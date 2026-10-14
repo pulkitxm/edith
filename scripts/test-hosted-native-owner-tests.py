@@ -2339,5 +2339,352 @@ class UnsealedChildLiveRecoveryContracts(unittest.TestCase):
                 self.assertNotIn(234, owner.admission_parents)
 
 
+class ExitingProcessLineageContracts(unittest.TestCase):
+    def setUp(self):
+        self.kernel = Kernel()
+        self.exit_pids = set()
+        self.pathless = set()
+        self.missing = set()
+        self.original_info = self.kernel.proc_pidinfo
+        self.original_path = self.kernel.proc_pidpath
+        self.library = patch.object(runner.watchdog.ctypes, 'CDLL', return_value=self.kernel)
+        self.kill = patch.object(runner.os, 'kill', side_effect=self.kernel.kill)
+        self.library.start()
+        self.kill.start()
+        self.addCleanup(self.library.stop)
+        self.addCleanup(self.kill.stop)
+        self.owner = runner.BoundedOwnership(123, 501)
+        self.records = patch.object(self.kernel, 'proc_pidinfo', side_effect=self.record)
+        self.paths = patch.object(self.kernel, 'proc_pidpath', side_effect=self.path)
+        self.records.start()
+        self.paths.start()
+        self.addCleanup(self.records.stop)
+        self.addCleanup(self.paths.stop)
+
+    def record(self, pid, flavor, argument, pointer, size):
+        result = self.original_info(pid, flavor, argument, pointer, size)
+        if result:
+            pointer._obj.status = 2
+            pointer._obj.flags = 4 if pid in self.exit_pids else 0
+        return 0 if pid in self.missing and argument == 0 else result
+
+    def path(self, pid, buffer, size):
+        return 0 if pid in self.pathless else self.original_path(pid, buffer, size)
+
+    def child(self, pid=234, parent=123, group=123):
+        self.kernel.processes[pid] = (pid, 101, 8, '/fixture/compiler', group, parent, 501, 501)
+
+    def test_actual_refresh_moves_known_pathless_and_path_available_exit_to_terminal_only(self):
+        self.child()
+        self.owner.refresh()
+        seals = dict(self.owner.seals)
+        for pathless in [False, True]:
+            with self.subTest(pathless=pathless):
+                self.exit_pids.update([123, 234])
+                if pathless:
+                    self.pathless.update([123, 234])
+                self.assertEqual(self.owner.refresh(), [])
+                self.assertEqual(set(self.owner.exiting_processes), {123, 234})
+                self.assertEqual(self.owner.known, {})
+                self.assertEqual(self.owner.seals, seals)
+                self.assertEqual(self.owner.errors, [])
+                self.owner.terminate(signal.SIGTERM)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_actual_refresh_brackets_exiting_parent_and_self_group_terminal_child_without_live_authority(self):
+        self.child(group=234)
+        self.exit_pids.update([123, 234])
+        self.pathless.update([123, 234])
+        self.missing.add(234)
+        self.assertEqual(self.owner.refresh(), [])
+        self.assertEqual(set(self.owner.exiting_processes), {123, 234})
+        self.assertNotIn(234, self.owner.seals)
+        self.assertNotIn(234, self.owner.known)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_terminal_census_rejects_live_unknown_descendant_and_enumeration_failure(self):
+        self.child()
+        self.exit_pids.add(123)
+        self.pathless.add(123)
+        self.assertEqual(self.owner.refresh(), [])
+        self.assertEqual(self.owner.errors, ['Owned descendant parent changed'])
+        self.assertNotIn(234, self.owner.seals)
+        self.assertNotIn(234, self.owner.known)
+        with patch.object(self.kernel, 'proc_listchildpids', return_value=-1):
+            self.owner.refresh()
+        self.assertIn('Invalid owned child enumeration', self.owner.errors)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_exit_proof_rejects_changed_full_child_fields_or_unstable_parent_records(self):
+        for field in ['flags', 'status', 'pid', 'seconds', 'microseconds', 'pgid', 'uid', 'ruid', 'ppid', 'nfiles']:
+            with self.subTest(field=field):
+                self.child(group=234)
+                owner = runner.BoundedOwnership(123, 501)
+                self.exit_pids.add(234)
+                self.pathless.add(234)
+                reads = 0
+
+                def changed(pid, flavor, argument, pointer, size):
+                    nonlocal reads
+                    result = self.record(pid, flavor, argument, pointer, size)
+                    if pid == 234 and argument == 1:
+                        reads += 1
+                        if reads == 2:
+                            setattr(pointer._obj, field, 0 if field in ['flags', 'status'] else getattr(pointer._obj, field) + 1)
+                    return result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=changed):
+                    owner.refresh()
+                self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+                self.assertNotIn(234, owner.exiting_processes)
+                self.exit_pids.clear()
+                self.pathless.clear()
+        owner = runner.BoundedOwnership(123, 501)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        reads = 0
+
+        def changed_parent(pid, flavor, argument, pointer, size):
+            nonlocal reads
+            result = self.record(pid, flavor, argument, pointer, size)
+            if pid == 123 and argument == 1:
+                reads += 1
+                if reads == 2:
+                    pointer._obj.nfiles += 1
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=changed_parent):
+            owner.refresh()
+        self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+        self.assertNotIn(234, owner.exiting_processes)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_zero_flags_path_failure_stays_permanent_and_inexit_diagnostic_is_closed(self):
+        self.child()
+        self.pathless.add(234)
+        self.owner.refresh()
+        self.assertEqual(self.owner.errors, ['Live owned process identity unavailable'])
+        self.assertIs(self.owner.failure_observations[0]['processInExit'], False)
+        self.assertNotIn(234, self.owner.exiting_processes)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_terminal_join_requires_two_kernel_absences_and_no_survivors_within_original_grace(self):
+        self.exit_pids.add(123)
+        self.pathless.add(123)
+        self.owner.refresh()
+        self.owner.finalize_exiting_processes(False)
+        self.assertIn('Terminal owned process unresolved after join', self.owner.errors)
+        self.assertIn(123, self.owner.exiting_processes)
+        self.kernel.processes.clear()
+        self.owner.begin_joined_cleanup(True)
+        self.assertEqual(self.owner.refresh(), [])
+        self.assertEqual(self.owner.exiting_processes, {})
+        self.assertIn('Terminal owned process unresolved after join', self.owner.errors)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_actual_retirement_drains_terminal_without_signals_or_deadline_extension(self):
+        self.exit_pids.add(123)
+        self.pathless.add(123)
+        clock = Clock()
+        process = Process(0)
+        original_wait = process.wait
+
+        def wait(timeout):
+            result = original_wait(timeout)
+            self.kernel.processes.clear()
+            return result
+
+        process.wait = wait
+        outcome = runner.retire(process, self.owner, clock.now, clock.sleep)
+        self.assertEqual(outcome, {'naturalSurvivorCount': 0, 'reaped': True,
+                         'remainingOwnedProcesses': 0, 'unverifiedOwnedProcesses': 0,
+                         'pendingOwnedChildren': 0, 'ownershipErrors': []})
+        self.assertEqual(clock.value, 0)
+        self.assertEqual(process.reaps, 1)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_unresolved_terminal_consumes_only_existing_five_second_grace_and_fails(self):
+        self.exit_pids.add(123)
+        clock = Clock()
+        outcome = runner.retire(Process(0), self.owner, clock.now, clock.sleep)
+        self.assertGreaterEqual(clock.value, 5)
+        self.assertLess(clock.value, 5.1)
+        self.assertEqual(outcome['pendingOwnedChildren'], 1)
+        self.assertEqual(outcome['ownershipErrors'], ['Terminal owned process unresolved after join'])
+        self.assertEqual(outcome['naturalSurvivorCount'], 0)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_terminal_unknown_cap_and_foreign_group_cannot_grant_authority(self):
+        for group, cap in [(999, None), (234, 'lifetime'), (234, 'concurrent')]:
+            with self.subTest(group=group, cap=cap):
+                owner = runner.BoundedOwnership(123, 501)
+                self.child(group=group)
+                self.exit_pids.add(234)
+                self.pathless.add(234)
+                if cap == 'lifetime':
+                    owner.terminal_children.update({pid: b'' for pid in range(10000, 14095)})
+                if cap == 'concurrent':
+                    owner.pending_children.update({pid: (123, 100, 7, '/usr/bin/make', 123, 1, 501, 501)
+                                                   for pid in range(10000, 10063)})
+                owner.refresh()
+                self.assertNotIn(234, owner.exiting_processes)
+                self.assertNotIn(234, owner.seals)
+                self.assertNotIn(234, owner.known)
+                self.assertTrue(owner.errors)
+                self.assertEqual(self.kernel.signals, [])
+
+
+    def test_partial_or_negative_initial_child_records_do_not_become_terminal_authority(self):
+        self.child(group=234)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        for initial in [-1, 135]:
+            with self.subTest(initial=initial):
+                owner = runner.BoundedOwnership(123, 501)
+
+                def partial(pid, flavor, argument, pointer, size):
+                    result = self.record(pid, flavor, argument, pointer, size)
+                    return initial if pid == 234 and argument == 0 else result
+
+                with patch.object(self.kernel, 'proc_pidinfo', side_effect=partial):
+                    owner.refresh()
+                self.assertEqual(owner.errors, ['Live owned process identity unavailable'])
+                self.assertNotIn(234, owner.exiting_processes)
+                self.assertNotIn(234, owner.seals)
+                self.assertIs(owner.failure_observations[0]['processInExit'], True)
+                self.assertEqual(self.kernel.signals, [])
+
+    def test_known_zero_record_recovery_cannot_return_inexit_as_live_even_with_available_path(self):
+        self.child()
+        self.owner.refresh()
+        self.exit_pids.add(234)
+        self.missing.add(234)
+        self.owner.refresh()
+        self.assertNotIn(234, self.owner.known)
+        self.assertIn(234, self.owner.exiting_processes)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_terminal_seal_birth_group_uid_reuse_never_reconciles_as_gone(self):
+        self.exit_pids.add(123)
+        self.owner.refresh()
+        original = self.kernel.processes[123]
+        for index in [1, 2, 4, 6, 7]:
+            with self.subTest(index=index):
+                changed = list(original)
+                changed[index] += 1
+                self.kernel.processes[123] = tuple(changed)
+                self.owner.begin_joined_cleanup(True)
+                self.owner.refresh()
+                self.assertIn(123, self.owner.exiting_processes)
+                self.assertIn('Terminal process identity could not be authenticated', self.owner.errors)
+        self.kernel.processes[123] = original
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_gone_proof_rejects_arg1_terminal_record_even_when_arg0_path_and_kill_claim_absence(self):
+        self.exit_pids.add(123)
+        self.owner.refresh()
+        self.missing.add(123)
+        self.pathless.add(123)
+        with patch.object(runner.os, 'kill', side_effect=ProcessLookupError()):
+            self.assertFalse(self.owner.exiting_process_absent(123))
+            self.owner.finalize_exiting_processes(True)
+        self.assertIn(123, self.owner.exiting_processes)
+        self.assertIn('Terminal owned process unresolved after join', self.owner.errors)
+        self.assertEqual(self.kernel.signals, [])
+
+    def test_repeated_terminal_parent_census_finds_late_terminal_descendant_without_signalling(self):
+        self.exit_pids.add(123)
+        self.owner.refresh()
+        self.child(group=234)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        self.owner.refresh()
+        self.assertEqual(set(self.owner.exiting_processes), {123, 234})
+        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_full_pathless_zombie_inexit_parent_keeps_terminal_census_before_legacy_returns(self):
+        self.exit_pids.add(123)
+        self.pathless.add(123)
+        self.child(group=234)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        original = self.record
+
+        def zombie(pid, flavor, argument, pointer, size):
+            result = original(pid, flavor, argument, pointer, size)
+            if result and pid in self.exit_pids:
+                pointer._obj.status = 5
+            return result
+
+        with patch.object(self.kernel, 'proc_pidinfo', side_effect=zombie), \
+                patch.object(self.kernel, 'proc_listchildpids', wraps=self.kernel.proc_listchildpids) as census:
+            self.assertEqual(self.owner.refresh(), [])
+        self.assertEqual(set(self.owner.exiting_processes), {123, 234})
+        self.assertIn(123, [call.args[0] for call in census.call_args_list])
+        self.assertNotIn(234, self.owner.seals)
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_retained_terminal_arg0_unavailable_keeps_stable_arg1_terminal_and_descendant_census(self):
+        self.exit_pids.add(123)
+        self.pathless.add(123)
+        self.owner.refresh()
+        self.missing.add(123)
+        self.child(group=234)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        self.owner.refresh()
+        self.assertEqual(set(self.owner.exiting_processes), {123, 234})
+        self.assertEqual(self.owner.errors, [])
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_esrch_after_retained_inexit_record_cannot_drop_known_terminal_parent_census(self):
+        self.child(group=234)
+        self.owner.refresh()
+        self.child(pid=345, parent=234, group=234)
+        self.exit_pids.add(234)
+        self.pathless.add(234)
+        self.missing.add(234)
+
+        def gone(pid, value):
+            if pid == 234 and value == 0:
+                raise ProcessLookupError()
+            return self.kernel.kill(pid, value)
+
+        with patch.object(runner.os, 'kill', side_effect=gone):
+            self.owner.refresh()
+        self.assertIn(234, self.owner.exiting_processes)
+        self.assertNotIn(345, self.owner.known)
+        self.assertNotIn(345, self.owner.seals)
+        self.assertEqual(self.owner.errors, ['Owned descendant parent changed'])
+        self.assertEqual(self.kernel.signals, [])
+
+
+    def test_terminal_identity_refusal_emits_existing_full_sample_without_additional_read(self):
+        self.exit_pids.add(123)
+        self.owner.refresh()
+        changed = list(self.kernel.processes[123])
+        changed[1] += 1
+        self.kernel.processes[123] = tuple(changed)
+        with patch.object(self.kernel, 'proc_pidinfo', wraps=self.kernel.proc_pidinfo) as records:
+            self.owner.refresh()
+        self.assertEqual([call.args[:3] for call in records.call_args_list], [(123, 3, 0), (123, 3, 0)])
+        row = self.owner.failure_observations[0]
+        self.assertEqual(row['kind'], 'live_identity_unavailable')
+        self.assertIs(row['processInExit'], True)
+        self.assertIs(row['knownSeal'], True)
+        self.assertIs(row['birthMatches'], False)
+        self.assertEqual(row['returnedBytes'], 136)
+        self.assertEqual(self.owner.errors, ['Terminal process identity could not be authenticated'])
+        self.assertEqual(self.kernel.signals, [])
+
+
 if __name__ == '__main__':
     unittest.main()

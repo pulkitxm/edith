@@ -69,6 +69,8 @@ def native_failure_diagnostics(value, log_path):
 
     ownership_kinds = {
         'Live owned process identity unavailable': 'live_identity_unavailable',
+        'Terminal process identity could not be authenticated': 'live_identity_unavailable',
+        'Terminal owned process unresolved after join': 'live_identity_unavailable',
         'Owned process birth or group changed': 'birth_or_group_changed',
         'Owned leader group changed': 'leader_group_changed',
         'Owned descendant parent changed': 'descendant_parent_changed',
@@ -86,7 +88,7 @@ def native_failure_diagnostics(value, log_path):
 
     observations = []
     boolean_fields = ['originalBirthMatches', 'originalGroupMatches', 'pidMatches',
-                      'birthMatches', 'groupMatches', 'uidMatches', 'realUIDMatches']
+                      'birthMatches', 'groupMatches', 'uidMatches', 'realUIDMatches', 'processInExit']
     fields = {'kind', 'knownSeal', 'returnedBytes', 'expectedBytes', 'status', 'probeFailed',
               *boolean_fields}
     self_group_fields = {'knownChild', 'groupIsOwnPID', 'originalParentRetained',

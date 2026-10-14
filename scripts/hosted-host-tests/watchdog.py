@@ -30,9 +30,11 @@ class OwnedProcesses:
         self.known = {}
         self.parents = {}
 
-    def snapshot(self, pid, on_failure=None):
+    def snapshot(self, pid, on_failure=None, on_record=None):
         info = ProcessInfo()
         result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        if on_record is not None:
+            on_record(result, info)
         if result != ctypes.sizeof(info) or info.uid != self.uid or info.ruid != self.uid:
             if on_failure is not None:
                 clause = ('kernel_record_unavailable' if result != ctypes.sizeof(info)
