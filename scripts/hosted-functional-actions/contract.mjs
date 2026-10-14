@@ -16,6 +16,27 @@ const uuid =
 const hash = /^[0-9a-f]{64}$/;
 const source = /^[0-9a-f]{40}$/;
 const phases = ["initial", "updated", "reinstalled"];
+const blitzTreeSeedSHA256 = createHash("sha256")
+  .update(Buffer.alloc(4096, 42))
+  .digest("hex");
+const blitzTreeAbsent = {
+  bytes: { present: false },
+  sha256: { present: false },
+};
+const blitzTreePresent = {
+  bytes: { present: true, value: 4096 },
+  sha256: { present: true, value: blitzTreeSeedSHA256 },
+};
+export const blitzTreeSavedDigests = Object.freeze({
+  initial: functionalDigest({
+    victim: blitzTreePresent,
+    "private-trash": blitzTreeAbsent,
+  }),
+  final: functionalDigest({
+    victim: blitzTreeAbsent,
+    "private-trash": blitzTreePresent,
+  }),
+});
 const limits = new Set([
   "synthetic-platform-adapter",
   "private-filesystem",
@@ -860,6 +881,16 @@ export function validateFunctionalActionProof(
     assert(stage.persistence.sequence > stage.authoritative.sequence);
     assert.equal(stage.persistence.name, definition.persistence.name);
     if (definition.persistence.applicable) {
+      if (definition.owner === "blitztree") {
+        assert.equal(
+          journal.baseline.readbackSHA256,
+          blitzTreeSavedDigests.initial,
+        );
+        assert.equal(
+          stage.persistence.readbackSHA256,
+          blitzTreeSavedDigests.final,
+        );
+      }
       assert.match(stage.persistence.readbackSHA256, hash);
       assert.equal(
         stage.persistence.readbackSHA256,
@@ -905,7 +936,9 @@ export function validateFunctionalActionProof(
         assert(prior.sequence < journal.loadSequence);
         assert.equal(
           prior.readbackSHA256,
-          observed.stages[0].persistence.readbackSHA256,
+          definition.owner === "blitztree"
+            ? blitzTreeSavedDigests.initial
+            : observed.stages[0].persistence.readbackSHA256,
         );
         assert.equal(prior.expectedSHA256, prior.readbackSHA256);
       } else assert.equal(stage.persistence.beforeActivation, null);

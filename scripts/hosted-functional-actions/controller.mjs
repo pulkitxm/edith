@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 import { parse } from "@babel/parser";
 import { loadAllFunctionalActionCases } from "./case-loader.mjs";
 import {
+  blitzTreeSavedDigests,
   functionalCanonicalJSON,
   functionalDigest,
   validateFunctionalActionProof,
@@ -189,12 +190,21 @@ export class FunctionalJourneyOrder {
   #generations = new Set();
   #pids = new Set();
   #held;
+  #owner;
+
+  constructor(owner) {
+    assert(functionalActionOwners.includes(owner));
+    this.#owner = owner;
+  }
 
   captureBaseline(bytes) {
     assert(["empty", "drained", "removed"].includes(this.#state));
     assert.equal(this.#phase === 2, this.#state === "removed");
     assert(Buffer.isBuffer(bytes) || bytes === null);
-    if (this.#phase > 0)
+    if (this.#owner === "blitztree") {
+      assert(Buffer.isBuffer(bytes));
+      assert.equal(hash(bytes), blitzTreeSavedDigests.initial);
+    } else if (this.#phase > 0)
       assert.deepEqual(
         bytes,
         this.#saved,
@@ -207,6 +217,7 @@ export class FunctionalJourneyOrder {
   hold(capability, definition) {
     assert.equal(this.#state, "baseline");
     validateFunctionalCapability(capability, definition);
+    assert.equal(definition.owner, this.#owner);
     assert.equal(capability.phase, phases[this.#phase]);
     assert.equal(
       capability.dataDirectory,
@@ -229,6 +240,10 @@ export class FunctionalJourneyOrder {
   }
 
   completeSaved(bytes) {
+    if (this.#owner === "blitztree") {
+      assert(Buffer.isBuffer(bytes));
+      assert.equal(hash(bytes), blitzTreeSavedDigests.final);
+    }
     assert.equal(this.#state, "held");
     assert(Buffer.isBuffer(bytes) || bytes === null);
     if (this.#phase === 0)
@@ -319,7 +334,7 @@ export async function runFunctionalOwner({
     compilation,
     environment,
   });
-  const order = new FunctionalJourneyOrder();
+  const order = new FunctionalJourneyOrder(ownerPlan.owner);
   const stages = [];
   const presentations = {};
   try {
@@ -1886,7 +1901,21 @@ export function validateFunctionalSavedReaderPolicy(reader, policy) {
       assert(!paths.has(location), "Duplicate saved read or sentinel path");
       paths.add(location);
       if (isRead) {
-        assert(["json", "property-list"].includes(file.format));
+        assert(["json", "property-list", "raw-file"].includes(file.format));
+        if (file.format === "raw-file") {
+          assert.equal(reader.owner, "blitztree");
+          assert.equal(file.root, "owner-outputs");
+          assert.equal(file.maximumBytes, 4096);
+          assert.deepEqual(file.components[0], { derived: "phase" });
+          assert.equal(file.components.length, 3);
+          assert(["scan", "trash"].includes(file.components[1]));
+          assert.equal(file.components[2], "victim.bin");
+          assert.equal(file.selections.length, 2);
+          assert.deepEqual(file.selections.map(({ path }) => path).sort(), [
+            ["bytes"],
+            ["sha256"],
+          ]);
+        }
         assert(
           Array.isArray(file.selections) &&
             file.selections.length > 0 &&
@@ -1917,6 +1946,12 @@ export function validateFunctionalSavedReaderPolicy(reader, policy) {
               "masked-utf8",
             ].includes(selected.codec),
           );
+          if (file.format === "raw-file") {
+            assert.equal(selected.codec, "value");
+            assert.equal(selected.path.length, 1);
+            assert(["bytes", "sha256"].includes(selected.path[0]));
+            assert(!Object.hasOwn(selected, "decodedPath"));
+          }
           if (Object.hasOwn(selected, "decodedPath")) {
             assert(
               ["data-json", "data-property-list"].includes(selected.codec),

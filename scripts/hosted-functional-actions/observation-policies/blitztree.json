@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "owner": "blitztree",
+  "readback": {
+    "operation": "blitztree.ui.snapshot",
+    "payload": {},
+    "normalizer": {
+      "kind": "select-object",
+      "fields": {
+        "entries": {
+          "path": ["scannedEntries"],
+          "transform": "identity"
+        }
+      }
+    }
+  },
+  "phases": [
+    {
+      "phase": "initial",
+      "before": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      },
+      "after": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "phase": "updated",
+      "before": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      },
+      "after": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "phase": "reinstalled",
+      "before": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 2
+          }
+        }
+      },
+      "after": {
+        "kind": "object",
+        "fields": {
+          "entries": {
+            "kind": "literal",
+            "value": 1
+          }
+        }
+      }
+    }
+  ]
+}

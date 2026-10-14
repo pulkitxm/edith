@@ -44,6 +44,11 @@ final class FunctionalProducerReceiver {
     private var xctestActor: FunctionalXCTestActor?
     private var savedGeneration: FunctionalSavedGeneration?
     private var finalSavedObservations: [String: FunctionalOwnerSavedReader.RawObservation] = [:]
+    private var preservedBlitzTreePhases:
+        [(
+            phase: String, reader: FunctionalOwnerSavedReader,
+            observation: FunctionalOwnerSavedReader.RawObservation
+        )] = []
     private var observationSequence = 0
     private var preservedSaved:
         [String: (
@@ -124,9 +129,21 @@ final class FunctionalProducerReceiver {
                     "stateless original source with mutable file grants")
             }
         }
+        let previousBlitzTree =
+            owner == "blitztree" && phase != "initial"
+            ? preservedSaved[owner] : nil
         if phase != "initial" {
-            guard finalSavedObservations[owner] != nil else {
+            guard let previous = finalSavedObservations[owner] else {
                 throw FunctionalFailure.invalid("missing prior actual saved generation")
+            }
+            if owner == "blitztree" {
+                guard let previousBlitzTree, previousBlitzTree.observation === previous else {
+                    throw FunctionalFailure.invalid("missing retained prior BlitzTree reader")
+                }
+                try previousBlitzTree.reader.requirePreserved(since: previous)
+                for prior in preservedBlitzTreePhases {
+                    try prior.reader.requirePreserved(since: prior.observation)
+                }
             }
         }
         if phase == "initial" || owner == "blitztree" {
@@ -150,11 +167,17 @@ final class FunctionalProducerReceiver {
                     session: issuer.session, policy: policy)
             }
         }
+        if let previousBlitzTree {
+            try previousBlitzTree.reader.requirePreserved(since: previousBlitzTree.observation)
+            for prior in preservedBlitzTreePhases {
+                try prior.reader.requirePreserved(since: prior.observation)
+            }
+        }
         observationSequence += 1
         let saved = try FunctionalSavedGeneration(
             owner: owner, phase: phase, root: root, issuer: issuer,
             definition: definition, sequence: observationSequence,
-            previous: finalSavedObservations[owner])
+            previous: owner == "blitztree" ? nil : finalSavedObservations[owner])
         savedGeneration = saved
         return try issuer.seal(saved.baselineClaim)
     }
@@ -312,6 +335,15 @@ final class FunctionalProducerReceiver {
             throw FunctionalFailure.invalid("missing final saved observation before retirement")
         }
         try savedGeneration.reader.requirePreserved(since: final)
+        if value.capability.owner == "blitztree" {
+            guard preservedBlitzTreePhases.count < 3,
+                !preservedBlitzTreePhases.contains(where: { $0.phase == value.capability.phase })
+            else { throw FunctionalFailure.invalid("duplicate BlitzTree saved phase") }
+            for prior in preservedBlitzTreePhases {
+                try prior.reader.requirePreserved(since: prior.observation)
+            }
+            preservedBlitzTreePhases.append((value.capability.phase, savedGeneration.reader, final))
+        }
         retiredBirths[value.capability.owner, default: []].append(contentsOf: [
             value.engine, value.ui,
         ])
@@ -382,6 +414,7 @@ final class FunctionalProducerReceiver {
             let previous = preservedSaved[owner],
             response["removedVersions"] as? [String] == ["1.0.0", "1.1.0"]
         else { throw FunctionalFailure.invalid("source original removal order") }
+        try requireRetainedBlitzTreePhases(owner: owner)
         let packageRoot = root.url.appendingPathComponent(
             "Edith Tests/worker-" + issuer.session + "/Extensions")
         _ = try FunctionalPinnedPath(packageRoot, directory: true)
@@ -429,6 +462,7 @@ final class FunctionalProducerReceiver {
             "owner": owner, "receipt": receipt, "before": previous.observation.object,
             "after": current.object,
         ])
+        try requireRetainedBlitzTreePhases(owner: owner)
         removalClaims[owner, default: []].append(sealed)
         return sealed
     }
@@ -629,6 +663,7 @@ final class FunctionalProducerReceiver {
             let claims = removalClaims[owner], claims.count == 2,
             let preserved = preservedSaved[owner]
         else { throw FunctionalFailure.invalid("missing actual completed owner proof facts") }
+        try requireRetainedBlitzTreePhases(owner: owner)
         try preserved.reader.requirePreserved(since: preserved.observation)
         let current = try preserved.reader.observeSentinels()
         func payload(_ envelope: Data) throws -> [String: Any] {
@@ -684,6 +719,7 @@ final class FunctionalProducerReceiver {
             evidence: evidence, owner: owner,
             caseSHA256: binding.caseSHA256, publicKey: issuer.publicKey,
             sign: { try self.issuer.seal(FunctionalBytes.object($0)) })
+        try requireRetainedBlitzTreePhases(owner: owner)
         ownerProofs[owner] = proof
         return proof
     }
@@ -708,6 +744,13 @@ final class FunctionalProducerReceiver {
         return completedStages.values.flatMap { $0 }.reduce(0) {
             $0 + $1.drain.engineStop.signalAttempts.count + $1.drain.nativeStop.signalAttempts.count
         }
+    }
+
+    private func requireRetainedBlitzTreePhases(owner: String) throws {
+        guard owner == "blitztree" else { return }
+        try FunctionalOwnerSavedReader.requireBlitzTreePhasesPreserved(
+            preservedBlitzTreePhases,
+            completedPhases: completedStages[owner]?.map { $0.capability.phase } ?? [])
     }
 
     private func rawFingerprint(_ observation: FunctionalOwnerSavedReader.RawObservation) throws

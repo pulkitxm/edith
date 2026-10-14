@@ -218,7 +218,7 @@ final class FunctionalOwnerSavedReader {
         files = parsed.files
         directories = parents.keys.sorted().map { parents[$0]! }
         definitionSHA256 = FunctionalBytes.digest(definition)
-        initialSaved = phase == "initial" ? parsed.initial : parsed.final
+        initialSaved = phase == "initial" || owner == "blitztree" ? parsed.initial : parsed.final
         finalSaved = parsed.final
         try requireDirectories()
     }
@@ -359,10 +359,26 @@ final class FunctionalOwnerSavedReader {
                 let format: String?
                 if isRead {
                     guard let value = entry["format"] as? String,
-                        ["json", "property-list"].contains(value),
+                        ["json", "property-list", "raw-file"].contains(value),
                         let values = entry["selections"] as? [[String: Any]], !values.isEmpty,
                         values.count <= 64
                     else { throw FunctionalFailure.invalid("source saved codec") }
+                    if value == "raw-file" {
+                        guard owner == "blitztree", maximum == 4096,
+                            entry["root"] as? String == "owner-outputs",
+                            let components = entry["components"] as? [Any], components.count == 3,
+                            (components[0] as? [String: String]) == ["derived": "phase"],
+                            let directory = components[1] as? String,
+                            ["scan", "trash"].contains(directory),
+                            components[2] as? String == "victim.bin", values.count == 2
+                        else { throw FunctionalFailure.invalid("signed BlitzTree raw file reader") }
+                    }
+                    if value == "raw-file" {
+                        let paths = values.compactMap { $0["path"] as? [String] }
+                        guard Set(paths) == Set([["bytes"], ["sha256"]]) else {
+                            throw FunctionalFailure.invalid("complete raw file metadata projection")
+                        }
+                    }
                     format = value
                     for selected in values {
                         try FunctionalBytes.exact(
@@ -382,6 +398,12 @@ final class FunctionalOwnerSavedReader {
                             ["value", "data-json", "data-property-list", "masked-utf8"].contains(
                                 codec)
                         else { throw FunctionalFailure.invalid("finite saved selection") }
+                        if value == "raw-file" {
+                            guard codec == "value", path.count == 1,
+                                ["bytes", "sha256"].contains(path[0]),
+                                selected["decodedPath"] == nil
+                            else { throw FunctionalFailure.invalid("raw file metadata selection") }
+                        }
                         let decodedPath: [String]
                         if let supplied = selected["decodedPath"] {
                             guard ["data-json", "data-property-list"].contains(codec),
@@ -472,10 +494,15 @@ final class FunctionalOwnerSavedReader {
         for (file, observation) in zip(files, before) where file.format != nil {
             let decoded: Any?
             if let bytes = observation.bytes {
-                decoded =
-                    file.format == "json"
-                    ? try JSONSerialization.jsonObject(with: bytes, options: [.fragmentsAllowed])
-                    : try PropertyListSerialization.propertyList(from: bytes, format: nil)
+                if file.format == "raw-file" {
+                    decoded = ["bytes": bytes.count, "sha256": FunctionalBytes.digest(bytes)]
+                } else {
+                    decoded =
+                        file.format == "json"
+                        ? try JSONSerialization.jsonObject(
+                            with: bytes, options: [.fragmentsAllowed])
+                        : try PropertyListSerialization.propertyList(from: bytes, format: nil)
+                }
                 guard decoded is [String: Any] || decoded is [Any] else {
                     throw FunctionalFailure.invalid("saved container")
                 }
@@ -540,6 +567,25 @@ final class FunctionalOwnerSavedReader {
         }
     }
 
+    static func requireBlitzTreePhasesPreserved(
+        _ retained: [(
+            phase: String, reader: FunctionalOwnerSavedReader, observation: RawObservation
+        )],
+        completedPhases: [String]
+    ) throws {
+        guard [2, 3].contains(completedPhases.count),
+            completedPhases
+                == Array(["initial", "updated", "reinstalled"].prefix(completedPhases.count)),
+            retained.map({ $0.phase }) == completedPhases
+        else { throw FunctionalFailure.invalid("incomplete retained BlitzTree saved phases") }
+        for prior in retained {
+            guard prior.reader.scope.hasPrefix("blitztree|") else {
+                throw FunctionalFailure.invalid("foreign retained BlitzTree saved reader")
+            }
+            try prior.reader.requirePreserved(since: prior.observation)
+        }
+    }
+
     func requirePreserved(since observation: RawObservation) throws {
         guard observation.scope == scope else {
             throw FunctionalFailure.invalid("foreign raw saved observation")
@@ -565,7 +611,8 @@ final class FunctionalOwnerSavedReader {
             return FileObservation(name: file.name, path: file.file.path, bytes: nil, identity: [:])
         }
         let pinned = try FunctionalPinnedPath(
-            file.file, directory: false, maximum: file.maximumBytes)
+            file.file, directory: false, privateMode: file.format == "raw-file",
+            maximum: file.maximumBytes)
         let bytes = try pinned.read()
         var after = stat()
         guard lstat(file.file.path, &after) == 0, try pinned.read() == bytes else {

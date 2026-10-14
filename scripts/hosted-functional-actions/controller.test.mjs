@@ -89,7 +89,7 @@ const removal = () => ({
 });
 
 test("portable lifecycle model holds each phase until actual drain and retained baseline", () => {
-  const order = new FunctionalJourneyOrder();
+  const order = new FunctionalJourneyOrder("keepAwake");
   const saved = Buffer.from('{"preventSleep":true}');
   for (const [index, phase] of [
     "initial",
@@ -114,7 +114,7 @@ test("portable lifecycle model holds each phase until actual drain and retained 
 });
 
 test("construction cannot precede baseline and transitions cannot skip natural join or physical removal", () => {
-  const order = new FunctionalJourneyOrder();
+  const order = new FunctionalJourneyOrder("keepAwake");
   assert.throws(() => order.hold(capability("initial", 0), definition));
   order.captureBaseline(null);
   const cap = capability("initial", 0);
@@ -131,7 +131,7 @@ test("construction cannot precede baseline and transitions cannot skip natural j
 });
 
 test("retained saved state must exist before any updated mutation and final restore must match initial saved bytes", () => {
-  const order = new FunctionalJourneyOrder();
+  const order = new FunctionalJourneyOrder("keepAwake");
   const cap = capability("initial", 0);
   order.captureBaseline(Buffer.from("before"));
   order.hold(cap, definition);
