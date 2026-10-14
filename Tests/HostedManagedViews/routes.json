@@ -632,11 +632,11 @@
       "sources": [
         {
           "path": "Extensions/bifrost/Runtime.swift",
-          "sha256": "8dbbbe893d2d7cea09e595b09f1f0e9e4270deaa362babdb935e510727846d3a"
+          "sha256": "c061de5ea3b2d141ed5aa749828dcfc9f9f684b2ee33d7a0dcefc8e3dd66134f"
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "f25ba3694c5325d3beff6f2d1b339aa22ac322e50a319eab0ef5cba842ac7db5"
+          "sha256": "c1336e48bd3f36ac47246292945c19ab50d8c1bea466835f487d564cadba5573"
         }
       ]
     },

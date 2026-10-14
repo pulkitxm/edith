@@ -389,7 +389,7 @@ final class BifrostStore: FeatureModule {
             var names: [String] = []
             if wantsShortcuts, !hasShortcuts { names = await BifrostShortcutsIndex.names() }
             guard !Task.isCancelled else { return }
-            await MainActor.run {
+            await MainActor.run { [weak self, windows, names] in
                 self?.machines = machines.map(\.name)
                 self?.adoptDynamicSources(windows: windows, shortcuts: names)
             }

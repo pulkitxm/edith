@@ -114,11 +114,11 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
     private func send(_ operation: String, payload: Data? = Data("{}".utf8)) {
         guard !stopped, tasks.count < 64, let payload else { return }
         let id = UUID()
-        tasks[id] = Task { [weak self] in
+        tasks[id] = Task { [weak self, invoke] in
             defer { self?.tasks[id] = nil }
             do {
                 _ = try await invoke(operation, payload)
-                await load()
+                await self?.load()
             } catch { if !Task.isCancelled { self?.error = error.localizedDescription } }
         }
     }
