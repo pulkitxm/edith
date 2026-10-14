@@ -965,14 +965,14 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
     }
 
 
-def run_selected_original(arguments, root, environment, output, selection=None):
+def run_selected_original(arguments, root, environment, output, selection=None, deadline=TEST_DEADLINE):
     driver = DRIVERS.SelectedSwiftDriver(environment['DEVELOPER_DIR'], entry='swift-test')
     pair = DRIVERS.SelectedPackageDriverPair(driver)
     try:
         def ownership_factory(pid, uid):
             return BoundedOwnership(pid, uid, package_driver_pair=pair)
 
-        result = run_original(arguments, root, environment, output,
+        result = run_original(arguments, root, environment, output, deadline=deadline,
                               ownership_factory=ownership_factory, selection=selection)
         driver.validate()
         return result

@@ -307,7 +307,8 @@ def main():
     source = admit_source(environment, root)
     paths = ['Makefile', 'Extensions/manifest.json', 'Extensions/keepAwake/Package.swift',
              'scripts/test-keep-awake-hosted-acceptance.py', 'scripts/test-extension-workers.mjs',
-             'scripts/hosted-native-owner-tests.py', 'scripts/hosted-host-tests/watchdog.py']
+             'scripts/hosted-native-owner-tests.py', 'scripts/hosted-host-tests/watchdog.py',
+             'scripts/run-host-swift-testing.py']
     paths += [str(path.relative_to(root)) for path in (root / 'Extensions/keepAwake').rglob('*.swift')
               if '.build' not in path.parts]
     pins = {path: digest(root / path) for path in sorted(set(paths))}
@@ -354,7 +355,7 @@ def main():
               'native': None, 'worker': None, 'passed': False,
               'publicPackageAcceptanceVerified': False, 'allExtensionsQualified': False}
     try:
-        native = runner.run_original(['make', 'ci-extension-keep-awake'], root,
+        native = runner.run_selected_original(['make', 'ci-extension-keep-awake'], root,
                                      child_environment, work / 'native', deadline=900)
         result['native'] = native
         native_failure_diagnostics(native, work / 'native/tests.log')
@@ -363,7 +364,7 @@ def main():
         native_proof(native_result, source)
         result['nativeControl'] = native_result
         result['nativeReceiptSHA256'] = digest(native_receipt)
-        worker = runner.run_original(
+        worker = runner.run_selected_original(
             ['bun', 'scripts/test-extension-workers.mjs', 'keepAwake', '--retain-packages'],
             root, child_environment, work / 'worker', deadline=900)
         result['worker'] = worker

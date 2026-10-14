@@ -2828,6 +2828,7 @@ class SelectedPackageInvocationTests(unittest.TestCase):
             self.assertIs(actual_environment, environment)
             self.assertIs(actual_output, output)
             self.assertIsNone(options['selection'])
+            self.assertEqual(options['deadline'], runner.TEST_DEADLINE)
             pair.close.assert_not_called()
             options['ownership_factory'](123, 501)
             owner.assert_called_once_with(123, 501, package_driver_pair=pair)
@@ -2873,6 +2874,17 @@ class SelectedPackageInvocationTests(unittest.TestCase):
                 runner.run_selected_original(['make', 'ci-extension-terminal'], Path('/synthetic'),
                                              {'DEVELOPER_DIR': '/synthetic/Developer'}, Path('/synthetic/output'))
             phase.assert_not_called()
+
+    def test_keep_acceptance_retains_its_original_deadline_and_failed_phase_result(self):
+        result = {'passed': False, 'timedOut': True, 'exitCode': 124}
+        with patch.object(runner, 'DRIVERS') as drivers, patch.object(runner, 'run_original', return_value=result) as phase:
+            actual = runner.run_selected_original(['make', 'ci-extension-keep-awake'], Path('/synthetic'),
+                                                  {'DEVELOPER_DIR': '/synthetic/Developer'},
+                                                  Path('/synthetic/output'), deadline=900)
+            self.assertIs(actual, result)
+            self.assertEqual(phase.call_args.kwargs['deadline'], 900)
+            drivers.SelectedSwiftDriver.return_value.validate.assert_called_once_with()
+            drivers.SelectedPackageDriverPair.return_value.close.assert_called_once_with()
 
 
 if __name__ == '__main__':
