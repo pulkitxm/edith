@@ -7,10 +7,7 @@ import {
   definitionSupportInputs,
   planExtensionBuilds,
 } from "./extension-release-plan.mjs";
-import {
-  shippingDefinitions,
-  shippingExtensionIDs,
-} from "./shipping-extension-policy.mjs";
+import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 import { extensionTestTargets } from "./test-extension-package.mjs";
 
 const definitions = JSON.parse(
@@ -120,7 +117,8 @@ export function planSwiftTests(
   if (matches(/^Extensions\/music\/Native\//)) {
     include.push({ lane: "native-music", targets: "ci-music-native" });
   }
-  const owners = (shipping ? shippingDefinitions(extensions) : extensions).map(
+  if (shipping) shippingDefinitions(extensions);
+  const owners = extensions.map(
     (definition) => ({
       ...definition,
       inputs: definition.inputs ?? [`Extensions/${definition.id}`],
@@ -179,16 +177,9 @@ export function planSwiftTests(
       lane: "feature-models",
       targets: targets.join(" "),
     });
-  const selectedLanes = shipping
-    ? include.filter(
-        (lane) =>
-          lane.lane === "host-runtime" ||
-          shippingExtensionIDs.includes(lane.extension),
-      )
-    : include;
   const scheduledTargets = new Set();
   return {
-    include: selectedLanes
+    include: include
       .map((lane) => ({
         ...lane,
         targets: lane.targets

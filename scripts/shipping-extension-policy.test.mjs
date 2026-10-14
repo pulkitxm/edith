@@ -9,59 +9,106 @@ import {
 } from "./hosted-public-release/evidence.mjs";
 import {
   assertShippingExtensions,
+  deferredExtensionIDs,
   shippingDefinitions,
   shippingExtensionIDs,
 } from "./shipping-extension-policy.mjs";
 
-test("the first release selects Keep Awake without modifying the full manifest", async () => {
-  const definitions = JSON.parse(
+const manifestDefinitions = async () =>
+  JSON.parse(
     await readFile(
       new URL("../Extensions/manifest.json", import.meta.url),
       "utf8",
     ),
   );
+
+test("the release selects every manifest extension without modifying the manifest", async () => {
+  const definitions = await manifestDefinitions();
   const before = JSON.stringify(definitions);
   const selected = shippingDefinitions(definitions);
+  assert.equal(definitions.length, 39);
   assert.deepEqual(
     selected.map((entry) => entry.id),
-    ["keepAwake"],
+    definitions
+      .map((entry) => entry.id)
+      .filter((id) => !deferredExtensionIDs.includes(id)),
   );
-  assert.deepEqual(selected[0].dependencies, []);
-  assert.equal(
-    selected[0],
-    definitions.find((entry) => entry.id === "keepAwake"),
+  assert.deepEqual(
+    shippingExtensionIDs(),
+    selected.map((entry) => entry.id),
   );
+  assert(selected.every((entry) => definitions.includes(entry)));
+  for (const entry of selected)
+    assert(
+      entry.dependencies.every((id) => shippingExtensionIDs().includes(id)),
+    );
   assert.equal(JSON.stringify(definitions), before);
-  assert.equal(definitions.length, 39);
-  assert(Object.isFrozen(shippingExtensionIDs));
+  assert(Object.isFrozen(shippingExtensionIDs()));
+  assert.equal(shippingExtensionIDs(), shippingExtensionIDs());
 });
 
-test("missing, duplicate and unreleased dependencies reject publication scope", () => {
-  const keepAwake = { id: "keepAwake", dependencies: [] };
+test("missing, duplicate, unknown and unreleased dependencies reject publication scope", async () => {
+  const definitions = await manifestDefinitions();
+  const keepAwake = definitions.find((entry) => entry.id === "keepAwake");
+  const others = definitions.filter((entry) => entry.id !== "keepAwake");
   assert.throws(() => shippingDefinitions([]), /exactly one/);
   assert.throws(
-    () => shippingDefinitions([keepAwake, keepAwake]),
+    () => shippingDefinitions(others),
+    /exactly one shipping extension definition: keepAwake/,
+  );
+  assert.throws(
+    () => shippingDefinitions([...definitions, keepAwake]),
     /exactly one/,
   );
   assert.throws(
-    () => shippingDefinitions([{ ...keepAwake, dependencies: ["music"] }]),
+    () =>
+      shippingDefinitions([
+        ...definitions,
+        { id: "unknownExtension", dependencies: [] },
+      ]),
+    /outside the shipping release scope/,
+  );
+  assert.throws(
+    () =>
+      shippingDefinitions([
+        { ...keepAwake, dependencies: ["unknownExtension"] },
+        ...others,
+      ]),
     /Unreleased/,
   );
-  assert.throws(() => shippingDefinitions([{ id: "keepAwake" }]), /Unreleased/);
+  assert.throws(
+    () => shippingDefinitions([{ id: "keepAwake" }, ...others]),
+    /Unreleased/,
+  );
+  assert.throws(() => shippingDefinitions({}), /Invalid/);
 });
 
-test("unreleased and duplicate planned packages reject before publication", () => {
+test("unknown and duplicate planned packages reject before publication", () => {
   assert.doesNotThrow(() => assertShippingExtensions([]));
   assert.doesNotThrow(() => assertShippingExtensions([{ id: "keepAwake" }]));
-  assert.throws(() => assertShippingExtensions([{ id: "music" }]), /shipping/);
+  assert.doesNotThrow(() =>
+    assertShippingExtensions([{ id: "keepAwake" }, { id: "music" }]),
+  );
+  assert.doesNotThrow(() =>
+    assertShippingExtensions(shippingExtensionIDs().map((id) => ({ id }))),
+  );
   assert.throws(
-    () => assertShippingExtensions([{ id: "keepAwake" }, { id: "music" }]),
+    () => assertShippingExtensions([{ id: "unknownExtension" }]),
+    /shipping/,
+  );
+  assert.throws(
+    () =>
+      assertShippingExtensions([
+        { id: "keepAwake" },
+        { id: "unknownExtension" },
+      ]),
     /shipping/,
   );
   assert.throws(
     () => assertShippingExtensions([{ id: "keepAwake" }, { id: "keepAwake" }]),
     /shipping/,
   );
+  assert.throws(() => assertShippingExtensions({}), /shipping/);
 });
 
 test("a signed single-extension publication binds its exact package and source", () => {
@@ -126,18 +173,12 @@ test("a signed single-extension publication binds its exact package and source",
   assert.throws(() => publicationComposition(source, 101, 1, [], {}));
 });
 
-test("a one-package owned draft resumes against the full source inventory", async () => {
-  const definitions = JSON.parse(
-    await readFile(
-      new URL("../Extensions/manifest.json", import.meta.url),
-      "utf8",
-    ),
-  );
+test("an owned draft resumes every shipping package against the full source inventory", async () => {
+  const definitions = await manifestDefinitions();
   const fingerprints = Object.fromEntries(
     definitions.map(({ id }) => [id, "b".repeat(64)]),
   );
-  const entry = shippingDefinitions(definitions)[0];
-  const record = {
+  const records = shippingDefinitions(definitions).map((entry) => ({
     id: entry.id,
     version: "1.0.0",
     hostABI: entry.hostABI,
@@ -146,26 +187,34 @@ test("a one-package owned draft resumes against the full source inventory", asyn
     downloadBytes: 100,
     installedBytes: 200,
     sha256: "c".repeat(64),
-    sourceFingerprint: fingerprints.keepAwake,
+    sourceFingerprint: fingerprints[entry.id],
     dependencies: [],
-    downloadURL: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(`extensions/keepAwake/1.0.0-${fingerprints.keepAwake.slice(0, 20)}`)}/keepAwake.zip`,
-  };
+    downloadURL: `https://github.com/pulkitxm/edith/releases/download/${encodeURIComponent(`extensions/${entry.id}/1.0.0-${fingerprints[entry.id].slice(0, 20)}`)}/${entry.id}.zip`,
+  }));
   const resume = {
     plan: { include: [] },
     state: { draft: true },
-    previous: { schemaVersion: 1, revision: 1, packages: [record] },
+    previous: { schemaVersion: 1, revision: 1, packages: records },
     definitions,
     fingerprints,
-    shippingIDs: shippingExtensionIDs,
+    shippingIDs: shippingExtensionIDs(),
   };
-  assert.deepEqual(ownedDraftResume(resume), [record]);
+  assert.deepEqual(ownedDraftResume(resume), records);
   assert.throws(() =>
     ownedDraftResume({
       ...resume,
       previous: { ...resume.previous, packages: [] },
     }),
   );
-  assert.throws(() => ownedDraftResume({ ...resume, shippingIDs: ["music"] }));
+  assert.throws(() =>
+    ownedDraftResume({
+      ...resume,
+      previous: { ...resume.previous, packages: records.slice(1) },
+    }),
+  );
+  assert.throws(() =>
+    ownedDraftResume({ ...resume, shippingIDs: ["unknownExtension"] }),
+  );
   assert.throws(() =>
     ownedDraftResume({ ...resume, shippingIDs: ["keepAwake", "keepAwake"] }),
   );

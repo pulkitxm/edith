@@ -520,6 +520,7 @@ export async function publishNativeComposition({
   next,
   nativeEvidence,
   verifyState,
+  cohort = false,
   verifyOriginal = async (value) => {
     const { verifyOriginalNativeLineage } = await import(
       "./extension-native-evidence.mjs"
@@ -541,9 +542,14 @@ export async function publishNativeComposition({
     await readFile(resolve(directory, "native-evidence.json")),
     publicKey,
   );
-  const definitions = shippingDefinitions(
-    JSON.parse(await readFile(resolve("Extensions/manifest.json"), "utf8")),
+  const manifest = JSON.parse(
+    await readFile(resolve("Extensions/manifest.json"), "utf8"),
   );
+  const definitions = cohort
+    ? (
+        await import("./hosted-public-release/shipping-scope.mjs")
+      ).shippingReleaseDefinitions(manifest)
+    : shippingDefinitions(manifest);
   const shippingFingerprints = Object.fromEntries(
     definitions.map(({ id }) => [id, evidencePayload.fingerprints[id]]),
   );
@@ -993,6 +999,7 @@ export async function publishExtensions({
     next,
     nativeEvidence,
     verifyState,
+    cohort: catalogPhase === "stage",
     verifyOriginal: admitOriginal,
   });
   const payload = resolve(directory, "payload.json");
