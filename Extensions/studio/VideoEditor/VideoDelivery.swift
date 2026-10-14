@@ -303,7 +303,8 @@ private final class VideoWriterReadiness: @unchecked Sendable {
         statusTimer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(100))
         statusTimer.setEventHandler { [weak self] in
             guard let self, waiting != nil,
-                writer.status != .writing || reader.status == .failed || reader.status == .cancelled
+                input.isReadyForMoreMediaData || writer.status != .writing
+                    || reader.status == .failed || reader.status == .cancelled
             else { return }
             resume()
         }
