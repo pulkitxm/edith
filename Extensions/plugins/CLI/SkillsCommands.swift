@@ -4,7 +4,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct SkillsCommand: AsyncParsableCommand {
+struct SkillsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "skills",
         abstract: "Read and install bundled skills.",
@@ -105,7 +105,7 @@ import Foundation
     }
 }
 
-@MainActor struct SkillsListCommand: AsyncParsableCommand {
+struct SkillsListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ls",
         abstract: "List Edith skills and the agents that can install them.",
@@ -122,7 +122,7 @@ import Foundation
     @Flag(name: .long, help: "Include every supported agent, not only the ones detected here.")
     var allAgents = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let detected = Set(try SkillsCLIEnvironment.detectAgents().map(\.id))
             let agents =
@@ -156,7 +156,7 @@ import Foundation
     }
 }
 
-@MainActor struct SkillsPreviewCommand: AsyncParsableCommand {
+struct SkillsPreviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "preview",
         abstract: "Print a skill's Markdown body.",
@@ -171,7 +171,7 @@ import Foundation
     @Argument(help: "Skill id from `ed skills ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let skill = try SkillsCLI.skill(id)
             let document = try await SkillsCLI.load(skill)
@@ -184,7 +184,7 @@ import Foundation
     }
 }
 
-@MainActor struct SkillsCopyCommand: AsyncParsableCommand {
+struct SkillsCopyCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "copy",
         abstract: "Print a skill's complete Markdown, or copy it to the clipboard.",
@@ -203,7 +203,7 @@ import Foundation
     @Argument(help: "Skill id from `ed skills ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let skill = try SkillsCLI.skill(id)
             let document = try await SkillsCLI.load(skill)
@@ -226,7 +226,7 @@ import Foundation
     }
 }
 
-@MainActor struct SkillsInstallCommand: AsyncParsableCommand {
+struct SkillsInstallCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "install",
         abstract: "Install one Edith skill into the agents you name.",
@@ -250,7 +250,7 @@ import Foundation
     @Argument(help: "Skill id from `ed skills ls`.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let skill = try SkillsCLI.skill(id)
             let agents = try SkillsCLI.targets(named: agent)
