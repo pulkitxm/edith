@@ -799,7 +799,8 @@
         "Extensions/plugins/SkillsModel.swift",
         "Extensions/plugins/PluginsFixtureTools.swift",
         "Extensions/plugins/PluginsFixturePolicy.swift",
-        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureJSON.swift"
       ]
     },
     "resources": {
@@ -842,7 +843,8 @@
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
-      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureJSON.swift"
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
@@ -925,7 +927,8 @@
         "Extensions/notchShelf/CLI/BrowserCommands.swift",
         "Extensions/notchShelf/CLI/BrowserCLIExecution.swift",
         "Extensions/notchShelf/Settings/NotchFixturePreferences.swift",
-        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureJSON.swift"
       ]
     },
     "inputs": [
@@ -938,7 +941,8 @@
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureJSON.swift"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -1656,7 +1660,20 @@
         "Extensions/studio/UIBridge/StudioSettingsNavigation.swift",
         "Extensions/studio/Studio/Views/StudioSettingsRows.swift",
         "Extensions/studio/StudioFixtureTools.swift",
-        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureBootstrapAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureBootstrapContract.swift",
+        "Extensions/fixtureSupport/WorkerFixtureBootstrapTrust.swift",
+        "Extensions/fixtureSupport/WorkerFixtureBootstrapTrustAnchor.swift",
+        "Extensions/fixtureSupport/WorkerFixtureEngineAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureEngineContract.swift",
+        "Extensions/fixtureSupport/WorkerFixtureEngineRequestGate.swift",
+        "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
+        "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+        "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
+        "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
+        "Extensions/fixtureSupport/WorkerFixtureUITrust.swift",
+        "Extensions/fixtureSupport/WorkerFixtureUITrustAnchor.swift"
       ]
     },
     "nativeSources": [
@@ -1733,7 +1750,20 @@
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureBootstrapAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureBootstrapContract.swift",
+      "Extensions/fixtureSupport/WorkerFixtureBootstrapTrust.swift",
+      "Extensions/fixtureSupport/WorkerFixtureBootstrapTrustAnchor.swift",
+      "Extensions/fixtureSupport/WorkerFixtureEngineAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureEngineContract.swift",
+      "Extensions/fixtureSupport/WorkerFixtureEngineRequestGate.swift",
+      "Extensions/fixtureSupport/WorkerFixtureJSON.swift",
+      "Extensions/fixtureSupport/WorkerFixtureRolePolicy.swift",
+      "Extensions/fixtureSupport/WorkerFixtureUIAdmission.swift",
+      "Extensions/fixtureSupport/WorkerFixtureUIContract.swift",
+      "Extensions/fixtureSupport/WorkerFixtureUITrust.swift",
+      "Extensions/fixtureSupport/WorkerFixtureUITrustAnchor.swift"
     ],
     "dependencies": [],
     "testTargets": [

@@ -1,11 +1,6 @@
 import { readFileSync } from "node:fs";
 
-export const deferredExtensionIDs = Object.freeze([
-  "machines",
-  "notchShelf",
-  "plugins",
-  "studio",
-]);
+export const deferredExtensionIDs = Object.freeze([]);
 
 let manifestIDs;
 

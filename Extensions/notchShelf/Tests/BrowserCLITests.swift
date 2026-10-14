@@ -130,7 +130,7 @@ import Testing
             })
         #else
         let runtime = ExtensionRuntime(
-            validateOrdinaryContext: { _ in },
+            admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context }, connectedDisplays: { [:] },
             createController: { _, _ in
                 ownersCreated += 1; fatalError("No owner is allowed")

@@ -271,8 +271,9 @@ import WorkerFixtureSupport
             })
         #else
         return ExtensionRuntime(
-            validateOrdinaryContext: { context in
+            admitOrdinaryContext: { context in
                 guard try admission(context) == nil else { throw WorkerFixtureError.invalid }
+                return nil
             },
             contextSource: {
                 self.dependencies += 1

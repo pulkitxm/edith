@@ -46,8 +46,9 @@ import WorkerFixtureTestSupport
         #if EDITH_FUNCTIONAL_FIXTURE
         return ExtensionRuntime(admitFixture: input.admit, fixtureDefaults: defaults)
         #else
-        return ExtensionRuntime(validateOrdinaryContext: { context in
+        return ExtensionRuntime(admitOrdinaryContext: { context in
             guard try input.admit(context) == nil else { throw WorkerFixtureError.invalid }
+            return nil
         })
         #endif
     }

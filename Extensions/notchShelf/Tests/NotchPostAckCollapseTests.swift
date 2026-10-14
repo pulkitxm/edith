@@ -31,7 +31,7 @@ struct NotchPostAckCollapseTests {
             })
         #else
         let runtime = ExtensionRuntime(
-            validateOrdinaryContext: { _ in },
+            admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: {
                 [42: CGSize(width: 1280, height: 900), 43: CGSize(width: 1600, height: 1000)]
