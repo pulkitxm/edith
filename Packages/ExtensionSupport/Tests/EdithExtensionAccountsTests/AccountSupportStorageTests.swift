@@ -487,8 +487,10 @@ import Testing
             account: account,
             startLogin: { id, replacement in
                 #expect(id != account.limitsProfileID && replacement != folder)
-                #expect(try await store.load() == linked)
-                #expect(try await store.limitsLoginCredentials(account: account).1 == data)
+                let loaded = try await store.load()
+                let credentials = try await store.limitsLoginCredentials(account: account)
+                #expect(loaded == linked)
+                #expect(credentials.1 == data)
             }, eraseScopedSecret: { native.record($0) })
         var reconnectedExpected = linked
         reconnectedExpected.accounts[0].limitsProfileID = reconnected.accounts[0].limitsProfileID
