@@ -629,10 +629,17 @@ test.each(["refs/pull/1/merge", "refs/heads/main"])(
       expect(values.get("swift")).toBe("true");
       expect(values.get("host")).toBe("false");
       expect(values.get("scripts")).toBe("false");
-      expect(values.get("swift_tests")).toBe("true");
-      expect(JSON.parse(values.get("swift_matrix"))).toEqual({
-        include: [{ lane: "feature-models", targets: "ci-extension-support" }],
-      });
+      const main = ref === "refs/heads/main";
+      expect(values.get("swift_tests")).toBe(String(!main));
+      expect(JSON.parse(values.get("swift_matrix"))).toEqual(
+        main
+          ? { include: [] }
+          : {
+              include: [
+                { lane: "feature-models", targets: "ci-extension-support" },
+              ],
+            },
+      );
       expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -1058,11 +1065,7 @@ test("the actual change job scopes release-only PRs and preserves main shipping 
     ).run;
     for (const [event, ref, expected] of [
       ["pull_request", "refs/pull/9/merge", { include: [] }],
-      [
-        "push",
-        "refs/heads/main",
-        planSwiftTests([".github/workflows/ci.yml"], { shipping: true }),
-      ],
+      ["push", "refs/heads/main", { include: [] }],
     ]) {
       const output = join(directory, `output-${event}`);
       execFileSync("bash", ["-e", "-o", "pipefail", "-c", command], {
