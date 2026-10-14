@@ -84,7 +84,14 @@ name: Extensions
 permissions:
   contents: read
 concurrency:
-  group: "extensions-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}"
+  group: >-
+    extensions-${{
+      github.event_name == 'pull_request' && github.ref
+      || github.event_name == 'workflow_dispatch' && inputs.publish == false
+        && inputs.validation_sha != '' && inputs.validation_sha == github.sha
+        && inputs.production_cohort == '' && format('validation-{0}', inputs.validation_sha)
+      || 'publish'
+    }}
   cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
 env:
   EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
