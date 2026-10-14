@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct CompanionCommand: AsyncParsableCommand {
+struct CompanionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "companion",
         abstract: "Show the companion memory backend.",
@@ -47,7 +47,7 @@ import Foundation
         defaultSubcommand: CompanionStatusCommand.self)
 }
 
-@MainActor struct CompanionRunsCommand: AsyncParsableCommand {
+struct CompanionRunsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "runs", abstract: "List the background learning runs.",
         discussion: """
@@ -68,7 +68,7 @@ import Foundation
     @Option(name: .long, help: "How many to list.")
     var limit = 10
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let runs = try await CompanionBridge.request(endpoint: endpoint) { client in
@@ -108,7 +108,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionExtractCommand: AsyncParsableCommand {
+struct CompanionExtractCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "extract", abstract: "Pull typed claims out of recent episodes.",
         discussion: """
@@ -126,7 +126,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.extractClaims()
@@ -146,7 +146,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionClaimsCommand: AsyncParsableCommand {
+struct CompanionClaimsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "claims", abstract: "List the claims you have made, with verdicts.",
         discussion: """
@@ -168,7 +168,7 @@ import Foundation
     @Option(name: .long, help: "How many to list.")
     var limit = 20
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let claims = try await CompanionBridge.request(endpoint: endpoint) { client in
@@ -205,7 +205,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionCorroborateCommand: AsyncParsableCommand {
+struct CompanionCorroborateCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "corroborate", abstract: "Check testable claims against the record.",
         discussion: """
@@ -224,7 +224,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.corroborate()
@@ -246,7 +246,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionAskCommand: AsyncParsableCommand {
+struct CompanionAskCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ask", abstract: "Ask a question answered from your own memory.",
         discussion: """
@@ -272,7 +272,7 @@ import Foundation
     @Argument(help: "The question to answer.")
     var question: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.askPersona(question: question, persona: persona)
@@ -289,7 +289,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionReflectCommand: AsyncParsableCommand {
+struct CompanionReflectCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reflect", abstract: "Distill fresh beliefs from recent episodes.",
         discussion: """
@@ -308,7 +308,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.reflect()
@@ -329,7 +329,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionBeliefsCommand: AsyncParsableCommand {
+struct CompanionBeliefsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "beliefs", abstract: "List what the companion believes about you.",
         discussion: """
@@ -350,7 +350,7 @@ import Foundation
     @Option(name: .long, help: "How many to list.")
     var limit = 20
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let beliefs = try await CompanionBridge.request(endpoint: endpoint) { client in
@@ -388,7 +388,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionSyncCommand: AsyncParsableCommand {
+struct CompanionSyncCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sync", abstract: "Pull a connector's activity into observations.",
         discussion: """
@@ -413,7 +413,7 @@ import Foundation
     @Argument(help: "Connector to sync: github or notion.")
     var connector: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             switch connector {
             case "github":
@@ -457,7 +457,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionObservationsCommand: AsyncParsableCommand {
+struct CompanionObservationsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "observations", abstract: "List what the connectors saw you do.",
         discussion: """
@@ -481,7 +481,7 @@ import Foundation
     @Option(name: .long, help: "Only this observation kind.")
     var kind: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let observations = try await CompanionBridge.request(endpoint: endpoint) { client in
@@ -609,7 +609,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStatusCommand: AsyncParsableCommand {
+struct CompanionStatusCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status", abstract: "Count what the companion remembers.",
         discussion: """
@@ -628,7 +628,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let status = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.status()
@@ -653,7 +653,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionSearchCommand: AsyncParsableCommand {
+struct CompanionSearchCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "search", abstract: "Search companion memory with hybrid retrieval.",
         discussion: """
@@ -678,7 +678,7 @@ import Foundation
     @Argument(help: "What to look for.")
     var query: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             guard limit <= 50 else {
@@ -714,7 +714,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionIndexCommand: AsyncParsableCommand {
+struct CompanionIndexCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "index", abstract: "Embed pending companion episodes.",
         discussion: """
@@ -732,7 +732,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let outcome = try await CompanionBridge.embeddingRequest(endpoint: endpoint) { client in
                 try await CompanionChatLibraryOperationExecution.index {
@@ -748,7 +748,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionDoctorCommand: AsyncParsableCommand {
+struct CompanionDoctorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "doctor", abstract: "Check the companion's dependencies.",
         discussion: """
@@ -767,7 +767,7 @@ import Foundation
     @Option(name: .long, help: "Companion API base URL.")
     var endpoint: String?
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let health = try await CompanionBridge.request(endpoint: endpoint) { client in
                 try await client.health()
@@ -803,7 +803,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionIngestCommand: AsyncParsableCommand {
+struct CompanionIngestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "ingest",
         abstract: "Ingest notes, recordings, photos, video and PDFs as episodes.",
@@ -828,7 +828,7 @@ import Foundation
         completion: .file())
     var path: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let url = try path.companionCLIPath()
             let scan: CompanionScanResult
@@ -924,7 +924,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionEpisodesCommand: AsyncParsableCommand {
+struct CompanionEpisodesCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "episodes", abstract: "List recent companion episodes.",
         discussion: """
@@ -945,7 +945,7 @@ import Foundation
     @Option(name: .long, help: "How many to list.")
     var limit = 20
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let limit = try ArgumentChecks.positive(self.limit, "--limit")
             let episodes = try await CompanionBridge.request(endpoint: endpoint) { client in
@@ -964,7 +964,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionStopCommand: AsyncParsableCommand {
+struct CompanionStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "stop", abstract: "Stop companion generation that is in progress.",
         discussion: """
@@ -975,7 +975,7 @@ import Foundation
             ed companion stop --json
             """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
-    static func reply(_ arguments: [String]) throws -> ExtensionCLIReply {
+    @MainActor static func reply(_ arguments: [String]) throws -> ExtensionCLIReply {
         do {
             guard let parsed = try CompanionCommand.parseAsRoot(arguments) as? CompanionStopCommand
             else { throw ExtensionPeerError.invalidRequest }
@@ -1012,7 +1012,7 @@ import Foundation
                 exitCode: code == .validationFailure ? 2 : code.rawValue)
         }
     }
-    func run() async throws {
+    @MainActor func run() async throws {
         CLIOut.raw(try Self.reply(["stop"] + (json ? ["--json"] : [])).stdout)
     }
 }

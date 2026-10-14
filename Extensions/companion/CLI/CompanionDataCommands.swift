@@ -3,7 +3,7 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
-@MainActor struct CompanionExportCommand: AsyncParsableCommand {
+struct CompanionExportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "export",
         abstract: "Save everything the companion remembers as a restorable bundle.",
@@ -32,7 +32,7 @@ import Foundation
     @Argument(help: "The directory the bundle is written into; created if missing.")
     var directory: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let target = try directory.companionCLIPath()
             let include = includeMedia
@@ -75,7 +75,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionImportCommand: AsyncParsableCommand {
+struct CompanionImportCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "import",
         abstract: "Restore a bundle written by `ed companion export`.",
@@ -100,7 +100,7 @@ import Foundation
     @Argument(help: "The bundle.json file, or the directory holding it.")
     var path: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let expanded = try path.companionCLIPath()
             let result = try await CompanionSettingsOperationBridge.request(
@@ -166,7 +166,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionEraseCommand: AsyncParsableCommand {
+struct CompanionEraseCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "erase",
         abstract: "Delete one episode, its media, and everything derived from it.",
@@ -194,7 +194,7 @@ import Foundation
     @Argument(help: "The episode id to erase.")
     var id: String
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             guard yes else {
                 throw CLIFailure.usage(
@@ -224,7 +224,7 @@ import Foundation
     }
 }
 
-@MainActor struct CompanionWipeCommand: AsyncParsableCommand {
+struct CompanionWipeCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "wipe",
         abstract: "Delete every episode, observation, belief and conversation.",
@@ -249,7 +249,7 @@ import Foundation
     @Flag(name: .long, help: "Actually wipe; without it nothing happens.")
     var yes = false
 
-    func run() async throws {
+    @MainActor func run() async throws {
         try await execute {
             let operation = CompanionSettingsOperation.wipe
             let plan = CLIDestructivePlan(
