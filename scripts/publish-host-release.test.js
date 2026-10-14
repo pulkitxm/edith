@@ -575,8 +575,14 @@ test("failed release control workflows never report completed publication", asyn
           throw new Error(`${operation} workflow failed`);
       });
       await expect(
-        publish(value, { execute: delayed.execute }),
+        publish(value, {
+          execute: delayed.execute,
+          retry: { sleep: () => {} },
+        }),
       ).rejects.toThrow(`${operation} workflow failed`);
+      expect(
+        delayed.events.filter((event) => event === `completed:${operation}`),
+      ).toHaveLength(6);
       expect(value.release?.draft ?? true).toBe(true);
       if (operation === "create")
         expect(
