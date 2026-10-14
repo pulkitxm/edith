@@ -216,6 +216,7 @@ export function readPullRequestBaseline(root, baseSHA) {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
+      stdio: "pipe",
     });
   const actual = git(["rev-parse", "--verify", `${baseSHA}^{commit}`]).trim();
   if (actual !== baseSHA) throw new Error("Pull request base commit mismatch");
