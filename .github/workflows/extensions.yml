@@ -353,8 +353,13 @@ jobs:
       - name: "Reuse this extension's unchanged support libraries"
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: "local/extension-support/${{ matrix.id }}_*"
-          key: "extension-support-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}"
+          path: |
+            local/extension-support/${{ matrix.id }}_*/build.json
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/lib*.a
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/Modules
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/*.bundle
+            local/extension-support/${{ matrix.id }}_*/.build/out/Products/Release
+          key: "extension-support-v3-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}"
       - name: "Test this extension's optional native packages"
         env:
           EXTENSION_ID: "${{ matrix.id }}"
