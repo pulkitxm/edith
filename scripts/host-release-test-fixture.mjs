@@ -126,6 +126,11 @@ export function fixture(existing = false) {
       if (release && !release.draft) return JSON.stringify(release);
       throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
     }
+    if (command === "gh" && /\/releases\/[0-9]+$/.test(args[1])) {
+      if (release && String(release.id) === args[1].split("/").at(-1))
+        return JSON.stringify(release);
+      throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
+    }
     if (command === "gh" && args[1].includes("/releases?"))
       return JSON.stringify(release ? [release] : []);
     if (command === "gh" && args.includes("Accept: application/octet-stream")) {

@@ -217,8 +217,9 @@ export async function publishHostRelease({
       verifyTag();
       verifyFiles();
     };
+    let releaseID;
     const readRelease = () =>
-      lookupRelease({ repository, tag, execute, retry });
+      lookupRelease({ repository, tag, releaseID, execute, retry });
     const requireIdentity = (value, draft, id) => {
       if (
         !value ||
@@ -307,6 +308,7 @@ export async function publishHostRelease({
       if (!release) throw new Error("Created host release is not available");
     }
     requireIdentity(release, release.draft, release.id);
+    releaseID = release.id;
     const compareAsset = async (expected, existing) => {
       const local = copies.snapshot.find(
         (asset) => asset.name === existing.name,
