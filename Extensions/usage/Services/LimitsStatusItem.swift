@@ -210,17 +210,29 @@ final class LimitsStatusItem {
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
-        let multi = groups.count > 1
-        return groups.map { stackedGroup($0, multi: multi) }
+        Self.stackedGroups(groups, defaults: SharedDefaults.store)
     }
 
-    private func stackedGroup(
-        _ group: MenuBarProviderGroup, multi: Bool
+    static func stackedGroups(
+        _ groups: [MenuBarProviderGroup], defaults: UserDefaults
+    ) -> [StackedLimitsView.Group] {
+        let multi = groups.count > 1
+        let firstAccount = groups.firstIndex { $0.accountHeader != nil }
+        return groups.enumerated().map { index, group in
+            stackedGroup(
+                group, multi: multi, showsAccountLogo: index == firstAccount, defaults: defaults)
+        }
+    }
+
+    private static func stackedGroup(
+        _ group: MenuBarProviderGroup, multi: Bool, showsAccountLogo: Bool, defaults: UserDefaults
     ) -> StackedLimitsView.Group {
+        let subColor = textColor(defaults: defaults)
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let showsLogo = group.accountLabel == nil && showsLogo(group.provider, multi: multi)
+        let showsLogo = group.accountHeader == nil
+            ? multi || group.provider == .cursor || group.provider == .grok : showsAccountLogo
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -237,18 +249,17 @@ final class LimitsStatusItem {
                 value = "\(percent)"
                 color =
                     segment.window.map {
-                        self.color(
+                        Self.color(
                             for: $0,
                             duration: segment.slot.pacingDuration(
-                                for: group.provider, period: $0.period))
+                                for: group.provider, period: $0.period), defaults: defaults)
                     }
                     ?? dimColor
             }
             columns.append(
                 StackedLimitsView.Column(
-                    label: (group.accountLabel.map { $0 + " " } ?? "")
-                        + segment.slot.menuBarLabel(
-                            for: group.provider, period: segment.window?.period), value: value,
+                    label: segment.slot.menuBarLabel(
+                        for: group.provider, period: segment.window?.period), value: value,
                     valueColor: color,
                     labelColor: labelColor))
         }
@@ -260,7 +271,7 @@ final class LimitsStatusItem {
         }
         return StackedLimitsView.Group(
             logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
-            columns: columns)
+            columns: columns, header: group.accountHeader, headerColor: labelColor)
     }
 
     private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
@@ -323,7 +334,20 @@ final class LimitsStatusItem {
     }
 
     private func color(for window: LimitWindow, duration: TimeInterval) -> NSColor {
-        let d = SharedDefaults.store
+        Self.color(for: window, duration: duration, defaults: SharedDefaults.store)
+    }
+
+    private static func color(
+        for window: LimitWindow, duration: TimeInterval, defaults d: UserDefaults
+    ) -> NSColor {
+        let mode = MenuBarTintMode(preference: d.string(forKey: AppStorageKeys.MenuBar.colorMode))
+        func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
+            guard mode == .custom else { return fallback }
+            return nsColor(hex: d.string(forKey: key)) ?? fallback
+        }
+        let lowColor = anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen)
+        let midColor = anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange)
+        let highColor = anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed)
         if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
@@ -338,29 +362,15 @@ final class LimitsStatusItem {
         }
     }
 
-    private var mode: MenuBarTintMode {
-        MenuBarTintMode(
-            preference: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode))
-    }
-
     private var subColor: NSColor? {
-        switch mode {
-        case .automatic:
-            return nil
-        case .custom:
-            return Self.nsColor(
-                hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
-        }
+        Self.textColor(defaults: SharedDefaults.store)
     }
 
-    private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == .custom else { return fallback }
-        return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
+    private static func textColor(defaults: UserDefaults) -> NSColor? {
+        guard MenuBarTintMode(preference: defaults.string(forKey: AppStorageKeys.MenuBar.colorMode))
+            == .custom else { return nil }
+        return nsColor(hex: defaults.string(forKey: AppStorageKeys.MenuBar.subColorHex))
     }
-
-    private var lowColor: NSColor { anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen) }
-    private var midColor: NSColor { anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange) }
-    private var highColor: NSColor { anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed) }
 
     static func color(
         forRisk risk: Double, low: NSColor = .systemGreen, mid: NSColor = .systemOrange,
@@ -414,6 +424,8 @@ final class StackedLimitsView: NSView {
     struct Group {
         let logo: NSImage?
         let columns: [Column]
+        var header: String? = nil
+        var headerColor: NSColor = .secondaryLabelColor
     }
 
     var groups: [Group] = [] {
@@ -434,10 +446,7 @@ final class StackedLimitsView: NSView {
         for (index, group) in groups.enumerated() {
             if index > 0 { width += Self.groupGap }
             if group.logo != nil { width += Self.logoSize + Self.logoGap }
-            for (columnIndex, column) in group.columns.enumerated() {
-                if columnIndex > 0 { width += Self.columnGap }
-                width += Self.columnWidth(column)
-            }
+            width += Self.groupWidth(group)
         }
         return width.rounded(.up)
     }
@@ -464,6 +473,26 @@ final class StackedLimitsView: NSView {
                     from: .zero, operation: .sourceOver, fraction: 1)
                 x += Self.logoSize + Self.logoGap
             }
+            if let header = group.header {
+                let width = Self.groupWidth(group)
+                let title = Self.attributed(header, font: Self.labelFont, color: group.headerColor)
+                title.draw(
+                    at: NSPoint(x: x + (width - title.size().width) / 2, y: blockTop - labelHeight))
+                let rowWidth = Self.rowWidth(group)
+                var columnX = x + (width - rowWidth) / 2
+                let valueY = blockTop - labelHeight - Self.rowGap - valueHeight
+                for column in group.columns {
+                    let label = Self.attributed(
+                        column.label, font: Self.labelFont, color: column.labelColor)
+                    let value = Self.attributed(
+                        column.value, font: Self.valueFont, color: column.valueColor)
+                    label.draw(at: NSPoint(x: columnX, y: valueY - 1))
+                    value.draw(at: NSPoint(x: columnX + label.size().width + 3, y: valueY))
+                    columnX += label.size().width + 3 + value.size().width + Self.columnGap
+                }
+                x += width
+                continue
+            }
             for (columnIndex, column) in group.columns.enumerated() {
                 if columnIndex > 0 { x += Self.columnGap }
                 let width = Self.columnWidth(column)
@@ -480,6 +509,22 @@ final class StackedLimitsView: NSView {
                 x += width
             }
         }
+    }
+
+    private static func rowWidth(_ group: Group) -> CGFloat {
+        group.columns.reduce(CGFloat(0)) { width, column in
+            width + attributed(column.label, font: labelFont, color: .labelColor).size().width
+                + 3 + attributed(column.value, font: valueFont, color: .labelColor).size().width
+        } + CGFloat(max(group.columns.count - 1, 0)) * columnGap
+    }
+
+    private static func groupWidth(_ group: Group) -> CGFloat {
+        if let header = group.header {
+            let headerWidth = attributed(header, font: labelFont, color: .labelColor).size().width
+            return ceil(max(rowWidth(group), headerWidth))
+        }
+        return group.columns.reduce(CGFloat(0)) { $0 + columnWidth($1) }
+            + CGFloat(max(group.columns.count - 1, 0)) * columnGap
     }
 
     private static func columnWidth(_ column: Column) -> CGFloat {

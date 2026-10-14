@@ -88,15 +88,17 @@ public struct MenuBarProviderGroup: Equatable, Sendable {
     public let provider: LimitProvider
     public let segments: [MenuBarLimitSegment]
     public let accountLabel: String?
+    public let accountHeader: String?
     public let remainingAccounts: Int
 
     public init(
         provider: LimitProvider, segments: [MenuBarLimitSegment], accountLabel: String? = nil,
-        remainingAccounts: Int = 0
+        remainingAccounts: Int = 0, accountHeader: String? = nil
     ) {
         self.provider = provider
         self.segments = segments
         self.accountLabel = accountLabel
+        self.accountHeader = accountHeader
         self.remainingAccounts = remainingAccounts
     }
 }
@@ -120,7 +122,8 @@ public enum MenuBarLimits {
             return .init(
                 provider: .claude, segments: group.segments,
                 accountLabel: masked ? "Account" : String(account.name.prefix(8)),
-                remainingAccounts: !masked && accounts.count > 2 ? accounts.count - 1 : 0)
+                remainingAccounts: !masked && accounts.count > 2 ? accounts.count - 1 : 0,
+                accountHeader: masked ? "Account" : String(account.name.prefix(16)))
         }
     }
 
