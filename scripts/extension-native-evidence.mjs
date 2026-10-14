@@ -380,7 +380,7 @@ export async function publishNativeEvidence({
       ),
       definitions,
       fingerprints,
-      shippingIDs: shippingExtensionIDs,
+      shippingIDs: shippingExtensionIDs(),
     };
     ownedDraftResume(resume);
     const { publicationPlanningState } = await import(
@@ -695,7 +695,7 @@ export async function preparedNativeEvidence({
         1024 ** 2,
       ),
       fingerprints: payload.fingerprints,
-      shippingIDs: shippingExtensionIDs,
+      shippingIDs: shippingExtensionIDs(),
     });
   const expected = {
     tag: evidenceTag(target, payload.runID, payload.runAttempt),

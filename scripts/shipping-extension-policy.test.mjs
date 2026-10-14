@@ -31,14 +31,17 @@ test("the release selects every manifest extension without modifying the manifes
     definitions.map((entry) => entry.id),
   );
   assert.deepEqual(
-    shippingExtensionIDs,
+    shippingExtensionIDs(),
     selected.map((entry) => entry.id),
   );
   assert(selected.every((entry, index) => entry === definitions[index]));
   for (const entry of selected)
-    assert(entry.dependencies.every((id) => shippingExtensionIDs.includes(id)));
+    assert(
+      entry.dependencies.every((id) => shippingExtensionIDs().includes(id)),
+    );
   assert.equal(JSON.stringify(definitions), before);
-  assert(Object.isFrozen(shippingExtensionIDs));
+  assert(Object.isFrozen(shippingExtensionIDs()));
+  assert.equal(shippingExtensionIDs(), shippingExtensionIDs());
 });
 
 test("missing, duplicate, unknown and unreleased dependencies reject publication scope", async () => {
@@ -84,7 +87,7 @@ test("unknown and duplicate planned packages reject before publication", () => {
     assertShippingExtensions([{ id: "keepAwake" }, { id: "music" }]),
   );
   assert.doesNotThrow(() =>
-    assertShippingExtensions(shippingExtensionIDs.map((id) => ({ id }))),
+    assertShippingExtensions(shippingExtensionIDs().map((id) => ({ id }))),
   );
   assert.throws(
     () => assertShippingExtensions([{ id: "unknownExtension" }]),
@@ -191,7 +194,7 @@ test("an owned draft resumes every shipping package against the full source inve
     previous: { schemaVersion: 1, revision: 1, packages: records },
     definitions,
     fingerprints,
-    shippingIDs: shippingExtensionIDs,
+    shippingIDs: shippingExtensionIDs(),
   };
   assert.deepEqual(ownedDraftResume(resume), records);
   assert.throws(() =>
