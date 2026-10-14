@@ -149,7 +149,7 @@ ci-host-abi:
 ci-scripts: ci-host-invocation ci-host-abi
 	bun test ./scripts --path-ignore-patterns '**/._*'
 
-ci-scripts-batch:
+ci-scripts-batch: ci-host-abi
 	@test -n "$(BATCH)" || { echo "set BATCH to a scripts test batch" >&2; exit 1; }
 	@set -eu; \
 	  paths="$$(python3 scripts/test-batches.py script-paths "$(BATCH)")"; \
