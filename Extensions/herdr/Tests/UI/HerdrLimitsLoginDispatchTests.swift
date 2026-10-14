@@ -6,6 +6,114 @@ import Testing
 @testable import HerdrUI
 
 @Suite(.serialized) @MainActor struct HerdrLimitsLoginDispatchTests {
+    @Test func independentCancellationBeforeCanonicalLoadReturnsPreventsLateLogin() async throws {
+        HerdrWorkOwnership.enable()
+        defer { HerdrWorkOwnership.enable() }
+        let root = try HerdrAccountFixture.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let terminal = HerdrLimitsTerminalFixture()
+        var creations = 0
+        let owner = HerdrLimitsLogin(
+            services: .init(
+                create: { _ in
+                    creations += 1
+                    return terminal
+                }, eraseScopedSecret: { _ in }))
+        let gate = HerdrLimitsReplyGate()
+        let directory = root.appendingPathComponent("Accounts")
+        let model = ClaudeAccountsModel(
+            directory: directory, limitsLogin: owner,
+            readState: { storage in
+                await gate.hold()
+                return try await storage.load()
+            }, eraseSecret: { _ in }, invalidateUsage: {}, refreshUsage: {})
+        let account = ClaudeAccount(name: "Synthetic launch", credential: "synthetic-launch-secret")
+        let original = ClaudeAccountsState(accounts: [account])
+        try await model.persist(original)
+        let defaults = HerdrUIDefaults()
+        let store = HerdrStore(
+            defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
+            machinesProvider: { [] })
+        let worker = HerdrWorker(
+            store: store, defaults: defaults, trackingDemand: { false }, searchDecider: { nil },
+            automaticActions: false)
+        let ticket = UUID()
+        let control = try JSONSerialization.data(withJSONObject: [
+            "id": account.id.uuidString, "ticket": ticket.uuidString,
+        ])
+        let foreign = try JSONSerialization.data(withJSONObject: [
+            "id": account.id.uuidString, "ticket": UUID().uuidString,
+        ])
+        let start = Task {
+            try await worker.execute("herdr.ui.accounts.limitsStart", payload: control)
+        }
+        await gate.waitUntilHeld()
+        let cancellationResult = HerdrLimitsCancellationResult()
+        var cancellation: Task<Void, Error>?
+        do {
+            let waitingData = try await worker.execute(
+                "herdr.ui.accounts.limitsStatus", payload: control)
+            let waiting = try JSONDecoder().decode(HerdrLimitsLoginState.self, from: waitingData)
+            #expect(waiting.accountID == account.id && waiting.ticket == ticket)
+            #expect(waiting.phase == .connecting && waiting.session == nil)
+            await #expect(throws: ExtensionPeerError.self) {
+                _ = try await worker.execute("herdr.ui.accounts.limitsCancel", payload: foreign)
+            }
+            await #expect(throws: ExtensionPeerError.self) {
+                _ = try await worker.execute("herdr.ui.accounts.limitsStart", payload: foreign)
+            }
+            let cancelledData = try await worker.execute(
+                "herdr.ui.accounts.limitsCancel", payload: control)
+            let cancelled = try JSONDecoder().decode(
+                HerdrLimitsLoginState.self, from: cancelledData)
+            #expect(cancelled.phase == .connecting && cancelled.session == nil)
+            #expect(!start.isCancelled && creations == 0 && terminal.closeCalls == 0)
+            let heldData = try await worker.execute(
+                "herdr.ui.accounts.limitsStatus", payload: control)
+            let held = try JSONDecoder().decode(HerdrLimitsLoginState.self, from: heldData)
+            #expect(held.phase == .connecting)
+            cancellation = Task {
+                cancellationResult.entered = true
+                let result = try await owner.cancel(accountID: account.id, ticket: ticket)
+                #expect(result.phase == .cancelled && result.session == nil)
+                cancellationResult.returned = true
+            }
+            let cancellationDeadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while !cancellationResult.entered {
+                try #require(ContinuousClock.now < cancellationDeadline)
+                await Task.yield()
+            }
+            #expect(!cancellationResult.returned)
+            gate.release()
+            await #expect(throws: (any Error).self) { _ = try await start.value }
+            let joinedCancellation = try #require(cancellation)
+            try await joinedCancellation.value
+            #expect(cancellationResult.returned)
+            await owner.joinPendingWork()
+            let finishedData = try await worker.execute(
+                "herdr.ui.accounts.limitsStatus", payload: control)
+            let finished = try JSONDecoder().decode(HerdrLimitsLoginState.self, from: finishedData)
+            #expect(finished.phase == .cancelled && finished.session == nil)
+            #expect(!owner.hasPendingWork)
+            #expect(creations == 0 && terminal.closeCalls == 0)
+            let saved = try await ClaudeAccountStorage(directory: directory).load()
+            #expect(saved == original)
+            let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            #expect(!names.contains("limits-cleanup.json") && !names.contains(".limits-start.lock"))
+            #expect(!names.contains(where: { UUID(uuidString: $0) != nil }))
+            await worker.shutdown()
+        } catch {
+            gate.release()
+            terminal.releaseClose()
+            start.cancel()
+            cancellation?.cancel()
+            _ = try? await start.value
+            _ = try? await cancellation?.value
+            await worker.shutdown()
+            throw error
+        }
+    }
+
     @Test func workerCancellationRejectsStartAfterHeldCanonicalLoadResumes() async throws {
         HerdrWorkOwnership.enable()
         defer { HerdrWorkOwnership.enable() }
@@ -282,6 +390,11 @@ import Testing
             throw error
         }
     }
+}
+
+@MainActor private final class HerdrLimitsCancellationResult {
+    var entered = false
+    var returned = false
 }
 
 @MainActor private final class HerdrLimitsReplyGate {

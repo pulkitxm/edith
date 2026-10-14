@@ -91,6 +91,19 @@ enum HerdrLimitsLoginLaunch {
     }
 
     private let services: Services
+    struct Preparation {
+        let account: ClaudeAccount
+        let storage: ClaudeAccountStorage
+        let command: String
+        let sharedEnvironment: String
+        let inheritedEnvironment: [String: String]
+    }
+
+    @MainActor private final class PreparationOutcome {
+        var state: HerdrLimitsLoginState?
+    }
+
+    private var preparing: Task<Void, Error>?
     private var pending: Task<Void, Never>?
     private var current: HerdrLimitsLoginState?
     private var terminal: (ticket: UUID, session: any HerdrLimitsLoginTerminal)?
@@ -98,20 +111,89 @@ enum HerdrLimitsLoginLaunch {
 
     init(services: Services = .init()) { self.services = services }
 
+    var hasPendingWork: Bool { preparing != nil || pending != nil || terminal != nil }
+
     func begin(
         account: ClaudeAccount, ticket: UUID, storage: ClaudeAccountStorage, command: String,
         sharedEnvironment: String, inheritedEnvironment: [String: String],
         didConnect: @escaping @MainActor () async -> Void = {}
     ) throws -> HerdrLimitsLoginState {
-        guard !stopped, pending == nil, current?.ticket != ticket else {
+        try startPrepared(
+            .init(
+                account: account, storage: storage, command: command,
+                sharedEnvironment: sharedEnvironment, inheritedEnvironment: inheritedEnvironment),
+            ticket: ticket, reserved: false, didConnect: didConnect)
+    }
+
+    func beginPreparing(
+        accountID: UUID, ticket: UUID,
+        prepare: @escaping @MainActor () async throws -> Preparation,
+        didConnect: @escaping @MainActor () async -> Void = {}
+    ) async throws -> HerdrLimitsLoginState {
+        guard !stopped, preparing == nil, pending == nil, current?.ticket != ticket else {
+            throw ExtensionPeerError.rejected("A subscription sign-in is already in progress.")
+        }
+        let state = HerdrLimitsLoginState(accountID: accountID, ticket: ticket, phase: .connecting)
+        current = state
+        let outcome = PreparationOutcome()
+        let task = Task {
+            defer { self.preparing = nil }
+            do {
+                let value = try await prepare()
+                try Task.checkCancellation()
+                guard !self.stopped, self.current?.accountID == accountID,
+                    self.current?.ticket == ticket, self.current?.phase == .connecting,
+                    value.account.id == accountID
+                else { throw CancellationError() }
+                outcome.state = try self.startPrepared(
+                    value, ticket: ticket, reserved: true, didConnect: didConnect)
+            } catch {
+                self.finish(
+                    ticket,
+                    phase: Task.isCancelled || error is CancellationError ? .cancelled : .failed)
+                if self.stopped { throw ExtensionPeerError.unavailable }
+                throw error
+            }
+        }
+        preparing = task
+        do {
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            try Task.checkCancellation()
+            guard let result = outcome.state else { throw ExtensionPeerError.invalidRequest }
+            return result
+        } catch {
+            if Task.isCancelled, current?.accountID == accountID, current?.ticket == ticket {
+                cancelPendingWork()
+                await joinPendingWork()
+            }
+            throw error
+        }
+    }
+
+    private func startPrepared(
+        _ preparation: Preparation, ticket: UUID, reserved: Bool,
+        didConnect: @escaping @MainActor () async -> Void
+    ) throws -> HerdrLimitsLoginState {
+        let account = preparation.account
+        let storage = preparation.storage
+        let admission =
+            reserved
+            ? current?.accountID == account.id && current?.ticket == ticket
+                && current?.phase == .connecting
+            : current?.ticket != ticket
+        guard !stopped, preparing == nil || reserved, pending == nil, admission else {
             throw ExtensionPeerError.rejected("A subscription sign-in is already in progress.")
         }
         let profileID = UUID()
         let launch = try HerdrLimitsLoginLaunch.prepare(
             account: account, profileID: profileID,
             folder: storage.directory.appendingPathComponent(profileID.uuidString),
-            command: command, sharedEnvironment: sharedEnvironment,
-            inheritedEnvironment: inheritedEnvironment)
+            command: preparation.command, sharedEnvironment: preparation.sharedEnvironment,
+            inheritedEnvironment: preparation.inheritedEnvironment)
         let state = HerdrLimitsLoginState(
             accountID: account.id, ticket: ticket, phase: .connecting)
         current = state
@@ -148,21 +230,19 @@ enum HerdrLimitsLoginLaunch {
 
     func cancel(accountID: UUID, ticket: UUID) async throws -> HerdrLimitsLoginState {
         _ = try requestCancellation(accountID: accountID, ticket: ticket)
-        let task = pending
-        await task?.value
+        await joinPendingWork()
         return try status(accountID: accountID, ticket: ticket)
     }
 
     func cancel(accountID: UUID) async {
         guard current?.accountID == accountID else { return }
-        let task = pending
-        task?.cancel()
-        await task?.value
+        cancelPendingWork()
+        await joinPendingWork()
     }
 
     func requestCancellation(accountID: UUID, ticket: UUID) throws -> HerdrLimitsLoginState {
         let state = try status(accountID: accountID, ticket: ticket)
-        pending?.cancel()
+        cancelPendingWork()
         return state
     }
 
@@ -177,22 +257,30 @@ enum HerdrLimitsLoginLaunch {
         return try await terminal.session.execute(operation, payload: payload)
     }
 
-    func cancelPendingWork() { pending?.cancel() }
+    func cancelPendingWork() {
+        preparing?.cancel()
+        pending?.cancel()
+    }
 
     func joinPendingWork() async {
-        let task = pending
-        await task?.value
+        let reservation = current
+        let preparation = preparing
+        let original = pending
+        _ = try? await preparation?.value
+        let promoted =
+            current?.accountID == reservation?.accountID && current?.ticket == reservation?.ticket
+            ? pending : nil
+        await (original ?? promoted)?.value
     }
 
     func stop() {
         stopped = true
-        pending?.cancel()
+        cancelPendingWork()
     }
 
     func stopAndWait() async {
         stop()
-        let task = pending
-        await task?.value
+        await joinPendingWork()
     }
 
     private func finish(_ ticket: UUID, phase: HerdrLimitsLoginState.Phase) {

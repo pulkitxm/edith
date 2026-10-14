@@ -303,6 +303,40 @@ import Observation
         return next
     }
 
+    func startCanonicalLimitsLogin(_ id: UUID, ticket: UUID, defaults: UserDefaults) async throws
+        -> HerdrLimitsLoginState
+    {
+        guard client == nil, !stopped, !saving else { throw ExtensionPeerError.invalidRequest }
+        return try await limitsLoginOwner.beginPreparing(
+            accountID: id, ticket: ticket,
+            prepare: { [self] in
+                try await load()
+                try Task.checkCancellation()
+                guard !saving else {
+                    throw ExtensionPeerError.rejected("An account change is already in progress.")
+                }
+                guard ready, !stopped, let account = account(id) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                var environment = CLIToolEnvironment.sanitized()
+                if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+                {
+                    environment["HOME"] = fixture
+                    environment["ZDOTDIR"] = fixture
+                }
+                return .init(
+                    account: account, storage: try ownedStorage(),
+                    command: HerdrLaunchSettings.command(for: "Claude Code", in: defaults),
+                    sharedEnvironment: HerdrLaunchSettings.sharedEnvironment(in: defaults),
+                    inheritedEnvironment: environment)
+            },
+            didConnect: { [weak self] in
+                guard let self, !self.stopped else { return }
+                try? await self.load()
+                await self.notifyChanged()
+            })
+    }
+
     func startLimitsLogin(_ id: UUID, ticket: UUID, defaults: UserDefaults) async throws
         -> HerdrLimitsLoginState
     {

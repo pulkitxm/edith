@@ -61,6 +61,18 @@ struct ClaudeSharedLaunchMutation: Codable {
                 let raw = object["id"] as? String, UUID(uuidString: raw) != nil
             else { throw ExtensionPeerError.invalidRequest }
         }
+        if command == "herdr.ui.accounts.limitsStart" {
+            guard !model.saving else {
+                throw ExtensionPeerError.rejected("An account change is already in progress.")
+            }
+            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
+                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
+                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                await model.startCanonicalLimitsLogin(
+                    id, ticket: ticket, defaults: worker.store.uiDefaults))
+        }
         guard !model.saving else {
             throw ExtensionPeerError.rejected("An account change is already in progress.")
         }
@@ -69,13 +81,6 @@ struct ClaudeSharedLaunchMutation: Codable {
             throw ExtensionPeerError.rejected("An account change is already in progress.")
         }
         switch command {
-        case "herdr.ui.accounts.limitsStart":
-            guard payload.count <= 256, Set(object.keys) == ["id", "ticket"],
-                let raw = object["id"] as? String, let id = UUID(uuidString: raw),
-                let token = object["ticket"] as? String, let ticket = UUID(uuidString: token)
-            else { throw ExtensionPeerError.invalidRequest }
-            return try JSONEncoder().encode(
-                await model.startLimitsLogin(id, ticket: ticket, defaults: worker.store.uiDefaults))
         case "herdr.ui.accounts.read":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
         case "herdr.ui.accounts.save":
