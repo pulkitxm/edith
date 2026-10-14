@@ -119,11 +119,11 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         suspendCommands { [self] in
             Task { [self] in
-                await commands.shutdownAndWait()
-                let service = service
-                _ = execute(["operation": "stop"])
+                await self.commands.shutdownAndWait()
+                let service = self.service
+                _ = self.execute(["operation": "stop"])
                 await service?.drain()
-                for task in Array(retiredPresentations.values) { await task.value }
+                for task in Array(self.retiredPresentations.values) { await task.value }
                 completion()
             }
         }

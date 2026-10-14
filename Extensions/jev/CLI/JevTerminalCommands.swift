@@ -97,7 +97,7 @@ struct JevStatusCommand: AsyncParsableCommand {
 
     @MainActor func run() async throws {
         try await execute {
-            let status = try await JevCLI.run { try await $0.status(probe: probe) }
+            let status = try await JevCLI.run { await $0.status(probe: probe) }
             guard !json else {
                 CLIOut.json(JevCLI.statusJSON(status))
                 return
@@ -145,7 +145,7 @@ struct JevKeyShowCommand: AsyncParsableCommand {
 
     @MainActor func run() async throws {
         try await execute {
-            let status = try await JevCLI.run { try await $0.status(probe: false) }
+            let status = try await JevCLI.run { await $0.status(probe: false) }
             guard !json else {
                 var fields: [String: JSONValue] = ["configured": .bool(status.isConfigured)]
                 if let hint = status.keyHint { fields["key"] = .string(hint) }
@@ -181,7 +181,7 @@ struct JevKeySetCommand: AsyncParsableCommand {
                 throw CLIFailure.usage(
                     "stdin was empty", hint: "printf %s \"$KEY\" | ed jev key set")
             }
-            let status = try await JevCLI.run { try await $0.setKey(key) }
+            let status = try await JevCLI.run { await $0.setKey(key) }
             guard !json else {
                 CLIOut.json(JevCLI.statusJSON(status))
                 return
@@ -220,7 +220,7 @@ struct JevKeyClearCommand: AsyncParsableCommand {
                 CLIOut.note("pass --yes to remove the key and turn Jev off")
                 return
             }
-            let status = try await JevCLI.run { try await $0.setKey(nil) }
+            let status = try await JevCLI.run { await $0.setKey(nil) }
             guard !json else {
                 CLIOut.json(JevCLI.statusJSON(status))
                 return

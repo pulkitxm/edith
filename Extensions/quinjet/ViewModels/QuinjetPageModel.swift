@@ -566,7 +566,7 @@ final class QuinjetPageModel {
         switch action {
         case .openNewTab:
             QuinjetWorkOwnership.start {
-                try? await self.performSessionOperation(
+                _ = try? await self.performSessionOperation(
                     QuinjetSessionRequest(operation: .create, session: tab.id.uuidString))
             }
         case .openWorktree:
