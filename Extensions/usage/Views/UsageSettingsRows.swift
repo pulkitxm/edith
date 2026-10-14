@@ -219,7 +219,7 @@ struct UsageSettingsRows: View {
 
                     if isCustomColor {
                         ColorPicker(
-                            "Text (5h / 7d)",
+                            "Labels (account / 5h / 7d)",
                             selection: hexBinding(
                                 $subColorHex),
                             supportsOpacity: false)
