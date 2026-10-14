@@ -4,7 +4,7 @@ import AppKit
 import CoreFoundation
 import Foundation
 import SwiftUI
-internal import WorkerFixtureSupport
+internal import AttentionWorkerFixtureSupport
 
 @MainActor
 @objc(EdithAttentionExtensionController)

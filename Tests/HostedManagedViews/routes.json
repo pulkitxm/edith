@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "083bb3a79e6a7da6b5d261787eec890c7ceac3d12c320c7a3a359f3d6248c1e4"
+          "sha256": "26843ffcdd79f41f7cb19005886a788de14e26701ee9e0e87e89f28228fbeca6"
         }
       ]
     },
