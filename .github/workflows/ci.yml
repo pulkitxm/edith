@@ -736,11 +736,22 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Stage the release plists
+        if: steps.release_build.outputs.superseded != 'true'
+        run: |
+          mkdir -p release-plists
+          cp Resources/Info.plist Resources/HelperInfo.plist release-plists/
+          for plist in release-plists/Info.plist release-plists/HelperInfo.plist; do
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
+          done
+          git diff --quiet -- Resources/Info.plist Resources/HelperInfo.plist
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-plists
-          path: Resources/*Info.plist
+          path: release-plists/*Info.plist
           if-no-files-found: error
           retention-days: 1
 

@@ -266,7 +266,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(12);
+  ).toBe(13);
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
 });
 
@@ -469,8 +469,30 @@ test("DMG version preparation leaves frozen source clean and reaches the isolate
   expect(
     dmg.steps.some((step) => step.name === "Stamp the release version"),
   ).toBe(false);
-  expect(jobText(dmg)).not.toContain("Set :CFBundleShortVersionString");
-  expect(jobText(dmg)).not.toContain("Set :CFBundleVersion");
+  const stageIndex = dmg.steps.findIndex(
+    (step) => step.name === "Stage the release plists",
+  );
+  const buildIndex = dmg.steps.findIndex(
+    (step) => step.name === "Build the app",
+  );
+  expect(buildIndex).toBeGreaterThan(-1);
+  expect(stageIndex).toBeGreaterThan(buildIndex);
+  const stage = dmg.steps[stageIndex].run;
+  expect(stage).toContain(
+    "cp Resources/Info.plist Resources/HelperInfo.plist release-plists/",
+  );
+  expect(stage).toContain(
+    'Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"',
+  );
+  expect(stage).toContain('Set :CFBundleVersion $RELEASE_BUILD" "$plist"');
+  expect(stage).not.toMatch(/Set :CFBundle\w+ \$RELEASE_\w+" Resources\//);
+  expect(stage).toContain(
+    "git diff --quiet -- Resources/Info.plist Resources/HelperInfo.plist",
+  );
+  const plistUpload = dmg.steps.find(
+    (step) => step.with?.name === "release-plists",
+  );
+  expect(plistUpload.with.path).toBe("release-plists/*Info.plist");
   const local = readFileSync("scripts/release-local.sh", "utf8");
   const buildStart = local.indexOf('echo "==> building the release app"');
   const stampStart = local.indexOf("Set :CFBundleShortVersionString");
