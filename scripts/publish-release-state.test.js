@@ -153,6 +153,7 @@ function releaseEnvironment(fixture, checksum = firstChecksum) {
     RELEASE_SHA256: checksum,
     RELEASE_TAG: "v0.0.80",
     RELEASE_VERSION: "0.0.80",
+    RELEASE_RETRY_SECONDS: "0",
   };
 }
 

@@ -813,13 +813,15 @@ export async function publishExtensions({
   const initial = await verifyState();
   if (catalogPhase === "stage" && initial?.release?.draft !== false)
     throw new Error("Staging requires an existing public catalog");
-  const publishDraft = async (id) =>
+  const publishDraft = async (id, tag) =>
     mutate(
       "release",
       "edit",
       "--repo",
       repository,
       String(id),
+      "--tag",
+      tag,
       "--draft",
       "false",
       "--make-latest",
@@ -858,7 +860,10 @@ export async function publishExtensions({
       verifyState,
       verifyOriginal,
     });
-    await finalizeDraftCatalog({ verifyState, publish: publishDraft });
+    await finalizeDraftCatalog({
+      verifyState,
+      publish: (id) => publishDraft(id, catalogTag),
+    });
     await verifyState();
     return { published: [], revision: old.revision, nativeEvidence };
   }
@@ -987,6 +992,8 @@ export async function publishExtensions({
       "--repo",
       repository,
       String(item.id),
+      "--tag",
+      entry.tag,
       "--draft",
       "false",
       "--make-latest",
@@ -1086,6 +1093,8 @@ export async function publishExtensions({
           "--repo",
           repository,
           String(id),
+          "--tag",
+          catalogTag,
           "--body",
           body,
           "--make-latest",
@@ -1105,7 +1114,7 @@ export async function publishExtensions({
                 .object.sha,
             readCatalog: () => readPublicationCatalog(repository, catalogTag),
           }),
-        publish: publishDraft,
+        publish: (id) => publishDraft(id, catalogTag),
       });
     return result;
   };
