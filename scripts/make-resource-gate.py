@@ -77,6 +77,7 @@ EXACT = {
     "ci-extension-herdr-settings-local": "swift-test",
     "ci-extension-usage-accounts": "swift-test",
     "ci-extension-usage-accounts-local": "swift-test",
+    "ci-extension-usage-backup-local": "swift-test",
     "ci-security": "scan",
     "ci-gitleaks": "scan",
     "ci-cargo-audit": "scan",

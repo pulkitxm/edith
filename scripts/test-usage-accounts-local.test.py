@@ -221,5 +221,122 @@ class UsageAccountLocalRouteTests(unittest.TestCase):
         self.assertTrue(path.is_file())
 
 
+class UsageBackupLocalRouteTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="usage-backup-route-pure-", dir=os.environ["TMPDIR"])
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name).resolve()
+        self.root = self.base / "checkout"
+        self.root.mkdir(mode=0o700)
+        self.tests = self.root / "Extensions/usage/Tests"
+        self.tests.mkdir(parents=True, mode=0o700)
+        self.backup = self.tests / "UsageBackupTests.swift"
+        self.backup.write_text(
+            "@Suite struct UsageBackupTests {\n@Test func " + HELPER.BACKUP_METHOD
+            + "() {}\n@Test func unrelatedBackupCase() {}\n}\n")
+        self.fixture = self.base / "fixture"
+        self.fixture.mkdir(mode=0o700)
+        self.cleanup = {"reaped": True, "remainingOwnedProcesses": 0,
+                        "unverifiedOwnedProcesses": 0, "ownershipErrors": [],
+                        "pendingOwnedChildren": 0, "naturalSurvivorCount": 0}
+
+    def output(self):
+        return ("◇ Suite UsageBackupTests started.\n◇ Test " + HELPER.BACKUP_METHOD
+                + "() started.\n✔ Test " + HELPER.BACKUP_METHOD
+                + "() passed after 0.1 seconds.\n✔ Suite UsageBackupTests passed after 0.1 seconds.\n"
+                + "✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\n").encode()
+
+    def test_closed_selector_and_boolean_cannot_accept_arbitrary_filters(self):
+        self.assertFalse(HELPER.backup_boundary_requested([]))
+        self.assertTrue(HELPER.backup_boundary_requested(["--backup-boundary"]))
+        self.assertEqual(HELPER.expected_counts(False), (47, 7, 52))
+        self.assertEqual(HELPER.expected_counts(True), (1, 1, 1))
+        for arguments in [["--filter", "synthetic"], ["--backup-boundary", "--backup-boundary"], ["--backup-boundary=true"], ["synthetic"]]:
+            with self.assertRaises(ValueError):
+                HELPER.backup_boundary_requested(arguments)
+        for value in [None, 0, 1, "true", []]:
+            with self.assertRaises(ValueError):
+                HELPER.source_inventory(self.root, value)
+
+    def test_inventory_requires_exact_single_original_method_and_rejects_duplicate_or_missing(self):
+        inventory = HELPER.source_inventory(self.root, True)
+        self.assertEqual(inventory["methods"], ["UsageBackupTests/" + HELPER.BACKUP_METHOD])
+        self.assertEqual(set(inventory["sourceSHA256"]), {"Extensions/usage/Tests/UsageBackupTests.swift"})
+        original = self.backup.read_text()
+        for contents in [original.replace(HELPER.BACKUP_METHOD, "differentBackupCase"),
+                         original.replace("@Test func unrelatedBackupCase() {}", "@Test func " + HELPER.BACKUP_METHOD + "() {}")]:
+            self.backup.write_text(contents)
+            with self.assertRaises(ValueError):
+                HELPER.source_inventory(self.root, True)
+
+    def test_filter_requires_real_module_suite_method_boundary_and_not_source_filename(self):
+        identity = "UsageExtensionTests.UsageBackupTests/" + HELPER.BACKUP_METHOD
+        for suffix in ["", "()", "()/UsageBackupTests.swift:258"]:
+            self.assertRegex(identity + suffix, HELPER.BACKUP_FILTER)
+        for value in ["ForeignModule.UsageBackupTests/" + HELPER.BACKUP_METHOD,
+                      identity + "Extra()", "UsageExtensionTests.ForeignSuite/" + HELPER.BACKUP_METHOD,
+                      "ForeignModule.Case/method()/UsageExtensionTests.UsageBackupTests/" + HELPER.BACKUP_METHOD]:
+            self.assertNotRegex(value, HELPER.BACKUP_FILTER)
+
+    def test_backup_arguments_change_only_filter_and_use_existing_make_budget(self):
+        developer = "/Applications/Xcode.app/Contents/Developer"
+        swift = Path(developer) / "Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-test"
+        default = HELPER.command(swift, self.root, self.fixture, developer)
+        selected = HELPER.command(swift, self.root, self.fixture, developer, True)
+        default[default.index("--filter") + 1] = HELPER.BACKUP_FILTER
+        self.assertEqual(selected, default)
+        make = (HELPER.ROOT / "Makefile").read_text()
+        self.assertIn("ci-extension-usage-backup-local:\n\tpython3 -B scripts/test-usage-accounts-local.py --backup-boundary", make)
+        spec = importlib.util.spec_from_file_location("usage_backup_resource_gate", HELPER.ROOT / "scripts/make-resource-gate.py")
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        self.assertEqual(gate.profile_for("ci-extension-usage-backup-local"), gate.PROFILES["swift-test"])
+
+    def test_result_requires_one_actual_named_start_pass_and_suite(self):
+        good = self.output()
+        self.assertEqual(HELPER.test_result(0, good, True), (0, 1, True))
+        for bad in [b"Test run with 1 test in 1 suite passed after 0.1 seconds.\n", good + good,
+                    good.replace(b"1 test in 1 suite", b"0 tests in 1 suite"),
+                    good.replace(b"1 test in 1 suite", b"1 test in 2 suites"),
+                    good.replace(HELPER.BACKUP_METHOD.encode(), b"differentMethod"),
+                    good.replace(b"UsageBackupTests", b"ForeignSuite")]:
+            self.assertNotEqual(HELPER.test_result(0, bad, True)[0], 0)
+        self.assertEqual(HELPER.test_result(2, good, True)[0], 2)
+        self.assertNotEqual(HELPER.test_result(-15, good, True)[0], 0)
+
+    def run_synthetic(self, cleanup=None):
+        driver = SyntheticDriver("/Applications/Xcode.app/Contents/Developer", "swift-test")
+        def owned(argv, root, environment, output):
+            self.assertIs(type(argv), HELPER.RUNTIME.DRIVERS.SelectedPackageArguments)
+            self.assertIs(argv.driver, driver)
+            self.assertEqual(list(argv), HELPER.command(driver.path, root, output.parent, "/Applications/Xcode.app/Contents/Developer", True))
+            self.assertTrue(Path(environment["TMPDIR"]).is_relative_to(output.parent))
+            output.write_bytes(self.output())
+            output.chmod(0o600)
+            return {"exitCode": 0, "cleanup": cleanup or self.cleanup}
+        with patch.object(HELPER, "ROOT", self.root), patch.object(HELPER.sys, "platform", "darwin"), \
+                patch.dict(os.environ, {"EDITH_LOCAL_CI_ROOT": str(self.base), "DEVELOPER_DIR": "/Applications/Xcode.app/Contents/Developer"}), \
+                patch.object(HELPER.RUNTIME.DRIVERS, "SelectedSwiftDriver", return_value=driver), \
+                patch("builtins.print"), patch.object(HELPER.RUNTIME, "run_owned", side_effect=owned):
+            status = HELPER.run(True)
+        storage = self.root / "local/usage-account-contracts"
+        return status, driver, storage, json.loads((storage / "receipt.json").read_text())
+
+    def test_actual_route_binds_retained_driver_and_qualifies_only_original_single_case(self):
+        status, driver, storage, receipt = self.run_synthetic()
+        self.assertEqual(status, 0)
+        self.assertEqual(driver.validations, 2)
+        self.assertEqual(list(storage.glob("fixture-*")), [])
+        self.assertEqual((receipt["expectedMethods"], receipt["expectedSuites"], receipt["expectedExpandedInvocations"]), (1, 1, 1))
+        self.assertTrue(receipt["expandedInvocationsQualified"])
+        self.assertTrue(receipt["usageTestsExecuted"])
+
+    def test_backup_route_keeps_failed_cleanup_fixture_and_never_qualifies(self):
+        status, _, storage, receipt = self.run_synthetic({**self.cleanup, "unverifiedOwnedProcesses": 1})
+        self.assertEqual(status, 1)
+        self.assertEqual(len(list(storage.glob("fixture-*"))), 1)
+        self.assertFalse(receipt["expandedInvocationsQualified"])
+
+
 if __name__ == "__main__":
     unittest.main()

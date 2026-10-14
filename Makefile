@@ -327,6 +327,10 @@ ci-extension-herdr-accounts: ghostty-extension
 ci-extension-usage-accounts-local:
 	python3 -B scripts/test-usage-accounts-local.py
 
+.PHONY: ci-extension-usage-backup-local
+ci-extension-usage-backup-local:
+	python3 -B scripts/test-usage-accounts-local.py --backup-boundary
+
 .PHONY: ci-extension-usage-account-contracts
 ci-extension-usage-account-contracts:
 	python3 -B scripts/test-usage-accounts-local.test.py
