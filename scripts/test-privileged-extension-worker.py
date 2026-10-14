@@ -10,6 +10,7 @@ import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 from macho_code_identity import executable_identity
+from package_extension_lifecycle_tools import carrier_input
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "Packages/EdithHost/Tests/EdithHostCoreTests/Fixtures"
@@ -70,17 +71,21 @@ def verify_payload(app, extracted):
     if app_info.get("CFBundleExecutable") != "Edith" or not isinstance(app_info.get("CFBundleIdentifier"), str) or not app_info["CFBundleIdentifier"]:
         raise ValueError("Expected the current same-executable host")
     original = code_identity(app / "Contents/MacOS/Edith")
-    identities = {"host": original}
+    carrier_source = carrier_input(ROOT, app)
+    frozen_carrier = code_identity(carrier_source["path"])
+    if frozen_carrier["signedSHA256"] != carrier_source["sha256"]:
+        raise ValueError("Frozen carrier identity differs from its receipt")
+    identities = {"host": original, "frozenCarrier": frozen_carrier}
     carrier = extracted.joinpath(*CARRIER.parts)
     worker = extracted.joinpath(*WORKER.parts)
     role = extracted.joinpath(*ROLE.parts)
-    for bundle in (carrier, worker):
+    for name, bundle, expected in (("carrier", carrier, frozen_carrier), ("worker", worker, original)):
         signed(bundle)
         value = info(bundle)
-        if value.get("CFBundleExecutable") != "Edith" or value.get("EdithExtensionID") != "lidAwake" or value.get("EdithHostABI") != "edith-host-2":
+        if (value.get("CFBundleExecutable") != "Edith" or value.get("EdithExtensionID") != "lidAwake" or value.get("EdithHostABI") != "edith-host-2"
+                or value.get("EdithCarrierExecutableProvenance") != carrier_source["sha256"]):
             raise ValueError("Invalid contained worker metadata")
-        identities["carrier" if bundle == carrier else "worker"] = code_identity(
-            bundle / "Contents/MacOS/Edith", original["normalizedUnsignedSHA256"])
+        identities[name] = code_identity(bundle / "Contents/MacOS/Edith", expected["normalizedUnsignedSHA256"])
     signed(role)
     value = info(role)
     if value.get("CFBundleIdentifier") != "com.pulkit.edith.extensions.lidAwake.privileged" or value.get("CFBundleExecutable") != "Runtime" or value.get("EdithHostABI") != "edith-host-2":
