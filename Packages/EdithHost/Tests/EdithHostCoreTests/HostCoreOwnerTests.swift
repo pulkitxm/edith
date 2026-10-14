@@ -174,6 +174,7 @@ private final class CoreOwnerFixture: @unchecked Sendable {
     private var disabledValue = false
     private var forgeValue = false
     private var changeValue = false
+    private var requestCount: UInt64 = 0
     var disabled: Bool {
         get { lock.withLock { disabledValue } }
         set { lock.withLock { disabledValue = newValue } }
@@ -188,8 +189,13 @@ private final class CoreOwnerFixture: @unchecked Sendable {
     }
 
     init() throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "core-owner-" + UUID().uuidString)
+        let temporaryPath = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        try #require(temporaryPath.hasPrefix("/"))
+        let temporary = URL(
+            fileURLWithPath: temporaryPath, isDirectory: true
+        ).standardizedFileURL.resolvingSymlinksInPath()
+        root = temporary.appendingPathComponent(
+            "core-owner-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try Data("synthetic controlled input".utf8).write(to: root.appendingPathComponent("input"))
@@ -255,8 +261,21 @@ private final class CoreOwnerFixture: @unchecked Sendable {
                 try HostCLIJSON.object(["operation": .string(name), "payload": payload]).encoded()
                 + Data([10])
             try input.fileHandleForWriting.write(contentsOf: data)
-            var result = try CoreOwnerFrameReader.read(
-                from: output.fileHandleForReading.fileDescriptor, operation: operation)
+            requestCount += 1
+            var result: Data
+            do {
+                result = try CoreOwnerFrameReader.read(
+                    from: output.fileHandleForReading.fileDescriptor, operation: operation)
+            } catch let failure as CoreOwnerFrameFailure {
+                let diagnostic = CoreOwnerFrameDiagnostic(
+                    failure: failure, requestCount: requestCount,
+                    processRunning: process.isRunning,
+                    trace: .capture(root.appendingPathComponent("trace")))
+                if let data = diagnostic.encoded(), let line = String(data: data, encoding: .utf8) {
+                    print(line)
+                }
+                throw failure
+            }
             if forgeValue && ["run", "cancel"].contains(name) {
                 result = try HostCLIJSON.object([
                     "owner": .string("herdr"), "job": .string("usage.refresh"),
@@ -291,6 +310,56 @@ private final class CoreOwnerFixture: @unchecked Sendable {
     private func waitForExit(duration: Duration) {
         let deadline = ContinuousClock.now.advanced(by: duration)
         while process.isRunning && ContinuousClock.now < deadline { usleep(10000) }
+    }
+}
+
+private struct CoreOwnerTraceMetadata: Encodable {
+    let present: Bool
+    let regular: Bool
+    let singleLink: Bool
+    let owned: Bool
+    let sizeUnder4096: Bool
+
+    static func capture(_ url: URL) -> Self {
+        var info = stat()
+        let present = url.path.withCString { lstat($0, &info) == 0 }
+        return Self(
+            present: present,
+            regular: present && info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+            singleLink: present && info.st_nlink == 1, owned: present && info.st_uid == getuid(),
+            sizeUnder4096: present && info.st_size >= 0 && info.st_size < 4096)
+    }
+}
+
+private struct CoreOwnerFrameDiagnostic: Encodable {
+    let reason: String
+    let operation: String
+    let frameBytes: Int
+    let requestCount: UInt64
+    let processRunning: Bool
+    let trace: CoreOwnerTraceMetadata
+
+    init(
+        failure: CoreOwnerFrameFailure, requestCount: UInt64, processRunning: Bool,
+        trace: CoreOwnerTraceMetadata
+    ) {
+        reason = failure.reason.rawValue
+        operation =
+            [
+                "usage.agent.jobs", "usage.agent.run", "usage.agent.cancel", "usage.agent.events",
+                "usage.agent.logs", "usage.lifecycle.inspect", "usage.lifecycle.setup",
+            ].contains(failure.operation) ? failure.operation : "unknown"
+        frameBytes = failure.byteCount
+        self.requestCount = requestCount
+        self.processRunning = processRunning
+        self.trace = trace
+    }
+
+    func encoded() -> Data? {
+        guard frameBytes >= 0, frameBytes <= 1_048_576,
+            let data = try? JSONEncoder().encode(self), data.count <= 1024
+        else { return nil }
+        return data
     }
 }
 
@@ -452,5 +521,105 @@ private enum CoreOwnerFrameReader {
             try CoreOwnerFrameReader.read(
                 from: empty.fileHandleForReading.fileDescriptor, operation: "empty")
         }
+    }
+}
+
+@Suite struct HostCoreOwnerDiagnosticTests {
+    @Test func repeatedJobsKeepTheActualRequestCounterWithoutPrivateFields() throws {
+        for count: UInt64 in [1, 3, 5] {
+            let diagnostic = CoreOwnerFrameDiagnostic(
+                failure: .init(
+                    reason: .deadlineExceeded, operation: "usage.agent.jobs", byteCount: 0),
+                requestCount: count, processRunning: true,
+                trace: .init(
+                    present: true, regular: true, singleLink: true, owned: true, sizeUnder4096: true
+                ))
+            let data = try #require(diagnostic.encoded())
+            let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(
+                Set(value.keys) == [
+                    "reason", "operation", "frameBytes", "requestCount", "processRunning", "trace",
+                ])
+            #expect(value["reason"] as? String == "deadlineExceeded")
+            #expect(value["operation"] as? String == "usage.agent.jobs")
+            #expect((value["requestCount"] as? NSNumber)?.uint64Value == count)
+            #expect((value["frameBytes"] as? NSNumber)?.intValue == 0)
+            #expect((value["processRunning"] as? NSNumber)?.boolValue == true)
+            #expect(data.count <= 1024)
+        }
+    }
+
+    @Test func everyFrameReasonIsBoundedAndUnknownOperationsAreRedacted() throws {
+        let reasons: [CoreOwnerFrameFailure.Reason] = [
+            .deadlineExceeded, .endOfFile, .emptyFrame, .frameTooLarge, .pollFailed,
+            .invalidDescriptor, .readFailed,
+        ]
+        for reason in reasons {
+            let diagnostic = CoreOwnerFrameDiagnostic(
+                failure: .init(
+                    reason: reason, operation: "/private/synthetic-operation", byteCount: 1_048_576),
+                requestCount: .max, processRunning: false,
+                trace: .init(
+                    present: false, regular: false, singleLink: false, owned: false,
+                    sizeUnder4096: false))
+            let data = try #require(diagnostic.encoded())
+            let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(value["reason"] as? String == reason.rawValue)
+            #expect(value["operation"] as? String == "unknown")
+            #expect(!String(decoding: data, as: UTF8.self).contains("/private/"))
+            #expect(data.count <= 1024)
+        }
+        for bytes in [-1, 1_048_577] {
+            #expect(
+                CoreOwnerFrameDiagnostic(
+                    failure: .init(
+                        reason: .frameTooLarge, operation: "usage.agent.logs", byteCount: bytes),
+                    requestCount: 1, processRunning: true,
+                    trace: .init(
+                        present: false, regular: false, singleLink: false, owned: false,
+                        sizeUnder4096: false)
+                ).encoded() == nil)
+        }
+    }
+
+    @Test func traceMetadataChecksActualOwnedFilesWithoutReadingTheirContents() throws {
+        let temporaryPath = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
+        try #require(temporaryPath.hasPrefix("/"))
+        let temporary = URL(
+            fileURLWithPath: temporaryPath, isDirectory: true
+        ).standardizedFileURL.resolvingSymlinksInPath()
+        let root = temporary.appendingPathComponent(
+            "core-owner-diagnostic-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer { try? FileManager.default.removeItem(at: root) }
+        try #require(root.resolvingSymlinksInPath() == root)
+        try #require(root.deletingLastPathComponent() == temporary)
+        let attributes = try FileManager.default.attributesOfItem(atPath: root.path)
+        try #require((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
+        let trace = root.appendingPathComponent("trace")
+        let missing = CoreOwnerTraceMetadata.capture(trace)
+        #expect(
+            !missing.present && !missing.regular && !missing.singleLink && !missing.owned
+                && !missing.sizeUnder4096)
+        try Data("Synthetic private trace".utf8).write(to: trace)
+        let regular = CoreOwnerTraceMetadata.capture(trace)
+        #expect(
+            regular.present && regular.regular && regular.singleLink && regular.owned
+                && regular.sizeUnder4096)
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: trace)
+        #expect(!CoreOwnerTraceMetadata.capture(link).regular)
+        try FileManager.default.linkItem(at: trace, to: root.appendingPathComponent("hardlink"))
+        #expect(!CoreOwnerTraceMetadata.capture(trace).singleLink)
+        try Data(repeating: 0, count: 4096).write(to: trace)
+        #expect(!CoreOwnerTraceMetadata.capture(trace).sizeUnder4096)
+        let directory = CoreOwnerTraceMetadata.capture(root)
+        #expect(directory.present && !directory.regular && directory.owned)
+        let data = try JSONEncoder().encode(regular)
+        let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(value.keys) == ["present", "regular", "singleLink", "owned", "sizeUnder4096"])
+        #expect(!String(decoding: data, as: UTF8.self).contains("Synthetic private trace"))
+        #expect(!String(decoding: data, as: UTF8.self).contains(root.path))
     }
 }

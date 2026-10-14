@@ -196,6 +196,11 @@ ci-swift-test:
 	$(MAKE) ci-marketplace-host ci-music-native
 
 .PHONY: ci-host ci-host-core host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-extension-commands ci-extension-workers
+.PHONY: ci-host-core-owner-local
+ci-host-core-owner-local:
+	python3 -I -B scripts/test-host-core-owner-local.test.py
+	python3 -I -B scripts/test-host-core-owner-local.py
+
 .PHONY: ci-host-invocation
 ci-host-invocation:
 	python3 -B scripts/test-host-test-invocation.py
