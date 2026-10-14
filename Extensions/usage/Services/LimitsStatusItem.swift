@@ -231,7 +231,8 @@ final class LimitsStatusItem {
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let showsLogo = group.accountHeader == nil
+        let showsLogo =
+            group.accountHeader == nil
             ? multi || group.provider == .cursor || group.provider == .grok : showsAccountLogo
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
@@ -367,8 +368,10 @@ final class LimitsStatusItem {
     }
 
     private static func textColor(defaults: UserDefaults) -> NSColor? {
-        guard MenuBarTintMode(preference: defaults.string(forKey: AppStorageKeys.MenuBar.colorMode))
-            == .custom else { return nil }
+        guard
+            MenuBarTintMode(preference: defaults.string(forKey: AppStorageKeys.MenuBar.colorMode))
+                == .custom
+        else { return nil }
         return nsColor(hex: defaults.string(forKey: AppStorageKeys.MenuBar.subColorHex))
     }
 
