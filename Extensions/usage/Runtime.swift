@@ -338,8 +338,7 @@ final class ExtensionRuntime: NSObject {
             let controller = UsageWorkerController { policy, event in
                 let local = try await UsageNativeCollector.collect(
                     home: UsageExecutionEnvironment.home, dataDirectory: Repo.dataDir,
-                    environment: UsageExecutionEnvironment.collectorEnvironment(),
-                    accounts: fixture ? .init() : await UsageNativeAccounts.load(), onEvent: event)
+                    environment: UsageExecutionEnvironment.collectorEnvironment(), onEvent: event)
                 if fixture { return local }
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)

@@ -9,9 +9,8 @@ import Testing
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     private func fixture() throws -> URL {
-        let temporary = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
-        let root = URL(fileURLWithPath: temporary, isDirectory: true)
-            .resolvingSymlinksInPath().appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let root = try PhysicalTemporaryDirectory.url()
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         return root
