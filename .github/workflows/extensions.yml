@@ -358,6 +358,7 @@ jobs:
       - name: "Test this extension's optional native packages"
         env:
           EXTENSION_ID: "${{ matrix.id }}"
+          EXTENSION_PACKAGE_SUITES: "${{ (!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))) && 'skip' || 'run' }}"
         run: "bun scripts/test-extension-package.mjs \"$EXTENSION_ID\""
       - name: Exercise this worker against the frozen host
         run: "bun scripts/test-extension-workers.mjs \"${{ matrix.id }}\""
