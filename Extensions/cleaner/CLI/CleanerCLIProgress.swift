@@ -28,7 +28,7 @@ final class CleanerCLIProgress: @unchecked Sendable {
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(90)) } catch { return }
                 guard let self, !Task.isCancelled else { return }
-                lock.withLock { frame = (frame + 1) % Self.frames.count }
+                lock.withLock { self.frame = (self.frame + 1) % Self.frames.count }
                 paint()
             }
         }

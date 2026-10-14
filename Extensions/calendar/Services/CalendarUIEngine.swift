@@ -49,19 +49,7 @@ final class CalendarUIEngine {
         authorized: (() -> Bool)? = nil,
         open: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         grant: @escaping () async throws -> Void = {
-            let owner = EKEventStore()
-            try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<Void, Error>) in
-                owner.requestFullAccessToEvents { [owner] _, error in
-                    withExtendedLifetime(owner) {
-                        if let error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume()
-                        }
-                    }
-                }
-            }
+            _ = try await EKEventStore().requestFullAccessToEvents()
         },
         navigate: @escaping (CalendarNavigationRequest) async throws -> Void = { _ in
             throw ExtensionPeerError.unavailable

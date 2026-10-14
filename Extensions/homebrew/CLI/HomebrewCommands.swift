@@ -333,7 +333,7 @@ struct HomebrewCancelCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @MainActor func run() async throws {
         try await execute {
-            let cancelled = await HomebrewCLIEnvironment.currentOwner.cancel()
+            let cancelled = HomebrewCLIEnvironment.currentOwner.cancel()
             if json {
                 CLIOut.json(
                     .object([

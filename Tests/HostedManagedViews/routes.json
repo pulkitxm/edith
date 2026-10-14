@@ -694,7 +694,7 @@
       "sources": [
         {
           "path": "Extensions/machines/Runtime.swift",
-          "sha256": "a34fbff8b5aa32aeb800f4717208a864c8d85b5cdbe6613312b31ae5b9f67be5"
+          "sha256": "d445827bb1b127d9322894c2622d8e9d4fda6c3c899bcd2698b088a3e34a05b9"
         },
         {
           "path": "Extensions/machines/Services/MachineUIClient.swift",

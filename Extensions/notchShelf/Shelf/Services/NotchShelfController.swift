@@ -1480,7 +1480,7 @@ final class NotchShelfController {
         ) { [weak self, owner] url, error in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.enqueueCallback(whileStopping: true) {
+                self.enqueueCallback(whileStopping: true) { [self] in
                     defer {
                         owner.returned(name: url.lastPathComponent)
                         if owner.completed {
@@ -1633,7 +1633,8 @@ final class NotchPromiseCallbackOwnership {
 }
 
 @MainActor
-final class SharePickerDelegate: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate
+final class SharePickerDelegate: NSObject, @MainActor NSSharingServicePickerDelegate,
+    NSSharingServiceDelegate
 {
     private let onEnd: @MainActor @Sendable () -> Void
     private var selectedService: NSSharingService?
