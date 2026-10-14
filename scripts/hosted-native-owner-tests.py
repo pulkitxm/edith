@@ -42,6 +42,10 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         self.seals = {}
         self.transitions = []
         self.terminal_children = {}
+        self.exiting_processes = {}
+        self.joined_cleanup = False
+        self.snapshot_pid = None
+        self.snapshot_exit_record = None
         self.terminal_child_refusals = {}
         self.rejected = {}
         self.failure_observations = []
@@ -66,11 +70,19 @@ class BoundedOwnership(watchdog.OwnedProcesses):
 
     def snapshot(self, pid, parent=None, parent_identity=None):
         self.last_recovery_failure = None
+        self.snapshot_pid = pid
+        self.snapshot_exit_record = None
         self.terminal_child_refusals.pop(pid, None)
         self.recovery_failure_stages.pop(pid, None)
         if pid in self.pending_failures:
             raise RuntimeError('Pending owned child identity permanently rejected')
         captured = None
+        original_record = None
+
+        def retain_record(result, info):
+            nonlocal original_record
+            original_record = (result, info, False)
+            self.retain_exit_record(pid, result, info)
 
         def capture(clause, result, info):
             nonlocal captured
@@ -92,7 +104,23 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 'leaderGroupMatches': info.pgid == self.leader if complete else None,
             }
 
-        value = super().snapshot(pid, capture)
+        value = super().snapshot(pid, capture, retain_record)
+        if pid in self.exiting_processes:
+            if self.exiting_process_absent(pid):
+                if self.joined_cleanup:
+                    self.exiting_processes.pop(pid)
+                return None
+            record = original_record if original_record[0] == ctypes.sizeof(original_record[1]) else self.diagnostic_record(pid)
+            if self.record_exiting_process(pid, parent, parent_identity, record):
+                return None
+            self.observe_failure(pid, 'live_identity_unavailable', record=record)
+            raise RuntimeError('Terminal process identity could not be authenticated')
+        if (type(original_record[0]) is int and original_record[0] == ctypes.sizeof(original_record[1])
+                and original_record[1].flags & 4):
+            if self.record_exiting_process(pid, parent, parent_identity, original_record):
+                return None
+            self.observe_failure(pid, 'live_identity_unavailable', record=original_record)
+            raise RuntimeError('Live owned process identity unavailable')
         if value is None:
             if captured is not None and captured['clause'] == 'kernel_record_unavailable':
                 if self.terminal_child(pid, parent, parent_identity):
@@ -116,12 +144,22 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             if self.sealed_zombie(pid):
                 self.terminal_child_refusals.pop(pid, None)
                 return None
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            record = self.snapshot_exit_record
+            if record is None:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    self.terminal_child_refusals.pop(pid, None)
+                    return None
+                record = self.diagnostic_record(pid)
+            eligible = (captured is not None and (
+                captured['clause'] == 'kernel_record_unavailable' and captured['returnedBytes'] == 0
+                or captured['clause'] == 'executable_path_unavailable'
+                and captured['pidMatches'] and captured['uidMatches'] and captured['realUIDMatches']))
+            if eligible and self.record_exiting_process(pid, parent, parent_identity, record):
                 self.terminal_child_refusals.pop(pid, None)
                 return None
-            self.observe_failure(pid, 'live_identity_unavailable')
+            self.observe_failure(pid, 'live_identity_unavailable', record=record)
             if (captured is not None and pid not in self.captured_snapshot_keys
                     and len(self.captured_snapshot_failures) < 8):
                 self.captured_snapshot_keys.add(pid)
@@ -133,6 +171,115 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             value = self.resolve_pending_child(pid, value)
         self.terminal_child_refusals.pop(pid, None)
         return value
+
+    def retain_exit_record(self, pid, result, info):
+        if (pid == self.snapshot_pid and type(result) is int
+                and result == ctypes.sizeof(info) and info.flags & 4):
+            self.snapshot_exit_record = (result, watchdog.ProcessInfo.from_buffer_copy(bytes(info)), False)
+
+    def complete_terminal_record(self, pid, record):
+        result, info, failed = record
+        if (failed or type(result) is not int or result != ctypes.sizeof(info)
+                or info.pid != pid or info.status not in (1, 2, 3, 4, 5)
+                or info.uid != self.uid or info.ruid != self.uid
+                or info.seconds <= 0 or info.microseconds >= 1_000_000
+                or info.pgid <= 0 or info.ppid <= 0 or not info.flags & 4):
+            return None
+        return bytes(info), (pid, info.seconds, info.microseconds, '',
+                             info.pgid, info.ppid, info.uid, info.ruid)
+
+    def retained_parent_record(self, parent, identity):
+        result, info, failed = self.diagnostic_record(parent)
+        if (failed or type(result) is not int or result != ctypes.sizeof(info)
+                or info.pid != parent or info.status not in (1, 2, 3, 4, 5)
+                or info.uid != self.uid or info.ruid != self.uid
+                or info.seconds <= 0 or info.microseconds >= 1_000_000
+                or info.pgid <= 0 or info.ppid <= 0 or info.status == 5 and not info.flags & 4
+                or (parent, info.seconds, info.microseconds, info.pgid) != self.current_seal(parent)
+                or identity[:3] + identity[4:5] != self.current_seal(parent)):
+            return None
+        if not info.flags & 4:
+            path = ctypes.create_string_buffer(4096)
+            if (self.library.proc_pidpath(parent, path, len(path)) <= 0
+                    or path.value != identity[3].encode()):
+                return None
+        return bytes(info)
+
+    def record_exiting_process(self, pid, parent, parent_identity, sample):
+        if type(pid) is not int or pid <= 0 or pid in self.rejected:
+            return False
+        candidate = self.complete_terminal_record(pid, sample)
+        if candidate is None:
+            return False
+        retained = self.exiting_processes.get(pid)
+        seal = self.current_seal(pid)
+        before = None
+        if retained is not None:
+            if candidate[1][:3] + candidate[1][4:5] != retained[:3] + retained[4:5]:
+                return False
+        elif seal is not None:
+            if candidate[1][:3] + candidate[1][4:5] != seal:
+                return False
+        else:
+            if (pid == self.leader or type(parent) is not int or parent <= 0
+                    or parent in self.rejected or parent_identity is None
+                    or parent_identity != self.known.get(parent)
+                    and parent_identity != self.exiting_processes.get(parent, ())[:5]
+                    or parent_identity[:3] + parent_identity[4:5] != self.current_seal(parent)
+                    or candidate[1][5] != parent or candidate[1][4] not in (parent_identity[4], pid)):
+                return False
+            before = self.retained_parent_record(parent, parent_identity)
+            if before is None:
+                return False
+        first = self.complete_terminal_record(pid, self.diagnostic_record(pid))
+        second = self.complete_terminal_record(pid, self.diagnostic_record(pid))
+        if first is None or first != second or first[1] != candidate[1]:
+            return False
+        if before is not None and self.retained_parent_record(parent, parent_identity) != before:
+            return False
+        if retained is None:
+            if pid not in self.seals and self.lifetime_count() - (pid in self.pending_children) >= 4096:
+                raise RuntimeError('Owned lifetime process bound exceeded')
+            if len(self.known) + len(self.pending_children) + len(self.exiting_processes) - (pid in self.known) >= 64:
+                raise RuntimeError('Owned concurrent descendant bound exceeded')
+            identity = self.known.get(pid)
+            terminal = first[1][:3] + ((identity[3] if identity else ''),) + first[1][4:]
+            self.exiting_processes[pid] = terminal
+            self.terminal_children[pid] = first[0]
+            self.pending_children.pop(pid, None)
+        return True
+
+    def exiting_process_absent(self, pid):
+        for _ in range(2):
+            for argument in (0, 1):
+                info = watchdog.ProcessInfo()
+                result = self.library.proc_pidinfo(pid, 3, argument, ctypes.byref(info), ctypes.sizeof(info))
+                self.retain_exit_record(pid, result, info)
+                if type(result) is not int or result != 0:
+                    return False
+            path = ctypes.create_string_buffer(4096)
+            if self.library.proc_pidpath(pid, path, len(path)) != 0:
+                return False
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                continue
+            return False
+        return True
+
+    def begin_joined_cleanup(self, reaped):
+        self.joined_cleanup = reaped
+
+    def finalize_exiting_processes(self, reaped):
+        for pid in list(self.exiting_processes):
+            try:
+                absent = reaped and self.exiting_process_absent(pid)
+            except OSError:
+                absent = False
+            if absent:
+                self.exiting_processes.pop(pid)
+            else:
+                self.reject(pid, 'Terminal owned process unresolved after join')
 
     def recover_unsealed_child(self, pid, parent, parent_identity):
         if (type(pid) is not int or pid <= 0 or pid == self.leader
@@ -170,6 +317,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         for _ in range(2):
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
             if type(result) is not int or result != 0:
                 return False
         if retained is not None and parent_identity is None:
@@ -184,7 +332,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         if retained is None:
             if self.lifetime_count() >= 4096:
                 raise RuntimeError('Owned lifetime process bound exceeded')
-            if len(self.known) + len(self.pending_children) >= 64:
+            if len(self.known) + len(self.pending_children) + len(self.exiting_processes) >= 64:
                 raise RuntimeError('Owned concurrent descendant bound exceeded')
             self.pending_children[pid] = before[1]
         return True
@@ -206,6 +354,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         for _ in range(2):
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
             if type(result) is not int or result != 0:
                 return False
             path = ctypes.create_string_buffer(4096)
@@ -244,8 +393,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         for _ in range(2):
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
             if (type(result) is not int or result != ctypes.sizeof(info)
-                    or info.status != 5 or info.pid != pid
+                    or info.status != 5 or info.flags & 4 or info.pid != pid
                     or info.uid != self.uid or info.ruid != self.uid
                     or info.ppid != parent or info.pgid != self.leader
                     or info.seconds <= 0 or info.microseconds >= 1_000_000):
@@ -306,8 +456,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def complete_live_record(self, pid, argument=0):
         info = watchdog.ProcessInfo()
         result = self.library.proc_pidinfo(pid, 3, argument, ctypes.byref(info), ctypes.sizeof(info))
+        self.retain_exit_record(pid, result, info)
         if (type(result) is not int or result != ctypes.sizeof(info)
-                or info.pid != pid or info.status not in (1, 2, 3, 4)
+                or info.pid != pid or info.status not in (1, 2, 3, 4) or info.flags & 4
                 or info.uid != self.uid or info.ruid != self.uid
                 or info.seconds <= 0 or info.microseconds >= 1_000_000
                 or info.pgid <= 0 or info.ppid <= 0):
@@ -383,8 +534,9 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(
                 pid, 3, 1 if include_zombies else 0, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
             if (type(result) is not int or result != ctypes.sizeof(info)
-                    or info.pid != pid or info.status not in (1, 2, 3, 4)
+                    or info.pid != pid or info.status not in (1, 2, 3, 4) or info.flags & 4
                     or info.uid != self.uid or info.ruid != self.uid
                     or info.seconds <= 0 or info.microseconds >= 1_000_000
                     or (pid, info.seconds, info.microseconds, info.pgid) != seal):
@@ -413,20 +565,32 @@ class BoundedOwnership(watchdog.OwnedProcesses):
         try:
             info = watchdog.ProcessInfo()
             result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
         except OSError:
             return False
         return (type(result) is int and result == ctypes.sizeof(info)
-                and info.status == 5 and info.pid == pid
+                and info.status == 5 and not info.flags & 4 and info.pid == pid
                 and info.uid == self.uid and info.ruid == self.uid
                 and (pid, info.seconds, info.microseconds, info.pgid) == seal)
 
-    def observe_failure(self, pid, kind, current=None):
+    def diagnostic_record(self, pid):
+        info = watchdog.ProcessInfo()
+        try:
+            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
+            self.retain_exit_record(pid, result, info)
+            if type(result) is not int or not -2147483648 <= result <= 2147483647:
+                raise ValueError('Invalid diagnostic byte count')
+            return result, info, False
+        except Exception:
+            return None, info, True
+
+    def observe_failure(self, pid, kind, current=None, record=None):
         key = (pid, kind)
         if len(self.failure_observations) >= 8 or key in self.failure_observation_keys:
             return
         self.failure_observation_keys.add(key)
         seal = self.seals.get(pid)
-        known = pid in self.known and seal is not None
+        known = (pid in self.known or pid in self.exiting_processes) and seal is not None
         row = {
             'kind': kind, 'knownSeal': known,
             'originalBirthMatches': current[:3] == seal[:3] if current and known else None,
@@ -434,21 +598,18 @@ class BoundedOwnership(watchdog.OwnedProcesses):
             'returnedBytes': None, 'expectedBytes': ctypes.sizeof(watchdog.ProcessInfo),
             'status': None, 'pidMatches': None, 'birthMatches': None,
             'groupMatches': None, 'uidMatches': None, 'realUIDMatches': None,
-            'probeFailed': False,
+            'probeFailed': False, 'processInExit': None,
         }
-        try:
-            info = watchdog.ProcessInfo()
-            result = self.library.proc_pidinfo(pid, 3, 1, ctypes.byref(info), ctypes.sizeof(info))
-            if type(result) is not int or not -2147483648 <= result <= 2147483647:
-                raise ValueError('Invalid diagnostic byte count')
+        result, info, failed = self.diagnostic_record(pid) if record is None else record
+        row['probeFailed'] = failed
+        if not failed:
             row['returnedBytes'] = result
             if result == ctypes.sizeof(info):
                 row.update(status=info.status, pidMatches=info.pid == pid,
                            birthMatches=(pid, info.seconds, info.microseconds) == seal[:3] if known else None,
                            groupMatches=info.pgid == seal[3] if known else None,
-                           uidMatches=info.uid == self.uid, realUIDMatches=info.ruid == self.uid)
-        except Exception:
-            row['probeFailed'] = True
+                           uidMatches=info.uid == self.uid, realUIDMatches=info.ruid == self.uid,
+                           processInExit=bool(info.flags & 4))
         if kind == 'birth_or_group_changed' and pid in self.self_group_observations:
             row.update(self.self_group_observations[pid])
         if kind == 'live_identity_unavailable' and pid in self.recovery_failure_stages:
@@ -477,6 +638,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
     def refresh(self):
         pending = [(pid, parent[0]) for pid, parent in self.pending_children.items()]
         pending += [(self.leader, None)] + [(pid, None) for pid in self.known]
+        pending += [(pid, None) for pid in self.exiting_processes]
         visited = set()
         active = {}
         while pending:
@@ -485,9 +647,15 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                 continue
             visited.add(pid)
             try:
-                value = self.snapshot(pid, parent, active.get(parent))
+                value = self.snapshot(pid, parent, active.get(parent) or self.exiting_processes.get(parent, ())[:5] or None)
                 if value is None:
                     self.known.pop(pid, None)
+                    if pid in self.exiting_processes and not self.exiting_process_absent(pid):
+                        children = (ctypes.c_int * 64)()
+                        count = self.library.proc_listchildpids(pid, children, ctypes.sizeof(children))
+                        if count < 0 or count >= len(children):
+                            raise RuntimeError('Invalid owned child enumeration')
+                        pending.extend((children[index], pid) for index in range(count))
                     continue
                 identity = value[:5]
                 seal = identity[:3] + identity[4:5]
@@ -508,7 +676,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                             raise RuntimeError('Owned parent identity changed before admission')
                     if self.lifetime_count() - (pid in self.pending_children) >= 4096:
                         raise RuntimeError('Owned lifetime process bound exceeded')
-                    if len(active) + len(self.pending_children) - (pid in self.pending_children) >= 64:
+                    if len(active) + len(self.pending_children) + len(self.exiting_processes) - (pid in self.pending_children) >= 64:
                         raise RuntimeError('Owned concurrent descendant bound exceeded')
                     self.seals[pid] = seal
                     if pid != self.leader:
@@ -520,7 +688,7 @@ class BoundedOwnership(watchdog.OwnedProcesses):
                     if len(self.transitions) >= 1024:
                         raise RuntimeError('Owned executable transition bound exceeded')
                     self.transitions.append({'previous': prior, 'current': identity})
-                if len(active) + len(self.pending_children) >= 64:
+                if len(active) + len(self.pending_children) + len(self.exiting_processes) >= 64:
                     raise RuntimeError('Owned concurrent descendant bound exceeded')
                 self.known[pid] = identity
                 active[pid] = identity
@@ -654,10 +822,16 @@ def retire(process, ownership, clock, sleep):
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             reaped = False
+    joined_cleanup = getattr(ownership, 'begin_joined_cleanup', None)
+    if joined_cleanup is not None:
+        joined_cleanup(reaped)
     deadline = clock() + 5
-    while ownership.refresh() and clock() < deadline:
+    while (ownership.refresh() or getattr(ownership, 'exiting_processes', {})) and clock() < deadline:
         sleep(0.1)
     remaining = ownership.refresh()
+    finalize_exiting = getattr(ownership, 'finalize_exiting_processes', None)
+    if finalize_exiting is not None:
+        finalize_exiting(reaped)
     finalize_pending = getattr(ownership, 'finalize_pending_children', None)
     if finalize_pending is not None:
         finalize_pending(reaped)
@@ -665,7 +839,7 @@ def retire(process, ownership, clock, sleep):
         'naturalSurvivorCount': len(natural_survivors), 'reaped': reaped,
         'remainingOwnedProcesses': len(remaining),
         'unverifiedOwnedProcesses': len(conflicts),
-        'pendingOwnedChildren': len(getattr(ownership, 'pending_children', {})),
+        'pendingOwnedChildren': len(getattr(ownership, 'pending_children', {})) + len(getattr(ownership, 'exiting_processes', {})),
         'ownershipErrors': getattr(ownership, 'errors', []),
     }
 

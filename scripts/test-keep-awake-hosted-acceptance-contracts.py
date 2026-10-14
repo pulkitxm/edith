@@ -250,7 +250,7 @@ class AcceptanceContracts(unittest.TestCase):
             'originalBirthMatches': None, 'originalGroupMatches': None,
             'returnedBytes': 128, 'expectedBytes': 128, 'status': 5,
             'pidMatches': True, 'birthMatches': True, 'groupMatches': True,
-            'uidMatches': True, 'realUIDMatches': True, 'probeFailed': False,
+            'uidMatches': True, 'realUIDMatches': True, 'probeFailed': False, 'processInExit': False,
         }
 
     def observations_diagnostics(self, observations, errors=None, passed=False):
@@ -857,6 +857,104 @@ class TerminalChildSelfGroupEmitterContracts(unittest.TestCase):
                 missing = {key: value for key, value in row.items() if key != 'terminalChildGroupIsSelf'}
                 self.assertEqual(self.emit([missing, row])[-1],
                                  {'nativeOwnershipFailureObservations': [row]})
+
+
+class ProcessExitDiagnosticConsumerContracts(unittest.TestCase):
+    def emit(self, candidates, errors=None, passed=False):
+        value = AcceptanceContracts().failed_runner()
+        value['passed'] = passed
+        value['cleanup']['ownershipErrors'] = (
+            ['Live owned process identity unavailable'] if errors is None else errors)
+        value['ownershipFailureObservations'] = candidates
+        output = io.StringIO()
+        with redirect_stdout(output):
+            acceptance.native_failure_diagnostics(value, Path('/synthetic/missing-log'))
+        return [json.loads(line) for line in output.getvalue().splitlines()]
+
+    def test_process_exit_field_is_mandatory_nullable_boolean_and_has_no_private_projection(self):
+        for flag in [None, False, True]:
+            with self.subTest(flag=flag):
+                row = {**AcceptanceContracts().failure_observation(), 'processInExit': flag}
+                output = self.emit([row])
+                self.assertEqual(output[-1], {'nativeOwnershipFailureObservations': [row]})
+                self.assertNotIn('flags', row)
+                self.assertNotIn('pid', row)
+                self.assertNotIn('path', row)
+
+    def test_wrong_types_missing_field_unknown_exit_metadata_and_raw_flags_reject(self):
+        original = AcceptanceContracts().failure_observation()
+        missing = dict(original)
+        missing.pop('processInExit')
+        rows = [missing, *({**original, 'processInExit': value}
+                          for value in [0, 1, 0.0, 'true', 'false', [], {}]),
+                {**original, 'flags': 4}, {**original, 'exitPath': '/synthetic/private'},
+                {**original, 'exitPID': 234}, {**original, 'exitSucceeded': True}]
+        for row in rows:
+            with self.subTest(row=row):
+                output = self.emit([row])
+                self.assertTrue(all('nativeOwnershipFailureObservations' not in value
+                                    for value in output))
+
+    def test_exit_metadata_cannot_publish_success_or_unrelated_failure_observations(self):
+        row = {**AcceptanceContracts().failure_observation(), 'processInExit': True}
+        self.assertEqual(self.emit([row], passed=True), [])
+        for errors in [[], ['Synthetic unrelated failure']]:
+            with self.subTest(errors=errors):
+                output = self.emit([row], errors=errors)
+                self.assertTrue(all('nativeOwnershipFailureObservations' not in value
+                                    for value in output))
+        output = self.emit([{**row, 'kind': 'successful_retirement'}])
+        self.assertTrue(all('nativeOwnershipFailureObservations' not in value for value in output))
+
+    def test_actual_producer_raw_sample_reaches_consumer_without_an_additional_query(self):
+        spec = importlib.util.spec_from_file_location(
+            'exit_producer_contracts', Path(__file__).with_name('test-hosted-native-owner-tests.py'))
+        model = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(model)
+        for mode, expected in [(0, False), (8, False), (4, True), (12, True),
+                               ('partial', None), ('failed', None)]:
+            with self.subTest(mode=mode):
+                kernel = model.Kernel()
+                original = kernel.proc_pidinfo
+                queries = []
+                def record(pid, flavor, argument, pointer, size):
+                    queries.append(argument)
+                    if mode == 'failed':
+                        raise OSError('Synthetic unavailable record')
+                    result = original(pid, flavor, argument, pointer, size)
+                    pointer._obj.status = 2
+                    pointer._obj.flags = 4 if isinstance(mode, str) else mode
+                    return 0 if mode == 'partial' else result
+                with patch.object(model.runner.watchdog.ctypes, 'CDLL', return_value=kernel), \
+                        patch.object(model.runner.os, 'kill', side_effect=kernel.kill):
+                    owner = model.runner.BoundedOwnership(123, 501)
+                    with patch.object(kernel, 'proc_pidinfo', side_effect=record):
+                        owner.observe_failure(123, 'live_identity_unavailable')
+                self.assertEqual(queries, [1])
+                self.assertEqual(kernel.signals, [])
+                self.assertEqual(len(owner.failure_observations), 1)
+                row = owner.failure_observations[0]
+                self.assertIs(row['processInExit'], expected)
+                self.assertEqual(self.emit([row])[-1], {'nativeOwnershipFailureObservations': [row]})
+
+    def test_only_two_exact_terminal_refusals_use_existing_unavailable_category(self):
+        row = {**AcceptanceContracts().failure_observation(), 'processInExit': True}
+        errors = ['Terminal process identity could not be authenticated',
+                  'Terminal owned process unresolved after join']
+        for error in errors:
+            with self.subTest(error=error):
+                output = self.emit([row], errors=[error])
+                self.assertEqual(output[-2], {'nativeOwnershipFailureKinds': ['live_identity_unavailable']})
+                self.assertEqual(output[-1], {'nativeOwnershipFailureObservations': [row]})
+                self.assertEqual(output[0]['nativeFailure']['cleanup']['ownershipErrorCount'], 1)
+                self.assertFalse(output[0]['nativeFailure']['testsCompleted'])
+                self.assertEqual(output[0]['nativeFailure']['exitCode'], 7)
+        for error in [errors[0] + ' ', errors[1] + '\n', 'Terminal synthetic success']:
+            with self.subTest(error=error):
+                output = self.emit([row], errors=[error])
+                self.assertTrue(all('nativeOwnershipFailureKinds' not in value
+                                    and 'nativeOwnershipFailureObservations' not in value
+                                    for value in output))
 
 
 if __name__ == '__main__':
