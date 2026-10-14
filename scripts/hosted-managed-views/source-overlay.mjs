@@ -208,7 +208,7 @@ export function managedFactoryOverlay(source, owner) {
   );
   const ordinaryAdmission = {
     plugins: `            #else
-            do { try validateOrdinaryContext(input) } catch {
+            do { _ = try admitOrdinaryContext(input) } catch {
                 fixtureRejected = true; return ["ok": false] as NSDictionary
             }
             #endif`,
@@ -226,7 +226,7 @@ export function managedFactoryOverlay(source, owner) {
     owner === "plugins"
       ? `            #else
             ${managedAdmission}
-                do { try validateOrdinaryContext(input) } catch {
+                do { _ = try admitOrdinaryContext(input) } catch {
                     fixtureRejected = true; return ["ok": false] as NSDictionary
                 }
             }

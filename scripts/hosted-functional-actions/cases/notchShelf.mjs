@@ -23,7 +23,7 @@ export const definition = {
       {
         path: "Extensions/notchShelf/Runtime.swift",
         sha256:
-          "3afa836f18cc40b93c0322ad182bca506f7af5b781c3f8d7dc4450a324f18331",
+          "61caad151a1b6cdae0312479e86d570f04f0eea33c6bc5526334b6bff2c48d3f",
       },
       {
         path: "Extensions/notchShelf/Settings/NotchFixturePreferences.swift",
