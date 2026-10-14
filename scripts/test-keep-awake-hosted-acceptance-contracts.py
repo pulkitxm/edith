@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -955,6 +956,104 @@ class ProcessExitDiagnosticConsumerContracts(unittest.TestCase):
                 self.assertTrue(all('nativeOwnershipFailureKinds' not in value
                                     and 'nativeOwnershipFailureObservations' not in value
                                     for value in output))
+
+
+class SelectedAcceptanceDispatchContracts(unittest.TestCase):
+    def test_actual_acceptance_main_uses_two_selected_lifetimes_and_original_deadlines(self):
+        runner_spec = importlib.util.spec_from_file_location(
+            'selected_acceptance_dispatch_runner', Path(acceptance.__file__).with_name('hosted-native-owner-tests.py'))
+        runner = importlib.util.module_from_spec(runner_spec)
+        runner_spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory(prefix='selected-acceptance-', dir=os.environ['TMPDIR']) as temporary:
+            root = Path(temporary).resolve() / 'checkout'
+            files = ['Makefile', 'Extensions/manifest.json', 'Extensions/keepAwake/Package.swift',
+                     'scripts/test-keep-awake-hosted-acceptance.py', 'scripts/test-extension-workers.mjs',
+                     'scripts/hosted-native-owner-tests.py', 'scripts/hosted-host-tests/watchdog.py',
+                     'scripts/run-host-swift-testing.py', 'Extensions/keepAwake/Synthetic.swift']
+            for name in files:
+                path = root / name
+                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                path.write_text('synthetic unexecuted source')
+            harness = root / 'Packages/EdithHost/.build/debug/HostLifecycleHarness'
+            harness.parent.mkdir(mode=0o700, parents=True)
+            harness.write_text('synthetic unexecuted harness')
+            harness.chmod(0o700)
+            (root / 'local/minimal-host/Edith.app').mkdir(mode=0o700, parents=True)
+            native = AcceptanceContracts().native()
+            lifecycle = AcceptanceContracts().worker()
+            events = []
+            cleanup = {'naturalSurvivorCount': 0, 'reaped': True, 'remainingOwnedProcesses': 0,
+                       'unverifiedOwnedProcesses': 0, 'ownershipErrors': []}
+            pairs = []
+            drivers = []
+
+            def selected_driver(*args, **options):
+                self.assertEqual(args, ('/synthetic/Developer',))
+                self.assertEqual(options, {'entry': 'swift-test'})
+                driver = unittest.mock.Mock()
+                driver.validate.side_effect = lambda: events.append('validated')
+                drivers.append(driver)
+                return driver
+
+            def selected_pair(driver):
+                self.assertIs(driver, drivers[-1])
+                pair = unittest.mock.Mock()
+                pair.close.side_effect = lambda: events.append('closed')
+                pairs.append(pair)
+                return pair
+
+            def phase(arguments, checkout, environment, output, **options):
+                self.assertEqual(checkout, root)
+                self.assertEqual(options['deadline'], 900)
+                self.assertIsNone(options['selection'])
+                self.assertEqual(environment['DEVELOPER_DIR'], '/synthetic/Developer')
+                self.assertNotIn('GITHUB_TOKEN', environment)
+                self.assertTrue(Path(environment['HOME']).is_relative_to(root / 'local/keep-awake-acceptance'))
+                pairs[-1].close.assert_not_called()
+                options['ownership_factory'](123, 501)
+                owner.assert_called_with(123, 501, package_driver_pair=pairs[-1])
+                if len(pairs) == 1:
+                    self.assertEqual(arguments, ['make', 'ci-extension-keep-awake'])
+                    events.append('native joined')
+                    Path(environment['KEEP_AWAKE_NATIVE_RECEIPT']).write_text(json.dumps(native))
+                else:
+                    self.assertEqual(arguments, ['bun', 'scripts/test-extension-workers.mjs',
+                                                  'keepAwake', '--retain-packages'])
+                    self.assertEqual(events[:3], ['native joined', 'validated', 'closed'])
+                    events.append('worker joined')
+                    (output / 'tests.log').write_text(json.dumps(lifecycle) + '\n')
+                return {'passed': True, 'exitCode': 0, 'timedOut': False,
+                        'logBoundExceeded': False, 'failure': None, 'cleanup': cleanup}
+
+            environment = {**AcceptanceContracts().hosted_environment(),
+                           'DEVELOPER_DIR': '/synthetic/Developer', 'GITHUB_TOKEN': 'synthetic-token'}
+            loader = unittest.mock.Mock()
+            synthetic_spec = unittest.mock.Mock(loader=loader)
+            with patch.object(acceptance, '__file__', str(root / files[3])), \
+                    patch.dict(os.environ, environment, clear=True), \
+                    patch.object(acceptance.sys, 'argv', ['acceptance']), \
+                    patch.object(acceptance.subprocess, 'check_output', side_effect=['a' * 40 + '\n', '']), \
+                    patch.object(acceptance.importlib.util, 'spec_from_file_location', return_value=synthetic_spec), \
+                    patch.object(acceptance.importlib.util, 'module_from_spec', return_value=runner), \
+                    patch.object(acceptance.signal, 'signal'), \
+                    patch.object(runner.DRIVERS, 'SelectedSwiftDriver', side_effect=selected_driver), \
+                    patch.object(runner.DRIVERS, 'SelectedPackageDriverPair', side_effect=selected_pair), \
+                    patch.object(runner, 'BoundedOwnership') as owner, \
+                    patch.object(runner, 'run_original', side_effect=phase) as original, \
+                    redirect_stdout(io.StringIO()):
+                acceptance.main()
+            self.assertEqual(original.call_count, 2)
+            self.assertEqual(events, ['native joined', 'validated', 'closed',
+                                      'worker joined', 'validated', 'closed'])
+            for pair in pairs:
+                pair.close.assert_called_once_with()
+            receipt_path = next((root / 'local/keep-awake-acceptance').glob('run-*/receipt.json'))
+            receipt = json.loads(receipt_path.read_text())
+            self.assertTrue(receipt['passed'])
+            self.assertFalse(receipt['publicPackageAcceptanceVerified'])
+            self.assertFalse(receipt['allExtensionsQualified'])
+            self.assertEqual(receipt['sourcePins']['scripts/run-host-swift-testing.py'],
+                             acceptance.digest(root / 'scripts/run-host-swift-testing.py'))
 
 
 if __name__ == '__main__':

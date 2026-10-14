@@ -8,7 +8,7 @@ import signal
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 spec = importlib.util.spec_from_file_location(
@@ -2807,6 +2807,84 @@ class SelectedPackageCompoundTransitionContracts(unittest.TestCase):
                         runner.BoundedOwnership(123, 501, package_driver_pair=value)
                     library.assert_not_called()
             pair.close()
+
+
+class SelectedPackageInvocationTests(unittest.TestCase):
+    def test_selected_pair_remains_open_through_the_original_phase_and_join(self):
+        events = []
+        driver = Mock()
+        pair = Mock()
+        pair.close.side_effect = lambda: events.append('closed')
+        driver.validate.side_effect = lambda: events.append('validated')
+        arguments = ['make', 'ci-extension-studio', 'ci-extension-studio-native']
+        root = Path('/synthetic/source')
+        output = Path('/synthetic/output')
+        environment = {'DEVELOPER_DIR': '/synthetic/Xcode.app/Contents/Developer'}
+        expected = {'passed': True, 'cleanup': {'reaped': True}}
+
+        def phase(argv, actual_root, actual_environment, actual_output, **options):
+            self.assertEqual(argv, arguments)
+            self.assertIs(actual_root, root)
+            self.assertIs(actual_environment, environment)
+            self.assertIs(actual_output, output)
+            self.assertIsNone(options['selection'])
+            self.assertEqual(options['deadline'], runner.TEST_DEADLINE)
+            pair.close.assert_not_called()
+            options['ownership_factory'](123, 501)
+            owner.assert_called_once_with(123, 501, package_driver_pair=pair)
+            events.extend(['original phase', 'joined'])
+            pair.close.assert_not_called()
+            return expected
+
+        with patch.object(runner, 'DRIVERS', create=True) as drivers, \
+                patch.object(runner, 'BoundedOwnership') as owner, \
+                patch.object(runner, 'run_original', side_effect=phase):
+            drivers.SelectedSwiftDriver.return_value = driver
+            drivers.SelectedPackageDriverPair.return_value = pair
+            result = runner.run_selected_original(arguments, root, environment, output)
+            drivers.SelectedSwiftDriver.assert_called_once_with(environment['DEVELOPER_DIR'], entry='swift-test')
+            drivers.SelectedPackageDriverPair.assert_called_once_with(driver)
+        self.assertIs(result, expected)
+        self.assertEqual(events, ['original phase', 'joined', 'validated', 'closed'])
+
+    def test_failed_original_phase_closes_the_selected_pair_and_preserves_failure(self):
+        with patch.object(runner, 'DRIVERS', create=True) as drivers, \
+                patch.object(runner, 'run_original', side_effect=RuntimeError('original phase failed')) as phase:
+            with self.assertRaisesRegex(RuntimeError, 'original phase failed'):
+                runner.run_selected_original(['make', 'ci-extension-attention'], Path('/synthetic'),
+                                             {'DEVELOPER_DIR': '/synthetic/Developer'}, Path('/synthetic/output'))
+            drivers.SelectedPackageDriverPair.return_value.close.assert_called_once_with()
+            self.assertIsNone(phase.call_args.kwargs['selection'])
+
+    def test_changed_selected_driver_after_join_cannot_return_success(self):
+        with patch.object(runner, 'DRIVERS', create=True) as drivers, \
+                patch.object(runner, 'run_original', return_value={'passed': True}) as phase:
+            drivers.SelectedSwiftDriver.return_value.validate.side_effect = ValueError('selected driver changed')
+            with self.assertRaisesRegex(ValueError, 'selected driver changed'):
+                runner.run_selected_original(['make', 'ci-extension-database-mutation'], Path('/synthetic'),
+                                             {'DEVELOPER_DIR': '/synthetic/Developer'}, Path('/synthetic/output'),
+                                             selection='database-mutation')
+            self.assertEqual(phase.call_args.kwargs['selection'], 'database-mutation')
+            drivers.SelectedPackageDriverPair.return_value.close.assert_called_once_with()
+
+    def test_rejected_selected_pair_never_starts_the_original_make_phase(self):
+        with patch.object(runner, 'DRIVERS', create=True) as drivers, patch.object(runner, 'run_original') as phase:
+            drivers.SelectedPackageDriverPair.side_effect = ValueError('selected package image changed')
+            with self.assertRaisesRegex(ValueError, 'selected package image changed'):
+                runner.run_selected_original(['make', 'ci-extension-terminal'], Path('/synthetic'),
+                                             {'DEVELOPER_DIR': '/synthetic/Developer'}, Path('/synthetic/output'))
+            phase.assert_not_called()
+
+    def test_keep_acceptance_retains_its_original_deadline_and_failed_phase_result(self):
+        result = {'passed': False, 'timedOut': True, 'exitCode': 124}
+        with patch.object(runner, 'DRIVERS') as drivers, patch.object(runner, 'run_original', return_value=result) as phase:
+            actual = runner.run_selected_original(['make', 'ci-extension-keep-awake'], Path('/synthetic'),
+                                                  {'DEVELOPER_DIR': '/synthetic/Developer'},
+                                                  Path('/synthetic/output'), deadline=900)
+            self.assertIs(actual, result)
+            self.assertEqual(phase.call_args.kwargs['deadline'], 900)
+            drivers.SelectedSwiftDriver.return_value.validate.assert_called_once_with()
+            drivers.SelectedPackageDriverPair.return_value.close.assert_called_once_with()
 
 
 if __name__ == '__main__':

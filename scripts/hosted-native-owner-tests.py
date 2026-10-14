@@ -965,6 +965,21 @@ def run_original(arguments, root, environment, output, deadline=TEST_DEADLINE,
     }
 
 
+def run_selected_original(arguments, root, environment, output, selection=None, deadline=TEST_DEADLINE):
+    driver = DRIVERS.SelectedSwiftDriver(environment['DEVELOPER_DIR'], entry='swift-test')
+    pair = DRIVERS.SelectedPackageDriverPair(driver)
+    try:
+        def ownership_factory(pid, uid):
+            return BoundedOwnership(pid, uid, package_driver_pair=pair)
+
+        result = run_original(arguments, root, environment, output, deadline=deadline,
+                              ownership_factory=ownership_factory, selection=selection)
+        driver.validate()
+        return result
+    finally:
+        pair.close()
+
+
 def interrupted(signum, frame):
     raise InterruptedError(f'Hosted native test runner received signal {signum}')
 
@@ -1005,7 +1020,7 @@ def main():
         }
         environment['DEVELOPER_DIR'] = subprocess.check_output(
             ['xcode-select', '-p'], text=True, timeout=30).strip()
-        outcome['result'] = run_original(
+        outcome['result'] = run_selected_original(
             command, root, environment, output,
             selection=owner if owner in DATABASE_DIAGNOSTICS else None)
         outcome['passed'] = outcome['result']['passed']
