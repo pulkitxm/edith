@@ -1,5 +1,5 @@
 import Foundation
-@_implementationOnly import Markdown
+internal import Markdown
 
 public enum DocsParser {
     public static func page(path: String, markdown: String) -> DocsPage {
