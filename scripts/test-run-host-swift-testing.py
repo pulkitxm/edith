@@ -137,7 +137,10 @@ class SwiftDriverAdmissionTests(unittest.TestCase):
         self.assertEqual(recipe, [
             "\tpython3 -B scripts/test-host-test-invocation.py",
             "\tpython3 -B scripts/test-run-host-swift-testing.py"])
-        self.assertIn("ci-scripts: ci-host-invocation\n", make)
+        prerequisites = next(row for row in make.splitlines()
+                             if row.startswith("ci-scripts:")).partition(":")[2].split()
+        self.assertIn("ci-host-invocation", prerequisites)
+        self.assertIn("ci-host-abi", prerequisites)
 
     def test_driver_change_during_query_cannot_publish_a_build_directory(self):
         developer, _, _, target = self.fixture()

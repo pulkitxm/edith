@@ -92,7 +92,15 @@ class HostTestInvocationTests(unittest.TestCase):
     def test_make_builds_once_and_retains_every_xctest_before_swift_testing(self):
         make = (ROOT / "Makefile").read_text()
         recipe = make.split("ci-host: ci-host-invocation\n", 1)[1].split("\n\n", 1)[0].splitlines()
-        self.assertIn("ci-scripts: ci-host-invocation\n", make)
+        prerequisites = {
+            target: next(row for row in make.splitlines()
+                         if row.startswith(target + ":")).partition(":")[2].split()
+            for target in ["ci-scripts", "ci-scripts-batch"]
+        }
+        self.assertIn("ci-host-invocation", prerequisites["ci-scripts"])
+        self.assertIn("ci-host-abi", prerequisites["ci-scripts"])
+        self.assertIn("ci-host-abi", prerequisites["ci-scripts-batch"])
+        self.assertIn("ci-host-abi:\n\tbun scripts/extension-host-abi.mjs --check\n", make)
         self.assertIn("ci-host-invocation:\n\tpython3 -B scripts/test-host-test-invocation.py\n", make)
         self.assertEqual(len(recipe), 4)
         self.assertTrue(recipe[0].startswith("\tswift format lint --strict"))
