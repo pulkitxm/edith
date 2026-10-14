@@ -1,3 +1,4 @@
+import Darwin
 import EdithExtensionAccounts
 import EdithExtensionSupport
 import Foundation
@@ -259,8 +260,9 @@ import Testing
         async throws
     {
         let temporaryPath = try #require(ProcessInfo.processInfo.environment["TMPDIR"])
-        let temporary = URL(fileURLWithPath: temporaryPath, isDirectory: true)
-            .resolvingSymlinksInPath()
+        let physical = try #require(realpath(temporaryPath, nil))
+        defer { free(physical) }
+        let temporary = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
         let root = temporary.appendingPathComponent(
             "usage-backup-synthetic-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
