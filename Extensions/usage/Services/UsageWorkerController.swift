@@ -35,7 +35,7 @@ public final class UsageWorkerController {
     private let projectLimits: FetchLimits
     private let collect: Collect
     private let dataDirectory: URL
-    private let limitsSession = LimitsRefreshSession()
+    private let limitsSession = LimitsRefreshSession(persistAccountCache: true)
     private var usageTask: Task<Void, Never>?
     private var limitsTask: Task<Void, Never>?
     private var limitsResetting = false
