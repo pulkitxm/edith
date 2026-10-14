@@ -325,8 +325,8 @@ export async function uploadReleaseAsset({
     return result;
   } catch (error) {
     if (!isAssetCapacityError(error, file)) throw error;
-    if (typeof tag !== "string" || !/^[A-Za-z0-9][A-Za-z0-9/_.-]*$/.test(tag))
-      throw new Error("Invalid release tag");
+    if (!Number.isSafeInteger(releaseID) || releaseID < 1)
+      throw new Error("Invalid release ID");
     const temporary = await mkdtemp(join(tmpdir(), "edith-release-upload-"));
     try {
       const upload = join(temporary, name);
@@ -335,7 +335,16 @@ export async function uploadReleaseAsset({
         () =>
           execute(
             "gh",
-            ["release", "upload", tag, upload, "--repo", repository],
+            [
+              "api",
+              "--method",
+              "POST",
+              "-H",
+              "Content-Type: application/octet-stream",
+              `https://uploads.github.com/repos/${repository}/releases/${releaseID}/assets?name=${encodeURIComponent(name)}`,
+              "--input",
+              upload,
+            ],
             {
               encoding: "utf8",
               timeout: remaining(),

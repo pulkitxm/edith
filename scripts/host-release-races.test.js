@@ -517,11 +517,19 @@ test("capacity fallback keeps copied bytes private and rechecks remote state bef
             },
           });
         }
-        if (command === "gh" && args[0] === "release" && args[1] === "upload") {
-          if (args.includes("--help")) return "Usage: gh release upload";
+        if (command === "gh" && args[0] === "release" && args[1] === "upload")
+          return "Usage: gh release upload";
+        if (
+          command === "gh" &&
+          args[0] === "api" &&
+          args.includes("--input") &&
+          args.some((argument) =>
+            argument.startsWith("https://uploads.github.com/"),
+          )
+        ) {
           expect(args).not.toContain("--clobber");
           expect(value.release.draft).toBe(true);
-          const file = args[3];
+          const file = args[args.indexOf("--input") + 1];
           fallbackFiles.push(file);
           expect(basename(file)).toBe("Edith.dmg");
           expect(statSync(file).mode & 0o777).toBe(0o600);

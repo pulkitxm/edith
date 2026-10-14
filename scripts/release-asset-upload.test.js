@@ -27,12 +27,8 @@ function fixture() {
       throw Object.assign(new Error("Request rejected"), {
         stderr: "Error: release asset must be between 1 and 40000 bytes",
       });
-    if (
-      args[0] === "release" &&
-      args[1] === "upload" &&
-      !args.includes("--help")
-    ) {
-      uploadPath = args[3];
+    if (args[0] === "api" && args.includes("--input")) {
+      uploadPath = args[args.indexOf("--input") + 1];
       expect(basename(uploadPath)).toBe("catalog-123.json");
       expect(readFileSync(uploadPath)).toEqual(readFileSync(file));
     }
@@ -51,7 +47,7 @@ function fixture() {
   };
 }
 
-test("capacity fallback uses the actual tag and an owned custom basename without clobber", async () => {
+test("capacity fallback uploads to the release ID with an owned custom basename without clobber", async () => {
   const value = fixture();
   try {
     const options = {
@@ -74,12 +70,10 @@ test("capacity fallback uses the actual tag and an owned custom basename without
       }),
     ).toBe("gh");
     const upload = value.calls.at(-1);
-    expect(upload.slice(0, 4)).toEqual([
-      "gh",
-      "release",
-      "upload",
-      "extension-catalog-v1",
-    ]);
+    expect(upload.slice(0, 4)).toEqual(["gh", "api", "--method", "POST"]);
+    expect(upload).toContain(
+      "https://uploads.github.com/repos/synthetic/fixture/releases/7/assets?name=catalog-123.json",
+    );
     expect(upload).not.toContain("--clobber");
     expect(upload.every((argument) => !argument.includes("#"))).toBe(true);
     expect(existsSync(value.uploadPath)).toBe(false);
@@ -235,10 +229,11 @@ test("nonzero client JSON capacity rejection permits only the bounded immutable 
     ).toBe("gh");
     expect(value.calls.at(-1).slice(0, 4)).toEqual([
       "gh",
-      "release",
-      "upload",
-      "verification-synthetic",
+      "api",
+      "--method",
+      "POST",
     ]);
+    expect(value.calls.at(-1).join(" ")).toContain("/releases/7/assets?name=");
     expect(value.calls.at(-1)).not.toContain("--clobber");
     expect(existsSync(value.uploadPath)).toBe(false);
     value.calls.length = 0;

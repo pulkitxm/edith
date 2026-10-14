@@ -353,7 +353,12 @@ export async function publishHostRelease({
         execute: (command, args, options) => {
           if (
             (command === "pukbot" && !args.includes("--dry-run")) ||
-            (command === "gh" && args[0] === "release" && args[1] === "upload")
+            (command === "gh" &&
+              args[0] === "api" &&
+              args.includes("--input") &&
+              args.some((argument) =>
+                argument.startsWith("https://uploads.github.com/"),
+              ))
           ) {
             guardSource();
             verifyFiles();
