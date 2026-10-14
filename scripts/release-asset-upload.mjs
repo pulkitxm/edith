@@ -4,7 +4,7 @@ import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { TransientGitHubError, withGitHubRetrySync } from "./github-retry.mjs";
-import { lookupRelease } from "./release-lookup.mjs";
+import { lookupRelease, readGitHubAPI } from "./release-lookup.mjs";
 
 function assetArguments({ repository, releaseID, file, name }) {
   const size = statSync(file).size;
@@ -104,30 +104,13 @@ function mutationArguments(args) {
 }
 
 function readTagCommit({ repository, tag, execute, retry }) {
-  try {
-    return withGitHubRetrySync(
-      () =>
-        JSON.parse(
-          execute(
-            "gh",
-            [
-              "api",
-              `repos/${repository}/git/ref/tags/${encodeURIComponent(tag)}`,
-            ],
-            {
-              encoding: "utf8",
-              timeout: 60_000,
-              killSignal: "SIGKILL",
-              maxBuffer: 1024 ** 2,
-            },
-          ),
-        ),
-      retry,
-    );
-  } catch (error) {
-    if (/\bHTTP 404\b/.test(String(error?.stderr))) return undefined;
-    throw error;
-  }
+  return readGitHubAPI({
+    path: `repos/${repository}/git/ref/tags/${encodeURIComponent(tag)}`,
+    execute,
+    retry,
+    allowMissing: true,
+    maxBuffer: 1024 ** 2,
+  });
 }
 
 export function createdObjectConfirmation(args, execute, retry = {}) {
@@ -310,7 +293,13 @@ export async function uploadReleaseAsset({
   const confirm =
     typeof tag === "string"
       ? () => {
-          const release = lookupRelease({ repository, tag, execute, retry });
+          const release = lookupRelease({
+            repository,
+            tag,
+            releaseID,
+            execute,
+            retry,
+          });
           return Boolean(
             release?.id === releaseID &&
               release.assets.some(

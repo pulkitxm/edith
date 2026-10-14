@@ -64,8 +64,15 @@ if (command === "swift") {
     const item = state.releases.find(item => item.tag_name === tag && !item.draft);
     if (!item) { process.stderr.write("gh: Not Found (HTTP 404)"); process.exit(1); }
     output(item);
-  } else if (route.includes("releases?")) output(state.releases);
-  else process.exit(2);
+  } else if (route.split("/").at(-2) === "releases" && /^[0-9]+$/.test(route.split("/").at(-1))) {
+    state.releaseReads = (state.releaseReads ?? 0) + 1; save();
+    const item = state.releases.find(item => item.id === Number(route.split("/").at(-1)));
+    if (!item) { process.stderr.write("gh: Not Found (HTTP 404)"); process.exit(1); }
+    output(item);
+  } else if (route.includes("releases?")) {
+    state.releaseListings = (state.releaseListings ?? 0) + 1; save();
+    output(state.releases);
+  } else process.exit(2);
 } else if (command === "pukbot") {
   if (args[0] !== "release") process.exit(2);
   if (args.includes("--dry-run")) { output({ ok: true }); process.exit(0); }
