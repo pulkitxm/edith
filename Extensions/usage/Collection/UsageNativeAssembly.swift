@@ -145,7 +145,7 @@ enum UsageNativeAssembly {
                     return (
                         source,
                         [
-                            "label": labels[source] ?? account ?? source,
+                            "label": account ?? labels[source] ?? source,
                             "tool": account == nil ? source : "cli",
                         ]
                     )
