@@ -57,8 +57,10 @@ def driver_contract(developer, entry="swift", inspect=lambda path: path.lstat())
         raise ValueError("Selected Swift driver must have one owned link")
     if entry in {"swift-test", "swift-build"}:
         directory_info = inspect(directory)
-        if (directory_info.st_uid != 0 or directory_info.st_mode & 0o022
-                or link.st_uid != 0 or metadata.st_uid != 0 or metadata.st_mode & 0o022):
+        owners = {0, os.getuid()}
+        if (directory_info.st_uid not in owners or directory_info.st_mode & 0o022
+                or link.st_uid not in owners or metadata.st_uid not in owners
+                or metadata.st_mode & 0o022):
             raise ValueError("Selected Swift package entry must be immutable and owned")
     def identity(value):
         return tuple(getattr(value, name) for name in (
@@ -110,7 +112,7 @@ class SelectedPackageDriverPair:
             self.frontend = self.directory / "swift-frontend"
             directory = self.directory.lstat()
             if (self.source.name != "swift-package" or not stat.S_ISDIR(directory.st_mode)
-                    or directory.st_uid != 0 or directory.st_mode & 0o022):
+                    or directory.st_uid not in {0, os.getuid()} or directory.st_mode & 0o022):
                 raise ValueError("Immutable selected package directory required")
             self.directory_identity = image_identity(directory)
             for path in (self.source, self.destination, self.frontend):
@@ -119,7 +121,7 @@ class SelectedPackageDriverPair:
                 descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
                 self.images.append((path, descriptor, None, None))
                 value = os.fstat(descriptor)
-                if (not stat.S_ISREG(value.st_mode) or value.st_uid != 0
+                if (not stat.S_ISREG(value.st_mode) or value.st_uid not in {0, os.getuid()}
                         or value.st_nlink != 1 or value.st_mode & 0o022
                         or not value.st_mode & 0o111 or not 0 < value.st_size <= PACKAGE_IMAGE_BOUND):
                     raise ValueError("Immutable selected package image required")
