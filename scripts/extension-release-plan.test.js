@@ -588,6 +588,13 @@ describe("independent extension releases", () => {
         join(root, "Extensions/music/EmbeddedTests/SceneTests.swift"),
         "new native scene test",
       );
+      for (const name of [
+        "test.mjs",
+        "Makefile",
+        "osv-scanner.toml",
+        ".gitignore",
+      ])
+        await writeFile(join(root, "Extensions/music", name), "test only");
       const { planSwiftTests } = await import("./ci-test-plan.mjs");
       expect(
         planSwiftTests(["Extensions/music/EmbeddedTests/SceneTests.swift"])
@@ -1436,6 +1443,11 @@ describe("pull request candidate planning", () => {
       "Extensions/music/EmbeddedTests/PlayerTests.swift",
       "Extensions/music/.build/Player.swift",
       "Extensions/music/vendor/Player.swift",
+      "Extensions/music/test.mjs",
+      "Extensions/music/Makefile",
+      "Extensions/music/Native/Makefile",
+      "Extensions/music/Native/osv-scanner.toml",
+      "Extensions/music/Native/.gitignore",
       "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
     ])
       expect(
@@ -1467,13 +1479,25 @@ describe("pull request candidate planning", () => {
         database,
       ),
     ).toEqual(database);
+    for (const path of [
+      "Extensions/music/Package.swift",
+      "Extensions/music/Resources/test.mjs.json",
+      "Extensions/music/Native/Cargo.toml",
+    ])
+      expect(
+        planPullRequestBuilds(
+          pullRequestDefinitions,
+          [path],
+          pullRequestDefinitions,
+        ).map(({ id }) => id),
+      ).toEqual(["music", "shelf"]);
     expect(
       planPullRequestBuilds(
         pullRequestDefinitions,
-        ["Extensions/music/Package.swift"],
+        ["Packages/ExtensionMarketplace/Makefile"],
         pullRequestDefinitions,
       ).map(({ id }) => id),
-    ).toEqual(["music", "shelf"]);
+    ).toEqual(["music", "calendar", "shelf"]);
   });
   test("manifest production rows select only the changed owner and consumers", () => {
     const next = structuredClone(pullRequestDefinitions);
