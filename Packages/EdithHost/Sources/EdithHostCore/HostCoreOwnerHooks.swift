@@ -114,6 +114,7 @@ public struct HostCoreOwnerHooks: Sendable {
         guard let provider = registry.providers.first(where: { $0.state.id == id }),
             let hook = provider.catalog.readiness?.inspect
         else {
+            if state.enabled && state.running { return .running(state: state, title: title) }
             return .unavailable(
                 state: state, title: title,
                 detail: registry.issues[id]

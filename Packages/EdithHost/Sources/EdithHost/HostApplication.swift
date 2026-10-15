@@ -20,9 +20,9 @@ struct HostApplication: App {
     @State private var herdrWindows: HostHerdrWindows?
     @State private var herdrInteractions: HostHerdrInteractions?
     @State private var notchStartup: HostNotchStartup?
-    @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
+    @State private var startup: Task<Void, Never>?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
         "accent"
     @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
@@ -62,7 +62,7 @@ struct HostApplication: App {
                 #if EDITH_GUI_FIXTURE
                 .background { HostGUIVisibilityProbe() }
                 #endif
-                .task { await start() }
+                .task { if startup == nil { startup = Task { await start() } } }
             }
             .tracksWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)
@@ -77,15 +77,7 @@ struct HostApplication: App {
             }
             .onChange(of: theme) { synchronizeAppearance() }
             .onChange(of: remotePresenter?.cleanupFailed ?? false) {
-                if remotePresenter?.cleanupFailed == true { remoteCleanupNotice = true }
-            }
-            .alert("Extension cleanup pending", isPresented: $remoteCleanupNotice) {
-                Button("Retry cleanup") { remotePresenter?.retryCleanup() }
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(
-                    "The extension interface has closed, but its process has not confirmed cleanup. Retry before removing or updating it."
-                )
+                if remotePresenter?.cleanupFailed == true { remotePresenter?.retryCleanup() }
             }
         }
         .commands {
@@ -275,19 +267,14 @@ struct HostApplication: App {
             windows.install()
             delegate.shutdown = {
                 await interactions.cancelPending()
-                do {
-                    try await notch.stop()
-                    try await ownedTerminal.stop()
-                    try await ownedHerdr.stop()
-                } catch { return false }
-                let ready = await loaded.sessions.shutdown(reason: .applicationQuit)
-                if ready {
-                    await interactions.stop()
-                    windows.closeAll(); windows.uninstall()
-                    await slots.stop()
-                    await services.shutdown(); core.shutdown(); control.shutdown()
-                }
-                return ready
+                try? await notch.stop()
+                try? await ownedTerminal.stop()
+                try? await ownedHerdr.stop()
+                await loaded.sessions.shutdown(reason: .applicationQuit)
+                await interactions.stop()
+                windows.closeAll(); windows.uninstall()
+                await slots.stop()
+                await services.shutdown(); core.shutdown(); control.shutdown()
             }
             await services.start()
             await loaded.loadCachedCatalog()

@@ -112,6 +112,7 @@ public final class HostWorker {
         source.setEventHandler { [weak self] in
             MainActor.assumeIsolated { self?.drainOutput() }
         }
+        source.setCancelHandler { [output] in try? output.fileHandleForReading.close() }
         readSource = source
         source.resume()
         process.terminationHandler = { [weak self] _ in
@@ -401,7 +402,7 @@ public final class HostWorker {
     }
 
     private func drainOutput() {
-        guard !exited, outputIsNonblocking else { return }
+        guard !exited, outputIsNonblocking, readSource != nil else { return }
         var buffer = [UInt8](repeating: 0, count: 8192)
         while true {
             let count = read(output.fileHandleForReading.fileDescriptor, &buffer, buffer.count)
@@ -602,7 +603,6 @@ public final class HostWorker {
         readSource = nil
         process.terminationHandler = nil
         try? input.fileHandleForWriting.close()
-        try? output.fileHandleForReading.close()
         let requests = pending.values
         pending.removeAll()
         for request in requests {

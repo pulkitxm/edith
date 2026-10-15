@@ -173,6 +173,20 @@ public struct HostCoreReadinessReport: Codable, Sendable {
         !value.isEmpty && value.utf8.count <= 4096 && !value.utf8.contains(0)
     }
 
+    public static func running(state: HostCLIProviderState, title: String) -> Self {
+        let detail = title + " is running."
+        return Self(
+            owner: state.id, id: state.id, title: title,
+            state: .init(
+                extensionID: state.id, phase: .ready, runtimePhase: .installed,
+                summary: detail, issues: []),
+            checks: [
+                .init(
+                    id: "owner.readiness", title: "Owning readiness provider", status: .passed,
+                    runtimePhase: .installed, detail: detail, recoveryCommand: nil)
+            ])
+    }
+
     public static func unavailable(state: HostCLIProviderState, title: String, detail: String)
         -> Self
     {
