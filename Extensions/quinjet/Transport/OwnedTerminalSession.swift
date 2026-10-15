@@ -81,6 +81,7 @@ enum OwnedTerminalContext {
     private weak var registry: OwnedTerminalSessionRegistry?
     private var stopped = false
     private var writing = false
+    private var drainTask: Task<Void, Never>?
 
     init(launch: OwnedTerminalLaunch) throws {
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
@@ -97,6 +98,13 @@ enum OwnedTerminalContext {
             resetTerminalAfterInterrupt: launch.resetTerminalAfterInterrupt)
         self.registry = registry
         registry?.register(self)
+        drainTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, !self.stopped, self.terminal.exitCode == nil else { return }
+                try? self.terminal.drain()
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {
@@ -178,6 +186,8 @@ enum OwnedTerminalContext {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        drainTask?.cancel()
+        drainTask = nil
         files.close(descriptor.handle)
         links.close(descriptor.handle)
         terminal.close()
@@ -291,7 +301,7 @@ enum OwnedTerminalContext {
             "read", request: .init(session: descriptor.handle, offset: offset))
         let output = try JSONDecoder().decode(OwnedTerminalPTY.Output.self, from: data)
         guard output.bytes.count <= 32768, output.nextOffset >= offset,
-            output.nextOffset - offset == UInt64(output.bytes.count)
+            output.nextOffset - offset >= UInt64(output.bytes.count)
         else {
             throw ExtensionPeerError.invalidRequest
         }

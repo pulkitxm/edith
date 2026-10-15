@@ -382,7 +382,10 @@ final class TerminalSessionHolder {
                 consumeOutput(Data(output.bytes.suffix(count)))
                 offset = output.nextOffset
             }
-            if let exit = output.exitCode { exitMessage = Self.exitMessage(exit) }
+            if let exit = output.exitCode {
+                exitMessage = Self.exitMessage(exit)
+                started = false
+            }
         }
         return data
     }
