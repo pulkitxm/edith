@@ -431,19 +431,16 @@ public enum UsageHistory {
                 retained.removeValue(forKey: key)
                 continue
             }
-            var candidates = block["candidates"] as? [[String: Any]] ?? []
+            var candidates = HistoryCandidates(
+                baseline: baseline, candidates: block["candidates"] as? [[String: Any]] ?? [],
+                source: source)
             for input in inputs {
                 guard let day = daily(input).first(where: { $0["period"] as? String == period }),
                     (day["bySource"] as? [String: Any])?[source] != nil
                 else { continue }
-                let candidate = historyBlock(day, source: source)
-                if !sameHistory(candidate, baseline, source: source),
-                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
-                {
-                    candidates.append(candidate)
-                }
+                candidates.insert(historyBlock(day, source: source))
             }
-            block["candidates"] = candidates
+            block["candidates"] = candidates.values
             retained[key] = block
             days[period] = mergeDay(
                 local: baseline, cloud: days[period] ?? baseline, mergeSourceDetail: true)
@@ -505,16 +502,17 @@ public enum UsageHistory {
                         ],
                         "baseline": baseline, "candidates": [[String: Any]](),
                     ]
-                guard let recordedBaseline = block["baseline"] as? [String: Any],
-                    sameHistory(recordedBaseline, baseline, source: source)
-                else { return nil }
-                var candidates = block["candidates"] as? [[String: Any]] ?? []
-                if !sameHistory(candidate, baseline, source: source),
-                    !candidates.contains(where: { sameHistory($0, candidate, source: source) })
-                {
-                    candidates.append(candidate)
+                guard let recordedBaseline = block["baseline"] as? [String: Any] else {
+                    return nil
                 }
-                block["candidates"] = candidates
+                if !sameHistory(recordedBaseline, baseline, source: source) {
+                    block["baseline"] = baseline
+                }
+                var candidates = HistoryCandidates(
+                    baseline: baseline,
+                    candidates: block["candidates"] as? [[String: Any]] ?? [], source: source)
+                candidates.insert(candidate)
+                block["candidates"] = candidates.values
                 retained[key] = block
                 excluded[period, default: []].insert(source)
             }
@@ -559,35 +557,102 @@ public enum UsageHistory {
     private static func sameHistory(
         _ lhs: [String: Any], _ rhs: [String: Any], source: String
     ) -> Bool {
-        func identity(_ day: [String: Any]) -> Data? {
-            guard let ordered = orderedHistory(day) as? [String: Any],
-                let projected = orderedHistory(historyBlock(ordered, source: source))
-                    as? [String: Any]
-            else { return nil }
-            return encoded(projected)
-        }
-        guard let left = identity(lhs), let right = identity(rhs) else { return false }
+        guard let left = historyIdentity(lhs, source: source),
+            let right = historyIdentity(rhs, source: source)
+        else { return false }
         return left == right
     }
 
-    private static func orderedHistory(_ value: Any, field: String = "") -> Any {
+    private static func historyIdentity(_ day: [String: Any], source: String) -> Data? {
+        var identity = Data()
+        guard appendIdentity(of: historyBlock(day, source: source), to: &identity) else {
+            return nil
+        }
+        return identity
+    }
+
+    private static func appendIdentity(of value: Any, field: String = "", to out: inout Data)
+        -> Bool
+    {
+        func append(_ tag: UInt8, _ count: Int) {
+            out.append(tag)
+            withUnsafeBytes(of: UInt64(count).littleEndian) { out.append(contentsOf: $0) }
+        }
+        func appendString(_ text: String) {
+            let bytes = Array(text.utf8)
+            append(1, bytes.count)
+            out.append(contentsOf: bytes)
+        }
         if let object = value as? [String: Any] {
-            return object.reduce(into: [String: Any]()) { result, entry in
-                result[entry.key] = orderedHistory(entry.value, field: entry.key)
+            append(2, object.count)
+            for key in object.keys.sorted() {
+                appendString(key)
+                guard let item = object[key], appendIdentity(of: item, field: key, to: &out)
+                else { return false }
             }
+            return true
         }
-        if field == "cost", let number = value as? NSNumber {
-            return (number.doubleValue * 1_000_000_000).rounded() / 1_000_000_000
+        if let array = value as? [Any] {
+            var items: [Data] = []
+            items.reserveCapacity(array.count)
+            for element in array {
+                var item = Data()
+                guard appendIdentity(of: element, to: &item) else { return false }
+                items.append(item)
+            }
+            if field != "hours" { items.sort { $0.lexicographicallyPrecedes($1) } }
+            append(3, items.count)
+            for item in items {
+                append(4, item.count)
+                out.append(item)
+            }
+            return true
         }
-        guard let array = value as? [Any] else { return value }
-        let ordered = array.map { orderedHistory($0) }
-        guard field != "hours" else { return ordered }
-        return ordered.map { item in
-            (
-                try? JSONSerialization.data(
-                    withJSONObject: item, options: [.sortedKeys, .fragmentsAllowed]), item
-            )
-        }.sorted { ($0.0 ?? Data()).lexicographicallyPrecedes($1.0 ?? Data()) }.map(\.1)
+        if let text = value as? String {
+            appendString(text)
+            return true
+        }
+        if value is NSNull {
+            out.append(5)
+            return true
+        }
+        guard let number = value as? NSNumber else { return false }
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            out.append(number.boolValue ? 6 : 7)
+            return true
+        }
+        let measured =
+            field == "cost"
+            ? (number.doubleValue * 1_000_000_000).rounded() / 1_000_000_000 : number.doubleValue
+        out.append(8)
+        withUnsafeBytes(of: (measured == 0 ? 0 : measured).bitPattern.littleEndian) {
+            out.append(contentsOf: $0)
+        }
+        return true
+    }
+
+    private struct HistoryCandidates {
+        private(set) var values: [[String: Any]]
+        private var identities: Set<Data>
+        private let baseline: Data?
+        private let source: String
+
+        init(baseline: [String: Any]?, candidates: [[String: Any]], source: String) {
+            self.source = source
+            self.baseline = baseline.flatMap { UsageHistory.historyIdentity($0, source: source) }
+            values = candidates
+            identities = Set(
+                candidates.compactMap { UsageHistory.historyIdentity($0, source: source) })
+        }
+
+        mutating func insert(_ candidate: [String: Any]) {
+            guard let identity = UsageHistory.historyIdentity(candidate, source: source) else {
+                values.append(candidate)
+                return
+            }
+            guard identity != baseline, identities.insert(identity).inserted else { return }
+            values.append(candidate)
+        }
     }
 
     private static func coverageRegressed(source: String, old: Any, fresh: Any?) -> Bool {
@@ -632,16 +697,19 @@ public enum UsageHistory {
                 let key = period + "\u{0}" + source
                 if var current = retained[key] {
                     guard let baseline = block["baseline"] as? [String: Any],
-                        let existing = current["baseline"] as? [String: Any],
-                        sameHistory(baseline, existing, source: source)
+                        let existing = current["baseline"] as? [String: Any]
                     else { return nil }
-                    var candidates = current["candidates"] as? [[String: Any]] ?? []
-                    for candidate in block["candidates"] as? [[String: Any]] ?? []
-                    where !candidates.contains(where: { sameHistory($0, candidate, source: source) }
-                    ) {
-                        candidates.append(candidate)
+                    var candidates = HistoryCandidates(
+                        baseline: nil,
+                        candidates: current["candidates"] as? [[String: Any]] ?? [],
+                        source: source)
+                    if !sameHistory(baseline, existing, source: source) {
+                        candidates.insert(baseline)
                     }
-                    current["candidates"] = candidates
+                    for candidate in block["candidates"] as? [[String: Any]] ?? [] {
+                        candidates.insert(candidate)
+                    }
+                    current["candidates"] = candidates.values
                     retained[key] = current
                 } else {
                     retained[key] = block
