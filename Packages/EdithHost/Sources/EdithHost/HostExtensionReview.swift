@@ -86,10 +86,6 @@ struct HostExtensionReview: View {
                                 permissions: entry.requiredPermissions + entry.optionalPermissions)
                         }
                         if !installed, !pending {
-                            Text(
-                                "New downloads stay disabled until you choose Enable. Updates preserve your previous enabled state."
-                            )
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
                             if reviewed == nil {
                                 Text(
                                     "Verified download information is unavailable. Refresh to review the package."
@@ -98,7 +94,7 @@ struct HostExtensionReview: View {
                                 Button("Refresh") { refresh() }.buttonStyle(.edith(.secondary))
                                     .disabled(busy)
                             } else {
-                                Button("Download reviewed package") { download() }
+                                Button("Download") { download() }
                                     .buttonStyle(.edith(.primary)).disabled(busy)
                             }
                         } else if pending {
@@ -167,6 +163,8 @@ struct HostExtensionReview: View {
             if marketplace.available[entry.id] != reviewed {
                 self.reviewed = marketplace.available[entry.id]
                 notice = "The package changed. Review its version and size before downloading."
+            } else if marketplace.installed[entry.id] != nil {
+                await suites.select(entry, enabled: true)
             }
         }
     }
