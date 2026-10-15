@@ -76,6 +76,7 @@ RELEASE_BUILD="$(sed -n 's/^build=//p' "$TMP_OUT")"
 rm -f "$TMP_OUT"
 [ -n "$RELEASE_TAG" ] && [ -n "$RELEASE_VERSION" ] && [ -n "$RELEASE_BUILD" ] \
   || { echo "release blocked: could not resolve the next version" >&2; exit 1; }
+export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD
 echo "==> releasing $RELEASE_TAG (version $RELEASE_VERSION, build $RELEASE_BUILD)"
 
 KEYCHAIN="$HOME/Library/Keychains/edith-release-$$.keychain-db"
