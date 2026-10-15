@@ -147,7 +147,7 @@ export async function admitHostBootstrapIntent(
       RELEASE_TAG: host.tag,
       RELEASE_VERSION: host.version,
       RELEASE_BUILD: String(host.build),
-      RELEASE_PRERELEASE: "true",
+      RELEASE_PRERELEASE: "false",
     }))
       assert.equal(environment[key], value);
   } else {

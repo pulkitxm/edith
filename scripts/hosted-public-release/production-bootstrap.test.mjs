@@ -230,7 +230,7 @@ test("host self-admission captures its actual run and rejects supplied future ru
     RELEASE_TAG: "v0.0.402",
     RELEASE_VERSION: "0.0.402",
     RELEASE_BUILD: "2",
-    RELEASE_PRERELEASE: "true",
+    RELEASE_PRERELEASE: "false",
   };
   const cap = await admitHostBootstrapIntent(
     JSON.stringify(pending),
