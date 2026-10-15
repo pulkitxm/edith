@@ -184,8 +184,7 @@ import Testing
         let entry = EmbeddedMusicUIEntry(
             path: title + ".wav", url: root.appendingPathComponent(title + ".wav"))
         return EmbeddedMusicUIState(
-            root: root, tracks: [entry], folders: [], folderTracks: [entry], searchTracks: [],
-            searchFolders: [], favourites: [entry],
+            root: root, folders: [], folderTracks: [entry], favourites: [entry],
             playback: .init(
                 path: entry.path, playing: true, elapsed: 12, duration: 100, volume: 0.5,
                 shuffle: false, repeating: true),
