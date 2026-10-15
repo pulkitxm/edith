@@ -76,7 +76,7 @@ const environment = {
   RELEASE_TAG: "v0.0.402",
   RELEASE_VERSION: "0.0.402",
   RELEASE_BUILD: "2",
-  RELEASE_PRERELEASE: "true",
+  RELEASE_PRERELEASE: "false",
 };
 function fixture() {
   const bodies = new Map();

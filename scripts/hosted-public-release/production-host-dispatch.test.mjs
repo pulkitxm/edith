@@ -253,7 +253,7 @@ test("workflow materializes exact dependencies only for the new declared host pa
       "run: node release-source/scripts/extension-release-ready.mjs release-source",
     ),
   );
-  assert(publish.includes('RELEASE_PRERELEASE: "true"'));
+  assert(publish.includes('RELEASE_PRERELEASE: "false"'));
   const consumer = readFileSync("scripts/extension-release-ready.mjs", "utf8");
   assert(consumer.includes("readiness.waitForStagedHostReadiness("));
   assert(consumer.includes("bootstrap.retireHostBootstrapIntent(intent)"));
