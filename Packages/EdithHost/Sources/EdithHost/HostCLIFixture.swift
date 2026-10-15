@@ -139,11 +139,10 @@ import Foundation
             try? JSONSerialization.data(withJSONObject: [
                 "coreStopped": true, "activeWorkers": sessions.activeIDs.count,
             ]).write(to: directory.appendingPathComponent("shutdown.json"), options: .atomic)
-            return true
         }
         requestQuit = {
             Task {
-                guard await delegate.shutdown?() == true else { exit(1) }
+                await delegate.shutdown?()
                 exit(0)
             }
         }

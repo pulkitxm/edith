@@ -7,13 +7,15 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     UNUserNotificationCenterDelegate
 {
     var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
-    var shutdown: (@MainActor () async -> Bool)?
+    var shutdown: (@MainActor () async -> Void)?
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
     var mainWindow: @MainActor () -> NSWindow? = {
         NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
     }
     private var terminating = false
+    private var replied = false
+    static let shutdownGrace: Duration = .seconds(5)
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
@@ -52,18 +54,18 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         guard !terminating else { return .terminateLater }
         guard let shutdown else { return .terminateNow }
         terminating = true
+        let finish = { [weak self] in
+            guard let self, !self.replied else { return }
+            self.replied = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
         Task {
-            let ready = await shutdown()
-            if !ready {
-                terminating = false
-                let alert = NSAlert()
-                alert.messageText = "An extension could not restore its system settings"
-                alert.informativeText =
-                    "Edith remains open. Open the enabled extension, restore its settings, then quit again."
-                alert.addButton(withTitle: "OK")
-                alert.runModal()
-            }
-            sender.reply(toApplicationShouldTerminate: ready)
+            await shutdown()
+            finish()
+        }
+        Task {
+            try? await Task.sleep(for: Self.shutdownGrace)
+            finish()
         }
         return .terminateLater
     }
