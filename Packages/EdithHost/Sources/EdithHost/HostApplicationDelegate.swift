@@ -16,8 +16,6 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
     private var terminating = false
     private(set) var launchedAtLogin = false
-    private var replied = false
-    static let shutdownGrace: Duration = .seconds(5)
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
@@ -61,24 +59,18 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !terminating else { return .terminateLater }
         guard let shutdown else { return .terminateNow }
+        guard !terminating else { return .terminateCancel }
         terminating = true
         let finish = { [weak self] in
-            guard let self, !self.replied else { return }
-            self.replied = true
-            self.stopWorkers?()
-            sender.reply(toApplicationShouldTerminate: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
+            self?.stopWorkers?()
+            exit(0)
         }
         Task {
             await shutdown()
             finish()
         }
-        Task {
-            try? await Task.sleep(for: Self.shutdownGrace)
-            finish()
-        }
-        return .terminateLater
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { finish() }
+        return .terminateCancel
     }
 }
