@@ -347,8 +347,23 @@ export async function buildExtensionPackage({
       environment,
     );
   }
-  const run = (file, args, options = {}) =>
-    execFileSync(file, args, { env: environment, ...options });
+  const run = (file, args, options = {}) => {
+    const attempts =
+      file === "codesign" && args.includes("--timestamp") ? 4 : 1;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return execFileSync(file, args, { env: environment, ...options });
+      } catch (error) {
+        if (attempt >= attempts) throw error;
+        Atomics.wait(
+          new Int32Array(new SharedArrayBuffer(4)),
+          0,
+          0,
+          attempt * 5000,
+        );
+      }
+    }
+  };
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );

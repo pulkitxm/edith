@@ -42,6 +42,10 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
+            if command == "companion.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    CompanionCommand.self, owner: "companion", payload: payload, streaming: true)
+            }
             if command.hasPrefix("companion.cli.") {
                 if self.cliStreams == nil {
                     self.cliStreams = try ExtensionCLIStreams(owner: "companion")

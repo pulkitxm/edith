@@ -93,6 +93,10 @@ final class ExtensionRuntime: NSObject {
                         .contains(command)
                 else { throw ExtensionPeerError.unavailable }
             }
+            if command == "studio.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    StudioCommand.self, owner: "studio", payload: payload, streaming: true)
+            }
             if command.hasPrefix("studio.cli.") {
                 if self.streams == nil { self.streams = try ExtensionCLIStreams(owner: "studio") }
                 guard let streams = self.streams else { throw ExtensionPeerError.unavailable }

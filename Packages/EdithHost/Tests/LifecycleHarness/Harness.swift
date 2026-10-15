@@ -318,12 +318,21 @@ struct HostLifecycleHarness {
             stage = "initial commands"
             if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
-                guard await settledChildProcesses(of: oldPID, count: 0).isEmpty else {
-                    throw HostWorkerError.invalidResponse
+                let before = await settledChildProcesses(of: oldPID, count: 0)
+                guard before.isEmpty else {
+                    throw CameraHarnessFailure(
+                        "camera worker had \(before.count) child processes before the check")
                 }
-                try await CameraFixture.verify(endpoint, fixture: fixture, seed: true)
+                do {
+                    try await CameraFixture.verify(endpoint, fixture: fixture, seed: true)
+                } catch {
+                    throw CameraHarnessFailure("camera fixture check failed: \(error)")
+                }
                 cameraChildren = await settledChildProcesses(of: oldPID, count: 1)
-                guard cameraChildren.count == 1 else { throw HostWorkerError.invalidResponse }
+                guard cameraChildren.count == 1 else {
+                    throw CameraHarnessFailure(
+                        "camera worker had \(cameraChildren.count) child processes after the check")
+                }
             } else if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
             } else if extensionID == "codeStats" {
@@ -1225,4 +1234,10 @@ struct HostLifecycleHarness {
 private enum LaTeXFixtureError: Error {
     case invalidData
     case invalidEditorState
+}
+
+struct CameraHarnessFailure: LocalizedError {
+    let message: String
+    init(_ message: String) { self.message = message }
+    var errorDescription: String? { message }
 }
