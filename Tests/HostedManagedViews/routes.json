@@ -588,7 +588,7 @@
       "sources": [
         {
           "path": "Extensions/studio/Runtime.swift",
-          "sha256": "a7d78e5b7f6728da94e1c6e91d09756ee4a2dbdf8a92f8f59d033b5f87949660"
+          "sha256": "2a431dc9f4f0976859b630e032fd07d80b2841a9567a3792a1c91721d9128c6e"
         },
         {
           "path": "Extensions/studio/UIBridge/StudioUIScene.swift",

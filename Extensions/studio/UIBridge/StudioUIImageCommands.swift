@@ -21,17 +21,9 @@ struct StudioUIImageData: Codable, Sendable {
     }
 }
 
-struct StudioUIImageRender: Codable, Sendable {
-    let preview: StudioUIImageData
-    let geometry: StudioUIImageData?
-}
-
 @MainActor enum StudioUIImageCommands {
     private static let fields: [String: Set<String>] = [
         "studio.ui.image.load": ["path", "size"],
-        "studio.ui.image.render": ["document", "size", "geometry"],
-        "studio.ui.image.thumbnails": ["document"],
-        "studio.ui.image.faces": ["document"],
         "studio.ui.image.export": ["document", "output"],
     ]
 
@@ -86,50 +78,6 @@ struct StudioUIImageRender: Codable, Sendable {
             if case let .image(path) = layer.content { _ = try StudioCommands.localPath(path) }
         }
         switch operation {
-        case "studio.ui.image.render":
-            guard let size = object["size"] as? Int,
-                (1...StudioImageEditorModel.previewSize).contains(size),
-                let geometry = object["geometry"] as? Bool
-            else { throw ExtensionPeerError.invalidRequest }
-            let result = try await BlockingWork.perform {
-                let source = try StudioImageEditorWork.loadSource(
-                    document.sourceURL,
-                    maxPixelSize: StudioImageEditorModel.previewSize
-                ).get()
-                let images = try StudioImageEditorWork.render(
-                    document, source: source,
-                    size: size, geometry: geometry
-                ).get()
-                return try StudioUIImageRender(
-                    preview: StudioUIImageData(images.preview),
-                    geometry: images.geometry.map { try StudioUIImageData($0) })
-            }
-            return try encoder.encode(resources.store(encoder.encode(result)))
-        case "studio.ui.image.thumbnails":
-            let images = try await BlockingWork.perform {
-                let source = try StudioImageEditorWork.loadSource(
-                    document.sourceURL,
-                    maxPixelSize: StudioImageEditorModel.previewSize
-                ).get()
-                return try StudioImageEditorWork.filterThumbnails(document, source: source)
-                    .reduce(into: [String: StudioUIImageData]()) {
-                        $0[$1.key.rawValue] = try StudioUIImageData($1.value)
-                    }
-            }
-            return try encoder.encode(resources.store(encoder.encode(images)))
-        case "studio.ui.image.faces":
-            let source = try await BlockingWork.perform {
-                let source = try StudioImageEditorWork.loadSource(
-                    document.sourceURL,
-                    maxPixelSize: StudioImageEditorModel.previewSize
-                ).get()
-                return try StudioImageEditorWork.render(
-                    document, source: source,
-                    size: StudioImageEditorModel.previewSize, geometry: false
-                ).get()
-            }
-            return try encoder.encode(
-                await StudioImageEditorWork.faces(in: StudioImageSource(image: source.preview)))
         case "studio.ui.image.export":
             let target: URL
             if let path = object["output"] as? String {
