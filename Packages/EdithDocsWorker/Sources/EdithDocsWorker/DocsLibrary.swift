@@ -77,7 +77,7 @@ public struct DocsLibrary: Sendable {
             return sourceMemory
         }
         memoryLock.unlock()
-        guard let url = Bundle.module.url(forResource: resourceName, withExtension: "json"),
+        guard let url = resourceBundle()?.url(forResource: resourceName, withExtension: "json"),
             let data = try? Data(contentsOf: url),
             let sources = try? JSONDecoder().decode([DocsSource].self, from: data)
         else { return nil }
@@ -86,6 +86,26 @@ public struct DocsLibrary: Sendable {
         let stored = sourceMemory
         memoryLock.unlock()
         return stored
+    }
+
+    static let resourceBundleName = "EdithDocsWorker_EdithDocsWorker.bundle"
+
+    static func resourceBundle() -> Bundle? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0, let name = info.dli_fname else { return nil }
+        var directory = URL(fileURLWithPath: String(cString: name)).resolvingSymlinksInPath()
+            .deletingLastPathComponent()
+        for _ in 0..<6 {
+            for candidate in [
+                directory.appendingPathComponent(resourceBundleName),
+                directory.appendingPathComponent("Resources").appendingPathComponent(
+                    resourceBundleName),
+            ] {
+                if let bundle = Bundle(url: candidate) { return bundle }
+            }
+            directory.deleteLastPathComponent()
+        }
+        return nil
     }
 
     private static func parsedPage(_ path: String, in sources: [DocsSource]) -> DocsPage? {
