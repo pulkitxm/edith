@@ -29,8 +29,10 @@ struct HostExtensionContent: View {
     @State private var browser = false
     @State private var approvalRequired = false
     @State private var contentHeight: Double?
+    @State private var release: (@MainActor () -> Void)?
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var visible
+    @Environment(\.automaticViewActionsEnabled) private var automaticActions
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
     private var eligible: Bool {
@@ -80,15 +82,18 @@ struct HostExtensionContent: View {
             }
         }
         .frame(height: (contentHeight ?? initialHeight).map { CGFloat($0) })
-        .pageTask(
+        .task(
             id: Request(
                 version: marketplace.installed[extensionID]?.version, active: active,
                 location: location,
                 section: section, surface: surface, retry: retry,
-                deliveryID: navigation?.delivery.id),
-            active: eligible && presenter != nil, cancel: clear
+                deliveryID: navigation?.delivery.id,
+                presentable: eligible && presenter != nil && automaticActions)
         ) {
-            guard let presenter else { return }
+            release?()
+            release = nil
+            guard eligible, automaticActions, let presenter, !Task.isCancelled else { return }
+            release = clear
             let token = navigation?.delivery.id ?? UUID()
             presentationID = token
             do {
@@ -152,7 +157,10 @@ struct HostExtensionContent: View {
                     : "The extension page could not open."
             }
         }
-        .onDisappear(perform: clear)
+        .onDisappear {
+            clear()
+            release = nil
+        }
         .edithSheet(isPresented: $browser, onDismiss: { retry += 1 }) {
             HostExtensionBrowser().frame(width: 560, height: 340)
         }
@@ -160,7 +168,7 @@ struct HostExtensionContent: View {
     private struct Request: Equatable {
         let version: String?; let active: Bool; let location: String; let section: String?
         let surface: SurfaceSnapshotRequest?; let retry: Int
-        let deliveryID: UUID?
+        let deliveryID: UUID?; let presentable: Bool
     }
     private func clear() {
         navigation?.delivery.reject()
