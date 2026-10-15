@@ -67,6 +67,12 @@ export function runSyntheticPublicationClient(stateFile) {
       );
       if (item) output(item);
       else fail("gh: Not Found (HTTP 404)");
+    } else if (/^\/releases\/\d+$/.test(route)) {
+      const item = state.releases.find(
+        ({ id }) => id === Number(route.split("/").at(-1)),
+      );
+      if (item) output(item);
+      else fail("gh: Not Found (HTTP 404)");
     } else if (route.startsWith("/releases?")) output(state.releases);
     else {
       assert(state.api[route], `Unknown synthetic API route ${route}`);
