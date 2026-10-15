@@ -252,7 +252,8 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         guard commands.contains(where: { $0.route.starts(with: path) }) else {
             throw HostCLIError.rejected("Parser metadata advertises an undeclared command.")
         }
-        for child in object["subcommands"]?.array ?? [] {
+        for child in object["subcommands"]?.array ?? []
+        where child.object?["commandName"]?.string != "help" {
             try validateHelp(child, route: path, commands: commands)
         }
     }
