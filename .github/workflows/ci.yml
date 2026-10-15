@@ -515,7 +515,7 @@ jobs:
     env:
       REBUILD: ${{ inputs.rebuild }}
       CUT_RELEASE: ${{ inputs.release || github.event_name == 'push' }}
-      RELEASE_PRERELEASE: "true"
+      RELEASE_PRERELEASE: "false"
       SOURCE_SHA: ${{ github.sha }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
@@ -585,7 +585,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
-      RELEASE_PRERELEASE: "true"
+      RELEASE_PRERELEASE: "false"
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -778,7 +778,7 @@ jobs:
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
       GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-      RELEASE_PRERELEASE: "true"
+      RELEASE_PRERELEASE: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
