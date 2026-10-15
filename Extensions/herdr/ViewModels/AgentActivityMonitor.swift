@@ -50,7 +50,7 @@ final class AgentActivityMonitor {
             && (observers > 0 || surfaceUntil > Date())
     }
     var service: AgentActivityService {
-        precondition(uiClient == nil && Bundle.main.bundleURL.pathExtension != "appex")
+        precondition(uiClient == nil && !ExtensionHostRole.isInterfaceProcess)
         if let serviceValue { return serviceValue }
         let defaults = AgentActivityDefaults(store: self.defaults)
         let created = AgentActivityService(

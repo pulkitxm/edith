@@ -200,7 +200,7 @@ public final class AttentionExtensionController: NSObject {
             }
             stopUI()
         case "start":
-            guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard !uiConfigured, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             guard !stopped, let suite = input["defaultsSuite"] as? String,

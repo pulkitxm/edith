@@ -221,7 +221,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
+            guard !stopping, !ExtensionHostRole.isInterfaceProcess,
                 input["remoteUI"] as? Bool != true,
                 let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }

@@ -13,6 +13,7 @@ public struct ExtensionUIConfiguration {
             guard let host = context["hostIdentifier"] as? String,
                 let id = context["extensionID"] as? String
             else { return nil }
+            ExtensionHostRole.markRendersInHost()
             self.init(
                 context: context, hostIdentifier: host, extensionID: id,
                 defaultsSuite: host + ".extension." + id + ".worker")

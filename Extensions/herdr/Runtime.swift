@@ -271,7 +271,7 @@ final class ExtensionRuntime: NSObject {
         case "stopUI": stopUI()
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
-            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard uiLocation == nil, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             let admitted: WorkerFixtureAdmission?
