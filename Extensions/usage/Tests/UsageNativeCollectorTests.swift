@@ -82,6 +82,19 @@ import Testing
         }
     }
 
+    @Test func receiptsWithoutAWorkingDirectoryKeepTheDocumentValid() async throws {
+        try await fixture { home, data in
+            try write(
+                claude(id: "one", cwd: ""),
+                home.appendingPathComponent(".claude/projects/mock/session.jsonl"))
+            let document = try await collect(home, data)
+            try validate(document)
+            #expect(UsageHistory.isValidDocument(try UsageNativeJSON.encode(document)))
+            let day = try #require((document["daily"] as? [[String: Any]])?.first)
+            #expect((day["projects"] as? [[String: Any]])?.isEmpty == true)
+        }
+    }
+
     @Test func openCodeSQLiteProjectionMatchesFileAndDoesNotDuplicate() async throws {
         try await fixture { home, data in
             let root = home.appendingPathComponent(".local/share/opencode")

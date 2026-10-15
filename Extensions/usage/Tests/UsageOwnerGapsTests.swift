@@ -6,7 +6,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct UsageOwnerGapsTests {
     @Test(arguments: [false, true], [false, true])
-    func missingJournalContextRetainsMetricsAndOriginalPublicationBoundary(cwd: Bool, content: Bool)
+    func missingJournalContextRetainsMetricsAndPublishes(cwd: Bool, content: Bool)
         async throws
     {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -41,11 +41,15 @@ import Testing
         let day = try #require((document["daily"] as? [[String: Any]])?.first)
         #expect(day["period"] as? String == "2026-10-09")
         let projects = try #require(day["projects"] as? [[String: Any]])
-        #expect(projects.count == 1 && projects[0]["path"] as? String == (cwd ? project.path : ""))
-        let chat = try #require((projects[0]["chats"] as? [[String: Any]])?.first)
-        #expect(chat["id"] as? String == "fixture-session" && chat["tokens"] as? Double == 15)
-        #expect(chat["firstTs"] as? Double == 1_791_507_600_000)
-        #expect(UsageHistory.isValidDocument(data) == cwd)
+        if cwd {
+            #expect(projects.count == 1 && projects[0]["path"] as? String == project.path)
+            let chat = try #require((projects[0]["chats"] as? [[String: Any]])?.first)
+            #expect(chat["id"] as? String == "fixture-session" && chat["tokens"] as? Double == 15)
+            #expect(chat["firstTs"] as? Double == 1_791_507_600_000)
+        } else {
+            #expect(projects.isEmpty)
+        }
+        #expect(UsageHistory.isValidDocument(data))
         let output = root.appendingPathComponent("publication")
         let controller = UsageWorkerController(
             dataDirectory: output, collect: { _, _ in try await collect() })
@@ -53,17 +57,10 @@ import Testing
             ExtensionCLIRequest(
                 arguments: ["refresh", "--no-machines", "--json"], workingDirectory: root.path),
             controller: controller)
-        if cwd {
-            #expect(reply.exitCode == 0)
-            #expect(
-                UsageHistory.isValidDocument(
-                    try Data(contentsOf: output.appendingPathComponent("usage.json"))))
-        } else {
-            #expect(reply.exitCode != 0 && reply.stderr.contains("invalid"))
-            #expect(
-                !FileManager.default.fileExists(
-                    atPath: output.appendingPathComponent("usage.json").path))
-        }
+        #expect(reply.exitCode == 0)
+        #expect(
+            UsageHistory.isValidDocument(
+                try Data(contentsOf: output.appendingPathComponent("usage.json"))))
         await controller.shutdown()
     }
 
