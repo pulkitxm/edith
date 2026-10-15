@@ -41,7 +41,6 @@ struct HostExtensionContent: View {
     @State private var presentationID = UUID()
     @State private var error: String?
     @State private var retry = 0
-    @State private var restartRequired = false
     @State private var contentHeight: Double?
     @State private var release: (@MainActor () -> Void)?
     @Environment(\.compactLayout) private var compact
@@ -91,12 +90,7 @@ struct HostExtensionContent: View {
                 } description: {
                     Text(error)
                 } actions: {
-                    if restartRequired {
-                        Button("Restart Edith") { HostRestart.relaunch() }.buttonStyle(
-                            .edith(.primary))
-                    } else {
-                        Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
-                    }
+                    Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
                 }
             } else {
                 PageLoading(state: .loading, title: "Opening " + title) { EmptyView() }
@@ -182,11 +176,7 @@ struct HostExtensionContent: View {
             } catch {
                 navigation?.delivery.reject(error)
                 guard !Task.isCancelled else { return }
-                restartRequired = error is HostLocalSceneError
-                self.error =
-                    restartRequired
-                    ? HostLocalSceneError.restartRequired.localizedDescription
-                    : "The extension page could not open."
+                self.error = "The extension page could not open."
             }
         }
         .onDisappear {
@@ -209,7 +199,7 @@ struct HostExtensionContent: View {
             presenter?.endPresentation(id: presentationID)
         }
         controller = nil; error = nil
-        contentHeight = nil; restartRequired = false
+        contentHeight = nil
     }
 }
 

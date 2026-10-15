@@ -4,14 +4,6 @@ import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
-public enum HostLocalSceneError: LocalizedError {
-    case restartRequired
-
-    public var errorDescription: String? {
-        "Restart Edith to finish updating this extension."
-    }
-}
-
 @MainActor
 public protocol HostScenePresentation: AnyObject {
     var request: HostExtensionContentRequest { get }
@@ -37,6 +29,7 @@ final class HostLocalSession {
     }
 
     private static var loaded: [String: Loaded] = [:]
+    private static var superseded: [Loaded] = []
     let configuration: HostRemoteConfiguration
     let engine: HostRemoteEngineOwner?
     let peer: HostRemoteProcessIdentity?
@@ -54,16 +47,14 @@ final class HostLocalSession {
         marketplace: HostMarketplace
     ) throws {
         let package = configuration.package
-        if let current = Self.loaded[package.id] {
-            guard current.version == package.version else {
-                throw HostLocalSceneError.restartRequired
-            }
+        if let current = Self.loaded[package.id], current.version == package.version {
             runtimes = current.runtimes
         } else {
             let lease = try marketplace.packageStore.lease(package)
             let runtimes = try Self.load(
                 package, store: marketplace.packageStore,
                 development: marketplace.identity.development)
+            if let previous = Self.loaded[package.id] { Self.superseded.append(previous) }
             Self.loaded[package.id] = Loaded(
                 version: package.version, runtimes: runtimes, lease: lease)
             self.runtimes = runtimes
