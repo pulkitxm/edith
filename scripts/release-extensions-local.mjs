@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const repository = process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith";
@@ -192,6 +192,8 @@ step(
 );
 
 step("building the host the extensions are packaged against");
+await rm("local/extension-tools", { recursive: true, force: true });
+await rm("local/extension-release-host", { recursive: true, force: true });
 run("make", ["host"], { stdio: ["ignore", "inherit", "inherit"] });
 const hostProducts = run("swift", [
   "build",
