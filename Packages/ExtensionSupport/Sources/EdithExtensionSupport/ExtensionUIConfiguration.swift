@@ -9,6 +9,15 @@ public struct ExtensionUIConfiguration {
     public let engineClient: ExtensionEngineClient?
 
     public init?(context: NSDictionary) {
+        if context["inProcess"] as? Bool == true {
+            guard let host = context["hostIdentifier"] as? String,
+                let id = context["extensionID"] as? String
+            else { return nil }
+            self.init(
+                context: context, hostIdentifier: host, extensionID: id,
+                defaultsSuite: host + ".extension." + id + ".worker")
+            return
+        }
         let bundle = Bundle.main
         guard bundle.bundleURL.pathExtension == "appex",
             let host = bundle.object(forInfoDictionaryKey: "EdithHostIdentifier") as? String,
