@@ -27,6 +27,11 @@ public enum StatusItemMenu {
             title: "Open Settings", action: #selector(StatusMenuHandler.open), keyEquivalent: "")
         open.target = handler
         menu.addItem(open)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(
+            title: "Quit Edith", action: #selector(StatusMenuHandler.quit), keyEquivalent: "q")
+        quit.target = handler
+        menu.addItem(quit)
         guard let button = item.button else { return }
         menu.popUp(
             positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
@@ -36,6 +41,16 @@ public enum StatusItemMenu {
 private final class StatusMenuHandler: NSObject {
     @objc func open() {
         MainActor.assumeIsolated { ExtensionPresentation.showWindow() }
+    }
+
+    @objc func quit() {
+        if let host = NSRunningApplication(processIdentifier: getppid()),
+            host.bundleIdentifier != nil
+        {
+            host.terminate()
+        } else {
+            MainActor.assumeIsolated { NSApp.terminate(nil) }
+        }
     }
 
 }
