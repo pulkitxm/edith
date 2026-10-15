@@ -14,6 +14,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
     }
     private var terminating = false
+    private(set) var launchedAtLogin = false
     private var replied = false
     static let shutdownGrace: Duration = .seconds(5)
 
@@ -48,6 +49,14 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             openMainWindow?()
         }
         activate()
+    }
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        launchedAtLogin =
+            event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
+                == keyAELaunchedAsLogInItem
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
