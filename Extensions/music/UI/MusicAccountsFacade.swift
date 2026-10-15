@@ -131,7 +131,7 @@ struct EmbeddedMusicEngineImage<Content: View, Placeholder: View>: View {
 
 struct EmbeddedMusicEmbeddedPage: View {
     var body: some View {
-        EmbeddedMusicPage().overlay { EmbeddedMusicDetailOverlay() }
+        EmbeddedMusicPage().musicWindowDetail()
             .pageTask { EmbeddedMusicRemote.shared.start() }
             .pageRefresh(interval: { .seconds(1) }) { EmbeddedMusicRemote.shared.rescan() }
     }

@@ -215,9 +215,8 @@ import Observation
                     EmbeddedPlaybackLevel.shared.update(level)
                 } catch {
                     guard !Task.isCancelled, self.levelGeneration == token else { return }
-                    self.libraryError = error.localizedDescription
                 }
-                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                do { try await Task.sleep(for: .milliseconds(66)) } catch { return }
             }
         }
     }
@@ -240,11 +239,7 @@ import Observation
                 try Task.checkCancellation()
                 guard let self, self.generation == token else { return }
                 self.apply(value)
-                self.libraryError = nil
-            } catch {
-                guard !Task.isCancelled, let self, self.generation == token else { return }
-                self.libraryError = error.localizedDescription
-            }
+            } catch {}
         }
     }
 
@@ -345,7 +340,9 @@ import Observation
                     action: .init(kind: kind, path: path, target: target, value: value))
                 self.rescan(force: true)
             } catch {
-                if !Task.isCancelled { self.libraryError = error.localizedDescription }
+                if !Task.isCancelled, kind.mutatesLibrary {
+                    self.libraryError = error.localizedDescription
+                }
             }
         }
     }
@@ -365,11 +362,7 @@ import Observation
                 _ = try await invoke("music.ui.spotify", payload)
                 guard !Task.isCancelled, let self, self.lifecycle == token else { return }
                 self.rescan()
-            } catch {
-                if !Task.isCancelled, self?.lifecycle == token {
-                    self?.libraryError = error.localizedDescription
-                }
-            }
+            } catch {}
         }
     }
     func streamingArtwork(_ url: URL) async throws -> Data {
@@ -528,10 +521,23 @@ import Observation
     func playPause() { send(.playPause) }
     func pausePlayback() { send(.pause) }
     func resumePlayback() { send(.resume) }
-    func next() { send(.next) }
-    func previous() { send(.previous) }
-    func seek(to fraction: Double) { send(.seek, value: min(max(fraction, 0), 1)) }
-    func setVolume(_ value: Double) { send(.volume, value: min(max(value, 0), 1)) }
+    func next() { leaveVideo(); send(.next) }
+    func previous() { leaveVideo(); send(.previous) }
+    func seek(to fraction: Double) {
+        let clamped = min(max(fraction, 0), 1)
+        if duration > 0 { elapsedBase = clamped * duration; sampledAt = Date() }
+        send(.seek, value: clamped)
+    }
+    func setVolume(_ value: Double) {
+        let clamped = min(max(value, 0), 1)
+        volume = clamped
+        send(.volume, value: clamped)
+    }
+    private func leaveVideo() {
+        let presenter = EmbeddedMusicDetailPresenter.shared
+        guard presenter.track?.isVideo == true, !presenter.followsPlayback else { return }
+        presenter.dismiss()
+    }
     func toggleLoop() { send(.repeating) }
     func toggleShuffle() { send(.shuffle) }
     func chooseLibrary() { send(.chooseLibrary) }
