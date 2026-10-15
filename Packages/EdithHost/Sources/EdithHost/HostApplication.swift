@@ -270,6 +270,11 @@ struct HostApplication: App {
             detached = windows
             sectionWindows = windows
             windows.install()
+            delegate.stopWorkers = {
+                for pid in loaded.sessions.processIdentifiers.values where pid > 1 {
+                    kill(-pid, SIGKILL)
+                }
+            }
             delegate.shutdown = {
                 await interactions.cancelPending()
                 try? await notch.stop()

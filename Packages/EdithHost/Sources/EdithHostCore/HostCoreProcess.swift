@@ -44,6 +44,7 @@ import Foundation
         }
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
         source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.drain() } }
+        source.setCancelHandler { [output] in try? output.fileHandleForReading.close() }
         self.source = source; source.resume()
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor [weak self] in self?.finish() }
@@ -162,6 +163,7 @@ import Foundation
     }
 
     private func drain() {
+        guard source != nil else { return }
         var buffer = [UInt8](repeating: 0, count: 8192)
         while true {
             let count = read(output.fileHandleForReading.fileDescriptor, &buffer, buffer.count)

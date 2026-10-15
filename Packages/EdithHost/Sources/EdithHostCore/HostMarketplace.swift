@@ -137,12 +137,17 @@ public final class HostMarketplace {
         await checkForUpdates(now: now)
     }
 
-    public func updateInstalledIfDue(now: Date = Date()) async {
+    public func updateInstalledIfDue(
+        now: Date = Date(),
+        hostBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? ""
+    ) async {
         guard automaticallyUpdatesExtensions, !downloadedIDs.isEmpty, operationID == nil else {
             return
         }
         if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
-            now.timeIntervalSince(checked) < Self.catalogRefreshInterval
+            now.timeIntervalSince(checked) < Self.catalogRefreshInterval,
+            preferences.string(forKey: "lastAutomaticExtensionCheckHostBuild") == hostBuild
         {
             return
         }
@@ -153,6 +158,7 @@ public final class HostMarketplace {
             if error != nil { return }
         }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
+        preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
     }
 
     public func enable(id: String) async {

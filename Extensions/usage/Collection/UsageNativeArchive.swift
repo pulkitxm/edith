@@ -386,6 +386,12 @@ final class UsageNativeArchive {
     }
 
     private static func contentIdentity(_ value: Any, ordered: Bool = false) throws -> Data {
+        try JSONSerialization.data(
+            withJSONObject: canonicalContent(value, ordered: ordered),
+            options: [.sortedKeys, .fragmentsAllowed])
+    }
+
+    private static func canonicalContent(_ value: Any, ordered: Bool = false) throws -> Any {
         if var object = value as? [String: Any] {
             if object["modelName"] != nil {
                 object = Dictionary(
@@ -398,22 +404,22 @@ final class UsageNativeArchive {
             }
             var result: [String: Any] = [:]
             for (key, item) in object {
-                result[key] = try JSONSerialization.jsonObject(
-                    with: contentIdentity(item, ordered: key == "hours"),
-                    options: [.fragmentsAllowed])
+                result[key] = try canonicalContent(item, ordered: key == "hours")
             }
-            return try UsageNativeJSON.encode(result)
+            return result
         }
         if let array = value as? [Any] {
-            let encoded = try array.map { try contentIdentity($0) }
-            let sorted = ordered ? encoded : encoded.sorted { $0.lexicographicallyPrecedes($1) }
-            let values = try sorted.map {
-                try JSONSerialization.jsonObject(with: $0, options: [.fragmentsAllowed])
+            let items = try array.map { try canonicalContent($0) }
+            guard !ordered else { return items }
+            let keyed = try items.map {
+                (
+                    try JSONSerialization.data(
+                        withJSONObject: $0, options: [.sortedKeys, .fragmentsAllowed]), $0
+                )
             }
-            return try UsageNativeJSON.encode(values)
+            return keyed.sorted { $0.0.lexicographicallyPrecedes($1.0) }.map(\.1)
         }
-        return try JSONSerialization.data(
-            withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+        return value
     }
 
     private static func cliDetail(_ node: [String: Any], paths: Bool) -> [String: Any] {

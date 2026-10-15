@@ -15,6 +15,8 @@ public enum HostCommandCLITransport {
             let work = Task.detached {
                 defer { connection.close() }
                 try cancellation.check()
+                try HostCLITransport.connect(identity: identity, timeout: request.timeout + 2)
+                    .close()
                 try connection.configure(timeout: request.timeout + 2)
                 var address = try HostCLITransport.address(
                     HostCLITransport.socketPath(identity: identity))
