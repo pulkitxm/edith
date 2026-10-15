@@ -62,7 +62,11 @@ struct HostApplication: App {
                 #if EDITH_GUI_FIXTURE
                 .background { HostGUIVisibilityProbe() }
                 #endif
-                .task { if startup == nil { startup = Task { await start() } } }
+                .task {
+                    guard startup == nil else { return }
+                    startup = Task { await start() }
+                    if delegate.launchedAtLogin { delegate.mainWindow()?.close() }
+                }
             }
             .tracksWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)
@@ -105,6 +109,7 @@ struct HostApplication: App {
                 supportDirectory: support)
             let loaded = try HostMarketplace.live(identity: identity)
             Task.detached(priority: .utility) { HostLegacyServices.retire(identity: identity) }
+            if !identity.development { HostLoginItem.register() }
             #endif
             let gateway = HostCLIGateway(marketplace: loaded)
             let core = try HostCoreCLIAdapter.make(
