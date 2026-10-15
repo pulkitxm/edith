@@ -22,6 +22,7 @@ struct HostApplication: App {
     @State private var notchStartup: HostNotchStartup?
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
+    @State private var startup: Task<Void, Never>?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
         "accent"
     @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
@@ -61,7 +62,7 @@ struct HostApplication: App {
                 #if EDITH_GUI_FIXTURE
                 .background { HostGUIVisibilityProbe() }
                 #endif
-                .task { await start() }
+                .task { if startup == nil { startup = Task { await start() } } }
             }
             .tracksWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)

@@ -121,7 +121,7 @@ public final class HostMarketplace {
     }
 
     public func restoreEnabledExtensions() async {
-        guard operationID == nil else { return }
+        while operationID != nil { try? await Task.sleep(for: .milliseconds(100)) }
         operationID = "restore"
         defer { operationID = nil }
         await sessions.restore(packages: installed)
