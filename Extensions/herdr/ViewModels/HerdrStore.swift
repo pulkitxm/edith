@@ -290,7 +290,7 @@ final class HerdrStore {
         }
     }
 
-    @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
+    @ObservationIgnored let pageWindows = NSHashTable<NSWindow>.weakObjects()
     @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
     let terminalPanels: HerdrTerminalPanels
     let messaging: HerdrMessaging
