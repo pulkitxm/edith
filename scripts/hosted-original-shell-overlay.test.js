@@ -4,11 +4,10 @@ import { originalShellFixtureOverlay } from "./hosted-original-shell/source-over
 
 test("the hosted shell keeps original views and navigation while omitting unrelated live core starts", async () => {
   const source = await readFile(
-    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
+    "Packages/EdithHost/Sources/EdithHost/HostRuntime.swift",
     "utf8",
   );
   const result = originalShellFixtureOverlay(source);
-  expect(result).toContain("HostWorkspace(");
   expect(result).toContain("HostRemoteContentPresenter(manager: manager)");
   expect(result).toContain("loaded.sessions.didRequestNavigation");
   expect(result).toContain("await loaded.restoreEnabledExtensions()");
@@ -21,14 +20,14 @@ test("the hosted shell keeps original views and navigation while omitting unrela
 
 test("ambiguous or changed service qualification fails rather than silently building a live fixture", async () => {
   const source = await readFile(
-    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
+    "Packages/EdithHost/Sources/EdithHost/HostRuntime.swift",
     "utf8",
   );
   for (const value of [
     source + source,
     source.replace("coreCLI = core", "different"),
     source.replace(
-      "@State private var coreServices: HostCoreServices?",
+      "private(set) var coreServices: HostCoreServices?",
       "different",
     ),
   ])

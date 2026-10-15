@@ -90,6 +90,8 @@ final class HostGUIJourneyServices {
 
     func panelShortcutChanged() {}
 
+    func killForQuit() {}
+
     func shutdown() async {
         await workflowModel.shutdown()
         await HostGUIFixture.stop()

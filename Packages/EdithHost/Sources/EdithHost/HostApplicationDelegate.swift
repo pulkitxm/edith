@@ -14,6 +14,8 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var mainWindow: @MainActor () -> NSWindow? = {
         NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
     }
+    var launchesRuntime = true
+    private(set) lazy var runtime = HostRuntime(delegate: self)
     private var terminating = false
     private(set) var launchedAtLogin = false
 
@@ -44,8 +46,13 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
             window.attachedSheet?.makeKeyAndOrderFront(nil)
+        } else if let openMainWindow {
+            openMainWindow()
         } else {
-            openMainWindow?()
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(
+                at: Bundle.main.bundleURL, configuration: configuration)
         }
         activate()
     }
@@ -56,6 +63,10 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
                 == keyAELaunchedAsLogInItem
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        if launchesRuntime { runtime.launch() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -70,7 +81,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             await shutdown()
             finish()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { finish() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) { finish() }
         return .terminateCancel
     }
 }
