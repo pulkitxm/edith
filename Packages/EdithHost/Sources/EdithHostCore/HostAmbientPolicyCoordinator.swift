@@ -108,7 +108,8 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
             ("usage", "notch", "limits"):
             return "usage.limits"
         case ("herdr", "main", nil), ("herdr", "main", "herdr"),
-            ("herdr", "herdr.agent", "herdr"), ("herdr", "herdr.space", "herdr"):
+            ("herdr", "herdr.agent", "herdr"), ("herdr", "herdr.space", "herdr"),
+            ("herdr", "notch", nil), ("herdr", "notch", "agents"):
             return "sessions.discover"
         case ("attention", "main", "attention"):
             return "attention.ingest"
