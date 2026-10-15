@@ -100,7 +100,9 @@ function jobsIdentity(
         const step = found[0];
         integer(step.number);
         const preserving = active && publisherPhase === "preservation";
-        assert.equal(step.status, preserving ? "in_progress" : "completed");
+        if (preserving)
+          assert(["pending", "in_progress"].includes(step.status));
+        else assert.equal(step.status, "completed");
         assert.equal(step.conclusion, preserving ? null : "success");
         return { name, number: step.number };
       });
@@ -109,7 +111,7 @@ function jobsIdentity(
           ({ name }) => name === publicationStep,
         );
         assert.equal(publication.length, 1);
-        assert.equal(publication[0].status, "in_progress");
+        assert(["pending", "in_progress"].includes(publication[0].status));
         assert.equal(publication[0].conclusion, null);
       }
       return { id: job.id, name: job.name, steps };
@@ -538,10 +540,10 @@ export function admitOriginalEvidence(payload, value, publisherNames) {
       `Unknown publisher step ${step.name}`,
     );
     assert.equal(step.status, "completed");
-    assert.equal(
-      step.conclusion,
-      step.name === publicationStep ? "failure" : "success",
-    );
+    if (step.name === publicationStep) assert.equal(step.conclusion, "failure");
+    else if (step.name === preservationStep)
+      assert.equal(step.conclusion, "success");
+    else assert(["success", "skipped"].includes(step.conclusion));
   }
   for (const name of publisherNames.filter(
     (name) =>
