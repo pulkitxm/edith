@@ -153,6 +153,7 @@ import Foundation
                 if count >= 0 { self?.close(token) }
             }
         }
+        watcher.setCancelHandler { [connection = job.connection] in connection.close() }
         watcher.resume()
         job.watcher = watcher
         jobs[token] = job
