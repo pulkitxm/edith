@@ -40,6 +40,7 @@ set +a
 : "${MACOS_CERT_PASSWORD:?release blocked: MACOS_CERT_PASSWORD missing from .env}"
 : "${SPARKLE_PRIVATE_KEY:?release blocked: SPARKLE_PRIVATE_KEY missing from .env}"
 : "${EDITH_SIGN_IDENTITY:?release blocked: EDITH_SIGN_IDENTITY missing from .env}"
+: "${EXTENSION_CATALOG_PRIVATE_KEY:?release blocked: EXTENSION_CATALOG_PRIVATE_KEY missing from .env}"
 export EDITH_RELEASE_ALLOW_DEV_SIGNING="${EDITH_RELEASE_ALLOW_DEV_SIGNING:-1}"
 
 if [ "$DRY_RUN" -eq 0 ]; then
@@ -59,6 +60,13 @@ WWDR="$(find /Applications/Xcode*.app -iname 'AppleWWDRCA-2030.cer' 2>/dev/null 
 git fetch origin main --tags --quiet
 BUILT_SHA="$(git rev-parse HEAD)"
 export BUILT_SHA
+
+if [ "$DRY_RUN" -eq 0 ]; then
+  [ "$BUILT_SHA" = "$(git rev-parse origin/main)" ] \
+    || { echo "release blocked: HEAD is not origin/main; pull first" >&2; exit 1; }
+  echo "==> publishing changed extensions"
+  bun scripts/release-extensions-local.mjs
+fi
 
 TMP_OUT="$(mktemp)"
 GITHUB_OUTPUT="$TMP_OUT" ./scripts/resolve-release-version.sh

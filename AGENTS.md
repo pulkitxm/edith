@@ -1,9 +1,45 @@
 # Agent guide
 
-GitHub Actions runs the checks and cuts the release. Workflows live in
-`.github/workflows/`, and Dependabot in `.github/dependabot.yml`. A pull
-request runs the checks. A push to `main` runs them again, and a product
-change on `main` publishes the next release.
+GitHub Actions only runs checks. Workflows live in `.github/workflows/`, and
+Dependabot in `.github/dependabot.yml`. A pull request runs the checks and a
+push to `main` runs them again, but nothing on GitHub publishes a release.
+Releases are published locally from the maintainer's Mac after every commit
+that lands on `main`. See Releases below.
+
+## Releases
+
+Every commit that lands on `main` must be released before the next one merges.
+The only exception is the `Release vX [skip ci]` commit that a release creates.
+
+1. Use a clean checkout of `main` that matches `origin/main` (`git pull`).
+2. Make sure `.env` is in the checkout root. The maintainer's copy lives at
+   `~/scripts/edith-worktrees/edith/.env`; copy it with `cp -p` so it stays
+   owner-only. It must define `EDITH_SIGN_IDENTITY`, `EDITH_TEAM_ID`,
+   `EDITH_RELEASE_ALLOW_DEV_SIGNING`, `MACOS_CERT_P12_BASE64`,
+   `MACOS_CERT_PASSWORD`, `SPARKLE_PRIVATE_KEY` and
+   `EXTENSION_CATALOG_PRIVATE_KEY`. It is gitignored. Never print, commit or
+   upload its values.
+3. Export `GH_TOKEN` for an account that can write to `pulkitxm/edith`
+   (`export GH_TOKEN=$(gh auth token --user pulkitxm)`), then run
+   `make release`.
+
+`make release` runs `scripts/release-local.sh`, which first runs
+`scripts/release-extensions-local.mjs`:
+
+- It plans which extensions changed against the signed catalog
+  (`extension-catalog-v1`), builds and signs only those packages (three at a
+  time, `EXTENSION_LOCAL_JOBS`), publishes one release per package, then signs
+  and publishes the next catalog revision. The catalog pointer moves only after
+  every package is uploaded and the new catalog verifies.
+- Then it builds and signs the app, writes the Sparkle appcast, commits and tags
+  `Release vX [skip ci]`, and publishes the release as the latest one, which is
+  what installed apps update to.
+
+Do not merge anything while a release runs; the release commit must sit on top
+of the commit it built. If a release fails, fix the cause and run `make release`
+again: existing package releases and assets are reused. `make release-dry`
+builds the app, DMG and appcast without publishing anything. The GitHub release
+workflows still accept a manual dispatch, but do not use them.
 
 ## Shared screen UI
 

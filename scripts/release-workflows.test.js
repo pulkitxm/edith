@@ -73,8 +73,8 @@ test("release preparation belongs to the same CI run and starts after routing", 
   expect(ciWorkflow).not.toContain("inputs.source_sha");
 });
 
-test("release routing accepts only main product pushes or explicit manual releases", () => {
-  expect(condition(version.if, releaseContext())).toBe(true);
+test("release routing accepts only explicit manual releases because main releases publish locally", () => {
+  expect(condition(version.if, releaseContext())).toBe(false);
   expect(
     condition(
       version.if,
