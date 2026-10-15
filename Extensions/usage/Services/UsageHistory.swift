@@ -502,9 +502,12 @@ public enum UsageHistory {
                         ],
                         "baseline": baseline, "candidates": [[String: Any]](),
                     ]
-                guard let recordedBaseline = block["baseline"] as? [String: Any],
-                    sameHistory(recordedBaseline, baseline, source: source)
-                else { return nil }
+                guard let recordedBaseline = block["baseline"] as? [String: Any] else {
+                    return nil
+                }
+                if !sameHistory(recordedBaseline, baseline, source: source) {
+                    block["baseline"] = baseline
+                }
                 var candidates = HistoryCandidates(
                     baseline: baseline,
                     candidates: block["candidates"] as? [[String: Any]] ?? [], source: source)
@@ -694,13 +697,15 @@ public enum UsageHistory {
                 let key = period + "\u{0}" + source
                 if var current = retained[key] {
                     guard let baseline = block["baseline"] as? [String: Any],
-                        let existing = current["baseline"] as? [String: Any],
-                        sameHistory(baseline, existing, source: source)
+                        let existing = current["baseline"] as? [String: Any]
                     else { return nil }
                     var candidates = HistoryCandidates(
                         baseline: nil,
                         candidates: current["candidates"] as? [[String: Any]] ?? [],
                         source: source)
+                    if !sameHistory(baseline, existing, source: source) {
+                        candidates.insert(baseline)
+                    }
                     for candidate in block["candidates"] as? [[String: Any]] ?? [] {
                         candidates.insert(candidate)
                     }
