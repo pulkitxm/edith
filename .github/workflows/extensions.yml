@@ -178,8 +178,7 @@ jobs:
           EXTENSION_SUPPORT_NATIVE_TESTS: "1"
           EXTENSION_SWIFT_JOBS: "2"
         run: |
-          command -v zig >/dev/null 2>&1 || brew install zig
-          test "$(zig version)" = "0.16.0"
+          source scripts/ci-setup-zig.sh
           bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
       - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
         if: "needs.plan.outputs.mode == 'validation'"
@@ -301,7 +300,7 @@ jobs:
         if: "steps.native.outputs.ghostty == 'true'"
         id: ghostty-toolchain
         run: |
-          command -v zig >/dev/null 2>&1 || brew install zig
+          source scripts/ci-setup-zig.sh
           echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
       - name: Cache the optional terminal library
         if: "steps.native.outputs.ghostty == 'true'"
