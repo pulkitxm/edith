@@ -45,6 +45,9 @@ struct HostWorkspace: View {
     @State private var keyMonitor: Any?
     @State private var hintMonitor: Any?
     @State private var showHints = false
+    @State private var hintWork: DispatchWorkItem?
+    @State private var hoveredRow: String?
+    @State private var status = HostSidebarStatusModel()
     @State private var fullscreen = false
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.colorScheme) private var scheme
@@ -189,6 +192,12 @@ struct HostWorkspace: View {
             }
         }
         .onAppear { installKeys() }
+        .pageRefresh(active: windowVisible && automaticActions && sidebarOpen, interval: { .seconds(5) }) {
+            await status.refresh(marketplace: marketplace, defaults: defaults)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) {
+            _ in dismissHints()
+        }
         .onDisappear {
             requestedSettings?.delivery.reject()
             removeKeys(); musicSlots?.setVisible(musicWindowID, visible: false)
@@ -261,6 +270,12 @@ struct HostWorkspace: View {
         ).clipped()
     }
     private var sidebar: some View {
+        ZStack {
+            HostSidebarMaterial()
+            sidebarContent
+        }
+    }
+    private var sidebarContent: some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: UIScale.pt(41))
             ScrollView {
@@ -291,6 +306,10 @@ struct HostWorkspace: View {
                     }
                 }.padding(.horizontal, UIScale.pt(8)).padding(.top, UIScale.pt(8))
             }
+            .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: destination)
+            .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showHints)
+            .animation(
+                Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expansionRevision)
             Rectangle().fill(Color.primary.opacity(0.06)).frame(height: UIScale.pt(1))
             HostSidebarFooter(
                 marketplace: marketplace, updater: updater, permissions: permissions,
@@ -333,10 +352,15 @@ struct HostWorkspace: View {
     }
     private func row(_ page: HostNavigationPage) -> some View {
         let expandable = !page.sections.isEmpty || pages.contains { $0.parentID == page.id }
+        let detach: (() -> Void)? =
+            page.detachable
+            ? sectionWindows.map { windows in { _ = windows.open(page.id) } } : nil
+        let disclosureLabel =
+            (expanded(page) ? "Collapse " : "Expand ") + page.title + " abilities"
         return ZStack(alignment: .trailing) {
             Button {
-                if page.detachable, NSEvent.modifierFlags.contains(.command), let sectionWindows {
-                    _ = sectionWindows.open(page.id)
+                if let detach, NSEvent.modifierFlags.contains(.command) {
+                    detach()
                 } else if expandable, destination.id == page.id {
                     toggle(page)
                 } else {
@@ -344,25 +368,31 @@ struct HostWorkspace: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(11)) {
-                    Image(systemName: page.symbol).font(
-                        .system(size: UIScale.pt(15), weight: .medium)
-                    ).foregroundStyle(destination.id == page.id ? .primary : .secondary).frame(
-                        width: UIScale.pt(22))
+                    HostSidebarGlyph(page: page, size: UIScale.pt(15)).foregroundStyle(
+                        destination.id == page.id ? .primary : .secondary
+                    ).frame(width: UIScale.pt(22))
                     Text(page.title).font(
                         .system(size: UIScale.pt(13.5), weight: page.landing ? .semibold : .medium)
                     ).foregroundStyle(
                         destination.id == page.id || page.landing ? .primary : .secondary
                     ).lineLimit(1)
                     Spacer(minLength: 0)
-                    if showHints, let index = pages.firstIndex(of: page), index < 8 {
-                        Text("⌥\(index + 1)").font(.system(size: UIScale.pt(11), weight: .medium))
-                            .foregroundStyle(.tertiary)
+                    if page.parentID != nil, let badge = status.badge(pageID: page.id) {
+                        HostSidebarBadgeLabel(badge: badge, theme: theme)
+                    }
+                    if let hint = shortcutHint(for: page) {
+                        Text(hint).font(.system(size: UIScale.pt(11), weight: .medium))
+                            .foregroundStyle(.tertiary).lineLimit(1)
                     }
                     if expandable { Color.clear.frame(width: UIScale.pt(28)) }
                 }
             }.buttonStyle(EdithButtonStyle(.row, selected: destination.id == page.id, tint: theme))
                 .padding(.leading, page.parentID == nil ? 0 : UIScale.pt(18))
                 .accessibilityValue(expandable ? (expanded(page) ? "Expanded" : "Collapsed") : "")
+                .help(detach == nil ? page.title : "\(page.title) (⌘-click to open in its own window)")
+                .contextMenu {
+                    if let detach { Button("Open in New Window", action: detach) }
+                }
             if expandable {
                 Button {
                     toggle(page)
@@ -370,10 +400,24 @@ struct HostWorkspace: View {
                     Image(systemName: "chevron.right").font(
                         .system(size: UIScale.pt(10), weight: .semibold)
                     ).foregroundStyle(.tertiary).rotationEffect(.degrees(expanded(page) ? 90 : 0))
+                        .animation(
+                            Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+                            value: expanded(page)
+                        )
                         .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                }.buttonStyle(.edith(.borderless)).padding(.trailing, UIScale.pt(2))
-                    .accessibilityLabel(
-                        (expanded(page) ? "Collapse " : "Expand ") + page.title + " abilities")
+                        .background(
+                            Color.primary.opacity(
+                                hoveredRow == page.id && destination.id != page.id ? 0.055 : 0),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        ).contentShape(Rectangle())
+                }.buttonStyle(.edith(.borderless)).padding(.trailing, UIScale.pt(2)).zIndex(1)
+                    .accessibilityLabel(disclosureLabel).help(disclosureLabel)
+            }
+        }.onHover { hovering in
+            if hovering {
+                hoveredRow = page.id
+            } else if hoveredRow == page.id {
+                hoveredRow = nil
             }
         }
     }
@@ -381,11 +425,7 @@ struct HostWorkspace: View {
         -> some View
     {
         Button {
-            if parent.id == "settings" {
-                settings = section.id
-            } else {
-                maintenanceSection = section.id
-            }
+            chooseSection(section, parent: parent)
             if NSEvent.modifierFlags.contains(.command), let sectionWindows {
                 _ = sectionWindows.open(parent.id)
             } else {
@@ -395,9 +435,26 @@ struct HostWorkspace: View {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: section.symbol).frame(width: UIScale.pt(18));
                 Text(section.title).lineLimit(1); Spacer(minLength: 0)
+                if let badge = status.badge(sectionID: section.id, of: parent.id) {
+                    HostSidebarBadgeLabel(badge: badge, theme: theme)
+                }
             }.font(.system(size: UIScale.pt(12.5), weight: .medium)).foregroundStyle(
                 destination.id == parent.id ? .primary : .secondary)
-        }.buttonStyle(
+        }
+        .accessibilityHint(section.summary)
+        .help(
+            sectionWindows == nil
+                ? section.title : "\(section.title) (⌘-click to open in its own window)"
+        )
+        .contextMenu {
+            if let sectionWindows {
+                Button("Open in New Window") {
+                    chooseSection(section, parent: parent)
+                    _ = sectionWindows.open(parent.id)
+                }
+            }
+        }
+        .buttonStyle(
             EdithButtonStyle(
                 .row,
                 selected: destination.id == parent.id
@@ -439,6 +496,23 @@ struct HostWorkspace: View {
             presenter: presenter, showWelcome: showWelcome,
             panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
             defaults: defaults, select: select)
+    }
+    private func chooseSection(_ section: HostNavigationSection, parent: HostNavigationPage) {
+        if parent.id == "settings" {
+            settings = section.id
+        } else {
+            maintenanceSection = section.id
+        }
+    }
+    private func shortcutHint(for page: HostNavigationPage) -> String? {
+        guard showHints, let index = pages.firstIndex(of: page) else { return nil }
+        if index < WindowKeyCommand.directSelectLimit { return "⌥\(index + 1)" }
+        return index == pages.count - 1 ? "⌥9" : nil
+    }
+    private func dismissHints() {
+        hintWork?.cancel()
+        hintWork = nil
+        showHints = false
     }
     private func customize() { settings = "surfaces"; selection = "settings" }
     private func select(_ id: String) {
@@ -490,11 +564,24 @@ struct HostWorkspace: View {
         }
         hintMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
             let option = event.modifierFlags.contains(.option)
-            MainActor.assumeIsolated { showHints = option }
+            MainActor.assumeIsolated {
+                if option {
+                    guard hintWork == nil, !showHints else { return }
+                    let work = DispatchWorkItem {
+                        showHints = true
+                        hintWork = nil
+                    }
+                    hintWork = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                } else {
+                    dismissHints()
+                }
+            }
             return event
         }
     }
     private func removeKeys() {
+        dismissHints()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) };
         if let hintMonitor { NSEvent.removeMonitor(hintMonitor) }; keyMonitor = nil;
         hintMonitor = nil

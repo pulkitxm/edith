@@ -135,8 +135,7 @@ jobs:
       - name: Prepare the native terminal prerequisite once
         run: |
           set -euo pipefail
-          command -v zig >/dev/null 2>&1 || brew install zig
-          test "$(zig version)" = "0.16.0"
+          source scripts/ci-setup-zig.sh
           make ghostty-extension
           node scripts/extension-ghostty-native.mjs --check
       - name: Recheck the actual source immediately before signing

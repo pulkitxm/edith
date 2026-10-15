@@ -78,6 +78,7 @@ final class CalendarUIEngine {
             try validateObject(payload, keys: [])
             presentation.refresh()
             store.refreshAuthStatus()
+            if operation == "calendar.ui.metadata" { await store.restoreCachedAgenda() }
             if authorized() {
                 if operation == "calendar.ui.list" {
                     _ = await store.refreshAndWait()
@@ -127,10 +128,11 @@ final class CalendarUIEngine {
         let blur = presentation.blurEvents
         return CalendarUISnapshot(
             authorized: allowed, blurEvents: blur, days: store.pagination.days,
-            events: allowed
-                ? CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)).map {
+            events: stopped
+                ? []
+                : CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)).map {
                     blur ? privateEvent($0) : $0
-                } : [])
+                })
     }
 
     func shutdown() {

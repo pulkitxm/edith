@@ -65,6 +65,7 @@ import Foundation
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
         let delegate = HostApplicationDelegate()
+        delegate.launchesRuntime = false
         delegate.activate = { preconditionFailure("The CLI fixture cannot activate windows.") }
         delegate.mainWindow = { nil }
         var requestQuit: @MainActor () -> Void = {}

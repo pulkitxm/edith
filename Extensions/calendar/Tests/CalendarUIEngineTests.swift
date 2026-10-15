@@ -49,7 +49,8 @@ import Testing
         #expect(!text.contains("Synthetic private") && !text.contains("google.com/synthetic"))
         fixture.allowed = false
         let denied = try await fixture.engine.execute("calendar.ui.list", payload: Data("{}".utf8))
-        #expect(try JSONDecoder().decode(CalendarUISnapshot.self, from: denied).events.isEmpty)
+        let revoked = try JSONDecoder().decode(CalendarUISnapshot.self, from: denied)
+        #expect(!revoked.authorized && revoked.events.first?.title == "Meeting")
         _ = try await fixture.engine.execute(
             "calendar.ui.action", payload: Data("{\"action\":\"permission\"}".utf8))
         #expect(fixture.grants == 1)

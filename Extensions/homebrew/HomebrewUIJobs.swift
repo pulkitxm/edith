@@ -6,11 +6,13 @@ struct HomebrewUIJobReply: Codable {
     let complete: Bool
     let payload: Data?
     let error: String?
+    var partial: Data? = nil
 }
 @MainActor final class HomebrewUIJobs {
     private struct Job {
         var task: Task<Void, Never>?
         var payload: Data?
+        var partial: Data?
         var error: String?
         var complete = false
         var lease: Task<Void, Never>?
@@ -33,7 +35,11 @@ struct HomebrewUIJobReply: Codable {
             jobs[token]?.task = Task { [weak self, weak owner] in
                 guard !Task.isCancelled, let owner else { return }
                 do {
-                    let result = try await owner.execute("homebrew." + operation, payload: encoded)
+                    let result = try await owner.execute(
+                        "homebrew." + operation, payload: encoded
+                    ) { [weak self] inventory in
+                        await self?.publishPartial(inventory, token: token)
+                    }
                     guard !Task.isCancelled, let self, !stopped, jobs[token]?.discarded == false
                     else { return }
                     jobs[token]?.payload = result; jobs[token]?.complete = true
@@ -56,7 +62,9 @@ struct HomebrewUIJobReply: Codable {
         }
         guard command == "homebrew.ui.poll" else { throw ExtensionPeerError.invalidRequest }
         let reply = HomebrewUIJobReply(
-            token: token, complete: job.complete, payload: job.payload, error: job.error)
+            token: token, complete: job.complete, payload: job.payload, error: job.error,
+            partial: job.complete ? nil : job.partial)
+        jobs[token]?.partial = nil
         if job.complete {
             retire(token)
         } else {
@@ -64,6 +72,13 @@ struct HomebrewUIJobReply: Codable {
         }
         return try JSONEncoder().encode(reply)
     }
+    private func publishPartial(_ inventory: Data, token: UUID) {
+        guard !stopped, jobs[token]?.discarded == false, jobs[token]?.complete == false else {
+            return
+        }
+        jobs[token]?.partial = inventory
+    }
+
     private func renew(_ token: UUID) {
         jobs[token]?.expires = .now.advanced(by: .seconds(10))
         guard jobs[token]?.lease == nil else { return }

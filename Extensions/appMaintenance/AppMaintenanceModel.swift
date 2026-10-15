@@ -53,6 +53,7 @@ final class AppMaintenanceModel {
     var lastUpdateRefresh: Date?
     var checkingUpdates = false
     private var remoteIcons: [String: Data] = [:]
+    @ObservationIgnored private var renderedIcons: [String: Data] = [:]
     private var engineClient: ExtensionEngineClient?
     private var remoteTask: Task<Void, Never>?
     private var remoteRevision = 0
@@ -151,6 +152,10 @@ final class AppMaintenanceModel {
     private func snapshotIcons() -> [String: Data] {
         var result: [String: Data] = [:]
         for path in visiblePaths.sorted().prefix(256) {
+            if let cached = renderedIcons[path] {
+                result[path] = cached
+                continue
+            }
             let original = NSWorkspace.shared.icon(forFile: path)
             let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
                 original.draw(in: rect); return true
@@ -159,6 +164,7 @@ final class AppMaintenanceModel {
                 let png = bitmap.representation(using: .png, properties: [:])
             {
                 result[path] = png
+                renderedIcons[path] = png
             }
         }
         return result
@@ -241,6 +247,9 @@ final class AppMaintenanceModel {
         installPlan = value.installPlan; updates = value.updates;
         updateHistory = value.updateHistory
         selectedUpdateIDs = value.selectedUpdateIDs; lastUpdateRefresh = value.lastUpdateRefresh;
+        if focusedUpdateID == nil || !value.updates.contains(where: { $0.id == focusedUpdateID }) {
+            focusedUpdateID = value.focusedUpdateID ?? value.updates.first?.id
+        }
         checkingUpdates = value.checkingUpdates
         previewToken = value.previewToken
         if value.phase == .loading {
@@ -330,24 +339,8 @@ final class AppMaintenanceModel {
         guard !stopped, !suspending, !Task.isCancelled, engineClient == nil, !onBattery,
             !mutationInProgress, operation == nil
         else { return }
-        if !loadedBackgroundSnapshot {
-            let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
-            let snapshot = await snapshots.load()
-            guard !stopped, !suspending, !Task.isCancelled, operation == nil else { return }
-            loadedBackgroundSnapshot = true
-            updateState = state
-            updateHistory = state.history
-            lastUpdateRefresh = state.lastRefresh
-            if let snapshot, applications.isEmpty, updates.isEmpty {
-                applications = snapshot.applications
-                discovered = snapshot.updates
-                updates = updatePersistence.visible(snapshot.updates, state: state, now: now())
-                brewCache = snapshot.homebrewOutdated
-                brewCachedAt = snapshot.homebrewCachedAt
-                phase = .ready
-                loading.retainContent()
-            }
-        }
+        await restoreCachedSnapshot()
+        guard !stopped, !suspending, !Task.isCancelled, operation == nil else { return }
         guard lastUpdateRefresh.map({ now().timeIntervalSince($0) < 21_600 }) != true else {
             return
         }
@@ -359,6 +352,31 @@ final class AppMaintenanceModel {
         } onCancel: {
             cancel()
         }
+    }
+
+    func restoreCachedSnapshot() async {
+        guard !loadedBackgroundSnapshot, !stopped, !suspending else { return }
+        let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
+        let snapshot = await snapshots.load()
+        guard !stopped, !suspending, !Task.isCancelled, !loadedBackgroundSnapshot else { return }
+        adopt(snapshot, state: state)
+    }
+
+    private func adopt(_ snapshot: AppMaintenanceSnapshot?, state: AppUpdateCenterState) {
+        updateState = state
+        loadedBackgroundSnapshot = true
+        updateHistory = state.history
+        lastUpdateRefresh = state.lastRefresh
+        guard let snapshot, applications.isEmpty, updates.isEmpty,
+            !snapshot.applications.isEmpty || !snapshot.updates.isEmpty
+        else { return }
+        applications = snapshot.applications
+        discovered = snapshot.updates
+        updates = updatePersistence.visible(snapshot.updates, state: state, now: now())
+        brewCache = snapshot.homebrewOutdated
+        brewCachedAt = snapshot.homebrewCachedAt
+        phase = .ready
+        loading.retainContent()
     }
 
     func stopBackgroundDiscovery() {
@@ -374,25 +392,12 @@ final class AppMaintenanceModel {
         let snapshot = await snapshots.load()
         let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
         guard !stopped, !suspending, loading.isCurrent(generation) else { return }
-        updateState = state
-        loadedBackgroundSnapshot = true
-        updateHistory = state.history
-        lastUpdateRefresh = state.lastRefresh
-        if applications.isEmpty, updates.isEmpty, let snapshot {
-            applications = snapshot.applications
-            discovered = snapshot.updates
-            updates = updatePersistence.visible(snapshot.updates, state: state, now: Date())
-            brewCache = snapshot.homebrewOutdated
-            brewCachedAt = snapshot.homebrewCachedAt
-            if !applications.isEmpty || !updates.isEmpty {
-                phase = .ready
-                loading.retainContent()
-            }
-        }
+        adopt(snapshot, state: state)
         let brewFresh = brewCachedAt.map { Date().timeIntervalSince($0) < interval } ?? false
         reuseCachedBrew = brewFresh
         let scanned = await inventory(brewFresh ? brewCache : nil)
         guard !stopped, !suspending, loading.isCurrent(generation) else { return }
+        renderedIcons.removeAll()
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready

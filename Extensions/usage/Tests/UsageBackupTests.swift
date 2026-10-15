@@ -178,8 +178,14 @@ import Testing
             !FileManager.default.fileExists(
                 atPath: cloud.appendingPathComponent("limits-history.jsonl").path))
         try usage("2026-08-21", tokens: 42).write(to: document)
+        let localDocument = try Data(contentsOf: document)
         UsageEvents.post(UsageEvents.usageUpdated)
-        await wait { (try? Data(contentsOf: document)) == (try? Data(contentsOf: exported)) }
+        await wait {
+            (try? Data(contentsOf: exported)).map {
+                String(decoding: $0, as: UTF8.self).contains("2026-08-21")
+            } ?? false
+        }
+        #expect(try Data(contentsOf: document) == localDocument)
         let saved = try Data(contentsOf: exported)
         defaults.set(false, forKey: AppStorageKeys.Backup.usage)
         provider.preferencesChanged()

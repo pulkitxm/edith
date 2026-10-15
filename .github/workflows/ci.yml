@@ -420,7 +420,7 @@ jobs:
         if: matrix.ghostty == true
         id: ghostty-toolchain
         run: |
-          command -v zig >/dev/null 2>&1 || brew install zig
+          source scripts/ci-setup-zig.sh
           echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
       - name: Cache the optional terminal test library
         if: matrix.ghostty == true

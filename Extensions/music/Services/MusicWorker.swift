@@ -99,6 +99,7 @@ final class MusicWorker {
         guard let resources else { return }
         resources.accounts.presentationOwnedYoutube = true
         if startImmediately {
+            MusicLibraryIndex.activate()
             resources.accounts.activate()
             resources.external.start()
             tasks.start { try? await DownloadWorker.shared.start() }

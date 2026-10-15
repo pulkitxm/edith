@@ -236,11 +236,11 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "e37ba5a493ce88ea3cf6cd423abfd3fa5b4c3c19e4fed3e8a6b56c86db2020a5"
+          "sha256": "853e359b106968a622b2ca9949922a8fccd4085219330499f8c0db18d1b9dcdf"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
-          "sha256": "be02ffa9e123f968060fdeeead80e711c514437aba00d953e6f8226b961119f4"
+          "sha256": "11dbf67ef5980c9793abaf7120b2373229cce30709bb47279766bc124756ea1c"
         }
       ]
     },
@@ -372,7 +372,7 @@
         },
         {
           "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
-          "sha256": "edaef18e0167c4f521a026bf78139caa861439709f097331e98362134a1032a3"
+          "sha256": "98f06adfdb4d5ebce56c226a3f8132e07124eb94cd10483753420b341863001c"
         }
       ]
     },
@@ -500,7 +500,7 @@
       "sources": [
         {
           "path": "Extensions/docs/Runtime.swift",
-          "sha256": "6cc04b778b03005e1d07273948d10d3f0d120a15224d79ff81badff864a53b7e"
+          "sha256": "c4535e0a86aa9c952307d3fccd74e94d88afd7f24dd8f91c374b8423242364b6"
         },
         {
           "path": "Extensions/docs/DocsUIBridge.swift",
@@ -632,7 +632,7 @@
       "sources": [
         {
           "path": "Extensions/bifrost/Runtime.swift",
-          "sha256": "c061de5ea3b2d141ed5aa749828dcfc9f9f684b2ee33d7a0dcefc8e3dd66134f"
+          "sha256": "3ee57725825babda1ae9f5b5ed4c67d6d1c2cf9ef4c076127097dd2f04da962e"
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "083bb3a79e6a7da6b5d261787eec890c7ceac3d12c320c7a3a359f3d6248c1e4"
+          "sha256": "8c525b2bd6e9dd56aedb88f6e85438a73d4830e4762fef48438f783fef5161db"
         }
       ]
     },

@@ -21,7 +21,10 @@ import Foundation
         self.store = store
     }
 
-    func execute(_ command: String, payload: Data) async throws -> Data {
+    func execute(
+        _ command: String, payload: Data,
+        onInventory: (@Sendable (Data) async -> Void)? = nil
+    ) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         if command == "homebrew.cli.catalog" { return try HomebrewCLICatalog.data() }
         if command.hasPrefix("homebrew.cli.stream.") {
@@ -68,7 +71,12 @@ import Foundation
             else { throw ExtensionPeerError.invalidRequest }
             let token = await store.claim()
             let status = await client.status()
-            let packages = try await client.installed(kind: kind)
+            let packages = try await client.installed(kind: kind) { inventory in
+                guard let onInventory, let data = try? JSONEncoder().encode(inventory) else {
+                    return
+                }
+                await onInventory(data)
+            }
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
             var snapshot = await store.load() ?? HomebrewListingSnapshot(status: status)
