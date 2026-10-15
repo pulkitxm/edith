@@ -121,7 +121,7 @@ public struct HostCoreOwnerRegistry: Sendable {
         var providers: [Provider] = []
         var issues: [String: String] = [:]
         let selected = states.filter {
-            $0.available && HostCLIProviderCatalog.prefixes[$0.id] != nil
+            $0.available && HostCLIProviderCatalog.declaresCommands($0.id)
         }
         await withTaskGroup(of: (HostCLIProviderState, HostCoreOwnerCatalog?, String?).self) {
             group in
