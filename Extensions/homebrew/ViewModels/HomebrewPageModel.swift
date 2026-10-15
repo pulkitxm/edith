@@ -188,18 +188,20 @@ final class HomebrewPageModel {
         loading.retainContent()
     }
 
-    private func restoreSnapshot(kind: HomebrewPackageKind, generation: UInt64) async {
-        if !didRestoreSnapshot {
-            let loadedSnapshot = await client.cached(store: store)
-            guard isCurrent(generation) else { return }
-            didRestoreSnapshot = true
-            if let loadedSnapshot {
-                if status == nil { status = loadedSnapshot.status }
-                for (key, value) in loadedSnapshot.packages where cachedPackages[key] == nil {
-                    cachedPackages[key] = value
-                }
-            }
+    func loadCachedListing() async {
+        guard !didRestoreSnapshot else { return }
+        let loadedSnapshot = await client.cached(store: store)
+        guard !didRestoreSnapshot else { return }
+        didRestoreSnapshot = true
+        guard let loadedSnapshot else { return }
+        if status == nil { status = loadedSnapshot.status }
+        for (key, value) in loadedSnapshot.packages where cachedPackages[key] == nil {
+            cachedPackages[key] = value
         }
+    }
+
+    private func restoreSnapshot(kind: HomebrewPackageKind, generation: UInt64) async {
+        await loadCachedListing()
         guard isCurrent(generation), packages.isEmpty, let cached = cachedPackages[kind],
             !cached.isEmpty
         else { return }

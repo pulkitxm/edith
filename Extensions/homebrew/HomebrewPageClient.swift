@@ -39,7 +39,16 @@ import Foundation
     ) async throws -> [HomebrewPackage] {
         if let client { return try await client.installed(kind: kind, onInventory: onInventory) }
         return try await read(
-            "homebrew.list", input: ["kind": kind.rawValue], as: [HomebrewPackage].self)
+            "homebrew.list", input: ["kind": kind.rawValue], as: [HomebrewPackage].self,
+            onPartial: onInventory.map { publish in
+                { data in
+                    let decoder = JSONDecoder()
+                    decoder.dateDecodingStrategy = .iso8601
+                    if let inventory = try? decoder.decode([HomebrewPackage].self, from: data) {
+                        await publish(inventory)
+                    }
+                }
+            })
     }
 
     func search(_ query: String, kind: HomebrewPackageKind) async throws -> [HomebrewPackage] {
@@ -64,7 +73,8 @@ import Foundation
     }
 
     private func read<Value: Decodable>(
-        _ command: String, input: [String: String] = [:], as type: Value.Type, timeout: Double = 30
+        _ command: String, input: [String: String] = [:], as type: Value.Type, timeout: Double = 30,
+        onPartial: (@MainActor (Data) async -> Void)? = nil
     ) async throws -> Value {
         guard let engine else { throw ExtensionPeerError.unavailable }
         let data: Data
@@ -83,6 +93,7 @@ import Foundation
                     let response = try await engine.invoke("homebrew.ui.poll", payload: poll)
                     let state = try JSONDecoder().decode(HomebrewUIJobReply.self, from: response)
                     guard state.token == job.token else { throw ExtensionPeerError.invalidRequest }
+                    if let partial = state.partial { await onPartial?(partial) }
                     if state.complete {
                         if let error = state.error { throw ExtensionPeerError.rejected(error) }
                         guard let result = state.payload else {

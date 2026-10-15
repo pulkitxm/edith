@@ -108,6 +108,7 @@ struct AppMaintenanceUIAction: Codable {
         }
         if command == "maintenance.ui.snapshot" {
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            await model.restoreCachedSnapshot()
         } else if command == "maintenance.ui.preferences" {
             let preferences = try JSONDecoder().decode(MaintenanceUISettings.self, from: payload)
             try preferences.save(model.preferenceDefaults); model.preferences = preferences
@@ -133,6 +134,7 @@ struct AppMaintenanceUIAction: Codable {
                 guard let interval = request.number, interval.isFinite,
                     (1...31_536_000).contains(interval)
                 else { throw ExtensionPeerError.invalidRequest }
+                await model.restoreCachedSnapshot()
                 model.refresh(automatic: request.enabled == true, interval: interval)
             case "cancel": model.cancel()
             case "cancelImage": model.cancelInstallPlan()

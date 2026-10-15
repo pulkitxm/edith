@@ -236,11 +236,11 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "e37ba5a493ce88ea3cf6cd423abfd3fa5b4c3c19e4fed3e8a6b56c86db2020a5"
+          "sha256": "853e359b106968a622b2ca9949922a8fccd4085219330499f8c0db18d1b9dcdf"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
-          "sha256": "be02ffa9e123f968060fdeeead80e711c514437aba00d953e6f8226b961119f4"
+          "sha256": "11dbf67ef5980c9793abaf7120b2373229cce30709bb47279766bc124756ea1c"
         }
       ]
     },
@@ -372,7 +372,7 @@
         },
         {
           "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
-          "sha256": "edaef18e0167c4f521a026bf78139caa861439709f097331e98362134a1032a3"
+          "sha256": "98f06adfdb4d5ebce56c226a3f8132e07124eb94cd10483753420b341863001c"
         }
       ]
     },
