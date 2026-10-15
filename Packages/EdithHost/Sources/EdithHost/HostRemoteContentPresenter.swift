@@ -33,9 +33,6 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
             endPresentation(id: request.presentationID)
             throw CancellationError()
         }
-        let remote = EXHostViewController()
-        remote.configuration = EXHostViewController.Configuration(
-            appExtension: handle.identity, sceneID: handle.sceneIdentifier)
         let terminalUI =
             HostTerminalUIRequest.accepts(request)
             ? HostTerminalInputClient(
@@ -47,11 +44,10 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
                     try await manager.terminalUIStatus(presentationID: request.presentationID)
                 }) : nil
         let controller = HostRemoteViewController(
-            request: request, remote: remote, terminalUI: terminalUI,
-            connect: { [manager] connection, state, receive in
-                try await manager.connectScene(
-                    handle, through: connection, compact: state.compact, visible: state.visible,
-                    width: state.width, receive: receive)
+            request: request, terminalUI: terminalUI,
+            present: { [manager] state in
+                try await manager.presentScene(
+                    handle, compact: state.compact, visible: state.visible, width: state.width)
             },
             update: { [manager] state in
                 try await manager.updateScene(
@@ -163,13 +159,15 @@ struct HostRemoteViewState: Equatable {
 @MainActor
 final class HostRemoteViewController: NSViewController, EXHostViewControllerDelegate {
     let request: HostExtensionContentRequest
-    private var remote: EXHostViewController
+    private var remote: EXHostViewController?
+    private var content: NSViewController?
     private let terminalUI: HostTerminalInputClient?
     private(set) var terminalInput: HostTerminalInput?
     private let connect:
         @MainActor (
             NSXPCConnection, HostRemoteViewState, @escaping @MainActor (HostRemoteEvent) -> Void
         ) async throws -> Void
+    private let present: (@MainActor (HostRemoteViewState) async throws -> NSViewController)?
     private let update: @MainActor (HostRemoteViewState) async throws -> Void
     private var activation: Task<Void, Never>?
     private var updates: Task<Void, Never>?
@@ -197,8 +195,23 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         self.terminalUI = terminalUI
         self.connect = connect
         self.update = update
+        present = nil
         super.init(nibName: nil, bundle: nil)
         remote.delegate = self
+    }
+
+    init(
+        request: HostExtensionContentRequest, terminalUI: HostTerminalInputClient? = nil,
+        present: @escaping @MainActor (HostRemoteViewState) async throws -> NSViewController,
+        update: @escaping @MainActor (HostRemoteViewState) async throws -> Void
+    ) {
+        self.request = request
+        remote = nil
+        self.terminalUI = terminalUI
+        connect = { _, _, _ in throw HostWorkerError.rejected }
+        self.present = present
+        self.update = update
+        super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { nil }
 
@@ -207,7 +220,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         view.contentHeight = contentHeight
         view.moved = { [weak self] in self?.terminalInput?.stateChanged() }
         self.view = view
-        mountRemote()
+        if remote != nil { mountRemote() } else { activateLocal() }
         if let terminalUI, HostTerminalUIRequest.accepts(request) {
             terminalInput = HostTerminalInput(
                 presentationID: request.presentationID, client: terminalUI,
@@ -219,7 +232,40 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
                 ownsResponder: { [weak self] in self?.containsResponder(in: $0) == true })
         }
     }
+    private func activateLocal() {
+        guard let present, activation == nil, !connected, !detached else { return }
+        let token = revision
+        activation = Task { [weak self] in
+            guard let self else { return }
+            defer { if revision == token { activation = nil } }
+            do {
+                let controller = try await present(state)
+                guard !Task.isCancelled, revision == token, !detached else { return }
+                mount(controller)
+                content = controller
+                connected = true
+                terminalInput?.stateChanged()
+                pending = state
+                drainUpdates()
+            } catch {
+                guard !Task.isCancelled, revision == token, !detached else { return }
+                showFailure()
+            }
+        }
+    }
+    private func mount(_ controller: NSViewController) {
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
     private func mountRemote() {
+        guard let remote else { return }
         addChild(remote)
         remote.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(remote.view)
@@ -361,8 +407,11 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         var responder = window.firstResponder
         for _ in 0..<64 {
             guard let current = responder else { return false }
-            if current === view || current === remote.view { return true }
-            if let current = current as? NSView, current.isDescendant(of: remote.view) {
+            let mounted = remote ?? content
+            if current === view || current === mounted?.view { return true }
+            if let current = current as? NSView, let mounted,
+                current.isDescendant(of: mounted.view)
+            {
                 return true
             }
             responder = current.nextResponder
@@ -379,13 +428,14 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         updates?.cancel(); updates = nil
         pending = nil; connected = false
         changed = nil
-        remote.delegate = nil
-        remote.configuration = nil
+        remote?.delegate = nil
+        remote?.configuration = nil
         statusView?.removeFromSuperview(); statusView = nil
-        if isViewLoaded {
-            remote.view.removeFromSuperview()
-            remote.removeFromParent()
+        if isViewLoaded, let mounted = remote ?? content {
+            mounted.view.removeFromSuperview()
+            mounted.removeFromParent()
         }
+        content = nil
     }
 }
 
