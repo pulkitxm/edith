@@ -332,6 +332,20 @@ import Testing
         #expect(await fixture.network.count == 2)
     }
 
+    @Test func aNewAppBuildChecksExtensionUpdatesImmediately() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        let now = Date()
+        await marketplace.updateInstalledIfDue(now: now, hostBuild: "331")
+        await marketplace.updateInstalledIfDue(now: now.addingTimeInterval(60), hostBuild: "331")
+        #expect(await fixture.network.count == 1)
+        await marketplace.updateInstalledIfDue(now: now.addingTimeInterval(120), hostBuild: "332")
+        #expect(await fixture.network.count == 2)
+    }
+
     @Test func cachedInformationIsVerifiedWithoutFetchingItAgain() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
