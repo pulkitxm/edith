@@ -100,6 +100,15 @@ import Observation
         return try JSONDecoder().decode(DashUsage.self, from: data)
     }
 
+    func cachedHomeUsage() async -> HomeUsageSnapshot? {
+        guard
+            let data = try? await checkedPayload("usage.ui.homeUsage"),
+            let snapshot = try? JSONDecoder().decode(HomeUsageSnapshot.self, from: data),
+            snapshot.hasDays
+        else { return nil }
+        return snapshot
+    }
+
     func limits(provider: LimitProvider) async throws -> UsageUILimits {
         try await JSONDecoder().decode(
             UsageUILimits.self,

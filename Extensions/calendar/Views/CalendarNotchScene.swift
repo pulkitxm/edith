@@ -37,44 +37,38 @@ struct CalendarNotchScene: View {
                 title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
                 retry: store.refresh
             ) {
-                if !store.authorized {
-                    CalendarPermissionPrompt(style: .panel, accentColor: tile.highlightColor) {
-                        store.perform(.permission)
-                    }
-                } else {
-                    let events = Array(
-                        CalendarWidgetEvents.selected(store.events, tile: tile, target: .notch)
-                            .prefix(tile.itemLimit))
-                    if events.isEmpty {
-                        Text("No upcoming meetings").font(.edithText(.caption))
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(events, id: \.id) { event in
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(event.title).font(.edithText(.caption))
-                                    .lineLimit(tile.dense ? 1 : 2).presenterBlur(store.blurEvents)
-                                if tile.showDetails, tile.shows("time") {
-                                    Text(
-                                        event.isAllDay
-                                            ? "All day"
-                                            : event.start.formatted(.dateTime.hour().minute())
-                                                + " to "
-                                                + event.end.formatted(.dateTime.hour().minute())
-                                    )
-                                    .font(.edithText(.caption2)).foregroundStyle(.secondary)
-                                }
+                let events = Array(
+                    CalendarWidgetEvents.selected(store.events, tile: tile, target: .notch)
+                        .prefix(tile.itemLimit))
+                if events.isEmpty {
+                    Text("No upcoming meetings").font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(events, id: \.id) { event in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(event.title).font(.edithText(.caption))
+                                .lineLimit(tile.dense ? 1 : 2).presenterBlur(store.blurEvents)
+                            if tile.showDetails, tile.shows("time") {
+                                Text(
+                                    event.isAllDay
+                                        ? "All day"
+                                        : event.start.formatted(.dateTime.hour().minute())
+                                            + " to "
+                                            + event.end.formatted(.dateTime.hour().minute())
+                                )
+                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
                             }
-                            Spacer(minLength: 4)
-                            if tile.showActions, tile.shows("join"),
-                                MeetingLink.url(for: event) != nil
-                            {
-                                Button {
-                                    store.perform(.join, eventID: event.id)
-                                } label: {
-                                    Image(systemName: "video.fill")
-                                }.help("Join meeting").accessibilityLabel("Join meeting")
-                            }
+                        }
+                        Spacer(minLength: 4)
+                        if tile.showActions, tile.shows("join"),
+                            MeetingLink.url(for: event) != nil
+                        {
+                            Button {
+                                store.perform(.join, eventID: event.id)
+                            } label: {
+                                Image(systemName: "video.fill")
+                            }.help("Join meeting").accessibilityLabel("Join meeting")
                         }
                     }
                 }

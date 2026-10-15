@@ -71,6 +71,53 @@ import Testing
         await controller.shutdown()
     }
 
+    @Test func remoteHomeUsageShowsTheWorkerCacheBeforeTheDocumentArrives() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try data.write(to: directory.appendingPathComponent("usage.json"))
+        let suite = "usage-ui-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let workerCache = HomeUsageSnapshotStore(
+            file: directory.appendingPathComponent("Snapshots/home-usage.json"))
+        let cachedDay = DayPoint(
+            id: "2026-01-01", date: Date(timeIntervalSince1970: 1_767_225_600), cost: 2, tokens: 9)
+        await workerCache.store(
+            HomeUsageSnapshot(
+                calendarDays: [cachedDay], heatDetail: [:],
+                heatScale: UsageCalendarScale(days: [cachedDay])))
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let service = UsageUICommands(
+            controller: controller, directory: directory, defaults: defaults,
+            homeUsage: workerCache)
+        var gate: CheckedContinuation<Void, Never>?
+        let client = UsageUIClient(invoke: { command, payload in
+            if command == "usage.ui.document" { await withCheckedContinuation { gate = $0 } }
+            return try await service.execute(command, payload: payload)
+        })
+        let model = DashboardModel(
+            preferences: defaults,
+            homeUsageStore: HomeUsageSnapshotStore(
+                file: directory.appendingPathComponent("unused.json")))
+        UsageUIClient.current = client
+        defer { client.stop(); UsageUIClient.current = nil; model.shutdown(); service.shutdown() }
+        let load = Task { await model.load() }
+        while gate == nil { await Task.yield() }
+        #expect(!model.loaded && !model.loadAttempted)
+        #expect(model.homeUsage.calendarDays.map(\.id) == ["2026-01-01"])
+        gate?.resume()
+        await load.value
+        await model.awaitPendingComputation()
+        #expect(model.loaded && model.homeUsage.calendarDays.map(\.id) == ["2026-10-09"])
+        await service.shutdownAndWait()
+        let refreshed = try #require(await workerCache.load())
+        #expect(refreshed.calendarDays.map(\.id) == ["2026-10-09"])
+        await controller.shutdown()
+    }
+
     private let data = Data(
         #"{"schemaVersion":8,"generatedAt":"2026-10-09T12:00:00Z","sources":["sample"],"defaultSources":["sample"],"sourceMeta":{"sample":{"label":"Sample source"}},"sessions":[],"totals":{"cost":2,"tokens":150,"inputTokens":120,"outputTokens":30,"cacheCreationTokens":0,"cacheReadTokens":0,"bySource":{"sample":{"cost":2,"tokens":150}}},"daily":[{"period":"2026-10-09","bySource":{"sample":[{"modelName":"Sample model","inputTokens":120,"outputTokens":30,"cacheCreationTokens":0,"cacheReadTokens":0,"cost":2}]},"projects":[],"hours":[{"hour":0,"cost":0,"tokens":0,"bySource":{}},{"hour":1,"cost":0,"tokens":0,"bySource":{}},{"hour":2,"cost":0,"tokens":0,"bySource":{}},{"hour":3,"cost":0,"tokens":0,"bySource":{}},{"hour":4,"cost":0,"tokens":0,"bySource":{}},{"hour":5,"cost":0,"tokens":0,"bySource":{}},{"hour":6,"cost":0,"tokens":0,"bySource":{}},{"hour":7,"cost":0,"tokens":0,"bySource":{}},{"hour":8,"cost":0,"tokens":0,"bySource":{}},{"hour":9,"cost":0,"tokens":0,"bySource":{}},{"hour":10,"cost":0,"tokens":0,"bySource":{}},{"hour":11,"cost":0,"tokens":0,"bySource":{}},{"hour":12,"cost":0,"tokens":0,"bySource":{}},{"hour":13,"cost":0,"tokens":0,"bySource":{}},{"hour":14,"cost":0,"tokens":0,"bySource":{}},{"hour":15,"cost":0,"tokens":0,"bySource":{}},{"hour":16,"cost":0,"tokens":0,"bySource":{}},{"hour":17,"cost":0,"tokens":0,"bySource":{}},{"hour":18,"cost":0,"tokens":0,"bySource":{}},{"hour":19,"cost":0,"tokens":0,"bySource":{}},{"hour":20,"cost":0,"tokens":0,"bySource":{}},{"hour":21,"cost":0,"tokens":0,"bySource":{}},{"hour":22,"cost":0,"tokens":0,"bySource":{}},{"hour":23,"cost":0,"tokens":0,"bySource":{}}]}]}"#
             .utf8)

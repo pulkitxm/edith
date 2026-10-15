@@ -24,11 +24,14 @@ struct UsageUILimits: Codable, Sendable {
     private var limitsPreparations: [UUID: Task<LimitsHistory.Snapshot, Never>] = [:]
     var pendingHistoryPreparations: Int { limitsPreparations.count }
     private let exports: UsageExportDelivery
+    private let homeUsage: HomeUsageSnapshotStore
+    private var homeUsageTask: Task<Void, Never>?
     private let navigate: @MainActor (UsageNavigationRequest) async throws -> Void
 
     init(
         controller: UsageWorkerController, directory: URL = Repo.dataDir,
         defaults: UserDefaults = SharedDefaults.store, exports: UsageExportDelivery? = nil,
+        homeUsage: HomeUsageSnapshotStore = .standard,
         navigate: @escaping @MainActor (UsageNavigationRequest) async throws -> Void = { _ in
             throw ExtensionPeerError.unavailable
         }
@@ -36,19 +39,23 @@ struct UsageUILimits: Codable, Sendable {
         self.navigate = navigate
         self.controller = controller; self.directory = directory; self.defaults = defaults
         self.exports = exports ?? UsageExportDelivery()
+        self.homeUsage = homeUsage
     }
 
     func shutdown() {
         stopped = true
         for task in limitsPreparations.values { task.cancel() }
+        homeUsageTask?.cancel()
         documents = [:]
         exports.stop()
     }
 
     func shutdownAndWait() async {
         let pending = Array(limitsPreparations.values)
+        let caching = homeUsageTask
         shutdown()
         for task in pending { _ = await task.value }
+        await caching?.value
         limitsPreparations = [:]
         await exports.stopAndWait()
     }
@@ -80,7 +87,16 @@ struct UsageUILimits: Codable, Sendable {
             guard !stopped, let data, UsageHistory.isValidDocument(data) else {
                 throw ExtensionPeerError.unavailable
             }
+            cacheHomeUsage(data)
             return try receipt(data)
+        case "usage.ui.homeUsage":
+            try empty(object)
+            guard let cached = await homeUsage.load(), cached.hasDays else {
+                throw ExtensionPeerError.unavailable
+            }
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try receipt(encoder.encode(cached))
         case "usage.ui.chunk":
             guard Set(object.keys) == ["id", "offset"],
                 let text = object["id"] as? String, let id = UUID(uuidString: text),
@@ -269,6 +285,22 @@ struct UsageUILimits: Codable, Sendable {
         try Task.checkCancellation()
         guard !stopped, !load.isCancelled else { throw ExtensionPeerError.unavailable }
         return snapshot
+    }
+
+    private func cacheHomeUsage(_ data: Data) {
+        homeUsageTask?.cancel()
+        let store = homeUsage
+        homeUsageTask = Task.detached(priority: .utility) {
+            guard let parsed = try? JSONDecoder().decode(DashUsage.self, from: data),
+                !Task.isCancelled
+            else { return }
+            let digest = DashboardComputation.digest(parsed, calendar: Calendar.current)
+            guard !Task.isCancelled else { return }
+            await store.store(
+                HomeUsageSnapshot(
+                    calendarDays: digest.calendarDays, heatDetail: digest.heatDetail,
+                    heatScale: DashboardComputation.heatScale(for: digest.calendarDays)))
+        }
     }
 
     private func receipt(_ data: Data) throws -> Data {
