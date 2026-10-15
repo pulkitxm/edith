@@ -8,6 +8,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 {
     var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
     var shutdown: (@MainActor () async -> Void)?
+    var stopWorkers: (@MainActor () -> Void)?
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
     var mainWindow: @MainActor () -> NSWindow? = {
@@ -66,7 +67,9 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         let finish = { [weak self] in
             guard let self, !self.replied else { return }
             self.replied = true
+            self.stopWorkers?()
             sender.reply(toApplicationShouldTerminate: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
         }
         Task {
             await shutdown()
