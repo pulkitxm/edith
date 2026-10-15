@@ -1,3 +1,4 @@
+internal import EdithExtensionCommands_attention_native
 internal import EdithExtensionSupport_attention_native
 internal import EdithExtensionUI_attention_native
 import AppKit
@@ -94,7 +95,11 @@ public final class AttentionExtensionController: NSObject {
                 return try await AttentionUICommands.execute(
                     command, payload: payload, repository: repository, service: service)
             }
-            if command == "cli.execute" {
+            if command == "attention.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    AttentionCommand.self, owner: "attention", payload: payload, streaming: false)
+            }
+            if command == "cli.execute" || command == "attention.cli" {
                 guard let repository = self.repository else { throw ExtensionPeerError.unavailable }
                 return try AttentionPayload.encode(
                     try await AttentionCLIExecution.run(

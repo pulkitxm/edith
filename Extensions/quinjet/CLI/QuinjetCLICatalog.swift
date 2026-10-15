@@ -1,4 +1,5 @@
 import ArgumentParser
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
@@ -7,6 +8,7 @@ enum QuinjetCLICatalog {
         try JSONSerialization.data(withJSONObject: [
             "version": 1, "owner": "quinjet", "commands": commands(QuinjetCommand.self, route: []),
             "settings": [], "acceptsInput": true,
+            "parserHelp": [try ExtensionCLICatalog.parserHelp(QuinjetCommand.self)],
         ])
     }
 

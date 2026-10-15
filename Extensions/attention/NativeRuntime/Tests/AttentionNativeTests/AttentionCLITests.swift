@@ -1,3 +1,4 @@
+import EdithExtensionCommands_attention_native
 import EdithExtensionSupport_attention_native
 import Foundation
 import Testing
@@ -71,5 +72,22 @@ import Testing
         #expect(
             (try JSONSerialization.jsonObject(with: Data(restore.stdout.utf8)) as? [String: Any])?[
                 "applied"] as? Bool == false)
+    }
+
+    @Test func answersTheCLICatalogWithoutTheBuiltInHelpCommand() throws {
+        let data = try ExtensionCLICatalog.data(
+            AttentionCommand.self, owner: "attention", payload: Data("{}".utf8), streaming: false)
+        let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(value["owner"] as? String == "attention")
+        let commands = try #require(value["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        #expect(routes.contains(["attention", "status"]))
+        #expect(!routes.contains { $0.last == "help" })
+        let help = try #require((value["parserHelp"] as? [[String: Any]])?.first)
+        let root = try #require(help["command"] as? [String: Any])
+        let names = (root["subcommands"] as? [[String: Any]] ?? []).compactMap {
+            $0["commandName"] as? String
+        }
+        #expect(!names.contains("help"))
     }
 }

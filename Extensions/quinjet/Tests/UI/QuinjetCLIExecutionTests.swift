@@ -206,4 +206,16 @@ import Testing
                 && conflict.stderr.contains("cannot be used together"))
         await worker.shutdown()
     }
+
+    @Test func catalogCarriesParserMetadataWithoutTheBuiltInHelpCommand() throws {
+        let value = try #require(
+            JSONSerialization.jsonObject(with: QuinjetCLICatalog.data()) as? [String: Any])
+        let help = try #require((value["parserHelp"] as? [[String: Any]])?.first)
+        let root = try #require(help["command"] as? [String: Any])
+        #expect(root["commandName"] as? String == "quinjet")
+        let names = (root["subcommands"] as? [[String: Any]] ?? []).compactMap {
+            $0["commandName"] as? String
+        }
+        #expect(names.contains("projects") && !names.contains("help"))
+    }
 }

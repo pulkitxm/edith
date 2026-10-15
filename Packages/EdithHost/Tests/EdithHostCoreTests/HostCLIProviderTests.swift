@@ -73,6 +73,32 @@ import Testing
         }
     }
 
+    @Test func extensionsWithoutACLIAreNeverAskedForACatalog() async throws {
+        let operations = OperationLog()
+        let states = try HostCLIJSON.array(
+            ["blitztree", "timeLapse", "terminal"].map { id in
+                .object([
+                    "id": .string(id), "installed": .bool(true), "compatible": .bool(true),
+                    "enabled": .bool(true), "running": .bool(true), "version": .string("1.0.0"),
+                    "disablePending": .bool(false), "removalPending": .bool(false),
+                ])
+            }
+        ).encoded()
+        let providers = try await HostCLIProviderRegistry.load(invoke: { request in
+            if request.action == .ls { return states }
+            await operations.record(request.operation)
+            throw HostCLIError.rejected("unexpected")
+        })
+        #expect(providers.providers.isEmpty && providers.issues.isEmpty)
+        let owners = try await HostCoreOwnerRegistry.load(invoke: { request in
+            if request.action == .ls { return states }
+            await operations.record(request.operation)
+            throw HostCLIError.rejected("unexpected")
+        })
+        #expect(owners.providers.isEmpty && owners.issues.isEmpty)
+        #expect(await operations.values.isEmpty)
+    }
+
     @Test func cancellationDuringDiscoveryIsPropagated() async throws {
         let fixture = ProviderFixture(cancelCatalog: true)
         await #expect(throws: CancellationError.self) {
@@ -117,6 +143,11 @@ import Testing
         let number = HostCLISetting("zoom", .number, group: "sample", summary: "Zoom")
         #expect(throws: HostCLIError.self) { try number.parse("nan") }
     }
+}
+
+private actor OperationLog {
+    private(set) var values: [String?] = []
+    func record(_ operation: String?) { values.append(operation) }
 }
 
 private actor ProviderFixture {
