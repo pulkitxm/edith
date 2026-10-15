@@ -76,6 +76,9 @@ struct HostApplication: App {
             }
         }
         .commands {
+            CommandGroup(replacing: .appTermination) {
+                Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for App Updates") { runtime.updater.checkForUpdates() }.disabled(
                     !runtime.updater.available)

@@ -21,7 +21,7 @@ import UserNotifications
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
-        quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
+        quit: @escaping @MainActor () -> Void = { HostQuit.terminate() },
         relaunch: @escaping @MainActor () async throws -> HostCLIJSON
     ) {
         self.identity = identity; self.marketplace = marketplace; self.updater = updater

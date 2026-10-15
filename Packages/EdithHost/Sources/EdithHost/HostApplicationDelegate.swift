@@ -63,6 +63,13 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
                 == keyAELaunchedAsLogInItem
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(handleQuit(_:reply:)),
+            forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEQuitApplication))
+    }
+
+    @objc private func handleQuit(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        HostQuit.terminate()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
