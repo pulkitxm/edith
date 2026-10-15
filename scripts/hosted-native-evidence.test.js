@@ -225,6 +225,15 @@ test("shipping evidence requires one successful authenticated peer transport ste
   }
 });
 
+test("staging tolerates the publisher step still reported as pending", () => {
+  const value = fixture();
+  value.jobs[4].steps[0].status = "pending";
+  expect(stagedEvidence(value)).toBeDefined();
+  const done = fixture();
+  done.jobs[4].steps[0].status = "completed";
+  expect(() => stagedEvidence(done)).toThrow();
+});
+
 test("staging requires real source and attempt identity with all actual native predecessors successful", () => {
   for (const mutation of [
     (value) => {
@@ -377,6 +386,21 @@ test("explicit composed retry admits only publication-stage failure with exact o
   const qualification = admitOriginalEvidence(payload, failed(), names);
   expect(qualification.originalWholeRunSucceeded).toBe(false);
   expect(qualification.originalPublicationOnlyFailure).toBe(true);
+  const skippedNames = [
+    ...names,
+    "Emit only bounded sanitized public observations",
+  ];
+  const skipped = failed();
+  skipped.jobs[4].steps.push({
+    name: "Emit only bounded sanitized public observations",
+    number: 3,
+    status: "completed",
+    conclusion: "skipped",
+  });
+  expect(
+    admitOriginalEvidence(payload, skipped, skippedNames)
+      .originalPublicationOnlyFailure,
+  ).toBe(true);
   for (const mutate of [
     (value) => {
       value.run.conclusion = "cancelled";
@@ -407,6 +431,12 @@ test("explicit composed retry admits only publication-stage failure with exact o
     },
     (value) => {
       value.jobs[4].steps[0].conclusion = "failure";
+    },
+    (value) => {
+      value.jobs[4].steps[0].conclusion = "skipped";
+    },
+    (value) => {
+      value.jobs[4].steps[1].conclusion = "skipped";
     },
     (value) => {
       value.jobs[4].steps.push({
