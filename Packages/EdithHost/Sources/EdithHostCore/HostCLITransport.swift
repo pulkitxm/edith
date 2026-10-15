@@ -184,6 +184,9 @@ public enum HostCLITransport {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         process.arguments = ["-g", "-j", app.path]
+        var environment = ProcessInfo.processInfo.environment
+        environment["EDITH_CLI"] = nil
+        process.environment = environment
         do {
             try process.run()
             process.waitUntilExit()
