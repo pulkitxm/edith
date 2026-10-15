@@ -61,29 +61,17 @@ enum EmojiSurface {
     ) async throws -> Data {
         try await SurfaceCommandService.execute(
             providerID: "emoji", command: command, payload: payload,
-            snapshot: { _ in
-                snapshot(frequent: store.frequent, character: store.character)
-            },
+            snapshot: { _ in snapshot() },
             perform: { action in
-                if action == "pick" {
-                    pick()
-                } else if let emoji = store.frequent.first(where: { "copy:" + $0.id == action }) {
-                    store.copy(emoji)
-                } else {
-                    throw ExtensionPeerError.invalidRequest
-                }
+                guard action == "pick" else { throw ExtensionPeerError.invalidRequest }
+                pick()
             })
     }
 
-    static func snapshot(frequent: [Emoji], character: (Emoji) -> String) -> SurfaceSnapshot {
+    static func snapshot() -> SurfaceSnapshot {
         .init(
             providerID: "emoji",
-            rows: frequent.prefix(100).map { emoji in
-                .init(
-                    emoji.id, title: character(emoji), detail: String(emoji.name.prefix(256)),
-                    icon: "face.smiling", actions: [.init("copy:" + emoji.id, "Copy", "doc.on.doc")]
-                )
-            }, actions: [.init("pick", "Pick emoji", "face.smiling")],
-            message: frequent.isEmpty ? "Choose an emoji to start your frequent list." : nil)
+            actions: [.init("pick", "Choose emoji", "face.smiling")],
+            message: "Choose an emoji to insert into your current app.")
     }
 }

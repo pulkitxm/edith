@@ -57,11 +57,11 @@ enum HostWorkerNavigationRouting {
             throw HostWindowNavigationError.inactiveOwner
         }
         let owned: (page: String, section: String?)
-        let restoreOnly = extensionID == "micMute"
+        let restoreOnly = ["micMute", "bifrost"].contains(extensionID)
         let settingsID = ["clipboard", "emoji"].contains(extensionID) ? extensionID : nil
         switch extensionID {
         case "clipboard", "emoji": owned = ("extensions", nil)
-        case "micMute": owned = (currentPage, nil)
+        case "micMute", "bifrost": owned = (currentPage, nil)
         case "systemStats": owned = ("system", nil)
         default:
             guard let catalog = HostNavigationCatalog.route(extensionID: extensionID) else {

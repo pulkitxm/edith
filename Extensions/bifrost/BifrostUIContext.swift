@@ -26,11 +26,13 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
         [AppStorageKeys.Bifrost.enabled, AppStorageKeys.Bifrost.pasteSnippets]
         + BifrostSource.allCases.map(\.defaultsKey)
     static let intKeys = [
-        AppStorageKeys.Bifrost.resultLimit, "bifrostHotKeyCode", "bifrostHotKeyModifiers",
+        AppStorageKeys.Bifrost.resultLimit, AppStorageKeys.Bifrost.hotKeyCode,
+        AppStorageKeys.Bifrost.hotKeyMods,
     ]
     static let stringKeys = [
         AppStorageKeys.Bifrost.popupAt, AppStorageKeys.Bifrost.quicklinks,
         AppStorageKeys.Bifrost.snippets, AppStorageKeys.Bifrost.shellCommands,
+        AppStorageKeys.Bifrost.hotKeyLabel,
     ]
     static var keys: [String] { boolKeys + intKeys + stringKeys }
 
@@ -151,7 +153,7 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
         if intKeys.contains(key) {
             let fallback =
                 key == AppStorageKeys.Bifrost.resultLimit
-                ? BifrostQuery.defaultLimit : key == "bifrostHotKeyCode" ? 49 : 2048
+                ? BifrostQuery.defaultLimit : key == AppStorageKeys.Bifrost.hotKeyCode ? 49 : 2048
             return String(SharedDefaults.store.object(forKey: key) as? Int ?? fallback)
         }
         return SharedDefaults.store.string(forKey: key)
@@ -176,6 +178,9 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
                 guard PopupPosition.allCases.contains(where: { $0.rawValue == value }) else {
                     throw ExtensionPeerError.invalidRequest
                 }
+            } else if key == AppStorageKeys.Bifrost.hotKeyLabel {
+                guard value.count <= 32 else { throw ExtensionPeerError.invalidRequest }
+                if value.isEmpty { return }
             } else if !value.isEmpty {
                 guard let data = value.data(using: .utf8),
                     (try? JSONSerialization.jsonObject(with: data)) is [Any]
@@ -199,7 +204,7 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             worker.configureHotKey()
         case "bifrost.ui.open":
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
-            BifrostPanel.shared.show(query: "")
+            BifrostPanel.shared.toggle()
         case "bifrost.ui.reindex":
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
             worker.store.reindex()

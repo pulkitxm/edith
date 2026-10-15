@@ -177,7 +177,7 @@ public enum BifrostQuery {
     static func entryResult(
         _ entry: BifrostEntry, score: Int, argument: String = ""
     ) -> BifrostResult {
-        let subtitle = argument.isEmpty ? entry.subtitle : "\(entry.subtitle) , \(argument)"
+        let subtitle = argument.isEmpty ? entry.subtitle : "\(entry.subtitle) \u{2014} \(argument)"
         return BifrostResult(
             id: entry.id, kind: entry.kind, title: entry.title, subtitle: subtitle,
             symbolName: entry.symbolName, iconPath: entry.iconPath, action: entry.action,

@@ -214,7 +214,7 @@
       "sources": [
         {
           "path": "Extensions/emoji/Runtime.swift",
-          "sha256": "36babb24a0a1fca87853fd75d2c8ff1f0c9f6d696e08084b9e7efa8c48dc9162"
+          "sha256": "bf084eebb7b425246d6a1f39cc5540ef2693e94db0dea85e0265bb94b72b0f39"
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
@@ -636,7 +636,7 @@
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "c1336e48bd3f36ac47246292945c19ab50d8c1bea466835f487d564cadba5573"
+          "sha256": "2e89c8f6fa09ae80de0ff7d08193544efc6a3f030fd5c0e175e4fa54023b35b2"
         }
       ]
     },

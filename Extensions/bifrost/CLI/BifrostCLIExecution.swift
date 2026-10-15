@@ -14,7 +14,7 @@ import Foundation
     private static func bind<Value>(_ store: BifrostStore, operation: () async throws -> Value)
         async throws -> Value
     {
-        try await BifrostCLIEnvironment.$open.withValue({ BifrostPanel.shared.show(query: $0) }) {
+        try await BifrostCLIEnvironment.$open.withValue({ BifrostPanel.shared.toggle(query: $0) }) {
             try await BifrostCLIEnvironment.$reindex.withValue({ store.reindex() }) {
                 try await operation()
             }
