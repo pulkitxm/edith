@@ -342,9 +342,9 @@ test("release version commits and tags use the release client with source verifi
   expect(releaseStateScript).not.toContain("git reset --hard");
 });
 
-test("lightweight host previews leave the stable appcast and Homebrew channel unchanged", () => {
+test("host releases publish to the stable appcast and Homebrew channel", () => {
   for (const job of [version, dmg, publish])
-    expect(job.env.RELEASE_PRERELEASE).toBe("true");
+    expect(job.env.RELEASE_PRERELEASE).toBe("false");
   const checksum = publish.steps.find(
     (step) => step.name === "Update the rebuilt release checksum",
   );
