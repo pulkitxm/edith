@@ -31,7 +31,7 @@ test("portable planning uses Ubuntu while native checks and publication keep mac
 });
 
 test("downloaded Docs source and reference changes run independent package checks", () => {
-  for (const event of [workflow.on.pull_request, workflow.on.push]) {
+  for (const event of [workflow.on.pull_request]) {
     expect(event.paths).toContain("Packages/EdithDocsWorker/**");
     expect(event.paths).toContain("docs/cli/**");
     expect(event.paths).toContain("scripts/generate-cli-docs-bundle.mjs");
@@ -56,7 +56,7 @@ test("maintained terminal native inputs trigger selective extension checks", () 
     "scripts/extension-ghostty-native.mjs",
   ];
   for (const path of inputs) {
-    for (const event of [workflow.on.pull_request, workflow.on.push]) {
+    for (const event of [workflow.on.pull_request]) {
       expect(
         event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
       ).toBe(true);
@@ -67,7 +67,7 @@ test("maintained terminal native inputs trigger selective extension checks", () 
   }
 });
 
-test.each(["pull_request", "push"])(
+test.each(["pull_request"])(
   "%s paths cover every explicit maintained producer script",
   (event) => {
     const definitions = JSON.parse(
@@ -122,7 +122,7 @@ test("all extension releases reuse one signed host without Camera provisioning",
 
 test("release asset helper changes run the extension checks", () => {
   expect(workflow.on.pull_request.paths).toContain("scripts/release-asset-*");
-  expect(workflow.on.push.paths).toContain("scripts/release-asset-*");
+  expect(workflow.on.push).toBeUndefined();
 });
 
 test("extension builds consume independent fingerprints without a feature framework host", () => {
@@ -336,7 +336,7 @@ test("common frozen runtime changes rebuild all39 while Camera-only packaging st
     "scripts/build-camera-carrier.mjs",
     "scripts/build-camera-microphone.py",
   ];
-  for (const event of [workflow.on.pull_request, workflow.on.push]) {
+  for (const event of [workflow.on.pull_request]) {
     for (const path of [common, ...camera])
       expect(
         event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),

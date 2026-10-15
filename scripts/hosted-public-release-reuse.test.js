@@ -369,13 +369,14 @@ describe("Host-only reuse of an unchanged signed catalog publication", () => {
         "utf8",
       ),
     );
+    expect(actual.on.push).toBeUndefined();
     expect(() =>
       absentExtensionsPathRoute(
         actual,
         [source],
         ["scripts/publish-host-release.mjs"],
       ),
-    ).not.toThrow();
+    ).toThrow();
     for (const paths of [
       ["Extensions/owner/file.swift"],
       ["Extensions/owner/.hidden"],
