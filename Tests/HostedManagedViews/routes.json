@@ -412,7 +412,7 @@
       "sources": [
         {
           "path": "Extensions/plugins/Runtime.swift",
-          "sha256": "2dd37bcd50c17a722babd22ab667cf43a7a49fcf6d586e56f1b0116595dbe076"
+          "sha256": "f825fc0f869e1c56f4ed59909fb4c69fb46f86aff655a86163b0c00970acfd60"
         },
         {
           "path": "Extensions/plugins/SkillsModel.swift",
@@ -456,7 +456,7 @@
       "sources": [
         {
           "path": "Extensions/clipboard/Runtime.swift",
-          "sha256": "409e052b2478664e6644afb0ecc6fa8ab444d27e99d0e5f0035451b286c1e109"
+          "sha256": "bea0bd74f15f4d4e052f8a1464a0ef5f65b578c7577953ec1ab2487f0aa4d7b0"
         },
         {
           "path": "Extensions/clipboard/ClipboardPresentation.swift",
@@ -478,7 +478,7 @@
       "sources": [
         {
           "path": "Extensions/music/Runtime.swift",
-          "sha256": "f9ff3be08120ecdf648c6cb7781be28df4bb1fdc3c9629e9be1f1553afec55c1"
+          "sha256": "f95fe06d32d806ea64c1e5a2e7b19084d064be82ff72ba7fb8c04ee40e330dde"
         },
         {
           "path": "Extensions/music/UI/Runtime.swift",
@@ -522,7 +522,7 @@
       "sources": [
         {
           "path": "Extensions/latex/Runtime.swift",
-          "sha256": "853f80eedc03bf2796dcce5937acc26505036d8a448fa038f6a0d072061478f3"
+          "sha256": "9e377efc4d6c79d01e9771ff6b306c725e9c3096f03ee51eb3f84cb109af841e"
         },
         {
           "path": "Extensions/latex/LaTeXModel.swift",
@@ -544,7 +544,7 @@
       "sources": [
         {
           "path": "Extensions/companion/Runtime.swift",
-          "sha256": "fa270082e3641a5221afd76f10e348d5bf30c52c8954829f848b7ef00f842812"
+          "sha256": "f6fc11caa4fd332410c9d17446670217b73821793904d502afa4f7b4bd2da5bf"
         },
         {
           "path": "Extensions/companion/ViewModels/CompanionWorkspaceSession.swift",
@@ -588,7 +588,7 @@
       "sources": [
         {
           "path": "Extensions/studio/Runtime.swift",
-          "sha256": "dd0e685f348bc25088898f464eff00b8e5f2538b16b37720845039d9638fb326"
+          "sha256": "a7d78e5b7f6728da94e1c6e91d09756ee4a2dbdf8a92f8f59d033b5f87949660"
         },
         {
           "path": "Extensions/studio/UIBridge/StudioUIScene.swift",
@@ -716,7 +716,7 @@
       "sources": [
         {
           "path": "Extensions/downloads/Runtime.swift",
-          "sha256": "5e5ed50e9c10aca6c82841ae4fc049e000fd75a58f73c3f37237e1cd3ed048a2"
+          "sha256": "865367cf8e97f18c165c11150f4789d878bdd4bb304cdc63b43a3b6eaa00b8fb"
         },
         {
           "path": "Extensions/downloads/DownloadsUIBridge.swift",
@@ -738,7 +738,7 @@
       "sources": [
         {
           "path": "Extensions/seoAudit/Runtime.swift",
-          "sha256": "b95281f4aa7f71a1708ee6456e57f398d5898e5f7bc2f3622a4c2b704935c220"
+          "sha256": "413f52f34c3beb86db86fc261dd8965f19a0cab201ce62338f54ecb6b38e3887"
         },
         {
           "path": "Extensions/seoAudit/ViewModels/SEOAuditModel.swift",
@@ -782,7 +782,7 @@
       "sources": [
         {
           "path": "Extensions/codeStats/Runtime.swift",
-          "sha256": "38926e95b3aa76250ed0d26e060efaaf0a29f12eae92ab02a9b60239a9d05290"
+          "sha256": "0d7be6e2223700fb21e23c99b1d5aa6d74cd1124525adf5bc52ac06a61c2b9f3"
         },
         {
           "path": "Extensions/codeStats/CodeStatsUIBridge.swift",
