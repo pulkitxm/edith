@@ -141,6 +141,14 @@ grep -q "url=\"https://github.com/${REPO}/releases/download/${RELEASE_TAG}/Edith
 grep -q 'sparkle:edSignature=' dist/appcast/appcast.xml \
   || { echo "release blocked: the appcast is not signed" >&2; exit 1; }
 
+echo "==> recording the host release proof"
+[ -f local/minimal-host/build-metadata.json ] || make host
+rm -rf local/host-release-proof
+GITHUB_SHA="$BUILT_SHA" python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg \
+  dist/appcast/appcast.xml local/host-release-proof \
+  --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
+  --notarization skipped
+
 for plist in Resources/Info.plist Resources/HelperInfo.plist; do
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
@@ -171,9 +179,12 @@ pukbot release create --help
 pukbot release upload-asset --help
 
 export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD RELEASE_SHA256 RELEASE_PLISTS_DIR
+rm -rf dist/host-release-assets
 mkdir -p dist/host-release-assets
 cp Edith.dmg dist/host-release-assets/
 cp dist/appcast/appcast.xml dist/host-release-assets/
+cp local/host-release-proof/host-release-proof.json local/host-release-proof/build-metadata.json \
+  local/host-release-proof/toolchain-provenance.json dist/host-release-assets/
 GITHUB_REPOSITORY="$REPO" node scripts/publish-host-release.mjs --preflight dist/host-release-assets
 
 echo "==> committing and tagging the verified release"
