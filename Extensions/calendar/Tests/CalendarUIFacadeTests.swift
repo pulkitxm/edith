@@ -26,6 +26,51 @@ import Testing
         await facade.refreshAndWait()
         #expect(bridge.requests.count == 2 && !facade.authorized && facade.events.isEmpty)
     }
+    @Test func observeShowsTheCachedAgendaBeforeTheFreshListReturns() async throws {
+        let gate = CalendarFacadeReadGate()
+        let cached = CalendarEventPayload(
+            id: "cached", title: "Synthetic cached event", start: Date(),
+            end: Date().addingTimeInterval(600), isAllDay: false)
+        var operations: [String] = []
+        let facade = CalendarUIFacade(invoke: { operation, _ in
+            operations.append(operation)
+            if operation == "calendar.ui.list" { return await gate.wait() }
+            return try JSONEncoder().encode(
+                CalendarUISnapshot(
+                    authorized: true, blurEvents: false, days: 14, events: [cached]))
+        })
+        defer { facade.shutdown() }
+        let observing = Task { await facade.observe() }
+        await gate.entered()
+        #expect(operations == ["calendar.ui.metadata", "calendar.ui.list"])
+        #expect(facade.loaded && facade.events.map(\.id) == ["cached"])
+        gate.release(
+            try JSONEncoder().encode(
+                CalendarUISnapshot(authorized: true, blurEvents: false, days: 14, events: [])))
+        while !facade.events.isEmpty { await Task.yield() }
+        facade.shutdown()
+        await observing.value
+    }
+
+    @Test func anEmptyAuthorizedCacheKeepsTheSkeletonUntilTheFreshListReturns() async throws {
+        let gate = CalendarFacadeReadGate()
+        let facade = CalendarUIFacade(invoke: { operation, _ in
+            if operation == "calendar.ui.list" { return await gate.wait() }
+            return try JSONEncoder().encode(
+                CalendarUISnapshot(authorized: true, blurEvents: false, days: 14, events: []))
+        })
+        defer { facade.shutdown() }
+        let observing = Task { await facade.observe() }
+        await gate.entered()
+        #expect(!facade.loaded && facade.error == nil)
+        gate.release(
+            try JSONEncoder().encode(
+                CalendarUISnapshot(authorized: true, blurEvents: false, days: 14, events: [])))
+        while !facade.loaded { await Task.yield() }
+        facade.shutdown()
+        await observing.value
+    }
+
     @Test func aLateResponseCannotUndoNewerPrivacyOrPermissionState() async throws {
         let gate = CalendarFacadeReadGate()
         var reads = 0
@@ -157,7 +202,8 @@ import Testing
         let facade = CalendarUIFacade(invoke: { _, _ in
             try JSONEncoder().encode(
                 CalendarUISnapshot(
-                    authorized: false, blurEvents: false, days: 14, events: [event]))
+                    authorized: true, blurEvents: false,
+                    days: CalendarEventQuery.maximumDays + 1, events: [event]))
         })
         defer { facade.shutdown() }
         await facade.refreshAndWait()

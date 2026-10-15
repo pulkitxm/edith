@@ -15,13 +15,11 @@ public enum ExtensionCLICatalog {
         _ root: Command.Type, owner: String, payload: Data, streaming: Bool,
         timeout: Double = 120, destructive: Set<String> = destructiveNames
     ) throws -> Data {
-        guard payload == Data("{}".utf8),
-            var help = try JSONSerialization.jsonObject(with: Data(root._dumpHelp().utf8))
-                as? [String: Any],
-            let command = help["command"] as? [String: Any]
-        else { throw ExtensionPeerError.invalidRequest }
-        let tree = withoutHelp(command)
-        help["command"] = tree
+        guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+        let help = try parserHelp(root)
+        guard let tree = help["command"] as? [String: Any] else {
+            throw ExtensionPeerError.invalidRequest
+        }
         var commands: [[String: Any]] = []
         func append(_ node: [String: Any], prefix: [String]) throws {
             guard let name = node["commandName"] as? String, !name.isEmpty,
@@ -50,6 +48,18 @@ public enum ExtensionCLICatalog {
                 "version": 1, "owner": owner, "commands": commands, "settings": [],
                 "acceptsInput": false, "parserHelp": [help],
             ], options: [.sortedKeys])
+    }
+
+    public static func parserHelp<Command: ParsableCommand>(
+        _ root: Command.Type
+    ) throws -> [String: Any] {
+        guard
+            var help = try JSONSerialization.jsonObject(with: Data(root._dumpHelp().utf8))
+                as? [String: Any],
+            let command = help["command"] as? [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        help["command"] = withoutHelp(command)
+        return help
     }
 
     static func withoutHelp(_ node: [String: Any]) -> [String: Any] {

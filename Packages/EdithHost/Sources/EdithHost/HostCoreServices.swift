@@ -57,6 +57,7 @@ import SwiftUI
         }
     }
 
+    func killForQuit() { process?.killForQuit() }
     var online: Bool { process?.ready == true && process?.processIdentifier == snapshot?.pid }
     var activeTaskCount: Int { snapshot?.tasks.filter { $0.phase == .running }.count ?? 0 }
     var activityLabel: String {

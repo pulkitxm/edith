@@ -56,6 +56,52 @@ import Testing
         #expect(model.errorMessage != nil)
     }
 
+    @Test func remoteModelShowsStreamedInventoryBeforeOutdatedCheckFinishes() async throws {
+        let recorder = Requests()
+        recorder.holdOutdated = true
+        let owner = makeOwner(recorder)
+        let bridge = Bridge(owner: owner)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let model = HomebrewPageModel(engineClient: client)
+        model.activate(kind: .formula)
+        try await wait { model.loaded && model.packages.map(\.name) == ["synthetic-formula"] }
+        #expect(model.isBusy)
+        #expect(recorder.arguments.contains { $0.first == "outdated" })
+        recorder.holdOutdated = false
+        try await wait { !model.isBusy }
+        #expect(model.packages.map(\.name) == ["synthetic-formula"])
+        model.shutdown(); client.invalidate(); await owner.shutdownAndWait()
+    }
+
+    @Test func remoteModelServesPersistedListingBeforeRefreshCompletes() async throws {
+        let recorder = Requests()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = HomebrewListingStore(
+            fileURL: directory.appendingPathComponent("listing.json"))
+        let owner = makeOwner(recorder, store: store)
+        let cached = HomebrewPackage(
+            kind: .formula, name: "cached-formula", displayName: "cached-formula",
+            installedVersions: ["1"])
+        let seed = HomebrewListingSnapshot(
+            status: HomebrewStatus(available: true, executable: "/synthetic/brew", version: "x"),
+            packages: [.formula: [cached]])
+        try await store.save(seed)
+        recorder.holdOutdated = true
+        let bridge = Bridge(owner: owner)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let model = HomebrewPageModel(engineClient: client)
+        await model.loadCachedListing()
+        model.activate(kind: .formula)
+        try await wait { model.loaded && model.packages.map(\.name).contains("cached-formula") }
+        #expect(model.isBusy)
+        recorder.holdOutdated = false
+        try await wait { !model.isBusy }
+        #expect(model.packages.map(\.name) == ["synthetic-formula"])
+        model.shutdown(); client.invalidate(); await owner.shutdownAndWait()
+    }
+
     @Test func originalCLICancelCanInterruptAnActiveCLIInstall() async throws {
         let recorder = Requests(); recorder.hold = true
         let owner = makeOwner(recorder)
@@ -165,16 +211,21 @@ import Testing
         }
     }
 
-    private func makeOwner(_ recorder: Requests) -> HomebrewEngineCommands {
+    private func makeOwner(
+        _ recorder: Requests, store: HomebrewListingStore? = nil
+    ) -> HomebrewEngineCommands {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("listing.json")
-        recorder.directory = url.deletingLastPathComponent()
+        if store == nil { recorder.directory = url.deletingLastPathComponent() }
         return HomebrewEngineCommands(
             client: HomebrewClient(executableURL: URL(fileURLWithPath: "/synthetic/brew")) {
                 request, _ in
                 recorder.record(request.arguments)
                 if request.arguments.first == "install", recorder.hold {
                     try await Task.sleep(for: .seconds(30))
+                }
+                while request.arguments.first == "outdated", recorder.holdOutdated {
+                    try await Task.sleep(for: .milliseconds(10))
                 }
                 let output: String
                 switch request.arguments.first {
@@ -186,7 +237,7 @@ import Testing
                         "{\"formulae\":[{\"name\":\"synthetic-formula\",\"installed\":[{\"version\":\"1\"}],\"versions\":{\"stable\":\"1\"}}],\"casks\":[]}"
                 }
                 return CLICommandResult(terminationStatus: 0, output: output)
-            }, store: HomebrewListingStore(fileURL: url))
+            }, store: store ?? HomebrewListingStore(fileURL: url))
     }
 
     private func ownerCache(_ owner: HomebrewEngineCommands) async -> HomebrewListingSnapshot? {
@@ -208,6 +259,12 @@ import Testing
         private let lock = NSLock()
         private var values: [[String]] = []
         var hold = false
+        private let outdatedLock = NSLock()
+        private var outdatedHeld = false
+        var holdOutdated: Bool {
+            get { outdatedLock.withLock { outdatedHeld } }
+            set { outdatedLock.withLock { outdatedHeld = newValue } }
+        }
         var directory: URL?
         var arguments: [[String]] { lock.withLock { values } }
         func record(_ arguments: [String]) { lock.withLock { values.append(arguments) } }

@@ -346,12 +346,26 @@ public final class HostExtensionSessions {
     @discardableResult public func shutdown(reason: HostWorkerStopReason = .shutdown) async -> Bool
     {
         var completed = true
-        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
+        let ids = Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
             HostRemoteCarrierCheckIn.extensionIDs
-        ).union(pendingDisableIDs).union(pendingRecoveryIDs) {
-            do { try await stop(id: id, remember: false, reason: reason) } catch {
-                completed = false
-                failures.insert(id)
+        ).union(pendingDisableIDs).union(pendingRecoveryIDs)
+        if reason == .applicationQuit {
+            let stops = ids.map { id in
+                Task {
+                    do { try await stop(id: id, remember: false, reason: reason) } catch {
+                        failures.insert(id)
+                        return false
+                    }
+                    return true
+                }
+            }
+            for stop in stops where !(await stop.value) { completed = false }
+        } else {
+            for id in ids {
+                do { try await stop(id: id, remember: false, reason: reason) } catch {
+                    completed = false
+                    failures.insert(id)
+                }
             }
         }
         return completed && workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty

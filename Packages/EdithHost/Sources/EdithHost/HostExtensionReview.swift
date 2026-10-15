@@ -60,75 +60,76 @@ struct HostExtensionReview: View {
                 }
             }.padding(.horizontal, UIScale.pt(28)).padding(.vertical, UIScale.pt(18))
             Divider()
-            if let request = Self.settingsRequest(id: entry.id, marketplace: marketplace) {
-                HostExtensionContent(
-                    marketplace: marketplace, extensionID: request.extensionID,
-                    location: request.location, section: request.section,
-                    presenter: presenter, openMarketplace: done, navigation: navigation
-                )
-                .id(navigation?.delivery.id)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title)
-                            .font(.edithText(.callout))
-                        let sizes = HostMarketplacePackageSummary(
-                            candidate: reviewed ?? marketplace.installed[entry.id],
-                            downloadedVersions: marketplace.installedVersions[entry.id] ?? [])
-                        if let estimate = sizes.estimate {
-                            Text(estimate).font(.edithText(.callout))
-                        }
-                        if let downloaded = sizes.downloaded {
-                            Text(downloaded).font(.edithText(.caption)).foregroundStyle(.secondary)
-                        }
-                        if !(entry.requiredPermissions + entry.optionalPermissions).isEmpty {
-                            HostPermissionInfoButton(
-                                permissions: entry.requiredPermissions + entry.optionalPermissions)
-                        }
-                        if !installed, !pending {
-                            Text(
-                                "New downloads stay disabled until you choose Enable. Updates preserve your previous enabled state."
-                            )
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
-                            if reviewed == nil {
+            Group {
+                if let request = Self.settingsRequest(id: entry.id, marketplace: marketplace) {
+                    HostExtensionContent(
+                        marketplace: marketplace, extensionID: request.extensionID,
+                        location: request.location, section: request.section,
+                        presenter: presenter, openMarketplace: done, navigation: navigation
+                    )
+                    .id(navigation?.delivery.id)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                            Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title)
+                                .font(.edithText(.callout))
+                            let sizes = HostMarketplacePackageSummary(
+                                candidate: reviewed ?? marketplace.installed[entry.id],
+                                downloadedVersions: marketplace.installedVersions[entry.id] ?? [])
+                            if let estimate = sizes.estimate {
+                                Text(estimate).font(.edithText(.callout))
+                            }
+                            if let downloaded = sizes.downloaded {
+                                Text(downloaded).font(.edithText(.caption)).foregroundStyle(
+                                    .secondary)
+                            }
+                            if !(entry.requiredPermissions + entry.optionalPermissions).isEmpty {
+                                HostPermissionInfoButton(
+                                    permissions: entry.requiredPermissions
+                                        + entry.optionalPermissions)
+                            }
+                            if !installed, !pending {
+                                if reviewed == nil {
+                                    Text(
+                                        "Verified download information is unavailable. Refresh to review the package."
+                                    )
+                                    .font(.edithText(.callout))
+                                    Button("Refresh") { refresh() }.buttonStyle(.edith(.secondary))
+                                        .disabled(busy)
+                                } else {
+                                    Button("Download") { download() }
+                                        .buttonStyle(.edith(.primary)).disabled(busy)
+                                }
+                            } else if pending {
                                 Text(
-                                    "Verified download information is unavailable. Refresh to review the package."
+                                    "Cleanup is pending. Finish removal or retry disable in Extensions."
                                 )
                                 .font(.edithText(.callout))
-                                Button("Refresh") { refresh() }.buttonStyle(.edith(.secondary))
-                                    .disabled(busy)
+                            } else if HostExtensionSettingsPolicy.policy(for: entry.id) == .active {
+                                Text("Enable this extension to open its settings.").font(
+                                    .edithText(.callout))
+                            } else if let route = HostNavigationCatalog.route(extensionID: entry.id)
+                            {
+                                Text(
+                                    "Open \(HostNavigationCatalog.pages.first { $0.id == route.page }?.title ?? entry.title) from the sidebar to use this extension."
+                                )
+                                .font(.edithText(.callout))
                             } else {
-                                Button("Download reviewed package") { download() }
-                                    .buttonStyle(.edith(.primary)).disabled(busy)
+                                Text(
+                                    "This extension's controls are available from its menu or shortcut."
+                                )
+                                .font(.edithText(.callout))
                             }
-                        } else if pending {
-                            Text(
-                                "Cleanup is pending. Finish removal or retry disable in Extensions."
-                            )
-                            .font(.edithText(.callout))
-                        } else if HostExtensionSettingsPolicy.policy(for: entry.id) == .active {
-                            Text("Enable this extension to open its settings.").font(
-                                .edithText(.callout))
-                        } else if let route = HostNavigationCatalog.route(extensionID: entry.id) {
-                            Text(
-                                "Open \(HostNavigationCatalog.pages.first { $0.id == route.page }?.title ?? entry.title) from the sidebar to use this extension."
-                            )
-                            .font(.edithText(.callout))
-                        } else {
-                            Text(
-                                "This extension's controls are available from its menu or shortcut."
-                            )
-                            .font(.edithText(.callout))
-                        }
-                        if let notice {
-                            Text(notice).font(.edithText(.caption)).foregroundStyle(.orange)
-                        }
-                        if let error = marketplace.error {
-                            Text(error).font(.edithText(.caption)).foregroundStyle(.red)
-                        }
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(28))
+                            if let notice {
+                                Text(notice).font(.edithText(.caption)).foregroundStyle(.orange)
+                            }
+                            if let error = marketplace.error {
+                                Text(error).font(.edithText(.caption)).foregroundStyle(.red)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(28))
+                    }
                 }
-            }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             Divider()
             HStack {
                 if busy { LoadingIndicator().frame(width: UIScale.pt(16), height: UIScale.pt(16)) }
@@ -167,6 +168,8 @@ struct HostExtensionReview: View {
             if marketplace.available[entry.id] != reviewed {
                 self.reviewed = marketplace.available[entry.id]
                 notice = "The package changed. Review its version and size before downloading."
+            } else if marketplace.installed[entry.id] != nil {
+                await suites.select(entry, enabled: true)
             }
         }
     }

@@ -7,8 +7,36 @@ struct EmbeddedMusicUIFolderIntent: Codable, Equatable, Sendable {
 
 struct EmbeddedMusicUIQuery: Codable, Equatable, Sendable {
     var path = ""
-    var search = ""
     var cursor = 0
+}
+
+struct EmbeddedMusicUISearchRequest: Codable, Equatable, Sendable {
+    var path = ""
+    var search = ""
+    var skip = 0
+    var limit: Int?
+
+    func validate() throws {
+        guard search.utf8.count <= 4096, !search.contains("\0"), skip >= 0,
+            limit.map({ $0 > 0 }) ?? true
+        else { throw CocoaError(.validationMissingMandatoryProperty) }
+        try EmbeddedMusicUIAction(kind: .startFolder, path: path).validate()
+    }
+}
+
+struct EmbeddedMusicUIListing: Codable, Equatable, Sendable {
+    var folders: [EmbeddedMusicUIEntry]
+    var tracks: [EmbeddedMusicUIEntry]
+
+    func validate() throws {
+        guard folders.count <= 50_000, tracks.count <= 50_000 else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        for entry in folders + tracks {
+            try EmbeddedMusicUIAction(kind: .startTrack, path: entry.path).validate()
+            guard entry.url.isFileURL else { throw CocoaError(.validationMissingMandatoryProperty) }
+        }
+    }
 }
 
 struct EmbeddedMusicUIEntry: Codable, Equatable, Sendable {
@@ -28,11 +56,8 @@ struct EmbeddedMusicUIPlayback: Codable, Equatable, Sendable {
 
 struct EmbeddedMusicUIState: Codable, Sendable {
     var root: URL
-    var tracks: [EmbeddedMusicUIEntry]
     var folders: [EmbeddedMusicUIEntry]
     var folderTracks: [EmbeddedMusicUIEntry]
-    var searchTracks: [EmbeddedMusicUIEntry]
-    var searchFolders: [EmbeddedMusicUIEntry]
     var favourites: [EmbeddedMusicUIEntry]
     var playback: EmbeddedMusicUIPlayback
     var selected: String
@@ -56,7 +81,7 @@ struct EmbeddedMusicUIState: Codable, Sendable {
         guard root.isFileURL, numbers.allSatisfy({ $0.isFinite && $0 >= 0 }),
             (0...1).contains(playback.volume), (0...1).contains(spotify.volume),
             (0.5...8).contains(preferences.fadeLength),
-            tracks.count <= 50_000, folders.count <= 50_000, events.count <= 64,
+            folders.count <= 50_000, folderTracks.count <= 50_000, events.count <= 64,
             ["local", "spotify", "youtubeMusic"].contains(selected), cursor >= 0
         else { throw CocoaError(.validationMissingMandatoryProperty) }
         if let videoControl {
@@ -70,7 +95,7 @@ struct EmbeddedMusicUIState: Codable, Sendable {
             }
             try EmbeddedMusicUIAction(kind: .openMusic, path: folderIntent.path).validate()
         }
-        for entry in tracks + folders + folderTracks + searchTracks + searchFolders + favourites {
+        for entry in folders + folderTracks + favourites {
             try EmbeddedMusicUIAction(kind: .startTrack, path: entry.path).validate()
             guard entry.url.isFileURL else { throw CocoaError(.validationMissingMandatoryProperty) }
         }

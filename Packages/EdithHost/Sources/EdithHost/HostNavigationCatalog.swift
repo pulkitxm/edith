@@ -6,6 +6,7 @@ struct HostNavigationSection: Identifiable, Equatable {
     let title: String
     let symbol: String
     let extensionID: String?
+    var summary = ""
 }
 
 struct HostNavigationPage: Identifiable, Equatable {
@@ -18,6 +19,7 @@ struct HostNavigationPage: Identifiable, Equatable {
     var sections: [HostNavigationSection] = []
     var landing = false
     var detachable = true
+    var logoName: String? = nil
 }
 
 enum HostNavigationCatalog {
@@ -31,39 +33,38 @@ enum HostNavigationCatalog {
         return nil
     }
     static let settings: [HostNavigationSection] = [
-        .init(id: "general", title: "General", symbol: "gearshape", extensionID: nil),
-        .init(id: "surfaces", title: "Home & Notch", symbol: "rectangle.3.group", extensionID: nil),
+        .init(id: "general", title: "General", symbol: "gearshape", extensionID: nil, summary: "Appearance, window, and welcome tour"),
+        .init(id: "surfaces", title: "Home & Notch", symbol: "rectangle.3.group", extensionID: nil, summary: "Arrange widgets and build your own Home and Notch"),
         .init(
             id: "agentActivity", title: "Agent connections", symbol: "terminal",
-            extensionID: "herdr"),
-        .init(id: "permissions", title: "Permissions", symbol: "hand.raised", extensionID: nil),
+            extensionID: "herdr", summary: "Live provider activity and explicit permission approvals"),
+        .init(id: "permissions", title: "Permissions", symbol: "hand.raised", extensionID: nil, summary: "Privacy access used by enabled extensions"),
         .init(
             id: "agent", title: "Background agent", symbol: "bolt.horizontal.circle",
-            extensionID: nil),
-        .init(id: "jev", title: "Jev", symbol: "brain", extensionID: "jev"),
+            extensionID: nil, summary: "The headless process that collects in the background"),
+        .init(id: "jev", title: "Jev", symbol: "brain", extensionID: "jev", summary: "Fast typed decisions from TypeSafe's Jev model"),
         .init(
             id: "data", title: "Data & backup", symbol: "externaldrive.badge.icloud",
-            extensionID: nil),
-        .init(id: "storage", title: "Storage", symbol: "internaldrive", extensionID: nil),
-        .init(id: "shortcuts", title: "Shortcuts", symbol: "keyboard", extensionID: nil),
-        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: nil),
-        .init(id: "icloud", title: "iCloud", symbol: "icloud", extensionID: nil),
+            extensionID: nil, summary: "Where Edith keeps things, and what leaves this Mac"),
+        .init(id: "storage", title: "Storage", symbol: "internaldrive", extensionID: nil, summary: "Disk space used by Edith and its extensions"),
+        .init(id: "shortcuts", title: "Shortcuts", symbol: "keyboard", extensionID: nil, summary: "Global and application keyboard shortcuts"),
+        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: nil, summary: "Command line and terminal integration"),
+        .init(id: "icloud", title: "iCloud", symbol: "icloud", extensionID: nil, summary: "Backup and synchronization"),
         .init(
-            id: "updates", title: "Updates", symbol: "arrow.triangle.2.circlepath", extensionID: nil
-        ),
+            id: "updates", title: "Updates", symbol: "arrow.triangle.2.circlepath", extensionID: nil, summary: "Version and automatic update behavior"),
     ]
     static let maintenance: [HostNavigationSection] = [
         .init(
             id: "Updates", title: "Updates", symbol: "arrow.up.circle",
-            extensionID: "appMaintenance"),
-        .init(id: "Packages", title: "Packages", symbol: "shippingbox", extensionID: "homebrew"),
-        .init(id: "Remove", title: "Remove", symbol: "trash", extensionID: "appMaintenance"),
+            extensionID: "appMaintenance", summary: "Review and run available application updates."),
+        .init(id: "Packages", title: "Packages", symbol: "shippingbox", extensionID: "homebrew", summary: "Manage installed and discoverable Homebrew packages."),
+        .init(id: "Remove", title: "Remove", symbol: "trash", extensionID: "appMaintenance", summary: "Review applications and their related files before removal."),
         .init(
             id: "Cleaner", title: "Cleaner", symbol: "sparkles.rectangle.stack",
-            extensionID: "cleaner"),
+            extensionID: "cleaner", summary: "Find reclaimable space and remove it after review."),
         .init(
             id: "History", title: "History", symbol: "clock.arrow.circlepath",
-            extensionID: "appMaintenance"),
+            extensionID: "appMaintenance", summary: "Review completed maintenance operations."),
     ]
     static let pages: [HostNavigationPage] = [
         .init(id: "home", title: "Home", symbol: "house.fill"),
@@ -75,7 +76,7 @@ enum HostNavigationCatalog {
             parentID: "agents", extensionID: "usage"),
         .init(
             id: "herdr", title: "Sessions", symbol: "rectangle.split.3x1.fill", suite: "agents",
-            parentID: "agents", extensionID: "herdr"),
+            parentID: "agents", extensionID: "herdr", logoName: "herdr"),
         .init(
             id: "quinjet", title: "Review", symbol: "arrow.triangle.branch", suite: "agents",
             parentID: "agents", extensionID: "quinjet"),

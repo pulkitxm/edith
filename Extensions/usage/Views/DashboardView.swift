@@ -118,7 +118,7 @@ struct DashboardView: View {
         }
         .exportCardPresentation(item: $sharePresentation)
         .navigationTitle("Agent Usage")
-        .pageTask(id: refresh.updating, active: !refresh.updating) {
+        .pageTask(id: refresh.updating) {
             await model.load()
             syncCustomDates()
         }

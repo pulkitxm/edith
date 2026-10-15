@@ -69,7 +69,9 @@ public enum UsageNativeCollector {
                 }
                 if file.pathExtension.lowercased() == "json" {
                     let data = try UsageNativeFileIO.read(file)
-                    let object = try JSONSerialization.jsonObject(with: data)
+                    guard let object = try? JSONSerialization.jsonObject(with: data) else {
+                        continue
+                    }
                     let parser = UsageNativeParser(source: root.source)
                     let records = try parser.document(object, path: file, modified: modified)
                     let prefix =

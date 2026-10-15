@@ -68,6 +68,20 @@ import Testing
         }
     }
 
+    @Test func unreadableJSONReceiptDoesNotStopCollection() async throws {
+        try await fixture { home, data in
+            try write(
+                claude(id: "one", cwd: home.path),
+                home.appendingPathComponent(".claude/projects/mock/session.jsonl"))
+            try write(Data(), home.appendingPathComponent(".cursor/chats/mock/prompt_history.json"))
+            try write(
+                Data("{".utf8), home.appendingPathComponent(".cursor/chats/mock/partial.json"))
+            let document = try await collect(home, data)
+            try validate(document)
+            #expect(Set(document["sources"] as? [String] ?? []).contains("cli"))
+        }
+    }
+
     @Test func openCodeSQLiteProjectionMatchesFileAndDoesNotDuplicate() async throws {
         try await fixture { home, data in
             let root = home.appendingPathComponent(".local/share/opencode")
