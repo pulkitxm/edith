@@ -13,6 +13,9 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     private var controllers: [UUID: HostRemoteViewController] = [:]
     private var closing: [UUID: Task<Void, Never>] = [:]
     private var failedClosures = Set<UUID>()
+    private var parked: [(key: String, version: String, id: UUID, controller: NSViewController)] =
+        []
+    private let parkingCapacity = 8
     private(set) var cleanupFailed = false
 
     init(manager: HostRemoteSessionManager) {
@@ -112,7 +115,37 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         }
     }
 
+    func park(key: String, version: String, presentationID: UUID, controller: NSViewController) {
+        guard let remote = controllers[presentationID], remote === controller, !remote.detached,
+            remote.failure == nil
+        else {
+            endPresentation(id: presentationID)
+            return
+        }
+        remote.apply(compact: remote.state.compact, visible: false, width: remote.state.width)
+        for entry in parked where entry.key == key { endPresentation(id: entry.id) }
+        parked.removeAll { $0.key == key }
+        parked.append((key, version, presentationID, controller))
+        while parked.count > parkingCapacity { endPresentation(id: parked.removeFirst().id) }
+    }
+
+    func unpark(key: String, version: String) -> (
+        presentationID: UUID, controller: NSViewController
+    )? {
+        guard let index = parked.lastIndex(where: { $0.key == key }) else { return nil }
+        let entry = parked.remove(at: index)
+        guard entry.version == version, let remote = controllers[entry.id],
+            remote === entry.controller, !remote.detached, remote.failure == nil,
+            closing[entry.id] == nil
+        else {
+            endPresentation(id: entry.id)
+            return nil
+        }
+        return (entry.id, entry.controller)
+    }
+
     func endPresentation(id: UUID) {
+        parked.removeAll { $0.id == id }
         guard closing[id] == nil else { return }
         closing[id] = Task { [weak self] in
             guard let self else { return }
@@ -139,6 +172,7 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         for id in failedClosures { endPresentation(id: id) }
     }
     private func detach(extensionID: String) {
+        parked.removeAll { controllers[$0.id]?.request.extensionID == extensionID }
         let ids = controllers.values.filter { $0.request.extensionID == extensionID }
             .map { $0.request.presentationID }
         for id in ids { controllers.removeValue(forKey: id)?.detach() }

@@ -10,6 +10,21 @@ typealias HostExtensionContentRequest = EdithHostCore.HostExtensionContentReques
 @MainActor protocol HostExtensionContentPresenting: AnyObject {
     func controller(for request: HostExtensionContentRequest) async throws -> NSViewController
     func endPresentation(id: UUID)
+    func park(key: String, version: String, presentationID: UUID, controller: NSViewController)
+    func unpark(key: String, version: String) -> (
+        presentationID: UUID, controller: NSViewController
+    )?
+}
+
+extension HostExtensionContentPresenting {
+    func park(key: String, version: String, presentationID: UUID, controller: NSViewController) {
+        endPresentation(id: presentationID)
+    }
+    func unpark(key: String, version: String) -> (
+        presentationID: UUID, controller: NSViewController
+    )? {
+        nil
+    }
 }
 
 struct HostExtensionContent: View {
@@ -41,6 +56,11 @@ struct HostExtensionContent: View {
                 && !marketplace.pendingRemovalIDs.contains(extensionID)
                 && !marketplace.sessions.pendingDisableIDs.contains(extensionID))
     }
+    private var parkingKey: String? {
+        guard location == "main", surface == nil, navigation == nil else { return nil }
+        return extensionID + "\u{0}" + (section ?? "")
+    }
+    private var installedVersion: String { marketplace.installed[extensionID]?.version ?? "" }
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
@@ -49,6 +69,7 @@ struct HostExtensionContent: View {
             if let controller {
                 HostEmbeddedController(controller: controller, compact: compact, visible: visible)
                     .frame(height: contentHeight.map { CGFloat($0) })
+                    .id(ObjectIdentifier(controller))
             } else if !eligible {
                 ContentUnavailableView {
                     Label(title, systemImage: "puzzlepiece.extension")
@@ -94,6 +115,17 @@ struct HostExtensionContent: View {
             release = nil
             guard eligible, automaticActions, let presenter, !Task.isCancelled else { return }
             release = clear
+            if let parkingKey,
+                let parked = presenter.unpark(key: parkingKey, version: installedVersion)
+            {
+                presentationID = parked.presentationID
+                if let remote = parked.controller as? HostRemoteViewController {
+                    remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
+                    contentHeight = remote.contentHeight
+                }
+                controller = parked.controller
+                return
+            }
             let token = navigation?.delivery.id ?? UUID()
             presentationID = token
             do {
@@ -169,7 +201,14 @@ struct HostExtensionContent: View {
     }
     private func clear() {
         navigation?.delivery.reject()
-        presenter?.endPresentation(id: presentationID); controller = nil; error = nil
+        if let parkingKey, let controller, error == nil {
+            presenter?.park(
+                key: parkingKey, version: installedVersion, presentationID: presentationID,
+                controller: controller)
+        } else {
+            presenter?.endPresentation(id: presentationID)
+        }
+        controller = nil; error = nil
         contentHeight = nil; restartRequired = false
     }
 }
