@@ -121,19 +121,9 @@ public enum HostCLITransport {
 
     public static func invoke(_ request: HostCLIRequest, identity: HostIdentity) throws -> Data {
         try request.validate()
-        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard descriptor >= 0 else { throw HostCLIError.unavailable }
-        let connection = HostCLIConnection(descriptor)
+        let connection = try connect(identity: identity, timeout: request.timeout + 2)
         defer { connection.close() }
-        try connection.configure(timeout: request.timeout + 2)
-        var address = try address(socketPath(identity: identity))
-        let connected = withUnsafePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard connected == 0 else { throw HostCLIError.unavailable }
-        let peer = try HostCLIProcess.peer(descriptor)
+        let peer = try HostCLIProcess.peer(connection.descriptor)
         try connection.write(request.encoded(), limit: maximumRequest)
         let response = try HostCLIResponse.decoded(connection.read(limit: maximumFrame))
         guard HostCLIProcess.read(peer.pid) == peer else { throw HostCLIError.unavailable }
@@ -147,6 +137,58 @@ public enum HostCLITransport {
             (try? JSONSerialization.jsonObject(with: payload, options: .fragmentsAllowed)) != nil
         else { throw HostCLIError.rejected("Edith returned an invalid command result.") }
         return payload
+    }
+
+    static func connect(identity: HostIdentity, timeout: Double) throws -> HostCLIConnection {
+        if let connection = try attempt(identity: identity, timeout: timeout) {
+            return connection
+        }
+        guard launchHostApp() else { throw HostCLIError.unavailable }
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            usleep(200_000)
+            if let connection = try attempt(identity: identity, timeout: timeout) {
+                return connection
+            }
+        }
+        throw HostCLIError.unavailable
+    }
+
+    private static func attempt(identity: HostIdentity, timeout: Double) throws
+        -> HostCLIConnection?
+    {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw HostCLIError.unavailable }
+        let connection = HostCLIConnection(descriptor)
+        try connection.configure(timeout: timeout)
+        var address = try address(socketPath(identity: identity))
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        if connected == 0 { return connection }
+        let failure = errno
+        connection.close()
+        guard failure == ENOENT || failure == ECONNREFUSED else { throw HostCLIError.unavailable }
+        return nil
+    }
+
+    private static func launchHostApp() -> Bool {
+        guard let current = HostCLIProcess.read(getpid()) else { return false }
+        let directory = URL(fileURLWithPath: current.executable).deletingLastPathComponent()
+        let app = directory.deletingLastPathComponent().deletingLastPathComponent()
+        guard directory.lastPathComponent == "MacOS", app.pathExtension == "app" else {
+            return false
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-g", "-j", app.path]
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch { return false }
+        return process.terminationStatus == 0
     }
 }
 
