@@ -65,9 +65,9 @@ try {
   assert.equal(receipt.productionExecutableUnchangedProof, false);
   assert.equal(receipt.frozenHost, join(output, "frozen/Edith.app"));
   assert.deepEqual(Object.keys(receipt.overlays).sort(), [
-    "HostApplication.swift",
     "HostPermissions.swift",
     "HostRemoteContentPresenter.swift",
+    "HostRuntime.swift",
     "HostWorkspace.swift",
   ]);
   await prepareJourney({

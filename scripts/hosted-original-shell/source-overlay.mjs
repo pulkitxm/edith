@@ -12,8 +12,8 @@ function replaceExact(source, before, after) {
 export function originalShellFixtureOverlay(source) {
   let result = replaceExact(
     source,
-    "@State private var coreServices: HostCoreServices?",
-    "@State private var coreServices: HostGUIJourneyServices?",
+    "private(set) var coreServices: HostCoreServices?",
+    "private(set) var coreServices: HostGUIJourneyServices?",
   );
   result = replaceExact(
     result,

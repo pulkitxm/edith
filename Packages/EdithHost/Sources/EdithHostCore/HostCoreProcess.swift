@@ -33,6 +33,13 @@ import Foundation
         process.standardError = FileHandle.nullDevice
     }
 
+    public func killForQuit() {
+        guard process.isRunning, process.processIdentifier > 1 else { return }
+        let pid = process.processIdentifier
+        if getpgid(pid) == pid { kill(-pid, SIGKILL) }
+        kill(pid, SIGKILL)
+    }
+
     public func start() async throws -> HostCoreSnapshot {
         guard !launched else { throw HostWorkerError.rejected }
         launched = true
