@@ -590,6 +590,7 @@ final class DashboardModel {
         syncExtensionState()
         guard extensionEnabled else { return }
         if let client = remoteClient {
+            await restoreCachedHomeUsage()
             await contentLoad.perform(operation: { try await client.document() }) { parsed in
                 self.ingest(parsed)
             }
@@ -705,8 +706,14 @@ final class DashboardModel {
     }
 
     func restoreCachedHomeUsage() async {
-        guard remoteClient == nil, !homeUsage.hasDays else { return }
-        guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
+        guard !homeUsage.hasDays else { return }
+        let cached: HomeUsageSnapshot?
+        if let client = remoteClient {
+            cached = await client.cachedHomeUsage()
+        } else {
+            cached = await homeUsageStore.load()
+        }
+        guard let cached, cached.hasDays, !homeUsage.hasDays, !Task.isCancelled else { return }
         homeUsage = cached
         heatDetail = cached.heatDetail
     }
