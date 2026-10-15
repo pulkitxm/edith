@@ -148,6 +148,33 @@ extension UsageBackupSchedulingTests {
             #expect(await clock.pending == 0)
         }
 
+        @Test func scheduledExportLeavesLocalHistoryUntouched() async throws {
+            let fixture = try UsageBackupBatteryFixture()
+            defer { fixture.remove() }
+            let clock = UsageBackupBatterySleep()
+            try fixture.write("latest")
+            try fixture.write("first", period: "2026-08-24", toCloud: true)
+            let localURL = fixture.local.appendingPathComponent("usage.json")
+            let before = try Data(contentsOf: localURL)
+            var updates = 0
+            let observer = UsageEvents.observe(UsageEvents.usageUpdated) { updates += 1 }
+            defer { NotificationCenter.default.removeObserver(observer) }
+            let provider = fixture.provider(onBattery: { false }, clock: clock)
+            let cloudURL = fixture.cloud.appendingPathComponent("usage.json")
+            let cloudBefore = try Data(contentsOf: cloudURL)
+            provider.startScheduling(debounce: .zero)
+            await wait { (try? Data(contentsOf: cloudURL)) != cloudBefore }
+            await wait {
+                guard let data = try? await provider.execute("backup.status", payload: Data()),
+                    let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else { return false }
+                return value["scheduled"] as? Bool == false && value["running"] as? Bool == false
+            }
+            #expect(try Data(contentsOf: localURL) == before)
+            #expect(updates == 0)
+            await provider.shutdown()
+        }
+
         @Test func explicitSyncStillWorksOnBatteryAndClearsPausedAutomaticWork() async throws {
             let fixture = try UsageBackupBatteryFixture()
             defer { fixture.remove() }
@@ -231,7 +258,7 @@ private actor UsageBackupBatterySleep {
     var exportExists: Bool {
         FileManager.default.fileExists(atPath: cloud.appendingPathComponent("usage.json").path)
     }
-    func write(_ value: String) throws {
+    func write(_ value: String, period: String = "2026-08-25", toCloud: Bool = false) throws {
         let tokens = value == "first" ? 1 : 9
         let data = try JSONSerialization.data(withJSONObject: [
             "schemaVersion": 8, "generatedAt": "2026-08-25T00:00:00Z",
@@ -244,7 +271,7 @@ private actor UsageBackupBatterySleep {
             ],
             "daily": [
                 [
-                    "period": "2026-08-25",
+                    "period": period,
                     "bySource": [
                         "cli": [
                             [
@@ -263,7 +290,9 @@ private actor UsageBackupBatterySleep {
                 ]
             ],
         ])
-        try data.write(to: local.appendingPathComponent("usage.json"))
+        let directory = toCloud ? cloud : local
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: directory.appendingPathComponent("usage.json"))
     }
     func verifyLatest() throws {
         let localData = try Data(contentsOf: local.appendingPathComponent("usage.json"))
