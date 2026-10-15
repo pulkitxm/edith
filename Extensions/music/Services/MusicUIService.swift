@@ -64,6 +64,18 @@ import WebKit
         }
     }
 
+    private static func entry(_ track: Track) -> MusicUIEntry {
+        .init(path: track.relativePath, url: track.url)
+    }
+
+    private static func entry(_ folder: MusicFolder) -> MusicUIEntry {
+        .init(path: folder.relativePath, url: folder.url)
+    }
+
+    private static func listing(folders: [MusicFolder], tracks: [Track]) -> MusicUIListing {
+        .init(folders: folders.map(entry), tracks: tracks.map(entry))
+    }
+
     func execute(_ operation: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -99,33 +111,54 @@ import WebKit
                     version: version, footer: visible && !collapsed, sidebar: visible && collapsed))
         case "music.ui.level":
             return try JSONEncoder().encode(worker.player.readLevel())
+        case "music.ui.cachedListing":
+            let query = try JSONDecoder().decode(MusicUIQuery.self, from: payload)
+            try MusicUIAction(kind: .startFolder, path: query.path).validate()
+            let path = query.path
+            let cached = await Task.detached { MusicLibraryIndex.listing(path) }.value
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(
+                cached.map { Self.listing(folders: $0.folders, tracks: $0.tracks) })
+        case "music.ui.catalog":
+            guard payload.count <= 256 else { throw ExtensionPeerError.invalidRequest }
+            let catalog = await Task.detached { TrackMeta.scanMusicFolder() }.value
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(catalog.map(Self.entry))
+        case "music.ui.search":
+            let request = try JSONDecoder().decode(MusicUISearchRequest.self, from: payload)
+            try request.validate()
+            let page = await Task.detached {
+                TrackMeta.searchPage(
+                    under: request.path, query: request.search, skip: request.skip,
+                    limit: request.limit)
+            }.value
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(
+                Self.listing(folders: page.folders, tracks: page.tracks))
         case "music.ui.read":
             let query = try JSONDecoder().decode(MusicUIQuery.self, from: payload)
-            try MusicUIAction(kind: .startFolder, path: query.path, target: query.search).validate()
+            try MusicUIAction(kind: .startFolder, path: query.path).validate()
             let path = query.path
-            let search = query.search
             let library = await Task.detached {
                 let entries = TrackMeta.entries(in: path)
-                let results = TrackMeta.searchPage(under: path, query: search, skip: 0, limit: nil)
-                return (TrackMeta.scanMusicFolder(), entries, results, Favourites.tracks())
+                MusicLibraryIndex.storeListing(
+                    path, folders: entries.folders.map(\.relativePath),
+                    tracks: entries.tracks.map(\.relativePath))
+                return (entries, Favourites.tracks())
             }.value
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
             let player = worker.player
             let accounts = worker.accounts
             let spotify = accounts.spotify
-            func entry(_ track: Track) -> MusicUIEntry {
-                .init(path: track.relativePath, url: track.url)
-            }
-            func folder(_ folder: MusicFolder) -> MusicUIEntry {
-                .init(path: folder.relativePath, url: folder.url)
-            }
             let state = MusicUIState(
-                root: MusicStorage.musicDir, tracks: library.0.map(entry),
-                folders: library.1.folders.map(folder), folderTracks: library.1.tracks.map(entry),
-                searchTracks: library.2.tracks.map(entry),
-                searchFolders: library.2.folders.map(folder),
-                favourites: library.3.map(entry),
+                root: MusicStorage.musicDir,
+                folders: library.0.folders.map(Self.entry),
+                folderTracks: library.0.tracks.map(Self.entry),
+                favourites: library.1.map(Self.entry),
                 playback: .init(
                     path: video?.track.relativePath ?? player.current?.relativePath,
                     playing: video?.playing ?? player.isPlaying,

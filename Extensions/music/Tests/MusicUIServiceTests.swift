@@ -283,6 +283,36 @@ extension MusicExtensionTests {
             try state.validate()
             #expect(state.root.path == root.resolvingSymlinksInPath().path)
             #expect(state.folderTracks.map(\.path) == ["Mock Garden.wav"])
+            MusicLibraryIndex.activate(fileURL: root.appendingPathComponent("index.json"))
+            defer { MusicLibraryIndex.reset() }
+            let cachedMiss = try await service.execute(
+                "music.ui.cachedListing", payload: JSONEncoder().encode(MusicUIQuery()))
+            #expect(try JSONDecoder().decode(MusicUIListing?.self, from: cachedMiss) == nil)
+            _ = try await service.execute(
+                "music.ui.read", payload: JSONEncoder().encode(MusicUIQuery()))
+            let cachedHit = try await service.execute(
+                "music.ui.cachedListing", payload: JSONEncoder().encode(MusicUIQuery()))
+            #expect(
+                try JSONDecoder().decode(MusicUIListing?.self, from: cachedHit)?.tracks.map(\.path)
+                    == ["Mock Garden.wav"])
+            let found = try JSONDecoder().decode(
+                MusicUIListing.self,
+                from: await service.execute(
+                    "music.ui.search",
+                    payload: JSONEncoder().encode(
+                        MusicUISearchRequest(search: "garden", skip: 0, limit: 40))))
+            #expect(found.tracks.map(\.path) == ["Mock Garden.wav"])
+            let skipped = try JSONDecoder().decode(
+                MusicUIListing.self,
+                from: await service.execute(
+                    "music.ui.search",
+                    payload: JSONEncoder().encode(
+                        MusicUISearchRequest(search: "garden", skip: 1, limit: nil))))
+            #expect(skipped.tracks.isEmpty)
+            let catalog = try JSONDecoder().decode(
+                [MusicUIEntry].self,
+                from: await service.execute("music.ui.catalog", payload: Data("{}".utf8)))
+            #expect(catalog.map(\.path) == ["Mock Garden.wav"])
             _ = try await service.execute(
                 "music.ui.action",
                 payload: JSONEncoder().encode(

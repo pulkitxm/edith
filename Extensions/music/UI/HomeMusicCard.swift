@@ -51,10 +51,13 @@ struct EmbeddedHomeMusicCard: View {
                         Divider().opacity(0.4)
                     }
                     if remote.tracks.isEmpty {
-                        Text("Drop audio files into your music folder to play them here.")
-                            .font(.system(size: UIScale.pt(12.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
+                        Text(
+                            remote.catalogLoaded
+                                ? "Drop audio files into your music folder to play them here." : ""
+                        )
+                        .font(.system(size: UIScale.pt(12.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                     } else if presentation?.tile.shows("queue") != false {
                         ForEach(upNext) { track in
                             trackRow(track)
@@ -67,7 +70,10 @@ struct EmbeddedHomeMusicCard: View {
             }
         }
         .onAppear {
-            if automaticActionsEnabled { remote.start() }
+            if automaticActionsEnabled {
+                remote.start()
+                remote.loadCatalog()
+            }
         }
     }
 
