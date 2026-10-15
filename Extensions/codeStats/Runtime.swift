@@ -47,6 +47,10 @@ final class ExtensionRuntime: NSObject {
             guard let self, self.workflow != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command == "codeStats.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    CodeStatsCLICommand.self, owner: "codeStats", payload: payload, streaming: true)
+            }
             if command.hasPrefix("codeStats.cli.") {
                 if self.cliStreams == nil {
                     self.cliStreams = try ExtensionCLIStreams(owner: "codeStats")

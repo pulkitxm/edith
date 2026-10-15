@@ -3,6 +3,7 @@ import WorkerFixtureSupport
 #endif
 import AppKit
 import Carbon.HIToolbox
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
@@ -77,6 +78,13 @@ final class ExtensionRuntime: NSObject {
 
     private func executeCommand(_ command: String, payload: Data) async throws -> Data {
         guard let worker = self.worker else { throw ExtensionPeerError.unavailable }
+        if command == "clipboard.cli.catalog" {
+            return try ExtensionCLICatalog.data(
+                ClipboardCommand.self, owner: "clipboard", payload: payload, streaming: false)
+        }
+        if command == "clipboard.cli" {
+            return try await worker.execute("cli.execute", payload: payload)
+        }
         if command.hasPrefix("surface.") {
             guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)

@@ -122,6 +122,10 @@ final class ExtensionRuntime: NSObject {
                 }
             }
             #endif
+            if command == "plugins.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    SkillsCommand.self, owner: "plugins", payload: payload, streaming: true)
+            }
             if command.hasPrefix("plugins.cli.") {
                 if self.cliStreams == nil {
                     self.cliStreams = try ExtensionCLIStreams(owner: "plugins")

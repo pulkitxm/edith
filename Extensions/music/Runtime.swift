@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -79,6 +80,10 @@ final class ExtensionRuntime: NSObject {
             guard !self.inertFixture else { throw ExtensionPeerError.unavailable }
             if command.hasPrefix("backup."), let backup = self.backup {
                 return try await backup.execute(command, payload: payload)
+            }
+            if command == "music.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    MusicCommand.self, owner: "music", payload: payload, streaming: false)
             }
             if command.hasPrefix("music.ui.") || command == "music.cli" {
                 guard let service = self.uiService else { throw ExtensionPeerError.unavailable }

@@ -27,6 +27,10 @@ final class ExtensionRuntime: NSObject {
             guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command == "seoAudit.cli.catalog" {
+                return try ExtensionCLICatalog.data(
+                    SEOCommand.self, owner: "seoAudit", payload: payload, streaming: true)
+            }
             if command.hasPrefix("seoAudit.cli.") {
                 guard let service = self.service else { throw ExtensionPeerError.unavailable }
                 if self.cliStreams == nil {
