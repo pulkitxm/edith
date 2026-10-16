@@ -11,20 +11,23 @@ import Testing
             root: root, namespace: UUID().uuidString, owner: "presenter")
         let state = SurfacePrivacyState(channel: channel)
         defer { state.shutdown() }
-        #expect(!state.hides(.calendar))
+        #expect(!state.hides(.agents))
         try channel.publish([
-            "active": "1", "blurCalendar": "1", "blurMusic": "0", "blurMoney": "0",
+            "active": "1", "blurAgents": "1", "blurCalendar": "1", "blurMusic": "0",
+            "blurMoney": "0",
         ])
         state.refresh()
-        #expect(state.hides(.calendar))
+        #expect(state.hides(.agents))
+        #expect(!state.hides(.calendar))
         #expect(!state.hides(.music))
         #expect(!state.hides(.clocks) && !state.hides(.actions))
         #expect(!state.hides(.usage) && !state.hides(.limits))
+        #expect(!state.hides(.activity))
         #expect(state.hides(.ability("machines")))
         #expect(state.hides(.ability("virtualCamera")))
         try channel.clear("presenter")
         state.refresh()
-        #expect(!state.hides(.calendar) && !state.hides(.ability("machines")))
+        #expect(!state.hides(.agents) && !state.hides(.ability("machines")))
     }
 
     @Test func privacyObservationClearsOnDisableAndStopsAfterItsOwnerShutsDown() async throws {
@@ -34,12 +37,12 @@ import Testing
             root: root, namespace: UUID().uuidString, owner: "presenter")
         let state = SurfacePrivacyState(channel: channel)
         defer { state.shutdown() }
-        try channel.publish(["active": "1", "blurCalendar": "1"])
-        try await wait { state.hides(.calendar) }
+        try channel.publish(["active": "1", "blurAgents": "1"])
+        try await wait { state.hides(.agents) }
         try channel.clear("presenter")
-        try await wait { !state.hides(.calendar) }
+        try await wait { !state.hides(.agents) }
         state.shutdown()
-        try channel.publish(["active": "1", "blurCalendar": "1"])
+        try channel.publish(["active": "1", "blurAgents": "1"])
         try await Task.sleep(for: .milliseconds(30))
         #expect(state.values.isEmpty)
     }

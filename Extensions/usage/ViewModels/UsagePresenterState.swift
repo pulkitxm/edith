@@ -45,7 +45,7 @@ final class UsagePresenterState {
         return values["blurUsage"].map { $0 != "0" } ?? false
     }
     func hides(_ category: String) -> Bool {
-        active && (values["blur" + category].map { $0 != "0" } ?? true)
+        active && (values["blur" + category].map { $0 != "0" } ?? (category != "Usage"))
     }
     func shutdown() { privacy?.shutdown() }
 }
@@ -81,6 +81,6 @@ private struct UsageCategoryPrivacy: ViewModifier {
         } else {
             hidden = UsagePresenterState.shared.hides(key)
         }
-        return content.presenterBlur(hidden)
+        return content.presenterBlur(hidden).privacySensitive(hidden)
     }
 }
