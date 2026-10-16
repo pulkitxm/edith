@@ -41,6 +41,8 @@ final class HostNotchContainerController: NSViewController {
     private let nativeLayer = HostNotchPassthroughView()
     private let root = HostNotchFlippedView()
     private let mask = CAShapeLayer()
+    private var glide = HostNotchGlide.resolve(
+        reduceMotion: false, browser: false, expanded: false)
     var drop: (@MainActor (HostNotchDropInput, CGPoint) -> Bool)? {
         didSet { root.drop = drop }
     }
@@ -63,6 +65,7 @@ final class HostNotchContainerController: NSViewController {
         loadViewIfNeeded()
         if controller.parent !== self { addChild(controller) }
         let container = native ? nativeLayer : view
+        let alreadyPlaced = controller.view.superview === container
         if controller.view.superview !== container {
             if native {
                 container.addSubview(controller.view)
@@ -70,8 +73,30 @@ final class HostNotchContainerController: NSViewController {
                 container.addSubview(controller.view, positioned: .below, relativeTo: nativeLayer)
             }
         }
-        controller.view.frame = rectangle ?? view.bounds
-        controller.view.autoresizingMask = native ? [] : [.width, .height]
+        let target = rectangle ?? view.bounds
+        let slot = controller.view
+        if native { slot.wantsLayer = true }
+        let wasPlaced = native && alreadyPlaced && slot.frame != target
+        let layer = wasPlaced ? slot.layer : nil
+        let fromPosition = layer.map { $0.presentation()?.position ?? $0.position }
+        let fromBounds = layer.map { $0.presentation()?.bounds ?? $0.bounds }
+        slot.frame = target
+        slot.autoresizingMask = native ? [] : [.width, .height]
+        guard wasPlaced, let layer, let fromPosition, let fromBounds else { return }
+        layer.removeAnimation(forKey: "slotGlide")
+        let group = CAAnimationGroup()
+        let position = glide.animation(
+            keyPath: "position", from: NSValue(point: fromPosition),
+            to: NSValue(point: layer.position))
+        let bounds = glide.animation(
+            keyPath: "bounds", from: NSValue(rect: fromBounds), to: NSValue(rect: layer.bounds))
+        group.animations = [position, bounds]
+        group.duration = max(position.duration, bounds.duration)
+        layer.add(group, forKey: "slotGlide")
+    }
+
+    var slotAnimating: Bool {
+        nativeLayer.subviews.contains { $0.layer?.animation(forKey: "slotGlide") != nil }
     }
 
     func apply(_ state: HostNotchPanelState, size: CGSize) {
@@ -107,10 +132,10 @@ final class HostNotchContainerController: NSViewController {
         path.closeSubpath()
         let previous = mask.presentation()?.path ?? mask.path
         mask.path = path
+        glide = HostNotchGlide.resolve(
+            reduceMotion: HostNotchMotion.reduceMotion, browser: state.activeTab == "browser",
+            expanded: state.phase == .expanded)
         if let previous, previous != path {
-            let glide = HostNotchGlide.resolve(
-                reduceMotion: HostNotchMotion.reduceMotion, browser: state.activeTab == "browser",
-                expanded: state.phase == .expanded)
             mask.add(glide.animation(keyPath: "path", from: previous, to: path), forKey: "glide")
         }
     }
