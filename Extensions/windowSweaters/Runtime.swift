@@ -57,8 +57,7 @@ final class ExtensionRuntime: NSObject {
                     providerID: "windowSweaters", command: command, payload: payload,
                     snapshot: { _ in
                         WindowSweatersSurface.snapshot(
-                            active: SweaterState.isActive(),
-                            pattern: SweaterState.settings().pattern.rawValue)
+                            active: SweaterState.isActive())
                     },
                     perform: { action in
                         SweaterState.setActive(action == "enable")
@@ -162,11 +161,7 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("Window Sweaters")
-                        } content: {
-                            Form { WindowSweatersRows() }.formStyle(.grouped)
-                        }
+                        Form { WindowSweatersRows(presentation: presentation) }.edithForm()
                     }
                 })
         case "synchronize":
