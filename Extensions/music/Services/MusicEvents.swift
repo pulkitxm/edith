@@ -30,6 +30,17 @@ public enum MusicEvents {
         }
     }()
 
+    private static let distributedFolderBridge: NSObjectProtocol? = {
+        guard let namespace = distributedNamespace else { return nil }
+        return DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(namespace + ".musicFolderChanged"), object: nil,
+            queue: .main
+        ) { _ in
+            NotificationCenter.default.post(
+                name: Notification.Name(Name.musicFolderChanged), object: nil)
+        }
+    }()
+
     public static func post(_ name: String, userInfo: [String: Any]? = nil) {
         DispatchQueue.main.async {
             NotificationCenter.default.post(
@@ -46,6 +57,7 @@ public enum MusicEvents {
         _ name: String, handler: @escaping () -> Void
     ) -> NSObjectProtocol {
         if name == Name.requestMusicState { _ = distributedRequestBridge }
+        if name == Name.musicFolderChanged { _ = distributedFolderBridge }
         return NotificationCenter.default.addObserver(
             forName: Notification.Name(name), object: nil, queue: .main
         ) { _ in handler() }

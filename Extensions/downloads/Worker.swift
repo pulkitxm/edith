@@ -18,6 +18,15 @@ final class DownloadsWorker {
                 executable: { fixture ? nil : CLIToolEnvironment.executable(named: "yt-dlp") },
                 galleryExecutable: {
                     fixture ? nil : CLIToolEnvironment.executable(named: "gallery-dl")
+                },
+                completed: {
+                    guard !fixture,
+                        let namespace = ProcessInfo.processInfo.environment[
+                            "EDITH_APPLICATION_IDENTIFIER"]
+                    else { return }
+                    DistributedNotificationCenter.default().postNotificationName(
+                        Notification.Name(namespace + ".musicFolderChanged"), object: nil,
+                        userInfo: nil, deliverImmediately: true)
                 })
         downloader = YoutubeDownloader(client: DownloadsClient(worker: self.queue), start: start)
         let model = downloader
