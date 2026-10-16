@@ -73,11 +73,13 @@ struct KeyboardCleaningStatus: Codable, Equatable, Sendable {
         guard phase == .idle else { return phase == .arming ? .arming : .cleaning }
         guard hasInputMonitoring else {
             environment.requestInputMonitoring()
+            recheckSoon()
             message = "Allow Input Monitoring in System Settings, then try again."
             return .inputMonitoringRequired
         }
         guard hasAccessibility else {
             environment.requestAccessibility()
+            recheckSoon()
             message = "Allow Accessibility in System Settings, then try again."
             return .accessibilityRequired
         }
@@ -91,6 +93,14 @@ struct KeyboardCleaningStatus: Codable, Equatable, Sendable {
         }
         armTimer = environment.schedule(1) { [weak self] in self?.armTick() }
         return .arming
+    }
+
+    private func recheckSoon() {
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard let self, !self.stopped else { return }
+            self.refreshPermissions()
+        }
     }
 
     func stopCleaning() {

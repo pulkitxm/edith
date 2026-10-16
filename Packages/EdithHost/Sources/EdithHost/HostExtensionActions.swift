@@ -16,6 +16,7 @@ enum HostExtensionSettingsPolicy: Equatable {
         case "jev": .init(section: "jev", policy: .active)
         case "usage": .init(section: "usage", policy: .active)
         case "music": .init(section: "music", policy: .active)
+        case "system": .init(section: "extension", policy: .active)
         default: nil
         }
     }

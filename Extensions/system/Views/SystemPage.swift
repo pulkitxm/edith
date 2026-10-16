@@ -45,8 +45,15 @@ struct SystemPage: View {
         } message: {
             Text("The app will close. Unsaved changes will prompt you first.")
         }
+        .onDisappear { model.setScrolling(false) }
         .pageRefresh(interval: { .seconds(2) }, cancel: { model.loading.cancel() }) {
             if !model.scrolling { await model.refresh() }
+        }
+        .pageTask {
+            while !Task.isCancelled {
+                await model.refreshPresentation()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
         }
     }
 
@@ -69,6 +76,9 @@ struct SystemPage: View {
                 } message: {
                     Text("Finder and Edith stay open. Apps with unsaved changes will ask first.")
                 }
+            },
+            accessory: {
+                SearchField(placeholder: "Filter app, bundle identifier or PID", text: $model.query)
             })
     }
 
@@ -78,7 +88,8 @@ struct SystemPage: View {
             Image(systemName: presentation.symbol)
             Text(status.message)
                 .font(.system(size: UIScale.pt(12), weight: .medium))
-                .blur(radius: hidesRunningApps ? 12 : 0)
+                .presenterBlur(hidesRunningApps)
+                .privacySensitive(hidesRunningApps)
                 .accessibilityHidden(hidesRunningApps)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
@@ -171,23 +182,27 @@ struct SystemPage: View {
     }
 
     private var appList: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        let apps = model.visibleApps
+        return VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
-            if model.apps.isEmpty {
-                Text("No user applications are running.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, UIScale.pt(24))
+            if apps.isEmpty {
+                Text(
+                    model.query.isEmpty
+                        ? "No user applications are running." : "No apps match this search."
+                )
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, UIScale.pt(24))
             }
             LazyVStack(spacing: UIScale.pt(0)) {
-                ForEach(model.apps) { app in
+                ForEach(apps) { app in
                     SystemAppRow(
                         app: app, dark: dark, canQuit: model.canQuit(app),
                         onQuit: { pendingQuit = app }, hidesName: hidesRunningApps
                     )
-                    if app.id != model.apps.last?.id {
+                    if app.id != apps.last?.id {
                         Divider().opacity(0.3)
                     }
                 }
@@ -270,10 +285,11 @@ struct SystemAppRow: View {
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 }
             }
-            .opacity(hidesName ? 0 : 1)
+            .presenterCover(hidesName, dark: dark)
             .accessibilityHidden(hidesName)
             Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
-                .blur(radius: hidesName ? 12 : 0)
+                .presenterBlur(hidesName)
+                .privacySensitive(hidesName)
                 .accessibilityHidden(hidesName)
             Spacer()
             Text(SystemPage.cpuLabel(app.cpuPercent))
@@ -305,5 +321,39 @@ struct SystemAppRow: View {
                 .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
         )
         .onHover { hovering = $0 }
+    }
+}
+
+struct SystemSettings: View {
+    let clean: @MainActor () async -> Void
+    @State private var started = false
+    @State private var reset: Task<Void, Never>?
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    Text("Keyboard cleaning")
+                    InfoDot(
+                        "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                    )
+                    Spacer()
+                    if started {
+                        Text("Locked - check the overlay").settingsCaption()
+                    }
+                    Button("Clean now") {
+                        Task { await clean() }
+                        started = true
+                        reset?.cancel()
+                        reset = Task {
+                            try? await Task.sleep(for: .seconds(4))
+                            if !Task.isCancelled { started = false }
+                        }
+                    }
+                }
+            }
+        }
+        .edithForm()
+        .onDisappear { reset?.cancel() }
     }
 }

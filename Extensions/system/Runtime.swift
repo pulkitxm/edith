@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: RunningAppsModel?
     private var uiPresentation: SystemPresentationState?
     private var uiClient: ExtensionEngineClient?
+    private var uiSettings = false
     private var presentation: SystemPresentationState?
     private var cleaning: KeyboardCleaning?
     private let operations: RunningAppOperationCenter = {
@@ -49,15 +50,7 @@ final class ExtensionRuntime: NSObject {
                             _ = try cleaning.execute("system." + action, payload: Data())
                             return
                         }
-                        guard
-                            let app = self.operations.list().first(where: {
-                                "activate:" + $0.pid.description == action
-                            }), let running = NSRunningApplication(processIdentifier: app.pid),
-                            running.bundleIdentifier == app.bundleID
-                        else { throw ExtensionPeerError.invalidRequest }
-                        guard running.activate() else {
-                            throw ExtensionPeerError.rejected("The app could not open.")
-                        }
+                        throw ExtensionPeerError.invalidRequest
                     })
             }
             if command == "system.cli.catalog" { return try SystemCLICatalog.data() }
@@ -72,6 +65,12 @@ final class ExtensionRuntime: NSObject {
                 else { throw ExtensionPeerError.invalidRequest }
                 await model.refresh()
                 return try JSONEncoder().encode(model.snapshot(presentation: presentation))
+            case "system.presentation":
+                guard payload == Data("{}".utf8), let presentation = self.presentation else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                return try JSONEncoder().encode(
+                    SystemPresentationReply(hideApps: presentation.hideApps))
             case "system.apps.sort":
                 let sort = try JSONDecoder().decode(SystemAppsSort.self, from: payload)
                 guard let key = AppSortKey(rawValue: sort.sortKey) else {
@@ -160,6 +159,7 @@ final class ExtensionRuntime: NSObject {
             stopUI()
             let presentation = SystemPresentationState(channel: nil)
             uiClient = client
+            uiSettings = input["location"] as? String == "settings"
             uiPresentation = presentation
             uiModel = RunningAppsModel(
                 engineClient: client, presentation: presentation, defaults: defaults)
@@ -167,6 +167,12 @@ final class ExtensionRuntime: NSObject {
         case "view":
             guard let model = uiModel, let presentation = uiPresentation else {
                 return ["ok": false] as NSDictionary
+            }
+            if uiSettings, let client = uiClient {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        SystemSettings { _ = try? await client.invoke("system.cleanKeys") }
+                    })
             }
             return NSHostingController(
                 rootView: ExtensionPageHost { SystemPage(model: model, presentation: presentation) }

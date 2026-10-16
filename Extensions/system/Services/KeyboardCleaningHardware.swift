@@ -21,14 +21,26 @@ extension KeyboardCleaningEnvironment {
         let hardware = KeyboardCleaningHardware()
         return .init(
             permissions: { (CGPreflightListenEventAccess(), AXIsProcessTrusted()) },
-            requestInputMonitoring: { _ = CGRequestListenEventAccess() },
+            requestInputMonitoring: {
+                _ = CGRequestListenEventAccess()
+                openPrivacyPane("Privacy_ListenEvent")
+            },
             requestAccessibility: {
                 _ = AXIsProcessTrustedWithOptions(
                     ["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+                openPrivacyPane("Privacy_Accessibility")
             }, installTap: { hardware.installTap() }, removeTap: { hardware.removeTap() },
             ensureTap: { hardware.ensureTap() }, showOverlays: { hardware.showOverlays($0) },
             hideOverlays: { hardware.hideOverlays() }, schedule: schedule)
     }
+}
+
+@MainActor private func openPrivacyPane(_ anchor: String) {
+    guard
+        let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?" + anchor)
+    else { return }
+    NSWorkspace.shared.open(url)
 }
 
 @MainActor final class KeyboardCleaningHardware {

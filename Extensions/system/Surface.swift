@@ -11,11 +11,7 @@ enum SystemSurface {
             : apps.prefix(100).map {
                 .init(
                     $0.pid.description, title: String($0.name.prefix(1024)),
-                    detail: String(($0.bundleID ?? "").prefix(4096)),
-                    value: $0.active ? "Frontmost" : "Running", icon: "app",
-                    actions: [
-                        .init("activate:" + $0.pid.description, "Open", "arrow.up.forward.app")
-                    ])
+                    value: $0.active ? "Active" : "", icon: "app")
             }
         return .init(
             providerID: "system", metrics: [.init("apps", "Running apps", apps.count.description)],
@@ -26,6 +22,6 @@ enum SystemSurface {
                         $0.phase == .idle ? "cleanKeys" : "stopCleaning",
                         $0.phase == .idle ? "Clean keys" : "Done cleaning", "keyboard")
                 ]
-            } ?? [], message: cleaning?.message)
+            } ?? [])
     }
 }

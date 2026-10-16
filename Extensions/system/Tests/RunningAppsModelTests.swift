@@ -24,6 +24,27 @@ import EdithExtensionUI
     static let music = RunningAppSnapshot(
         pid: 3, name: "Music", bundleID: "com.apple.Music", active: false)
 
+    @Test func queryFiltersByNameBundleIdentifierAndProcessID() async {
+        let model = makeModel(
+            operations: RunningAppOperationCenter(snapshot: { [Self.finder, Self.safari] }))
+        await model.refresh()
+        model.query = "  safari "
+        #expect(model.visibleApps.map(\.pid) == [2])
+        model.query = "com.apple.finder"
+        #expect(model.visibleApps.map(\.pid) == [1])
+        model.query = "2"
+        #expect(model.visibleApps.map(\.pid) == [2])
+        model.query = "nothing"
+        #expect(model.visibleApps.isEmpty)
+        model.shutdown()
+    }
+
+    @Test func resolutionErrorsReadAsPlainSentences() {
+        #expect(
+            RunningAppResolutionError.notFound("Safari").localizedDescription
+                == "Safari is no longer running. Refresh the list and try again.")
+    }
+
     @Test func protectedAppPlanFailureIsObservable() {
         let model = makeModel(
             operations: RunningAppOperationCenter(snapshot: { [Self.finder] }))

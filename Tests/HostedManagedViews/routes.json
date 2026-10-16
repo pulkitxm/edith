@@ -302,11 +302,11 @@
       "sources": [
         {
           "path": "Extensions/system/Runtime.swift",
-          "sha256": "d28d68283976a2ef9b052bcd4761774c46050a7bc35177efff3d9accb25a436d"
+          "sha256": "9d1db328af7fe98b4af0b1160f5af24d4faf25e44696463109fe00c0492e47c3"
         },
         {
           "path": "Extensions/system/ViewModels/RunningAppsModel.swift",
-          "sha256": "1847d958e8524c3e9de6869de6ab527511d6faebba8bc181b9406ce257bff9a1"
+          "sha256": "63f8cf7fefb0b5a257b0991e30cd893b7f8673d4b0648d74fbd710b03d42e18e"
         }
       ]
     },

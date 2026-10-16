@@ -60,10 +60,21 @@ public enum RunningAppSelection: Equatable, Sendable {
     case all
 }
 
-public enum RunningAppResolutionError: Error, Equatable, Sendable {
+public enum RunningAppResolutionError: LocalizedError, Equatable, Sendable {
     case notFound(String)
     case ambiguous(String, [String])
     case protected(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .notFound(let query):
+            "\(query) is no longer running. Refresh the list and try again."
+        case .ambiguous(let query, let matches):
+            "\(query) matches \(matches.joined(separator: ", ")). Choose one app and try again."
+        case .protected(let name):
+            "\(name) stays open because Edith protects essential apps."
+        }
+    }
 }
 
 public struct RunningAppQuitPlan: Equatable, Sendable {

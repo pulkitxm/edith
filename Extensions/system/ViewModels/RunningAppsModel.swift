@@ -81,6 +81,17 @@ final class RunningAppsModel {
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
     private(set) var actionStatus: RunningAppActionStatus?
+    var query = ""
+    var visibleApps: [RunningAppRow] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty
+            ? apps
+            : apps.filter {
+                $0.name.localizedCaseInsensitiveContains(query)
+                    || $0.bundleID?.localizedCaseInsensitiveContains(query) == true
+                    || String($0.pid).contains(query)
+            }
+    }
     let loading = ContentLoad()
     var loaded: Bool { loading.hasContent }
     var refreshing: Bool { loading.isRunning }
@@ -90,6 +101,8 @@ final class RunningAppsModel {
     private var presentation: SystemPresentationState?
     private var remoteTasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
+    private var sortEpoch = 0
+    private var sortsInFlight = 0
     private var refreshTasks: [UUID: Task<Void, Never>] = [:]
     private var resourceBaseline: RunningAppResourceBaseline?
     private let operations: RunningAppOperationCenter
@@ -138,10 +151,6 @@ final class RunningAppsModel {
                     pid: $0.pid, name: $0.name, bundleID: $0.bundleID, active: false,
                     cpuPercent: $0.cpuPercent, memoryMB: $0.memoryMB)
             },
-            icons: Dictionary(
-                uniqueKeysWithValues: apps.compactMap { row in
-                    row.icon?.tiffRepresentation.map { (String(row.pid), $0) }
-                }),
             sortKey: sortKey.rawValue, ascending: ascending, hideApps: presentation.hideApps)
     }
 
@@ -161,7 +170,13 @@ final class RunningAppsModel {
         if let engineClient {
             let sortKey = sortKey.rawValue
             let ascending = ascending
+            sortEpoch += 1
+            sortsInFlight += 1
             launchRemote {
+                defer {
+                    self.sortsInFlight -= 1
+                    self.sortEpoch += 1
+                }
                 let payload = try JSONEncoder().encode(
                     SystemAppsSort(sortKey: sortKey, ascending: ascending))
                 _ = try await engineClient.invoke("system.apps.sort", payload: payload)
@@ -210,21 +225,21 @@ final class RunningAppsModel {
     private func refreshOwned() async {
         guard !stopped else { return }
         if let engineClient {
+            let epoch = sortEpoch
+            let known = Set(apps.filter { $0.icon != nil }.map(\.pid))
             await loading.perform(operation: {
                 let data = try await engineClient.invoke("system.apps.snapshot")
-                return try JSONDecoder().decode(SystemAppsSnapshot.self, from: data)
-            }) { snapshot in
+                let snapshot = try JSONDecoder().decode(SystemAppsSnapshot.self, from: data)
+                return (snapshot, Self.icons(for: snapshot.apps.filter { !known.contains($0.pid) }))
+            }) { measured in
                 guard !stopped else { return }
-                sortKey = AppSortKey(rawValue: snapshot.sortKey) ?? .cpu
-                ascending = snapshot.ascending
+                let snapshot = measured.0
+                if sortsInFlight == 0, epoch == sortEpoch {
+                    sortKey = AppSortKey(rawValue: snapshot.sortKey) ?? .cpu
+                    ascending = snapshot.ascending
+                }
                 presentation?.apply(hideApps: snapshot.hideApps)
-                publish(
-                    snapshot.apps,
-                    icons: snapshot.icons.reduce(into: [:]) { result, pair in
-                        if let pid = Int32(pair.key), let image = NSImage(data: pair.value) {
-                            result[pid] = image
-                        }
-                    })
+                publish(snapshot.apps, icons: measured.1)
             }
             return
         }
@@ -359,6 +374,15 @@ final class RunningAppsModel {
                 actionStatus = .planningFailed(error.localizedDescription)
             }
         }
+    }
+
+    func refreshPresentation() async {
+        guard let engineClient, !stopped else { return }
+        guard let data = try? await engineClient.invoke("system.presentation"),
+            let state = try? JSONDecoder().decode(SystemPresentationReply.self, from: data),
+            !stopped
+        else { return }
+        presentation?.apply(hideApps: state.hideApps)
     }
 
     func clearActionStatus() {
