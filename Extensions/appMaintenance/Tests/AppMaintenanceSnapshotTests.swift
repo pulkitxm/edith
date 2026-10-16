@@ -168,14 +168,15 @@ import EdithExtensionSupport
         let first = try decoder.decode(
             AppMaintenanceUISnapshot.self,
             from: try await AppMaintenanceUICommands.execute(
-                "maintenance.ui.snapshot", payload: Data("{}".utf8), model: model))
+                "maintenance.ui.snapshot", payload: Data("{\"scope\":\"all\"}".utf8),
+                model: model))
         #expect(first.phase == .ready)
         #expect(first.applications.map(\.name) == ["Example"])
         #expect(first.updates.map(\.id) == [Self.storeItem.id])
 
         let action = AppMaintenanceUIAction(
             operation: "refresh", value: nil, item: nil, enabled: false, integer: nil,
-            number: 86_400, previewToken: model.previewToken)
+            number: 86_400, previewToken: model.previewToken, scope: .all)
         let refreshed = try decoder.decode(
             AppMaintenanceUISnapshot.self,
             from: try await AppMaintenanceUICommands.execute(
@@ -219,7 +220,7 @@ import EdithExtensionSupport
         let answered = AnsweredFlag()
         let request = Task { @MainActor in
             let data = try await AppMaintenanceUICommands.execute(
-                "maintenance.ui.snapshot", payload: Data("{\"iconRevision\":-1}".utf8),
+                "maintenance.ui.snapshot", payload: Data("{\"scope\":\"all\"}".utf8),
                 model: model)
             answered.raise()
             return data
@@ -229,14 +230,13 @@ import EdithExtensionSupport
         #expect(reply.phase == .ready && reply.checkingUpdates)
         #expect(reply.applications.map(\.name) == ["Example"])
         #expect(reply.updates.map(\.id) == [Self.storeItem.id])
-        #expect(reply.icons != nil)
-
-        let unchanged = try decoder.decode(
+        let light = try decoder.decode(
             AppMaintenanceUISnapshot.self,
             from: try await AppMaintenanceUICommands.execute(
-                "maintenance.ui.snapshot",
-                payload: Data("{\"iconRevision\":\(reply.iconRevision)}".utf8), model: model))
-        #expect(unchanged.icons == nil)
+                "maintenance.ui.snapshot", payload: Data("{}".utf8), model: model))
+        #expect(light.scope == .updates)
+        #expect(light.applications.isEmpty)
+        #expect(light.updates.map(\.id) == [Self.storeItem.id])
         gate.open()
         #expect(await Self.wait { !model.checkingUpdates })
         await model.shutdown()
@@ -265,6 +265,7 @@ import EdithExtensionSupport
         let memory = AppMaintenanceUIMemory()
 
         let first = AppMaintenanceModel(engineClient: client, memory: memory)
+        first.scope = .all
         #expect(first.phase == .loading && !first.loading.hasContent)
         await first.refreshRemote()
         #expect(first.phase == .ready && first.applications.map(\.name) == ["Example"])

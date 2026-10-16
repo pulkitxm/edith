@@ -137,7 +137,6 @@ final class ExtensionRuntime: NSObject {
                 }
                 Task { [weak model] in
                     await model?.restoreCachedSnapshot()
-                    model?.warmIcons()
                 }
             }
         case "configureUI":

@@ -59,12 +59,10 @@ final class AppMaintenanceModel {
     var focusedUpdateID: String?
     var lastUpdateRefresh: Date?
     var checkingUpdates = false
-    private var remoteIcons: [String: Data] = [:]
-    @ObservationIgnored private var renderedIcons: [String: Data] = [:]
-    @ObservationIgnored private var iconWarmup: Task<Void, Never>?
-    @ObservationIgnored private var remoteIconRevision = -1
     @ObservationIgnored private var memory: AppMaintenanceUIMemory?
-    private(set) var iconRevision = 0
+    @ObservationIgnored private var remoteToken = UUID()
+    @ObservationIgnored private var releaseNotes: [String: String] = [:]
+    @ObservationIgnored var scope = AppMaintenanceUIScope.updates
     private var engineClient: ExtensionEngineClient?
     private var remoteTask: Task<Void, Never>?
     private var remoteRevision = 0
@@ -156,44 +154,7 @@ final class AppMaintenanceModel {
                 + [installPlan?.sourceApplication.url.path].compactMap { $0 })
     }
     func icon(for path: String) -> NSImage {
-        if engineClient != nil {
-            return remoteIcons[path].flatMap(NSImage.init(data:)) ?? NSImage(
-                named: NSImage.applicationIconName) ?? NSImage()
-        }
-        return NSWorkspace.shared.icon(forFile: path)
-    }
-    private func snapshotIcons() -> [String: Data] {
-        var result: [String: Data] = [:]
-        for path in visiblePaths.sorted().prefix(256) {
-            if let cached = renderedIcons[path], !cached.isEmpty { result[path] = cached }
-        }
-        return result
-    }
-
-    func warmIcons() {
-        guard iconWarmup == nil, !stopped, !suspending else { return }
-        iconWarmup = Task { [weak self] in
-            while let self, !stopped, !suspending, !Task.isCancelled {
-                let missing = visiblePaths.sorted().prefix(256).filter { renderedIcons[$0] == nil }
-                guard !missing.isEmpty else { break }
-                for path in missing.prefix(8) {
-                    renderedIcons[path] = Self.renderIcon(path) ?? Data()
-                }
-                iconRevision += 1
-                await Task.yield()
-            }
-            self?.iconWarmup = nil
-        }
-    }
-
-    private static func renderIcon(_ path: String) -> Data? {
-        let original = NSWorkspace.shared.icon(forFile: path)
-        let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
-            original.draw(in: rect); return true
-        }
-        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff)
-        else { return nil }
-        return bitmap.representation(using: .png, properties: [:])
+        NSWorkspace.shared.icon(forFile: path)
     }
 
     func reveal(_ url: URL) {
@@ -201,17 +162,28 @@ final class AppMaintenanceModel {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func uiSnapshot(knownIconRevision: Int? = nil) -> AppMaintenanceUISnapshot {
-        warmIcons()
-        let icons = knownIconRevision == iconRevision ? nil : snapshotIcons()
+    func uiSnapshot(
+        scope: AppMaintenanceUIScope = .updates, focus: String? = nil
+    ) -> AppMaintenanceUISnapshot {
+        let includesUpdates = scope == .updates || scope == .all
+        let includesApplications = scope == .removal || scope == .all
+        let includesHistory = scope == .history || scope == .all
+        let carriedNotes = Set([focus, updates.first?.id].compactMap { $0 })
         return .init(
-            preferences: preferences, icons: icons, iconRevision: iconRevision,
-            applications: applications,
+            scope: scope, preferences: preferences,
+            applications: includesApplications ? applications : [],
             previewToken: previewToken,
             selectedApplicationID: selectedApplicationID,
-            plan: plan, selectedItemIDs: selectedItemIDs, phase: phase, errorMessage: errorMessage,
+            plan: includesApplications ? plan : nil,
+            selectedItemIDs: selectedItemIDs, phase: phase, errorMessage: errorMessage,
             resultMessage: resultMessage,
-            installPlan: installPlan, updates: updates, updateHistory: updateHistory,
+            installPlan: installPlan,
+            updates: includesUpdates
+                ? updates.map {
+                    scope == .all || carriedNotes.contains($0.id) ? $0 : $0.withoutNotes()
+                }
+                : [],
+            updateHistory: includesHistory ? updateHistory : [],
             selectedUpdateIDs: selectedUpdateIDs,
             focusedUpdateID: focusedUpdateID, lastUpdateRefresh: lastUpdateRefresh,
             checkingUpdates: checkingUpdates)
@@ -257,7 +229,8 @@ final class AppMaintenanceModel {
         do {
             let data = try await engineClient.invoke(
                 "maintenance.ui.snapshot",
-                payload: JSONEncoder().encode(["iconRevision": remoteIconRevision]))
+                payload: JSONEncoder().encode(
+                    AppMaintenanceUISnapshotRequest(scope: scope, focus: focusedUpdateID)))
             guard !stopped, !suspending, !Task.isCancelled, revision == remoteRevision else {
                 return
             }
@@ -269,43 +242,44 @@ final class AppMaintenanceModel {
 
     private func applyRemote(_ value: AppMaintenanceUISnapshot) {
         preferences = value.preferences
-        if let icons = value.icons {
-            remoteIcons = icons
-            remoteIconRevision = value.iconRevision
-        }
         applyingRemote = true
         defer { applyingRemote = false }
-        applications = value.applications; selectedApplicationID = value.selectedApplicationID;
-        plan = value.plan
-        selectedItemIDs = value.selectedItemIDs; phase = value.phase;
-        errorMessage = value.errorMessage; resultMessage = value.resultMessage
-        installPlan = value.installPlan; updates = value.updates;
-        updateHistory = value.updateHistory
-        selectedUpdateIDs = value.selectedUpdateIDs; lastUpdateRefresh = value.lastUpdateRefresh;
-        if focusedUpdateID == nil || !value.updates.contains(where: { $0.id == focusedUpdateID }) {
-            focusedUpdateID = value.focusedUpdateID ?? value.updates.first?.id
+        let all = value.scope == .all
+        if all || value.scope == .removal {
+            applications = value.applications
+            selectedApplicationID = value.selectedApplicationID
+            plan = value.plan
+            selectedItemIDs = value.selectedItemIDs
         }
+        phase = value.phase
+        errorMessage = value.errorMessage; resultMessage = value.resultMessage
+        installPlan = value.installPlan
+        if all || value.scope == .history { updateHistory = value.updateHistory }
+        if all || value.scope == .updates {
+            for update in value.updates {
+                if let notes = update.releaseNotes { releaseNotes[update.id] = notes }
+            }
+            updates = value.updates.map { $0.withNotes(releaseNotes[$0.id]) }
+            selectedUpdateIDs = value.selectedUpdateIDs
+            if focusedUpdateID == nil
+                || !value.updates.contains(where: { $0.id == focusedUpdateID })
+            {
+                focusedUpdateID = value.focusedUpdateID ?? value.updates.first?.id
+            }
+        }
+        lastUpdateRefresh = value.lastUpdateRefresh
         checkingUpdates = value.checkingUpdates
         previewToken = value.previewToken
+        remoteToken = value.previewToken
         if value.phase == .loading {
             if !loading.isRunning { _ = loading.begin() }
-        } else if let error = value.errorMessage, value.applications.isEmpty {
+        } else if let error = value.errorMessage, applications.isEmpty, updates.isEmpty {
             loading.fail(loading.begin(), message: error)
         } else {
             loading.setContent()
         }
         if let memory, value.phase == .ready {
-            memory.snapshot = AppMaintenanceUISnapshot(
-                preferences: value.preferences, icons: remoteIcons,
-                iconRevision: remoteIconRevision, applications: value.applications,
-                previewToken: value.previewToken,
-                selectedApplicationID: value.selectedApplicationID, plan: value.plan,
-                selectedItemIDs: value.selectedItemIDs, phase: value.phase,
-                errorMessage: value.errorMessage, resultMessage: value.resultMessage,
-                installPlan: value.installPlan, updates: value.updates,
-                updateHistory: value.updateHistory, selectedUpdateIDs: value.selectedUpdateIDs,
-                focusedUpdateID: value.focusedUpdateID, lastUpdateRefresh: value.lastUpdateRefresh,
-                checkingUpdates: value.checkingUpdates)
+            memory.snapshot = uiSnapshot(scope: .all)
         }
     }
 
@@ -318,7 +292,8 @@ final class AppMaintenanceModel {
         let revision = remoteRevision
         let request = AppMaintenanceUIAction(
             operation: operation, value: value, item: item, enabled: enabled, integer: integer,
-            number: number, previewToken: previewToken)
+            number: number, previewToken: remoteToken, scope: scope,
+            focus: focusedUpdateID)
         remoteTask = track { [self] in
             defer { if revision == remoteRevision { remoteTask = nil } }
             do {
@@ -340,7 +315,8 @@ final class AppMaintenanceModel {
         if engineClient != nil, !stopped, !suspending {
             sendRemote("refresh", enabled: automatic, number: interval); return
         }
-        guard !stopped, !suspending, !mutationInProgress, !checkingUpdates || operation == nil
+        guard !stopped, !suspending, phase == .ready || phase == .loading,
+            !checkingUpdates || operation == nil
         else { return }
         cancelOperation()
         let generation = loading.begin()
@@ -445,8 +421,6 @@ final class AppMaintenanceModel {
         reuseCachedBrew = brewFresh
         let scanned = await inventory(brewFresh ? brewCache : nil)
         guard !stopped, !suspending, loading.isCurrent(generation) else { return }
-        renderedIcons.removeAll()
-        iconRevision += 1
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready
@@ -522,6 +496,11 @@ final class AppMaintenanceModel {
 
     func setUpdateSelected(_ selected: Bool, item: AppUpdateItem) {
         if engineClient != nil, !stopped, !suspending {
+            if selected {
+                selectedUpdateIDs.insert(item.id)
+            } else {
+                selectedUpdateIDs.remove(item.id)
+            }
             sendRemote("updateSelection", value: item.id, enabled: selected); return
         }
         guard !stopped, !suspending else { return }
@@ -675,6 +654,7 @@ final class AppMaintenanceModel {
 
     func setSelected(_ selected: Bool, item: AppMaintenanceItem) {
         if engineClient != nil, !stopped, !suspending {
+            if selected { selectedItemIDs.insert(item.id) } else { selectedItemIDs.remove(item.id) }
             sendRemote("selection", value: item.id, enabled: selected); return
         }
         guard !stopped, !suspending else { return }
@@ -776,9 +756,9 @@ final class AppMaintenanceModel {
                 let result = try await AppMaintenanceDiskImageInstaller.install(
                     plan: installPlan, replaceExisting: replaceExisting,
                     moveImageToTrash: moveImageToTrash)
-                if result.ejected { self.installPlan = nil }
+                self.installPlan = nil
                 guard !stopped, !suspending, !Task.isCancelled else { return }
-                applications = await inventory(nil)
+                applications = await inventory(brewCache)
                 guard !stopped, !suspending, !Task.isCancelled else { return }
                 let cleanup: String
                 if !result.ejected {
@@ -791,6 +771,7 @@ final class AppMaintenanceModel {
                 resultMessage = "Installed \(result.applicationURL.lastPathComponent).\(cleanup)"
                 phase = .ready
             } catch {
+                self.installPlan = nil
                 guard !stopped, !suspending, !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
                 phase = .ready
@@ -805,6 +786,15 @@ final class AppMaintenanceModel {
             trackCleanup { await AppMaintenanceDiskImageInstaller.cancel(plan: installPlan) }
         }
         releaseSecurityScopedAccess()
+    }
+
+    func cancelDiscovery() {
+        guard checkingUpdates || phase == .loading, !mutationInProgress else { return }
+        if engineClient != nil, !stopped, !suspending { sendRemote("cancelDiscovery"); return }
+        loading.cancel()
+        cancelOperation()
+        checkingUpdates = false
+        phase = .ready
     }
 
     func cancel() {
@@ -882,7 +872,6 @@ final class AppMaintenanceModel {
         suspending = true
         stopBackgroundDiscovery()
         loading.cancel()
-        iconWarmup?.cancel()
         remoteRevision += 1
         preferencesTask?.cancel()
         remoteTask?.cancel()
@@ -892,7 +881,6 @@ final class AppMaintenanceModel {
     func cancelAndWait() async {
         cancelPendingCommands()
         await backgroundDiscovery?.value
-        await iconWarmup?.value
         while let task = ownedTasks.values.first { await task.value }
     }
 
