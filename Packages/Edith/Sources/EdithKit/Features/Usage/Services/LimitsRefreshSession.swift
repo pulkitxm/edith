@@ -6,13 +6,16 @@ public actor LimitsRefreshSession {
         case cached(LimitsTopicSnapshot)
     }
 
-    public static let shared = LimitsRefreshSession()
+    public static let shared = LimitsRefreshSession(persistAccountCache: true)
+    let accountCollector: ClaudeAccountLimitsCollector
     private var collecting = false
     private var retryNotBefore: [LimitProvider: Date] = [:]
     private var latest: LimitsTopicSnapshot?
     private var followers: [CheckedContinuation<Decision, Never>] = []
 
-    public init() {}
+    public init(persistAccountCache: Bool = false) {
+        accountCollector = ClaudeAccountLimitsCollector(persistCache: persistAccountCache)
+    }
 
     var followerCount: Int { followers.count }
 
@@ -37,7 +40,8 @@ public actor LimitsRefreshSession {
             return .cached(
                 LimitsTopicSnapshot(
                     refreshedAt: latest.refreshedAt, providers: paused,
-                    failure: paused.compactMap(\.error).first))
+                    failure: paused.compactMap(\.error).first,
+                    claudeAccounts: latest.claudeAccounts))
         }
         collecting = true
         return .collect(paused)

@@ -1691,6 +1691,32 @@ private struct ExtensionPermissionSheet: View {
     }
 }
 
+private struct ClaudeQuotaAccountSelectionRow: View {
+    @AppStorage(MenuBarLimits.accountSelectionKey, store: SharedDefaults.store) private
+        var selectedID = ""
+    @State private var accounts: [ClaudeAccountLimits] = []
+
+    var body: some View {
+        Group {
+            if !accounts.isEmpty {
+                Picker("Menu bar account", selection: $selectedID) {
+                    Text("First account").tag("")
+                    ForEach(accounts) { Text($0.name).tag($0.id.uuidString) }
+                }
+                .presenterCover(.usage)
+            }
+        }
+        .pageTask {
+            for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
+            {
+                guard !Task.isCancelled else { return }
+                accounts = snapshot.claudeAccounts
+            }
+        }
+        .onChange(of: selectedID) { IPC.post(IPC.Name.settingsChanged) }
+    }
+}
+
 private struct ClaudeStatusLineRow: View {
     @State private var connected: Bool?
     @State private var failure: String?
@@ -1828,6 +1854,7 @@ private struct UsageRows: View {
                 )
                 if claudeEnabled {
                     ClaudeStatusLineRow()
+                    ClaudeQuotaAccountSelectionRow()
                 }
                 Toggle(
                     "Codex limits",

@@ -25,9 +25,39 @@ public enum SurfaceCoreProjection {
         let providers = snapshot.providers.filter {
             tile.sourceIDs?.contains($0.provider.rawValue) ?? true
         }
+        let accounts = snapshot.claudeAccounts.filter { account in
+            tile.sourceIDs.map { selected in
+                selected.contains("claude")
+                    || selected.contains("claude-account:" + account.id.uuidString)
+            } ?? true
+        }
+        let inputs =
+            providers.filter { $0.provider != .claude || snapshot.claudeAccounts.isEmpty }
+            .map { ($0.provider.rawValue, $0.provider.label, $0) }
+            + accounts.map { ("claude-account:" + $0.id.uuidString, $0.name, $0.limits) }
         var rows: [SurfaceDataRow] = []
         var remaining: [Int] = []
-        for provider in providers {
+        for (source, label, provider) in inputs {
+            let isAccount = source.hasPrefix("claude-account:")
+            if accounts.count > 2, isAccount {
+                let session = SurfaceQuotaValue(provider.session, now: now)
+                let week = SurfaceQuotaValue(provider.week, now: now)
+                let quotas = [session, week].compactMap(\.remaining)
+                remaining.append(contentsOf: quotas)
+                let details: [SurfaceRowDetail] =
+                    provider.error.map { [.init("errors", $0)] }
+                    ?? [
+                        .init("session", "5h: " + session.text),
+                        .init("weekly", "7d: " + week.text),
+                    ]
+                rows.append(
+                    .init(
+                        source, source: source, title: label,
+                        value: quotas.min().map { "\($0)% left" } ?? "Unavailable", icon: "gauge",
+                        progress: [session.fraction, week.fraction].compactMap { $0 }.max(),
+                        field: "weekly", details: details))
+                continue
+            }
             let windows: [(String, String, LimitWindow?)] = [
                 (
                     "session", provider.provider == .cursor ? "Cursor models" : "Session (5h)",
@@ -42,7 +72,8 @@ public enum SurfaceCoreProjection {
                 ),
                 ("additional", "Additional models", provider.fable),
             ]
-            for (field, title, window) in windows where window != nil || field == "weekly" {
+            for (field, title, window) in windows
+            where window != nil || field == "weekly" || (isAccount && field == "session") {
                 let quota = SurfaceQuotaValue(window, now: now)
                 if let capacity = quota.remaining { remaining.append(capacity) }
                 var details: [SurfaceRowDetail] = []
@@ -61,9 +92,9 @@ public enum SurfaceCoreProjection {
                 if let error = provider.error { details.append(.init("errors", error)) }
                 rows.append(
                     .init(
-                        provider.provider.rawValue + ":" + field,
-                        source: provider.provider.rawValue,
-                        title: provider.provider.label + " · " + title, value: quota.text,
+                        source + ":" + field,
+                        source: source,
+                        title: label + " · " + title, value: quota.text,
                         icon: quota.expired
                             ? "clock.badge.exclamationmark"
                             : quota.percent == nil
@@ -71,21 +102,37 @@ public enum SurfaceCoreProjection {
                         progress: quota.fraction, field: field, details: details))
             }
         }
+        var metrics: [SurfaceMetric] = [
+            .init("providers", "Providers", "\(Set(inputs.map { $0.2.provider }).count)"),
+            .init(
+                "remaining", "Lowest remaining",
+                remaining.min().map { "\($0)%" } ?? "Unavailable"),
+        ]
+        if !accounts.isEmpty {
+            metrics.insert(.init("accounts", "Claude accounts", "\(accounts.count)"), at: 1)
+        }
+        let ambient = snapshot.providers.filter {
+            $0.provider != .claude || snapshot.claudeAccounts.isEmpty
+        }
+        let accountSources: [SurfaceSourceChoice] =
+            snapshot.claudeAccounts.isEmpty
+            ? []
+            : [.init("claude", "Claude accounts")]
+                + snapshot.claudeAccounts.map {
+                    .init("claude-account:" + $0.id.uuidString, $0.name)
+                }
         return .init(
-            metrics: [
-                .init("providers", "Providers", "\(providers.count)"),
-                .init(
-                    "remaining", "Lowest remaining",
-                    remaining.min().map { "\($0)%" } ?? "Unavailable"),
-            ],
-            rows: rows,
+            metrics: metrics,
+            rows: Array(rows.prefix(64)),
             actions: [.init("Open Agent Usage", "arrow.up.right", .navigate("dashboard"))],
             message: snapshot.failure
-                ?? (providers.isEmpty
+                ?? (inputs.isEmpty
                     ? "No providers match this widget. Connect a provider in Agent Usage or change the selection."
                     : nil),
             updatedAt: snapshot.refreshedAt,
-            sources: snapshot.providers.map { .init($0.provider.rawValue, $0.provider.label) })
+            sources: Array(
+                (ambient.map { .init($0.provider.rawValue, $0.provider.label) } + accountSources)
+                    .prefix(16)))
     }
     public static func codeStats(_ report: CodeStatsReport?, tile: SurfaceTile)
         -> SurfaceExtensionSnapshot

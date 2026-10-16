@@ -22,6 +22,7 @@ struct RateLimitsDialsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.windowVisible) private var windowVisible
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.compactLayout) private var compact
 
     @State private var providers: [LimitProvider] = []
     @State private var reloadJob: Task<Void, Never>?
@@ -41,7 +42,10 @@ struct RateLimitsDialsView: View {
             await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
                 latest in
                 latestProviders = latest
-                let found = LimitProvider.allCases.filter { latest[$0] != nil }
+                let hasAccounts = latestLimits?.claudeAccounts.isEmpty == false
+                let found = LimitProvider.allCases.filter {
+                    latest[$0] != nil || ($0 == .claude && hasAccounts)
+                }
                 providers = found
                 let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
                 let provider = found.contains(saved) ? saved : found.first ?? saved
@@ -73,7 +77,10 @@ struct RateLimitsDialsView: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
-            if showsJumpLink {
+            if selected == .claude, let accounts = latestLimits?.claudeAccounts, !accounts.isEmpty {
+                ClaudeAccountLimitsView(accounts: accounts, compact: compact)
+                    .presenterCover(.usage)
+            } else if showsJumpLink {
                 providerOverview
             } else {
                 HStack(spacing: UIScale.pt(24)) {
