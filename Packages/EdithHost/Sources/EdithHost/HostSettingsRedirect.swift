@@ -4,7 +4,6 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HostSettingsRedirect: View {
-    @Environment(\.openWindow) private var openWindow
     var body: some View {
         Color.clear.frame(width: UIScale.pt(1), height: UIScale.pt(1)).onAppear {
             SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
@@ -13,7 +12,7 @@ struct HostSettingsRedirect: View {
                 where window.identifier?.rawValue.contains("Settings") == true
                     || window.title == "Edith Settings"
                 { window.close() }
-                openWindow(id: "main")
+                (NSApp.delegate as? HostApplicationDelegate)?.showMainWindow()
             }
         }
     }

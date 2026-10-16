@@ -67,6 +67,15 @@ import SwiftUI
         return activeTaskCount > 0 ? "\(activeTaskCount) active" : "Idle"
     }
 
+    var sidebarSummary: String {
+        if failure != nil { return "Unavailable" }
+        if starting { return "Starting" }
+        guard online else { return HostLoginItem.registration.title }
+        let jobs = snapshot?.agent?.jobs ?? []
+        let live = jobs.filter { $0.subscribers > 0 }.count
+        return "\(jobs.count) jobs · \(live) live · \(String(format: "%.1f", cpuPercent))% CPU"
+    }
+
     func start() async {
         guard !starting, process == nil else { return }
         starting = true
@@ -192,7 +201,8 @@ import SwiftUI
 
     func copyLogCommand() {
         let value =
-            "/usr/bin/log show --last 10m --predicate 'subsystem == \"\(identity.identifier)\"'"
+            "log show --style compact --last 1h --predicate 'subsystem == "
+            + "\"\(identity.identifier)\"'"
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
     }
@@ -491,6 +501,9 @@ import SwiftUI
         let tooling = HostToolingCLI(
             home: FileManager.default.homeDirectoryForCurrentUser,
             executable: launcher, path: [])
+        if !identity.development {
+            Task.detached(priority: .utility) { tooling.installMissingLinks() }
+        }
         _ = tooling.refreshExistingCompletions(
             enabled: defaults.object(forKey: "completionsAutoRefresh") as? Bool ?? true)
     }
