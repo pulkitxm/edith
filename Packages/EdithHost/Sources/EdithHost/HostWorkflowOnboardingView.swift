@@ -9,22 +9,32 @@ struct HostWorkflowOnboardingView: View {
     @Environment(\.compactLayout) private var compact
     @State private var permissions = HostPermissions()
     @State private var permissionTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             PageSectionHeader(title, subtitle: detail)
-            switch model.stage {
-            case .workflows: workflowChoices
-            case .review: selectionReview
-            case .installing: installProgress
-            case .finished: finished
+            ZStack(alignment: .topLeading) {
+                stageContent
+                    .id(model.stage)
+                    .transition(
+                        Motion.transition(
+                            .asymmetric(
+                                insertion: .move(edge: model.advancing ? .trailing : .leading)
+                                    .combined(with: .opacity),
+                                removal: .move(edge: model.advancing ? .leading : .trailing)
+                                    .combined(with: .opacity)),
+                            reduceMotion: reduceMotion, preferCrossFade: false))
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .clipped()
             if let failure = model.failure {
                 Text(failure).font(.edithText(.callout)).foregroundStyle(.orange).textSelection(
                     .enabled)
             }
         }
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: model.stage)
         .padding(UIScale.pt(20))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
@@ -35,6 +45,15 @@ struct HostWorkflowOnboardingView: View {
         }
         .onDisappear {
             permissionTask?.cancel(); permissionTask = nil; model.cancel()
+        }
+    }
+
+    @ViewBuilder private var stageContent: some View {
+        switch model.stage {
+        case .workflows: workflowChoices
+        case .review: selectionReview
+        case .installing: installProgress
+        case .finished: finished
         }
     }
 
