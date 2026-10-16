@@ -105,7 +105,14 @@ final class HostNotchContainerController: NSViewController {
             to: CGPoint(x: rect.maxX, y: rect.minY),
             control: CGPoint(x: rect.maxX - top, y: rect.minY))
         path.closeSubpath()
+        let previous = mask.presentation()?.path ?? mask.path
         mask.path = path
+        if let previous, previous != path {
+            let glide = HostNotchGlide.resolve(
+                reduceMotion: HostNotchMotion.reduceMotion, browser: state.activeTab == "browser",
+                expanded: state.phase == .expanded)
+            mask.add(glide.animation(keyPath: "path", from: previous, to: path), forKey: "glide")
+        }
     }
 }
 
