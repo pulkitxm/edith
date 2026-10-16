@@ -215,7 +215,7 @@ struct TerminalTabsView: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private var broadcastBar: some View {

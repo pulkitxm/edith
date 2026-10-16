@@ -343,7 +343,7 @@ struct StudioProgressCard: View {
                     .keyboardShortcut(".", modifiers: .command)
             }
             .padding(UIScale.pt(26))
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
+            .background(DashSkin.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
             .shadow(color: .black.opacity(0.15), radius: 18, y: 8)
         }
     }

@@ -238,7 +238,7 @@ struct UpdateSchedulePanel: View {
     private func color(for outcome: UpdateCheckRecord.Outcome) -> Color {
         switch outcome {
         case .upToDate: return .secondary
-        case .updateFound: return .accentColor
+        case .updateFound: return Color.themeAccent
         case .failed: return .red
         }
     }

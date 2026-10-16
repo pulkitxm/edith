@@ -36,6 +36,17 @@ public enum DashSkin {
         (.black, 0.45), (.black, 0.2), (.white, 0.05), (.white, 0.35),
     ]
 
+    private static func adaptive(_ pair: (Color, Color)) -> Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                NSColor(appearance.isDark ? pair.1 : pair.0)
+            })
+    }
+
+    public static let canvas = adaptive(paperPair)
+    public static let panel = adaptive(paper2Pair)
+    public static let hairline = adaptive(linePair)
+
     public static func paper(_ d: Bool) -> Color {
         d ? paperPair.1 : paperPair.0
     }

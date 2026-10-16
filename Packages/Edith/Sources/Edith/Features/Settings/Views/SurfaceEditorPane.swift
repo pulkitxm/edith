@@ -472,7 +472,7 @@ struct SurfaceEditorPane: View {
             }
             ForEach(libraryWidgets) { widget in
                 HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                    Image(systemName: widget.icon).foregroundStyle(Color.accentColor).frame(
+                    Image(systemName: widget.icon).foregroundStyle(Color.themeAccent).frame(
                         width: UIScale.pt(20), height: UIScale.pt(28)
                     )
                     .contentShape(Rectangle())
@@ -542,12 +542,12 @@ struct SurfaceEditorPane: View {
                 .overlay {
                     if target == .notch, layout.notchHorizontal, localLibraryPreview != nil {
                         RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                            Color.accentColor, lineWidth: 2
+                            Color.themeAccent, lineWidth: 2
                         )
                         .overlay(alignment: .bottomTrailing) {
                             Text("Add " + (libraryDrag?.widget.title ?? "widget"))
                                 .font(.edithText(.caption)).padding(UIScale.pt(8))
-                                .background(.regularMaterial, in: Capsule())
+                                .background(DashSkin.panel, in: Capsule())
                         }.allowsHitTesting(false)
                     }
                 }
@@ -1011,7 +1011,7 @@ struct SurfaceEditorPane: View {
                     ColorPicker(
                         "Widget color",
                         selection: Binding(
-                            get: { selection?.highlightColor ?? .accentColor },
+                            get: { selection?.highlightColor ?? Color.themeAccent },
                             set: { color in edit(tile.id) { $0.accentHex = color.hex6 } }
                         ), supportsOpacity: false
                     ).disabled(!tile.accent)
@@ -1361,7 +1361,7 @@ private struct SurfaceWidgetPreview: View {
                 Image(systemName: "waveform").font(.edithText(.title2))
                     .frame(width: UIScale.pt(42), height: UIScale.pt(42))
                     .background(
-                        Color.accentColor.opacity(0.16),
+                        Color.themeAccent.opacity(0.16),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                 VStack(alignment: .leading) {
                     Text("Evening loop").font(.edithText(.callout))
@@ -1387,7 +1387,7 @@ private struct SurfaceWidgetPreview: View {
                 Text("\(tile.focusMinutes):00").font(.edithText(.title2)).monospacedDigit()
                 Spacer()
                 Text("Start focus").font(.edithText(.caption)).padding(UIScale.pt(6))
-                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    .background(Color.themeAccent.opacity(0.12), in: Capsule())
             }
         case .clocks:
             sampleMetrics([("Local", "09:41"), ("London", "05:11")])

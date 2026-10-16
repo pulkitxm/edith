@@ -130,18 +130,18 @@ public struct SurfaceCanvas<Content: View>: View {
                 {
                     let frame = dropFrame(widget, at: point)
                     RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
-                        .fill(Color.accentColor.opacity(0.15))
+                        .fill(Color.themeAccent.opacity(0.15))
                         .overlay {
                             RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
                                 .strokeBorder(
-                                    Color.accentColor,
+                                    Color.themeAccent,
                                     style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                         }
                         .overlay(alignment: .topLeading) {
                             Label("Add " + widget.title, systemImage: "plus.circle.fill")
                                 .font(.edithText(.caption)).padding(UIScale.pt(8))
                                 .background(
-                                    .regularMaterial,
+                                    DashSkin.panel,
                                     in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
                         }
                         .frame(width: frame.width, height: frame.height)
@@ -177,7 +177,7 @@ public struct SurfaceCanvas<Content: View>: View {
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(UIScale.pt(20))
                     .background(
-                        Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 10)
+                        Color.themeAccent.opacity(0.04), in: RoundedRectangle(cornerRadius: 10)
                     )
                     .onDrop(of: [SurfaceDrag.type], isTargeted: nil) {
                         SurfaceDrag.accept($0) { place($0, nil) }
@@ -471,7 +471,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                     Button("Configure", action: inspect).font(.edithText(.caption))
                     Spacer()
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.edithText(.caption)).foregroundStyle(Color.accentColor)
+                        .font(.edithText(.caption)).foregroundStyle(Color.themeAccent)
                         .frame(width: UIScale.pt(28), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                         .gesture(
@@ -555,14 +555,14 @@ private struct SurfaceCanvasTile<Content: View>: View {
         .background {
             if editing {
                 RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
-                    .fill(Color.accentColor.opacity(selected ? 0.08 : 0.025))
+                    .fill(Color.themeAccent.opacity(selected ? 0.08 : 0.025))
             }
         }
         .overlay(alignment: .topLeading) {
             if editing {
                 RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
                     .strokeBorder(
-                        selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                        selected ? Color.themeAccent : Color.secondary.opacity(0.25),
                         lineWidth: selected ? 2 : 1
                     )
                     .frame(
@@ -587,7 +587,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 }
                 .font(.edithText(.caption)).monospacedDigit()
                 .padding(UIScale.pt(6))
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+                .background(DashSkin.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
                 .offset(y: -UIScale.pt(30))
                 .allowsHitTesting(false)
             }

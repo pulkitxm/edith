@@ -478,7 +478,7 @@ private struct VideoMeasuredWaveform: View {
                         Path(
                             CGRect(
                                 x: start * scale, y: 0, width: (end - start) * scale,
-                                height: size.height)), with: .color(.accentColor.opacity(0.08)))
+                                height: size.height)), with: .color(Color.themeAccent.opacity(0.08)))
                 }
                 for bin in result.waveform {
                     let x = Double(bin.startSample) / result.sampleRate * scale
@@ -488,7 +488,7 @@ private struct VideoMeasuredWaveform: View {
                         Path(
                             CGRect(
                                 x: x, y: (size.height - height) / 2, width: width, height: height)),
-                        with: .color(.accentColor.opacity(0.7)))
+                        with: .color(Color.themeAccent.opacity(0.7)))
                 }
                 for transient in result.transients {
                     let x = Double(transient.sample) / result.sampleRate * scale

@@ -63,7 +63,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                         if refreshing {
                             LoadingIndicator("Refreshing")
                                 .padding(8)
-                                .background(.regularMaterial, in: Capsule())
+                                .background(DashSkin.panel, in: Capsule())
                                 .allowsHitTesting(false)
                         }
                     }

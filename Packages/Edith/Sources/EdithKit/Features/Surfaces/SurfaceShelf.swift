@@ -87,7 +87,7 @@ public struct SurfaceShelf<Content: View>: View {
                                 .foregroundStyle(.secondary)
                                 .frame(width: UIScale.pt(120), height: UIScale.pt(100))
                                 .background(
-                                    Color.accentColor.opacity(0.06),
+                                    Color.themeAccent.opacity(0.06),
                                     in: RoundedRectangle(
                                         cornerRadius: UIScale.pt(layout.cornerRadius))
                                 )
@@ -297,7 +297,7 @@ private struct SurfaceShelfTile<Content: View>: View {
             if editing {
                 RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
                     .stroke(
-                        selected ? Color.accentColor : Color.secondary.opacity(0.2),
+                        selected ? Color.themeAccent : Color.secondary.opacity(0.2),
                         lineWidth: selected ? 2 : 1)
             }
         }

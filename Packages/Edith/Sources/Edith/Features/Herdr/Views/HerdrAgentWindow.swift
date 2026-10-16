@@ -46,7 +46,8 @@ enum HerdrAgentWindow {
         }
         let hosting = NSHostingController(
             rootView: HerdrDetachedView(
-                store: store, agentID: tab.id, launchEnabled: launchEnabled))
+                store: store, agentID: tab.id, launchEnabled: launchEnabled
+            ).themedControls())
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1000, height: 640))
@@ -66,6 +67,7 @@ enum HerdrAgentWindow {
             rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
                 .frame(width: viewControlsContentWidth, height: UIScale.pt(28))
                 .padding(.trailing, 8)
+                .themedControls()
         )
         hosting.frame = NSRect(x: 0, y: 0, width: viewControlsWidth, height: 28)
         accessory.view = hosting

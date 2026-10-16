@@ -104,7 +104,7 @@ struct DockerContainerList: View {
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .padding(.horizontal, UIScale.pt(16))
                         .padding(.vertical, UIScale.pt(6))
-                        .background(.thinMaterial)
+                        .background(DashSkin.panel)
                     }
                 }
             }

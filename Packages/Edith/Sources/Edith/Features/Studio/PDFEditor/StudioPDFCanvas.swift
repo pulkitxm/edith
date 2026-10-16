@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import EdithStudio
 import PDFKit
 import SwiftUI
@@ -99,10 +100,10 @@ final class StudioPDFCanvasContainer: NSView {
         canvas.autoScales = true
         canvas.displayMode = .singlePageContinuous
         canvas.displaysPageBreaks = true
-        canvas.backgroundColor = NSColor.windowBackgroundColor
+        canvas.backgroundColor = NSColor(DashSkin.canvas)
         thumbnails.pdfView = canvas
         thumbnails.thumbnailSize = CGSize(width: 76, height: 98)
-        thumbnails.backgroundColor = NSColor.controlBackgroundColor
+        thumbnails.backgroundColor = NSColor(DashSkin.panel)
         for view in [thumbnails, canvas] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
@@ -350,7 +351,7 @@ final class StudioPDFCanvasView: PDFView {
     }
 
     fileprivate func drawOverlay() {
-        NSColor.controlAccentColor.setStroke()
+        NSColor(Color.themeAccent).setStroke()
         if let page = dragPage, let start = dragStart, let current = dragCurrent {
             let a = convert(start, from: page)
             let b = convert(current, from: page)
@@ -393,7 +394,7 @@ final class StudioPDFCanvasView: PDFView {
             let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
             path.lineWidth = 1.5
             path.setLineDash([4, 3], count: 2, phase: 0)
-            NSColor.controlAccentColor.setStroke()
+            NSColor(Color.themeAccent).setStroke()
             path.stroke()
             if editsAnnotations, StudioPDFGrip.resizable(annotation) {
                 for grip in StudioPDFGrip.handles {
@@ -403,7 +404,7 @@ final class StudioPDFCanvasView: PDFView {
                     NSColor.white.setFill()
                     handle.fill()
                     handle.lineWidth = 1.5
-                    NSColor.controlAccentColor.setStroke()
+                    NSColor(Color.themeAccent).setStroke()
                     handle.stroke()
                 }
             }

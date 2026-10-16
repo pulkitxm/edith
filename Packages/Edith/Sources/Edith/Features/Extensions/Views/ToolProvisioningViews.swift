@@ -70,7 +70,7 @@ struct ToolProvisioningPanel: View {
                 }
                 .frame(height: UIScale.pt(110))
                 .background(
-                    Color(nsColor: .textBackgroundColor),
+                    DashSkin.canvas,
                     in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             }
             .font(.system(size: UIScale.pt(10), weight: .medium))
@@ -139,7 +139,7 @@ private struct ProvisioningToolRow: View {
         }
         .padding(UIScale.pt(11))
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.panel,
             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 

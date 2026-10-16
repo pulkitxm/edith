@@ -23,7 +23,7 @@ enum OnboardingWindow {
         onboardingWindow.titlebarSeparatorStyle = .none
         onboardingWindow.isMovableByWindowBackground = true
         onboardingWindow.isReleasedWhenClosed = false
-        let hosting = NSHostingController(rootView: OnboardingView(onFinish: close))
+        let hosting = NSHostingController(rootView: OnboardingView(onFinish: close).themedControls())
         hosting.sizingOptions = []
         onboardingWindow.contentViewController = hosting
         onboardingWindow.setContentSize(
