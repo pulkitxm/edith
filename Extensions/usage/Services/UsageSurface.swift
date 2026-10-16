@@ -214,6 +214,7 @@ final class UsageSurface {
                 .init("limits-refresh", "Refresh limits", "arrow.clockwise"),
                 .init("open", "Open Usage", "arrow.up.right"),
             ],
+            facts: lowestRemaining(cached).map { ["lowestRemaining": $0] } ?? [:],
             sources: Array(
                 (LimitProvider.allCases.map { SurfaceSourceChoice($0.rawValue, $0.label) }
                     + cached.claudeAccounts.map {
@@ -222,6 +223,19 @@ final class UsageSurface {
             message: rows.isEmpty
                 ? "No current limits. Open Usage to connect a provider." : cached.failure,
             updatedAt: cached.refreshedAt == .distantPast ? nil : cached.refreshedAt)
+    }
+
+    private func lowestRemaining(_ snapshot: LimitsTopicSnapshot, now: Date = Date()) -> Double? {
+        var lowest: Double?
+        for provider in snapshot.providers {
+            for slot in LimitWindowSlot.allCases {
+                guard let window = provider.window(for: slot), window.percent.isFinite,
+                    (window.resetsAt ?? .distantFuture) > now
+                else { continue }
+                lowest = min(lowest ?? .infinity, 100 - window.percent)
+            }
+        }
+        return lowest
     }
 
     private func actions() -> [SurfaceAction] {
