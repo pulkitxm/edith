@@ -273,18 +273,20 @@ public struct LoadingIndicator: View {
 public struct LoadingProgress: View {
     public let value: Double
     public var total: Double = 1
+    public var tint: Color?
     @Environment(\.colorScheme) private var scheme
 
-    public init(value: Double, total: Double = 1) {
+    public init(value: Double, total: Double = 1, tint: Color? = nil) {
         self.value = value
         self.total = total
+        self.tint = tint
     }
 
     public var body: some View {
         GeometryReader { proxy in
             Capsule().fill(DashSkin.line(scheme == .dark))
                 .overlay(alignment: .leading) {
-                    Capsule().fill(DashSkin.accent(scheme == .dark))
+                    Capsule().fill(tint ?? DashSkin.accent(scheme == .dark))
                         .frame(width: proxy.size.width * fraction)
                 }
         }

@@ -1,22 +1,27 @@
-import EdithKit
+@testable import EdithKit
 import SwiftUI
 import Testing
 @testable import Edith
 
 @Suite(.serialized) struct ThemeTests {
-    @Test func accentNameReturnsBrandAccent() {
-        #expect(themeColor("accent") == brandAccent)
+    @Test func brandThemeUsesTheBrandAccentInEachScheme() {
+        #expect(rgb(themeColor("accent"), dark: false) == [217, 119, 87])
+        #expect(rgb(themeColor("accent"), dark: true) == [224, 138, 106])
     }
 
-    @Test func paletteNamesResolveToTheirColors() {
-        for entry in themePalette {
-            #expect(themeColor(entry.name) == entry.color)
+    @Test func themeNamesResolveToTheSameAccentAsThePalette() {
+        for theme in AppTheme.allCases {
+            for dark in [false, true] {
+                #expect(
+                    rgb(themeColor(theme.rawValue), dark: dark)
+                        == rgb(DashSkin.accent(dark, theme: theme)))
+            }
         }
     }
 
     @Test func unknownNameFallsBackToBrandAccent() {
-        #expect(themeColor("chartreuse") == brandAccent)
-        #expect(themeColor("") == brandAccent)
+        #expect(rgb(themeColor("chartreuse"), dark: true) == [224, 138, 106])
+        #expect(rgb(themeColor(""), dark: false) == [217, 119, 87])
     }
 
     @Test func paletteNamesAreUnique() {
@@ -24,15 +29,36 @@ import Testing
         #expect(Set(names).count == names.count)
     }
 
-    @Test func everyStoredThemeResolvesToItsOwnAccent() {
+    @Test func everyStoredThemeResolvesToItself() {
         for theme in AppTheme.allCases {
             #expect(AppTheme(storedName: theme.rawValue) == theme)
-            #expect(themeColor(theme.rawValue) == theme.color)
         }
     }
 
     @Test func invalidStoredThemeResolvesToTheBrandTheme() {
         #expect(AppTheme(storedName: "chartreuse") == .accent)
+    }
+
+    @MainActor @Test func themeStoreFollowsTheStoredTheme() async throws {
+        let suite = "theme-store-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("teal", forKey: AppStorageKeys.General.theme)
+        let store = ThemeStore(defaults: defaults)
+        #expect(store.theme == .teal)
+
+        defaults.set("pink", forKey: AppStorageKeys.General.theme)
+        for _ in 0..<50 where store.theme != .pink {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(store.theme == .pink)
+    }
+
+    @Test func paletteSurfacesAdaptToTheAppearance() {
+        #expect(rgb(DashSkin.panel, dark: true) == rgb(DashSkin.paper2(true)))
+        #expect(rgb(DashSkin.panel, dark: false) == rgb(DashSkin.paper2(false)))
+        #expect(rgb(DashSkin.canvas, dark: true) == rgb(DashSkin.paper(true)))
+        #expect(rgb(DashSkin.hairline, dark: false) == rgb(DashSkin.line(false)))
     }
 
     @Test func appSurfacesStayConstantWhileAccentsChange() {
@@ -56,19 +82,25 @@ import Testing
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let sourceRoot = packageRoot.appendingPathComponent("Sources/Edith")
+        let sourceRoots = ["Sources/Edith", "Sources/EdithKit", "Sources/EdithHelper"].map {
+            packageRoot.appendingPathComponent($0)
+        }
         let banned = [
             "brandAccent", "Color(nsColor: .windowBackgroundColor)",
-            ".background(dark ? Color.black", ".background(Color.white",
+            "Color(nsColor: .controlBackgroundColor)", "NSColor.windowBackgroundColor",
+            "Color.accentColor", ".accentColor.", "ProgressView(value",
+            "storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)",
         ]
-        let files = FileManager.default.enumerator(
-            at: sourceRoot, includingPropertiesForKeys: nil)
+        let appSurfaceBypasses = [".background(dark ? Color.black", ".background(Color.white"]
+        let allowed: Set<String> = ["Theme.swift", "DashSkin.swift", "SweaterState.swift"]
         var violations: [String] = []
 
-        while let url = files?.nextObject() as? URL {
-            guard url.pathExtension == "swift" else { continue }
+        for url in sourceRoots.flatMap(swiftFiles) {
+            guard !allowed.contains(url.lastPathComponent) else { continue }
             let source = try String(contentsOf: url, encoding: .utf8)
-            for token in banned where source.contains(token) {
+            let appView = url.path.contains("/Sources/Edith/")
+            let tokens = appView ? banned + appSurfaceBypasses : banned
+            for token in tokens where source.contains(token) {
                 violations.append("\(url.lastPathComponent): \(token)")
             }
         }
@@ -82,6 +114,19 @@ import Testing
             #expect(levels == levels.sorted(), "dark=\(dark) \(levels)")
             #expect(Set(levels).count == levels.count, "dark=\(dark) \(levels)")
         }
+    }
+
+    private func swiftFiles(in root: URL) -> [URL] {
+        let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        return (files?.allObjects as? [URL] ?? []).filter { $0.pathExtension == "swift" }
+    }
+
+    private func rgb(_ color: Color, dark: Bool) -> [Int] {
+        var channels: [Int] = []
+        NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
+            channels = rgb(color)
+        }
+        return channels
     }
 
     private func luminance(_ color: Color) -> Double {

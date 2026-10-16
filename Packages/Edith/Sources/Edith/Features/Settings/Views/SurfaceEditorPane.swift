@@ -1439,8 +1439,7 @@ private struct SurfaceWidgetPreview: View {
                 Spacer(minLength: 0)
                 Text("\(Int(percent))% used").font(.edithText(.caption)).monospacedDigit()
             }
-            ProgressView(value: percent, total: 100).tint(
-                tile.highlightColor)
+            LoadingProgress(value: percent, total: 100, tint: tile.highlightColor)
             if tile.showDetails, tile.shows("resets") {
                 Text("Resets in 2h 14m").font(.edithText(.caption2)).foregroundStyle(.secondary)
             }

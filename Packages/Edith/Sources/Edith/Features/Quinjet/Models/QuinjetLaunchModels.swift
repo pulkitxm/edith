@@ -70,10 +70,7 @@ struct TerminalPalette: Equatable {
     }
 
     static func edith(dark: Bool) -> TerminalPalette {
-        let theme = AppTheme(
-            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
-                ?? AppTheme.accent.rawValue)
-        return edith(dark: dark, theme: theme)
+        edith(dark: dark, theme: ThemeStore.current)
     }
 
     static func edith(dark: Bool, theme: AppTheme) -> TerminalPalette {
