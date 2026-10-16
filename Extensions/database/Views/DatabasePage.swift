@@ -204,14 +204,14 @@ struct DatabasePage: View {
         case .checking:
             DatabaseServiceProgressView(
                 title: "Preparing Database",
-                detail: "Opening your saved connections.",
+                detail: "Starting the local tools used by your connections.",
                 compact: compact,
                 palette: palette,
                 theme: theme)
         case .repairing:
             DatabaseServiceProgressView(
                 title: "Repairing Database",
-                detail: "Reopening your saved connections.",
+                detail: "Refreshing the local tools, then reopening your connections.",
                 compact: compact,
                 palette: palette,
                 theme: theme)

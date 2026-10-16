@@ -39,7 +39,7 @@ struct DatabaseUIClientTests {
         await fixture.client.load()
         let columns = Data(#"{"version":1,"layouts":[]}"#.utf8)
         fixture.client.persistColumns(columns)
-        try await fixture.client.flushColumns()
+        await fixture.client.flushColumns()
         #expect(
             try JSONSerialization.jsonObject(with: #require(fixture.bridge.columns))
                 as? NSDictionary == JSONSerialization.jsonObject(with: columns) as? NSDictionary)
@@ -52,22 +52,27 @@ struct DatabaseUIClientTests {
             ])
     }
 
-    @Test func failedColumnWritesRemainPendingUntilExplicitRetry() async throws {
+    @Test func failedColumnWritesRetryInTheBackgroundAndNeverBlockClosing() async throws {
         let fixture = Fixture()
         fixture.bridge.reject = true
         fixture.client.persistColumns(Data(#"{"version":1,"layouts":[]}"#.utf8))
-        await #expect(throws: ExtensionEngineError.unavailable) {
-            try await fixture.client.flushColumns()
-        }
-        #expect(fixture.client.failure != nil)
+        await fixture.client.flushColumns()
         fixture.bridge.reject = false
-        fixture.client.retryColumns()
-        try await fixture.client.flushColumns()
-        #expect(fixture.client.failure == nil)
+        await fixture.client.flushColumns()
         #expect(
-            fixture.bridge.requests.map(\.operation) == [
-                "database.ui.columns", "database.ui.columns",
-            ])
+            fixture.bridge.requests.map(\.operation).allSatisfy { $0 == "database.ui.columns" })
+        #expect(fixture.bridge.requests.count >= 2)
+        #expect(fixture.bridge.columns != nil)
+    }
+
+    @Test func pageReadinessLoadsTheOwnedWorkspaceWithoutAnExtraStage() async throws {
+        let fixture = Fixture()
+        let session = fixture.client.makeSession()
+        await session.page.refresh()
+        #expect(fixture.client.loaded)
+        #expect(session.page.readiness == .ready)
+        #expect(
+            fixture.bridge.requests.map(\.operation) == ["database.ui.state", "database.execute"])
     }
 
     @Test func privacyFailsClosedWhenTheOwnedEngineIsUnavailable() async throws {

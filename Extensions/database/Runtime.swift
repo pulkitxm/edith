@@ -30,9 +30,8 @@ final class ExtensionRuntime: NSObject {
         }
         guard
             uiWork.launch({
-                do { try await client.flushColumns(); completion(nil) } catch {
-                    completion("Database preferences are not saved.")
-                }
+                await client.flushColumns()
+                completion(nil)
             }) != nil
         else { completion("Database is stopping."); return }
     }
