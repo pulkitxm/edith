@@ -330,14 +330,8 @@ final class HerdrStore {
     ) {
         self.defaults = defaults
         self.claudeAccounts = claudeAccounts ?? ClaudeAccountsModel.shared
-        let restoredAccountSessions = Dictionary(
-            uniqueKeysWithValues: (defaults.dictionary(forKey: Self.accountSessionsKey)
-                as? [String: String] ?? [:])
-                .filter {
-                    $0.key.utf8.count <= 512 && !$0.key.utf8.contains(0)
-                        && UUID(uuidString: $0.value) != nil
-                }
-                .sorted { $0.key < $1.key }.prefix(4096).map { ($0.key, $0.value) })
+        let restoredAccountSessions = Self.restoredAccountSessions(
+            defaults.dictionary(forKey: Self.accountSessionsKey) as? [String: String] ?? [:])
         accountSessions = restoredAccountSessions
         if let data = defaults.data(forKey: Self.accountSessionIdentitiesKey),
             data.count <= 1_048_576
@@ -1985,6 +1979,15 @@ final class HerdrStore {
     }
 
     nonisolated static let accountSessionsKey = "herdr.claudeAccountSessions"
+    nonisolated static func restoredAccountSessions(_ stored: [String: String]) -> [String: String]
+    {
+        Dictionary(
+            uniqueKeysWithValues: stored.filter {
+                $0.key.utf8.count <= 512 && !$0.key.utf8.contains(0)
+                    && UUID(uuidString: $0.value) != nil
+            }
+            .sorted { $0.key < $1.key }.prefix(4096).map { ($0.key, $0.value) })
+    }
     nonisolated static let accountSessionIdentitiesKey = "herdr.claudeAccountSessionIdentities"
 
     func launchNewAgent(
@@ -2106,7 +2109,9 @@ final class HerdrStore {
             if selected.remoteMachineID == nil {
                 selected.remoteMachineID = machine.id.uuidString
                 var next = claudeAccounts.state
-                next.accounts = next.accounts.map { $0.id == selected.id ? selected : $0 }
+                if let index = next.accounts.firstIndex(where: { $0.id == selected.id }) {
+                    next.accounts[index] = selected
+                }
                 try await claudeAccounts.persist(next)
             }
         }
