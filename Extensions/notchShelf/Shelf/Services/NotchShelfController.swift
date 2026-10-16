@@ -219,7 +219,10 @@ final class NotchShelfController {
     var visibleTabs: [NotchTab] {
         SurfaceNotchTab.visible(
             layout: surfaceLayout, activeIDs: activeIDs,
-            browserEnabled: browser != nil || browserEngine != nil)
+            browserEnabled: browser != nil || browserEngine != nil
+        ).filter {
+            $0 != .audio || context.defaults.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
+        }
     }
 
     func synchronize() {

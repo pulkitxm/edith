@@ -14,6 +14,7 @@ struct NotchWorkerOwnershipTests {
         let defaults = try #require(UserDefaults(suiteName: id))
         defaults.set(false, forKey: AppStorageKeys.Notch.alertsEnabled)
         defaults.set(false, forKey: AppStorageKeys.Notch.shelfHaptics)
+        defaults.set(true, forKey: AppStorageKeys.Notch.audioMixerEnabled)
         let state = ExtensionSharedState(root: root, namespace: id, owner: "host")
         let data = try JSONEncoder().encode(Array(active.keys).sorted())
         let versions = try JSONEncoder().encode(active)
