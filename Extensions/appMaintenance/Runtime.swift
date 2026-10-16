@@ -135,6 +135,10 @@ final class ExtensionRuntime: NSObject {
                 if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
                     model?.startBackgroundDiscovery()
                 }
+                Task { [weak model] in
+                    await model?.restoreCachedSnapshot()
+                    model?.warmIcons()
+                }
             }
         case "configureUI":
             guard !commandsSuspended, uiDrains.count < 8 else {
@@ -197,7 +201,7 @@ final class ExtensionRuntime: NSObject {
         if location == "settings" {
             settingsModel = MaintenanceSettingsModel(engine: client)
         } else {
-            uiModel = AppMaintenanceModel(engineClient: client)
+            uiModel = AppMaintenanceModel(engineClient: client, memory: .shared)
         }
         return true
     }

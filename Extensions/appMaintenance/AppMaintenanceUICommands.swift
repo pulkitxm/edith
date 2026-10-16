@@ -39,7 +39,8 @@ struct MaintenanceUISettings: Codable, Equatable {
 }
 struct AppMaintenanceUISnapshot: Codable {
     let preferences: MaintenanceUISettings
-    let icons: [String: Data]
+    let icons: [String: Data]?
+    let iconRevision: Int
     let applications: [InstalledApplication]
     let previewToken: UUID
     let selectedApplicationID: String?
@@ -107,8 +108,13 @@ struct AppMaintenanceUIAction: Codable {
             return try JSONEncoder().encode(kind)
         }
         if command == "maintenance.ui.snapshot" {
-            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            let known = try JSONDecoder().decode([String: Int].self, from: payload)
+            guard Set(known.keys).isSubset(of: ["iconRevision"]) else {
+                throw ExtensionPeerError.invalidRequest
+            }
             await model.restoreCachedSnapshot()
+            return try JSONEncoder().encode(
+                model.uiSnapshot(knownIconRevision: known["iconRevision"]))
         } else if command == "maintenance.ui.preferences" {
             let preferences = try JSONDecoder().decode(MaintenanceUISettings.self, from: payload)
             try preferences.save(model.preferenceDefaults); model.preferences = preferences
@@ -196,6 +202,6 @@ struct AppMaintenanceUIAction: Codable {
         } else {
             throw ExtensionPeerError.invalidRequest
         }
-        return try JSONEncoder().encode(model.uiSnapshot())
+        return try JSONEncoder().encode(model.uiSnapshot(knownIconRevision: model.iconRevision))
     }
 }

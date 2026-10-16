@@ -15,6 +15,13 @@ typealias AppMaintenanceDiscover =
     ) async -> [AppUpdateItem]
 
 @MainActor
+final class AppMaintenanceUIMemory {
+    static let shared = AppMaintenanceUIMemory()
+
+    var snapshot: AppMaintenanceUISnapshot?
+}
+
+@MainActor
 @Observable
 final class AppMaintenanceModel {
     enum Phase: String, Codable, Equatable {
@@ -54,6 +61,10 @@ final class AppMaintenanceModel {
     var checkingUpdates = false
     private var remoteIcons: [String: Data] = [:]
     @ObservationIgnored private var renderedIcons: [String: Data] = [:]
+    @ObservationIgnored private var iconWarmup: Task<Void, Never>?
+    @ObservationIgnored private var remoteIconRevision = -1
+    @ObservationIgnored private var memory: AppMaintenanceUIMemory?
+    private(set) var iconRevision = 0
     private var engineClient: ExtensionEngineClient?
     private var remoteTask: Task<Void, Never>?
     private var remoteRevision = 0
@@ -131,9 +142,11 @@ final class AppMaintenanceModel {
 
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
 
-    convenience init(engineClient: ExtensionEngineClient) {
+    convenience init(engineClient: ExtensionEngineClient, memory: AppMaintenanceUIMemory) {
         self.init()
         self.engineClient = engineClient
+        self.memory = memory
+        if let remembered = memory.snapshot { applyRemote(remembered) }
     }
 
     var visiblePaths: Set<String> {
@@ -152,31 +165,48 @@ final class AppMaintenanceModel {
     private func snapshotIcons() -> [String: Data] {
         var result: [String: Data] = [:]
         for path in visiblePaths.sorted().prefix(256) {
-            if let cached = renderedIcons[path] {
-                result[path] = cached
-                continue
-            }
-            let original = NSWorkspace.shared.icon(forFile: path)
-            let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
-                original.draw(in: rect); return true
-            }
-            if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
-                let png = bitmap.representation(using: .png, properties: [:])
-            {
-                result[path] = png
-                renderedIcons[path] = png
-            }
+            if let cached = renderedIcons[path], !cached.isEmpty { result[path] = cached }
         }
         return result
     }
+
+    func warmIcons() {
+        guard iconWarmup == nil, !stopped, !suspending else { return }
+        iconWarmup = Task { [weak self] in
+            while let self, !stopped, !suspending, !Task.isCancelled {
+                let missing = visiblePaths.sorted().prefix(256).filter { renderedIcons[$0] == nil }
+                guard !missing.isEmpty else { break }
+                for path in missing.prefix(8) {
+                    renderedIcons[path] = Self.renderIcon(path) ?? Data()
+                }
+                iconRevision += 1
+                await Task.yield()
+            }
+            self?.iconWarmup = nil
+        }
+    }
+
+    private static func renderIcon(_ path: String) -> Data? {
+        let original = NSWorkspace.shared.icon(forFile: path)
+        let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+            original.draw(in: rect); return true
+        }
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff)
+        else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
     func reveal(_ url: URL) {
         if engineClient != nil { sendRemote("reveal", value: url.path); return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    func uiSnapshot() -> AppMaintenanceUISnapshot {
-        .init(
-            preferences: preferences, icons: snapshotIcons(), applications: applications,
+    func uiSnapshot(knownIconRevision: Int? = nil) -> AppMaintenanceUISnapshot {
+        warmIcons()
+        let icons = knownIconRevision == iconRevision ? nil : snapshotIcons()
+        return .init(
+            preferences: preferences, icons: icons, iconRevision: iconRevision,
+            applications: applications,
             previewToken: previewToken,
             selectedApplicationID: selectedApplicationID,
             plan: plan, selectedItemIDs: selectedItemIDs, phase: phase, errorMessage: errorMessage,
@@ -225,7 +255,9 @@ final class AppMaintenanceModel {
         guard let engineClient, !stopped, !suspending else { return }
         let revision = remoteRevision
         do {
-            let data = try await engineClient.invoke("maintenance.ui.snapshot")
+            let data = try await engineClient.invoke(
+                "maintenance.ui.snapshot",
+                payload: JSONEncoder().encode(["iconRevision": remoteIconRevision]))
             guard !stopped, !suspending, !Task.isCancelled, revision == remoteRevision else {
                 return
             }
@@ -237,7 +269,10 @@ final class AppMaintenanceModel {
 
     private func applyRemote(_ value: AppMaintenanceUISnapshot) {
         preferences = value.preferences
-        remoteIcons = value.icons
+        if let icons = value.icons {
+            remoteIcons = icons
+            remoteIconRevision = value.iconRevision
+        }
         applyingRemote = true
         defer { applyingRemote = false }
         applications = value.applications; selectedApplicationID = value.selectedApplicationID;
@@ -258,6 +293,19 @@ final class AppMaintenanceModel {
             loading.fail(loading.begin(), message: error)
         } else {
             loading.setContent()
+        }
+        if let memory, value.phase == .ready {
+            memory.snapshot = AppMaintenanceUISnapshot(
+                preferences: value.preferences, icons: remoteIcons,
+                iconRevision: remoteIconRevision, applications: value.applications,
+                previewToken: value.previewToken,
+                selectedApplicationID: value.selectedApplicationID, plan: value.plan,
+                selectedItemIDs: value.selectedItemIDs, phase: value.phase,
+                errorMessage: value.errorMessage, resultMessage: value.resultMessage,
+                installPlan: value.installPlan, updates: value.updates,
+                updateHistory: value.updateHistory, selectedUpdateIDs: value.selectedUpdateIDs,
+                focusedUpdateID: value.focusedUpdateID, lastUpdateRefresh: value.lastUpdateRefresh,
+                checkingUpdates: value.checkingUpdates)
         }
     }
 
@@ -398,6 +446,7 @@ final class AppMaintenanceModel {
         let scanned = await inventory(brewFresh ? brewCache : nil)
         guard !stopped, !suspending, loading.isCurrent(generation) else { return }
         renderedIcons.removeAll()
+        iconRevision += 1
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready
@@ -833,6 +882,7 @@ final class AppMaintenanceModel {
         suspending = true
         stopBackgroundDiscovery()
         loading.cancel()
+        iconWarmup?.cancel()
         remoteRevision += 1
         preferencesTask?.cancel()
         remoteTask?.cancel()
@@ -842,6 +892,7 @@ final class AppMaintenanceModel {
     func cancelAndWait() async {
         cancelPendingCommands()
         await backgroundDiscovery?.value
+        await iconWarmup?.value
         while let task = ownedTasks.values.first { await task.value }
     }
 
