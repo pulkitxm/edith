@@ -60,7 +60,7 @@ final class LimitsStatusItem {
         let accountGroups = MenuBarLimits.accountGroups(
             accounts, selectedID: defaults.string(forKey: MenuBarLimits.accountSelectionKey),
             slots: MenuBarLimits.selection(for: .claude, defaults: defaults),
-            masked: masked || UsagePresenterState.shared.hides("Usage"))
+            masked: masked)
         let groups =
             accountGroups
             + MenuBarLimits.groups(
@@ -551,10 +551,8 @@ struct LimitsMenuPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if UsagePresenterState.shared.hides("Usage")
-                || (UsagePresenterState.shared.active
-                    && SharedDefaults.store.bool(
-                        forKey: AppStorageKeys.Presenter.hideMenuBarNumbers))
+            if UsagePresenterState.shared.active
+                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
             {
                 Text("Usage hidden during presentation").foregroundStyle(.secondary)
             } else {

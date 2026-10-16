@@ -82,11 +82,11 @@
       "sources": [
         {
           "path": "Extensions/windowSweaters/Runtime.swift",
-          "sha256": "4ce8dacf41b82611ab0dd8c94f36daa42c85ea6e5979fb64cb3d970ae4bc30e9"
+          "sha256": "a195a37c99701da4352fc38736efee63eafa1518acf440cb830704daab630be9"
         },
         {
           "path": "Extensions/windowSweaters/Presentation.swift",
-          "sha256": "938ed403500b0981e694ff12397f77685336e10ff63090c4ebaa3a47eb75ade4"
+          "sha256": "7a9cff144301cd6b65c2413dd91e20d6f254dea685415f56b3c01c1344647fb3"
         }
       ]
     },
@@ -126,11 +126,11 @@
       "sources": [
         {
           "path": "Extensions/keystrokeHighlight/Runtime.swift",
-          "sha256": "6397c7c104834cb9fac38f4c3dafd9c0e9a918389f3173a9945928d8a109b7ed"
+          "sha256": "ee13965efada5721467904c4b32373138c0c03c2e15bcbbfb742791267c309b5"
         },
         {
           "path": "Extensions/keystrokeHighlight/Presentation.swift",
-          "sha256": "ded5caf6e4005feb8465d9a9a305c0a4ae5e259be828c8a22cf94599607a775a"
+          "sha256": "3e355eb832ae70c6f20dece6a3f526ec461bbef3ec3a7d966821477d5e751a4f"
         }
       ]
     },
@@ -148,11 +148,11 @@
       "sources": [
         {
           "path": "Extensions/presenter/Runtime.swift",
-          "sha256": "20275bf7564c837021244e4a7f39662aa9548f64be5fd26934e7d260909e27fe"
+          "sha256": "e15b84ede72f3ccf54cedda7096bc398978d1a976adcdb572e27baac24c19f80"
         },
         {
           "path": "Extensions/presenter/Presentation.swift",
-          "sha256": "50654a659d7aa1c394b60fd273e9172306e5c0673e211a0ae6ccedc07b73806e"
+          "sha256": "0a1204d429c851d8513b1156c4d0fb8dee6c85f91d55caad081909722886d794"
         }
       ]
     },

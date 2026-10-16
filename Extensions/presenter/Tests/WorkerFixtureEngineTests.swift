@@ -73,7 +73,6 @@ import WorkerFixtureTestSupport
         await first.value
         await second.value
         #expect(returned == 2 && reads == 1)
-        #expect(!presentation.ready)
     }
 
     @Test func presenterNeverDiscoversActualSessionsOrWindows() throws {

@@ -224,11 +224,7 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("Presenter")
-                        } content: {
-                            Form { PresenterRows(presentation: presentation) }.formStyle(.grouped)
-                        }
+                        Form { PresenterRows(presentation: presentation) }.edithForm()
                     }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
