@@ -80,6 +80,8 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         guard let shutdown else { return .terminateNow }
         guard !terminating else { return .terminateCancel }
         terminating = true
+        HostQuit.conceal()
+        NSApp.setActivationPolicy(.prohibited)
         let finish = { [weak self] in
             self?.stopWorkers?()
             exit(0)
