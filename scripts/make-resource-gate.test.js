@@ -211,54 +211,6 @@ test("mixed goals take the heavier target", () => {
   expect(tests.profile).toBe("swift test");
 });
 
-test("filesystem local tests share the Swift resource budget", () => {
-  const goal = "ci-functional-filesystem-local";
-  const admitted = decide([goal], healthy, []);
-  expect(admitted.profile).toBe("swift test");
-  expect(admitted.need_threads).toBe(2.5);
-  expect(admitted.need_mem_mb).toBe(2560);
-  expect(decide([goal], { ...healthy, cpus: 6 }, [seated(0)]).action).toBe(
-    "wait",
-  );
-});
-
-for (const goal of [
-  "ci-host-navigation-local",
-  "ci-extension-keep-awake-compile",
-  "ci-extension-keep-awake",
-  "ci-extension-keep-awake-native",
-  "package-extension-keep-awake",
-]) {
-  test(`focused ${goal} respects the Swift resource budget`, () => {
-    const admitted = decide([goal], healthy, []);
-    expect(admitted.action).toBe("run");
-    expect(admitted.profile).toBe("swift test");
-    expect(admitted.need_threads).toBe(2.5);
-    expect(admitted.need_mem_mb).toBe(2560);
-
-    const cpuLimited = { ...healthy, cpus: 6 };
-    const cpu = decide([goal], cpuLimited, [seated(0)]);
-    expect(cpu.action).toBe("wait");
-    expect(cpu.threads_left).toBeLessThan(cpu.need_threads);
-    expect(cpu.mem_left_mb).toBeGreaterThan(cpu.need_mem_mb);
-
-    const memory = decide([goal], { ...healthy, mem_available_mb: 10000 }, [
-      seated(0),
-    ]);
-    expect(memory.action).toBe("wait");
-    expect(memory.threads_left).toBeGreaterThan(memory.need_threads);
-    expect(memory.mem_left_mb).toBeLessThan(memory.need_mem_mb);
-
-    const pressureHost = { ...healthy, cpus: 8 };
-    expect(decide([goal], pressureHost, [seated(0)]).action).toBe("run");
-    expect(
-      decide([goal], { ...pressureHost, pressure: "warn" }, [seated(0)]).action,
-    ).toBe("wait");
-    expect(decide([goal], cpuLimited, [seated(0)], 30, 20).action).toBe("run");
-    expect(decide([goal, "build"], healthy, []).profile).toBe("xcode build");
-  });
-}
-
 test("five concurrent app builds stay inside the live budget", async () => {
   const root = tempDir();
   const env = gateEnv(root);
@@ -448,22 +400,3 @@ test("make runs light targets through the gate without waiting", async () => {
     [],
   );
 }, 20000);
-
-test("the original owned-process SDK route retains the native resource budget", () => {
-  const result = decide(
-    ["ci-extension-owned-process-groups-local"],
-    healthy,
-    [],
-  );
-  expect(result.action).toBe("run");
-  expect(result.profile).toBe("swift test");
-  expect(result.need_threads).toBe(2.5);
-  expect(result.need_mem_mb).toBe(2560);
-  expect(
-    decide(
-      ["ci-extension-owned-process-groups-local"],
-      { ...healthy, cpus: 6 },
-      [seated(0)],
-    ).action,
-  ).toBe("wait");
-});

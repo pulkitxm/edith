@@ -19,7 +19,7 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
-    .package(path: "../ExtensionMarketplace"),
+    .package(path: "../MeetingVoice"),
     .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
@@ -38,25 +38,13 @@ let dependencies: [Package.Dependency] = [
         url: "https://github.com/vapor/mysql-nio.git",
         revision: "a9378d6ed22899b7df72894719cc3df51a37fb18"),
     .package(path: "../EdithStudio"),
+    .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
 ]
 
 let shippedSwiftSettings: [SwiftSetting] = [
     .swiftLanguageMode(.v5),
     .unsafeFlags(["-Xfrontend", "-disable-reflection-metadata"]),
 ]
-
-#if os(macOS)
-let ghosttyBinaryTargets: [Target] = [
-    .binaryTarget(
-        name: "GhosttyKit",
-        path: "vendor/GhosttyKit.xcframework"
-    )
-]
-let ghosttyDependencies: [Target.Dependency] = ["EdithCore", "GhosttyKit"]
-#else
-let ghosttyBinaryTargets: [Target] = []
-let ghosttyDependencies: [Target.Dependency] = ["EdithCore"]
-#endif
 
 let targets: [Target] = [
     .target(
@@ -154,7 +142,8 @@ let targets: [Target] = [
         name: "EdithKit",
         dependencies: [
             "EdithCore", "EdithDatabase", "EdithLidAwakeSupport", "EdithCameraSupport",
-            .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace"),
+            .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],
         resources: [
             .process("Resources"),
@@ -234,9 +223,13 @@ let targets: [Target] = [
             ])
         ]
     ),
+    .binaryTarget(
+        name: "GhosttyKit",
+        path: "vendor/GhosttyKit.xcframework"
+    ),
     .target(
         name: "GhosttyTerminal",
-        dependencies: ghosttyDependencies,
+        dependencies: ["EdithCore", "GhosttyKit"],
         resources: [
             .copy("Resources/Fonts"),
             .copy("../../vendor/GhosttyResources"),
@@ -300,5 +293,5 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: products,
     dependencies: dependencies,
-    targets: targets + ghosttyBinaryTargets
+    targets: targets
 )

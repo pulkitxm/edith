@@ -8,14 +8,12 @@ let package = Package(
         .library(name: "EdithStudio", targets: ["EdithStudio"])
     ],
     dependencies: [
-        .package(path: "../ExtensionMarketplace")
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")
     ],
     targets: [
         .target(
             name: "EdithStudio",
-            dependencies: [
-                "CPDFium", .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace"),
-            ],
+            dependencies: ["CPDFium", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
             resources: [.copy("Resources/PDFium-Licenses.txt")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

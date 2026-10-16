@@ -294,7 +294,6 @@ struct ExtensionsEnableCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            try await MarketplaceServices.ensureInstalled(id: entry.id)
             let result = ExtensionLookup.mutationCenter().setEnabled(true, for: entry)
             guard !json else {
                 CLIOut.json(ExtensionLookup.json(entry))
@@ -491,7 +490,6 @@ struct ExtensionsSetupCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let entry = try ExtensionLookup.entry(id)
-            if !dryRun { try await MarketplaceServices.ensureInstalled(id: entry.id) }
             let result = await ExtensionLookup.mutationCenter().setup(
                 entry, dryRun: dryRun, installTools: installTools,
                 log: { line in if !json { CLIOut.note(line) } })

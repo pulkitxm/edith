@@ -6,71 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      hosted_native_owner_tests_sha:
-        description: "Exact reviewed source for original hosted native owner tests."
-        type: string
-        required: false
-        default: ""
-      hosted_native_owner:
-        description: "attention, terminal, timeLapse, studio, machines, virtualCamera, feature-models, database-mutation or database-executor."
-        type: string
-        required: false
-        default: ""
-      hosted_native_compile_sha:
-        description: "Exact reviewed source for verbose hosted Attention test compilation."
-        type: string
-        required: false
-        default: ""
-      hosted_host_tests_sha:
-        description: "Reviewed synthetic hosted host diagnostics commit."
-        type: string
-        required: false
-        default: ""
-      hosted_shell_journey_sha:
-        description: "Reviewed synthetic original shell journey commit."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_views_sha:
-        description: "Reviewed synthetic hosted managed original-view smoke commit."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_artifacts_run:
-        description: "Completed immutable nonpublishing Extensions run containing all 39 packages."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_artifacts_sha:
-        description: "Exact original package and frozen host source commit."
-        type: string
-        required: false
-        default: ""
-      hosted_sparkle_update_sha:
-        description: "Reviewed synthetic standard Sparkle update commit."
-        type: string
-        required: false
-        default: ""
-      public_release_validation_sha:
-        description: "Exact reviewed current main release commit for public verification."
-        type: string
-        required: false
-        default: ""
-      public_release_validation:
-        description: "Closed source, packagesRun, hostRun, tag, updateIDs and retainedRuns JSON pins."
-        type: string
-        required: false
-        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
         required: false
         default: false
-      coordinated_host_release:
-        description: "Closed pending host intent for a coordinated public release."
-        type: string
-        required: false
-        default: ""
       rebuild:
         description: "Current release tag to rebuild and re-upload."
         type: string
@@ -91,90 +31,15 @@ permissions:
   contents: read
 
 jobs:
-  hosted-native-owner-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_owner_tests_sha != '' && inputs.hosted_native_owner_tests_sha == github.sha && (inputs.hosted_native_owner == 'attention' || inputs.hosted_native_owner == 'terminal' || inputs.hosted_native_owner == 'timeLapse' || inputs.hosted_native_owner == 'studio' || inputs.hosted_native_owner == 'machines' || inputs.hosted_native_owner == 'virtualCamera' || inputs.hosted_native_owner == 'feature-models' || inputs.hosted_native_owner == 'database-mutation' || inputs.hosted_native_owner == 'database-executor') && !inputs.hosted_native_compile_sha && !inputs.hosted_host_tests_sha && !inputs.hosted_shell_journey_sha && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-native-owner-tests.yml
-    with:
-      expected_sha: ${{ inputs.hosted_native_owner_tests_sha }}
-      owner: ${{ inputs.hosted_native_owner }}
-
-  hosted-native-compile:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_compile_sha != '' && inputs.hosted_native_compile_sha == github.sha && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-native-compile-diagnostics.yml
-    with:
-      expected_sha: ${{ inputs.hosted_native_compile_sha }}
-
-  hosted-host-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-host-test-diagnostics.yml
-    with:
-      expected_sha: ${{ inputs.hosted_host_tests_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-
-  hosted-original-shell:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-original-shell.yml
-    with:
-      expected_sha: ${{ inputs.hosted_shell_journey_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-managed-views:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_managed_views_sha != '' && inputs.hosted_managed_artifacts_run != '' && inputs.hosted_managed_artifacts_sha != '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_managed_views_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/hosted-managed-views.yml
-    with:
-      expected_sha: ${{ inputs.hosted_managed_views_sha }}
-      artifact_run: ${{ inputs.hosted_managed_artifacts_run }}
-      artifact_source: ${{ inputs.hosted_managed_artifacts_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-sparkle-update:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_sparkle_update_sha != '' && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-sparkle-verification' || github.ref == 'refs/heads/feat/hosted-sparkle-ui-flow' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_sparkle_update_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-sparkle-update.yml
-    with:
-      expected_sha: ${{ inputs.hosted_sparkle_update_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-public-release-verification:
-    if: github.event_name == 'workflow_dispatch' && inputs.public_release_validation_sha != '' && inputs.public_release_validation != '' && inputs.public_release_validation_sha == github.sha && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_managed_views_sha == '' && inputs.hosted_managed_artifacts_run == '' && inputs.hosted_managed_artifacts_sha == '' && inputs.hosted_sparkle_update_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/main' && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/hosted-public-release-verification.yml
-    with:
-      expected_sha: ${{ inputs.public_release_validation_sha }}
-      request: ${{ inputs.public_release_validation }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-
   changes:
     name: changes
     if: >-
-      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != '' || inputs.hosted_managed_views_sha != '' || inputs.hosted_managed_artifacts_run != '' || inputs.hosted_managed_artifacts_sha != '' || inputs.hosted_sparkle_update_sha != '' || inputs.public_release_validation_sha != '' || inputs.public_release_validation != '' || inputs.hosted_native_compile_sha != '' || inputs.hosted_native_owner_tests_sha != '' || inputs.hosted_native_owner != ''))
-      && (github.event_name != 'push'
+      github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
-      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
-      host: ${{ steps.areas.outputs.host }}
-      swift_matrix: ${{ steps.areas.outputs.swift_matrix }}
-      swift_tests: ${{ steps.areas.outputs.swift_tests }}
       docs: ${{ steps.areas.outputs.docs }}
       workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
@@ -189,10 +54,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        if: github.event_name == 'pull_request'
       - id: areas
         name: Work out which areas changed
         env:
@@ -215,7 +78,7 @@ jobs:
             echo "no comparable base commit, running every area"
           fi
           area() {
-            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -E "$2" >/dev/null; then
+            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -qE "$2"; then
               echo "$1=true" >> "$GITHUB_OUTPUT"
               echo "$1: run"
             else
@@ -223,8 +86,7 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|EdithHost|EdithDocsWorker|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|edth\.xcodeproj/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|host_build_metadata\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
-          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
+          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -235,31 +97,11 @@ jobs:
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
           area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
-          test_scope=()
-          test_runner=node
-          if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ -n "$base" ]; then
-            test_scope+=("--pull-request-base=$base")
-            test_runner=bun
-          fi
-          if [ "$GITHUB_REF" = refs/heads/main ]; then
-            test_scope=(--shipping)
-          fi
-          if [ "$GITHUB_REF" = refs/heads/main ]; then
-            test_plan='{"include":[]}'
-          elif [ -z "$base" ]; then
-            test_plan="$(printf '%s\n' "$changed" | "$test_runner" scripts/ci-test-plan.mjs "${test_scope[@]}" --all)"
-          else
-            test_plan="$(printf '%s\n' "$changed" | "$test_runner" scripts/ci-test-plan.mjs "${test_scope[@]}")"
-          fi
-          echo "swift_matrix=$test_plan" >> "$GITHUB_OUTPUT"
-          printf '%s' "$test_plan" | node -e 'const fs=require("node:fs"); const plan=JSON.parse(fs.readFileSync(0,"utf8")); console.log("swift_tests="+(plan.include.length > 0));' >> "$GITHUB_OUTPUT"
 
   music-player:
     name: music-player
     needs: changes
-    if: >-
-      needs.changes.outputs.music_player == 'true'
-      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
+    if: needs.changes.outputs.music_player == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -337,7 +179,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           cache: npm
@@ -354,7 +196,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'pull_request'
-      && (needs.changes.outputs.host == 'true'
+      && (needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
     concurrency:
@@ -365,11 +207,38 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Format and lint (swift-format)
+        run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
+        working-directory: Packages/Edith
+      - name: Cache libghostty
+        id: ghostty-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+      - name: Build libghostty
+        run: |
+          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
+            || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
+            || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
+      - name: Save validated libghostty
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
       - name: Cache Swift build products
-        uses: ./.github/actions/cache-host
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - name: Check host ownership and lifecycle contracts
-        run: make ci-host
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: app-release
       - name: Build the release .app bundle
         env:
           EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
@@ -380,69 +249,101 @@ jobs:
   swift-test:
     name: swift-test (${{ matrix.lane }})
     needs: changes
-    if: needs.changes.outputs.swift_tests == 'true'
+    if: >-
+      needs.changes.outputs.swift == 'true'
+      || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     concurrency:
       group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.changes.outputs.swift_matrix) }}
+      max-parallel: 4
+      matrix:
+        include:
+          - lane: core-cli
+            batches: core database database-mcp cli
+          - lane: herdr-clipboard
+            batches: herdr agent machines bifrost clipboard
+          - lane: usage-media
+            batches: usage attention companion browser media
+          - lane: dashboard-app
+            batches: dashboard extensions files database-ui studio time-lapse app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - name: Cache host products
-        uses: ./.github/actions/cache-host
-      - name: Identify the native test toolchain
-        id: native-toolchain
+      - name: Install Fish
         run: |
-          fingerprint="$( { xcodebuild -version; swift --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)"
-          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
-      - name: Cache independent test products
+          command -v fish >/dev/null 2>&1 || brew install fish
+          fish --version
+      - name: Cache libghostty
+        id: ghostty-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
-            Packages/ExtensionMarketplace/.build
-            Packages/ExtensionSupport/.build
-            Packages/EdithDocsWorker/.build
-            Extensions/.build
-            Extensions/music/Native/target
-            ${{ matrix.extension && format('Extensions/{0}/.build', matrix.extension) || '' }}
-            ${{ matrix.extension && format('Extensions/{0}/*/.build', matrix.extension) || '' }}
-            ${{ matrix.extension && format('local/extension-support/{0}_*', matrix.extension) || '' }}
-          key: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-${{ github.sha }}
-          restore-keys: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-
-      - name: Identify the optional terminal test toolchain
-        if: matrix.ghostty == true
-        id: ghostty-toolchain
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+      - name: Build libghostty
         run: |
-          source scripts/ci-setup-zig.sh
-          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
-      - name: Cache the optional terminal test library
-        if: matrix.ghostty == true
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
+            || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
+            || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
+            command -v zig >/dev/null 2>&1 || brew install zig
+            make ghostty
+          fi
+      - name: Save validated libghostty
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: Extensions/terminal/Native/vendor
-          key: ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Cache Swift build products
+        id: swift-cache
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: tests-debug
+      - name: Verify test isolation
+        run: python3 -B scripts/test-swift-test-isolation.py
+      - name: Build tests
+        timeout-minutes: 45
+        run: ./test.sh --build-only
+        working-directory: Packages/Edith
+      - name: Save compiled tests
+        if: matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/.build/*-apple-macosx
+            Packages/Edith/.build/plugins
+            Packages/Edith/.build/*.db
+            Packages/Edith/.build/*.yaml
+          key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
-        timeout-minutes: 40
-        env:
-          TARGETS: ${{ matrix.targets }}
+        timeout-minutes: 30
         run: |
-          read -r -a targets <<< "$TARGETS"
-          make "${targets[@]}"
+          for batch in ${{ matrix.batches }}; do
+            timeout=480
+            if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi
+            events="$RUNNER_TEMP/test-events-$batch.jsonl"
+            python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"
+          done
+        working-directory: Packages/Edith
+        env:
+          EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
 
   companion:
     name: companion
     needs: changes
     if: >-
-      (needs.changes.outputs.companion == 'true'
-      || needs.changes.outputs.workflows == 'true')
-      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
+      needs.changes.outputs.companion == 'true'
+      || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
@@ -477,20 +378,12 @@ jobs:
             apps/companion/target
           key: cargo-${{ runner.os }}-${{ hashFiles('apps/companion/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
-      - name: Prepare the PDF extractor
-        run: make prepare-pdf-extract ci-pdf-source-preparation
       - name: Lint
         run: cargo clippy --all-targets --locked -- -D warnings
         working-directory: apps/companion
       - name: Tests
         run: cargo test --locked
         working-directory: apps/companion
-      - name: Build the original Companion container
-        run: docker build --progress=plain --tag edith-companion-pdf-check --file apps/companion/Dockerfile apps/companion
-      - name: Verify the original runtime image
-        run: |
-          test "$(docker image inspect --format '{{ .Config.User }}' edith-companion-pdf-check)" = companion
-          docker run --rm --network none --entrypoint /bin/sh edith-companion-pdf-check -c 'test -x /usr/local/bin/companion && test "$(id -un)" = companion && command -v ffmpeg && command -v exiftool'
       - name: Migrations apply to a real pgvector database
         env:
           DATABASE_URL: postgres://companion:companion-dev@127.0.0.1:5432/companion
@@ -503,7 +396,9 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
-      && github.event_name == 'workflow_dispatch' && (inputs.release || inputs.rebuild != '')
+      && ((github.event_name == 'push'
+      && needs.changes.outputs.swift == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.rebuild != '')))
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
@@ -513,7 +408,6 @@ jobs:
     env:
       REBUILD: ${{ inputs.rebuild }}
       CUT_RELEASE: ${{ inputs.release || github.event_name == 'push' }}
-      RELEASE_PRERELEASE: "false"
       SOURCE_SHA: ${{ github.sha }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
@@ -551,18 +445,8 @@ jobs:
             || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
           test "$HAS_PUSH_TOKEN" = true \
             || { echo "release blocked: RELEASE_PUSH_TOKEN is required" >&2; exit 1; }
-          if [ "$RELEASE_PRERELEASE" != true ]; then
-            test "$HAS_TAP_TOKEN" = true \
-              || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
-          fi
-
-      - name: Validate coordinated host release dispatch
-        if: inputs.coordinated_host_release != ''
-        env:
-          COORDINATED_HOST_RELEASE: ${{ inputs.coordinated_host_release }}
-          COORDINATED_RELEASE_INPUTS: ${{ toJSON(inputs) }}
-          PUBLIC_RELEASE_VERIFICATION: "1"
-        run: node release-source/scripts/hosted-public-release/production-host-dispatch.mjs
+          test "$HAS_TAP_TOKEN" = true \
+            || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
 
       - name: Resolve the version to release
         id: resolve
@@ -583,8 +467,6 @@ jobs:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
-      RELEASE_PRERELEASE: "false"
-      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -592,10 +474,46 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Cache Swift build products
-        uses: ./.github/actions/cache-host
+      - name: Cache libghostty
+        id: ghostty-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Build libghostty
+        run: |
+          if grep -q 'name: "GhosttyKit"' Packages/Edith/Package.swift; then
+            if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
+              || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
+              || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
+              command -v zig >/dev/null 2>&1 || brew install zig
+              make ghostty
+            fi
+          fi
+
+      - name: Save validated libghostty
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            Packages/Edith/vendor/GhosttyKit.xcframework
+            Packages/Edith/vendor/GhosttyResources
+          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
+
+      - name: Cache Swift build products
+        uses: ./.github/actions/cache-swift
+        with:
+          variant: app-release
+
+      - name: Stamp the release version
+        run: |
+          for plist in Resources/Info.plist Resources/HelperInfo.plist; do
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
+          done
 
       - name: Import signing certificate
         env:
@@ -647,7 +565,32 @@ jobs:
 
       - name: Package the DMG
         if: steps.release_build.outputs.superseded != 'true'
-        run: python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
+        run: |
+          rm -rf dmg-root && mkdir dmg-root
+          ditto dist/Edith.app dmg-root/Edith.app
+          ln -s /Applications dmg-root/Applications
+          dmg_size_kb="$(du -Ask dmg-root | awk '{print $1}')"
+          dmg_size_kb=$((dmg_size_kb + dmg_size_kb / 4 + 65536))
+          hdiutil create -volname Edith -fs HFS+ -size "${dmg_size_kb}k" \
+            -srcfolder dmg-root -format ULMO Edith.dmg
+          verify_status=1
+          for attempt in 1 2 3 4 5; do
+            if hdiutil verify Edith.dmg; then
+              verify_status=0
+              break
+            else
+              verify_status=$?
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep 2
+            fi
+          done
+          rm -rf dmg-root
+          exit "$verify_status"
+
+      - name: Package the database pack
+        if: steps.release_build.outputs.superseded != 'true'
+        run: ./scripts/package-database-pack.sh dist/edith-database .
 
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
@@ -662,6 +605,10 @@ jobs:
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER_ID"
           xcrun stapler staple Edith.dmg
+          xcrun notarytool submit edith-database.zip --wait \
+            --key "$RUNNER_TEMP/notary-key.p8" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID"
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
       - name: Generate the signed appcast
@@ -669,7 +616,7 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          GENERATE_APPCAST="$(find Packages/EdithHost/.build/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
+          GENERATE_APPCAST="$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
           test -n "$GENERATE_APPCAST" \
             || { echo "release blocked: generate_appcast is missing" >&2; exit 1; }
           rm -rf dist/appcast && mkdir dist/appcast
@@ -694,38 +641,16 @@ jobs:
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
         run: spctl -a -t open --context context:primary-signature Edith.dmg
 
-      - name: Record the source-bound static host release proof
-        if: steps.release_build.outputs.superseded != 'true'
-        run: |
-          set -euo pipefail
-          notary=skipped
-          if [ "$HAS_NOTARY" = true ]; then notary=verified; fi
-          python3 -B scripts/test-host-release-source-cleanliness.py
-          python3 scripts/test-host-release-proof.py
-          python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg dist/appcast/appcast.xml local/host-release-proof \
-            --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
-            --notarization "$notary"
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: steps.release_build.outputs.superseded != 'true'
-        with:
-          name: host-release-proof
-          retention-days: 7
-          if-no-files-found: error
-          path: |
-            local/host-release-proof/host-release-proof.json
-            local/host-release-proof/build-metadata.json
-            local/host-release-proof/toolchain-provenance.json
-
       - name: Stage macOS release assets
         if: steps.release_build.outputs.superseded != 'true'
         run: |
           mkdir release-macos
           cp Edith.dmg release-macos/
           cp dist/appcast/appcast.xml release-macos/
-          cp local/host-release-proof/host-release-proof.json local/host-release-proof/build-metadata.json local/host-release-proof/toolchain-provenance.json release-macos/
+          cp edith-database.zip release-macos/
+          cp edith-database.zip.sha256 release-macos/
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-macos
@@ -734,49 +659,40 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Stage the release plists
-        if: steps.release_build.outputs.superseded != 'true'
-        run: |
-          mkdir -p release-plists
-          cp Resources/Info.plist Resources/HelperInfo.plist release-plists/
-          for plist in release-plists/Info.plist release-plists/HelperInfo.plist; do
-            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
-          done
-          git diff --quiet -- Resources/Info.plist Resources/HelperInfo.plist
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.release_build.outputs.superseded != 'true'
         with:
           name: release-plists
-          path: release-plists/*Info.plist
+          path: Resources/*Info.plist
           if-no-files-found: error
           retention-days: 1
 
   publish:
     name: Publish release
-    needs: [version, dmg]
+    needs: [version, dmg, checks, swift-test, companion, music-player, promo-video, swift-build]
     if: >-
       !cancelled()
       && needs.version.result == 'success'
       && needs.dmg.result == 'success'
       && needs.dmg.outputs.superseded != 'true'
+      && needs.checks.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.swift-test.result)
+      && contains(fromJSON('["success","skipped"]'), needs.companion.result)
+      && contains(fromJSON('["success","skipped"]'), needs.music-player.result)
+      && contains(fromJSON('["success","skipped"]'), needs.promo-video.result)
+      && contains(fromJSON('["success","skipped"]'), needs.swift-build.result)
     runs-on: ubuntu-latest
-    timeout-minutes: 150
     concurrency:
       group: release-publication
       cancel-in-progress: false
     permissions:
-      contents: read
-      actions: read
+      contents: write
     env:
       REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
-      GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-      RELEASE_PRERELEASE: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -788,55 +704,29 @@ jobs:
           path: release-source
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          persist-credentials: false
+          persist-credentials: true
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: release-macos
           path: release-assets
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: release-plists
           path: release-plists
-
-      - name: Install the release client
-        run: bash scripts/install-release-client.sh
-
-      - name: Inspect release capabilities
-        run: |
-          pukbot capabilities --json
-          pukbot commit create --help
-          pukbot tag create --help
-          pukbot release create --help
-          pukbot release edit --help
-          pukbot release upload-asset --help
 
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/appcast.xml
+          test -f release-assets/edith-database.zip
+          test -f release-assets/edith-database.zip.sha256
+          expected="$(awk '{print $1}' release-assets/edith-database.zip.sha256)"
+          actual="$(sha256sum release-assets/edith-database.zip | awk '{print $1}')"
+          test "$expected" = "$actual"
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        if: inputs.coordinated_host_release != ''
-
-      - name: Install verified coordinated release dependencies
-        if: inputs.coordinated_host_release != ''
-        working-directory: release-source
-        run: bun install --frozen-lockfile
-
-      - name: Wait for compatible extension releases
-        env:
-          COORDINATED_HOST_RELEASE: ${{ inputs.coordinated_host_release }}
-          COORDINATED_RELEASE_INPUTS: ${{ toJSON(inputs) }}
-          PUBLIC_RELEASE_VERIFICATION: "1"
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node release-source/scripts/extension-release-ready.mjs release-source
-
-      - name: Require the release client to accept both assets
-        run: node scripts/publish-host-release.mjs --preflight release-assets
 
       - name: Commit and tag the release
         id: release_state
@@ -858,24 +748,37 @@ jobs:
           fi
           exit "$PUBLISH_STATUS"
 
-      - name: Publish the release
-        if: steps.release_state.outputs.superseded != 'true'
-        run: node scripts/publish-host-release.mjs release-assets
-
       - name: Update the rebuilt release checksum
-        if: env.REBUILD != '' && env.RELEASE_PRERELEASE != 'true'
+        if: env.REBUILD != ''
         working-directory: release-source
         run: |
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           bash ../scripts/publish-release-state.sh rebuild
 
+      - name: Publish the release
+        if: steps.release_state.outputs.superseded != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --clobber \
+              release-assets/Edith.dmg release-assets/appcast.xml \
+              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
+          else
+            gh release create "$RELEASE_TAG" --title "Edith $RELEASE_TAG" --generate-notes \
+              release-assets/Edith.dmg release-assets/appcast.xml \
+              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
+          fi
+
       - name: Mirror the cask to the tap repository
-        if: steps.release_state.outputs.superseded != 'true' && env.RELEASE_PRERELEASE != 'true'
+        if: steps.release_state.outputs.superseded != 'true'
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          GH_TOKEN="$TAP_PUSH_TOKEN" gh repo clone pulkitxm/homebrew-tap tap -- --depth 1
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
           mkdir -p tap/Casks
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
@@ -883,6 +786,10 @@ jobs:
             echo "the tap already carries $RELEASE_TAG"
             exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/edith.rb
-          GH_TOKEN="$TAP_PUSH_TOKEN" pukbot commit create --repo pulkitxm/homebrew-tap --branch main \
-            --message "Update the Edith cask to ${RELEASE_TAG}" Casks/edith.rb --json
+          git commit -m "Update the Edith cask to ${RELEASE_TAG}"
+          git push origin HEAD:main
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)" \
+            || { echo "release blocked: the tap did not take $RELEASE_TAG" >&2; exit 1; }

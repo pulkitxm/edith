@@ -2990,7 +2990,7 @@ describe("collector configuration", () => {
       "for agent in opencode amp droid codebuff hermes pi goose kilo copilot gemini kimi qwen openclaw grok; do",
     );
     expect(script).toContain("walk_grok");
-    expect(script).toContain(`root="\${GROK_HOME:-$HOME/.grok}/sessions"`);
+    expect(script).toContain('root="${GROK_HOME:-$HOME/.grok}/sessions"');
     const [record] = jq(
       WALKG,
       JSON.stringify({

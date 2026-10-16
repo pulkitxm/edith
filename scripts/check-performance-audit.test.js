@@ -489,7 +489,7 @@ test("single-flight tasks reject replacement while retaining publication guards"
   expect(
     findPerformanceViolations(
       createSource(
-        `${replacementGuard}\nawait service.prepare()`,
+        replacementGuard + "\nawait service.prepare()",
         publicationGuard,
       ),
     ).map(({ rule }) => rule),

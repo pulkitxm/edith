@@ -1,20 +1,13 @@
 import { expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { planSwiftTests } from "./ci-test-plan.mjs";
+import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
+const swiftCache = Bun.YAML.parse(
+  readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
+);
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
+const batches = JSON.parse(readFileSync("scripts/test-batches.json", "utf8"));
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
 
@@ -25,73 +18,6 @@ const areaPatterns = new Map(
 );
 
 const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
-
-function runAreas(paths, { all = false } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "edith-area-routing-"));
-  const output = join(root, "output");
-  const changedFile = join(root, "changed");
-  const script = ciJobs.changes.steps.find((step) => step.id === "areas").run;
-  const areas = script.slice(
-    script.indexOf("area() {"),
-    script.indexOf("test_scope=()"),
-  );
-  try {
-    writeFileSync(changedFile, paths.join("\n"));
-    execFileSync(
-      "bash",
-      [
-        "-e",
-        "-o",
-        "pipefail",
-        "-c",
-        `changed="$(cat "$1")"\n${areas}`,
-        "edith-area-fixture",
-        changedFile,
-      ],
-      {
-        stdio: "pipe",
-        env: {
-          ...process.env,
-          base: all ? "" : "synthetic-base",
-          GITHUB_OUTPUT: output,
-        },
-      },
-    );
-    return Object.fromEntries(
-      readFileSync(output, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => line.split("=")),
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-test("large changed lists retain early area matches under pipefail", () => {
-  const unrelated = Array.from(
-    { length: 7500 },
-    (_, index) => `unrelated/${index}/${"x".repeat(64)}`,
-  );
-  for (const first of [
-    ["Extensions/keepAwake/Runtime.swift"],
-    [".github/workflows/ci.yml", "docs/index.md"],
-    ["apps/music-player/Cargo.lock"],
-  ]) {
-    const changed = [...first, ...unrelated];
-    expect(Buffer.byteLength(changed.join("\n"))).toBeGreaterThan(512 * 1024);
-    const expected = runAreas(first);
-    expect(Object.values(expected)).toContain("true");
-    expect(runAreas(changed)).toEqual(expected);
-  }
-});
-
-test("area routing runs every area without a comparable base", () => {
-  const areas = runAreas(["docs/index.md"], { all: true });
-  expect(Object.keys(areas)).toEqual([...areaPatterns.keys()]);
-  for (const [area, value] of Object.entries(areas))
-    expect(value, area).toBe("true");
-});
 
 test("Spotify catalog changes run native and locked Rust checks", () => {
   for (const path of [
@@ -105,23 +31,7 @@ test("Spotify catalog changes run native and locked Rust checks", () => {
   expect(matchesArea("music_player", "docs/music.md")).toBe(false);
   const job = ciJobs["music-player"];
   expect(job.needs).toBe("changes");
-  const allows = new Function(
-    "needs",
-    "github",
-    "inputs",
-    `return Boolean(${job.if})`,
-  );
-  for (const event_name of ["push", "pull_request"]) {
-    for (const selected of [false, true]) {
-      expect(
-        allows(
-          { changes: { outputs: { music_player: String(selected) } } },
-          { event_name },
-          {},
-        ),
-      ).toBe(selected);
-    }
-  }
+  expect(job.if).toBe("needs.changes.outputs.music_player == 'true'");
   expect(job["runs-on"]).toBe("macos-26");
   const checks = job.steps.find(
     (step) => step["working-directory"] === "apps/music-player",
@@ -152,10 +62,6 @@ test("every change area covers its repository inputs", () => {
   const cases = {
     swift: [
       "Packages/Edith/Sources/Edith/App.swift",
-      "Packages/EdithDocsWorker/Sources/EdithDocsWorker/DocsLibrary.swift",
-      "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
-      "Packages/EdithDocsWorker/Tests/EdithDocsWorkerTests/DocsTests.swift",
-      "Packages/EdithDocsWorker/Package.swift",
       "Resources/Info.plist",
       "edth.xcodeproj/project.pbxproj",
       "scripts/test-swift-test-isolation.py",
@@ -212,17 +118,11 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("main pushes never release on GitHub because releases publish locally", () => {
-  const releaseBuildJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  version:"),
-    ciWorkflow.indexOf("\n  dmg:"),
+test("a main push releases when the Swift area changed", () => {
+  const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
+  expect(releaseBuildJob).toContain(
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
   );
-  const condition = releaseBuildJob.slice(
-    releaseBuildJob.indexOf("if: >-"),
-    releaseBuildJob.indexOf("runs-on:"),
-  );
-  expect(condition).not.toContain("github.event_name == 'push'");
-  expect(condition).toContain("github.event_name == 'workflow_dispatch'");
   expect(ciWorkflow).not.toContain("release_artifact");
   expect(ciWorkflow).not.toContain("release-artifact-changed.sh");
 });
@@ -273,207 +173,139 @@ test("pull requests build the release app that main releases rebuild", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
   );
   expect(swiftBuild).toContain("github.event_name == 'pull_request'");
-  expect(swiftBuild).toContain("needs.changes.outputs.host == 'true'");
-  expect(swiftBuild).not.toContain(
-    "needs.changes.outputs.swift == 'true'\n      ||",
-  );
   expect(swiftBuild).toContain("run: ./build.sh --no-open --release");
   expect(swiftBuild).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
   const releaseBuild = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  version:"),
     ciWorkflow.indexOf("\n  dmg:"),
   );
-  expect(
-    releaseBuild.slice(
-      releaseBuild.indexOf("if: >-"),
-      releaseBuild.indexOf("runs-on:"),
-    ),
-  ).not.toContain("github.event_name == 'push'");
+  expect(releaseBuild).toContain("&& ((github.event_name == 'push'");
   expect(releaseBuild).not.toContain("needs.swift-build");
 });
 
-test("Swift lanes exercise only independent host and extension packages", () => {
+test("Swift tests build their CLI fixture in one package graph", () => {
+  const testTarget = packageManifest.slice(
+    packageManifest.indexOf('name: "EdithTests"'),
+  );
+  expect(testTarget).toContain('"Highlighter", "ed"');
+});
+
+test("Swift tests cache a successful build before bounded execution", () => {
   const job = ciJobs["swift-test"];
+  const steps = job.steps;
+  const restore = steps.find((step) => step.id === "swift-cache");
+  const isolation = steps.find((step) => step.name === "Verify test isolation");
+  const build = steps.find((step) => step.name === "Build tests");
+  const save = steps.find((step) => step.name === "Save compiled tests");
+  const run = steps.find((step) => step.name === "Tests");
+  expect(job["timeout-minutes"]).toBe(90);
+  expect(restore.uses).toBe("./.github/actions/cache-swift");
+  expect(restore.with.variant).toBe("tests-debug");
+  expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
+  expect(build.run).toBe("./test.sh --build-only");
+  expect(build["working-directory"]).toBe("Packages/Edith");
+  expect(build["timeout-minutes"]).toBe(45);
+  expect(build.if).toBeUndefined();
+  expect(run.run).toBe(
+    `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,
+  );
   expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy["max-parallel"]).toBeUndefined();
-  expect(job.strategy.matrix).toBe(
-    ["$", "{{ fromJSON(needs.changes.outputs.swift_matrix) }}"].join(""),
-  );
-  expect(job.if).toBe("needs.changes.outputs.swift_tests == 'true'");
-  expect(planSwiftTests([], { all: true, extensions: [] }).include).toEqual([
-    { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
+  expect(job.strategy["max-parallel"]).toBe(4);
+  expect(job.strategy.matrix.include).toEqual([
     {
-      lane: "feature-models",
-      targets: "ci-extension-support ci-extension-docs",
+      lane: "core-cli",
+      batches: "core database database-mcp cli",
     },
-    { lane: "native-music", targets: "ci-music-native" },
+    {
+      lane: "herdr-clipboard",
+      batches: "herdr agent machines bifrost clipboard",
+    },
+    {
+      lane: "usage-media",
+      batches: "usage attention companion browser media",
+    },
+    {
+      lane: "dashboard-app",
+      batches: "dashboard extensions files database-ui studio time-lapse app",
+    },
   ]);
-  expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
-  expect(JSON.stringify(job)).not.toContain("make ghostty");
-  const tests = job.steps.find((step) => step.name === "Tests");
-  expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
-  expect(tests.run).toContain(`make "\${targets[@]}"`);
-  expect(tests.env.TARGETS).toBe(`\${{ matrix.targets }}`);
-  expect(job["timeout-minutes"]).toBeGreaterThan(tests["timeout-minutes"]);
-  const cache = job.steps.find(
-    (step) => step.name === "Cache independent test products",
+  expect(run["working-directory"]).toBe(build["working-directory"]);
+  expect(run["timeout-minutes"]).toBe(30);
+  expect(run.if).toBeUndefined();
+  expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
+  expect(save.if).toBe(
+    "matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
   );
-  expect(cache.with.path).toContain("Packages/ExtensionSupport/.build");
-  expect(cache.with.path).toContain("Extensions/.build");
-  expect(cache.with.key).toContain("runner.arch");
-  expect(cache.with.key).toContain("matrix.lane");
-  const toolchain = job.steps.find((step) => step.id === "native-toolchain");
-  expect(toolchain.run).toContain("xcodebuild -version");
-  expect(toolchain.run).toContain("swift --version");
-  expect(toolchain.run).toContain("xcrun --sdk macosx --show-sdk-version");
-  expect(job.steps.indexOf(toolchain)).toBeLessThan(job.steps.indexOf(cache));
-  for (const key of [cache.with.key, cache.with["restore-keys"]]) {
-    expect(key).toContain("steps.native-toolchain.outputs.fingerprint");
-    expect(key).toContain("Extensions/{0}/**/Package.*");
+  expect(save.uses).toBe(
+    "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  expect(save.with.key).toBe(
+    `\${{ steps.swift-cache.outputs.compiled-cache-key }}`,
+  );
+  for (const [before, after] of [
+    [restore, build],
+    [isolation, build],
+    [build, save],
+    [save, run],
+  ]) {
+    expect(steps.indexOf(before)).toBeLessThan(steps.indexOf(after));
   }
+  const compiled = swiftCache.runs.steps.find(
+    (step) => step.id === "compiled-tests",
+  );
+  expect(save.with.path).toBe(compiled.with.path);
+  expect(swiftCache.outputs["compiled-cache-key"].value).toBe(
+    compiled.with.key,
+  );
+  expect(swiftCache.outputs["compiled-cache-hit"].value).toBe(
+    `\${{ steps.compiled-tests.outputs.cache-hit || steps.compiled.outputs.cache-hit }}`,
+  );
 });
 
-test("a cold Machines target prepares its native renderer before Swift tests", () => {
-  const makefile = resolve("Makefile");
-  const root = mkdtempSync(join(tmpdir(), "edith-native-prerequisite-"));
-  const bin = join(root, "bin");
-  mkdirSync(bin);
-  mkdirSync(join(root, "scripts"));
-  writeFileSync(
-    join(root, "scripts/prepare-argument-parser.py"),
-    readFileSync("scripts/prepare-argument-parser.py"),
+test("Swift build consumers retain automatic compiled cache saves", () => {
+  const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
+  const tests = swiftCache.runs.steps.find(
+    (step) => step.id === "compiled-tests",
   );
-  const script = (name, body) => {
-    const path = join(bin, name);
-    writeFileSync(path, `#!/bin/sh\nset -eu\n${body}\n`);
-    chmodSync(path, 0o755);
-  };
-  try {
-    script(
-      "bash",
-      'test "$1" = scripts/build-ghostty.sh\ntest "$2" = --extension-only\nmkdir -p Extensions/terminal/Native/vendor\n: > Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" renderer >> events',
+  expect(tests.if).toBe("inputs.variant == 'tests-debug'");
+  expect(tests.uses).toBe(
+    "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  expect(tests.with.key).toBe(compiled.with.key);
+  expect(tests.with["restore-keys"]).toBe(compiled.with["restore-keys"]);
+  expect(tests.with.path).toContain("Packages/Edith/.build/*-apple-macosx");
+  expect(compiled.if).toBe("inputs.variant != 'tests-debug'");
+  expect(compiled.uses).toBe(
+    "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+  );
+  expect(compiled.with.path.trim().split("\n")).toEqual([
+    "build/Build",
+    "build/SDKExplicitPrecompiledModules",
+  ]);
+  for (const [job, variant] of [
+    ["swift-build", "app-release"],
+    ["dmg", "app-release"],
+  ]) {
+    const cache = ciJobs[job].steps.find(
+      (step) => step.uses === "./.github/actions/cache-swift",
     );
-    script(
-      "python3",
-      'test "$#" = 4\ntest "$1" = -I\ntest "$2" = -B\ntest "$3" = scripts/prepare-argument-parser.py\ntest "$4" = Extensions/machines\ntest -f "$3"\ntest -f Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" argument-parser >> events\ntest "$PREPARE_FAIL" = 0',
-    );
-    script(
-      "swift",
-      'test -f Extensions/terminal/Native/vendor/prepared\ncase "$*" in\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionTests"*) printf "%s\\n" machines-core >> events ;;\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionUITests"*) printf "%s\\n" machines-ui >> events ;;\n  *) exit 2 ;;\nesac',
-    );
-    for (const [target, expected] of [
-      ["ci-machines", ["renderer", "argument-parser", "machines-core"]],
-      ["ci-machines-ui", ["renderer", "argument-parser", "machines-ui"]],
-      [
-        "ci-extension-machines",
-        [
-          "renderer",
-          "argument-parser",
-          "machines-core",
-          "argument-parser",
-          "machines-ui",
-        ],
-      ],
-    ]) {
-      rmSync(join(root, "events"), { force: true });
-      rmSync(join(root, "Extensions"), { recursive: true, force: true });
-      execFileSync("make", ["-f", makefile, target], {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
-          EDITH_MAKE_GATE: "skip",
-          PATH: `${bin}:${process.env.PATH}`,
-          PREPARE_FAIL: "0",
-        },
-      });
-      expect(
-        readFileSync(join(root, "events"), "utf8").trim().split("\n"),
-      ).toEqual(expected);
-    }
-    rmSync(join(root, "events"));
-    expect(() =>
-      execFileSync("make", ["-f", makefile, "ci-machines"], {
-        cwd: root,
-        stdio: "pipe",
-        env: {
-          ...process.env,
-          EDITH_MAKE_GATE: "skip",
-          PATH: `${bin}:${process.env.PATH}`,
-          PREPARE_FAIL: "1",
-        },
-      }),
-    ).toThrow();
-    expect(
-      readFileSync(join(root, "events"), "utf8").trim().split("\n"),
-    ).toEqual(["renderer", "argument-parser"]);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+    expect(cache.with.variant).toBe(variant);
   }
-});
-
-test("host build consumers use the narrow host cache", () => {
-  for (const job of ["swift-build", "dmg", "swift-test"]) {
-    expect(
-      ciJobs[job].steps.some(
-        (step) => step.uses === "./.github/actions/cache-host",
-      ),
-    ).toBe(true);
-  }
-  const hostCache = Bun.YAML.parse(
-    readFileSync(".github/actions/cache-host/action.yml", "utf8"),
-  );
-  const products = hostCache.runs.steps.find((step) =>
-    step.uses?.startsWith("actions/cache@"),
-  );
-  expect(products.with.path).toBe("Packages/EdithHost/.build");
-  expect(products.with.key).not.toContain("Packages/Edith/");
-  expect(products.with.key).not.toContain("EdithExtensionDocuments");
 });
 
 test("Swift jobs restore commit times from full history before reusing builds", () => {
-  const hostCache = Bun.YAML.parse(
-    readFileSync(".github/actions/cache-host/action.yml", "utf8"),
-  );
-  expect(hostCache.runs.steps[0].run).toBe(
-    "python3 -B scripts/restore-source-mtimes.py",
-  );
+  const [restoreTimes] = swiftCache.runs.steps;
+  expect(restoreTimes.run).toBe("python3 -B scripts/restore-source-mtimes.py");
   for (const name of ["swift-build", "swift-test", "dmg"]) {
     const steps = ciJobs[name].steps;
     const checkout = steps.find((step) =>
       step.uses?.startsWith("actions/checkout@"),
     );
-    const cache = steps.findIndex((step) =>
-      [
-        "./.github/actions/cache-swift",
-        "./.github/actions/cache-host",
-      ].includes(step.uses),
+    const cache = steps.findIndex(
+      (step) => step.uses === "./.github/actions/cache-swift",
     );
     expect(checkout.with["fetch-depth"], name).toBe(0);
     expect(steps.indexOf(checkout), name).toBeLessThan(cache);
-  }
-});
-
-test("every host cache consumer has full history before restoring source times", () => {
-  for (const file of readdirSync(".github/workflows").filter((name) =>
-    /\.ya?ml$/.test(name),
-  )) {
-    const workflow = Bun.YAML.parse(
-      readFileSync(join(".github/workflows", file), "utf8"),
-    );
-    for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
-      const steps = job.steps ?? [];
-      const cache = steps.findIndex(
-        (step) => step.uses === "./.github/actions/cache-host",
-      );
-      if (cache < 0) continue;
-      const checkout = steps.findIndex((step) =>
-        step.uses?.startsWith("actions/checkout@"),
-      );
-      expect(checkout, `${file}/${name}`).toBeGreaterThan(-1);
-      expect(checkout, `${file}/${name}`).toBeLessThan(cache);
-      expect(steps[checkout].with?.["fetch-depth"], `${file}/${name}`).toBe(0);
-    }
   }
 });
 
@@ -506,7 +338,7 @@ test("every workflow change runs the runtime guard", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  version:"),
   );
-  expect(swiftTest).toContain("needs.changes.outputs.swift_tests == 'true'");
+  expect(swiftTest).toContain("needs.changes.outputs.workflows == 'true'");
   expect(ciWorkflow).toContain(
     "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
   );
@@ -582,67 +414,4 @@ test("backend changes run the companion job", () => {
     "cargo clippy --all-targets --locked -- -D warnings",
   );
   expect(ciWorkflow).toContain("--migrate-only");
-});
-
-test("independent feature changes do not release or invalidate the host", () => {
-  for (const path of [
-    "Extensions/calendar/Runtime.swift",
-    "Packages/EdithHost/Tests/EdithHostCoreTests/HostTests.swift",
-    "Packages/ExtensionMarketplace/Tests/ExtensionMarketplaceTests/StoreTests.swift",
-    "apps/music-player/src/main.rs",
-    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentRenderer.swift",
-  ]) {
-    expect(matchesArea("host", path), path).toBe(false);
-  }
-  for (const path of [
-    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
-    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/PackageStore.swift",
-    "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
-    "scripts/package-shipping-host.py",
-    "scripts/verify_shipping_host.py",
-    "scripts/host_build_metadata.py",
-    ".github/actions/cache-host/action.yml",
-  ]) {
-    expect(matchesArea("host", path), path).toBe(true);
-  }
-});
-
-test("full native extension contracts run on macOS with private SDK execution enabled", () => {
-  const jobs = Bun.YAML.parse(
-    readFileSync(".github/workflows/extensions.yml", "utf8"),
-  ).jobs;
-  const job = jobs.tests;
-  const proof = job.steps.find((step) =>
-    step.run?.includes("scripts/build-extension-support.native.test.js"),
-  );
-  expect(job["runs-on"]).toBe("macos-26");
-  expect(job.needs).toContain("frozen-host");
-  expect(proof.env.EXTENSION_SUPPORT_NATIVE_TESTS).toBe("1");
-  expect(proof.run).toContain("scripts/extension-ghostty-native.test.js");
-  expect(proof.if).toBe("needs.plan.outputs.mode == 'validation'");
-  expect(proof["timeout-minutes"]).toBeGreaterThan(0);
-  const restore = job.steps.findIndex((step) =>
-    step.run?.includes("tar -xzf local/extension-host-artifact/host.tar.gz"),
-  );
-  expect(restore).toBeGreaterThanOrEqual(0);
-  expect(job.steps.indexOf(proof)).toBeGreaterThan(restore);
-});
-
-test("standalone terminal consumers get verified native prerequisites independently of the frozen host", () => {
-  const job = ciJobs["swift-test"];
-  expect(job.needs).toBe("changes");
-  const setup = job.steps.find((step) => step.id === "ghostty-toolchain");
-  const cache = job.steps.find(
-    (step) => step.name === "Cache the optional terminal test library",
-  );
-  const tests = job.steps.find((step) => step.name === "Tests");
-  expect(setup.if).toBe("matrix.ghostty == true");
-  expect(setup.run).toContain("source scripts/ci-setup-zig.sh");
-  expect(setup.run).toContain("extension-ghostty-native.mjs --fingerprint");
-  expect(cache.if).toBe("matrix.ghostty == true");
-  expect(cache.with.path).toBe("Extensions/terminal/Native/vendor");
-  expect(cache.with.key).toContain(
-    "steps.ghostty-toolchain.outputs.fingerprint",
-  );
-  expect(job.steps.indexOf(cache)).toBeLessThan(job.steps.indexOf(tests));
 });

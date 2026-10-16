@@ -17,13 +17,10 @@ globs:
 
 ignores:
   - Packages/Edith/Vendor/**
-  - Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Resources/Highlighter-LICENSE.md
   - "**/.build/**"
   - .wiki-build/**
   - .wiki-clone/**
   - build/**
-  - dist/**
-  - local/**
   - apps/companion/target/**
   - apps/promo-video/node_modules/**
   - extras/**

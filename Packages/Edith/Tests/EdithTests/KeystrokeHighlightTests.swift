@@ -56,13 +56,13 @@ import Testing
             flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand, .maskSecondaryFn])
         let shiftedNumber = try event(keyCode: 18, flags: [.maskShift])
 
-        #expect(KeystrokeEventLabelReader.labels(from: plain) == ["⌥", "⌘", "P"])
+        #expect(KeystrokeHighlightRuntime.labels(from: plain) == ["⌥", "⌘", "P"])
         #expect(
-            KeystrokeEventLabelReader.labels(from: shifted) == ["⌥", "⇧", "⌘", "P"])
+            KeystrokeHighlightRuntime.labels(from: shifted) == ["⌥", "⇧", "⌘", "P"])
         #expect(
-            KeystrokeEventLabelReader.labels(from: all)
+            KeystrokeHighlightRuntime.labels(from: all)
                 == ["⌃", "⌥", "⇧", "⌘", "fn", "P"])
-        #expect(KeystrokeEventLabelReader.labels(from: shiftedNumber) == ["⇧", "1"])
+        #expect(KeystrokeHighlightRuntime.labels(from: shiftedNumber) == ["⇧", "1"])
     }
 
     @Test func cgEventFlagsMapToMacModifiersWithoutDroppingBits() {
@@ -71,10 +71,10 @@ import Testing
             (.maskCommand, .command), (.maskSecondaryFn, .function),
         ]
         for (flag, modifier) in cases {
-            #expect(KeystrokeEventLabelReader.modifiers(from: flag) == modifier)
+            #expect(KeystrokeHighlightRuntime.modifiers(from: flag) == modifier)
         }
         #expect(
-            KeystrokeEventLabelReader.modifiers(from: [
+            KeystrokeHighlightRuntime.modifiers(from: [
                 .maskControl, .maskAlternate, .maskShift, .maskCommand, .maskSecondaryFn,
             ]) == [.control, .option, .shift, .command, .function])
     }
@@ -111,7 +111,7 @@ import Testing
         ]
         for keyCode in keyCodes {
             let labels = try #require(
-                KeystrokeEventLabelReader.labels(
+                KeystrokeHighlightRuntime.labels(
                     from: event(
                         keyCode: keyCode,
                         flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand])))

@@ -108,21 +108,5 @@ Common failures are a stopped container runtime, a closed SSH connection, an
 occupied port, a model that has not finished downloading, or a missing source tree
 on the first deployment.
 
-Enable Companion and keep Edith running before invoking its worker:
-
-```sh
-ed invoke companion companion.status --json '{}'
-ed invoke companion companion.health --json '{"refresh":true}'
-ed invoke companion companion.search --json '{"query":"synthetic note","limit":10}'
-```
-
-Deployment, stack controls, export, import, and erase remain in the Companion UI. See the [public invocation reference](cli/invoke/README.md) for worker availability and request limits.
-
-## Backend development
-
-Run `make prepare-pdf-extract` before invoking Cargo directly in `apps/companion`.
-The command verifies the official PDF extractor source checksum, applies the
-reviewed maintained-parser adaptation, and validates the generated private source
-tree on subsequent runs. `make ci-companion`, `make ci-companion-migrate`, and
-container builds prepare it automatically. The generated source lives in
-`apps/companion/local/pdf-extract` and must stay outside version control.
+The CLI exposes the same deployment, stack, health, export, import and erase
+operations. See the [Companion command reference](cli/companion/README.md).

@@ -124,7 +124,6 @@ Metal, GPU or CPU Compose overlay from the host it probes.
 For backend-only work, install stable Rust with Clippy and use:
 
 ```bash
-make prepare-pdf-extract
 cd apps/companion
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
