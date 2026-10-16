@@ -9,6 +9,7 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var uiModel: AnyObject?
     private var uiClient: ExtensionEngineClient?
+    private var uiLocation: String?
     private var engine: AnyObject?
     private var surface: AnyObject?
     private var commandDrain: Task<Void, Never>?
@@ -44,7 +45,7 @@ final class ExtensionRuntime: NSObject {
                 }
                 let icons = Dictionary(
                     uniqueKeysWithValues: engine.apps.compactMap { app in
-                        app.icon?.tiffRepresentation.map { (String(app.objectID), $0) }
+                        AudioMixerIcon.png(app.icon).map { (String(app.objectID), $0) }
                     })
                 return try JSONEncoder().encode(
                     AudioMixerUISnapshot(apps: apps, icons: icons, error: engine.errorMessage))
@@ -95,12 +96,17 @@ final class ExtensionRuntime: NSObject {
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client
+            uiLocation = input["location"] as? String
             if #available(macOS 14.4, *) { uiModel = AudioMixerRemoteModel(client: client) }
         case "stopUI": stopUI()
         case "view":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
             if #available(macOS 14.4, *), let engine = uiModel as? AudioMixerRemoteModel {
+                if uiLocation == "notch" {
+                    return NSHostingController(
+                        rootView: ExtensionPageHost { AudioMixerView(engine: engine) })
+                }
                 return NSHostingController(
                     rootView: ExtensionPageHost {
                         PageWorkspace {
@@ -133,7 +139,7 @@ final class ExtensionRuntime: NSObject {
                 await owner.stopAndWait()
             }
         }
-        uiModel = nil; uiClient?.invalidate(); uiClient = nil
+        uiModel = nil; uiClient?.invalidate(); uiClient = nil; uiLocation = nil
     }
 
     @objc(suspendCommandsWithCompletion:)

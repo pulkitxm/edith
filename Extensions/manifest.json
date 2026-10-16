@@ -42,16 +42,17 @@
     "minimumSystemVersion": "14.4.0",
     "roles": {
       "app": [
+        "Extensions/audioMixer/AudioMixerIcon.swift",
+        "Extensions/audioMixer/AudioMixerRemoteModel.swift",
         "Extensions/audioMixer/AudioMixerSurface.swift",
+        "Extensions/audioMixer/CLI/AudioCLICatalog.swift",
+        "Extensions/audioMixer/CLI/AudioCLIExecution.swift",
+        "Extensions/audioMixer/CLI/AudioCommands.swift",
         "Extensions/audioMixer/Models/AudioMixer.swift",
         "Extensions/audioMixer/Models/AudioMixerAction.swift",
         "Extensions/audioMixer/Models/AudioMixerCommand.swift",
         "Extensions/audioMixer/Runtime.swift",
-        "Extensions/audioMixer/Views/AudioMixerView.swift",
-        "Extensions/audioMixer/AudioMixerRemoteModel.swift",
-        "Extensions/audioMixer/CLI/AudioCommands.swift",
-        "Extensions/audioMixer/CLI/AudioCLIExecution.swift",
-        "Extensions/audioMixer/CLI/AudioCLICatalog.swift"
+        "Extensions/audioMixer/Views/AudioMixerView.swift"
       ]
     },
     "inputs": [
@@ -3039,6 +3040,7 @@
         "Extensions/herdr/Views/HerdrMessageSheet.swift",
         "Extensions/herdr/Views/HerdrMessageTiming.swift",
         "Extensions/herdr/Views/HerdrNewAgentPopup.swift",
+        "Extensions/herdr/Views/HerdrNotchAgentsCard.swift",
         "Extensions/herdr/Views/HerdrPage.swift",
         "Extensions/herdr/Views/HerdrRemoteScene.swift",
         "Extensions/herdr/Views/HerdrSearchPopup.swift",

@@ -103,6 +103,9 @@ import Testing
             HostAmbientPolicyCoordinator.topic(
                 owner: "herdr", location: "herdr.space", section: "herdr") == "sessions.discover")
         #expect(
+            HostAmbientPolicyCoordinator.topic(owner: "herdr", location: "notch", section: "agents")
+                == "sessions.discover")
+        #expect(
             HostAmbientPolicyCoordinator.topic(
                 owner: "attention", location: "main", section: "attention") == "attention.ingest")
         #expect(

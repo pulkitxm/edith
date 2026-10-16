@@ -38,7 +38,7 @@
       "sources": [
         {
           "path": "Extensions/audioMixer/Runtime.swift",
-          "sha256": "a438493bbdbe725bc82b7a20d3cc3abe1af9f320655bd186bc53c4192b8aa448"
+          "sha256": "44dd46b2f2328c30c900c1ca2eff0be7a9efe13f7e28e14f7ebf4399915d0f2a"
         },
         {
           "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
@@ -804,7 +804,7 @@
       "sources": [
         {
           "path": "Extensions/herdr/Runtime.swift",
-          "sha256": "f0e7a3b1cfb7ea14f39cf26e6004de2a3683be0c39d3307b22fcef87da9f0239"
+          "sha256": "f83cc45a0785fa2e3864eb944955f71c3ce147a99512210e267aee2a77c812bb"
         },
         {
           "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",

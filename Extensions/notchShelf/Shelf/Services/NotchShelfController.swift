@@ -60,6 +60,7 @@ final class NotchShelfController {
     private var startsServices = false
     private let hostOwned: Bool
     private var hostOption = false
+    private var hostPrimaryPressed: Set<CGDirectDisplayID> = []
     weak var panelEngine: NotchPanelEngine?
     var onPanelStateChanged: (() -> Void)?
     private var contextObserver: NSObjectProtocol?
@@ -695,6 +696,13 @@ final class NotchShelfController {
 
     func hostPointer(_ pointer: NotchPanelPointer, display: NotchPanelDisplay) {
         hostOption = pointer.option
+        let pressed = pointer.buttons & 1 != 0
+        let clicked = pressed && !hostPrimaryPressed.contains(display.displayID)
+        if pressed {
+            hostPrimaryPressed.insert(display.displayID)
+        } else {
+            hostPrimaryPressed.remove(display.displayID)
+        }
         let collapsed = NotchGeometry.collapsedSize(
             base: display.collapsedSize, wingWidth: glanceWingWidth)
         let expanded = expandedSize(on: display.displayID)
@@ -709,6 +717,10 @@ final class NotchShelfController {
             NotchGeometry.interactionFrame(around: collapsedFrame).contains(point)
         {
             expand(on: display.displayID, preferredTab: .files)
+        } else if clicked, expandedDisplay == nil, currentAlert == nil,
+            NotchGeometry.openFrame(around: collapsedFrame).contains(point)
+        {
+            expand(on: display.displayID)
         } else if expandedDisplay == display.displayID {
             applyProximity(
                 NotchGeometry.proximity(

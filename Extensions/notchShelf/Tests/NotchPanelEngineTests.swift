@@ -259,6 +259,27 @@ import Testing
         }
     }
 
+    @Test func primaryClickOnCollapsedNotchExpandsOnceAndFileDragOpensFiles() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        let batch = try fixture.attach()
+        let controller = fixture.bind()
+        func pointer(buttons: UInt32, dragging: Bool, y: Double = 10) -> NotchPanelPointer {
+            .init(
+                identity: batch.identity, displayID: 42, presentationID: fixture.presentation,
+                x: 640, y: y, buttons: buttons, option: false, draggingFiles: dragging)
+        }
+        try fixture.engine.pointer(pointer(buttons: 1, dragging: false))
+        #expect(controller.isExpanded(on: 42))
+        controller.collapseNow()
+        try fixture.engine.pointer(pointer(buttons: 1, dragging: false))
+        #expect(!controller.isExpanded(on: 42))
+        try fixture.engine.pointer(pointer(buttons: 0, dragging: false, y: 600))
+        try fixture.engine.pointer(pointer(buttons: 1, dragging: true))
+        #expect(controller.isExpanded(on: 42))
+        #expect(controller.activeTab == .files)
+    }
+
     @Test func chromeActionsMutateOriginalOwnedShelfAndRejectAnotherGeneration() async throws {
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
