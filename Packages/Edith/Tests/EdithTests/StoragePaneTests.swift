@@ -13,17 +13,15 @@ struct StoragePaneTests {
         _ = TestWindowHost.application
     }
 
-    @Test func unknownSizesNeverPresentAsKnownSavings() {
-        var unknown = StorageBytes()
-        unknown.complete = false
-        #expect(StorageSizeLine.value(unknown).hasPrefix("Unknown"))
-        unknown.exists = true
-        #expect(StorageSizeLine.value(unknown).hasPrefix("Partial"))
-        #expect(!StorageSizeLine.value(unknown).contains("saved"))
+    @Test func incompleteSizesReadAsLowerBounds() {
         var known = StorageBytes()
         known.logical = 2048
         known.allocated = 4096
-        #expect(StorageSizeLine.value(known) == "2 KB logical · 4 KB allocated")
+        #expect(StorageFormat.size(known) == "4 KB")
+        known.complete = false
+        #expect(StorageFormat.size(known) == "At least 4 KB")
+        #expect(StorageFormat.share(5, of: 1000) == "under 1%")
+        #expect(StorageFormat.share(500, of: 1000) == "50%")
     }
 
     @Test func replacementAndCancellationRejectLateScanPublicationWhileRetainingContent()
@@ -72,6 +70,10 @@ struct StoragePaneTests {
         let model = StoragePaneModel()
         await model.refresh(inventory: fixture.inventory())
         #expect(model.measurement != nil)
+        let music = try #require(model.inventory?.items.first { $0.id == "music" })
+        model.toggle(music)
+        while model.contents["music"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["music"]?.first?.url.lastPathComponent == "track.json")
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for (name, width, height, zoom, scheme) in [
@@ -114,6 +116,33 @@ struct StoragePaneTests {
             }
             #expect(!TestWindowHost.isExposedOnDesktop(window))
         }
+    }
+
+    @Test func everyStorageItemHasItsOwnIcon() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let outside = try fixture.file("Tracks/song.m4a", count: 10).deletingLastPathComponent()
+        let ids = fixture.inventory(selectedMusic: outside).items.map(\.id).filter { $0 != "app" }
+        #expect(ids.allSatisfy { StorageItemIcon.symbols[$0] != nil })
+        #expect(Set(StorageItemIcon.symbols.keys) == Set(ids))
+    }
+
+    @Test func togglingCollapsesAndRefreshReloadsOpenContents() async throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let model = StoragePaneModel()
+        await model.refresh(inventory: fixture.inventory())
+        let cache = try #require(model.inventory?.items.first { $0.id == "cache" })
+        model.toggle(cache)
+        #expect(model.expanded == ["cache"])
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.count == 2)
+        try fixture.file("Caches/huge.bin", count: 9000)
+        await model.refresh(inventory: fixture.inventory())
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.first?.url.lastPathComponent == "huge.bin")
+        model.toggle(cache)
+        #expect(model.expanded.isEmpty)
     }
 
     private actor ScanGate {

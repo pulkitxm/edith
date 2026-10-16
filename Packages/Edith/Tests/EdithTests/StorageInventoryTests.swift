@@ -43,6 +43,52 @@ struct StorageInventoryTests {
         #expect(category("app", inventory, measurement).logical == 7000)
     }
 
+    @Test func usageListsEveryByteOnceLargestFirst() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let inventory = fixture.inventory()
+        let measurement = try StorageAccounting.scan(scopes: inventory.scopes)
+        let usage = inventory.usage(in: measurement)
+        #expect(!usage.contains { $0.id == "feature-data" })
+        #expect(!usage.contains { $0.id == "latex" })
+        #expect(
+            usage.reduce(Int64(0)) { $0 + $1.bytes.allocated } == measurement.total.allocated)
+        #expect(
+            usage.map(\.bytes.allocated) == usage.map(\.bytes.allocated).sorted(by: >))
+        #expect(
+            usage.first { $0.id == "music" }?.item.roots.map(\.lastPathComponent) == [
+                "music", "thumbnails", "music-library-index.json",
+            ])
+        #expect(
+            usage.first { $0.id == "store" }?.item.roots.map(\.lastPathComponent).contains(
+                "Tasks") == true)
+    }
+
+    @Test func contentsListTheLargestEntriesWithoutOtherItemsData() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let inventory = fixture.inventory()
+        func contents(_ id: String) throws -> [String: Int64] {
+            let item = try #require(inventory.items.first { $0.id == id })
+            return Dictionary(
+                uniqueKeysWithValues: try inventory.contents(of: item).map {
+                    ($0.url.lastPathComponent, $0.bytes.logical)
+                })
+        }
+        #expect(
+            try contents("music") == [
+                "track.json": 2000, "cover.jpg": 500, "music-library-index.json": 100,
+            ])
+        #expect(try contents("other") == ["settings.json": 500, "Cache": 400])
+        #expect(try contents("cache") == ["favicons": 600, "Runtime": 150])
+        #expect(try contents("app") == ["Edith": 7000])
+        let item = try #require(inventory.items.first { $0.id == "music" })
+        #expect(
+            try inventory.contents(of: item, limit: 1).map(\.url.lastPathComponent) == [
+                "track.json"
+            ])
+    }
+
     @Test func databaseBackupsCountUnderTheAppDatabase() throws {
         let fixture = try StorageFixture()
         defer { fixture.clean() }
