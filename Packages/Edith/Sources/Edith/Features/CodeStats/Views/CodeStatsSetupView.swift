@@ -1,35 +1,16 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
 struct CodeStatsSetupView: View {
     let model: CodeStatsModel
-    let choose: () -> Void
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-    @State private var newIdentity = ""
-
-    static let largeMirrorWarningBytes: Int64 = 20_000_000_000
-
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
         PageCard(
             title: "Set up Code Stats", note: "Mirror your GitHub and count your commits"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                folderStep
-                step(
-                    "git", done: model.status?.gitAvailable == true,
-                    detail: model.status?.gitAvailable == true
-                        ? "Installed" : "git is needed to mirror and read repositories."
-                ) {
-                    if model.status?.gitAvailable == false {
-                        CodeStatsCommandHint(command: "ed tools install git", dark: dark)
-                    }
-                }
-                githubStep
-                identityStep
-                scheduleStep
+                CodeStatsSettingsSteps(model: model)
                 HStack {
                     Spacer()
                     Button {
@@ -42,6 +23,86 @@ struct CodeStatsSetupView: View {
                     .disabled(!model.canStart)
                 }
             }
+        }
+    }
+}
+
+struct CodeStatsSettingsSheet: View {
+    let model: CodeStatsModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        PageScaffold(width: .readable) {
+            PageHeader(
+                "Code Stats settings",
+                trailing: {
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.defaultAction)
+                })
+        } content: {
+            CodeStatsSettingsSteps(model: model)
+            Divider()
+            HStack(spacing: UIScale.pt(12)) {
+                Text("Folder, repository and identity changes count from the next refresh.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button {
+                    Task { await model.start() }
+                    dismiss()
+                } label: {
+                    Label("Refresh now", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.edith(.primary))
+                .disabled(!model.canStart)
+            }
+        }
+        .frame(width: UIScale.pt(640), height: UIScale.pt(680))
+    }
+}
+
+enum CodeStatsFolderPanel {
+    @MainActor
+    static func choose(for model: CodeStatsModel) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose the folder for your GitHub mirror"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await model.chooseFolder(url.path) }
+    }
+}
+
+struct CodeStatsSettingsSteps: View {
+    let model: CodeStatsModel
+    @Environment(\.colorScheme) private var scheme
+    @State private var newIdentity = ""
+
+    static let largeMirrorWarningBytes: Int64 = 20_000_000_000
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            folderStep
+            step(
+                "git", done: model.status?.gitAvailable == true,
+                detail: model.status?.gitAvailable == true
+                    ? "Installed" : "git is needed to mirror and read repositories."
+            ) {
+                if model.status?.gitAvailable == false {
+                    CodeStatsCommandHint(command: "ed tools install git", dark: dark)
+                }
+            }
+            githubStep
+            identityStep
+            repositoriesStep
+            scheduleStep
         }
         .pageTask {
             await model.loadProfileIfNeeded()
@@ -56,7 +117,7 @@ struct CodeStatsSetupView: View {
                 ?? "Every repository you can reach is kept here as a bare clone."
         ) {
             HStack(spacing: UIScale.pt(10)) {
-                Button("Choose folder...", action: choose)
+                Button("Choose folder...") { CodeStatsFolderPanel.choose(for: model) }
                 if case .ready(let free?) = storage {
                     Text(
                         ByteCountFormatter.string(fromByteCount: free, countStyle: .file) + " free"
@@ -154,6 +215,25 @@ struct CodeStatsSetupView: View {
         }
     }
 
+    private var repositoriesStep: some View {
+        step(
+            "Repositories", done: true,
+            detail: "Choose which of your GitHub repositories are mirrored and counted."
+        ) {
+            Toggle(
+                "Include forks",
+                isOn: Binding(
+                    get: { model.settings.includeForks },
+                    set: { value in Task { await model.setIncludeForks(value) } }))
+            Toggle(
+                "Include archived repositories",
+                isOn: Binding(
+                    get: { model.settings.includeArchived },
+                    set: { value in Task { await model.setIncludeArchived(value) } }))
+        }
+        .font(.system(size: UIScale.pt(12)))
+    }
+
     private var scheduleStep: some View {
         step(
             "Schedule", done: true,
@@ -176,7 +256,52 @@ struct CodeStatsSetupView: View {
             )
             .labelsHidden()
             .fixedSize()
+            scheduleTime
         }
+    }
+
+    @ViewBuilder private var scheduleTime: some View {
+        switch model.schedule {
+        case .manual:
+            EmptyView()
+        case .daily(let hour):
+            HStack(spacing: UIScale.pt(10)) {
+                hourPicker(hour) { .daily(hour: $0) }
+            }
+        case .weekly(let weekday, let hour):
+            HStack(spacing: UIScale.pt(10)) {
+                Picker(
+                    "Day",
+                    selection: Binding(
+                        get: { weekday },
+                        set: { day in update(.weekly(weekday: day, hour: hour)) })
+                ) {
+                    ForEach(CodeStatsPreferences.weekdays, id: \.self) { day in
+                        Text(Calendar.current.weekdaySymbols[day - 1]).tag(day)
+                    }
+                }
+                .fixedSize()
+                hourPicker(hour) { .weekly(weekday: weekday, hour: $0) }
+            }
+        }
+    }
+
+    private func hourPicker(
+        _ hour: Int, schedule: @escaping (Int) -> CodeStatsSchedule
+    ) -> some View {
+        Picker(
+            "Time",
+            selection: Binding(get: { hour }, set: { value in update(schedule(value)) })
+        ) {
+            ForEach(CodeStatsPreferences.hours, id: \.self) { value in
+                Text(String(format: "%02d:00", value)).tag(value)
+            }
+        }
+        .fixedSize()
+    }
+
+    private func update(_ schedule: CodeStatsSchedule) {
+        Task { await model.setSchedule(schedule) }
     }
 
     private func addIdentity() {
