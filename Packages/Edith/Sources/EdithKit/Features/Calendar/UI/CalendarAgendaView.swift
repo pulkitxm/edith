@@ -525,8 +525,13 @@ enum CalendarText {
 
     static func duration(for event: CalendarEventPayload) -> String {
         let minutes = max(0, Int(event.end.timeIntervalSince(event.start) / 60))
-        let hours = minutes / 60
+        let days = minutes / 1_440
+        let hours = minutes % 1_440 / 60
         let remainder = minutes % 60
+        if days > 0 {
+            let dayText = days == 1 ? "1 day" : "\(days) days"
+            return hours == 0 ? dayText : "\(dayText) \(hours) hr"
+        }
         if hours == 0 { return "\(minutes) min" }
         if remainder == 0 { return hours == 1 ? "1 hr" : "\(hours) hrs" }
         return "\(hours) hr \(remainder) min"

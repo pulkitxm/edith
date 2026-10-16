@@ -34,6 +34,10 @@ import Testing
         #expect(snapshot.processID == 42)
         #expect(snapshot.uptimeSeconds == 7_300)
         #expect(snapshot.uptimeText == "2h 1m")
+
+        let longRunning = center.diagnostics(
+            launchedAt: launched, now: Date(timeIntervalSince1970: 190_100), processID: 42)
+        #expect(longRunning.uptimeText == "2d 4h")
         #expect(snapshot.idleWakeups == 17)
     }
 

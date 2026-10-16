@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 public struct SurfaceMetric: Equatable, Identifiable, Sendable {
@@ -275,8 +276,7 @@ public enum SurfaceExtensionProjection {
     }
     public static func duration(_ seconds: Double) -> String {
         guard seconds.isFinite else { return "Unavailable" }
-        let minutes = Int(min(525_600, max(0, seconds / 60)))
-        return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+        return CompactDuration.detailed(min(31_536_000, seconds), showsSeconds: false)
     }
 }
 
