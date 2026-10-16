@@ -16,11 +16,14 @@ final class BlitzTreeModel {
     private(set) var error: String?
     private(set) var stopped = false
     private(set) var previewToken = UUID()
+    var list = BlitzTreeList.children
+    var rings = false
     private var engineClient: ExtensionEngineClient?
     private var suspending = false
     private var pickerTask: Task<Void, Never>?
     private var remoteTask: Task<Void, Never>?
     private var remoteRevision = 0
+    private var following = false
     private let client: BlitzTreeClient
     private let remove: @Sendable (BlitzTreeReport.Entry, String, Progress) async throws -> Void
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -32,7 +35,7 @@ final class BlitzTreeModel {
         client: BlitzTreeClient = .live,
         remove: @escaping @Sendable (BlitzTreeReport.Entry, String, Progress) async throws -> Void =
             { entry, root, cancellation in
-                try await BlockingWork.perform {
+                try await BlockingWork.perform(qos: .userInitiated) {
                     try BlitzTreeActions.trash(
                         entry, root: root, isCancelled: { cancellation.isCancelled })
                 }
@@ -62,6 +65,17 @@ final class BlitzTreeModel {
     }
 
     func refreshRemote() async {
+        await refreshRemoteOnce()
+        guard !following else { return }
+        following = true
+        defer { following = false }
+        while scanning || removing, !stopped, !suspending, !Task.isCancelled {
+            do { try await Task.sleep(for: .milliseconds(80)) } catch { return }
+            await refreshRemoteOnce()
+        }
+    }
+
+    private func refreshRemoteOnce() async {
         guard let task = track({ [self] in await refreshRemoteWork() }) else { return }
         await withTaskCancellationHandler {
             await task.value
@@ -89,12 +103,15 @@ final class BlitzTreeModel {
         previewToken = value.previewToken; removing = value.removing;
         scannedEntries = value.scannedEntries; error = value.error
         if value.scanning {
-            if !loading.isRunning { _ = loading.begin() }
+            if !loading.isRunning || (value.report == nil && loading.hasContent) {
+                _ = loading.begin(preservingContent: value.report != nil)
+            }
         } else if value.report != nil {
             loading.setContent()
         } else if let error = value.error {
-            loading.fail(loading.begin(), message: error)
+            loading.fail(loading.begin(preservingContent: false), message: error)
         } else {
+            _ = loading.begin(preservingContent: false)
             loading.cancel()
         }
     }
@@ -129,7 +146,6 @@ final class BlitzTreeModel {
         }
         cancel()
         if remember, let root, root != path { history.append(root) }
-        if history.count > 100 { history.removeFirst(history.count - 100) }
         root = path
         previewToken = UUID()
         if report?.root != path { report = nil }
@@ -187,7 +203,7 @@ final class BlitzTreeModel {
 
     func trash(_ entry: BlitzTreeReport.Entry) {
         if engineClient != nil {
-            guard
+            guard !stopped, !suspending, !scanning, !removing,
                 let payload = try? JSONEncoder().encode(
                     BlitzTreeUITrash(path: entry.path, confirmed: true, previewToken: previewToken))
             else { return }
@@ -319,6 +335,24 @@ final class BlitzTreeModel {
         panel.begin { value in
             response.continuation.yield(value)
             response.continuation.finish()
+        }
+    }
+}
+
+enum BlitzTreeList: String, CaseIterable, Identifiable {
+    case children = "Contents"
+    case directories = "Largest folders"
+    case files = "Largest files"
+    case candidates = "Cleanup candidates"
+
+    var id: String { rawValue }
+
+    func entries(_ report: BlitzTreeReport) -> [BlitzTreeReport.Entry] {
+        switch self {
+        case .children: report.report.inventory.largestChildren
+        case .directories: report.report.inventory.largestDirectories
+        case .files: report.report.inventory.largestFiles
+        case .candidates: report.report.candidates
         }
     }
 }

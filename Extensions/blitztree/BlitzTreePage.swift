@@ -5,11 +5,10 @@ import SwiftUI
 
 struct BlitzTreePage: View {
     @State var model: BlitzTreeModel
-    @State private var list = BlitzTreeList.children
-    @State private var rings = false
     @State private var pendingRemoval: BlitzTreeReport.Entry?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.windowRouter) private var router
 
     var body: some View {
         PageScaffold {
@@ -53,6 +52,8 @@ struct BlitzTreePage: View {
                 }
             }
         }
+        .navigationRoute("list", selection: $model.list)
+        .navigationRoute("folder", selection: folderBinding, isValid: folderIsValid)
         .onDisappear { model.cancel() }
         .confirmationDialog(
             "Move this item to Trash?",
@@ -85,16 +86,21 @@ struct BlitzTreePage: View {
     }
 
     private func folderIsValid(_ path: String) -> Bool {
-        path.hasPrefix("/") && !path.utf8.contains(0)
-
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     private var navigation: some View {
         HStack {
             Button("Back", systemImage: "chevron.left") {
-                model.back()
+                if router?.canGoBack == true {
+                    router?.goBack()
+                } else {
+                    model.back()
+                }
             }
-            .disabled(model.history.isEmpty || model.removing)
+            .disabled((router?.canGoBack != true && model.history.isEmpty) || model.removing)
             Text(model.root ?? "Choose a folder to explore its disk usage")
                 .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .lineLimit(1)
@@ -145,14 +151,14 @@ struct BlitzTreePage: View {
                 .font(.edithText(.headline))
             Spacer()
             EdithSegmentedPicker(
-                "Visualization", selection: $rings, options: [false, true],
+                "Visualization", selection: $model.rings, options: [false, true],
                 label: { $0 ? "Rings" : "Treemap" }
             )
             .labelsHidden()
             .frame(width: UIScale.pt(180))
         }
         Group {
-            if rings {
+            if model.rings {
                 BlitzTreeRings(report: report) { entry in activate(entry) }
             } else {
                 BlitzTreeMap(report: report) { entry in activate(entry) }
@@ -164,18 +170,18 @@ struct BlitzTreePage: View {
             .font(.edithText(.caption))
             .foregroundStyle(.secondary)
         EdithSegmentedPicker(
-            "Show", selection: $list, options: BlitzTreeList.allCases, label: { $0.rawValue })
-        if list == .candidates {
+            "Show", selection: $model.list, options: BlitzTreeList.allCases, label: { $0.rawValue })
+        if model.list == .candidates {
             Text(
                 "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
             )
             .font(.edithText(.callout))
             .foregroundStyle(.secondary)
         }
-        let entries = list.entries(report)
+        let entries = model.list.entries(report)
         if entries.isEmpty {
             Text(
-                list == .candidates
+                model.list == .candidates
                     ? "No cleanup candidates meet the 50 MB threshold." : "No entries to show."
             )
             .foregroundStyle(.secondary)
@@ -243,20 +249,17 @@ struct BlitzTreePage: View {
     }
 }
 
-private enum BlitzTreeList: String, CaseIterable, Identifiable {
-    case children = "Contents"
-    case directories = "Largest folders"
-    case files = "Largest files"
-    case candidates = "Cleanup candidates"
-
-    var id: String { rawValue }
-
-    func entries(_ report: BlitzTreeReport) -> [BlitzTreeReport.Entry] {
-        switch self {
-        case .children: report.report.inventory.largestChildren
-        case .directories: report.report.inventory.largestDirectories
-        case .files: report.report.inventory.largestFiles
-        case .candidates: report.report.candidates
+struct BlitzTreeSettings: View {
+    var body: some View {
+        Form {
+            Section("Disk space") {
+                LabeledContent("Engine", value: "BlitzTree")
+                Text(
+                    "Choose a folder to explore allocated space and review cleanup candidates in Finder."
+                )
+                .settingsCaption()
+            }
         }
+        .edithForm()
     }
 }

@@ -92,7 +92,7 @@ public struct BlitzTreeClient: Sendable {
     public static let live = BlitzTreeClient { root, progress in
         let cancellation = Foundation.Progress(totalUnitCount: 0)
         return try await withTaskCancellationHandler {
-            try await BlockingWork.perform {
+            try await BlockingWork.perform(qos: .userInitiated) {
                 try BlitzTreeScanner.scan(
                     root: root, isCancelled: { cancellation.isCancelled }, progress: progress)
             }

@@ -13,10 +13,11 @@ public final class WorkCancellation: @unchecked Sendable {
 
 public enum BlockingWork {
     public static func perform<T: Sendable>(
+        qos: DispatchQoS.QoSClass = .utility,
         _ body: @escaping @Sendable () throws -> T
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
+            DispatchQueue.global(qos: qos).async {
                 continuation.resume(with: Result { try body() })
             }
         }
