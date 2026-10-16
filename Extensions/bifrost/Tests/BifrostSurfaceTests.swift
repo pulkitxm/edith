@@ -32,6 +32,9 @@ import Testing
         let data = try await surface.execute(
             "surface.snapshot", payload: request.encoded(providerID: "bifrost"))
         let snapshot = try SurfaceSnapshot.decode(data, providerID: "bifrost")
+        #expect(snapshot.metrics.map(\.id) == ["apps"])
+        #expect(snapshot.metrics.first?.title == "Indexed apps")
+        #expect(snapshot.actions.map(\.title) == ["Open launcher"])
         #expect(snapshot.rows.first?.title == "Fixture Notes")
         #expect(snapshot.rows.first?.actions.first?.id.hasPrefix("launch/") == true)
         #expect(!String(decoding: data, as: UTF8.self).contains("/synthetic"))
@@ -48,13 +51,13 @@ import Testing
                     snapshot: .init(target: .home, tile: tile), actionID: "open"
                 ).encoded(providerID: "bifrost"))
         }
-        tile = SurfaceTile(.desk); tile.hiddenFields = ["bifrost"]
-        let hidden = try SurfaceSnapshot.decode(
+        tile = SurfaceTile(.desk)
+        await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.snapshot",
                 payload: SurfaceSnapshotRequest(target: .home, tile: tile).encoded(
-                    providerID: "bifrost")), providerID: "bifrost")
-        #expect(hidden.rows.isEmpty && hidden.metrics.isEmpty && hidden.actions.isEmpty)
+                    providerID: "bifrost"))
+        }
         tile = SurfaceTile(.ability("bifrost")); tile.sourceIDs = []
         let filtered = try SurfaceSnapshot.decode(
             try await surface.execute(

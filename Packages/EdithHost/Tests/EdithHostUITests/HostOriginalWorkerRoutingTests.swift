@@ -67,6 +67,13 @@ import Testing
                 && request.section == "extension")
     }
 
+    @Test func bifrostPanelRequestRestoresTheWindowWithoutNavigating() throws {
+        let route = try HostWorkerNavigationRouting.resolve(
+            extensionID: "bifrost", version: "1.0.0", activeVersions: admitted("bifrost"),
+            currentPage: "music", visible: { _ in true })
+        #expect(route.restoreOnly && route.page == "music" && route.section == nil)
+    }
+
     @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
     func absentReplacedIncompatibleAndRetiringWorkersNeverReachARegisteredDestination(id: String) {
         let candidates: [[String: String]] =
