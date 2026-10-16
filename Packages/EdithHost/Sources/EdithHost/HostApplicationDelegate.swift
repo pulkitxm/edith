@@ -11,6 +11,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
     var shutdown: (@MainActor () async -> Void)?
     var stopWorkers: (@MainActor () -> Void)?
+    var preventsQuit: (@MainActor () async -> Bool)?
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
     var mainWindow: @MainActor () -> NSWindow? = {
@@ -19,6 +20,9 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var launchesRuntime = true
     private(set) lazy var runtime = HostRuntime(delegate: self)
     private var terminating = false
+    private var deferringQuit = false
+    private var quitConfirmed = false
+    private var quitCancelled = false
     private(set) var launchedAtLogin = false
     private var windowCloseObserver: NSObjectProtocol?
 
@@ -107,9 +111,33 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         if launchesRuntime { runtime.launch() }
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if deferringQuit { quitCancelled = true }
+        return true
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let shutdown else { return .terminateNow }
         guard !terminating else { return .terminateCancel }
+        if let preventsQuit, !quitConfirmed {
+            guard !deferringQuit else { return .terminateCancel }
+            deferringQuit = true
+            quitCancelled = false
+            Task {
+                if await preventsQuit() {
+                    NSApp.hide(nil)
+                    while !quitCancelled, await preventsQuit() {
+                        try? await Task.sleep(for: .seconds(1))
+                    }
+                }
+                deferringQuit = false
+                guard !quitCancelled else { return }
+                quitConfirmed = true
+                HostQuit.terminate()
+                quitConfirmed = false
+            }
+            return .terminateCancel
+        }
         terminating = true
         HostQuit.conceal()
         NSApp.setActivationPolicy(.prohibited)

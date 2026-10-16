@@ -35,16 +35,6 @@ struct VideoAudioEnvelope: Codable, Sendable {
                 throw VideoRenderPipeline.RenderError.exportFailed(
                     "This source has no audio track.")
             }
-            let descriptions = try await track.load(.formatDescriptions)
-            let channels = max(
-                1,
-                min(
-                    32,
-                    Int(
-                        descriptions.first.flatMap {
-                            CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee
-                                .mChannelsPerFrame
-                        } ?? 1)))
             let interval = max(0.02, duration / 200_000)
             let bucketSize = max(1, Int(interval * 8000))
             let reader = try AVAssetReader(asset: asset)
@@ -52,7 +42,7 @@ struct VideoAudioEnvelope: Codable, Sendable {
                 track: track,
                 outputSettings: [
                     AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 8000,
-                    AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 32,
+                    AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 32,
                     AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
                 ])
             reader.add(output)
@@ -71,10 +61,8 @@ struct VideoAudioEnvelope: Codable, Sendable {
                         block, atOffset: 0, dataLength: length, destination: $0.baseAddress!)
                 }
                 guard status == kCMBlockBufferNoErr else { continue }
-                for offset in stride(from: 0, to: samples.count, by: channels) {
-                    for channel in offset..<min(offset + channels, samples.count) {
-                        peak = max(peak, abs(samples[channel]))
-                    }
+                for value in samples {
+                    peak = max(peak, abs(value))
                     count += 1
                     if count == bucketSize { peaks.append(peak); peak = 0; count = 0 }
                 }

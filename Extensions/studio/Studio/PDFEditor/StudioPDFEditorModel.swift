@@ -456,15 +456,6 @@ final class StudioPDFEditorModel {
     }
 
     func findRedactions() {
-        if facade != nil {
-            remoteChange(
-                "redactions",
-                parameters: [
-                    "terms": redactTerms, "emails": redactEmails, "phones": redactPhones,
-                    "cards": redactCards,
-                ]);
-            return
-        }
         var patterns: [PDFRedaction.Pattern] = []
         if redactEmails { patterns.append(.email) }
         if redactPhones { patterns.append(.phone) }
@@ -484,7 +475,6 @@ final class StudioPDFEditorModel {
     }
 
     func trimAllMargins() {
-        if facade != nil { remoteChange("trim", parameters: [:]); return }
         var trimmed = 0
         mutate { trimmed = try $0.trimMargins(pages: Array(0..<pageCount)) }
         status =
@@ -493,7 +483,6 @@ final class StudioPDFEditorModel {
     }
 
     func detectFields() {
-        if facade != nil { remoteChange("fields", parameters: [:]); return }
         var created = 0
         mutate { created = $0.detectFormFields() }
         status =
@@ -528,9 +517,6 @@ final class StudioPDFEditorModel {
         panel.allowedContentTypes = [.pdf, .image]
         panel.message = "Choose a PDF or image to insert."
         guard panel.runModal() == .OK, let file = panel.url else { return }
-        if facade != nil {
-            remoteChange("insert", parameters: ["file": file.path, "page": page + 1]); return
-        }
         mutate { _ = try $0.insertPages(from: file, at: page + 1) }
     }
 
@@ -540,11 +526,6 @@ final class StudioPDFEditorModel {
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = url.studioStem + "-pages.pdf"
         guard panel.runModal() == .OK, let target = panel.url else { return }
-        if facade != nil {
-            remoteChange(
-                "extract", parameters: ["pages": Array(pages).sorted(), "output": target.path]);
-            return
-        }
         do {
             try session.extractPages(Array(pages), to: target)
             status =
@@ -718,31 +699,6 @@ final class StudioPDFEditorModel {
         panel.nameFieldStringValue = url.studioStem + "-\(mode.suffix).pdf"
         guard panel.runModal() == .OK, let target = panel.url else { return }
         save(to: target, studio: studio)
-    }
-
-    private func remoteChange(_ action: String, parameters: [String: Any]) {
-        guard !isWorking, let facade, let session, let snapshot = session.snapshot() else { return }
-        let version = revision
-        isWorking = true
-        mutationTask = work.start { [weak self] in
-            defer { self?.isWorking = false }
-            do {
-                let uploaded = try await facade.upload(snapshot)
-                let handle: StudioUIResource = try await facade.perform(
-                    "studio.ui.pdf.change",
-                    object: [
-                        "path": session.source.path, "snapshot": try facade.object(uploaded),
-                        "action": action, "parameters": parameters,
-                    ])
-                let value: StudioUIPDFChange = try await facade.download(handle)
-                guard let self, !Task.isCancelled, self.revision == version else { return }
-                if action != "extract" {
-                    self.undoStack.append(snapshot); self.redoStack.removeAll()
-                    session.restore(value.snapshot); self.revision += 1; self.selected = nil
-                }
-                if let status = value.status { self.status = status }
-            } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
-        }
     }
 
     func zoom(_ factor: CGFloat) {

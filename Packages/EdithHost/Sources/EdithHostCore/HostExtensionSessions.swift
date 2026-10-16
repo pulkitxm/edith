@@ -331,6 +331,11 @@ public final class HostExtensionSessions {
         else { throw HostWorkerError.rejected }
     }
 
+    public func preventsQuit() async -> Bool {
+        for worker in Array(workers.values) where await worker.preventsQuit() { return true }
+        return false
+    }
+
     public func applyUpdate(_ package: ExtensionPackage) async throws {
         guard !pendingDisableIDs.contains(package.id), states[package.id] == .active,
             versions[package.id] != package.version

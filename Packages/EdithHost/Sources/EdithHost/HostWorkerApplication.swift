@@ -184,6 +184,20 @@ final class HostWorkerApplication {
                             token: request.token, ok: true, version: configuration?.version))
                     continue
                 }
+                if request.operation == "quitStatus" {
+                    let prevents = runtimes.contains { runtime in
+                        guard runtime.role == .app, let id = configuration?.extensionID else {
+                            return false
+                        }
+                        let status = try? runtime.response(id: id, operation: "status")
+                        return status?["preventsQuit"] as? Bool == true
+                    }
+                    try control.send(
+                        HostWorkerResponse(
+                            token: request.token, ok: true, version: configuration?.version,
+                            message: prevents ? HostWorkerResponse.preventsQuitMessage : nil))
+                    continue
+                }
                 if request.operation == "prepareDisable" {
                     prepareDisable(request)
                     continue

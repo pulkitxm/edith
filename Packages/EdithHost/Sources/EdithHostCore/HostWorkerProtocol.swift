@@ -136,6 +136,7 @@ public struct HostWorkerRequest: Codable, Sendable {
 }
 
 public struct HostWorkerResponse: Codable, Sendable {
+    public static let preventsQuitMessage = "preventsQuit"
     public let token: UUID
     public let ok: Bool
     public let version: String?
