@@ -5,7 +5,6 @@ import SwiftUI
 @MainActor
 @Observable
 final class DataBackupModel {
-    var footprints: [BackupFootprint] = []
     var lastBackupAt: Date?
     var schemaVersion: Int?
     var restorePreview: [String] = []
@@ -21,7 +20,6 @@ final class DataBackupModel {
         do {
             let value = try await StorageInspectionClient().inspect(force: force)
             try Task.checkCancellation()
-            footprints = value.footprints
             restorePreview = value.restoreEntries.map {
                 "\($0.name) · \(ByteCountFormatter.string(fromByteCount: $0.bytes, countStyle: .file))"
             }
@@ -41,10 +39,6 @@ final class DataBackupModel {
             try AgentClient.shared.runtimeSnapshot()
         }?.schemaVersion
     }
-
-    var totalBytes: Int64 {
-        footprints.first { $0.id == "data" }?.bytes ?? 0
-    }
 }
 
 struct DataBackupPane: View {
@@ -60,7 +54,6 @@ struct DataBackupPane: View {
         Form {
             rootSection
             classesSection
-            footprintSection
             restoreSection
             if let failure = model.failure {
                 Section { Text(failure).foregroundStyle(.orange) }
@@ -84,10 +77,6 @@ struct DataBackupPane: View {
                     .font(DashSkin.mono(10.5))
                     .textSelection(.enabled)
             }
-            LabeledContent(
-                "On disk",
-                value: ByteCountFormatter.string(
-                    fromByteCount: model.totalBytes, countStyle: .file))
             if let schemaVersion = model.schemaVersion {
                 LabeledContent("Store schema", value: "version \(schemaVersion)")
             }
@@ -106,7 +95,7 @@ struct DataBackupPane: View {
             }
             Text(
                 "Caches and logs are regenerable and never synced. Logs older than seven days "
-                    + "are pruned on launch."
+                    + "are pruned on launch. The Storage tab measures what each area uses on disk."
             )
             .settingsCaption()
         }
@@ -120,37 +109,6 @@ struct DataBackupPane: View {
             }
             Text("Secrets stay in the Keychain and are re-entered on each Mac.")
                 .settingsCaption()
-        }
-    }
-
-    private var footprintSection: some View {
-        Section("On disk") {
-            ForEach(model.footprints) { footprint in
-                LabeledContent(footprint.title) {
-                    HStack(spacing: UIScale.pt(8)) {
-                        Text(
-                            footprint.exists
-                                ? ByteCountFormatter.string(
-                                    fromByteCount: footprint.bytes, countStyle: .file)
-                                : "not created"
-                        )
-                        .font(DashSkin.mono(10.5))
-                        .foregroundStyle(footprint.exists ? .secondary : .tertiary)
-                    }
-                }
-            }
-            if model.isRefreshing {
-                SkeletonGroup {
-                    SkeletonBlock(width: 180, height: 9, corner: 4)
-                }
-                .accessibilityLabel("Inspecting storage in the background")
-            }
-            if let collectedAt = model.collectedAt {
-                Text("Measured \(collectedAt.formatted(date: .omitted, time: .shortened))")
-                    .settingsCaption()
-            }
-            Button("Refresh sizes") { refreshRevision &+= 1 }
-                .disabled(model.isRefreshing)
         }
     }
 

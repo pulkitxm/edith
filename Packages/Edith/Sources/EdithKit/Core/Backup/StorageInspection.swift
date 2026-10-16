@@ -13,16 +13,13 @@ public struct StorageRestoreEntry: Codable, Equatable, Sendable, Identifiable {
 
 public struct StorageInspectionSnapshot: Codable, Sendable {
     public let collectedAt: Date
-    public let footprints: [BackupFootprint]
     public let restoreEntries: [StorageRestoreEntry]
     public let issues: [String]
 
     public init(
-        collectedAt: Date = Date(), footprints: [BackupFootprint],
-        restoreEntries: [StorageRestoreEntry], issues: [String]
+        collectedAt: Date = Date(), restoreEntries: [StorageRestoreEntry], issues: [String]
     ) {
         self.collectedAt = collectedAt
-        self.footprints = footprints
         self.restoreEntries = restoreEntries
         self.issues = issues
     }
@@ -37,7 +34,7 @@ public struct StorageInspectionClient: Sendable {
     public func inspect(force: Bool = false) async throws -> StorageInspectionSnapshot {
         let data = try await tasks.run(
             AgentTaskSubmission(
-                operation: Self.operation, title: "Inspecting storage and backup sizes",
+                operation: Self.operation, title: "Inspecting backup sizes",
                 payload: AgentPayload.encode(force)))
         return try AgentPayload.decode(StorageInspectionSnapshot.self, from: data)
     }
