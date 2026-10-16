@@ -309,7 +309,7 @@ final class ExtensionRuntime: NSObject {
             uiPresentations.release(id)
         case "stopUI": uiPresentations.stop()
         case "start":
-            guard !draining, Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty
+            guard !draining, !ExtensionHostRole.isInterfaceProcess, uiPresentations.isEmpty
             else {
                 return ["ok": false] as NSDictionary
             }

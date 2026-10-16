@@ -513,6 +513,19 @@ final class TerminalSessionHolder {
         guard started, retirementTask == nil, exitMessage == nil,
             client != nil || creationTask != nil
         else { return }
+        switch (events.last, event) {
+        case (.resize, .resize):
+            events[events.count - 1] = event
+            deliverEvents()
+            return
+        case let (.input(queued), .input(data))
+        where queued.count + data.count <= OwnedTerminalPTY.maximumInputBytes:
+            events[events.count - 1] = .input(queued + data)
+            queuedBytes += bytes
+            deliverEvents()
+            return
+        default: break
+        }
         guard events.count < 256, queuedBytes + bytes <= 262144 else {
             failStream("The terminal input queue is full."); return
         }

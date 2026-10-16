@@ -76,7 +76,7 @@ public actor CodeStatsWorkflow {
     private var state: CodeStatsState
     private var progress: CodeStatsRunProgress?
     private var runTask: Task<Void, Never>?
-    private var profileFlight: Task<CodeStatsProfileLookup, Never>?
+    private var profileFlight: Task<CodeStatsProfileLookup?, Never>?
     private var subscribers: [UUID: AsyncStream<CodeStatsStatus>.Continuation] = [:]
     private var stopped = false
     private var launching: UUID?
@@ -87,6 +87,10 @@ public actor CodeStatsWorkflow {
     private var storage: (folder: String?, checkedAt: Date, status: CodeStatsStorageStatus)?
     private var authorsFlight: Task<[CodeStatsDiscoveredAuthor], Error>?
     private var revision: UInt64 = 0
+    private var probed = false
+    private var lastProbeAt: Date?
+    private var statusRefresh: Task<Void, Never>?
+    private var factsCache: (stamp: Date?, data: Data)?
 
     public init(
         environment: CodeStatsEnvironment = .live,
@@ -95,11 +99,20 @@ public actor CodeStatsWorkflow {
         self.environment = environment
         self.publish = publish
         state = environment.store.loadState()
+        if let saved = environment.store.loadStatus() {
+            gitAvailable = saved.gitAvailable
+            githubInstalled = (.distantPast, saved.githubAvailable)
+            storage = (saved.settings.folder, .distantPast, saved.storage)
+            probed = true
+        }
     }
 
     public func shutdown() async {
         stopped = true
         runTask?.cancel(); authorsFlight?.cancel(); profileFlight?.cancel()
+        statusRefresh?.cancel()
+        await statusRefresh?.value
+        statusRefresh = nil
         await runTask?.value
         _ = try? await authorsFlight?.value
         _ = await profileFlight?.value
@@ -152,8 +165,7 @@ public actor CodeStatsWorkflow {
             }
             return try JSONEncoder().encode(report)
         case CodeStatsCommand.facts:
-            let store = environment.store
-            return try JSONEncoder().encode(await BlockingWork.value { store.loadFacts() })
+            return await factsData()
         case CodeStatsCommand.audit:
             let filter =
                 payload.isEmpty
@@ -186,7 +198,58 @@ public actor CodeStatsWorkflow {
     public func status() async -> CodeStatsStatus {
         await reconcile()
         await refreshGitAvailability()
-        return snapshot(probingStorage: true)
+        let value = snapshot(probingStorage: true)
+        probed = true
+        lastProbeAt = environment.now()
+        remember(value)
+        return value
+    }
+
+    public func cachedStatus(maximumAge: TimeInterval = 5) -> CodeStatsStatus? {
+        guard probed, !stopped else { return nil }
+        let value = snapshot(cachedOnly: true)
+        let stale =
+            lastProbeAt.map { environment.now().timeIntervalSince($0) >= maximumAge } ?? true
+        if stale, statusRefresh == nil {
+            statusRefresh = Task { [weak self] in
+                guard let self else { return }
+                _ = await self.status()
+                await self.finishStatusRefresh()
+            }
+        }
+        return value
+    }
+
+    private func finishStatusRefresh() async {
+        statusRefresh = nil
+        guard !stopped, !Task.isCancelled else { return }
+        await announce()
+    }
+
+    public func preload() async {
+        guard !stopped else { return }
+        _ = await factsData()
+    }
+
+    private func factsData() async -> Data {
+        let store = environment.store
+        let stamp = store.factsStamp()
+        if let factsCache, factsCache.stamp == stamp { return factsCache.data }
+        let loaded = await BlockingWork.value { () -> (Date?, Data?) in
+            (store.factsStamp(), store.loadFactsData())
+        }
+        let data = loaded.1 ?? Data("null".utf8)
+        factsCache = (loaded.0, data)
+        return data
+    }
+
+    private func remember(_ value: CodeStatsStatus) {
+        var current = value
+        current.revision = 0
+        var previous = environment.store.loadStatus()
+        previous?.revision = 0
+        guard previous != current else { return }
+        try? environment.store.saveStatus(value)
     }
 
     public func settingsChanged() async {
@@ -281,7 +344,14 @@ public actor CodeStatsWorkflow {
     }
 
     public func profile() async -> CodeStatsProfileLookup {
-        guard !stopped else { return CodeStatsProfileLookup(issue: .unavailable) }
+        let unavailable = CodeStatsProfileLookup(issue: .unavailable)
+        guard !stopped else { return unavailable }
+        if let first = await profileOnce() { return first }
+        guard !Task.isCancelled, !stopped else { return unavailable }
+        return await profileOnce() ?? unavailable
+    }
+
+    private func profileOnce() async -> CodeStatsProfileLookup? {
         if let flight = profileFlight { return await flight.value }
         let flight = Task { await self.loadProfile() }
         profileFlight = flight
@@ -293,7 +363,7 @@ public actor CodeStatsWorkflow {
         }
     }
 
-    private func loadProfile() async -> CodeStatsProfileLookup {
+    private func loadProfile() async -> CodeStatsProfileLookup? {
         guard !stopped, let github = environment.github() else {
             return CodeStatsProfileLookup(issue: .unavailable)
         }
@@ -305,8 +375,9 @@ public actor CodeStatsWorkflow {
             if state.profile != profile { state.profile = profile; persist(); await announce() }
             return CodeStatsProfileLookup(profile: profile, emails: emails)
         } catch let issue as CodeStatsGitHubError {
-            return CodeStatsProfileLookup(issue: issue)
+            return Task.isCancelled ? nil : CodeStatsProfileLookup(issue: issue)
         } catch {
+            if CodeStatsCancellation.isSilent(error) || Task.isCancelled { return nil }
             return CodeStatsProfileLookup(issue: .failed(message: error.localizedDescription))
         }
     }
@@ -424,23 +495,29 @@ public actor CodeStatsWorkflow {
                 finishedAt: environment.now()), active)
     }
 
-    private func snapshot(probingStorage: Bool = false) -> CodeStatsStatus {
+    private func snapshot(probingStorage: Bool = false, cachedOnly: Bool = false)
+        -> CodeStatsStatus
+    {
         let settings = environment.settings()
         let milliseconds = UInt64(max(environment.now().timeIntervalSince1970 * 1_000, 0))
         revision = max(revision + 1, milliseconds)
         return CodeStatsStatus(
             settings: settings,
-            storage: storageStatus(for: settings.folder, probing: probingStorage),
-            gitAvailable: gitAvailable, githubAvailable: githubAvailable(), state: state,
+            storage: storageStatus(
+                for: settings.folder, probing: probingStorage, cachedOnly: cachedOnly),
+            gitAvailable: gitAvailable, githubAvailable: githubAvailable(cachedOnly: cachedOnly),
+            state: state,
             nextRunAt: settings.schedule.nextRun(
                 after: state.scheduleBase, calendar: environment.calendar),
             progress: state.active == nil ? nil : progress, revision: revision)
     }
 
-    private func storageStatus(for folder: String?, probing: Bool) -> CodeStatsStorageStatus {
+    private func storageStatus(for folder: String?, probing: Bool, cachedOnly: Bool = false)
+        -> CodeStatsStorageStatus
+    {
         let now = environment.now()
         if !probing, let storage, storage.folder == folder,
-            now.timeIntervalSince(storage.checkedAt) < Self.storageRecheckInterval
+            cachedOnly || now.timeIntervalSince(storage.checkedAt) < Self.storageRecheckInterval
         {
             return storage.status
         }
@@ -449,10 +526,10 @@ public actor CodeStatsWorkflow {
         return status
     }
 
-    private func githubAvailable() -> Bool {
+    private func githubAvailable(cachedOnly: Bool = false) -> Bool {
         let now = environment.now()
         if let githubInstalled,
-            now.timeIntervalSince(githubInstalled.checkedAt) < Self.gitRecheckInterval
+            cachedOnly || now.timeIntervalSince(githubInstalled.checkedAt) < Self.gitRecheckInterval
         {
             return githubInstalled.available
         }

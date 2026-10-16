@@ -128,13 +128,6 @@ import Observation
         }
     }
 
-    func thumbnail(_ url: URL, side: CGFloat) async throws -> NSImage? {
-        let value: Data? = try await read(
-            "studio.ui.thumbnail",
-            object: ["path": url.path, "side": Double(side)])
-        return value.flatMap(NSImage.init(data:))
-    }
-
     func run(_ job: StudioJob, onFinish: @escaping @MainActor (StudioJob) -> Void) {
         submit(job.id.uuidString) { [weak self, weak job] in
             guard let self, let job else { return nil }
@@ -164,8 +157,8 @@ import Observation
         action("studio.ui.job.cancel", object: ["id": job.id.uuidString])
     }
 
-    func add(_ urls: [URL]) {
-        mutate("studio.library.add", object: ["paths": urls.map(\.path)])
+    func add(_ urls: [URL], then: @escaping @MainActor () -> Void = {}) {
+        mutate("studio.library.add", object: ["paths": urls.map(\.path)], then: then)
     }
 
     func remove(_ urls: Set<URL>) {
@@ -331,11 +324,15 @@ import Observation
         }
     }
 
-    private func mutate(_ operation: String, object: [String: Any] = [:]) {
+    private func mutate(
+        _ operation: String, object: [String: Any] = [:], then: @escaping @MainActor () -> Void = {}
+    ) {
         submit(UUID().uuidString) { [weak self] in
             guard let self else { return nil }
             let _: [StudioMediaItem] = try await self.read(operation, object: object)
-            return { self.refresh() }
+            return {
+                then(); self.refresh()
+            }
         }
     }
 

@@ -69,6 +69,39 @@ private func waitForHomebrewModel(
         #expect(!model.isCancelling)
     }
 
+    @Test func leavingThePageStopsDiscoveryWithoutANotice() async {
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { _, _ in
+                try await Task.sleep(for: .seconds(30))
+                return CLICommandResult(terminationStatus: 0, output: "")
+            }, store: store())
+
+        model.loadInstalled(kind: .formula)
+        #expect(model.isBusy)
+        model.cancelDiscovery()
+        #expect(await waitForHomebrewModel { !model.isBusy })
+
+        #expect(model.resultMessage == nil)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func leavingThePageKeepsAMutationRunning() async {
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { request, _ in
+                if request.arguments.first == "install" {
+                    try await Task.sleep(for: .seconds(30))
+                }
+                return CLICommandResult(terminationStatus: 0, output: "")
+            }, store: store())
+        let package = HomebrewPackage(kind: .formula, name: "ripgrep", displayName: "ripgrep")
+
+        model.perform(.install, package: package, query: "", kind: .formula)
+        model.cancelDiscovery()
+        #expect(model.isBusy && model.isMutating)
+        model.cancel()
+        #expect(await waitForHomebrewModel { !model.isBusy })
+    }
+
     @Test func cachedListingShowsBeforeRefreshFinishes() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

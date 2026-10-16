@@ -11,6 +11,8 @@ final class OwnedTerminalPTY {
     private var pendingInput = Data()
     private var output = Data()
     private(set) var offset: UInt64 = 0
+    private var acknowledged: UInt64 = 0
+    private var lastRead = ContinuousClock.now
     private(set) var exitCode: Int32?
 
     struct Output: Codable, Equatable {
@@ -57,17 +59,21 @@ final class OwnedTerminalPTY {
         var size = winsize(
             ws_row: rows, ws_col: columns, ws_xpixel: pixelWidth, ws_ypixel: pixelHeight)
         guard ioctl(descriptor, TIOCSWINSZ, &size) == 0 else { throw Self.error() }
+        let foreground = tcgetpgrp(descriptor)
+        if foreground > 0 { _ = killpg(foreground, SIGWINCH) }
     }
 
     func read(after cursor: UInt64, limit: Int = 32_768) throws -> Output {
         guard !closed, limit > 0, limit <= 32_768 else { throw POSIXError(.EINVAL) }
-        let retainedBeginning = offset - UInt64(output.count)
-        guard cursor >= retainedBeginning, cursor <= offset else { throw POSIXError(.EOVERFLOW) }
-        try poll(after: cursor)
+        guard cursor <= offset else { throw POSIXError(.EOVERFLOW) }
+        lastRead = ContinuousClock.now
+        acknowledged = max(acknowledged, cursor)
+        try drain()
         let beginning = offset - UInt64(output.count)
-        let index = Int(cursor - beginning)
+        let start = max(cursor, beginning)
+        let index = Int(start - beginning)
         let bytes = Data(output.dropFirst(index).prefix(limit))
-        let next = cursor + UInt64(bytes.count)
+        let next = start + UInt64(bytes.count)
         var mode = termios()
         guard tcgetattr(descriptor, &mode) == 0 else { throw Self.error() }
         return Output(
@@ -95,16 +101,20 @@ final class OwnedTerminalPTY {
         while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
     }
 
-    private func poll(after cursor: UInt64) throws {
+    func drain() throws {
+        guard !closed else { return }
         observeExit()
         if exitCode == nil { try flushInput() } else { pendingInput.removeAll() }
+        let detached = ContinuousClock.now - lastRead > .seconds(1)
         var buffer = [UInt8](repeating: 0, count: 8_192)
         for _ in 0..<32 {
             if output.count == Self.maximumBufferedBytes {
                 let beginning = offset - UInt64(output.count)
-                let acknowledged = Int(cursor - beginning)
-                guard acknowledged > 0 else { break }
-                output.removeFirst(acknowledged)
+                let removable =
+                    detached
+                    ? output.count / 2 : Int(min(max(acknowledged, beginning), offset) - beginning)
+                guard removable > 0 else { break }
+                output.removeFirst(removable)
             }
             let capacity = min(buffer.count, Self.maximumBufferedBytes - output.count)
             let count = Darwin.read(descriptor, &buffer, capacity)

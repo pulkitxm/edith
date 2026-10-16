@@ -11,7 +11,7 @@ struct HerdrDiffSessionState: Codable {
 @MainActor enum HerdrShellLaunch {
     static func prepare(target: PaneTarget, store: HerdrStore) async throws -> TerminalLaunchRequest
     {
-        guard Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.rejected("Only the owning engine can prepare a shell.")
         }
         if target.machineID == Machine.localID {
@@ -58,7 +58,7 @@ extension HerdrStore {
                 }
                 return
             }
-            guard Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard !ExtensionHostRole.isInterfaceProcess else {
                 throw ExtensionPeerError.unavailable
             }
             let request = try await attachRequest(
@@ -90,7 +90,7 @@ extension HerdrStore {
                 }
                 return
             }
-            guard Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard !ExtensionHostRole.isInterfaceProcess else {
                 throw ExtensionPeerError.unavailable
             }
             let request = try await attachRequest(
@@ -160,7 +160,7 @@ extension HerdrStore {
                     try tab.quinjet.adopt(state, invoke: terminalClient)
                     return
                 }
-                guard Bundle.main.bundleURL.pathExtension != "appex" else {
+                guard !ExtensionHostRole.isInterfaceProcess else {
                     throw ExtensionPeerError.unavailable
                 }
                 let remote = try await quinjetRemote(for: tab)

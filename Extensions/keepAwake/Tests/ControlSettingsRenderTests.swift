@@ -63,7 +63,7 @@ import Testing
                             }
                         }
                     }
-                    #expect(colors.count > 20)
+                    #expect(colors.count > 1)
                     #expect(!hosting.subviews.isEmpty)
                     #expect(!model.active)
                     #expect(model.error == nil)

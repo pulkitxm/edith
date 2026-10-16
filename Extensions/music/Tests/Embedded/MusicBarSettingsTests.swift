@@ -546,7 +546,7 @@ import Testing
     }
 }
 
-@MainActor private final class MusicSettingsFlushTestBridge: NSObject {
+@MainActor final class MusicSettingsFlushTestBridge: NSObject {
     private var requests: [UUID: ExtensionEngineRequest] = [:]
     private var completions: [UUID: (NSData) -> Void] = [:]
     private(set) var cancelled: Set<UUID> = []

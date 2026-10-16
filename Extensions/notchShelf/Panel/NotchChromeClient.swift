@@ -152,7 +152,7 @@ import Observation
                 ? next.display.width - 48 : min(1200, next.display.width - 48))).contains(
                     next.panel.shapeWidth),
             (1...(next.panel.activeTab == "browser"
-                ? next.display.height - 12 : min(1024, next.display.height - 48))).contains(
+                ? next.display.height - 48 : min(1024, next.display.height - 48))).contains(
                     next.panel.shapeHeight),
             next.panel.capacityWidth.map({
                 $0.isFinite && $0 >= next.panel.shapeWidth && $0 <= next.display.width - 48
@@ -387,6 +387,8 @@ import Observation
     var leadingGlance: NotchSurfaceGlance? { snapshot?.leadingGlance }
     var trailingGlance: NotchSurfaceGlance? { snapshot?.trailingGlance }
     var glanceWingWidth: CGFloat { CGFloat(snapshot?.glanceWingWidth ?? 0) }
+    var nowPlaying: Bool { snapshot?.nowPlaying ?? false }
+    var pendingPermissions: Int { snapshot?.pendingPermissions ?? 0 }
     var surfaceLayout: SurfaceLayout { remoteLayouts.notch }
     var visibleSurfaceLayout: SurfaceLayout {
         var layout = surfaceLayout

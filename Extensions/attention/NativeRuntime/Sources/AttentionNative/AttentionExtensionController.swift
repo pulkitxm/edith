@@ -200,7 +200,7 @@ public final class AttentionExtensionController: NSObject {
             }
             stopUI()
         case "start":
-            guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard !uiConfigured, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
@@ -236,7 +236,18 @@ public final class AttentionExtensionController: NSObject {
                             bundleID: "com.example.fixture.editor"))
                 }
                 surface = AttentionSurface(repository: repository, service: service)
-                if !fixture { startup = Task { await service.start() } }
+                if !fixture {
+                    let root = AttentionPaths.root
+                    startup = Task {
+                        _ = try? AttentionLegacyHistoryImport.run(
+                            source: root.appendingPathComponent(
+                                AttentionLegacyHistoryImport.sourceName),
+                            marker: root.appendingPathComponent(
+                                AttentionLegacyHistoryImport.markerName),
+                            into: database)
+                        await service.start()
+                    }
+                }
             } catch { return ["ok": false, "message": error.localizedDescription] as NSDictionary }
         case "view":
             guard !stopped, let uiClient, !uiClient.stopped,

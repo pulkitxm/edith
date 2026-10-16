@@ -30,6 +30,14 @@ public struct HostRemoteKernelIdentity: Equatable, Sendable {
     }
 
     public var isRunning: Bool { (try? Self.read(pid)) == self }
+
+    public var isAlive: Bool {
+        var info = proc_bsdinfo()
+        let size = MemoryLayout<proc_bsdinfo>.size
+        return pid > 1 && proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size)) == size
+            && info.pbi_uid == getuid() && info.pbi_ruid == getuid()
+            && generation == "\(info.pbi_start_tvsec):\(info.pbi_start_tvusec)"
+    }
 }
 
 public struct HostRemoteProcessIdentity: Equatable, Sendable {

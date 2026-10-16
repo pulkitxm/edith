@@ -187,6 +187,99 @@ import EdithExtensionSupport
         #expect(await Self.wait { !model.checkingUpdates })
     }
 
+    @Test func snapshotRequestAnswersFromMemoryWhileTheScanIsBlocked() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshots = AppMaintenanceSnapshotStore(
+            fileURL: directory.appendingPathComponent("snapshot.json"))
+        let application = Self.application
+        try await snapshots.save(
+            AppMaintenanceSnapshot(applications: [application], updates: [Self.storeItem]))
+        let gate = DiscoveryGate()
+        let model = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: snapshots,
+            inventory: { _ in
+                await gate.wait()
+                return [application]
+            },
+            discover: { _, _, _, _ in [] })
+        let decoder = JSONDecoder()
+        await model.restoreCachedSnapshot()
+        let action = AppMaintenanceUIAction(
+            operation: "refresh", value: nil, item: nil, enabled: false, integer: nil,
+            number: 86_400, previewToken: model.previewToken)
+        let started = try decoder.decode(
+            AppMaintenanceUISnapshot.self,
+            from: try await AppMaintenanceUICommands.execute(
+                "maintenance.ui.action", payload: JSONEncoder().encode(action), model: model))
+        #expect(started.checkingUpdates && started.phase == .ready)
+
+        let answered = AnsweredFlag()
+        let request = Task { @MainActor in
+            let data = try await AppMaintenanceUICommands.execute(
+                "maintenance.ui.snapshot", payload: Data("{\"iconRevision\":-1}".utf8),
+                model: model)
+            answered.raise()
+            return data
+        }
+        #expect(await Self.wait { answered.raised })
+        let reply = try decoder.decode(AppMaintenanceUISnapshot.self, from: try await request.value)
+        #expect(reply.phase == .ready && reply.checkingUpdates)
+        #expect(reply.applications.map(\.name) == ["Example"])
+        #expect(reply.updates.map(\.id) == [Self.storeItem.id])
+        #expect(reply.icons != nil)
+
+        let unchanged = try decoder.decode(
+            AppMaintenanceUISnapshot.self,
+            from: try await AppMaintenanceUICommands.execute(
+                "maintenance.ui.snapshot",
+                payload: Data("{\"iconRevision\":\(reply.iconRevision)}".utf8), model: model))
+        #expect(unchanged.icons == nil)
+        gate.open()
+        #expect(await Self.wait { !model.checkingUpdates })
+        await model.shutdown()
+    }
+
+    @Test func secondVisitRendersTheRememberedSnapshotOnTheFirstFrame() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshots = AppMaintenanceSnapshotStore(
+            fileURL: directory.appendingPathComponent("snapshot.json"))
+        let application = Self.application
+        try await snapshots.save(
+            AppMaintenanceSnapshot(applications: [application], updates: [Self.storeItem]))
+        let gate = DiscoveryGate()
+        let engine = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: snapshots,
+            inventory: { _ in
+                await gate.wait()
+                return [application]
+            },
+            discover: { _, _, _, _ in [] })
+        let bridge = SnapshotBridge(model: engine)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let memory = AppMaintenanceUIMemory()
+
+        let first = AppMaintenanceModel(engineClient: client, memory: memory)
+        #expect(first.phase == .loading && !first.loading.hasContent)
+        await first.refreshRemote()
+        #expect(first.phase == .ready && first.applications.map(\.name) == ["Example"])
+        await first.shutdown()
+
+        let second = AppMaintenanceModel(engineClient: client, memory: memory)
+        #expect(second.phase == .ready && second.loading.state == .content)
+        #expect(second.applications.map(\.name) == ["Example"])
+        #expect(second.updates.map(\.id) == [Self.storeItem.id])
+        gate.open()
+        await second.shutdown()
+        client.invalidate()
+        await engine.shutdown()
+    }
+
     @Test func secondRefreshKeepsApplicationsVisible() async throws {
         let directory = try Self.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -290,6 +383,35 @@ import EdithExtensionSupport
     private static let brewJSON = """
         {"formulae":[],"casks":[{"name":"example","installed_versions":["1.0"],"current_version":"2.0"}]}
         """
+}
+
+private final class AnsweredFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var raised: Bool { lock.withLock { value } }
+    func raise() { lock.withLock { value = true } }
+}
+
+private final class SnapshotBridge: NSObject {
+    let model: AppMaintenanceModel
+    var tasks: [UUID: Task<Void, Never>] = [:]
+    init(model: AppMaintenanceModel) { self.model = model }
+    @objc func invoke(_ data: Data, completion: @escaping (Data) -> Void) {
+        guard let request = try? ExtensionEngineWire.decode(ExtensionEngineRequest.self, from: data)
+        else { completion(Data()); return }
+        tasks[request.token] = Task { @MainActor in
+            let payload = try? await AppMaintenanceUICommands.execute(
+                request.operation, payload: request.payload, model: model)
+            let reply = ExtensionEngineReply(
+                token: request.token, ok: payload != nil, payload: payload ?? Data("{}".utf8))
+            completion((try? ExtensionEngineWire.encode(reply)) ?? Data())
+            tasks[request.token] = nil
+        }
+    }
+    @objc func cancel(_ token: String) {
+        guard let token = UUID(uuidString: token) else { return }
+        tasks.removeValue(forKey: token)?.cancel()
+    }
 }
 
 private final class DiscoveryCounter: @unchecked Sendable {

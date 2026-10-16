@@ -82,8 +82,8 @@ export function fixturePermissionOverlay(source) {
 export function fixturePresenterOverlay(source) {
   return replaceExact(
     source,
-    "width: state.width, receive: receive)",
-    "width: state.width, receive: receive)\n                try HostGUIFixture.recordUI(handle)",
+    "                try await manager.presentScene(\n                    handle, compact: state.compact, visible: state.visible, width: state.width)\n",
+    "                let presented = try await manager.presentScene(\n                    handle, compact: state.compact, visible: state.visible, width: state.width)\n                try HostGUIFixture.recordUI(handle)\n                return presented\n",
   );
 }
 

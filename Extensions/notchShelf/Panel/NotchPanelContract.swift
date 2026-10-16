@@ -179,6 +179,8 @@ struct NotchChromeSnapshot: Codable, Sendable {
     let leadingGlance: NotchSurfaceGlance?
     let trailingGlance: NotchSurfaceGlance?
     let glanceWingWidth: Double
+    let nowPlaying: Bool
+    let pendingPermissions: Int
     let alert: NotchAlert?
     let shelfOperationError: String?
     let heights: [UUID: Double]

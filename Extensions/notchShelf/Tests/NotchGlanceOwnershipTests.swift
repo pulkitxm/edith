@@ -13,14 +13,14 @@ import Testing
             $0.notchExpandPermissions = false
             $0.notchPrioritizePermissions = false
         }
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         #expect(fixture.controller.leadingGlance == nil)
         #expect(fixture.controller.trailingGlance?.source == .clock)
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .files }
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
-        #expect(fixture.controller.leadingGlance == nil)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
+        #expect(fixture.controller.leadingGlance?.value == "0")
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .nextMeeting }
-        #expect(fixture.controller.glanceProviderIDs == ["calendar"])
+        #expect(fixture.controller.glanceProviderIDs == ["calendar", "herdr"])
     }
 
     @Test func liveSnapshotIsClearedImmediatelyOnDisableOrPrivacyChange() throws {
@@ -29,9 +29,11 @@ import Testing
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .nextMeeting }
         let snapshot = SurfaceSnapshot(
             providerID: "calendar",
-            rows: [.init("mock-meeting", title: "Synthetic planning session")])
+            rows: [.init("mock-meeting", title: "Synthetic planning session")],
+            facts: ["nextMeetingStart": Date().addingTimeInterval(600).timeIntervalSince1970])
         fixture.controller.recordSurfaceSnapshot(snapshot)
-        #expect(fixture.controller.leadingGlance?.value == "Synthetic planni")
+        #expect(fixture.controller.leadingGlance?.source == .nextMeeting)
+        #expect(fixture.controller.leadingGlance?.detail == "Next meeting")
         let presenter = ExtensionSharedState(
             root: fixture.root, namespace: fixture.id, owner: "presenter")
         try presenter.publish(["active": "1", "blurCalendar": "1"])
@@ -85,24 +87,47 @@ import Testing
             $0.notchPrioritizePermissions = false
             $0.notchExpandPermissions = false
         }
-        fixture.controller.recordSurfaceSnapshot(
-            .init(
-                providerID: "herdr",
-                rows: [.init("unrelated", title: "Synthetic working agent", value: "Working")]))
         #expect(fixture.controller.leadingGlance == nil)
         #expect(fixture.controller.glanceWingWidth == 0)
         fixture.controller.recordSurfaceSnapshot(
-            .init(
-                providerID: "herdr",
-                metrics: [.init("permissions", "Permissions", "0")]))
-        #expect(fixture.controller.leadingGlance == nil)
+            .init(providerID: "herdr", facts: ["permissions": 0]))
+        #expect(fixture.controller.leadingGlance?.value == "0")
+        #expect(fixture.controller.leadingGlance?.urgency == 0)
         fixture.controller.recordSurfaceSnapshot(
-            .init(
-                providerID: "herdr",
-                metrics: [.init("permissions", "Permissions", "2")]))
+            .init(providerID: "herdr", facts: ["permissions": 2]))
         #expect(fixture.controller.leadingGlance?.value == "2")
-        #expect(fixture.controller.leadingGlance?.urgent == true)
+        #expect(fixture.controller.leadingGlance?.urgency == 1)
         #expect(fixture.controller.glanceWingWidth == 96)
+    }
+
+    @Test func automaticGlancesFollowTheResolutionTree() throws {
+        var context = NotchGlanceContext()
+        #expect(context.resolve(.automatic, leading: true) == nil)
+        #expect(context.resolve(.automatic, leading: false) == nil)
+        context.files = 3
+        #expect(context.resolve(.automatic, leading: true)?.source == .files)
+        #expect(context.resolve(.automatic, leading: false)?.source == .clock)
+        context.focus = NotchGlanceFocus(name: "Focus", endsAt: context.now.addingTimeInterval(90))
+        #expect(context.resolve(.automatic, leading: true)?.value == "1:30")
+        context.hasMusic = true
+        #expect(context.resolve(.automatic, leading: true)?.source == .music)
+        context.observing = true
+        context.active = 2
+        context.working = 1
+        #expect(context.resolve(.automatic, leading: true)?.source == .workingAgents)
+        context.waiting = 1
+        #expect(context.resolve(.automatic, leading: false)?.source == .waitingAgents)
+        context.approvals = 1
+        #expect(context.resolve(.automatic, leading: false)?.source == .permissions)
+        #expect(context.resolve(.automatic, leading: false)?.urgency == 1)
+        context.stuck = 1
+        context.monitoringStalls = false
+        #expect(context.resolve(.stuckAgents, leading: false)?.value == "Off")
+        context.nextMeeting = nil
+        #expect(context.resolve(.nextMeeting, leading: false)?.value == "Free")
+        context.quotaRemaining = 4.9
+        #expect(context.resolve(.limits, leading: false)?.value == "4%")
+        #expect(context.resolve(.limits, leading: false)?.urgency == 1)
     }
 
     @Test func newPermissionExpansionIsOptInAndDoesNotReopenForTheSameRequest() throws {
@@ -122,8 +147,8 @@ import Testing
         #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         let snapshot = SurfaceSnapshot(
             providerID: "herdr",
-            metrics: [.init("permissions", "Permissions", "1")],
-            rows: [.init("synthetic-request", title: "Synthetic tool", field: "approvals")])
+            rows: [.init("synthetic-request", title: "Synthetic tool", field: "approvals")],
+            facts: ["permissions": 1])
         fixture.controller.recordSurfaceSnapshot(snapshot)
         #expect(fixture.controller.isExpanded)
         #expect(fixture.controller.activeTab == .agents)
@@ -132,10 +157,36 @@ import Testing
         #expect(!fixture.controller.isExpanded)
         fixture.controller.layoutEditing = true
         fixture.controller.recordSurfaceSnapshot(
-            .init(
-                providerID: "herdr",
-                metrics: [.init("permissions", "Permissions", "2")]))
+            .init(providerID: "herdr", facts: ["permissions": 2]))
         #expect(!fixture.controller.isExpanded)
+    }
+
+    @Test func pendingPermissionsInsertTheAgentsTabAndExpandAfterEditing() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.controller.layouts.update(.notch) {
+            $0.hiddenTabs = ["agents"]
+            $0.notchExpandPermissions = true
+            $0.notchPrioritizePermissions = true
+        }
+        #expect(!fixture.controller.visibleTabs.contains(.agents))
+        fixture.controller.layoutEditing = true
+        fixture.controller.recordSurfaceSnapshot(
+            .init(providerID: "herdr", facts: ["permissions": 3]))
+        #expect(fixture.controller.pendingPermissions == 0)
+        try fixture.state.publish([
+            "surface.activeIDs": "[\"notchShelf\",\"herdr\"]",
+            "surface.activeVersions": "{\"notchShelf\":\"1\",\"herdr\":\"1\"}",
+        ])
+        fixture.controller.synchronize()
+        fixture.controller.recordSurfaceSnapshot(
+            .init(providerID: "herdr", facts: ["permissions": 3]))
+        #expect(fixture.controller.pendingPermissions == 3)
+        #expect(fixture.controller.visibleTabs.contains(.agents))
+        #expect(!fixture.controller.isExpanded)
+        fixture.controller.layoutEditing = false
+        #expect(fixture.controller.isExpanded)
+        #expect(fixture.controller.activeTab == .agents)
     }
 
     @Test func savedMusicPreferenceClearsGlancesAndRejectsLateProviderData() async throws {
@@ -153,13 +204,14 @@ import Testing
             $0.notchPrioritizePermissions = false
         }
         let snapshot = SurfaceSnapshot(
-            providerID: "music", rows: [.init("track", title: "Synthetic track")])
+            providerID: "music", rows: [.init("track", title: "Synthetic track")],
+            facts: ["hasTrack": 1, "playing": 1])
         fixture.controller.recordSurfaceSnapshot(snapshot)
         #expect(fixture.controller.leadingGlance?.source == .music)
         let request = NotchPreferenceRequest(key: AppStorageKeys.Notch.shelfShowMusic, value: "0")
         _ = try await fixture.controller.execute(
             "notch.settings.write", payload: JSONEncoder().encode(request))
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         #expect(fixture.controller.leadingGlance == nil)
         #expect(fixture.controller.surfaceSnapshots["music"] == nil)
         fixture.controller.recordSurfaceSnapshot(snapshot)

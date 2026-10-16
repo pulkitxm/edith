@@ -239,6 +239,11 @@ public final class HostWorker {
     }
 
     public func prepareStop(reason: HostWorkerStopReason) async throws {
+        if reason == .applicationQuit, process.isRunning, !exited {
+            _ = try? await request(
+                HostWorkerRequest(operation: "concealForQuit", stopReason: reason),
+                timeout: .milliseconds(500))
+        }
         if reason == .applicationQuit, configuration.extensionID == "lidAwake",
             !configuration.recoveryOnly
         {

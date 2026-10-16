@@ -4,7 +4,6 @@ import Foundation
 struct ClipboardPreferences: Codable, Equatable, Sendable {
     static let hotKeyLabelKey = "clipboardHotKeyLabel"
 
-    var enabled: Bool = false
     var maxItems: Int = ClipboardIndex.defaultMaxItems
     var maxItemBytes: Int = ClipboardIndex.defaultMaxItemBytes
     var maxAgeDays: Int = 0
@@ -26,7 +25,6 @@ struct ClipboardPreferences: Codable, Equatable, Sendable {
 
     static func read(_ defaults: UserDefaults) -> Self {
         var value = Self()
-        value.enabled = defaults.object(forKey: AppStorageKeys.Clipboard.enabled) as? Bool ?? false
         value.maxItems =
             defaults.object(forKey: AppStorageKeys.Clipboard.maxItems) as? Int
             ?? ClipboardIndex.defaultMaxItems
@@ -73,7 +71,6 @@ struct ClipboardPreferences: Codable, Equatable, Sendable {
             (0...127).contains(hotKeyCode), hotKeyMods > 0, hotKeyMods & ~6912 == 0,
             hotKeyLabel.utf8.count <= 80
         else { throw ExtensionPeerError.invalidRequest }
-        defaults.set(enabled, forKey: AppStorageKeys.Clipboard.enabled)
         defaults.set(maxItems, forKey: AppStorageKeys.Clipboard.maxItems)
         defaults.set(maxItemBytes, forKey: AppStorageKeys.Clipboard.maxItemBytes)
         defaults.set(maxAgeDays, forKey: AppStorageKeys.Clipboard.maxAgeDays)

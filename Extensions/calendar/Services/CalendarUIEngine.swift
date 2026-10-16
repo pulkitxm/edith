@@ -8,6 +8,16 @@ struct CalendarUISnapshot: Codable, Equatable, Sendable {
     let blurEvents: Bool
     let days: Int
     let events: [CalendarEventPayload]
+    var ready = true
+}
+
+enum CalendarCancellation {
+    static func isSilent(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let url = error as? URLError { return url.code == .cancelled }
+        let bridged = error as NSError
+        return bridged.domain == NSURLErrorDomain && bridged.code == NSURLErrorCancelled
+    }
 }
 
 enum CalendarUIAction: String, Codable, Sendable {
@@ -132,7 +142,8 @@ final class CalendarUIEngine {
                 ? []
                 : CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)).map {
                     blur ? privateEvent($0) : $0
-                })
+                },
+            ready: !stopped && store.agendaKnown)
     }
 
     func shutdown() {

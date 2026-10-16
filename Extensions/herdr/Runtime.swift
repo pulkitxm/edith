@@ -174,8 +174,8 @@ final class ExtensionRuntime: NSObject {
         case "configureUI":
             guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard worker == nil, let location = input["location"] as? String,
-                ["main", "settings", "herdr.agent", "herdr.agent.controls", "herdr.space"].contains(
-                    location),
+                ["main", "settings", "notch", "herdr.agent", "herdr.agent.controls", "herdr.space"]
+                    .contains(location),
                 let configuration = ExtensionUIConfiguration(context: input),
                 let origin = input["presentationID"] as? String,
                 let presentationID = UUID(uuidString: origin),
@@ -214,6 +214,8 @@ final class ExtensionRuntime: NSObject {
                         if location == "main" {
                             HerdrPage(store: store, activity: activity)
                                 .environment(\.terminalLaunchEnabled, true)
+                        } else if location == "notch" {
+                            HerdrNotchAgentsCard(store: store, monitor: activity)
                         } else {
                             HerdrRemoteScene(
                                 store: store, location: location,
@@ -271,7 +273,7 @@ final class ExtensionRuntime: NSObject {
         case "stopUI": stopUI()
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
-            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard uiLocation == nil, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             let admitted: WorkerFixtureAdmission?

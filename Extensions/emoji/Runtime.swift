@@ -173,7 +173,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func startService(_ input: NSDictionary) -> Bool {
-        guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
         else { return false }
         guard let suite = input["defaultsSuite"] as? String,
             suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -305,7 +305,7 @@ final class ExtensionRuntime: NSObject {
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
                         PageWorkspace {
-                            PageHeader("Emoji")
+                            PageHeader("Emoji Picker")
                         } content: {
                             Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
                                 .grouped)
@@ -347,7 +347,7 @@ final class ExtensionRuntime: NSObject {
 
     private func showPanel() {
         guard !suspended, fixture == nil else { return }
-        EmojiPanel.shared.show()
+        EmojiPanel.shared.toggle()
     }
 
     private func registerHotKey() {

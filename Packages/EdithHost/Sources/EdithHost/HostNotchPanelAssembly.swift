@@ -105,7 +105,9 @@ final class HostNotchPanelAssembly {
                     slot: slot)
             }
         }
-        for id in Array(records.keys) where !wanted.contains(id) { remove(id) }
+        for id in Array(records.keys) where !wanted.contains(id) {
+            remove(id, fade: removalFade(records[id]?.slot, state: next))
+        }
         if next.visible { present(panel) } else { panel.orderOut(nil) }
     }
 
@@ -208,10 +210,7 @@ final class HostNotchPanelAssembly {
                 position(lease, record: record)
             } catch {
                 guard !Task.isCancelled, !stopped, records[id] === record else { return }
-                let message =
-                    error is HostRemoteAvailabilityError
-                    ? "Approve this extension in macOS extension settings to open its card."
-                    : "The extension card could not open."
+                let message = "The extension card could not open."
                 failures[id] = message
                 if let slot = record.slot { reportFailure(slot.id, message) }
             }
@@ -228,23 +227,50 @@ final class HostNotchPanelAssembly {
         lease.apply(
             compact: record.slot?.tile.dense ?? true, visible: state.visible,
             width: record.slot?.rectangle.width ?? container.view.bounds.width)
+        reveal(lease, record: record)
     }
 
-    private func remove(_ id: UUID) {
+    private func remove(_ id: UUID, fade: HostNotchFade? = nil) {
         guard let record = records.removeValue(forKey: id) else { return }
         record.task?.cancel()
         failures[id] = nil
-        if let lease = record.lease { retire(lease) }
+        if let lease = record.lease { retire(lease, fade: fade) }
     }
 
-    private func retire(_ lease: HostNotchSceneLease) {
+    private func removalFade(_ slot: HostNotchNativeSlot?, state: HostNotchPanelState)
+        -> HostNotchFade?
+    {
+        guard let slot else { return nil }
+        return HostNotchMotion.removal(
+            collapsedContent: slot.kind == .collapsedLeading || slot.kind == .collapsedTrailing,
+            browser: state.activeTab == "browser", reduceMotion: HostNotchMotion.reduceMotion)
+    }
+
+    private func reveal(_ lease: HostNotchSceneLease, record: Record) {
+        guard !record.revealed, let slot = record.slot, let state, lease.controller.isViewLoaded
+        else { return }
+        record.revealed = true
+        HostNotchMotion.fade(
+            lease.controller.view, from: 0, to: 1,
+            HostNotchMotion.insertion(
+                collapsedContent: slot.kind == .collapsedLeading
+                    || slot.kind == .collapsedTrailing,
+                browser: state.activeTab == "browser", reduceMotion: HostNotchMotion.reduceMotion))
+    }
+
+    private func retire(_ lease: HostNotchSceneLease, fade: HostNotchFade? = nil) {
         let id = lease.request.presentationID
-        lease.detach()
+        if let fade, lease.controller.isViewLoaded, lease.controller.view.superview != nil {
+            HostNotchMotion.fade(lease.controller.view, from: 1, to: 0, fade)
+        } else {
+            lease.detach()
+        }
         retiring[id] = lease
         guard closing[id] == nil else { return }
         closing[id] = Task { [weak self] in
             guard let self else { return }
             defer { closing[id] = nil }
+            if let fade { try? await Task.sleep(for: .seconds(fade.duration)) }
             do {
                 try await release(lease)
                 retiring[id] = nil; failures[id] = nil
@@ -265,6 +291,7 @@ final class HostNotchPanelAssembly {
         var slot: HostNotchNativeSlot?
         var lease: HostNotchSceneLease?
         var task: Task<Void, Never>?
+        var revealed = false
         init(request: HostExtensionContentRequest, slot: HostNotchNativeSlot?) {
             self.request = request
             self.slot = slot

@@ -11,6 +11,8 @@ import Observation
     private let invoke: Invoke?
     private var requests: [UUID: Task<Void, Never>] = [:]
     private var generation = UUID()
+    private var pendingWrites = 0
+    private var writeTail: Task<Void, Never>?
 
     init(client: ExtensionEngineClient?) {
         snapshot = .empty
@@ -24,6 +26,7 @@ import Observation
         self.invoke = invoke
     }
 
+    var saving: Bool { pendingWrites > 0 }
     var available: Bool { invoke != nil && !stopped }
 
     func refresh() async {
@@ -52,10 +55,35 @@ import Observation
 
     func set(_ key: String, value: String) {
         let request = NotchPreferenceRequest(key: key, value: value)
-        guard (try? request.validate()) != nil, let data = try? JSONEncoder().encode(request) else {
-            return
+        guard (try? request.validate()) != nil, let payload = try? JSONEncoder().encode(request),
+            available, requests.count < 8, let invoke
+        else { return }
+        generation = UUID()
+        snapshot.preferences[key] = value
+        pendingWrites += 1
+        let token = UUID()
+        let previous = writeTail
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            defer {
+                self.requests[token] = nil
+                self.pendingWrites -= 1
+            }
+            do {
+                try Task.checkCancellation()
+                guard !self.stopped else { return }
+                let data = try await invoke("notch.settings.write", payload)
+                guard self.pendingWrites == 1, !self.stopped else { return }
+                try self.applyLatest(data)
+            } catch {
+                guard !self.stopped, !Task.isCancelled else { return }
+                self.error = error.localizedDescription
+                if self.pendingWrites == 1 { Task { await self.refresh() } }
+            }
         }
-        perform("notch.settings.write", payload: data)
+        writeTail = task
+        requests[token] = task
     }
 
     func perform(_ operation: String, payload: Data = Data("{}".utf8)) {
@@ -100,6 +128,15 @@ import Observation
         stop()
         let pending = Array(requests.values)
         for task in pending { await task.value }
+    }
+
+    private func applyLatest(_ data: Data) throws {
+        try Task.checkCancellation()
+        guard !stopped, data.count <= 65_536 else { return }
+        let snapshot = try JSONDecoder().decode(NotchSettingsSnapshot.self, from: data)
+        try snapshot.validate()
+        self.snapshot = snapshot
+        error = nil
     }
 
     private func apply(_ data: Data, token: UUID) throws {

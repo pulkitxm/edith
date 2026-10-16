@@ -290,7 +290,7 @@ final class HerdrStore {
         }
     }
 
-    @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
+    @ObservationIgnored let pageWindows = NSHashTable<NSWindow>.weakObjects()
     @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
     let terminalPanels: HerdrTerminalPanels
     let messaging: HerdrMessaging
@@ -742,7 +742,7 @@ final class HerdrStore {
         for task in spaces { await task.value }
         for task in presentations { await task.value }
         for holder in holders { await holder.stopRenderingAndWait() }
-        await HerdrWorkOwnership.shutdown()
+        if uiClient == nil { await HerdrWorkOwnership.shutdown() }
     }
 
     func shutdown() async {
@@ -2169,7 +2169,7 @@ final class HerdrStore {
     }
 
     func connection(for machine: Machine) async throws -> SSHConnection {
-        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard uiClient == nil, !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.unavailable
         }
         if let existing = connections[machine.id] {
@@ -2206,7 +2206,7 @@ final class HerdrStore {
     }
 
     func uploadDroppedFiles(_ urls: [URL], to machine: Machine?) async throws -> [String] {
-        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard uiClient == nil, !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.invalidRequest
         }
         guard let machine else { throw HerdrQuinjetError.machineUnavailable }

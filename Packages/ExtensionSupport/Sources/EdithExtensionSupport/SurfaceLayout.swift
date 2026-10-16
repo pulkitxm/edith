@@ -73,7 +73,7 @@ public enum SurfaceWidget: Codable, RawRepresentable, CaseIterable, Hashable, Id
         case .databases: ["database"]
         case .machines: ["machines"]
         case .github: ["quinjet"]
-        case .desk: ["clipboard", "colorPicker", "emoji", "bifrost"]
+        case .desk: ["clipboard", "colorPicker", "emoji"]
         case .media: ["timeLapse", "downloads", "virtualCamera", "music", "studio"]
         case .ability(let id): [id]
         }

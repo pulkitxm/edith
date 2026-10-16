@@ -22,6 +22,8 @@ final class LauncherUsage {
     func adopt(_ timestamps: [String: Date]) { history = .init(timestamps: timestamps) }
 
     func record(_ keys: [[String]], at date: Date = Date()) {
+        let stored = defaults?.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:]
+        history.timestamps.merge(stored) { current, other in max(current, other) }
         for key in keys { history.timestamps[LauncherUsageHistory.encoded(key)] = date }
         defaults?.set(history.timestamps, forKey: Self.storageKey)
     }

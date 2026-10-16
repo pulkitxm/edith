@@ -6,7 +6,7 @@ struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
     @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
-    @State private var kindRaw = HomebrewPackageKind.formula.rawValue
+    @State private var kindRaw: String
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var themeName = AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
@@ -16,11 +16,13 @@ struct HomebrewMaintenanceView: View {
     @MainActor
     init() {
         _model = State(initialValue: HomebrewPageModel())
+        _kindRaw = State(initialValue: HomebrewPackageKind.formula.rawValue)
     }
 
     @MainActor
     init(model: HomebrewPageModel) {
         _model = State(initialValue: model)
+        _kindRaw = State(initialValue: model.initialKind.rawValue)
     }
 
     private var kind: HomebrewPackageKind {
@@ -39,7 +41,7 @@ struct HomebrewMaintenanceView: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.errorMessage ?? "Homebrew could not load its packages.",
-                layout: .list, refreshing: model.loading.isRefreshing,
+                layout: .editor, refreshing: model.loading.isRefreshing,
                 retry: refreshCurrentMode
             ) {
                 if model.status?.available == false {
@@ -51,12 +53,12 @@ struct HomebrewMaintenanceView: View {
                 }
             }
         }
-        .pageTask(cancel: { model.cancel() }) {
-            async let cached: Void = model.loadCachedListing()
-            let restored = try? await model.preferredKind()
-            await cached
-            if let restored, !Task.isCancelled {
+        .pageTask(cancel: { model.cancelDiscovery() }) {
+            async let restored = try? await model.preferredKind()
+            await model.loadCachedListing(showing: kind)
+            if let restored = await restored, !Task.isCancelled {
                 kindRaw = restored.rawValue
+                model.showCached(kind: restored)
             }
             guard !Task.isCancelled else { return }
             model.activate(kind: kind)

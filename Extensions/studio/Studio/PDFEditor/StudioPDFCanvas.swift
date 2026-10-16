@@ -23,8 +23,14 @@ struct StudioPDFCanvas: NSViewRepresentable {
         let canvas = container.canvas
         context.coordinator.editor = editor
         if canvas.document !== editor.session?.document {
+            let page = editor.currentPage
             canvas.document = editor.session?.document
             editor.pdfView = canvas
+            if page > 0, let document = canvas.document, document.pageCount > 0,
+                let target = document.page(at: min(page, document.pageCount - 1))
+            {
+                canvas.go(to: target)
+            }
         }
         canvas.tool = editor.tool
         canvas.selectedAnnotation = editor.selected

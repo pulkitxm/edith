@@ -92,6 +92,7 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     public var sliders: [SurfaceSlider]?
     public var charts: [SurfaceChart]?
     public var calendars: [SurfaceCalendar]?
+    public var facts: [String: Double]?
     public var sources: [SurfaceSourceChoice]
     public var message: String?
     public var updatedAt: Date?
@@ -99,13 +100,14 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     public init(
         providerID: String, metrics: [SurfaceMetric] = [], rows: [SurfaceDataRow] = [],
         actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = [], charts: [SurfaceChart] = [],
-        calendars: [SurfaceCalendar] = [], sources: [SurfaceSourceChoice] = [],
-        message: String? = nil, updatedAt: Date? = nil
+        calendars: [SurfaceCalendar] = [], facts: [String: Double] = [:],
+        sources: [SurfaceSourceChoice] = [], message: String? = nil, updatedAt: Date? = nil
     ) {
         self.providerID = providerID; self.metrics = metrics; self.rows = rows
         self.actions = actions; self.sliders = sliders.isEmpty ? nil : sliders;
         self.charts = charts.isEmpty ? nil : charts;
         self.calendars = calendars.isEmpty ? nil : calendars;
+        self.facts = facts.isEmpty ? nil : facts
         self.sources = sources; self.message = message
         self.updatedAt = updatedAt
     }
@@ -153,6 +155,9 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
                 with: Set(controlActions.map(\.id)))
         else { throw ExtensionPeerError.invalidRequest }
         for control in controls { try control.validate() }
+        guard (facts ?? [:]).count <= 32,
+            (facts ?? [:]).allSatisfy({ Self.validText($0.key, maximum: 80) && $0.value.isFinite })
+        else { throw ExtensionPeerError.invalidRequest }
         guard contractVersion == 1, providerID == expected,
             Self.validText(providerID, maximum: 80), metrics.count <= 32, rows.count <= 100,
             sources.count <= 100, Self.validActions(actions),

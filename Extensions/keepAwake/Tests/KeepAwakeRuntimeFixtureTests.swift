@@ -94,12 +94,13 @@ import WorkerFixtureTestSupport
         let before = try await invoke(
             runtime, command: "surface.snapshot", payload: request.encoded(providerID: "keepAwake"))
         #expect(
-            try SurfaceSnapshot.decode(before, providerID: "keepAwake").rows.first?.value == "Off")
+            try SurfaceSnapshot.decode(before, providerID: "keepAwake").metrics.first?.value
+                == "Off")
         let enable = SurfaceActionRequest(snapshot: request, actionID: "enable")
         let after = try await invoke(
             runtime, command: "surface.perform", payload: enable.encoded(providerID: "keepAwake"))
         #expect(
-            try SurfaceSnapshot.decode(after, providerID: "keepAwake").rows.first?.value == "Awake")
+            try SurfaceSnapshot.decode(after, providerID: "keepAwake").metrics.first?.value == "On")
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["preventingSleep"] as? Bool
                 == true)

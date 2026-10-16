@@ -274,6 +274,10 @@ final class MusicSurface {
                 ? Array(ordered.prefix(8)).map {
                     .init($0.identifier("openPlayer"), "Open player", "arrow.up.forward.app")
                 } : [],
+            facts: [
+                "hasTrack": ordered.contains { !$0.trackKey.isEmpty } ? 1 : 0,
+                "playing": ordered.contains { $0.playing && !$0.trackKey.isEmpty } ? 1 : 0,
+            ],
             sources: states.map { .init($0.sourceID, $0.sourceTitle) },
             message: rows.isEmpty ? "No available player in this selection." : nil, updatedAt: .now)
     }

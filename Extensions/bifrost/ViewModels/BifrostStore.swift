@@ -279,8 +279,10 @@ final class BifrostStore: FeatureModule {
                 record(result.action.targetKey, query: query, at: now)
                 return true
             }
-            if let owner = command.abilityID, owner != "bifrost" {
-                ownAction { _ = try? await BifrostPeers.open(owner: owner) }
+            if command.id == "panel.open" {
+                ownAction { _ = try? await BifrostPeers.open(owner: "bifrost") }
+            } else if let owner = command.abilityID, owner != "bifrost" {
+                ownAction { _ = try? await BifrostPeers.pick(owner: owner) }
             } else {
                 post(command.notification)
             }
@@ -373,13 +375,10 @@ final class BifrostStore: FeatureModule {
         rebuildEntries()
         let wantsWindows = sources.contains(.openWindows)
         let wantsShortcuts = sources.contains(.appleShortcuts)
-        guard wantsWindows || wantsShortcuts || BifrostPeers.activeIDs.contains("machines") else {
-            return
-        }
+        guard wantsWindows || wantsShortcuts else { return }
         let hasShortcuts = !shortcutNames.isEmpty
         sourcesTask?.cancel()
         sourcesTask = track { [weak self] in
-            let machines = (try? await BifrostRemoteSearch.machines()) ?? []
             var windows: [BifrostWindowHandle] = []
             if wantsWindows {
                 windows = await Task.detached(priority: .utility) {
@@ -390,7 +389,6 @@ final class BifrostStore: FeatureModule {
             if wantsShortcuts, !hasShortcuts { names = await BifrostShortcutsIndex.names() }
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self, windows, names] in
-                self?.machines = machines.map(\.name)
                 self?.adoptDynamicSources(windows: windows, shortcuts: names)
             }
         }

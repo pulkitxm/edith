@@ -14,7 +14,10 @@ public final class CalendarStore: FeatureModule {
 
     private var generation: UInt64 = 0
     private var stopped = false
-    private static let eventStore = EKEventStore()
+    public private(set) var agendaKnown = false
+    private var observing = false
+    private var lastFetchBegan = Date.distantPast
+    private static let eventStore = CalendarEventStoreHandle.shared
     private let snapshotStore: CalendarAgendaSnapshotStore
     private let fetchOverride: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
     private let authorization: @MainActor () -> EKAuthorizationStatus
@@ -58,40 +61,49 @@ public final class CalendarStore: FeatureModule {
     }
 
     public func start() {
-        guard changeObserver == nil else { return }
+        guard !observing else { return }
         stopped = false
         authStatus = authorization()
         if fetchOverride != nil {
             refresh()
             return
         }
-        if fetchOverride == nil {
-            if authStatus == .fullAccess {
-                refresh()
-            } else {
-                fetchTask = launch { [weak self] in await self?.restoreCachedAgenda() }
+        observing = true
+        if authStatus == .fullAccess {
+            refresh()
+        } else {
+            fetchTask = launch { [weak self] in await self?.restoreCachedAgenda() }
+        }
+        observeChanges()
+    }
+
+    private func observeChanges() {
+        _ = launch { [weak self] in
+            await CalendarEventStoreHandle.prepare()
+            guard let self, !self.stopped, self.observing, self.changeObserver == nil else {
+                return
             }
-        }
-        changeObserver = NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged, object: Self.eventStore, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleRefresh() }
-        }
-        wakeCenter = NSWorkspace.shared.notificationCenter
-        wakeObserver = wakeCenter?.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scheduleRefresh() }
+            self.changeObserver = NotificationCenter.default.addObserver(
+                forName: .EKEventStoreChanged, object: Self.eventStore, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleRefresh() }
+            }
+            self.wakeCenter = NSWorkspace.shared.notificationCenter
+            self.wakeObserver = self.wakeCenter?.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scheduleRefresh() }
+            }
         }
     }
 
     private func scheduleRefresh() {
-        guard changeObserver != nil else { return }
+        guard observing else { return }
         refreshDebounce?.cancel()
         refreshDebounce = launch { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            guard let self, self.changeObserver != nil else { return }
+            guard let self, self.observing else { return }
             self.refresh()
         }
     }
@@ -111,6 +123,7 @@ public final class CalendarStore: FeatureModule {
         changeObserver = nil
         wakeObserver = nil
         wakeCenter = nil
+        observing = false
     }
 
     public func stopAndWait() async {
@@ -135,12 +148,12 @@ public final class CalendarStore: FeatureModule {
         let status = authorization()
         guard status != authStatus else { return }
         authStatus = status
-        if status == .fullAccess, changeObserver != nil { refresh() }
+        if status == .fullAccess, observing { refresh() }
     }
 
     public func restoreCachedAgenda() async {
-        guard !stopped, events.isEmpty, let cached = await snapshotStore.load(), !cached.isEmpty,
-            !stopped, events.isEmpty, !Task.isCancelled
+        guard !stopped, !agendaKnown, let cached = await snapshotStore.load(),
+            !stopped, !agendaKnown, !Task.isCancelled
         else {
             return
         }
@@ -184,10 +197,10 @@ public final class CalendarStore: FeatureModule {
     private func fetchEvents(_ query: CalendarEventQuery) async -> [CalendarEventPayload]? {
         if let fetchOverride { return await fetchOverride(query) }
         guard authStatus == .fullAccess else { return nil }
-        let eventStore = Self.eventStore
         return await CalendarEventOperationExecution.events(query) { query in
             let read = Task.detached(priority: .userInitiated) {
                 guard !Task.isCancelled else { return [CalendarEventPayload]() }
+                let eventStore = CalendarEventStoreHandle.shared
                 let predicate = eventStore.predicateForEvents(
                     withStart: query.start, end: query.end,
                     calendars: eventStore.calendars(for: .event))
@@ -244,7 +257,13 @@ public final class CalendarStore: FeatureModule {
         return next
     }
 
+    public func refreshIfStale(after interval: TimeInterval = 2) {
+        guard Date().timeIntervalSince(lastFetchBegan) >= interval else { return }
+        refresh()
+    }
+
     private func beginFetch() -> UInt64 {
+        lastFetchBegan = Date()
         fetchTask?.cancel()
         fetchTask = nil
         generation &+= 1
@@ -257,6 +276,7 @@ public final class CalendarStore: FeatureModule {
 
     private func publish(_ next: [CalendarEventPayload], persist: Bool) {
         guard !stopped else { return }
+        agendaKnown = true
         events = next
         groupedDays = CalendarDayEvents.groupedByDay(next)
         guard persist else { return }
@@ -267,4 +287,12 @@ public final class CalendarStore: FeatureModule {
         }
     }
 
+}
+
+enum CalendarEventStoreHandle {
+    nonisolated(unsafe) static let shared = EKEventStore()
+
+    static func prepare() async {
+        await Task.detached(priority: .userInitiated) { _ = shared }.value
+    }
 }

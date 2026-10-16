@@ -13,25 +13,26 @@ struct HostNotchWindowAssociation {
 
 @MainActor
 struct HostNotchPointerMonitors {
-    let start: @MainActor (@escaping @MainActor () -> Void) -> [Any]
+    let start: @MainActor (@escaping @MainActor (NSEvent.EventType) -> Void) -> [Any]
     let remove: @MainActor (Any) -> Void
 
     static var native: Self {
         .init(
             start: { deliver in
                 let mask: NSEvent.EventTypeMask = [
-                    .mouseMoved, .leftMouseDragged, .rightMouseDragged,
+                    .mouseMoved, .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+                    .rightMouseDragged,
                 ]
                 var monitors: [Any] = []
                 if let monitor = NSEvent.addGlobalMonitorForEvents(
-                    matching: mask, handler: { _ in deliver() })
+                    matching: mask, handler: { event in deliver(event.type) })
                 {
                     monitors.append(monitor)
                 }
                 if let monitor = NSEvent.addLocalMonitorForEvents(
                     matching: mask,
                     handler: { event in
-                        deliver(); return event
+                        deliver(event.type); return event
                     })
                 {
                     monitors.append(monitor)
@@ -58,6 +59,7 @@ final class HostNotchLifecycleAdapter {
     private var stopped = false
     private var screenObserver: NSObjectProtocol?
     private var eventMonitors: [Any] = []
+    private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     private(set) var failure: String?
 
     init(
@@ -178,13 +180,16 @@ final class HostNotchLifecycleAdapter {
             (coordinator?.activePanelCount ?? 0) > 0
         else { removeMonitors(); return }
         guard eventMonitors.isEmpty else { return }
-        eventMonitors = monitors.start { [weak self] in
+        eventMonitors = monitors.start { [weak self] type in
             guard let self, !stopped else { return }
+            let pasteboard = NSPasteboard(name: .drag)
+            if type == .leftMouseDown { dragChangeCount = pasteboard.changeCount }
+            let dragging = type == .leftMouseDragged && pasteboard.changeCount != dragChangeCount
             for screen in attachedScreens {
                 coordinator?.pointer(
                     displayID: screen.display.id, globalPoint: NSEvent.mouseLocation,
                     buttons: UInt32(NSEvent.pressedMouseButtons & 31),
-                    option: NSEvent.modifierFlags.contains(.option), draggingFiles: false)
+                    option: NSEvent.modifierFlags.contains(.option), draggingFiles: dragging)
             }
         }
     }

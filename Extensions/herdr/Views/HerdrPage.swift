@@ -24,6 +24,7 @@ struct HerdrPage: View {
     @State private var compactRailPresented = false
     @State private var compactDetailsPresented = false
     @State private var filterDismissedAt: Date?
+    @State private var keyMonitor = HerdrPageKeyMonitor()
 
     @MainActor init(
         store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil,
@@ -121,7 +122,12 @@ struct HerdrPage: View {
             "tab", selection: tabBinding, isValid: herdrTabIsValid,
             isReady: store.inventoryReady
         )
-        .onDisappear { drag.cancel() }
+        .onDisappear {
+            drag.cancel()
+            keyMonitor.active = false
+            keyMonitor.remove()
+        }
+        .onChange(of: automaticActions) { keyMonitor.active = automaticActions }
         .onChange(of: compact) {
             compactRailPresented = false
             compactDetailsPresented = false
@@ -132,6 +138,12 @@ struct HerdrPage: View {
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
         .navigationTitle("Herdr")
         .onAppear {
+            keyMonitor.active = automaticActions
+            keyMonitor.install(store: store) { store, event, window in
+                store.performPageKey(
+                    characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
+                    modifiers: event.modifierFlags, repeats: event.isARepeat, in: window)
+            }
             if store.uiClient == nil {
                 HerdrAgentWindowDelegate.shared.onClose = { id in store.reattach(id) }
             }
@@ -1246,7 +1258,7 @@ extension View {
     }
 }
 
-private struct HerdrWindowReader: NSViewRepresentable {
+struct HerdrWindowReader: NSViewRepresentable {
     let onWindow: (NSWindow?, NSWindow?) -> Void
 
     func makeNSView(context: Context) -> ReaderView {

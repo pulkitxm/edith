@@ -44,10 +44,11 @@ enum HerdrAgentDetailCommand {
             return .space(hasAgent: model.selectedTab?.agentTab != nil)
         }
         let agentSessionOpen = store.focusedSession != nil
-        if window.identifier?.rawValue == "edith.extension.herdr" {
-            return .mainSessions(agentSessionOpen: agentSessionOpen)
+        guard store.hostsPage(window) else { return .elsewhere }
+        if HerdrPageWindowKind.of(window) == .detached {
+            return .detachedSessions(agentSessionOpen: agentSessionOpen)
         }
-        return .elsewhere
+        return .mainSessions(agentSessionOpen: agentSessionOpen)
     }
 
     static func perform(

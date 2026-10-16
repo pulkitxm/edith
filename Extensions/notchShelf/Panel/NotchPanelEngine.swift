@@ -287,7 +287,9 @@ import Foundation
             visibleTabs: controller.visibleTabs.map(\.rawValue),
             hovering: controller.isHovering(on: display.displayID),
             leadingGlance: controller.leadingGlance, trailingGlance: controller.trailingGlance,
-            glanceWingWidth: controller.glanceWingWidth, alert: controller.currentAlert,
+            glanceWingWidth: controller.glanceWingWidth, nowPlaying: controller.nowPlaying,
+            pendingPermissions: controller.pendingPermissions,
+            alert: controller.currentAlert,
             shelfOperationError: controller.shelfOperationError, heights: heights,
             failures: failures,
             browserState: try controller.browserEngine?.state(includeAvatars: false),
@@ -734,7 +736,7 @@ import Foundation
             shapeWidth: min(
                 max(1, size.width), browser ? display.width - 48 : min(1200, display.width - 48)),
             shapeHeight: min(
-                max(1, size.height), browser ? display.height - 12 : min(1024, display.height - 48)),
+                max(1, size.height), browser ? display.height - 48 : min(1024, display.height - 48)),
             visible: visible, acceptsPointer: accepts,
             acceptsKeyFocus: expanded && controller?.activeTab == .browser, slots: [],
             capacityWidth: min(display.width - 48, max(size.width, capacity.width)),

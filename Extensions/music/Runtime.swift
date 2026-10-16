@@ -195,7 +195,7 @@ final class ExtensionRuntime: NSObject {
                         roleBundle: Bundle(for: ExtensionRuntime.self)) == nil
                 else { return ["ok": false] as NSDictionary }
             } catch { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil

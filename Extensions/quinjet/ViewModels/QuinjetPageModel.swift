@@ -353,7 +353,12 @@ final class QuinjetPageModel {
 
     func refreshProjects() async {
         await performRead(.projects) { [self] in
-            if isRemote { await performUI("quinjet.ui.projects", object: [:]); return }
+            if isRemote {
+                let request = projectLoad.begin()
+                await performUI("quinjet.ui.projects", object: [:])
+                projectLoad.complete(request)
+                return
+            }
             projectError = nil
             let client = client
             await projectLoad.perform(operation: {
@@ -379,14 +384,16 @@ final class QuinjetPageModel {
 
     func refreshProjects(for remote: QuinjetRemote) async {
         await performRead(.remoteProjects(remote.machineID)) { [self] in
-            if isRemote {
-                await performUI(
-                    "quinjet.ui.projects", object: ["machineID": remote.machineID.uuidString])
-                return
-            }
             let machineID = remote.machineID
             let loading = remoteProjectLoads[machineID] ?? ContentLoad()
             remoteProjectLoads[machineID] = loading
+            if isRemote {
+                let request = loading.begin()
+                await performUI(
+                    "quinjet.ui.projects", object: ["machineID": machineID.uuidString])
+                loading.complete(request)
+                return
+            }
             remoteProjectErrors[machineID] = nil
             let client = client
             await loading.perform(operation: {
@@ -541,7 +548,9 @@ final class QuinjetPageModel {
         await performRead(.worktrees(tab.id)) { [self] in
             if isRemote {
                 tab.showsWorktrees = true
+                let request = tab.worktreeLoad.begin()
                 await performUI("quinjet.ui.worktrees", object: ["tabID": tab.id.uuidString])
+                tab.worktreeLoad.complete(request)
                 return
             }
             guard let path = tab.worktree?.path else { return }

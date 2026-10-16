@@ -27,6 +27,8 @@ extension SurfaceLayoutStore: NotchChromeLayoutStore {}
     var leadingGlance: NotchSurfaceGlance? { get }
     var trailingGlance: NotchSurfaceGlance? { get }
     var glanceWingWidth: CGFloat { get }
+    var nowPlaying: Bool { get }
+    var pendingPermissions: Int { get }
     var surfaceLayout: SurfaceLayout { get }
     var visibleSurfaceLayout: SurfaceLayout { get }
     var visibleTabs: [NotchTab] { get }

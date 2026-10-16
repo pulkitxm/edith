@@ -142,7 +142,7 @@ import Testing
     }
 
     private func settle(_ model: NotchSettingsModel) async {
-        while model.busy { await Task.yield() }
+        while model.busy || model.saving { await Task.yield() }
     }
 
     @MainActor private final class Gate {

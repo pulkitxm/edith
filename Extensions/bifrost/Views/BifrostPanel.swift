@@ -118,7 +118,8 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         }
         NotificationCenter.default.post(
             name: Self.willShow, object: nil, userInfo: [Self.prefillKey: query])
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
+        panel.makeKey()
         startWatchingDrags()
         guard !wasVisible else { return }
         NSAnimationContext.runAnimationGroup { context in

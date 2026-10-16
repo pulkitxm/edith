@@ -39,7 +39,8 @@ public final class ExtensionCommandRegistry {
             let payload = request["payload"] as? Data,
             !command.isEmpty, command.utf8.count <= 256, !command.utf8.contains(0),
             payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes,
-            commands[token] == nil, retired[token] == nil, running[token] == nil, running.count < 8
+            commands[token] == nil, retired[token] == nil, running[token] == nil,
+            running.count < ExtensionPeerEndpoint.maximumConcurrentCommands
         else { completion(nil, "The extension command is invalid."); return }
         let task = Task { [weak self] in
             do {

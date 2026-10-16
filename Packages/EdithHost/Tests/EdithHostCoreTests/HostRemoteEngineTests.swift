@@ -124,7 +124,7 @@ struct HostRemoteEngineTests {
         #expect(state.active == 0)
     }
 
-    @Test func reverseRequestsEnforceEightPendingCallsAndPreferencesOnlyDeniesEngineAccess()
+    @Test func reverseRequestsEnforcePendingCallLimitAndPreferencesOnlyDeniesEngineAccess()
         async throws
     {
         let identity = try HostRemoteProcessIdentity.read(getpid())
@@ -150,14 +150,15 @@ struct HostRemoteEngineTests {
                 return Data("{}".utf8)
             })
         defer { channel.invalidate() }
-        let tasks = (0..<8).map { _ in
+        let limit = ExtensionEngineWire.maximumConcurrentRequests
+        let tasks = (0..<limit).map { _ in
             Task {
                 try await server.invokeEngine(
                     ExtensionEngineRequest(
                         presentationID: UUID(), operation: "sample.hold"))
             }
         }
-        try await wait { state.active == 8 }
+        try await wait { state.active == limit }
         await #expect(throws: HostWorkerError.rejected) {
             try await server.invokeEngine(
                 ExtensionEngineRequest(
@@ -166,7 +167,7 @@ struct HostRemoteEngineTests {
         tasks.forEach { $0.cancel() }
         for task in tasks { await #expect(throws: CancellationError.self) { try await task.value } }
         try await wait { state.active == 0 }
-        #expect(state.completed == 8)
+        #expect(state.completed == limit)
     }
 
     private func endpoint(_ identity: HostRemoteProcessIdentity) throws -> HostRemoteEndpoint {

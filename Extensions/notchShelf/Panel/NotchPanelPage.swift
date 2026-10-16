@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
@@ -44,8 +45,23 @@ struct NotchNativeSlotView: View {
             tile.height ?? (tile.widget == .music ? (tile.dense ? 62 : 92) : 160)
         }
     }
+    private func collapseOnCopy() async {
+        let pasteboard = NSPasteboard.general
+        let baseline = pasteboard.changeCount
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(120))
+            if pasteboard.changeCount != baseline {
+                client.collapseNow()
+                return
+            }
+        }
+    }
     var body: some View {
         Color.clear
+            .task(id: kind == .providerTab && tile.widget == .ability("clipboard")) {
+                guard kind == .providerTab, tile.widget == .ability("clipboard") else { return }
+                await collapseOnCopy()
+            }
             .frame(
                 minHeight: tile.height ?? client.slotHeight(tile: tile, kind: kind)
                     ?? fallbackHeight

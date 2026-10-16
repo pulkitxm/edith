@@ -167,6 +167,23 @@ import Testing
         next.model.close()
     }
 
+    @Test func installedPresenterRunsWhenTheProjectIsReadyToShow() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge(reply: { _ in }, present: {})
+        var presentations = 0
+        bridge.present = { presentations += 1 }
+        bridge.receive(
+            try VideoEditorService.prepareOpen(url), deadline: Date().addingTimeInterval(5))
+        try await waitUntil { bridge.pending != nil }
+        #expect(presentations == 1)
+        bridge.shutdown()
+    }
+
     @Test func concurrentRequestIsRejectedAndUnmountedRequestTimesOut() async throws {
         let url = try fixture()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

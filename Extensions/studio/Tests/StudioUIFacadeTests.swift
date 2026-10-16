@@ -101,6 +101,39 @@ import Testing
         }
     }
 
+    @Test func remoteModelAnnouncesAddsAndShowsEachEngineMessageOnce() async throws {
+        let root = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = root.appendingPathComponent("synthetic.png")
+        try Data("synthetic".utf8).write(to: image)
+        let suite = "studio.remote-notice.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let engine = StudioModel(defaults: defaults, loadsState: false)
+        defer { engine.shutdown() }
+        let facade = StudioUIFacade(
+            invoke: { operation, payload in
+                if operation.hasPrefix("studio.ui.") {
+                    return try await StudioUICommands.execute(
+                        operation, payload: payload, model: engine)
+                }
+                return try await StudioCommands.execute(operation, payload: payload, model: engine)
+            })
+        let remote = StudioModel(defaults: defaults, facade: facade)
+        defer { remote.shutdown() }
+        remote.start()
+        remote.add([image])
+        try await waitUntil { remote.notice == "Added synthetic.png" || remote.message != nil }
+        #expect(remote.notice == "Added synthetic.png" && remote.message == nil)
+        engine.message = "Synthetic engine failure"
+        facade.refresh()
+        try await waitUntil { remote.message == "Synthetic engine failure" }
+        remote.message = nil
+        facade.refresh()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(remote.message == nil)
+    }
+
     @Test func originalRemoteModelRunsNativeToolAndPersistsOwnedPreferences() async throws {
         let root = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: root) }
