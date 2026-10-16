@@ -44,7 +44,7 @@ final class VideoEditorOpenBridge {
     private var commandsSuspended = false
     private nonisolated let callbacks = StudioTaskOwner()
     private let reply: @MainActor ([String: Any]) -> Void
-    private let present: @MainActor () -> Void
+    var present: @MainActor () -> Void
 
     init(
         reply: @escaping @MainActor ([String: Any]) -> Void = {

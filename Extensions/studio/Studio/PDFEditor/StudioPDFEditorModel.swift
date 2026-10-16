@@ -736,8 +736,10 @@ final class StudioPDFEditorModel {
                     ])
                 let value: StudioUIPDFChange = try await facade.download(handle)
                 guard let self, !Task.isCancelled, self.revision == version else { return }
-                self.undoStack.append(snapshot); self.redoStack.removeAll()
-                session.restore(value.snapshot); self.revision += 1; self.selected = nil
+                if action != "extract" {
+                    self.undoStack.append(snapshot); self.redoStack.removeAll()
+                    session.restore(value.snapshot); self.revision += 1; self.selected = nil
+                }
                 if let status = value.status { self.status = status }
             } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
         }

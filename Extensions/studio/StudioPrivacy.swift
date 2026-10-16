@@ -16,21 +16,18 @@ extension EnvironmentValues {
 private struct StudioPrivacyCover: ViewModifier {
     @Environment(\.studioPrivacy) private var privacy
 
-    func body(content: Content) -> some View {
-        let hidden = privacy?.hides(.ability("studio")) ?? false
-        content
-            .blur(radius: hidden ? UIScale.pt(16) : 0)
-            .allowsHitTesting(!hidden)
-            .accessibilityHidden(hidden)
-            .overlay {
-                if hidden {
-                    Label("Hidden while presenting", systemImage: "eye.slash")
-                        .font(.edithText(.body))
-                        .padding(UIScale.pt(16))
-                        .background(
-                            .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+    @ViewBuilder func body(content: Content) -> some View {
+        if privacy?.hides(.ability("studio")) ?? false {
+            content
+                .compositingGroup()
+                .blur(radius: UIScale.pt(28))
+                .overlay {
+                    Color.black.opacity(0.45).allowsHitTesting(false)
                 }
-            }
+                .privacySensitive(true)
+        } else {
+            content
+        }
     }
 }
 

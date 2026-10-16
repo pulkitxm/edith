@@ -30,16 +30,13 @@ struct StudioThumbnail: View {
     var side: CGFloat = 160
     var corner: CGFloat = 10
     @State private var image: NSImage?
-    @Environment(\.studioFacade) private var facade
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(corner))
                 .fill(DashSkin.grid(scheme == .dark))
-            if let image = image
-                ?? (facade == nil ? StudioThumbnails.shared.cached(url, side: side) : nil)
-            {
+            if let image = image ?? StudioThumbnails.shared.cached(url, side: side) {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -53,10 +50,6 @@ struct StudioThumbnail: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
         .pageTask(id: url) {
-            if let facade {
-                image = try? await facade.thumbnail(url, side: side)
-                return
-            }
             image = StudioThumbnails.shared.cached(url, side: side)
             if image == nil {
                 image = await StudioThumbnails.shared.thumbnail(for: url, side: side)

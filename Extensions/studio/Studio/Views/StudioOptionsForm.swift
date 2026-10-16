@@ -481,11 +481,7 @@ struct StudioRectField: View {
                 image = nil
                 return
             }
-            if let facade = job.facade {
-                image = try? await facade.thumbnail(url, side: 320)
-            } else {
-                image = await StudioThumbnails.shared.thumbnail(for: url, side: 320)
-            }
+            image = await StudioThumbnails.shared.thumbnail(for: url, side: 320)
         }
     }
 }
