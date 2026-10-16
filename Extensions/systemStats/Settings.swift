@@ -86,7 +86,7 @@ enum SystemStatsSettingsScene {
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
                     Form { SystemStatsRows(presentation: presentation, defaults: defaults) }
-                        .formStyle(.grouped)
+                        .edithForm()
                 }
             })
     }

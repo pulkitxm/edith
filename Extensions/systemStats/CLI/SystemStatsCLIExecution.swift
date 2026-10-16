@@ -54,7 +54,7 @@ import Foundation
                 ]
                 if route == ["system", "stats"] {
                     entry["streamOperation"] = "systemStats.cli.stream"
-                    entry["streamDeadline"] = 1_800
+                    entry["streamDeadline"] = 21_600
                 }
                 commands.append(entry)
             }
