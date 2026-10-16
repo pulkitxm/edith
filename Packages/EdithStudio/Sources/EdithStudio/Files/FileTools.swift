@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import ExtensionMarketplace
 
 enum FileTools {
     static var all: [StudioTool] { [zip, unzip, tar] }
