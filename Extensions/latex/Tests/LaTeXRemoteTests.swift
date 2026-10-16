@@ -36,27 +36,35 @@ import Testing
         await ui.shutdown()
         #expect(!engine.isStopped && engine.dirty)
         await engine.shutdown()
-        #expect(try store.loadDraft()?.text == "edited document")
     }
 
-    @Test func buildDeliveryStaysEngineOwnedAndFixtureCannotOpenURLs() async throws {
-        let store = LaTeXProjectStore(
-            url: FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString))
+    @Test func selectingClearsStaleSourceAndFailuresKeepTheirMessage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("first.tex")
+        let second = root.appendingPathComponent("second.tex")
+        try Data("first document".utf8).write(to: first)
+        try Data("second document".utf8).write(to: second)
+        let store = LaTeXProjectStore(url: root.appendingPathComponent("projects.json"))
         let engine = LaTeXModel(store: store)
-        engine.buildURL = URL(string: "https://fixture.invalid/build")
-        #expect(throws: ExtensionPeerError.self) { try engine.deliverBuildURL() }
-        var actions: [LaTeXUIAction] = []
+        try await engine.add(.init(name: "First", location: .disk, sourcePath: first.path))
+        try await engine.add(.init(name: "Second", location: .disk, sourcePath: second.path))
+        let firstID = try #require(engine.projects.first?.id)
         let bridge = LaTeXUIBridge(invoke: { command, payload in
-            #expect(command == "latex.ui.action")
-            actions.append(try JSONDecoder().decode(LaTeXUIAction.self, from: payload))
-            return try JSONEncoder().encode(LaTeXUISnapshot(model: engine))
+            try await LaTeXUIBridge.execute(command, payload: payload, model: engine)
         })
         let ui = LaTeXModel(remote: bridge)
-        ui.selectedID = UUID()
-        ui.openBuildURL()
-        while actions.isEmpty { await Task.yield() }
-        #expect(actions.count == 1 && actions[0].action == "buildURL")
+        await ui.start()
+        #expect(ui.load.hasContent && !ui.load.isRunning && ui.localMessage == nil)
+        let secondID = try #require(ui.projects.last?.id)
+        await ui.select(secondID)
+        #expect(ui.source == "second document" && !ui.busy && !ui.load.isRunning)
+        #expect(ui.editorRequest == 0)
+        try FileManager.default.removeItem(at: first)
+        await ui.select(firstID)
+        #expect(ui.selectedID == firstID && ui.original == nil && ui.source.isEmpty)
+        #expect(ui.load.errorMessage != nil && !ui.busy)
         await ui.shutdown(); await engine.shutdown()
     }
 

@@ -10,13 +10,12 @@ struct LaTeXPage: View {
     @State private var editing = false
     @State private var adding = false
     @State private var showingReview = false
-    @State private var showingTools = false
     @State private var inspector = "PDF"
     @State private var layout = "Split"
     let model: LaTeXModel
     init(model: LaTeXModel, opensEditor: Bool = false) {
         self.model = model
-        _editing = State(initialValue: opensEditor || model.editorRequest > 0)
+        _editing = State(initialValue: opensEditor)
     }
     private var editorControls: LaTeXEditorControls { model.editorControls }
 
@@ -38,10 +37,6 @@ struct LaTeXPage: View {
         .edithSheet(isPresented: $adding, dismissible: nil) {
             LaTeXAddProject(model: model, onAdded: { editing = true })
         }
-        .edithSheet(isPresented: $showingTools, dismissible: nil) {
-            LaTeXToolsPage(owner: model.tools).frame(
-                width: UIScale.pt(620), height: UIScale.pt(530))
-        }
         .onChange(of: model.editorRequest) { _, generation in
             if generation > 0 { editing = true }
         }
@@ -53,7 +48,6 @@ struct LaTeXPage: View {
     private var projectsPage: some View {
         PageScaffold {
             PageHeader("LaTeX projects") {
-                Button("Tools", systemImage: "wrench.and.screwdriver") { showingTools = true }
                 Button {
                     adding = true
                 } label: {
@@ -153,7 +147,7 @@ struct LaTeXPage: View {
                     Label("Saved", systemImage: "checkmark.circle")
                         .foregroundStyle(.secondary)
                 }
-                if let message = model.message ?? model.load.errorMessage {
+                if let message = model.statusMessage ?? model.load.errorMessage {
                     Text(message).foregroundStyle(.secondary).lineLimit(1).help(message)
                 }
                 Spacer(minLength: 0)
@@ -379,13 +373,11 @@ struct LaTeXPage: View {
                         Button("Refresh PDF") { model.refreshPDF() }.disabled(
                             model.busy || model.dirty)
                     }
-                    if model.buildURL != nil {
-                        Button("View PDF build") { model.openBuildURL() }.buttonStyle(.link)
+                    if let buildURL = model.buildURL {
+                        Link("View PDF build", destination: buildURL)
                     }
                     if let data = model.pdfPreview {
-                        LaTeXPDFPane(
-                            data: data, generation: model.buildGeneration,
-                            delivery: { model.openPDF(save: $0) })
+                        LaTeXPDFPane(data: data, generation: model.buildGeneration)
                     } else {
                         ContentUnavailableView(
                             model.buildingPDF
@@ -526,7 +518,7 @@ private struct LaTeXReviewWorkspace: View {
                         }
                     }
                 }
-                if let message = model.message {
+                if let message = model.statusMessage {
                     Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }.padding(UIScale.pt(16))
@@ -577,7 +569,7 @@ private struct LaTeXReviewWorkspace: View {
             } else {
                 PageLoading(
                     state: model.busy ? .loading : .empty,
-                    title: "Pull request review", message: model.message ?? "Loading review…",
+                    title: "Pull request review", message: model.statusMessage ?? "Loading review…",
                     layout: .cards, retry: { model.refreshReview() }
                 ) { EmptyView() }
             }

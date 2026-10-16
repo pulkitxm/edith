@@ -24,12 +24,22 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
         case .pukbot: "pulkitxm/tap/pukbot"
         }
     }
-    var instruction: String {
+    var why: String {
         switch self {
         case .tectonic: "Compiles local LaTeX sources into PDFs."
-        case .latexmk: "Install MacTeX and add /Library/TeX/texbin to PATH."
-        case .gh: "Reads repository source and PDF artifacts. Sign in with gh auth login."
-        case .pukbot: "Saves repository changes and manages pull requests."
+        case .latexmk:
+            "Compiles pdfLaTeX documents, including sources with pdfTeX-specific commands."
+        case .gh: "Lists the GitHub repositories you can reach and signs Code Stats clones in."
+        case .pukbot: "Saves LaTeX source changes and manages GitHub pull requests."
+        }
+    }
+    var instruction: String {
+        switch self {
+        case .tectonic: "Install with brew install tectonic."
+        case .latexmk:
+            "Install MacTeX from https://tug.org/mactex, then make /Library/TeX/texbin available on PATH."
+        case .gh: "Install with `brew install gh`, then run `gh auth login`."
+        case .pukbot: "Install with brew install pulkitxm/tap/pukbot."
         }
     }
 }
@@ -74,10 +84,8 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
 
     func install(_ id: String) {
         if let remote { remoteRequest(remote, action: "tools.install", tool: id); return }
-        guard !stopped, let tool = LaTeXTool(rawValue: id), tool.formula != nil,
-            jobs[id] == nil
-        else { return }
-        start(tool, installing: true)
+        guard !stopped, let tool = LaTeXTool(rawValue: id), jobs[id] == nil else { return }
+        start(tool, installing: tool.formula != nil)
     }
 
     private func start(_ tool: LaTeXTool, installing: Bool) {
@@ -133,48 +141,77 @@ private enum LaTeXTool: String, CaseIterable, Identifiable {
     }
 }
 
-struct LaTeXToolsPage: View {
+struct LaTeXSettings: View {
     let owner: LaTeXToolOwner
+
     var body: some View {
-        PageScaffold(width: .readable) {
-            PageHeader(
-                "LaTeX tools",
-                trailing: {
-                    Button("Check again") { owner.refresh() }.disabled(!owner.busy.isEmpty)
-                })
-        } content: {
-            ForEach(LaTeXTool.allCases) { tool in
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    if owner.busy.contains(tool.id) {
-                        LoadingIndicator()
-                    } else {
-                        Image(
-                            systemName: owner.installed.contains(tool.id)
-                                ? "checkmark.circle.fill" : "exclamationmark.circle"
-                        )
-                        .foregroundStyle(owner.installed.contains(tool.id) ? .green : .secondary)
-                    }
-                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                        Text(tool.title).font(.edithText(.headline))
-                        Text(owner.status[tool.id] ?? "Not checked").font(.edithText(.caption))
-                        Text(tool.instruction).font(.edithText(.caption)).foregroundStyle(
-                            .secondary)
-                    }
-                    Spacer()
-                    if !owner.installed.contains(tool.id) {
-                        if tool.formula != nil {
-                            Button("Install") { owner.install(tool.id) }
-                                .disabled(owner.busy.contains(tool.id))
-                        } else {
-                            Link("Get MacTeX", destination: URL(string: "https://tug.org/mactex/")!)
+        Form {
+            Section("LaTeX projects") {
+                Text("Add local .tex files or GitHub repositories from the LaTeX page.")
+                    .font(.edithText(.body))
+                Text(
+                    "Local compilation uses Tectonic or a TeX Live installation. Repository projects use GitHub Actions for PDFs, Quinjet for review, and Pukbot for pull request changes and squash merges."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(LaTeXTool.allCases) { tool in
+                    HStack(alignment: .top, spacing: UIScale.pt(10)) {
+                        icon(tool).frame(width: UIScale.pt(18), height: UIScale.pt(22))
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(tool.title).fontWeight(.medium)
+                            if owner.busy.contains(tool.id) {
+                                SkeletonGroup { SkeletonBlock(width: 150, height: 8) }
+                                    .accessibilityLabel(detail(tool))
+                            } else {
+                                Text(detail(tool)).font(.edithText(.caption))
+                                    .foregroundStyle(.secondary).textSelection(.enabled)
+                            }
+                        }
+                        Spacer(minLength: 12)
+                        if canInstall(tool) {
+                            Button(failed(tool) ? "Retry" : "Install") { owner.install(tool.id) }
+                                .controlSize(.small)
                         }
                     }
-                }.padding(.vertical, UIScale.pt(8))
+                }
+            } header: {
+                Text("Command-line tools")
+            } footer: {
+                Text("Tools stay installed when the extension is disabled.")
             }
-            Text(
-                "Tools already installed on this Mac stay available when this extension is disabled."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-        }.pageTask { owner.refresh() }
+        }
+        .edithForm()
+        .pageTask { owner.refresh() }
+    }
+
+    private func failed(_ tool: LaTeXTool) -> Bool {
+        !owner.installed.contains(tool.id) && !owner.busy.contains(tool.id)
+            && owner.status[tool.id] != nil
+    }
+
+    private func canInstall(_ tool: LaTeXTool) -> Bool {
+        !owner.installed.contains(tool.id) && !owner.busy.contains(tool.id)
+    }
+
+    private func detail(_ tool: LaTeXTool) -> String {
+        if owner.installed.contains(tool.id) || owner.busy.contains(tool.id) {
+            return owner.status[tool.id] ?? tool.why
+        }
+        guard let status = owner.status[tool.id] else { return tool.why }
+        return "\(status). \(tool.instruction)"
+    }
+
+    @ViewBuilder private func icon(_ tool: LaTeXTool) -> some View {
+        if owner.busy.contains(tool.id) {
+            SkeletonGroup { SkeletonBlock(width: 14, height: 14, corner: 7) }
+                .accessibilityLabel("Checking command-line tool")
+        } else if owner.installed.contains(tool.id) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        } else if owner.status[tool.id] != nil {
+            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        } else {
+            Image(systemName: "circle").foregroundStyle(.secondary)
+        }
     }
 }

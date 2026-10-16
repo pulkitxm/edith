@@ -16,6 +16,7 @@ final class LaTeXModel {
     var buildGeneration = UUID()
     var editorRequest: UInt64 = 0
     var message: String?
+    var localMessage: String?
     var busy = false
     var buildingPDF = false
     var hasRepositoryBuild = false
@@ -27,6 +28,7 @@ final class LaTeXModel {
     private var remoteGeneration = 0
     private var remoteTask: Task<Void, Never>?
     private var remoteApplying = false
+    private var seenEditorRequest: UInt64?
     private var remoteActionRunning = false
     private var draftTask: Task<Void, Never>?
     private var draftGeneration = UUID()
@@ -49,6 +51,8 @@ final class LaTeXModel {
         tools = LaTeXToolOwner(remote: remote)
     }
 
+    private var pollsQuickly: Bool { busy || buildingPDF || load.errorMessage != nil }
+    var statusMessage: String? { localMessage ?? message }
     var selected: LaTeXProject? { projects.first { $0.id == selectedID } }
     var dirty: Bool { original != nil && source != original?.text }
     var canSubmit: Bool {
@@ -63,7 +67,9 @@ final class LaTeXModel {
             if remoteTask == nil {
                 remoteTask = Task { [weak self] in
                     while !Task.isCancelled {
-                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                        let interval = Duration.seconds(
+                            await self?.pollsQuickly == true ? 1 : 5)
+                        do { try await Task.sleep(for: interval) } catch { return }
                         guard let self, !isStopped else { return }
                         await refreshRemote(remote)
                     }
@@ -75,13 +81,6 @@ final class LaTeXModel {
         let request = load.begin()
         do {
             projects = try store.load()
-            if let draft = try store.loadDraft(),
-                projects.contains(where: { $0.id == draft.projectID })
-            {
-                selectedID = draft.projectID; source = draft.text; original = draft.original
-                editorRequest &+= 1
-                message = "Unsaved edits restored. Save or discard them to continue."
-            }
             load.complete(request, empty: projects.isEmpty)
         } catch {
             if !isStopped && !Task.isCancelled { load.fail(request, error: error) }
@@ -89,7 +88,20 @@ final class LaTeXModel {
     }
 
     func select(_ id: UUID) async {
-        if remote != nil { await remoteAction(.init(action: "select", projectID: id)); return }
+        if remote != nil {
+            guard !isStopped, !dirty, !busy else { return }
+            selectedID = id
+            hasRepositoryBuild = false
+            original = nil
+            source = ""
+            review = nil
+            pdfPreview = nil
+            log = ""
+            message = nil
+            buildURL = nil
+            await remoteAction(.init(action: "select", projectID: id), mode: .loading(false))
+            return
+        }
         guard !isStopped, !dirty, !busy else { return }
         stopFollowingBuild()
         selectedID = id
@@ -105,7 +117,10 @@ final class LaTeXModel {
 
     func reload() async {
         if remote != nil {
-            await remoteAction(.init(action: "reload", projectID: selectedID)); return
+            guard !isStopped, !dirty, !busy else { return }
+            await remoteAction(
+                .init(action: "reload", projectID: selectedID), mode: .loading(original != nil))
+            return
         }
         guard !isStopped, let project = selected, !dirty, !busy else { return }
         stopFollowingBuild()
@@ -144,6 +159,7 @@ final class LaTeXModel {
             let next = try await remote.perform(.init(action: "add", project: project))
             guard !isStopped, !Task.isCancelled else { throw CancellationError() }
             applyRemote(next)
+            settleLoad(nil, next)
             return
         }
         guard !isStopped else { throw CancellationError() }
@@ -178,7 +194,8 @@ final class LaTeXModel {
                 await self.remoteAction(
                     .init(
                         action: "remove", projectID: self.selectedID,
-                        revision: self.original?.revision, text: self.source))
+                        revision: self.original?.revision, text: self.source),
+                    mode: .silent)
             }; return
         }
         guard !isStopped, let selected, !dirty, !busy else { return }
@@ -202,12 +219,12 @@ final class LaTeXModel {
                 await self.remoteAction(
                     .init(
                         action: "discard", projectID: self.selectedID,
-                        revision: self.original?.revision, text: self.source))
+                        revision: self.original?.revision, text: self.source),
+                    mode: .silent)
             }; return
         }
         guard !isStopped else { return }
         if let original { source = original.text }
-        do { try store.saveDraft(nil) } catch { message = error.localizedDescription }
     }
 
     func requestEditor() {
@@ -416,7 +433,6 @@ final class LaTeXModel {
             defer { busy = false; operation = nil }
             do {
                 try await action()
-                if !dirty { try store.saveDraft(nil) }
             } catch {
                 if !isStopped && !Task.isCancelled { message = error.localizedDescription }
             }
@@ -435,11 +451,6 @@ final class LaTeXModel {
     }
 
     func shutdown() async {
-        if remote == nil, dirty, let selectedID, let original {
-            do {
-                try store.saveDraft(.init(projectID: selectedID, text: source, original: original))
-            } catch { message = error.localizedDescription }
-        }
         isStopped = true
         remoteGeneration &+= 1
         cancelPendingWork()
@@ -450,6 +461,7 @@ final class LaTeXModel {
         projects.removeAll(); selectedID = nil; source = ""; original = nil
         review = nil; pdfPreview = nil; log = ""; message = nil
         busy = false; buildingPDF = false; hasRepositoryBuild = false; buildURL = nil
+        localMessage = nil
     }
 
     func cancelPendingWork() {
@@ -489,7 +501,10 @@ final class LaTeXModel {
 
     func revealSource() {
         if remote != nil {
-            launch { await self.remoteAction(.init(action: "reveal", projectID: self.selectedID)) }
+            launch {
+                await self.remoteAction(
+                    .init(action: "reveal", projectID: self.selectedID), mode: .silent)
+            }
         } else if let selected {
             NSWorkspace.shared.activateFileViewerSelecting([
                 URL(fileURLWithPath: selected.sourcePath)
@@ -497,52 +512,27 @@ final class LaTeXModel {
         }
     }
 
-    func openBuildURL() {
-        if remote != nil {
-            launch {
-                await self.remoteAction(.init(action: "buildURL", projectID: self.selectedID))
-            }
-        } else {
-            do { try deliverBuildURL() } catch { message = error.localizedDescription }
-        }
-    }
-    func deliverBuildURL() throws {
-        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
-            let url = buildURL, ["http", "https"].contains(url.scheme?.lowercased() ?? "")
-        else { throw ExtensionPeerError.invalidRequest }
-        NSWorkspace.shared.open(url)
-    }
-
     func openPDF(save: Bool) {
-        if remote != nil {
-            launch {
-                await self.remoteAction(
-                    .init(action: save ? "savePDF" : "openPDF", projectID: self.selectedID))
-            }
-        } else {
-            do { try deliverPDF(save: save) } catch { message = error.localizedDescription }
+        do { try deliverPDF(save: save) } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
         }
     }
     func deliverPDF(save: Bool) throws {
         guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
             let project = selected
         else { throw ExtensionPeerError.invalidRequest }
-        let bytes = project.location == .disk ? try Data(contentsOf: project.pdfURL) : pdfPreview
+        let bytes =
+            project.location == .disk && remote == nil
+            ? try Data(contentsOf: project.pdfURL) : pdfPreview
         guard let bytes else { throw ExtensionPeerError.unavailable }
         if save {
             let panel = NSSavePanel(); panel.nameFieldStringValue = project.pdfURL.lastPathComponent
             if panel.runModal() == .OK, let url = panel.url {
                 try bytes.write(to: url, options: .atomic)
             }
-        } else if project.location == .disk {
-            NSWorkspace.shared.open(project.pdfURL)
         } else {
-            let directory = ExtensionData.root.appendingPathComponent(
-                "PDFPreviews", isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let url = directory.appendingPathComponent(project.id.uuidString + ".pdf")
-            try bytes.write(to: url, options: .atomic); NSWorkspace.shared.open(url)
+            NSWorkspace.shared.open(project.pdfURL)
         }
     }
 
@@ -569,7 +559,7 @@ final class LaTeXModel {
                 _ = try await remote.perform(request)
             } catch {
                 if !isStopped, !Task.isCancelled, generation == draftGeneration {
-                    message = error.localizedDescription
+                    localMessage = error.localizedDescription
                 }
             }
         }
@@ -579,25 +569,35 @@ final class LaTeXModel {
         guard !remoteActionRunning else { return }
         remoteGeneration &+= 1
         let generation = remoteGeneration
-        let request = load.begin(preservingContent: load.hasContent)
+        let request = load.hasContent ? nil : load.begin(preservingContent: false)
         do {
             let value = try await remote.snapshot()
             guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }
             applyRemote(value, retainingDraft: dirty)
-            load.complete(request, empty: projects.isEmpty)
+            settleLoad(request, value)
         } catch {
-            if !isStopped, !Task.isCancelled, generation == remoteGeneration {
+            if !isStopped, !Task.isCancelled, generation == remoteGeneration, let request {
                 load.fail(request, error: error)
             }
         }
     }
 
-    private func remoteAction(_ action: LaTeXUIAction) async {
+    enum RemoteMode {
+        case busy, silent, loading(Bool)
+    }
+
+    private func remoteAction(_ action: LaTeXUIAction, mode: RemoteMode = .busy) async {
         guard let remote, !isStopped, !busy else { return }
         remoteGeneration &+= 1
         let generation = remoteGeneration
         retireDraft()
-        busy = true
+        localMessage = nil
+        var request: UInt64?
+        switch mode {
+        case .busy: busy = true
+        case .silent: break
+        case .loading(let preserving): request = load.begin(preservingContent: preserving)
+        }
         remoteActionRunning = true
         defer { remoteActionRunning = false }
         await draftTask?.value
@@ -606,10 +606,30 @@ final class LaTeXModel {
             let value = try await remote.perform(action)
             guard !isStopped, !Task.isCancelled, generation == remoteGeneration else { return }
             applyRemote(value)
+            settleLoad(request, value)
         } catch {
             if !isStopped, !Task.isCancelled, generation == remoteGeneration {
-                message = error.localizedDescription
+                localMessage = error.localizedDescription
+                if let request { load.fail(request, error: error) }
             }
+        }
+    }
+
+    private func settleLoad(_ request: UInt64?, _ value: LaTeXUISnapshot) {
+        if let request {
+            if let failure = value.loadError {
+                load.fail(request, message: failure)
+            } else {
+                load.complete(request, empty: projects.isEmpty)
+            }
+        } else if let failure = value.loadError {
+            if load.errorMessage != failure {
+                load.fail(load.begin(preservingContent: true), message: failure)
+            }
+        } else if load.errorMessage != nil || !load.hasContent {
+            load.setContent(empty: projects.isEmpty)
+        } else {
+            load.retainContent(empty: projects.isEmpty)
         }
     }
 
@@ -625,12 +645,14 @@ final class LaTeXModel {
             original = value.original
         }
         review = value.review; pdfPreview = value.pdfPreview
-        editorRequest = value.editorRequest
+        if let seen = seenEditorRequest {
+            if value.editorRequest != seen { editorRequest &+= 1 }
+        }
+        seenEditorRequest = value.editorRequest
         log = value.log; buildGeneration = value.buildGeneration
         busy = value.busy; buildingPDF = value.buildingPDF
         hasRepositoryBuild = value.hasRepositoryBuild; buildURL = value.buildURL
         message = value.message
         tools.apply(value.tools)
-        load.setContent(empty: projects.isEmpty)
     }
 }

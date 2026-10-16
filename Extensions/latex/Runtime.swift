@@ -8,6 +8,7 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var worker: LaTeXWorker?
     private var uiModel: LaTeXModel?
+    private var settingsTools: LaTeXToolOwner?
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
@@ -106,6 +107,10 @@ final class ExtensionRuntime: NSObject {
                 Self.hasEditorResources
             else { return ["ok": false] as NSDictionary }
             engineClient = client
+            if input["location"] as? String == "settings" {
+                settingsTools = LaTeXToolOwner(remote: LaTeXUIBridge(client: client))
+                return ["ok": true] as NSDictionary
+            }
             uiModel = LaTeXModel(remote: LaTeXUIBridge(client: client))
             TextEditingCommands.install()
         case "stopUI": stopUI()
@@ -117,6 +122,10 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if worker == nil { worker = LaTeXWorker() }
         case "view":
+            if let tools = settingsTools {
+                return NSHostingController(
+                    rootView: ExtensionPageHost { LaTeXSettings(owner: tools) })
+            }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { LaTeXPage(model: model) })
@@ -139,6 +148,14 @@ final class ExtensionRuntime: NSObject {
     private func stopUI() {
         engineClient?.invalidate(); engineClient = nil
         let model = uiModel; uiModel = nil
+        let tools = settingsTools; settingsTools = nil
+        if let tools {
+            let id = UUID()
+            uiRetirements[id] = Task { [self, tools] in
+                await tools.shutdown()
+                uiRetirements[id] = nil
+            }
+        }
         if let model {
             model.cancelPendingWork()
             let id = UUID()
