@@ -2789,6 +2789,7 @@
         "Extensions/codeStats/Models/CodeStatsStatus.swift",
         "Extensions/codeStats/Models/CodeStatsStorage.swift",
         "Extensions/codeStats/Runtime.swift",
+        "Extensions/codeStats/Services/CodeStatsCancellation.swift",
         "Extensions/codeStats/Services/CodeStatsCommand.swift",
         "Extensions/codeStats/Services/CodeStatsCommands.swift",
         "Extensions/codeStats/Services/CodeStatsEngine.swift",
