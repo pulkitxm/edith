@@ -10,6 +10,27 @@ struct DocsScrollRequest: Equatable {
     let serial: Int
 }
 
+struct DocsLocalLibrary: Sendable {
+    var cached: @Sendable () -> DocsLibrary?
+    var opening: @Sendable () -> DocsPage?
+    var bundled: @Sendable () -> DocsLibrary?
+
+    static let live = Self(
+        cached: { DocsLibrary.cached() }, opening: { DocsLibrary.openingPage() },
+        bundled: { DocsLibrary.bundled() })
+    static let none = Self(cached: { nil }, opening: { nil }, bundled: { nil })
+}
+
+struct DocsSession {
+    var location = DocsLocation(path: DocsLibrary.indexPath)
+    var expandedGroups: Set<String> = [""]
+    var filter = ""
+    var question = ""
+    var answer: DocsPresentationAnswer?
+
+    @MainActor static var last: DocsSession?
+}
+
 @MainActor @Observable
 final class DocsBrowser {
 
@@ -22,9 +43,9 @@ final class DocsBrowser {
     private(set) var asking = false
     private(set) var resultsVisible = false
     private var askSerial = 0
-    var expandedGroups: Set<String> = [""]
+    var expandedGroups: Set<String> = [""] { didSet { remember() } }
     var filter = ""
-    var question = ""
+    var question = "" { didSet { remember() } }
     var selection = 0
     private(set) var sidebarGroups: [(DocsGroup, [DocsPage])] = []
     private(set) var appliedFilter = ""
@@ -44,26 +65,37 @@ final class DocsBrowser {
     private var cancelledWork: [UUID: Task<Void, Never>] = [:]
     private let defaults: UserDefaults
     private let remote: DocsUIBridge?
+    private let local: DocsLocalLibrary
 
     init(
         library: DocsLibrary? = nil,
         matchPages: (@Sendable ([DocsGroup], String) -> [(DocsGroup, [DocsPage])])? = nil,
         filterDelay: Duration = .milliseconds(200),
         defaults: UserDefaults = SharedDefaults.store,
-        remote: DocsUIBridge? = nil
+        remote: DocsUIBridge? = nil, local: DocsLocalLibrary = .live
     ) {
         self.defaults = defaults
         self.remote = remote
+        self.local = local
         if let library {
             self.library = library
             suppliedLibrary = true
-        } else if remote == nil, let ready = DocsLibrary.cached() {
+        } else if let ready = local.cached() {
             self.library = ready
             suppliedLibrary = true
         }
         self.filterDelay = filterDelay
         if let matchPages { self.matchPages = matchPages }
         if let groups = self.library?.groups { sidebarGroups = Self.listing(groups) }
+        if remote != nil, let session = DocsSession.last {
+            location = session.location
+            expandedGroups = session.expandedGroups
+            filter = session.filter
+            question = session.question
+            answer = session.answer
+            scroll = DocsScrollRequest(anchor: session.location.anchor, serial: 1)
+        }
+        if !filter.trimmingCharacters(in: .whitespaces).isEmpty { startFilter() }
     }
 
     var page: DocsPage? { library?.page(location.path) }
@@ -81,31 +113,38 @@ final class DocsBrowser {
     }
 
     private func loadFresh() async {
-        if let remote {
+        if let ready = local.cached() {
+            adopt(ready)
+            suppliedLibrary = true
+            return
+        }
+        if library == nil {
+            let opening = local.opening
+            let index = await Task.detached(priority: .userInitiated) { opening() }.value
+            guard !stopped, !Task.isCancelled else { return }
+            if let index { adopt(DocsLibrary(pages: [index])) }
+        }
+        let bundled = local.bundled
+        let loaded = await Task.detached(priority: .userInitiated) { bundled() }.value
+        guard !stopped, !Task.isCancelled else { return }
+        if let loaded {
+            adopt(loaded)
+            suppliedLibrary = true
+        } else if let remote {
             do {
                 let next = try await remote.library()
                 guard !stopped, !Task.isCancelled else { return }
                 adopt(next)
                 suppliedLibrary = true
             } catch {}
-            return
         }
-        if let ready = DocsLibrary.cached() {
-            adopt(ready)
-            suppliedLibrary = true
-            return
-        }
-        if library == nil {
-            let index = await Task.detached(priority: .userInitiated) {
-                DocsLibrary.openingPage()
-            }.value
-            guard !stopped, !Task.isCancelled else { return }
-            if let index { adopt(DocsLibrary(pages: [index])) }
-        }
-        let loaded = await Task.detached(priority: .userInitiated) { DocsLibrary.bundled() }.value
-        guard let loaded, !stopped, !Task.isCancelled else { return }
-        adopt(loaded)
-        suppliedLibrary = true
+    }
+
+    private func remember() {
+        guard remote != nil, !stopped else { return }
+        DocsSession.last = DocsSession(
+            location: location, expandedGroups: expandedGroups, filter: filter,
+            question: question, answer: answer)
     }
 
     private func adopt(_ next: DocsLibrary) {
@@ -122,6 +161,7 @@ final class DocsBrowser {
     func noteFilter(_ text: String) {
         guard !stopped else { return }
         filter = String(text.prefix(256))
+        remember()
         filterGeneration &+= 1
         filterTask?.cancel()
         if filter.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -229,14 +269,15 @@ final class DocsBrowser {
         _ = await previous?.value
         guard !stopped, !Task.isCancelled, serial == askSerial else { return }
         let task = Task {
-            if let remote = self.remote {
-                return (try? await remote.answer(request, library: library))
-                    ?? DocsPresentationAnswer(
-                        request: request, engine: .search, picks: [], milliseconds: 0)
+            if let remote = self.remote,
+                let answered = try? await remote.answer(request, library: library)
+            {
+                return answered
             }
             return DocsPresentationAnswer(
                 await DocsAsk.answer(
-                    request, in: library, decider: decider, defaults: defaults))
+                    request, in: library, decider: self.remote == nil ? decider : nil,
+                    defaults: defaults))
         }
         askTask = task
         let answered = await withTaskCancellationHandler {
@@ -247,6 +288,7 @@ final class DocsBrowser {
         guard !stopped, !Task.isCancelled, !task.isCancelled, serial == askSerial else { return }
         askTask = nil
         answer = answered
+        remember()
         selection = 0
         asking = false
         resultsVisible = true
@@ -287,6 +329,7 @@ final class DocsBrowser {
         askTask?.cancel()
         question = ""
         answer = nil
+        remember()
         asking = false
         resultsVisible = false
         return true
@@ -333,6 +376,7 @@ final class DocsBrowser {
 
     private func show(_ target: DocsLocation, reveal: Bool = true) {
         location = target
+        remember()
         if reveal { revealSerial += 1 }
         if let group = library?.page(target.path)?.group { expandedGroups.insert(group) }
         flashAnchor = target.anchor

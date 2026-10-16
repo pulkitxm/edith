@@ -500,7 +500,7 @@
       "sources": [
         {
           "path": "Extensions/docs/Runtime.swift",
-          "sha256": "c4535e0a86aa9c952307d3fccd74e94d88afd7f24dd8f91c374b8423242364b6"
+          "sha256": "950f48503ee8d322ceffd42ede20115f1b8f3501012a6067137cdbd6a56c8b83"
         },
         {
           "path": "Extensions/docs/DocsUIBridge.swift",
