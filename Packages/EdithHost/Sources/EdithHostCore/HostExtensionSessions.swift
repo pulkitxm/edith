@@ -114,20 +114,26 @@ public final class HostExtensionSessions {
     }
 
     public func restore(packages: [String: ExtensionPackage]) async {
+        var restores: [Task<Void, Never>] = []
         for id in enabledIDs.union(pendingDisableIDs).union(pendingRecoveryIDs).sorted() {
             guard let package = packages[id] else { states[id] = .notInstalled; continue }
-            if pendingDisableIDs.contains(id) {
-                self.packages[id] = package
-                do { try await disable(id: id) } catch { failures.insert(id) }
-            } else if pendingRecoveryIDs.contains(id) {
-                self.packages[id] = package
-                do {
-                    try await stop(id: id, remember: false, reason: .shutdown)
-                    if enabledIDs.contains(id) { try await enable(package) }
-                } catch { failures.insert(id) }
-            } else {
-                do { try await enable(package) } catch { failures.insert(id) }
-            }
+            restores.append(Task { await restore(id: id, package: package) })
+        }
+        for restore in restores { await restore.value }
+    }
+
+    private func restore(id: String, package: ExtensionPackage) async {
+        if pendingDisableIDs.contains(id) {
+            packages[id] = package
+            do { try await disable(id: id) } catch { failures.insert(id) }
+        } else if pendingRecoveryIDs.contains(id) {
+            packages[id] = package
+            do {
+                try await stop(id: id, remember: false, reason: .shutdown)
+                if enabledIDs.contains(id) { try await enable(package) }
+            } catch { failures.insert(id) }
+        } else {
+            do { try await enable(package) } catch { failures.insert(id) }
         }
     }
 
