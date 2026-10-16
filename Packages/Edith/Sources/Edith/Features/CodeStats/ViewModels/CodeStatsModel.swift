@@ -129,9 +129,11 @@ final class CodeStatsModel {
             logins: lookup.profiles.map(\.login), emails: lookup.emails)
     }
 
-    var schedule: CodeStatsSchedule {
-        status?.settings.schedule ?? CodeStatsPreferences.schedule(in: defaults)
+    var settings: CodeStatsSettings {
+        status?.settings ?? CodeStatsPreferences.load(from: defaults)
     }
+
+    var schedule: CodeStatsSchedule { settings.schedule }
 
     func observe() async {
         await withTaskGroup(of: Void.self) { group in
@@ -413,7 +415,21 @@ final class CodeStatsModel {
                 weekday: weekday ?? CodeStatsPreferences.defaultWeekday,
                 hour: hour ?? CodeStatsPreferences.defaultHour)
         }
+        await setSchedule(next)
+    }
+
+    func setSchedule(_ next: CodeStatsSchedule) async {
         CodeStatsPreferences.setSchedule(next, in: defaults)
+        await loadStatus()
+    }
+
+    func setIncludeForks(_ value: Bool) async {
+        defaults.set(value, forKey: AppStorageKeys.CodeStats.includeForks)
+        await loadStatus()
+    }
+
+    func setIncludeArchived(_ value: Bool) async {
+        defaults.set(value, forKey: AppStorageKeys.CodeStats.includeArchived)
         await loadStatus()
     }
 
