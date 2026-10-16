@@ -1562,7 +1562,7 @@ private struct ExtensionPermissionSheet: View {
                     .foregroundStyle(.tint)
                     .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     .background(
-                        Color.accentColor.opacity(0.12),
+                        Color.themeAccent.opacity(0.12),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Enable \(request.entry.title)")
@@ -1661,7 +1661,7 @@ private struct ExtensionPermissionSheet: View {
         }
         .padding(UIScale.pt(14))
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.panel,
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {

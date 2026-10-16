@@ -7,7 +7,7 @@ struct AgentEventRow: View {
 
     private var color: Color {
         switch event.level {
-        case .info: .accentColor
+        case .info: Color.themeAccent
         case .warning: .orange
         case .error: .red
         }

@@ -284,14 +284,14 @@ private struct TimeLapseSourceCard: View {
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                             .font(.edithText(.title3)).foregroundStyle(
-                                selected ? Color.accentColor : .secondary
+                                selected ? Color.themeAccent : .secondary
                             )
                             .background(.regularMaterial, in: Circle()).padding(UIScale.pt(8))
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: UIScale.pt(10))
                             .strokeBorder(
-                                selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                                selected ? Color.themeAccent : Color.secondary.opacity(0.25),
                                 lineWidth: UIScale.pt(selected ? 2 : 1))
                     }
                 Text(choice.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(1)

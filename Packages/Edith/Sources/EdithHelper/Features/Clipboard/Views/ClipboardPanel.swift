@@ -82,7 +82,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
                 store: store,
                 onDismiss: { [weak self] in self?.hide() },
                 onHeightChange: { [weak self] height in self?.resize(toFit: height) }
-            ))
+            ).themedControls())
         hosting?.layoutSubtreeIfNeeded()
     }
 

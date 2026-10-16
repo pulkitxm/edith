@@ -3,6 +3,7 @@ import SwiftUI
 public struct ClaudeAccountLimitsView: View {
     private let accounts: [ClaudeAccountLimits]
     private let compact: Bool
+    @Environment(\.colorScheme) private var scheme
 
     public init(accounts: [ClaudeAccountLimits], compact: Bool = false) {
         self.accounts = accounts
@@ -57,7 +58,14 @@ public struct ClaudeAccountLimitsView: View {
                 }
                 .padding(UIScale.pt(compact ? 10 : 14))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                .background(
+                    DashSkin.paper(scheme == .dark),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: UIScale.pt(10))
+                        .strokeBorder(DashSkin.line(scheme == .dark), lineWidth: 0.5)
+                }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(account.name + " Claude limits")
             }

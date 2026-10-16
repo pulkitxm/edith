@@ -63,7 +63,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                         if refreshing {
                             LoadingIndicator("Refreshing")
                                 .padding(8)
-                                .background(.regularMaterial, in: Capsule())
+                                .background(DashSkin.panel, in: Capsule())
                                 .allowsHitTesting(false)
                         }
                     }
@@ -273,19 +273,27 @@ public struct LoadingIndicator: View {
 public struct LoadingProgress: View {
     public let value: Double
     public var total: Double = 1
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
-    private var themeName = "accent"
+    public var tint: Color?
+    @Environment(\.colorScheme) private var scheme
 
-    public init(value: Double, total: Double = 1) {
+    public init(value: Double, total: Double = 1, tint: Color? = nil) {
         self.value = value
         self.total = total
+        self.tint = tint
     }
 
     public var body: some View {
-        ProgressView(value: fraction)
-            .tint(themeColor(themeName))
-            .accessibilityLabel("Progress")
-            .accessibilityValue("\(Int(fraction * 100)) percent")
+        GeometryReader { proxy in
+            Capsule().fill(DashSkin.line(scheme == .dark))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(tint ?? DashSkin.accent(scheme == .dark))
+                        .frame(width: proxy.size.width * fraction)
+                }
+        }
+        .frame(height: UIScale.pt(6))
+        .accessibilityElement()
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int(fraction * 100)) percent")
     }
 
     public var fraction: Double {

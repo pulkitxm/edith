@@ -217,7 +217,7 @@ struct StudioImageFilterPanel: View {
                             RoundedRectangle(cornerRadius: UIScale.pt(6))
                                 .strokeBorder(
                                     editor.document.filter == preset
-                                        ? Color.accentColor : Color.clear, lineWidth: 2.5))
+                                        ? Color.themeAccent : Color.clear, lineWidth: 2.5))
                         Text(preset.title).font(.system(size: UIScale.pt(10.5)))
                     }
                     .edithButtonTarget(.borderless)

@@ -742,7 +742,6 @@ struct MainWindowView: View {
             VStack(spacing: UIScale.pt(0)) {
                 band(detailBackground, height: bandHeight)
                 detail
-                    .tint(theme)
                     .task(id: destination) {
                         await Task.yield()
                         PageTrace.end(destination)

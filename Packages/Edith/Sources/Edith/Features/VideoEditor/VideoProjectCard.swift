@@ -62,7 +62,7 @@ struct VideoProjectCard: View {
                     .overlay {
                         RoundedRectangle(cornerRadius: UIScale.pt(8))
                             .strokeBorder(
-                                hovering ? Color.accentColor : Color.primary.opacity(0.1),
+                                hovering ? Color.themeAccent : Color.primary.opacity(0.1),
                                 lineWidth: hovering ? 2 : 1)
                     }
                 Text(listing.title)

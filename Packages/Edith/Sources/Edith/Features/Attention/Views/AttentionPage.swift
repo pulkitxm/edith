@@ -425,11 +425,11 @@ private struct AttentionCollectingView: View {
         PageCard {
             VStack(spacing: 18) {
                 ZStack {
-                    Circle().fill(Color.accentColor.opacity(0.12)).frame(
+                    Circle().fill(Color.themeAccent.opacity(0.12)).frame(
                         width: UIScale.pt(76), height: UIScale.pt(76))
                     Image(systemName: "waveform.path.ecg")
                         .font(.system(size: UIScale.pt(30), weight: .medium))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.themeAccent)
                 }
                 Text(
                     model.settings.isEnabled
@@ -477,8 +477,8 @@ struct SetupStep: View {
             Text(number)
                 .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
                 .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                .background(Color.accentColor.opacity(0.14), in: Circle())
-                .foregroundStyle(Color.accentColor)
+                .background(Color.themeAccent.opacity(0.14), in: Circle())
+                .foregroundStyle(Color.themeAccent)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
                 Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
@@ -494,7 +494,7 @@ struct SourceLabel: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: UIScale.pt(24))
+            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(24))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: UIScale.pt(13), weight: .semibold))
                 Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)

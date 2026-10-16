@@ -626,7 +626,7 @@ struct DockerContainerDetail: View {
                 }
                 .padding(.horizontal, UIScale.pt(12))
                 .padding(.vertical, UIScale.pt(7))
-                .background(.thinMaterial, in: Capsule())
+                .background(DashSkin.panel, in: Capsule())
                 .padding(.bottom, UIScale.pt(12))
             }
         }

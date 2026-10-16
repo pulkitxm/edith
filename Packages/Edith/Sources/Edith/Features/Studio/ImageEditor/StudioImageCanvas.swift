@@ -123,7 +123,7 @@ struct StudioImageCanvas: View {
         if let selected = editor.selected, !selected.isHidden {
             let frame = ImageEditGeometry.viewRect(for: selected.frame, in: rect)
             Rectangle()
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                .strokeBorder(Color.themeAccent, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                 .frame(width: max(frame.width, 6), height: max(frame.height, 6))
                 .offset(x: frame.minX, y: frame.minY)
                 .allowsHitTesting(false)
@@ -133,7 +133,7 @@ struct StudioImageCanvas: View {
                     .fill(Color.white)
                     .overlay(
                         RoundedRectangle(cornerRadius: UIScale.pt(2)).strokeBorder(
-                            Color.accentColor, lineWidth: 1.5)
+                            Color.themeAccent, lineWidth: 1.5)
                     )
                     .frame(width: UIScale.pt(10), height: UIScale.pt(10))
                     .offset(x: anchor.x - UIScale.pt(5), y: anchor.y - UIScale.pt(5))
@@ -146,7 +146,7 @@ struct StudioImageCanvas: View {
             let a = ImageEditGeometry.viewPoint(start, in: rect)
             let b = ImageEditGeometry.viewPoint(current, in: rect)
             Rectangle()
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                .strokeBorder(Color.themeAccent, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                 .background(editor.panel == .blur ? Color.black.opacity(0.25) : Color.clear)
                 .frame(width: abs(b.x - a.x), height: abs(b.y - a.y))
                 .offset(x: min(a.x, b.x), y: min(a.y, b.y))

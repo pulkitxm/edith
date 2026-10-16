@@ -184,7 +184,8 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         hosting?.rootView = AnyView(
             BifrostPanelView(
                 store: store, onDismiss: { [weak self] in self?.hide() },
-                onHeightChanged: { [weak self] height in self?.resize(height: height) }))
+                onHeightChanged: { [weak self] height in self?.resize(height: height) }
+            ).themedControls())
         hosting?.layoutSubtreeIfNeeded()
     }
 

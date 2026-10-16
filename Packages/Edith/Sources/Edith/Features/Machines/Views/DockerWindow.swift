@@ -308,7 +308,7 @@ struct DockerConsoleView: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     @ViewBuilder
