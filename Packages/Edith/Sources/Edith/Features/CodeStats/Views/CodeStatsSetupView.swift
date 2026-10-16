@@ -24,6 +24,9 @@ struct CodeStatsSetupView: View {
                 }
             }
         }
+        .pageTask {
+            await model.loadProfileIfNeeded()
+        }
     }
 }
 
@@ -32,21 +35,30 @@ struct CodeStatsSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
+    private var dark: Bool { scheme == .dark }
+
     var body: some View {
-        PageScaffold(width: .readable) {
-            PageHeader(
-                "Code Stats settings",
-                trailing: {
-                    Button("Done") { dismiss() }
-                        .keyboardShortcut(.defaultAction)
-                })
-        } content: {
-            CodeStatsSettingsSteps(model: model)
+        VStack(spacing: 0) {
+            HStack {
+                Text("Code Stats settings")
+                    .font(.system(size: UIScale.pt(17), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, UIScale.pt(24))
+            .padding(.vertical, UIScale.pt(16))
+            Divider()
+            ScrollView {
+                CodeStatsSettingsSteps(model: model)
+                    .padding(UIScale.pt(24))
+            }
             Divider()
             HStack(spacing: UIScale.pt(12)) {
                 Text("Folder, repository and identity changes count from the next refresh.")
                     .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button {
@@ -58,8 +70,15 @@ struct CodeStatsSettingsSheet: View {
                 .buttonStyle(.edith(.primary))
                 .disabled(!model.canStart)
             }
+            .padding(.horizontal, UIScale.pt(24))
+            .padding(.vertical, UIScale.pt(14))
         }
         .frame(width: UIScale.pt(640), height: UIScale.pt(680))
+        .task {
+            async let status: Void = model.loadStatus()
+            async let profile: Void = model.loadProfile()
+            _ = await (status, profile)
+        }
     }
 }
 
@@ -103,9 +122,6 @@ struct CodeStatsSettingsSteps: View {
             identityStep
             repositoriesStep
             scheduleStep
-        }
-        .pageTask {
-            await model.loadProfileIfNeeded()
         }
     }
 
