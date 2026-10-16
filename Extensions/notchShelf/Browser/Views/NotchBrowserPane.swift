@@ -92,7 +92,7 @@ final class NotchBrowserKeyEquivalentView: NSView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard window?.isKeyWindow == true else { return false }
-        return MainActor.assumeIsolated { store.handleKeyEquivalent(event) }
+        return store.handleKeyEquivalent(event)
     }
 }
 
