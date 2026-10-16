@@ -387,6 +387,7 @@ import Observation
     var leadingGlance: NotchSurfaceGlance? { snapshot?.leadingGlance }
     var trailingGlance: NotchSurfaceGlance? { snapshot?.trailingGlance }
     var glanceWingWidth: CGFloat { CGFloat(snapshot?.glanceWingWidth ?? 0) }
+    var nowPlaying: Bool { snapshot?.nowPlaying ?? false }
     var surfaceLayout: SurfaceLayout { remoteLayouts.notch }
     var visibleSurfaceLayout: SurfaceLayout {
         var layout = surfaceLayout
