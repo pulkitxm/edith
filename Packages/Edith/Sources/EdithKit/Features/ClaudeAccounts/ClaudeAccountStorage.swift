@@ -160,14 +160,15 @@ public actor ClaudeAccountStorage {
                 throw ClaudeLimitsLoginCleanupError(originalError: original, cleanupError: error)
             }
             if createsProfile {
-                let cleanup = Task.detached {
-                    guard try await self.pendingLimitsProfile(accountID: account.id, id: id) != nil
-                    else { return }
-                    try await eraseScopedSecret(folder)
-                    try await self.discardLimitsProfile(accountID: account.id, id: id)
-                }
                 do {
-                    try await cleanup.value
+                    try await Task.detached {
+                        guard
+                            try await self.pendingLimitsProfile(accountID: account.id, id: id)
+                                != nil
+                        else { return }
+                        try await eraseScopedSecret(folder)
+                        try await self.discardLimitsProfile(accountID: account.id, id: id)
+                    }.value
                 } catch {
                     throw ClaudeLimitsLoginCleanupError(
                         originalError: original, cleanupError: error)
@@ -176,7 +177,7 @@ public actor ClaudeAccountStorage {
             throw original
         }
         if createsProfile {
-            let cleanup = Task.detached {
+            try await Task.detached {
                 for retired in try await self.retiredLimitsProfiles(accountID: account.id) {
                     guard
                         let folder = try await self.pendingLimitsProfile(
@@ -185,8 +186,7 @@ public actor ClaudeAccountStorage {
                     try await eraseScopedSecret(folder)
                     try await self.discardLimitsProfile(accountID: account.id, id: retired)
                 }
-            }
-            try await cleanup.value
+            }.value
         }
         return result
     }
@@ -225,10 +225,9 @@ public actor ClaudeAccountStorage {
     }
 
     private func finishLimitsStart(accountID: UUID, id: UUID) async throws {
-        let finish = Task.detached {
+        try await Task.detached {
             try await self.markLimitsStartJoined(accountID: accountID, id: id)
-        }
-        try await finish.value
+        }.value
     }
 
     private func markLimitsStartJoined(accountID: UUID, id: UUID) throws {
