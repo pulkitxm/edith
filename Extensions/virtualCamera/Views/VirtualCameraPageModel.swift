@@ -328,7 +328,7 @@ final class VirtualCameraPageModel: ObservableObject {
             previewStatistics.sourceHeight = value.snapshot.sourceHeight
             previewStatistics.systemBackgroundActive = value.snapshot.systemBackgroundActive
             previewFailure = value.previewFailure
-            previewFeed = .helper; previewRunning = value.preview != nil
+            previewFeed = .helper; previewRunning = display.current != nil
             if let reference = value.reference.flatMap(Self.image) {
                 helperReference = reference;
                 if expandedInspectorSections.contains(.look) {
@@ -526,8 +526,8 @@ final class VirtualCameraPageModel: ObservableObject {
         guard visible, attachments == 0 else { return }
         visible = false
         if engineClient != nil {
-            remotePoll?.cancel(); framePoll?.cancel(); statusTask?.cancel(); saveTimer?.invalidate();
-            saveTimer = nil; stopPreview()
+            remotePoll?.cancel(); framePoll?.cancel(); statusTask?.cancel()
+            saveTimer?.invalidate(); saveTimer = nil; stopPreview()
             if let engineClient, !stopped {
                 _ = launch { _ = try? await engineClient.invoke("camera.ui.release") }
             }

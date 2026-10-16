@@ -81,8 +81,8 @@ import Testing
             let frame = try JSONDecoder().decode(
                 CameraUIFrame.self,
                 from: await worker.ui.execute(
-                    "camera.ui.frame", payload: JSONSerialization.data(withJSONObject: ["after": -1])
-                ))
+                    "camera.ui.frame",
+                    payload: JSONSerialization.data(withJSONObject: ["after": -1])))
             #expect(frame.preview == nil)
             await #expect(throws: ExtensionPeerError.self) {
                 _ = try await worker.ui.execute(
