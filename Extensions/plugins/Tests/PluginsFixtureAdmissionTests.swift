@@ -119,9 +119,10 @@ import WorkerFixtureTestSupport
         #expect(
             selected.selectedAgentIDs.isEmpty && selected.savedAgentSelections == ["amp": false])
         #expect(
-            defaults.dictionary(forKey: "plugins.agentSelections") as? [String: Bool] == [
-                "amp": false
-            ])
+            defaults.dictionary(forKey: AppStorageKeys.Skills.agentSelections) as? [String: Bool]
+                == [
+                    "amp": false
+                ])
         await model.shutdown()
         let recreated = makeModel()
         _ = try await action(.init(action: "discover"), model: recreated)
@@ -142,13 +143,13 @@ import WorkerFixtureTestSupport
             defaults: defaults, dataDirectory: FileManager.default.temporaryDirectory,
             agents: [])
         #expect(try model.savedAgentSelections() == nil)
-        defaults.set([String: Bool](), forKey: "plugins.agentSelections")
+        defaults.set([String: Bool](), forKey: AppStorageKeys.Skills.agentSelections)
         #expect(try model.savedAgentSelections() == [:])
-        defaults.set(["amp": false], forKey: "plugins.agentSelections")
+        defaults.set(["amp": false], forKey: AppStorageKeys.Skills.agentSelections)
         #expect(try model.savedAgentSelections() == ["amp": false])
-        defaults.set(["amp": 1], forKey: "plugins.agentSelections")
+        defaults.set(["amp": 1], forKey: AppStorageKeys.Skills.agentSelections)
         #expect(throws: (any Error).self) { try model.savedAgentSelections() }
-        defaults.set("invalid", forKey: "plugins.agentSelections")
+        defaults.set("invalid", forKey: AppStorageKeys.Skills.agentSelections)
         #expect(throws: (any Error).self) { try model.savedAgentSelections() }
         model.stop()
     }

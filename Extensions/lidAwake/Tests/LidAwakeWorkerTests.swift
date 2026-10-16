@@ -29,16 +29,13 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
             },
             startServices: false, recoveryOnly: true)
         let worker = LidAwakeWorker(
-            defaults: defaults, engine: engine, recoveryOnly: true,
-            confirm: {
-                Issue.record("Recovery must not request activation approval"); return true
-            })
+            defaults: defaults, engine: engine, recoveryOnly: true)
         #expect(!defaults.bool(forKey: LidAwakeState.enabledKey))
         #expect(engine.remaining == nil)
         #expect(LidAwakeState.sessionDeadline(defaults) == deadline)
         #expect(mutations.isEmpty)
         await #expect(throws: ExtensionPeerError.self) {
-            try await worker.perform(.on(.indefinite), requiresConfirmation: true)
+            try await worker.perform(.on(.indefinite))
         }
         try await worker.prepareDisable()
         #expect(mutations == [false])
@@ -60,7 +57,7 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
             applySystemState: { value in
                 mutations.append(value); return outcomes.removeFirst()
             }, startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { true })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         await #expect(throws: LidAwakeOperationFailure.self) { try await worker.prepareDisable() }
         #expect(defaults.bool(forKey: LidAwakeState.enabledKey))
         #expect(defaults.bool(forKey: LidAwakeState.activeKey))
@@ -116,7 +113,7 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
             applySystemState: { value in
                 mutations.append(value); return .applied
             }, startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { true })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         defer { worker.shutdown() }
         let surface = LidAwakeSurface(worker: worker, privacy: { [:] })
         var tile = SurfaceTile(.ability("lidAwake"))

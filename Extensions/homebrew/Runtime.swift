@@ -50,20 +50,26 @@ final class ExtensionRuntime: NSObject {
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            stopUI()
-            uiClient = client
-            uiModel = HomebrewPageModel(engineClient: client, memory: .shared)
+            TextEditingCommands.shutdown()
+            if let model = uiModel {
+                if model.isMutating {
+                    client.invalidate()
+                } else {
+                    uiClient?.invalidate()
+                    uiClient = client
+                    model.rebind(client)
+                }
+            } else {
+                uiClient = client
+                uiModel = HomebrewPageModel(engineClient: client, memory: .shared)
+            }
             TextEditingCommands.install()
-        case "stopUI": stopUI()
+        case "stopUI": releasePresentation()
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Homebrew")
-                    } content: {
-                        HomebrewMaintenanceView(model: model)
-                    }
+                    HomebrewMaintenanceView(model: model)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
@@ -79,6 +85,14 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    private func releasePresentation() {
+        TextEditingCommands.shutdown()
+        guard let model = uiModel, !model.isMutating else { return }
+        model.cancelDiscovery()
+        uiClient?.invalidate()
+        uiClient = nil
+    }
+
     private func stopUI() {
         TextEditingCommands.shutdown()
         uiModel?.shutdown()

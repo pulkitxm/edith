@@ -21,7 +21,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         didSet {
             guard store !== oldValue else { return }
             if store == nil { hide() }
-            if panel?.isVisible == true { mountRootView() }
+            mountRootView()
         }
     }
 
@@ -39,7 +39,6 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        mountRootView()
         guard let store, let p = panel else { return }
         NotificationCenter.default.post(name: Self.willShow, object: nil)
         let height = ClipboardPanelLayout.estimatedHeight(
@@ -71,12 +70,12 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         showTask?.cancel()
         showTask = nil
         panel?.orderOut(nil)
-        hosting?.rootView = AnyView(EmptyView())
     }
 
     func shutdown() {
         hide()
         store = nil
+        hosting?.rootView = AnyView(EmptyView())
         panel?.close(); panel = nil; hosting = nil
     }
 

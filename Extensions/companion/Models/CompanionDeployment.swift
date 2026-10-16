@@ -94,12 +94,21 @@ public enum CompanionDeploymentStore {
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
         CompanionClient.invalidateEndpointCache()
+        if url == file { publishHostingMachine(deployment) }
         return deployment
     }
 
     public static func clear(_ url: URL = file) {
         try? FileManager.default.removeItem(at: url)
         CompanionClient.invalidateEndpointCache()
+        if url == file { publishHostingMachine(nil) }
+    }
+
+    private static let localMachineID = "00000000-0000-0000-0000-0000000000ED"
+
+    public static func publishHostingMachine(_ deployment: CompanionDeployment? = load()) {
+        let identifier = deployment.map { $0.machineID?.uuidString ?? localMachineID } ?? ""
+        try? ExtensionSharedState.current?.publish(["machineID": identifier])
     }
 }
 

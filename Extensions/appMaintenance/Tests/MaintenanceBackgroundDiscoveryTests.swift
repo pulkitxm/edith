@@ -21,7 +21,7 @@ import Testing
         let stored = await fixture.snapshots.load()
         #expect(stored?.updates.map(\.id) == ["fixture-update"])
         let tile = SurfaceTile(.ability("appMaintenance"))
-        #expect(AppMaintenanceSurface.snapshot(model, tile: tile).metrics.last?.value == "1")
+        #expect(AppMaintenanceSurface.snapshot(model, tile: tile).metrics.first?.value == "1")
         clock.advance(21_599)
         await model.discoverIfDue(onBattery: false)
         #expect(probe.calls == 1)

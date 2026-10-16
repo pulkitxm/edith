@@ -49,7 +49,9 @@ final class JevCommands {
             case "jev.key.set":
                 let update = try JSONDecoder().decode(JevKeyUpdate.self, from: payload)
                 await engine.setKey(update.key)
-                return try JSONEncoder().encode(await engine.status(probe: false))
+                return try JSONEncoder().encode(await engine.status(probe: update.key != nil))
+            case "jev.find":
+                return try await JevFind.run(payload, using: engine)
             case "jev.decide":
                 let call = try JSONDecoder().decode(JevCall.self, from: payload)
                 do {

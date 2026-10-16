@@ -4,7 +4,6 @@ import SwiftUI
 
 struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
-    @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
     @State private var kindRaw: String
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
@@ -32,10 +31,14 @@ struct HomebrewMaintenanceView: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true) {
+        PageWorkspace {
             filterBar
                 .pageGutter(compact)
                 .padding(.vertical, 12)
+            if model.status?.available != false {
+                summary.pageGutter(compact).padding(.bottom, UIScale.pt(8))
+                operationCard.pageGutter(compact).padding(.bottom, UIScale.pt(8))
+            }
             Divider()
         } content: {
             PageLoading(
@@ -47,12 +50,13 @@ struct HomebrewMaintenanceView: View {
                 if model.status?.available == false {
                     unavailableCard
                 } else {
-                    summary
-                    operationCard
                     packageCard
                 }
             }
+            .pageGutter(compact)
+            .padding(.vertical, UIScale.pt(12))
         }
+        .navigationRoute("view", selection: $model.mode)
         .pageTask(cancel: { model.cancelDiscovery() }) {
             async let restored = try? await model.preferredKind()
             await model.loadCachedListing(showing: kind)
@@ -67,8 +71,8 @@ struct HomebrewMaintenanceView: View {
             guard automaticActionsEnabled else { return }
             if mode == .installed {
                 model.loadInstalled(kind: kind)
-            } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                model.search(query, kind: kind)
+            } else if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.search(model.query, kind: kind)
             } else {
                 model.packages = []
                 model.loading.setContent()
@@ -83,7 +87,7 @@ struct HomebrewMaintenanceView: View {
             Button("Uninstall", role: .destructive) {
                 guard let package = pendingUninstall else { return }
                 pendingUninstall = nil
-                model.perform(.uninstall, package: package, query: query, kind: kind)
+                model.perform(.uninstall, package: package, query: model.query, kind: kind)
             }
             Button("Cancel", role: .cancel) { pendingUninstall = nil }
         } message: {
@@ -171,33 +175,45 @@ struct HomebrewMaintenanceView: View {
         )
         .labelsHidden()
         .frame(width: UIScale.pt(170))
+        .disabled(model.isMutating)
     }
 
     @ViewBuilder
     private var actions: some View {
         if model.mode == .search {
             HStack(spacing: 10) {
-                SearchField(placeholder: "Search \(kind.pluralTitle.lowercased())", text: $query)
-                    .frame(maxWidth: compact ? .infinity : 320)
-                    .onSubmit { runSearch() }
+                SearchField(
+                    placeholder: "Search \(kind.pluralTitle.lowercased())", text: $model.query
+                )
+                .frame(maxWidth: compact ? .infinity : 320)
+                .onSubmit { runSearch() }
                 Button("Search", action: runSearch)
                     .buttonStyle(.edith(.primary))
                     .disabled(
                         model.isBusy
-                            || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         } else {
-            Button {
-                model.loadInstalled(kind: kind)
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+            HStack(spacing: UIScale.pt(8)) {
+                SearchField(placeholder: "Filter installed packages", text: $model.installedQuery)
+                    .frame(maxWidth: compact ? .infinity : UIScale.pt(300))
+                Toggle("Updates", isOn: $model.updatesOnly)
+                    .toggleStyle(.button)
+                    .help("Show packages with an available update")
+                Button {
+                    model.loadInstalled(kind: kind)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .accessibilityLabel("Refresh installed packages")
+                .disabled(model.isBusy)
             }
-            .disabled(model.isBusy)
         }
     }
 
     private var unavailableCard: some View {
-        PageCard {
+        HomebrewCard {
             VStack(spacing: 16) {
                 Image(systemName: "shippingbox")
                     .font(.system(size: UIScale.pt(34), weight: .medium))
@@ -222,32 +238,21 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var summary: some View {
-        LazyVGrid(
-            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
-            spacing: 12
-        ) {
-            HomebrewMetric(
-                title: model.mode == .installed ? "Installed" : "Results",
-                value: String(
-                    model.mode == .installed ? model.installedCount : model.packages.count),
-                detail: kind.pluralTitle, icon: "shippingbox.fill", accent: theme)
-            HomebrewMetric(
-                title: "Updates", value: String(model.updateCount),
-                detail: model.updateCount == 1 ? "package ready" : "packages ready",
-                icon: "arrow.up.circle.fill", accent: theme)
-            HomebrewMetric(
-                title: "Homebrew",
-                value: model.status?.available == true ? "Ready" : "Checking",
-                detail: model.status?.version ?? model.status?.executable
-                    ?? "Local package manager",
-                icon: "checkmark.seal.fill", accent: theme)
+        WrapHStack(spacing: UIScale.pt(14), lineSpacing: UIScale.pt(6)) {
+            Label(
+                "\(model.packages.count) \(kind.pluralTitle.lowercased())",
+                systemImage: "shippingbox")
+            Label("\(model.updateCount) updates", systemImage: "arrow.up.circle")
+            if let version = model.status?.version { Text(version) }
         }
+        .font(.edithText(.caption))
+        .foregroundStyle(.secondary)
     }
 
     @ViewBuilder
     private var operationCard: some View {
         if model.isBusy || model.errorMessage != nil || model.resultMessage != nil {
-            PageCard {
+            HomebrewCard {
                 HStack(alignment: .top, spacing: 12) {
                     if model.isBusy {
                         SkeletonGroup {
@@ -292,45 +297,44 @@ struct HomebrewMaintenanceView: View {
         }
     }
 
-    private var packageCard: some View {
-        PageCard {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text(
-                        model.mode == .installed
-                            ? "Installed \(kind.pluralTitle)" : "Search Results"
-                    )
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
-                    Spacer()
-                    Text("\(model.packages.count)")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 12)
+    private var visiblePackages: [HomebrewPackage] {
+        guard model.mode == .installed else { return model.packages }
+        let query = model.installedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.packages.filter {
+            (!model.updatesOnly || $0.outdated)
+                && (query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query)
+                    || $0.name.localizedCaseInsensitiveContains(query)
+                    || $0.description?.localizedCaseInsensitiveContains(query) == true)
+        }
+    }
 
-                if model.packages.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: model.mode == .search ? "magnifyingglass" : "shippingbox")
-                            .font(.system(size: UIScale.pt(25)))
-                            .foregroundStyle(.tertiary)
-                        Text(emptyTitle)
-                            .font(.system(size: UIScale.pt(14), weight: .semibold))
-                        Text(emptyDetail)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(180))
+    private var packageCard: some View {
+        let packages = visiblePackages
+        return HomebrewPackageTable(
+            packages: packages, selection: $model.selectedPackageID,
+            disabled: model.isBusy, accent: theme,
+            perform: { action, package in
+                if action == .uninstall {
+                    pendingUninstall = package
                 } else {
-                    ForEach(Array(model.packages.enumerated()), id: \.element.id) {
-                        index, package in
-                        if index > 0 { Divider() }
-                        HomebrewPackageRow(
-                            package: package, disabled: model.isBusy, accent: theme,
-                            perform: {
-                                model.perform($0, package: package, query: query, kind: kind)
-                            },
-                            uninstall: { pendingUninstall = package })
+                    model.perform(action, package: package, query: model.query, kind: kind)
+                }
+            }
+        )
+        .overlay {
+            if packages.isEmpty {
+                ContentUnavailableView {
+                    Label(emptyTitle, systemImage: "shippingbox")
+                } description: {
+                    Text(emptyDetail)
+                } actions: {
+                    if model.mode == .installed,
+                        !model.installedQuery.isEmpty || model.updatesOnly
+                    {
+                        Button("Clear filters") {
+                            model.installedQuery = ""
+                            model.updatesOnly = false
+                        }
                     }
                 }
             }
@@ -338,7 +342,12 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var emptyTitle: String {
-        if model.mode == .search, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if model.mode == .installed, !model.installedQuery.isEmpty || model.updatesOnly {
+            return "No packages match these filters"
+        }
+        if model.mode == .search,
+            model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             return "Search Homebrew"
         }
         return model.mode == .search
@@ -346,7 +355,12 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var emptyDetail: String {
-        if model.mode == .search, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if model.mode == .installed, !model.installedQuery.isEmpty || model.updatesOnly {
+            return "Clear the search or Updates filter to see all installed packages."
+        }
+        if model.mode == .search,
+            model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             return "Enter a name or keyword to inspect available packages before installing."
         }
         return model.mode == .search
@@ -355,7 +369,7 @@ struct HomebrewMaintenanceView: View {
     }
 
     private func runSearch() {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         model.search(value, kind: kind)
     }
@@ -363,7 +377,7 @@ struct HomebrewMaintenanceView: View {
     private func refreshCurrentMode() {
         if model.mode == .installed {
             model.loadInstalled(kind: kind)
-        } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        } else if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             runSearch()
         } else {
             model.packages = []
@@ -372,92 +386,103 @@ struct HomebrewMaintenanceView: View {
     }
 }
 
-private struct HomebrewPackageRow: View {
-    let package: HomebrewPackage
+struct HomebrewPackageTable: View {
+    let packages: [HomebrewPackage]
+    @Binding var selection: String?
+    @State private var columns = TableColumnCustomization<HomebrewPackage>()
     let disabled: Bool
     let accent: Color
-    let perform: (HomebrewMutation) -> Void
-    let uninstall: () -> Void
+    let perform: (HomebrewMutation, HomebrewPackage) -> Void
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(accent.opacity(0.12))
-                Image(systemName: package.kind == .cask ? "app.fill" : "terminal.fill")
-                    .foregroundStyle(accent)
-            }
-            .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text(package.displayName)
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        .lineLimit(1)
-                    if package.outdated {
-                        Text("UPDATE")
-                            .font(.system(size: UIScale.pt(8), weight: .bold))
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.13), in: Capsule())
+        GeometryReader { geometry in
+            Table(packages, selection: $selection, columnCustomization: $columns) {
+                SwiftUI.TableColumn("Package") { package in
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(package.displayName).font(.edithText(.body)).lineLimit(1)
+                        if let subtitle = package.subtitle {
+                            Text(subtitle).font(.edithText(.caption))
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        if compact {
+                            Text(package.versionSummary).font(.edithText(.caption2))
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    .help("\(package.name)\n\(package.subtitle ?? "")\n\(package.versionSummary)")
+                }
+                .width(
+                    PageMetrics.tableNameWidth(
+                        viewport: geometry.size.width,
+                        fixedWidth: (compact ? 0 : 140) + 80 + (compact ? 44 : 220),
+                        columnCount: compact ? 3 : 4))
+                SwiftUI.TableColumn("Version") { Text($0.versionSummary).monospacedDigit() }
+                    .width(UIScale.pt(140))
+                    .customizationID("version")
+                    .defaultVisibility(compact ? .hidden : .visible)
+                SwiftUI.TableColumn("Status") { package in
+                    Text(
+                        package.outdated ? "Update" : package.installed ? "Installed" : "Available"
+                    )
+                    .foregroundStyle(package.outdated ? DashSkin.warn : .secondary)
+                }
+                .width(UIScale.pt(80))
+                SwiftUI.TableColumn("Actions") { package in
+                    if compact {
+                        Menu {
+                            packageActions(package)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                        .accessibilityLabel("Actions for \(package.displayName)")
+                        .disabled(disabled)
+                    } else {
+                        HStack(spacing: UIScale.pt(8)) { packageActions(package) }.fixedSize()
+                            .disabled(disabled)
                     }
                 }
-                if let subtitle = package.subtitle {
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Text(package.versionSummary)
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                .width(UIScale.pt(compact ? 44 : 220))
             }
-            Spacer(minLength: 8)
-            if package.installed {
-                if package.outdated {
-                    Button("Upgrade") { perform(.upgrade) }
-                        .buttonStyle(.edith(.primary))
-                }
-                Button("Uninstall", role: .destructive, action: uninstall)
-            } else {
-                Button("Install") { perform(.install) }
-                    .buttonStyle(.edith(.primary))
+            .font(.edithText(.callout))
+            .accessibilityLabel("Homebrew packages")
+            .onChange(of: compact, initial: true) { _, compact in
+                columns[visibility: "version"] = compact ? .hidden : .visible
             }
         }
-        .padding(.vertical, 11)
-        .disabled(disabled)
+    }
+
+    @ViewBuilder
+    private func packageActions(_ package: HomebrewPackage) -> some View {
+        if package.installed {
+            if package.outdated {
+                Button("Upgrade") { perform(.upgrade, package) }
+                    .buttonStyle(.edith(.secondary, tint: accent))
+            }
+            Button("Uninstall", role: .destructive) { perform(.uninstall, package) }
+                .buttonStyle(.edith(.borderless, tint: DashSkin.danger))
+        } else {
+            Button("Install") { perform(.install, package) }
+                .buttonStyle(.edith(.primary, tint: accent))
+        }
     }
 }
 
-private struct HomebrewMetric: View {
-    let title: String
-    let value: String
-    let detail: String
-    let icon: String
-    let accent: Color
+private struct HomebrewCard<Content: View>: View {
+    @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        PageCard {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: UIScale.pt(20)))
-                    .foregroundStyle(accent)
-                    .frame(width: UIScale.pt(32))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    Text(value)
-                        .font(.system(size: UIScale.pt(20), weight: .semibold, design: .rounded))
-                    Text(detail)
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+        content
+            .padding(16)
+            .background(
+                DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(DashSkin.line(scheme == .dark))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 }

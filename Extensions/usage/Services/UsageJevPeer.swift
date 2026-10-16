@@ -34,7 +34,7 @@ public struct UsageJevPeer: JevDeciding {
             else { return nil }
             return UsageJevPeer(
                 active: { await MainActor.run { context.activeIDs.contains("jev") } },
-                invoke: { try await endpoint.invoke("jev.decide", payload: $0, timeout: 10) })
+                invoke: { try await endpoint.invoke("jev.decide", payload: $0, timeout: 12) })
         }
     }
 

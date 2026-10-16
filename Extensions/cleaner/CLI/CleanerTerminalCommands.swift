@@ -199,13 +199,13 @@ struct CleanerScanCommand: AsyncParsableCommand {
             }
             let rows = found.map { category in
                 [
-                    category.id, JunkScanner.format(category.sizeBytes),
+                    category.id, CleanerByteFormat.string(category.sizeBytes),
                     String(category.items.count), category.name,
                 ]
             }
             CLIOut.out(TextTable.render(headers: ["ID", "SIZE", "ITEMS", "NAME"], rows: rows))
             CLIOut.out("")
-            CLIOut.out("total \(JunkScanner.format(total))")
+            CLIOut.out("total \(CleanerByteFormat.string(total))")
         }
     }
 }
@@ -261,7 +261,7 @@ struct CleanerCleanCommand: AsyncParsableCommand {
                     return
                 }
                 CLIOut.out(
-                    "would move \(items.count) items, \(JunkScanner.format(total)), "
+                    "would move \(items.count) items, \(CleanerByteFormat.string(total)), "
                         + "to the Trash")
                 CLIOut.note("pass --yes to do it")
                 return
@@ -279,7 +279,7 @@ struct CleanerCleanCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            CLIOut.out("moved \(JunkScanner.format(result.reclaimedBytes)) to the Trash")
+            CLIOut.out("moved \(CleanerByteFormat.string(result.reclaimedBytes)) to the Trash")
         }
     }
 }
@@ -316,11 +316,26 @@ struct CleanerDrivesCommand: AsyncParsableCommand {
             }
             let rows = drives.map { drive in
                 [
-                    drive.name, drive.id, JunkScanner.format(drive.totalBytes),
+                    drive.name, drive.id, CleanerByteFormat.string(drive.totalBytes),
                     drive.isExternal ? "external" : "internal",
                 ]
             }
             CLIOut.out(TextTable.render(headers: ["NAME", "MOUNT", "SIZE", "KIND"], rows: rows))
         }
+    }
+}
+
+enum CleanerByteFormat {
+    static func string(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B" }
+        let units = ["B", "KB", "MB", "GB", "TB", "PB"]
+        var value = Double(bytes)
+        var index = 0
+        while value >= 1000, index < units.count - 1 {
+            value /= 1000
+            index += 1
+        }
+        if index == 0 { return "\(Int(value)) B" }
+        return String(format: value >= 100 ? "%.0f %@" : "%.1f %@", value, units[index])
     }
 }

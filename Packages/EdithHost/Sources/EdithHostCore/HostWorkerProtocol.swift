@@ -335,6 +335,19 @@ public struct HostWorkerFrames: Sendable {
     }
 }
 
+extension HostWorkerError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .exited: "The extension process exited before it finished starting."
+        case .timedOut: "The extension process did not answer in time."
+        case .invalidResponse: "The extension process sent an invalid response."
+        case .rejected: "The extension process rejected the request."
+        case .stillRunning: "The extension process is still running."
+        case let .disableRejected(message): message
+        }
+    }
+}
+
 public extension HostWorkerError {
     var disableMessage: String {
         if case .disableRejected(let message) = self { return message }

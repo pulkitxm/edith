@@ -245,7 +245,7 @@ final class DocsCodeHighlight: @unchecked Sendable {
 
     func highlight(text: String, language: String, dark: Bool) async -> AttributedString? {
         if let hit = stored(text: text, language: language, dark: dark) { return hit }
-        guard text.utf8.count <= 131_072, language.utf8.count <= 64, !Task.isCancelled,
+        guard !Task.isCancelled,
             let rendered = await render(text, language, dark), !Task.isCancelled
         else { return nil }
         return remember(text: text, language: language, dark: dark, value: rendered)
@@ -266,7 +266,7 @@ final class DocsCodeHighlight: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if cache[key]?.text != text {
-            if cache.count >= 64 { cache.removeAll() }
+            if cache.count >= 4096 { cache.removeAll() }
             cache[key] = Entry(text: text, value: value)
         }
         return cache[key]?.value ?? value
@@ -380,10 +380,10 @@ private struct DocsCodeBlock: View {
     }
 
     private func copy() {
-        guard DocsCopyResetWork.schedule(copyResetID, reset: { copied = false }) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copied = true
+        if !DocsCopyResetWork.schedule(copyResetID, reset: { copied = false }) { copied = false }
     }
 }
 

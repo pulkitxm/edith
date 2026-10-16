@@ -6,10 +6,10 @@ import Observation
 import SwiftUI
 
 struct LidAwakeRows: View {
-    @State private var enabled = false
-    @State private var sessionRaw = LidAwakeSession.indefinite.rawValue
-    @State private var batteryThreshold = 0
-    @State private var active = false
+    @State private var enabled = LidAwakeState.isEnabled(SharedDefaults.store)
+    @State private var sessionRaw = LidAwakeState.session(SharedDefaults.store).rawValue
+    @State private var batteryThreshold = LidAwakeState.batteryThreshold(SharedDefaults.store)
+    @State private var active = SharedDefaults.store.bool(forKey: LidAwakeState.activeKey)
     @State private var confirmingActivation = false
     @ObservedObject var operations: LidAwakeOperationModel
     var chooseSession: (LidAwakeSession) -> Void
@@ -47,6 +47,7 @@ struct LidAwakeRows: View {
         Binding(
             get: { LidAwakeState.normalizedBatteryThreshold(batteryThreshold) },
             set: { threshold in
+                batteryThreshold = threshold
                 applySetting(.setBatteryThreshold(threshold))
             })
     }
@@ -123,10 +124,14 @@ struct LidAwakeRows: View {
         .disabled(operations.applying)
         .opacity(enabled ? 1 : 0.5)
         .pageTask(cancel: { operations.cancel() }) { operations.refreshStatus() }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: Notification.Name(LidAwakeNotifications.distributed))
+        ) { _ in operations.refreshStatus() }
         .onReceive(operations.$lastSnapshot) { snapshot in
             guard let snapshot else { return }
             enabled = snapshot.extensionEnabled
-            active = snapshot.requestedActive
+            active = snapshot.active
             sessionRaw = snapshot.session.rawValue
             batteryThreshold = snapshot.batteryThreshold
         }
@@ -152,28 +157,36 @@ struct LidAwakeRows: View {
         }
     }
 
-    private func applySetting(_ request: LidAwakeRequest) { operations.perform(request) }
+    private func applySetting(_ request: LidAwakeRequest) { operations.performSilently(request) }
 }
 
 @MainActor @Observable
 final class LidAwakeRestorationControl {
     var confirmingDisabled = false
+    private var pending: Bool?
     private let operations: LidAwakeOperationModel
 
     init(operations: LidAwakeOperationModel) { self.operations = operations }
 
+    private var enabledNow: Bool {
+        operations.lastSnapshot?.extensionEnabled ?? LidAwakeState.isEnabled(SharedDefaults.store)
+    }
+
     var binding: Binding<Bool> {
         Binding(
-            get: { self.operations.lastSnapshot?.restoreOnQuit ?? true },
+            get: {
+                self.pending ?? self.operations.lastSnapshot?.restoreOnQuit
+                    ?? LidAwakeState.restoresOnQuit(SharedDefaults.store)
+            },
             set: { self.choose($0) })
     }
 
     func choose(_ enabled: Bool) {
-        guard operations.lastSnapshot?.extensionEnabled == true, !operations.applying else {
+        guard enabledNow, !operations.applying else {
             return
         }
         if enabled {
-            operations.perform(.setRestoreOnQuit(true))
+            apply(true)
         } else {
             confirmingDisabled = true
         }
@@ -182,10 +195,19 @@ final class LidAwakeRestorationControl {
     func confirmDisable() {
         guard confirmingDisabled else { return }
         confirmingDisabled = false
-        guard operations.lastSnapshot?.extensionEnabled == true, !operations.applying else {
+        guard enabledNow, !operations.applying else {
             return
         }
-        operations.perform(.setRestoreOnQuit(false))
+        apply(false)
+    }
+
+    private func apply(_ value: Bool) {
+        pending = value
+        let task = operations.performSilently(.setRestoreOnQuit(value))
+        Task { @MainActor [weak self] in
+            await task?.value
+            self?.pending = nil
+        }
     }
 
     func cancelDisable() { confirmingDisabled = false }

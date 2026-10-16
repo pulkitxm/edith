@@ -61,7 +61,10 @@ import SwiftUI
                 navigation: { action, route in
                     NavigationCommands.perform(action: action, route: route)
                 }, core: { [weak self] in self?.coreServices },
-                changed: { [weak self] in self?.coreServices?.panelShortcutChanged() })
+                changed: { [weak self] in
+                    self?.coreServices?.panelShortcutChanged()
+                    IPC.post(IPC.Name.settingsChanged)
+                })
             let control = HostCLIServer(identity: identity) { request in
                 if HostCoreCLIService.handles(request) {
                     return try await core.execute(request)

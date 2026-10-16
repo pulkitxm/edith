@@ -103,18 +103,22 @@ struct ClipboardRows: View {
                 Text("Recent")
             }
         }
-        .pageTask(cancel: {
-            refreshTask?.cancel(); refreshTask = nil
-            recent.contentLoad.cancel()
-            if let refreshObserver { IPC.stopObserving(refreshObserver) }
-            refreshObserver = nil
-        }) {
+        .pageRefresh(
+            interval: { .seconds(2) },
+            cancel: {
+                refreshTask?.cancel(); refreshTask = nil
+                recent.contentLoad.cancel()
+                if let refreshObserver { IPC.stopObserving(refreshObserver) }
+                refreshObserver = nil
+            }
+        ) {
             if presentation == nil, refreshObserver == nil {
                 refreshObserver = IPC.observe(IPC.Name.clipboardChanged) { reload() }
             }
             if let presentation {
                 await presentation.refresh()
                 preferences = presentation.preferences
+                if showHistory { history.reload() }
             }
             await recent.refresh()
         }
@@ -129,7 +133,7 @@ struct ClipboardRows: View {
     @ViewBuilder private var generalSections: some View {
         Section {
             LabeledContent {
-                ClipboardShortcutRecorder(preferences: $preferences, save: savePreferences)
+                HotKeyRecorderControl(keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Open")
@@ -176,8 +180,6 @@ struct ClipboardRows: View {
                     "Accessibility isn't granted yet - selecting an item only copies until you grant it."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
-                Button("Grant Accessibility") { requestPermission() }
-                    .buttonStyle(.edith(.secondary))
             }
             Toggle(
                 "Paste without formatting",

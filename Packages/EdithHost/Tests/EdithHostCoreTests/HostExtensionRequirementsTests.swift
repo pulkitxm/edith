@@ -92,13 +92,13 @@ import Testing
         #expect(report.checks.first { $0.id == "owner.inspection" }?.status == .failed)
     }
 
-    @Test func pluginsRetainsNodeAndNpxConstraintsAndBrowsingPreview() async throws {
+    @Test func pluginsRequiresOnlyNpxAndKeepsBrowsingPreview() async throws {
         let fixture = RequirementFixture()
         fixture.toolStates["node"] = .unsupported("Node.js 22.20 or later is required")
         fixture.toolStates["npx"] = .missing("npx is missing")
         let report = try await fixture.service.inspect(id: "plugins")
         #expect(!report.verified)
-        #expect(report.checks.first { $0.id == "tool.node" }?.status == .failed)
+        #expect(report.checks.first { $0.id == "tool.node" } == nil)
         #expect(report.checks.first { $0.id == "tool.npx" }?.status == .failed)
         let preview = try await fixture.service.preview(id: "plugins", installTools: true)
         #expect(preview.instruction.contains("Browsing is available now"))

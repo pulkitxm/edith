@@ -78,6 +78,11 @@ struct PluginsUIAction: Codable {
                         || model.agents.contains(where: { $0.id == action.agentID })
                 else { throw ExtensionPeerError.invalidRequest }
                 await model.present(skill, agentID: action.agentID)
+            case "dismiss":
+                guard !model.isInstalling, !model.remoteInstallIsPending else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                await model.dismissPresentation()
             case "select":
                 guard let id = action.agentID, let enabled = action.enabled,
                     model.agents.contains(where: { $0.id == id }), !model.isInstalling,

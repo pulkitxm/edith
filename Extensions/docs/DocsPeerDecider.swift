@@ -13,7 +13,7 @@ struct DocsPeerDecider: JevDeciding {
         let endpoint = configured ? ExtensionPeerEndpoint.current(owner: "jev") : nil
         JevAvailability.record(configured: endpoint != nil, in: SharedDefaults.store)
         guard let endpoint else { return nil }
-        return Self { try await endpoint.invoke("jev.decide", payload: $0, timeout: 5) }
+        return Self { try await endpoint.invoke("jev.decide", payload: $0, timeout: 12) }
     }
 
     func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {

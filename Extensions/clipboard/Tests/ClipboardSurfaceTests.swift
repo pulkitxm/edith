@@ -44,7 +44,7 @@ import Testing
             providerID: "clipboard")
         #expect(snapshot.rows.map(\.id) == [textID])
         #expect(snapshot.rows.first?.detail == "")
-        #expect(snapshot.rows.first?.actions.count == 3)
+        #expect(snapshot.rows.first?.actions.count == 2)
         _ = try await surface.execute(
             "surface.perform",
             payload: SurfaceActionRequest(snapshot: request, actionID: "copy/" + textID).encoded(
@@ -71,17 +71,6 @@ import Testing
                 payload: SurfaceActionRequest(
                     snapshot: .init(target: .home, tile: tile), actionID: "delete/" + textID
                 ).encoded(providerID: "clipboard"))
-        }
-        _ = try await surface.execute(
-            "surface.perform",
-            payload: SurfaceActionRequest(snapshot: request, actionID: "delete/" + textID).encoded(
-                providerID: "clipboard"))
-        #expect(try await client.snapshot().entries.map(\.id) == [linkID])
-        await #expect(throws: ExtensionPeerError.self) {
-            try await surface.execute(
-                "surface.perform",
-                payload: SurfaceActionRequest(snapshot: request, actionID: "copy/" + textID)
-                    .encoded(providerID: "clipboard"))
         }
         await service.stop()
     }

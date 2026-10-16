@@ -65,6 +65,11 @@ import Foundation
                 defaults)
             return try ClipboardMessage.encode(ClipboardPreferences.read(defaults))
         }
+        if command == "clipboard.ui.preferences.patch" {
+            guard payload.count <= 16_384 else { throw ExtensionPeerError.invalidRequest }
+            try ClipboardPreferences.patched(defaults, with: payload).save(defaults)
+            return try ClipboardMessage.encode(ClipboardPreferences.read(defaults))
+        }
         if command == "clipboard.ui.copy" {
             guard payload.count <= 128 else { throw ExtensionPeerError.invalidRequest }
             let id = try ClipboardMessage.decode(String.self, from: payload)

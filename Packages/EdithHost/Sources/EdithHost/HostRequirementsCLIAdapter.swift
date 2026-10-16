@@ -10,6 +10,7 @@ import Foundation
         let processIdentifier: Int32?
         let disablePending: Bool
         let removalPending: Bool
+        var startFailure: String? = nil
 
         var available: Bool {
             enabled && active && version != nil && (processIdentifier ?? 0) > 0
@@ -80,7 +81,8 @@ import Foundation
                         version: sessions.versions[id],
                         processIdentifier: sessions.processIdentifiers[id],
                         disablePending: sessions.pendingDisableIDs.contains(id),
-                        removalPending: marketplace.pendingRemovalIDs.contains(id))
+                        removalPending: marketplace.pendingRemovalIDs.contains(id),
+                        startFailure: sessions.failureReasons[id])
                 }, tool: { try await probe.inspect(id: $0) },
                 inspectOwner: { id in
                     try await hooks.readiness(
@@ -180,6 +182,10 @@ import Foundation
         }
         if activation.removalPending {
             return .invalid("The extension is pending removal; readonly requirements still run.")
+        }
+        if let failure = activation.startFailure, activation.enabled, !activation.active {
+            return .invalid(
+                "The extension failed to start and is retried automatically: " + failure)
         }
         let inspector = HostRequirementPackageInspection(
             store: environment.store, hostABI: environment.hostABI,

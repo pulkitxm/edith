@@ -223,7 +223,7 @@ final class AttentionTrackingService {
             idleSeconds: idleSeconds, threshold: settings.idleThreshold,
             locked: locked || away || AttentionSystemActivity.isLocked)
         let context = AttentionContextBoard.shared.context(for: identity.bundleID, now: now)
-        let detailed = settings.privacyLevel == .detailed && settings.windowTitlesEnabled
+        let detailed = settings.windowTitlesEnabled
         let contextTitle = detailed ? context?.windowTitle : nil
         return AttentionHeartbeatSample(
             event: AttentionEvent(

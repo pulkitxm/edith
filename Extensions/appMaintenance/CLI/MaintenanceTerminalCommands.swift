@@ -109,13 +109,13 @@ enum MaintenanceCLI {
                 rows: plan.items.map { item in
                     [
                         selected.contains(where: { $0.id == item.id }) ? "yes" : "no",
-                        AppMaintenanceFiles.format(item.sizeBytes), item.category.rawValue,
+                        ByteFormatter.string(item.sizeBytes), item.category.rawValue,
                         item.url.path,
                     ]
                 }))
         CLIOut.out("")
         let total = selected.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        CLIOut.out("selected \(selected.count) items, \(AppMaintenanceFiles.format(total))")
+        CLIOut.out("selected \(selected.count) items, \(ByteFormatter.string(total))")
     }
 
     static func printInstallPlan(_ plan: AppMaintenanceDiskImagePlan) {
@@ -493,7 +493,7 @@ struct MaintenanceRemoveCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out(
-                "moved \(result.removed.count) items, \(AppMaintenanceFiles.format(result.reclaimedBytes)), to the Trash"
+                "moved \(result.removed.count) items, \(ByteFormatter.string(result.reclaimedBytes)), to the Trash"
             )
             if !result.failed.isEmpty {
                 CLIOut.note("\(result.failed.count) reviewed items could not be moved")
@@ -597,5 +597,20 @@ struct MaintenanceInstallCommand: AsyncParsableCommand {
                 CLIOut.note("the app is installed, but the disk image was kept")
             }
         }
+    }
+}
+
+enum ByteFormatter {
+    static func string(_ bytes: Int64) -> String {
+        guard bytes > 0 else { return "0 B" }
+        let units = ["B", "KB", "MB", "GB", "TB", "PB"]
+        var value = Double(bytes)
+        var index = 0
+        while value >= 1000, index < units.count - 1 {
+            value /= 1000
+            index += 1
+        }
+        if index == 0 { return "\(Int(value)) B" }
+        return String(format: value >= 100 ? "%.0f %@" : "%.1f %@", value, units[index])
     }
 }

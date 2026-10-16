@@ -468,12 +468,12 @@ public enum AppMaintenanceDiskImageInstaller {
     ) async -> Bool {
         await Task.detached {
             let normal = try? await command(
-                "/usr/bin/hdiutil", ["detach", attachment.deviceEntry], timeout: 1, run: run)
+                "/usr/bin/hdiutil", ["detach", attachment.deviceEntry], timeout: 60, run: run)
             var detached = normal?.terminationStatus == 0
             if !detached {
                 let forced = try? await command(
                     "/usr/bin/hdiutil", ["detach", "-force", attachment.deviceEntry],
-                    timeout: 1, run: run)
+                    timeout: 60, run: run)
                 detached = forced?.terminationStatus == 0
             }
             if detached { try? FileManager.default.removeItem(at: attachment.mountURL) }

@@ -11,6 +11,45 @@ struct CompanionHTTPCall: Codable, Sendable {
     let timeout: Double
     let body: Data
 }
+struct CompanionHTTPHead: Codable, Sendable {
+    let path: String
+    let method: String
+    let query: [String: String]
+    let contentType: String?
+    let timeout: Double
+    let bodyLength: Int
+
+    init(_ call: CompanionHTTPCall) {
+        path = call.path; method = call.method; query = call.query
+        contentType = call.contentType; timeout = call.timeout; bodyLength = call.body.count
+    }
+
+    static func decode(_ upload: Data) throws -> CompanionHTTPCall {
+        guard upload.count >= 4 else { throw ExtensionPeerError.invalidRequest }
+        let length = upload.prefix(4).reduce(0) { ($0 << 8) | Int($1) }
+        let start = upload.startIndex + 4
+        guard length > 0, length <= 65_536, upload.count >= 4 + length else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let head = try JSONDecoder().decode(
+            CompanionHTTPHead.self, from: upload[start..<start + length])
+        let body = upload[(start + length)...]
+        guard body.count == head.bodyLength else { throw ExtensionPeerError.invalidRequest }
+        return CompanionHTTPCall(
+            path: head.path, method: head.method, query: head.query,
+            contentType: head.contentType, timeout: head.timeout, body: Data(body))
+    }
+
+    func frame(body: Data) throws -> [Data] {
+        let json = try JSONEncoder().encode(self)
+        let size = UInt32(json.count)
+        let prefix = Data([
+            UInt8(size >> 24 & 0xFF), UInt8(size >> 16 & 0xFF), UInt8(size >> 8 & 0xFF),
+            UInt8(size & 0xFF),
+        ])
+        return [prefix, json, body]
+    }
+}
 struct CompanionHTTPResult: Codable, Sendable {
     let status: Int
     let contentType: String
@@ -140,18 +179,23 @@ struct CompanionUIBridge: Sendable {
         let upload = try JSONDecoder().decode(
             CompanionJob.self, from: await invoke("companion.ui.upload", Data("{}".utf8)))
         do {
-            let encoded = try JSONEncoder().encode(call)
-            guard encoded.count <= CompanionUIEngine.maximumTransferBytes else {
+            let parts = try CompanionHTTPHead(call).frame(body: call.body)
+            let total = parts.reduce(0) { $0 + $1.count }
+            guard total <= CompanionUIEngine.maximumTransferBytes else {
                 throw ExtensionPeerError.invalidRequest
             }
             var offset = 0
-            while offset < encoded.count {
-                try Task.checkCancellation()
-                let chunk = CompanionUploadChunk(
-                    id: upload.id, offset: offset,
-                    data: encoded.subdata(in: offset..<min(offset + 65_536, encoded.count)))
-                _ = try await invoke("companion.ui.uploadChunk", JSONEncoder().encode(chunk))
-                offset += chunk.data.count
+            for part in parts {
+                var position = part.startIndex
+                while position < part.endIndex {
+                    try Task.checkCancellation()
+                    let end = min(position + CompanionUIEngine.chunkBytes, part.endIndex)
+                    let chunk = CompanionUploadChunk(
+                        id: upload.id, offset: offset, data: part.subdata(in: position..<end))
+                    _ = try await invoke("companion.ui.uploadChunk", JSONEncoder().encode(chunk))
+                    offset += chunk.data.count
+                    position = end
+                }
             }
             _ = try await invoke("companion.ui.http", JSONEncoder().encode(upload))
             var output = Data()
@@ -178,7 +222,6 @@ struct CompanionUIBridge: Sendable {
                     _ = try await invoke("companion.ui.cancel", JSONEncoder().encode(upload));
                     return (output, response)
                 }
-                if value.data.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
             }
         } catch {
             let cleanup = Task {
@@ -208,7 +251,6 @@ struct CompanionUIBridge: Sendable {
                         for event in batch.events { continuation.yield(event) }
                         if let error = batch.error { throw CompanionClientError.unreachable(error) }
                         if batch.done { break }
-                        try await Task.sleep(for: .milliseconds(100))
                     }
                     if Task.isCancelled { throw CancellationError() }
                     if let job {
@@ -236,7 +278,9 @@ struct CompanionUIBridge: Sendable {
 struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: Data }
 
 @MainActor final class CompanionUIEngine {
-    nonisolated static let maximumTransferBytes = 67_108_864
+    nonisolated static let maximumTransferBytes = 805_306_368 + 65_536
+    nonisolated static let chunkBytes = 524_288
+    nonisolated static let longPoll = Duration.milliseconds(250)
     private let worker: CompanionWorker
     private let read: @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let endpoint: @MainActor () -> URL
@@ -250,7 +294,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
     private var stopped = false
     private var backendTask: Task<Void, Never>?
     private var setupTask: Task<Void, Never>?
-    private lazy var setupModel = CompanionSetupModel(onFinish: { _ in })
+    private var setupModel = CompanionSetupModel(onFinish: { _ in })
     init(
         worker: CompanionWorker,
         endpoint: @escaping @MainActor () -> URL = { CompanionClient.endpoint(override: nil) },
@@ -269,7 +313,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                     && !$0.contains("%")
             }), call.query.count <= 16,
             call.query.allSatisfy({ $0.key.utf8.count <= 64 && $0.value.utf8.count <= 16_384 }),
-            (0...3600).contains(call.timeout), call.body.count <= maximumTransferBytes
+            (0...3600).contains(call.timeout), call.body.count <= maximumTransferBytes - 65_536
         else { throw ExtensionPeerError.invalidRequest }
         let reads: Set<String> = [
             "health", "status", "episodes", "search", "runs", "claims", "beliefs", "observations",
@@ -340,7 +384,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
         case "companion.ui.uploadChunk":
             let chunk = try JSONDecoder().decode(CompanionUploadChunk.self, from: payload)
             guard let bytes = uploads[chunk.id], bytes.count == chunk.offset,
-                chunk.data.count <= 65_536,
+                chunk.data.count <= Self.chunkBytes,
                 bytes.count + chunk.data.count <= Self.maximumTransferBytes, jobs[chunk.id] == nil
             else { throw ExtensionPeerError.invalidRequest }
             uploads[chunk.id]?.append(chunk.data)
@@ -348,7 +392,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             let job = try JSONDecoder().decode(CompanionJob.self, from: payload)
             guard let bytes = uploads[job.id], jobs[job.id] == nil, !finished.contains(job.id)
             else { throw ExtensionPeerError.invalidRequest }
-            let call = try JSONDecoder().decode(CompanionHTTPCall.self, from: bytes)
+            let call = try CompanionHTTPHead.decode(bytes)
             try Self.checked(call)
             var components = URLComponents(
                 url: endpoint().appendingPathComponent("v1").appendingPathComponent(call.path),
@@ -386,11 +430,19 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
         case "companion.ui.result":
             let job = try JSONDecoder().decode(CompanionJob.self, from: payload)
             guard uploads[job.id] != nil else { throw ExtensionPeerError.invalidRequest }
+            if replies[job.id] == nil, errors[job.id] == nil, !finished.contains(job.id) {
+                let deadline = ContinuousClock.now + Self.longPoll
+                while replies[job.id] == nil, errors[job.id] == nil, !finished.contains(job.id),
+                    !stopped, ContinuousClock.now < deadline
+                {
+                    try await Task.sleep(for: .milliseconds(5))
+                }
+            }
             let result = replies[job.id]; let count = result?.data.count ?? 0
             guard job.offset >= 0, job.offset <= count else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let end = min(count, job.offset + 65_536)
+            let end = min(count, job.offset + Self.chunkBytes)
             return try encode(
                 CompanionJobReply(
                     done: finished.contains(job.id) && end == count, error: errors[job.id],
@@ -433,6 +485,15 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             return try encode(CompanionJob(id: id, offset: 0))
         case "companion.ui.chatEvents":
             let job = try JSONDecoder().decode(CompanionJob.self, from: payload)
+            guard events[job.id] != nil else { throw ExtensionPeerError.invalidRequest }
+            if events[job.id]?.isEmpty == true, errors[job.id] == nil, !finished.contains(job.id) {
+                let deadline = ContinuousClock.now + Self.longPoll
+                while events[job.id]?.isEmpty == true, errors[job.id] == nil,
+                    !finished.contains(job.id), !stopped, ContinuousClock.now < deadline
+                {
+                    try await Task.sleep(for: .milliseconds(5))
+                }
+            }
             guard let buffer = events[job.id] else { throw ExtensionPeerError.invalidRequest }
             events[job.id] = Array(buffer.dropFirst(64))
             return try encode(
@@ -441,6 +502,10 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                     done: finished.contains(job.id) && buffer.count <= 64, error: errors[job.id]))
         case "companion.ui.setup":
             let action = try JSONDecoder().decode(CompanionSetupAction.self, from: payload)
+            if action.action == "begin", setupTask == nil {
+                setupModel.shutdown()
+                setupModel = CompanionSetupModel(onFinish: { _ in })
+            }
             let model = setupModel
             if action.action != "snapshot",
                 ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
@@ -471,7 +536,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                 await Task.yield()
             default: throw ExtensionPeerError.invalidRequest
             }
-            return try encode(CompanionSetupState(model))
+            return try encode(CompanionSetupState(model, working: setupTask != nil))
         case "companion.ui.capture":
             let action = try JSONDecoder().decode(CompanionCaptureAction.self, from: payload)
             let model = worker.workspace.capture
@@ -617,7 +682,9 @@ struct CompanionSetupAction: Codable {
     let deploying: Bool
     let deployError: String?
     let deployed: CompanionDeployment?
-    init(_ model: CompanionSetupModel) {
+    let working: Bool
+    init(_ model: CompanionSetupModel, working: Bool = false) {
+        self.working = working
         step = model.step; hosts = model.hosts; probing = model.probing
         selectedHostID = model.selectedHostID; stages = model.stages; deploying = model.deploying
         deployError = model.deployError; deployed = model.deployed

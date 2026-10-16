@@ -37,10 +37,19 @@ struct MaintenanceUISettings: Codable, Equatable {
         defaults.set(retries, forKey: MaintenancePreferences.updateRetries)
     }
 }
+enum AppMaintenanceUIScope: String, Codable {
+    case updates
+    case removal
+    case history
+    case all
+}
+struct AppMaintenanceUISnapshotRequest: Codable {
+    var scope: AppMaintenanceUIScope?
+    var focus: String?
+}
 struct AppMaintenanceUISnapshot: Codable {
+    let scope: AppMaintenanceUIScope
     let preferences: MaintenanceUISettings
-    let icons: [String: Data]?
-    let iconRevision: Int
     let applications: [InstalledApplication]
     let previewToken: UUID
     let selectedApplicationID: String?
@@ -60,6 +69,8 @@ struct AppMaintenanceUISnapshot: Codable {
 struct AppMaintenanceUIAction: Codable {
     let operation: String; let value: String?; let item: String?; let enabled: Bool?
     let integer: Int?; let number: Double?; let previewToken: UUID
+    var scope: AppMaintenanceUIScope? = nil
+    var focus: String? = nil
 }
 @MainActor enum AppMaintenanceUICommands {
     static func execute(
@@ -73,6 +84,8 @@ struct AppMaintenanceUIAction: Codable {
     ) async throws
         -> Data
     {
+        var scope = AppMaintenanceUIScope.updates
+        var focus: String?
         try Task.checkCancellation()
         guard payload.count <= 65_536, !model.stopped else { throw ExtensionPeerError.unavailable }
         if command == "maintenance.ui.settings.read" {
@@ -108,21 +121,19 @@ struct AppMaintenanceUIAction: Codable {
             return try JSONEncoder().encode(kind)
         }
         if command == "maintenance.ui.snapshot" {
-            let known = try JSONDecoder().decode([String: Int].self, from: payload)
-            guard Set(known.keys).isSubset(of: ["iconRevision"]) else {
-                throw ExtensionPeerError.invalidRequest
-            }
+            let request = try JSONDecoder().decode(
+                AppMaintenanceUISnapshotRequest.self, from: payload)
             await model.restoreCachedSnapshot()
             return try JSONEncoder().encode(
-                model.uiSnapshot(knownIconRevision: known["iconRevision"]))
+                model.uiSnapshot(scope: request.scope ?? .updates, focus: request.focus))
         } else if command == "maintenance.ui.preferences" {
             let preferences = try JSONDecoder().decode(MaintenanceUISettings.self, from: payload)
             try preferences.save(model.preferenceDefaults); model.preferences = preferences
         } else if command == "maintenance.ui.action" {
             let request = try JSONDecoder().decode(AppMaintenanceUIAction.self, from: payload)
-            if ["remove", "update", "install", "selection", "updateSelection"].contains(
-                request.operation)
-            {
+            scope = request.scope ?? .updates
+            focus = request.focus
+            if ["remove", "update", "install"].contains(request.operation) {
                 guard request.previewToken == model.previewToken, !model.mutationInProgress,
                     model.phase == .ready
                 else {
@@ -143,6 +154,7 @@ struct AppMaintenanceUIAction: Codable {
                 await model.restoreCachedSnapshot()
                 model.refresh(automatic: request.enabled == true, interval: interval)
             case "cancel": model.cancel()
+            case "cancelDiscovery": model.cancelDiscovery()
             case "cancelImage": model.cancelInstallPlan()
             case "select":
                 guard let id = request.value,
@@ -202,6 +214,7 @@ struct AppMaintenanceUIAction: Codable {
         } else {
             throw ExtensionPeerError.invalidRequest
         }
-        return try JSONEncoder().encode(model.uiSnapshot(knownIconRevision: model.iconRevision))
+        return try JSONEncoder().encode(
+            model.uiSnapshot(scope: scope, focus: focus))
     }
 }

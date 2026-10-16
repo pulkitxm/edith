@@ -1525,6 +1525,17 @@ private struct SurfaceWidgetPreview: View {
                     }
                 }
             }
+        case .ability("systemStats"):
+            SurfaceSnapshotContent(
+                tile: tile,
+                snapshot: SurfaceSnapshot(
+                    providerID: "systemStats",
+                    metrics: [
+                        .init("cpu", "CPU", "24%", fraction: 0.24),
+                        .init("memory", "Memory used", "58%", fraction: 0.58),
+                        .init("disk", "Storage free", "320 GB", fraction: 0.38),
+                    ]),
+                perform: { _ in })
         case .ability:
             Label(tile.widget.summary, systemImage: tile.widget.icon)
                 .font(.edithText(.caption)).foregroundStyle(.secondary)

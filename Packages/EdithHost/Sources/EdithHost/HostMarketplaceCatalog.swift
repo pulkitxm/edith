@@ -76,9 +76,9 @@ enum HostMarketplaceCatalog {
         "seoAudit": "Crawl sitemaps, inspect page metadata, and keep every run local.",
         "codeStats": "Mirror your GitHub repositories and see how your own code grows.",
         "machines": "Your Mac and SSH machines, projects and services in one fleet.",
-        "docs": "Browse and edit local documents and project notes.",
+        "docs": "Browse the ed command reference and ask how to do something.",
         "terminal": "A native terminal for local projects and SSH machines.",
-        "jev": "A personal agent for decisions, tasks and connected services.",
+        "jev": "Fast typed decisions from TypeSafe's Jev model",
     ]
     static func filter(_ entries: [HostExtension], query: String, category: String)
         -> [HostExtension]

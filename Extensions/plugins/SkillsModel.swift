@@ -33,7 +33,7 @@ import Observation
     private var remoteGeneration = 0
     private var remoteRequests: [UUID: Task<Void, Never>] = [:]
     private var installationLogs: [UUID: SkillInstallationLogs] = [:]
-    private static let agentSelectionsKey = "plugins.agentSelections"
+    private static let agentSelectionsKey = AppStorageKeys.Skills.agentSelections
 
     init(
         remote: PluginsUIBridge? = nil,
@@ -93,7 +93,15 @@ import Observation
 
     public func present(_ skill: EdithSkill, agentID: String? = nil) async {
         if remote != nil {
-            await remoteAction(.init(action: "present", skillID: skill.id, agentID: agentID));
+            guard !isStopped, !isInstalling, skills.contains(skill), !Task.isCancelled else {
+                return
+            }
+            singleAgentOverride = agentID != nil
+            installationSucceeded = false
+            installationError = nil
+            installationLog = ""
+            presentedSkill = skill
+            await remoteAction(.init(action: "present", skillID: skill.id, agentID: agentID))
             return
         }
         guard !isStopped, !isInstalling, skills.contains(skill), !Task.isCancelled else { return }
@@ -124,6 +132,24 @@ import Observation
         }
     }
 
+    public func dismissPresentation() async {
+        if remote != nil {
+            guard presentedSkill != nil, !isInstalling else { return }
+            presentedSkill = nil
+            installationSucceeded = false
+            installationError = nil
+            installationLog = ""
+            await remoteAction(.init(action: "dismiss"))
+            return
+        }
+        guard !isStopped, !isInstalling else { return }
+        installationID = UUID()
+        presentedSkill = nil
+        installationSucceeded = false
+        installationError = nil
+        installationLog = ""
+    }
+
     func savedAgentSelections() throws -> [String: Bool]? {
         guard defaults.synchronize() else { throw ExtensionPeerError.unavailable }
         guard let stored = defaults.object(forKey: Self.agentSelectionsKey) else { return nil }
@@ -145,6 +171,7 @@ import Observation
         guard !isStopped, !Task.isCancelled else { return }
         if remote != nil {
             if enabled { selectedAgentIDs.insert(id) } else { selectedAgentIDs.remove(id) }
+            singleAgentOverride = false
             ownRemoteAction(.init(action: "select", agentID: id, enabled: enabled))
             return
         }
@@ -251,29 +278,33 @@ import Observation
         guard let remote, !isStopped, !Task.isCancelled else { return }
         remoteGeneration &+= 1
         let generation = remoteGeneration
-        let loading = discoveryLoad.begin(preservingContent: discoveryLoad.hasContent)
+        let tracksDiscovery = request.action == "discover" || request.action == "present"
+        let loading =
+            tracksDiscovery ? discoveryLoad.begin(preservingContent: discoveryLoad.hasContent) : nil
         if request.action == "install" { isInstalling = true }
         do {
             var value = try await remote.perform(request)
             if request.action == "install" {
                 while value.isInstalling, !Task.isCancelled, !isStopped {
-                    try await Task.sleep(for: .milliseconds(250))
+                    try await Task.sleep(for: .milliseconds(100))
                     value = try await remote.perform(.init(action: "snapshot"))
                 }
             }
             guard !isStopped, !Task.isCancelled, remoteGeneration == generation else { return }
             agents = value.agents; selectedAgentIDs = value.selectedAgentIDs
-            presentedSkill = skills.first { $0.id == value.presentedSkillID }
+            if request.action == "present" {
+                presentedSkill = skills.first { $0.id == value.presentedSkillID }
+            }
             installedAgents = value.installedAgents
             isInstalling = value.isInstalling; installerAvailable = value.installerAvailable
             installationSucceeded = value.installationSucceeded
             installationLog = value.installationLog; installationError = value.installationError
             singleAgentOverride = value.singleAgentOverride
-            discoveryLoad.complete(loading)
+            if let loading { discoveryLoad.complete(loading) }
         } catch {
             guard !isStopped, !Task.isCancelled, remoteGeneration == generation else { return }
             isInstalling = false; installationError = error.localizedDescription
-            discoveryLoad.fail(loading, error: error)
+            if let loading { discoveryLoad.fail(loading, error: error) }
         }
     }
 

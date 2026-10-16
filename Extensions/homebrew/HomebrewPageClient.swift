@@ -27,10 +27,9 @@ import Foundation
             "homebrew.preference.write", input: ["kind": kind.rawValue],
             as: HomebrewPackageKind.self)
     }
-    func status() async -> HomebrewStatus {
+    func status() async throws -> HomebrewStatus {
         if let client { return await client.status() }
-        return (try? await read("homebrew.status", as: HomebrewStatus.self))
-            ?? HomebrewStatus(available: false, executable: nil, version: nil)
+        return try await read("homebrew.status", as: HomebrewStatus.self)
     }
 
     func installed(

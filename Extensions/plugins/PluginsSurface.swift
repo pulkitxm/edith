@@ -33,7 +33,7 @@ import Foundation
         let request = try Self.request(command, payload: payload)
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         if hidden() { return try snapshot(request.tile).encoded() }
-        await model.discoverAgents()
+        if command == "surface.perform" || !model.agentsLoaded { await model.discoverAgents() }
         try Task.checkCancellation()
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         return try snapshot(request.tile).encoded()
@@ -41,25 +41,17 @@ import Foundation
 
     func snapshot(_ tile: SurfaceTile) -> SurfaceSnapshot {
         if hidden() { return .init(providerID: "plugins", message: "Hidden while presenting") }
-        let skills = model.skills.filter { tile.sourceIDs?.contains($0.id) ?? true }
         return .init(
             providerID: "plugins",
             metrics: [
-                .init("agents", "Agents", "\(model.agents.count)"),
-                .init("skills", "Skills", "\(skills.count)"),
+                .init("agents", "Detected agents", "\(model.agents.count)"),
+                .init("skills", "Available skills", "\(model.skills.count)"),
             ],
-            rows: skills.prefix(tile.itemLimit).map { skill in
-                .init(
-                    skill.id, title: skill.name,
-                    detail: tile.showDetails ? skill.summary : "",
-                    value: model.installedAgents[skill.id]?.isEmpty == false
-                        ? "Installed" : "Available",
-                    icon: skill.symbol)
+            rows: model.agents.prefix(tile.itemLimit).map { agent in
+                .init(agent.id, title: agent.name, icon: "terminal")
             },
             actions: tile.showActions
                 ? [.init("refreshAgents", "Refresh agents", "arrow.clockwise")] : [],
-            sources: model.skills.map { .init($0.id, $0.name) },
-            message: model.isInstalling ? "Installing selected plugin" : nil,
             updatedAt: Date())
     }
 }

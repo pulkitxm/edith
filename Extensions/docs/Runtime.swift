@@ -7,8 +7,7 @@ import SwiftUI
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var browser: DocsBrowser?
-    private var uiBrowser: DocsBrowser?
-    private var engineClient: ExtensionEngineClient?
+    private var uiPresentations: [UUID: (browser: DocsBrowser, client: ExtensionEngineClient)] = [:]
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
     private var stopped = false
@@ -54,18 +53,18 @@ final class ExtensionRuntime: NSObject {
         suspended = true
         DocsCopyResetWork.beginSuspension()
         let browser = browser
-        let uiBrowser = uiBrowser
+        let uiBrowsers = uiPresentations.values.map(\.browser)
         let streams = cliStreams
         browser?.cancelPendingWork()
-        uiBrowser?.cancelPendingWork()
+        uiBrowsers.forEach { $0.cancelPendingWork() }
         streams?.stop()
         if suspension == nil {
             let retired = Array(uiRetirements.values)
-            suspension = Task { [self, browser, uiBrowser, streams] in
+            suspension = Task { [self, browser, uiBrowsers, streams] in
                 await commands.suspendAndWait()
                 await DocsCopyResetWork.drain()
                 await browser?.drain()
-                await uiBrowser?.drain()
+                for uiBrowser in uiBrowsers { await uiBrowser.drain() }
                 await streams?.stopAndWait()
                 for task in retired { await task.value }
             }
@@ -108,16 +107,26 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+            guard !suspended, uiRetirements.isEmpty, uiPresentations.count < 8 else {
+                return ["ok": false] as NSDictionary
+            }
+            guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "docs", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            engineClient = client
+            if let previous = uiPresentations[client.presentationID] {
+                previous.browser.cancelPendingWork()
+                previous.client.invalidate()
+            }
             DocsCopyResetWork.enable()
-            uiBrowser = DocsBrowser(remote: DocsUIBridge(client: client))
+            uiPresentations[client.presentationID] = (
+                DocsBrowser(remote: DocsUIBridge(client: client)), client
+            )
         case "stopUI":
             DocsCopyResetWork.beginSuspension()
-            if let browser = uiBrowser {
+            let retired = uiPresentations.values
+            uiPresentations = [:]
+            for presentation in retired {
+                let browser = presentation.browser
                 browser.cancelPendingWork()
                 let id = UUID()
                 uiRetirements[id] = Task { [self, browser] in
@@ -126,9 +135,8 @@ final class ExtensionRuntime: NSObject {
                     browser.shutdown()
                     uiRetirements[id] = nil
                 }
+                presentation.client.invalidate()
             }
-            uiBrowser = nil
-            engineClient?.invalidate(); engineClient = nil
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
@@ -136,7 +144,9 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if browser == nil { browser = DocsBrowser() }
         case "view":
-            guard let browser = uiBrowser else { return ["ok": false] as NSDictionary }
+            guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                let browser = uiPresentations[id]?.browser
+            else { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { DocsScreen(browser: browser) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": _ = DocsPeerDecider.configured()

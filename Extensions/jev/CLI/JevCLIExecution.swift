@@ -13,7 +13,7 @@ struct JevCLIEngine {
     func status(probe: Bool) async -> JevStatus { await engine.status(probe: probe) }
     func setKey(_ key: String?) async -> JevStatus {
         await engine.setKey(key)
-        return await engine.status(probe: false)
+        return await engine.status(probe: key != nil)
     }
     func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {
         try await engine.decide(request, purpose: purpose)

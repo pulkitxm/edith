@@ -39,6 +39,7 @@ struct ClipboardPage: View {
             Form { ClipboardRows(client: client, history: history, presentation: presentation) }
                 .formStyle(.grouped)
                 .disabled(presentation.map { !$0.preferencesLoad.hasContent } ?? false)
+                .opacity(presentation?.available == false ? 0.5 : 1)
         }
         .disabled(presentation?.available == false || presentation?.stopped == true)
     }

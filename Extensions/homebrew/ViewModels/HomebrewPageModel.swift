@@ -23,6 +23,10 @@ final class HomebrewListingMemory {
 @Observable
 final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
+    var query = ""
+    var installedQuery = ""
+    var updatesOnly = false
+    var selectedPackageID: String?
     var packages: [HomebrewPackage] = []
     var status: HomebrewStatus?
     let loading = ContentLoad()
@@ -34,7 +38,7 @@ final class HomebrewPageModel {
     var resultMessage: String?
     var output = ""
 
-    private let client: HomebrewPageClient
+    private var client: HomebrewPageClient
     private let store: HomebrewListingStore?
     private var task: Task<Void, Never>?
     private(set) var isMutating = false
@@ -101,14 +105,31 @@ final class HomebrewPageModel {
     var updateCount: Int { packages.count(where: \.outdated) }
     var installedCount: Int { packages.count(where: \.installed) }
 
+    func rebind(_ engineClient: ExtensionEngineClient) {
+        client = .remote(engineClient)
+    }
+
     func activate(kind: HomebrewPackageKind) {
+        guard !isMutating else { return }
+        if mode == .search {
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                loading.setContent()
+            } else {
+                search(query, kind: kind)
+            }
+            return
+        }
         showCached(kind: kind)
         begin(title: "Checking Homebrew") { generation in
             let token = await self.store?.claim() ?? UUID()
             guard self.isCurrent(generation) else { return }
             await self.restoreSnapshot(kind: kind, generation: generation)
             guard self.isCurrent(generation) else { return }
-            let status = await self.client.status()
+            let status: HomebrewStatus
+            do { status = try await self.client.status() } catch {
+                self.fail(error, generation: generation)
+                return
+            }
             guard self.isCurrent(generation) else { return }
             self.status = status
             self.remember()
@@ -141,6 +162,7 @@ final class HomebrewPageModel {
     }
 
     func search(_ query: String, kind: HomebrewPackageKind) {
+        self.query = query
         mode = .search
         begin(title: "Searching \(kind.pluralTitle.lowercased())") { generation in
             do {

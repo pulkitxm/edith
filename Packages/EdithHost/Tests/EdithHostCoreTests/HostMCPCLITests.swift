@@ -118,6 +118,33 @@ import Testing
         await server.shutdown()
     }
 
+    @Test func toolFinderIsListedOnlyWithAKeyAndReceivesThePublicToolList() async throws {
+        for configured in [false, true] {
+            let output = MCPOutputFixture()
+            let calls = MCPJevFixture(configured: configured)
+            let server = HostMCPCLI(
+                version: "1", invoke: { try await calls.invoke($0) },
+                send: { try await output.append($0) })
+            try await initialize(server)
+            try await server.accept(
+                Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}".utf8))
+            let names = try await output.response(2).object?["result"]?.object?["tools"]?.array?
+                .compactMap { $0.object?["name"]?.string }
+            #expect(names?.contains("edith_find") == configured)
+            if configured {
+                try await server.accept(
+                    Data(
+                        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"edith_find\",\"arguments\":{\"request\":\"synthetic\"}}}"
+                            .utf8))
+                _ = try await output.response(3)
+                let received = await calls.payload()?.object
+                #expect(received?["request"] == .string("synthetic"))
+                #expect(received?["tools"]?.array?.isEmpty == false)
+            }
+            await server.shutdown()
+        }
+    }
+
     @Test func toolsReflectLiveCatalogsAndConfirmationCannotBeSmuggledInArguments() async throws {
         let fixture = MCPProviderFixture()
         let output = MCPOutputFixture()
@@ -175,6 +202,51 @@ import Testing
         await server.shutdown()
         #expect(await fixture.cancelled)
         #expect(await !output.hasResponse(9))
+    }
+}
+
+private actor MCPJevFixture {
+    private var received: HostCLIJSON?
+    private let configured: Bool
+    init(configured: Bool) { self.configured = configured }
+    func payload() -> HostCLIJSON? { received }
+    func invoke(_ request: HostCLIRequest) throws -> Data {
+        if request.action == .ls {
+            return try HostCLIJSON.array([
+                .object([
+                    "id": .string("jev"), "installed": .bool(true), "compatible": .bool(true),
+                    "enabled": .bool(true), "running": .bool(true), "version": .string("1"),
+                    "disablePending": .bool(false), "removalPending": .bool(false),
+                ])
+            ]).encoded()
+        }
+        switch request.operation {
+        case "jev.cli.catalog":
+            return try JSONEncoder().encode(
+                HostCLIProviderCatalog(
+                    owner: "jev",
+                    commands: [
+                        .init(route: ["jev", "status"], operation: "jev.cli", summary: "Status")
+                    ],
+                    nativeTools: [
+                        .init(
+                            name: "edith_find", title: "Find", summary: "Find",
+                            operation: "jev.find",
+                            inputSchema: .object(["type": .string("object")]))
+                    ]))
+        case "jev.status":
+            return try HostCLIJSON.object([
+                "state": .string(configured ? "ready" : "notConfigured")
+            ]).encoded()
+        case "jev.find":
+            received = try JSONDecoder().decode(HostCLIJSON.self, from: request.payload)
+            return try HostCLIJSON.object([
+                "content": .array([
+                    .object(["type": .string("text"), "text": .string("{}")])
+                ]), "isError": .bool(false),
+            ]).encoded()
+        default: throw HostCLIError.rejected("Unsupported fixture operation")
+        }
     }
 }
 

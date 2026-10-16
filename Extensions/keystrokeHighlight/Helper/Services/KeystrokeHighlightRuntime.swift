@@ -40,7 +40,6 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     func syncSettings() {
         guard !stopped else { return }
         guard fixture == nil else { return }
-        if eventTap == nil { start() }
         guard !entries.isEmpty else { return }
         movePanelToPointerScreen()
     }

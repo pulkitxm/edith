@@ -24,4 +24,25 @@ import Testing
                     && $0["summary"] as? String != ""
             })
     }
+
+    @Test func catalogDeclaresTheToolFinder() throws {
+        let value = try #require(
+            JSONSerialization.jsonObject(with: JevCLICatalog.data()) as? [String: Any])
+        let tools = try #require(value["nativeTools"] as? [[String: Any]])
+        #expect(tools.count == 1)
+        #expect(tools[0]["name"] as? String == "edith_find")
+        #expect(tools[0]["operation"] as? String == "jev.find")
+    }
+
+    @Test func toolFinderWithoutAKeyReportsTheMissingKeyError() async throws {
+        let engine = JevEngine(store: MemoryJevKeyStore())
+        let payload = Data(
+            #"{"request":"play music","tools":[{"tool":"edith_music_play","summary":"Play","area":"music"}]}"#
+                .utf8)
+        let data = try await JevFind.run(payload, using: engine)
+        let reply = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(reply["isError"] as? Bool == true)
+        #expect(
+            JevFind.groups([JevFindTool(tool: "a", summary: "s", area: "x")]).map(\.id) == ["x"])
+    }
 }

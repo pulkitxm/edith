@@ -84,7 +84,7 @@ extension NotchPanelEngine {
                 controller.presentFailure(Self.quickActionFailureAlert(providerID, error))
                 return try await quickActionState(request, controller: controller, allowed: allowed)
             }
-            if providerID != "colorPicker" { controller.collapseNow() }
+            if providerID != "colorPicker", providerID != "lidAwake" { controller.collapseNow() }
         } else if request.providerID != nil || request.actionID != nil || request.session != nil {
             throw ExtensionPeerError.invalidRequest
         }

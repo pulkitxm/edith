@@ -222,7 +222,7 @@ public enum JevError: Error, Equatable, Sendable, Codable, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .missingKey: "Open Jev and save a TypeSafe API key to use its features."
+        case .missingKey: "Add a TypeSafe API key in Settings to use Jev."
         case .invalidRequest(let reason): "The Jev request is invalid: \(reason)."
         case .unauthorized: "TypeSafe rejected the API key."
         case .noCredits(let message): message

@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 final class MaintenanceCancellation: @unchecked Sendable {
@@ -8,11 +9,11 @@ final class MaintenanceCancellation: @unchecked Sendable {
 }
 
 enum MaintenancePreferences {
-    static let installDestination = "maintenance.installDestination"
-    static let section = "maintenance.section"
-    static let updateAutoRefresh = "maintenance.updateAutoRefresh"
-    static let updateConcurrency = "maintenance.updateConcurrency"
-    static let updateNotifications = "maintenance.updateNotifications"
-    static let updateRefreshInterval = "maintenance.updateRefreshInterval"
-    static let updateRetries = "maintenance.updateRetries"
+    static let installDestination = AppStorageKeys.AppMaintenance.installDestination
+    static let section = AppStorageKeys.AppMaintenance.section
+    static let updateAutoRefresh = AppStorageKeys.AppMaintenance.updateAutoRefresh
+    static let updateConcurrency = AppStorageKeys.AppMaintenance.updateConcurrency
+    static let updateNotifications = AppStorageKeys.AppMaintenance.updateNotifications
+    static let updateRefreshInterval = AppStorageKeys.AppMaintenance.updateRefreshInterval
+    static let updateRetries = AppStorageKeys.AppMaintenance.updateRetries
 }

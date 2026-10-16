@@ -61,14 +61,13 @@ struct HostSidebarFooter: View {
     let openPermissions: () -> Void
     var enabled = true
     var music: AnyView? = nil
-    @State private var snapshots: [String: SurfaceSnapshot] = [:]
-    @State private var actionTask: Task<Void, Never>?
-    @State private var actionToken: UUID?
-    @State private var error: String?
+    @State private var actions = HostUtilityActions()
     @State private var presenterSettings = false
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store)
+    private var preventSleep = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tile = SurfaceTile(.actions)
     @Environment(\.windowVisible) private var visible
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
     private var versions: [String: String] {
@@ -122,7 +121,7 @@ struct HostSidebarFooter: View {
                             HStack(spacing: 0) {
                                 utility(.presenter, background: false)
                                 Rectangle().fill(
-                                    HostSidebarUtility.presenter.isOn(snapshots["presenter"])
+                                    actions.isOn(.presenter, preventSleep: preventSleep)
                                         ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
                                 )
                                 .frame(width: UIScale.pt(1), height: UIScale.pt(28))
@@ -151,11 +150,11 @@ struct HostSidebarFooter: View {
                                     .frame(maxHeight: UIScale.pt(440))
                                 }
                             }.foregroundStyle(
-                                HostSidebarUtility.presenter.isOn(snapshots["presenter"])
+                                actions.isOn(.presenter, preventSleep: preventSleep)
                                     ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
                             )
                             .background(
-                                HostSidebarUtility.presenter.isOn(snapshots["presenter"])
+                                actions.isOn(.presenter, preventSleep: preventSleep)
                                     ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(9))
                             )
@@ -177,87 +176,117 @@ struct HostSidebarFooter: View {
                                         in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
                             }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
                         }
-                        if let error {
-                            Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                        }
                     }.padding(UIScale.pt(10))
-                }.transition(.move(edge: .bottom).combined(with: .opacity))
+                }.transition(utilityTransition)
             }
         }
         .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: populated)
         .animation(
             Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: music != nil
         )
-        .pageTask(id: versions, active: enabled && !versions.isEmpty, cancel: clear) {
-            repeat {
-                for utility in utilities {
-                    let version = versions[utility.id]
-                    do {
-                        let snapshot = try await marketplace.surfaces.requests.snapshot(
-                            providerID: utility.id, target: .home, tile: tile)
-                        guard !Task.isCancelled, versions[utility.id] == version else { return }
-                        snapshots[utility.id] = snapshot
-                    } catch {
-                        guard !Task.isCancelled else { return }
-                        snapshots[utility.id] = nil
-                    }
-                }
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
-            } while !Task.isCancelled
+        .animation(
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: utilities
+        )
+        .hostUtilityAlerts(actions, marketplace: marketplace, tile: tile) { id in versions[id] }
+        .pageTask(id: versions, active: enabled && !versions.isEmpty, cancel: actions.clear) {
+            await actions.poll(
+                utilities: utilities, marketplace: marketplace, tile: tile, versions: { versions })
         }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: Notification.Name("edith.lidAwakeChanged"))
+        ) { _ in actions.refreshTick += 1 }
         .pageRefresh(active: enabled, interval: { .seconds(15) }) { await permissions.refresh() }
         .onChange(of: enabled) { if !enabled { clear() } }
-        .onChange(of: versions) { snapshots = snapshots.filter { versions[$0.key] != nil } }
+        .onChange(of: versions) {
+            actions.snapshots = actions.snapshots.filter { versions[$0.key] != nil }
+        }
         .onDisappear(perform: clear)
+    }
+
+    private var utilityTransition: AnyTransition {
+        Motion.transition(
+            .move(edge: .bottom).combined(with: .opacity), reduceMotion: reduceMotion,
+            preferCrossFade: false)
     }
 
     @ViewBuilder private func utilityRow(_ row: [HostSidebarUtility]) -> some View {
         let available = row.filter(utilities.contains)
         if available.count == 2 && sidebarWidth >= 220 {
             HStack(spacing: UIScale.pt(8)) { ForEach(available) { utility($0) } }
+                .transition(utilityTransition)
         } else {
-            ForEach(available) { utility($0) }
+            ForEach(available) { utility($0).transition(utilityTransition) }
         }
     }
 
     private func utility(_ value: HostSidebarUtility, background: Bool = true) -> some View {
         HostSidebarUtilityButton(
-            utility: value, active: value.isOn(snapshots[value.id]), theme: theme,
+            utility: value, active: actions.isOn(value, preventSleep: preventSleep), theme: theme,
             background: background,
             action: { perform(value) }
         )
-        .disabled(actionTask != nil)
     }
 
     private func perform(_ utility: HostSidebarUtility) {
-        guard actionTask == nil, enabled, visible, let version = versions[utility.id]
-        else { return }
-        let token = UUID(); actionToken = token; error = nil
-        actionTask = Task {
-            defer { if actionToken == token { actionTask = nil; actionToken = nil } }
-            do {
-                let current = try await marketplace.surfaces.requests.snapshot(
-                    providerID: utility.id, target: .home, tile: tile)
-                guard !Task.isCancelled, actionToken == token, versions[utility.id] == version,
-                    let action = utility.action(in: current)
-                else { return }
-                let result = try await marketplace.surfaces.requests.perform(
-                    providerID: utility.id, target: .home, tile: tile, snapshot: current,
-                    actionID: action.id)
-                guard !Task.isCancelled, actionToken == token, versions[utility.id] == version
-                else { return }
-                snapshots[utility.id] = result
-                error = result.message
-            } catch {
-                guard !Task.isCancelled, actionToken == token else { return }
-                self.error = "The action could not finish. Try again."
-            }
-        }
+        guard enabled, visible, let version = versions[utility.id] else { return }
+        actions.perform(
+            utility, marketplace: marketplace, tile: tile, version: version,
+            preventSleep: preventSleep, current: { versions[utility.id] })
     }
 
     private func clear() {
-        actionTask?.cancel(); actionTask = nil; actionToken = nil
-        snapshots.removeAll(); error = nil; presenterSettings = false
+        actions.clear(); presenterSettings = false
+    }
+}
+
+extension View {
+    func hostUtilityAlerts(
+        _ actions: HostUtilityActions, marketplace: HostMarketplace, tile: SurfaceTile,
+        version: @escaping @MainActor (String) -> String?
+    ) -> some View {
+        modifier(
+            HostUtilityAlerts(
+                actions: actions, marketplace: marketplace, tile: tile, version: version))
+    }
+}
+
+private struct HostUtilityAlerts: ViewModifier {
+    @Bindable var actions: HostUtilityActions
+    let marketplace: HostMarketplace
+    let tile: SurfaceTile
+    let version: @MainActor (String) -> String?
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Lid Awake could not change state",
+                isPresented: Binding(
+                    get: { actions.lidAwakeError != nil },
+                    set: { if !$0 { actions.lidAwakeError = nil } })
+            ) {
+                Button("OK") { actions.lidAwakeError = nil }
+            } message: {
+                Text(actions.lidAwakeError ?? "")
+            }
+            .alert(
+                actions.confirmation?.action.confirmation?.title ?? "",
+                isPresented: Binding(
+                    get: { actions.confirmation != nil },
+                    set: { if !$0 { actions.confirmation = nil } }),
+                presenting: actions.confirmation
+            ) { pending in
+                Button(pending.action.confirmation?.confirmTitle ?? "OK") {
+                    let utility = pending.utility
+                    actions.run(
+                        utility, action: pending.action, snapshot: pending.snapshot,
+                        marketplace: marketplace, tile: tile, version: pending.version,
+                        current: { version(utility.id) })
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text(pending.action.confirmation?.message ?? "")
+            }
     }
 }
 
