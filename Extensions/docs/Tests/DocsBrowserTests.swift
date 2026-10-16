@@ -187,11 +187,12 @@ private actor SlowDocsPeer: JevDeciding {
 @Suite(.serialized) @MainActor
 struct DocsRemoteTests {
     @Test func originalNavigationUsesOwnedEngineSourcesAndAsk() async throws {
+        DocsSession.last = nil
         let engine = DocsBrowser(library: DocsBrowserTests.library)
         let remote = DocsBrowser(
             remote: DocsUIBridge(invoke: { command, payload in
                 try await DocsUIBridge.execute(command, payload: payload, browser: engine)
-            }))
+            }), local: .none)
         await remote.load()
         remote.open(.init(path: "herdr/ls.md", anchor: "options"))
         remote.noteFilter("ls")
@@ -207,7 +208,29 @@ struct DocsRemoteTests {
         #expect(remote.library == nil)
     }
 
+    @Test func cachedLibraryPaintsImmediatelyAndSessionSurvivesReopen() async throws {
+        DocsSession.last = nil
+        let library = DocsBrowserTests.library
+        let local = DocsLocalLibrary(
+            cached: { library }, opening: { nil }, bundled: { library })
+        let bridge = DocsUIBridge(invoke: { _, _ in throw ExtensionPeerError.unavailable })
+        let first = DocsBrowser(remote: bridge, local: local)
+        #expect(first.library != nil)
+        #expect(!first.sidebarGroups.isEmpty)
+        first.open(.init(path: "herdr/ls.md", anchor: "options"))
+        first.toggle("herdr")
+        first.question = "list sessions"
+        first.shutdown()
+        let second = DocsBrowser(remote: bridge, local: local)
+        #expect(second.location == DocsLocation(path: "herdr/ls.md", anchor: "options"))
+        #expect(second.expandedGroups == first.expandedGroups)
+        #expect(second.question == "list sessions")
+        second.shutdown()
+        DocsSession.last = nil
+    }
+
     @Test func shutdownRejectsLateEngineLibrary() async throws {
+        DocsSession.last = nil
         let remote = DocsBrowser(
             remote: DocsUIBridge(invoke: { _, _ in
                 try? await Task.sleep(for: .milliseconds(20))
@@ -215,7 +238,7 @@ struct DocsRemoteTests {
                     DocsBrowserTests.library.pages.map {
                         DocsSource(path: $0.path, markdown: $0.markdown)
                     })
-            }))
+            }), local: .none)
         let loading = Task { await remote.load() }
         await Task.yield()
         remote.shutdown()

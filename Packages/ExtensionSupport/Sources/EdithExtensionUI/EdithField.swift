@@ -65,9 +65,8 @@ public struct EdithTextField: View {
     ) {
         self.placeholder = placeholder; _text = text; self.icon = icon; self.font = font
         self.alignment = alignment; self.compact = compact; self.clearable = clearable
-        self.typeAhead = typeAhead; self.searchable = searchable; self.invalid = invalid;
-        self.focus = focus;
-        self.onSubmit = onSubmit
+        self.typeAhead = typeAhead; self.searchable = searchable; self.invalid = invalid
+        self.focus = focus; self.onSubmit = onSubmit
     }
 
     private var dark: Bool { scheme == .dark }
