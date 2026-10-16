@@ -47,6 +47,7 @@ import AppKit
         } else {
             image = PluginResources.url(forResource: name, withExtension: "svg").flatMap(
                 NSImage.init(contentsOf:))
+            image?.isTemplate = true
         }
         images[id] = image
         return image
