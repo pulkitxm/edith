@@ -22,6 +22,8 @@ public enum DataRoot {
         AppDirectories.current.logs
     }
 
+    public static var accounts: URL { support.appendingPathComponent("Accounts") }
+
     public static var machines: URL { support.appendingPathComponent("machines") }
 
     public static var clipboard: URL { support.appendingPathComponent("clipboard") }
