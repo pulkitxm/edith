@@ -49,7 +49,8 @@ public struct CodeStatsIdentity: Codable, Equatable, Hashable, Sendable {
                 + values.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
         }
         return CodeStatsIdentity(
-            substrings: appending(logins, to: substrings), emails: appending(emails, to: self.emails))
+            substrings: appending(logins, to: substrings),
+            emails: appending(emails, to: self.emails))
     }
 
     private static let regexMetacharacters = Set(".*+?^${}()|[]\\")

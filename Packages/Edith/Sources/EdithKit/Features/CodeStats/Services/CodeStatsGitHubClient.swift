@@ -58,8 +58,8 @@ public protocol CodeStatsGitHubClient: Sendable {
 }
 
 public struct CodeStatsGitHubCLI: CodeStatsGitHubClient {
-    public typealias Runner = @Sendable ([String], [String: String]) async throws ->
-        CLICommandResult
+    public typealias Runner =
+        @Sendable ([String], [String: String]) async throws -> CLICommandResult
 
     public static let host = "github.com"
     public static let repositoryQuery =
