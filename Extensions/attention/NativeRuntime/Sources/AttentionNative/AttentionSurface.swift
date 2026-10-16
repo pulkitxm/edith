@@ -84,8 +84,10 @@ final class AttentionSurface {
                         field: "session")
                 ],
                 actions: [.init("focus.finish", "Finish", "stop.fill")],
-                facts: ["focusEndsAt": session.startedAt.addingTimeInterval(session.plannedDuration)
-                    .timeIntervalSince1970],
+                facts: [
+                    "focusEndsAt": session.startedAt.addingTimeInterval(session.plannedDuration)
+                        .timeIntervalSince1970
+                ],
                 updatedAt: now)
         }
         return SurfaceSnapshot(
