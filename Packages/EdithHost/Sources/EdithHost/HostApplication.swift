@@ -40,7 +40,7 @@ struct HostApplication: App {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
                     } else {
-                        Text("Opening Edith")
+                        Color.clear
                     }
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
@@ -79,10 +79,7 @@ struct HostApplication: App {
             CommandGroup(replacing: .appTermination) {
                 Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")
             }
-            CommandGroup(after: .appInfo) {
-                Button("Check for App Updates") { runtime.updater.checkForUpdates() }.disabled(
-                    !runtime.updater.available)
-            }
+            CommandGroup(replacing: .newItem) {}
         }
         Settings { HostSettingsRedirect() }
     }

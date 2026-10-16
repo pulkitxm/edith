@@ -9,6 +9,7 @@ public final class HostSurfaces {
     public let requests: SurfaceSnapshotClient
     public let privacy: SurfacePrivacyState
     public let navigation: HostSurfaceNavigation
+    private var publishState: (@MainActor (SurfaceNotice?) -> Void)?
 
     public init(identity: HostIdentity, entries: [HostExtension], sessions: HostExtensionSessions)
         throws
@@ -38,16 +39,23 @@ public final class HostSurfaces {
             return try await endpoint.invoke(command, payload: payload, timeout: 5)
         }
         self.requests = requests
+        var notice: String?
         let publish: @MainActor () -> Void = {
             let versions = activeVersions()
             guard let data = try? JSONEncoder().encode(versions.keys.sorted()),
                 let encodedVersions = try? JSONEncoder().encode(versions)
             else { return }
-            try? channel.publish([
+            var values = [
                 "surface.activeIDs": String(decoding: data, as: UTF8.self),
                 "surface.activeVersions": String(decoding: encodedVersions, as: UTF8.self),
                 "surface.revision": UUID().uuidString,
-            ])
+            ]
+            if let notice { values["surface.notice"] = notice }
+            try? channel.publish(values)
+        }
+        publishState = { value in
+            notice = (try? JSONEncoder().encode(value)).map { String(decoding: $0, as: UTF8.self) }
+            publish()
         }
         layouts = SurfaceLayoutStore(defaults: defaults, changed: publish)
         sessions.didChange = { [weak requests] in
@@ -56,4 +64,6 @@ public final class HostSurfaces {
         }
         publish()
     }
+
+    public func post(_ notice: SurfaceNotice) { publishState?(notice) }
 }

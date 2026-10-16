@@ -53,6 +53,13 @@ import SwiftUI
             if !identity.development { HostLoginItem.register() }
             #endif
             let gateway = HostCLIGateway(marketplace: loaded)
+            HostPermissionPromptTracker.hintDue = { [weak loaded] in
+                loaded?.surfaces.post(.permissionHint)
+            }
+            updater.readyHandler = { [weak loaded] version in
+                loaded?.surfaces.post(.updateReady(version: version))
+                HostNotifications.postUpdateReady(version: version)
+            }
             let core = try HostCoreCLIAdapter.make(
                 identity: identity, marketplace: loaded, updater: updater,
                 shared: SharedDefaults.store, standard: .standard,

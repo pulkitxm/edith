@@ -50,6 +50,8 @@ public final class StatusItemPanel {
             row.isEnabled = action.enabled
             menu.addItem(row)
         }
+        menu.addItem(.separator())
+        menu.addItem(StatusPanelAction(title: "Quit Edith") { StatusItemQuit.perform() })
         self.menu = menu
         item.menu = menu
         button.performClick(nil)

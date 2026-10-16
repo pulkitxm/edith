@@ -10,6 +10,7 @@ final class HostUpdater: NSObject,
     @preconcurrency SPUStandardUserDriverDelegate, SPUUpdaterDelegate
 {
     private(set) var updateReady: String?
+    @ObservationIgnored var readyHandler: ((String) -> Void)?
     private(set) var updaterAvailable = false
     private(set) var canCheckForUpdates = false
     private(set) var lastUpdateCheckDate: Date?
@@ -186,6 +187,7 @@ final class HostUpdater: NSObject,
         guard updateReady != version else { return }
         updateReady = version
         IPC.post(HostUpdateEvents.ready, userInfo: ["version": version])
+        readyHandler?(version)
     }
 
     func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {

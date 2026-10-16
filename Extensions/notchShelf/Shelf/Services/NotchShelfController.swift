@@ -85,6 +85,7 @@ final class NotchShelfController {
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
+    private var lastNoticeNonce: String?
     private var pendingAlerts: [PendingNotchAlert] = []
     private(set) var livePositions: [UUID: CGPoint] = [:]
     private(set) var selectedIDs: Set<UUID> = []
@@ -252,6 +253,7 @@ final class NotchShelfController {
         activeIDs = context.activeIDs
         requests.retain(activeVersions: context.activeVersions)
         privacy.refresh()
+        postHostNotice()
         layouts.reload()
         activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
         surfaceSnapshots = surfaceSnapshots.filter {
@@ -392,6 +394,17 @@ final class NotchShelfController {
             alertDetectors = nil
             dismissAlert()
         }
+    }
+
+    private func postHostNotice() {
+        guard let notice = context.notice, notice.nonce != lastNoticeNonce else { return }
+        lastNoticeNonce = notice.nonce
+        postAlert(
+            NotchAlert(
+                id: notice.id, icon: notice.icon, tint: notice.tint, title: notice.title,
+                subtitle: notice.subtitle,
+                priority: NotchAlertPriority(rawValue: notice.priority) ?? .medium,
+                autoHide: notice.autoHide, settingsTab: notice.settingsTab))
     }
 
     func postAlert(_ alert: NotchAlert) {

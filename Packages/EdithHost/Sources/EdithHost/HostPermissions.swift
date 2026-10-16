@@ -74,6 +74,7 @@ import UserNotifications
         guard !permission.grantsOnFirstUse, requesting == nil else { return }
         requesting = permission
         defer { requesting = nil }
+        HostPermissionPromptTracker.record()
         await environment.request(permission)
         guard !Task.isCancelled else { return }
         await refresh()

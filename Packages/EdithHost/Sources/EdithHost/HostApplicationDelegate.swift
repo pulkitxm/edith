@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import EdithHostCore
 import UserNotifications
 
@@ -18,6 +19,30 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     private(set) lazy var runtime = HostRuntime(delegate: self)
     private var terminating = false
     private(set) var launchedAtLogin = false
+    private var windowCloseObserver: NSObjectProtocol?
+
+    static func applyConfiguredActivationPolicy(defaults: UserDefaults = SharedDefaults.store) {
+        let showsDock =
+            defaults.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool ?? true
+        NSApp.setActivationPolicy(showsDock ? .regular : .accessory)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    private func dropToAccessoryWhenWindowless() {
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: nil, queue: .main
+        ) { _ in
+            DispatchQueue.main.async {
+                let presenting = NSApp.windows.contains {
+                    ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
+                }
+                if !presenting { NSApp.setActivationPolicy(.accessory) }
+            }
+        }
+    }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
@@ -42,6 +67,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func showMainWindow(_ ownedWindow: NSWindow? = nil) {
+        if NSApp.activationPolicy() == .accessory { Self.applyConfiguredActivationPolicy() }
         if let window = ownedWindow ?? mainWindow() {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
@@ -58,6 +84,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        Self.applyConfiguredActivationPolicy()
         let event = NSAppleEventManager.shared().currentAppleEvent
         launchedAtLogin =
             event?.eventID == kAEOpenApplication
@@ -73,6 +100,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        dropToAccessoryWhenWindowless()
         if launchesRuntime { runtime.launch() }
     }
 

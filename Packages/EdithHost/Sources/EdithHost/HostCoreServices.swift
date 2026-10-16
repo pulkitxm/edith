@@ -491,6 +491,9 @@ import SwiftUI
         let tooling = HostToolingCLI(
             home: FileManager.default.homeDirectoryForCurrentUser,
             executable: launcher, path: [])
+        if !identity.development {
+            Task.detached(priority: .utility) { tooling.installMissingLinks() }
+        }
         _ = tooling.refreshExistingCompletions(
             enabled: defaults.object(forKey: "completionsAutoRefresh") as? Bool ?? true)
     }
