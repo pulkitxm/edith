@@ -236,11 +236,11 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "853e359b106968a622b2ca9949922a8fccd4085219330499f8c0db18d1b9dcdf"
+          "sha256": "ee2301a7bae4f2eaf1819dd591af0a61672a99d01cb215f09c2bb3f8e416ff1c"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
-          "sha256": "11dbf67ef5980c9793abaf7120b2373229cce30709bb47279766bc124756ea1c"
+          "sha256": "2222817d23ecf1a32aa143c9f89857271e1cf0e596df08a68322534665b961f7"
         }
       ]
     },
@@ -368,11 +368,11 @@
       "sources": [
         {
           "path": "Extensions/appMaintenance/Runtime.swift",
-          "sha256": "4218e414f26fdbdc4fe42cf21e83b399bd1655b4ab8c59b9cce8a94bfc3590ae"
+          "sha256": "32ce09c42ae1434dc29723cabb99aaa4d32e8a6167681d665e88504d883fc450"
         },
         {
           "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
-          "sha256": "98f06adfdb4d5ebce56c226a3f8132e07124eb94cd10483753420b341863001c"
+          "sha256": "6b5d7c69a21efd073de4e9ae1748cadcdaffe8e7874f9ea9c7f19b52e76d59be"
         }
       ]
     },

@@ -12,6 +12,14 @@ enum HomebrewPageMode: String, CaseIterable, Identifiable {
 }
 
 @MainActor
+final class HomebrewListingMemory {
+    static let shared = HomebrewListingMemory()
+
+    var snapshot: HomebrewListingSnapshot?
+    var kind: HomebrewPackageKind?
+}
+
+@MainActor
 @Observable
 final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
@@ -32,6 +40,8 @@ final class HomebrewPageModel {
     private var preferenceTask: Task<Void, Never>?
     private var cachedPackages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
     private var didRestoreSnapshot = false
+    @ObservationIgnored private let memory: HomebrewListingMemory?
+    private(set) var initialKind = HomebrewPackageKind.formula
 
     init(
         client: HomebrewClient = HomebrewClient(),
@@ -39,15 +49,43 @@ final class HomebrewPageModel {
     ) {
         self.client = .local(client)
         self.store = store
+        memory = nil
     }
 
-    init(engineClient: ExtensionEngineClient) {
+    init(engineClient: ExtensionEngineClient, memory: HomebrewListingMemory) {
         client = .remote(engineClient)
         store = nil
+        self.memory = memory
+        if let remembered = memory.snapshot {
+            status = remembered.status
+            cachedPackages = remembered.packages
+            didRestoreSnapshot = true
+            initialKind = memory.kind ?? .formula
+            showCached(kind: initialKind)
+        }
     }
 
-    func preferredKind() async throws -> HomebrewPackageKind { try await client.preferredKind() }
+    func preferredKind() async throws -> HomebrewPackageKind {
+        let kind = try await client.preferredKind()
+        memory?.kind = kind
+        return kind
+    }
+
+    func showCached(kind: HomebrewPackageKind) {
+        guard mode == .installed, packages.isEmpty,
+            let cached = cachedPackages[kind], !cached.isEmpty
+        else { return }
+        packages = cached
+        loading.retainContent()
+    }
+
+    private func remember() {
+        guard let memory, let status else { return }
+        memory.snapshot = HomebrewListingSnapshot(status: status, packages: cachedPackages)
+    }
+
     func savePreferredKind(_ kind: HomebrewPackageKind) {
+        memory?.kind = kind
         preferenceTask?.cancel()
         preferenceTask = Task { [weak self] in
             guard let self else { return }
@@ -62,6 +100,7 @@ final class HomebrewPageModel {
     var installedCount: Int { packages.count(where: \.installed) }
 
     func activate(kind: HomebrewPackageKind) {
+        showCached(kind: kind)
         begin(title: "Checking Homebrew") { generation in
             let token = await self.store?.claim() ?? UUID()
             guard self.isCurrent(generation) else { return }
@@ -70,6 +109,7 @@ final class HomebrewPageModel {
             let status = await self.client.status()
             guard self.isCurrent(generation) else { return }
             self.status = status
+            self.remember()
             guard status.available else {
                 self.packages = []
                 self.finish(generation)
@@ -88,6 +128,7 @@ final class HomebrewPageModel {
             packages = []
             loading.reset()
         }
+        showCached(kind: kind)
         begin(title: "Reading installed \(kind.pluralTitle.lowercased())") { generation in
             let token = await self.store?.claim() ?? UUID()
             guard self.isCurrent(generation) else { return }
@@ -167,6 +208,7 @@ final class HomebrewPageModel {
             self.packages = packages
             cachedPackages[kind] = packages
             loading.retainContent()
+            remember()
             if let status {
                 let snapshot = HomebrewListingSnapshot(status: status, packages: cachedPackages)
                 try? await store?.save(snapshot, replacing: token)
@@ -186,18 +228,24 @@ final class HomebrewPageModel {
         packages = visible
         cachedPackages[kind] = visible
         loading.retainContent()
+        remember()
     }
 
-    func loadCachedListing() async {
-        guard !didRestoreSnapshot else { return }
-        let loadedSnapshot = await client.cached(store: store)
-        guard !didRestoreSnapshot else { return }
-        didRestoreSnapshot = true
-        guard let loadedSnapshot else { return }
-        if status == nil { status = loadedSnapshot.status }
-        for (key, value) in loadedSnapshot.packages where cachedPackages[key] == nil {
-            cachedPackages[key] = value
+    func loadCachedListing(showing kind: HomebrewPackageKind? = nil) async {
+        if !didRestoreSnapshot {
+            let loadedSnapshot = await client.cached(store: store)
+            if !didRestoreSnapshot {
+                didRestoreSnapshot = true
+                if let loadedSnapshot {
+                    if status == nil { status = loadedSnapshot.status }
+                    for (key, value) in loadedSnapshot.packages where cachedPackages[key] == nil {
+                        cachedPackages[key] = value
+                    }
+                    remember()
+                }
+            }
         }
+        if let kind { showCached(kind: kind) }
     }
 
     private func restoreSnapshot(kind: HomebrewPackageKind, generation: UInt64) async {
