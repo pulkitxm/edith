@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import ExtensionFoundation
 import EdithExtensionSupport
 import ExtensionMarketplace
@@ -116,7 +117,8 @@ public final class HostRemoteSessionManager {
         starting[id] = nil
     }
 
-    private var presentations: [UUID: HostRemoteSceneHandle] = [:]
+    private var presentations: [UUID: any HostScenePresentation] = [:]
+    private var localSessions: [String: HostLocalSession] = [:]
     private var terminalClients: [UUID: HostTerminalSceneClient] = [:]
     private var admissions: [String: Set<UUID>] = [:]
     private var pendingCleanup: [UUID: String] = [:]
@@ -150,7 +152,7 @@ public final class HostRemoteSessionManager {
     }
 
     public func scene(for request: HostExtensionContentRequest) async throws
-        -> HostRemoteSceneHandle
+        -> HostLocalSceneHandle
     {
         let id = request.extensionID
         let token = UUID()
@@ -173,6 +175,37 @@ public final class HostRemoteSessionManager {
     }
 
     private func prepareScene(for request: HostExtensionContentRequest) async throws
+        -> HostLocalSceneHandle
+    {
+        try Task.checkCancellation()
+        let configuration = try selectedConfiguration(for: request)
+        let id = request.extensionID
+        let engine =
+            configuration.uiOnly
+            ? nil
+            : try HostRemoteEngineOwner(
+                marketplace: marketplace, configuration: configuration)
+        let session: HostLocalSession
+        if let current = localSessions[id], current.configuration.package == configuration.package,
+            current.configuration.uiOnly == configuration.uiOnly, current.isAvailable,
+            current.engineIdentity == engine?.process
+        {
+            session = current
+        } else {
+            if let current = localSessions[id] {
+                detach(id)
+                current.stop()
+            }
+            session = try HostLocalSession(
+                configuration: configuration, engine: engine, marketplace: marketplace)
+            localSessions[id] = session
+        }
+        let handle = try session.reserve(request)
+        presentations[request.presentationID] = handle
+        return handle
+    }
+
+    private func prepareRemoteScene(for request: HostExtensionContentRequest) async throws
         -> HostRemoteSceneHandle
     {
         try Task.checkCancellation()
@@ -437,7 +470,7 @@ public final class HostRemoteSessionManager {
         return client
     }
 
-    private func terminalHandle(_ id: UUID) throws -> HostRemoteSceneHandle {
+    private func terminalHandle(_ id: UUID) throws -> any HostScenePresentation {
         guard let handle = presentations[id], HostTerminalUIRequest.accepts(handle.request),
             handle.isPresented, pendingCleanup[id] == nil,
             handle.processIdentity?.isRunning == true,
@@ -476,8 +509,19 @@ public final class HostRemoteSessionManager {
         }
     }
 
+    public func presentScene(
+        _ handle: HostLocalSceneHandle, compact: Bool, visible: Bool, width: Double
+    ) async throws -> NSViewController {
+        var controller: NSViewController?
+        try await ambientScene(handle, visible: visible) {
+            controller = try handle.present(compact: compact, visible: visible, width: width)
+        }
+        guard let controller else { throw HostWorkerError.rejected }
+        return controller
+    }
+
     public func updateScene(
-        _ handle: HostRemoteSceneHandle, compact: Bool, visible: Bool, width: Double
+        _ handle: any HostScenePresentation, compact: Bool, visible: Bool, width: Double
     ) async throws {
         try await ambientScene(handle, visible: visible) {
             try await handle.update(compact: compact, visible: visible, width: width)
@@ -485,7 +529,7 @@ public final class HostRemoteSessionManager {
     }
 
     private func ambientScene(
-        _ handle: HostRemoteSceneHandle, visible: Bool,
+        _ handle: any HostScenePresentation, visible: Bool,
         operation: @escaping @MainActor () async throws -> Void
     ) async throws {
         let request = handle.request
@@ -506,7 +550,9 @@ public final class HostRemoteSessionManager {
             }, operation: operation)
     }
 
-    private func ambientOwner(_ handle: HostRemoteSceneHandle) throws -> HostAmbientPolicyOwner {
+    private func ambientOwner(_ handle: any HostScenePresentation) throws
+        -> HostAmbientPolicyOwner
+    {
         let request = handle.request
         guard presentations[request.presentationID] === handle,
             pendingCleanup[request.presentationID] == nil, !handle.configuration.uiOnly
@@ -573,6 +619,10 @@ public final class HostRemoteSessionManager {
         guard admissions[extensionID] == nil,
             !presentations.values.contains(where: { $0.request.extensionID == extensionID })
         else { return }
+        if let session = localSessions[extensionID], session.isIdle {
+            session.stop()
+            localSessions[extensionID] = nil
+        }
         if let session = sessions[extensionID] { try await session.stop() }
     }
 
@@ -585,6 +635,7 @@ public final class HostRemoteSessionManager {
             finishStarting(id: extensionID, token: reservation.token)
         }
         detach(extensionID)
+        localSessions.removeValue(forKey: extensionID)?.stop()
         terminalClients = terminalClients.filter {
             presentations[$0.key]?.request.extensionID != extensionID
         }

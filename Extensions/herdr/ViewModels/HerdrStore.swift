@@ -2169,7 +2169,7 @@ final class HerdrStore {
     }
 
     func connection(for machine: Machine) async throws -> SSHConnection {
-        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard uiClient == nil, !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.unavailable
         }
         if let existing = connections[machine.id] {
@@ -2206,7 +2206,7 @@ final class HerdrStore {
     }
 
     func uploadDroppedFiles(_ urls: [URL], to machine: Machine?) async throws -> [String] {
-        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard uiClient == nil, !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.invalidRequest
         }
         guard let machine else { throw HerdrQuinjetError.machineUnavailable }

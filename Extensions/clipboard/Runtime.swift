@@ -217,7 +217,7 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard !uiConfigured, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             do {

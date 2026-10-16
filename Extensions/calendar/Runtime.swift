@@ -172,7 +172,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard !stopping, Bundle.main.bundleURL.pathExtension != "appex",
+            guard !stopping, !ExtensionHostRole.isInterfaceProcess,
                 uiPresentations.isEmpty,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]

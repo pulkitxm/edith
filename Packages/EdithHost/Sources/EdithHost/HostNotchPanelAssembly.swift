@@ -210,10 +210,7 @@ final class HostNotchPanelAssembly {
                 position(lease, record: record)
             } catch {
                 guard !Task.isCancelled, !stopped, records[id] === record else { return }
-                let message =
-                    error is HostRemoteAvailabilityError
-                    ? "Approve this extension in macOS extension settings to open its card."
-                    : "The extension card could not open."
+                let message = "The extension card could not open."
                 failures[id] = message
                 if let slot = record.slot { reportFailure(slot.id, message) }
             }

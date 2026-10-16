@@ -45,7 +45,7 @@ final class HerdrTerminalScroll {
 
     func startWatch(session: String, pane: String, machine: Machine?) {
         guard watchTask == nil, remoteScroll == nil,
-            Bundle.main.bundleURL.pathExtension != "appex"
+            !ExtensionHostRole.isInterfaceProcess
         else { return }
         watchTask = Task { [weak self] in
             await self?.watch(session: session, pane: pane, machine: machine)
@@ -53,7 +53,7 @@ final class HerdrTerminalScroll {
     }
 
     func watch(session: String, pane: String, machine: Machine?) async {
-        guard remoteScroll == nil, Bundle.main.bundleURL.pathExtension != "appex" else { return }
+        guard remoteScroll == nil, !ExtensionHostRole.isInterfaceProcess else { return }
         while !Task.isCancelled {
             do {
                 let channel = try await open(session, pane, machine)
