@@ -69,11 +69,7 @@ final class ExtensionRuntime: NSObject {
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Homebrew")
-                    } content: {
-                        HomebrewMaintenanceView(model: model)
-                    }
+                    HomebrewMaintenanceView(model: model)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":

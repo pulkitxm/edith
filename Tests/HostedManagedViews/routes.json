@@ -236,7 +236,7 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "a6c3f7993e01194b902202c9b2cfd7b1ba13c55991a89fca7f60a79a6d11c887"
+          "sha256": "ed91e0c0807e7fbe2b95a403698b2ada27078e1d34cff2211d89e5faadcad244"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
