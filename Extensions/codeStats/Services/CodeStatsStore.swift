@@ -72,6 +72,7 @@ public struct CodeStatsStore: Sendable {
     private var reportsFile: URL { root.appendingPathComponent("reports.json") }
     private var factsFile: URL { root.appendingPathComponent("facts.json") }
     private var stateFile: URL { root.appendingPathComponent("state.json") }
+    private var statusFile: URL { root.appendingPathComponent("status.json") }
 
     private func cacheFile(for repository: String) -> URL {
         repository.split(separator: "/").reduce(repositoriesFolder) {
@@ -142,6 +143,17 @@ public struct CodeStatsStore: Sendable {
         return try? JSONDecoder().decode(CodeStatsFactTable.self, from: data)
     }
 
+    public func factsStamp() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: factsFile.path))?[.modificationDate]
+            as? Date
+    }
+
+    public func loadFactsData() -> Data? {
+        CodeStatsOwnedIO.read(factsFile, root: root).flatMap {
+            (try? JSONDecoder().decode(CodeStatsFactTable.self, from: $0)) == nil ? nil : $0
+        }
+    }
+
     public func saveFacts(_ table: CodeStatsFactTable) throws {
         try CodeStatsOwnedIO.write(JSONEncoder().encode(table), to: factsFile, root: root)
     }
@@ -151,6 +163,15 @@ public struct CodeStatsStore: Sendable {
             return CodeStatsState()
         }
         return (try? JSONDecoder().decode(CodeStatsState.self, from: data)) ?? CodeStatsState()
+    }
+
+    public func loadStatus() -> CodeStatsStatus? {
+        guard let data = CodeStatsOwnedIO.read(statusFile, root: root) else { return nil }
+        return try? JSONDecoder().decode(CodeStatsStatus.self, from: data)
+    }
+
+    public func saveStatus(_ status: CodeStatsStatus) throws {
+        try CodeStatsOwnedIO.write(JSONEncoder().encode(status), to: statusFile, root: root)
     }
 
     public func saveState(_ state: CodeStatsState) throws {

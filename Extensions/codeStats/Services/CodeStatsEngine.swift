@@ -208,7 +208,7 @@ public actor CodeStatsEngine {
     }
 
     private static func issue(_ error: Error) -> CodeStatsGitHubError? {
-        if error is CancellationError { return nil }
+        if CodeStatsCancellation.isSilent(error) || Task.isCancelled { return nil }
         return error as? CodeStatsGitHubError ?? .failed(message: "\(error)")
     }
 

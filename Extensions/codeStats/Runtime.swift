@@ -158,6 +158,7 @@ final class ExtensionRuntime: NSObject {
             self.workflow = workflow; CodeStatsWorkerOperations.workflow = workflow
             surface = CodeStatsSurface(store: store, workflow: workflow)
             operations = CodeStatsCommands(workflow: workflow, store: store)
+            Task { await workflow.preload() }
             startup = Task {
                 await workflow.recoverInterruptedRun()
                 if fixture, !Task.isCancelled {

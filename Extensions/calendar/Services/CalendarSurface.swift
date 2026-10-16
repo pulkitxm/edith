@@ -44,7 +44,14 @@ final class CalendarSurface {
         }
         presentation.refresh()
         store.refreshAuthStatus()
-        if command == "surface.snapshot" { _ = await store.refreshAndWait() }
+        if command == "surface.snapshot" {
+            await store.restoreCachedAgenda()
+            if store.agendaKnown {
+                store.refreshIfStale()
+            } else {
+                _ = await store.refreshAndWait()
+            }
+        }
         try Task.checkCancellation()
         return try snapshot(request.tile, target: request.target).encoded()
     }

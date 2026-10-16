@@ -262,7 +262,7 @@
         },
         {
           "path": "Extensions/calendar/Views/CalendarUIPresentation.swift",
-          "sha256": "532154a99ad9ae026c99f48648bef3ff381ad36760224ba1a952093367dfb964"
+          "sha256": "f10f63670bb4430b9cea7216fc60fab03dc691aa9b4edb9a88da6ddaf5bd4e60"
         }
       ]
     },
@@ -782,11 +782,11 @@
       "sources": [
         {
           "path": "Extensions/codeStats/Runtime.swift",
-          "sha256": "0d7be6e2223700fb21e23c99b1d5aa6d74cd1124525adf5bc52ac06a61c2b9f3"
+          "sha256": "341c27c60aea45f3635f4d2ec017546c7b4931fcb4235e997c650435087d476c"
         },
         {
           "path": "Extensions/codeStats/CodeStatsUIBridge.swift",
-          "sha256": "924d3c11b9b843b2dbf92e29f95a0667a5c4dff832cd60bd015c90a952cbdc06"
+          "sha256": "c62a90074c4947bf08fc2b36c5e983e744aea8281d3899a9a789a3cd5c78469e"
         }
       ]
     },

@@ -4,6 +4,25 @@ import Foundation
 import Observation
 
 @MainActor
+final class CodeStatsModelMemory {
+    static let shared = CodeStatsModelMemory()
+
+    struct Content {
+        var report: CodeStatsReport
+        var projection: CodeStatsProjection
+        var table: CodeStatsFactTable?
+        var facets: CodeStatsFacets
+        var audit: CodeStatsAudit?
+        var explorer: CodeStatsExplorer
+        var range: CodeStatsRange
+        var filter: CodeStatsFilter
+    }
+
+    var status: CodeStatsStatus?
+    var content: Content?
+}
+
+@MainActor
 @Observable
 final class CodeStatsModel {
     static let shared = CodeStatsModel()
@@ -32,6 +51,8 @@ final class CodeStatsModel {
     private(set) var lastPreset = CodeStatsRange.days(90)
 
     @ObservationIgnored private var reportRevision: UInt64 = 0
+    @ObservationIgnored private let memory: CodeStatsModelMemory?
+    @ObservationIgnored private var seededReportedAt: Date??
     let remote: CodeStatsUIBridge?
     private var remotePreferencesLoaded = false
     @ObservationIgnored private let service: CodeStatsPageService
@@ -45,10 +66,12 @@ final class CodeStatsModel {
     init(
         service: CodeStatsPageService = .live, remote: CodeStatsUIBridge? = nil,
         defaults: UserDefaults = SharedDefaults.store,
-        calendar: Calendar = .current, today: @escaping @Sendable () -> Date = { Date() }
+        calendar: Calendar = .current, today: @escaping @Sendable () -> Date = { Date() },
+        memory: CodeStatsModelMemory? = nil
     ) {
         self.service = service
         self.remote = remote
+        self.memory = memory ?? (remote == nil ? nil : .shared)
         self.defaults = defaults
         self.calendar = calendar
         self.today = today
@@ -60,6 +83,44 @@ final class CodeStatsModel {
             range = selection.range
             lastPreset = selection.lastPreset
         }
+        seedFromMemory()
+    }
+
+    private func seedFromMemory() {
+        guard let memory, let saved = memory.status, let content = memory.content,
+            content.range == range, content.filter == filter
+        else { return }
+        status = saved
+        report = content.report
+        projection = content.projection
+        table = content.table
+        facets = content.facets
+        audit = content.audit
+        explorer = content.explorer
+        reportLoaded = true
+        seededReportedAt = .some(saved.state.reportedAt)
+    }
+
+    private func remember() {
+        guard let memory else { return }
+        memory.status = status
+        guard let report, reportLoaded, !showsPreviousRange else { return }
+        memory.content = CodeStatsModelMemory.Content(
+            report: report, projection: projection, table: table, facets: facets, audit: audit,
+            explorer: explorer, range: range, filter: filter)
+    }
+
+    private func fail(_ load: ContentLoad, _ request: UInt64, _ error: Error) {
+        if CodeStatsCancellation.isSilent(error) {
+            load.cancel(request)
+        } else {
+            load.fail(request, error: error)
+        }
+    }
+
+    private func surface(_ error: Error) {
+        guard !CodeStatsCancellation.isSilent(error), !Task.isCancelled else { return }
+        errorMessage = error.localizedDescription
     }
 
     var phase: CodeStatsPagePhase {
@@ -148,6 +209,10 @@ final class CodeStatsModel {
         let revision = reportRevision
         await loadStatus()
         guard !Task.isCancelled, reportRevision == revision else { return }
+        if let seeded = seededReportedAt {
+            seededReportedAt = nil
+            if report != nil, status?.state.reportedAt == seeded { return }
+        }
         await loadReport()
     }
 
@@ -160,7 +225,7 @@ final class CodeStatsModel {
             await apply(next)
             statusLoad.complete(request)
         } catch {
-            statusLoad.fail(request, error: error)
+            fail(statusLoad, request, error)
         }
     }
 
@@ -182,6 +247,7 @@ final class CodeStatsModel {
                 reportLoaded = true
                 reportRevision &+= 1
                 reportLoad.complete(request)
+                remember()
                 return
             }
             let next = try await service.report(requested)
@@ -194,8 +260,9 @@ final class CodeStatsModel {
             reportLoaded = true
             reportRevision &+= 1
             reportLoad.complete(request)
+            remember()
         } catch {
-            reportLoad.fail(request, error: error)
+            fail(reportLoad, request, error)
         }
     }
 
@@ -309,6 +376,7 @@ final class CodeStatsModel {
             projection = result.1
             audit = result.2
             explorer = result.3
+            remember()
         }
     }
 
@@ -325,6 +393,7 @@ final class CodeStatsModel {
             remotePreferencesLoaded = true
         }
         status = next
+        memory?.status = next
         if !statusLoad.isRunning, !statusLoad.hasContent { statusLoad.setContent() }
         identity = next.settings.identity
         let finished = previous?.isRunning == true && !next.isRunning
@@ -343,7 +412,7 @@ final class CodeStatsModel {
             _ = try await service.start()
             await loadStatus()
         } catch {
-            errorMessage = error.localizedDescription
+            surface(error)
         }
     }
 
@@ -354,7 +423,7 @@ final class CodeStatsModel {
         do {
             await apply(try await service.cancel())
         } catch {
-            errorMessage = error.localizedDescription
+            surface(error)
         }
     }
 
@@ -370,6 +439,7 @@ final class CodeStatsModel {
         do {
             profileLookup = try await service.profile()
         } catch {
+            guard !CodeStatsCancellation.isSilent(error), !Task.isCancelled else { return }
             profileLookup = CodeStatsProfileLookup(
                 issue: .failed(message: error.localizedDescription))
         }
@@ -382,7 +452,7 @@ final class CodeStatsModel {
         do {
             authors = try await service.authors()
         } catch {
-            errorMessage = error.localizedDescription
+            surface(error)
         }
     }
 
@@ -393,7 +463,7 @@ final class CodeStatsModel {
                 path, defaults: defaults, homeDirectory: CodeStatsExecutionEnvironment.home)
             await loadStatus()
         } catch {
-            errorMessage = error.localizedDescription
+            surface(error)
         }
     }
 
