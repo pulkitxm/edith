@@ -1,4 +1,5 @@
 import Darwin
+import EdithCore
 import Foundation
 import Testing
 @testable import EdithKit
@@ -247,11 +248,23 @@ import Testing
         }
     }
 
-    @Test func defaultDirectoryIsTheSharedAccountsFolder() {
+    @Test func accountsFolderKeepsTheProductionAndDevelopmentPaths() {
+        let home = URL(fileURLWithPath: "/Users/synthetic", isDirectory: true)
+        func accounts(_ identifier: String) -> String {
+            let directories = AppDirectories(
+                homeDirectory: home,
+                directoryName: AppBuildIdentity.directoryName(for: identifier))
+            return ClaudeAccountStorage.directory(support: directories.data).path
+        }
+        #expect(
+            accounts(AppBuildIdentity.production)
+                == "/Users/synthetic/Library/Application Support/Edith/Accounts")
+        #expect(
+            accounts(AppBuildIdentity.developmentPrefix + "alpha")
+                == "/Users/synthetic/Library/Application Support/Edith Dev/alpha/Accounts")
         #expect(
             ClaudeAccountStorage.defaultDirectory.path
-                == DataRoot.support.appendingPathComponent("Accounts").path)
-        #expect(ClaudeAccountStorage.defaultDirectory.lastPathComponent == "Accounts")
+                == ClaudeAccountStorage.directory(support: DataRoot.support).path)
     }
 
     @Test func refreshedLoginIsNeverOverwrittenAndProfileSymlinksReject() async throws {

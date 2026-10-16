@@ -18,7 +18,11 @@ public actor ClaudeAccountStorage {
 
     public init(directory: URL) { self.directory = directory }
 
-    public static var defaultDirectory: URL { DataRoot.accounts }
+    public static var defaultDirectory: URL { directory(support: DataRoot.support) }
+
+    public static func directory(support: URL) -> URL {
+        support.appendingPathComponent("Accounts", isDirectory: true)
+    }
 
     public func load() throws -> ClaudeAccountsState {
         try withRoot { try readState($0) }
