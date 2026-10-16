@@ -67,3 +67,49 @@ enum AudioMixerAction {
         AudioMixerListSnapshot(apps: records(engine), changed: changed)
     }
 }
+
+@available(macOS 14.4, *)
+@MainActor
+enum AudioMixerUICommand {
+    static func execute(_ operation: String, payload: Data, engine: MixerEngine) throws -> Data? {
+        switch operation {
+        case "audioMixer.ui.snapshot":
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            engine.refresh()
+            return try JSONEncoder().encode(
+                snapshot(engine, icons: true, error: engine.errorMessage))
+        case "audioMixer.ui.retry":
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            engine.retry()
+            return try JSONEncoder().encode(
+                snapshot(engine, icons: false, error: engine.errorMessage))
+        case "audioMixer.ui.volume":
+            guard let raw = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                let request = AudioMixerRuntimeRequest(payload: raw), request.isLive(at: Date()),
+                request.request == .volume
+            else { throw ExtensionPeerError.invalidRequest }
+            let outcome = AudioMixerAction.perform(request, engine: engine)
+            return try JSONEncoder().encode(
+                snapshot(engine, icons: false, error: outcome.error ?? engine.discoveryError))
+        default:
+            return nil
+        }
+    }
+
+    private static func snapshot(_ engine: MixerEngine, icons: Bool, error: String?)
+        -> AudioMixerUISnapshot
+    {
+        let apps = engine.apps.map {
+            AudioMixerAppRecord(
+                objectID: $0.objectID, pid: $0.pid, bundleID: $0.bundleID, name: $0.name,
+                volume: Double($0.volume))
+        }
+        let images =
+            icons
+            ? Dictionary(
+                uniqueKeysWithValues: engine.apps.compactMap { app in
+                    AudioMixerIcon.png(app.icon).map { (String(app.objectID), $0) }
+                }) : [:]
+        return AudioMixerUISnapshot(apps: apps, icons: images, error: error)
+    }
+}

@@ -25,13 +25,44 @@ import Testing
         try await wait { remote.apps.count == 1 }
         #expect(remote.apps.first?.name == "Synthetic Audio" && remote.apps.first?.volume == 1)
         remote.setVolume(try #require(remote.apps.first), 0.4)
+        #expect(remote.apps.first?.volume == 0.4)
         try await wait { remote.errorMessage != nil }
-        #expect(engine.apps.first?.volume == 1 && remote.apps.first?.volume == 1)
+        #expect(remote.errorMessage?.contains("Could not change Synthetic Audio's volume") == true)
+        #expect(engine.apps.first?.volume == 1)
+        try await wait { remote.apps.first?.volume == 1 }
         remote.stop(); client.invalidate(); engine.shutdown()
         let count = bridge.operations.count
         remote.retry(); remote.viewAppeared()
         await Task.yield()
         #expect(bridge.operations.count == count)
+    }
+    @Test func retryReappliesTheFailedVolumeThroughTheEngine() async throws {
+        guard #available(macOS 14.4, *) else { return }
+        var failing = true
+        let engine = MixerEngine(
+            snapshotLoader: {
+                .init(
+                    apps: [
+                        .init(
+                            objectID: 1, pid: 424242, bundleID: "synthetic.audio",
+                            name: "Synthetic Audio", icon: nil, volume: 1)
+                    ], outputUID: "synthetic")
+            },
+            tapFactory: { _, _, _ in
+                failing ? .failure(.deviceStart(-50)) : .success(RetryTap())
+            })
+        let bridge = Bridge(engine: engine)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let remote = AudioMixerRemoteModel(client: client)
+        remote.viewAppeared()
+        try await wait { remote.apps.count == 1 }
+        remote.setVolume(try #require(remote.apps.first), 0.4)
+        try await wait { remote.errorMessage != nil }
+        failing = false
+        remote.retry()
+        try await wait { remote.errorMessage == nil && engine.apps.first?.volume == 0.4 }
+        #expect(remote.apps.first?.volume == 0.4)
+        remote.stop(); client.invalidate(); engine.shutdown()
     }
     @Test func originalRowsRenderOffscreenAtCompactRegularAndIncreasedZoom() throws {
         guard #available(macOS 14.4, *) else { return }
@@ -64,6 +95,10 @@ import Testing
         }
         #expect(app.windows.allSatisfy { !$0.isVisible })
     }
+    @available(macOS 14.4, *) private final class RetryTap: AudioMixerTapControlling {
+        func setGain(_ value: Float) {}
+        func destroy() {}
+    }
     private func wait(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(3)
         while !condition() {
@@ -95,24 +130,11 @@ import Testing
                                 payload: bytes as Data? ?? Data("{}".utf8)))) ?? Data())
                 },
                 execute: { [engine] operation, payload in
-                    if operation == "audioMixer.ui.snapshot" {
-                        engine.refresh()
-                        return try JSONEncoder().encode(
-                            AudioMixerUISnapshot(
-                                apps: engine.apps.map {
-                                    .init(
-                                        objectID: $0.objectID, pid: $0.pid, bundleID: $0.bundleID,
-                                        name: $0.name, volume: Double($0.volume))
-                                }, icons: [:], error: engine.errorMessage))
-                    }
-                    guard operation == "audioMixer.request",
-                        let values = try JSONSerialization.jsonObject(with: payload)
-                            as? [String: Any],
-                        let request = AudioMixerRuntimeRequest(payload: values)
+                    guard
+                        let reply = try AudioMixerUICommand.execute(
+                            operation, payload: payload, engine: engine)
                     else { throw ExtensionPeerError.invalidRequest }
-                    let result = AudioMixerAction.perform(request, engine: engine)
-                    if let error = result.error { throw ExtensionPeerError.rejected(error) }
-                    return try JSONEncoder().encode(result.snapshot)
+                    return reply
                 })
         }
         @objc func cancel(_ token: String) { registry.cancel(token) }
