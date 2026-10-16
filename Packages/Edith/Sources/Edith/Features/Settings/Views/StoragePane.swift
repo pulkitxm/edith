@@ -6,7 +6,7 @@ struct StoragePane: View {
     private let makeInventory: @MainActor () -> StorageInventory
     @State private var model: StoragePaneModel
     @State private var revision = 0
-    @Environment(\.compactLayout) private var compact
+    @State private var showsSmallItems = false
 
     @MainActor init(
         appBundle: URL = Bundle.main.bundleURL,
@@ -24,32 +24,18 @@ struct StoragePane: View {
 
     var body: some View {
         PageScaffold(width: .fluid, header: {}) {
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                Text("Actual files on this Mac.")
-                    .font(.edithText(.callout)).foregroundStyle(.secondary)
-                Spacer(minLength: UIScale.pt(8))
-                Button(model.load.isRunning ? "Restart scan" : "Refresh") { revision += 1 }
-                    .buttonStyle(.edith(.secondary))
-            }
             PageLoading(
                 state: model.load.state, message: "Refresh to measure storage.", layout: .list,
                 retry: { revision += 1 }
             ) {
                 if let inventory = model.inventory, let measurement = model.measurement {
-                    summary(inventory, measurement)
-                    areas(inventory, measurement)
-                }
-            }
-            if model.load.isRunning {
-                HStack {
-                    LoadingIndicator()
+                    let usage = inventory.usage(in: measurement)
+                    summary(measurement, usage)
+                    breakdown(measurement, usage)
                     Text(
-                        model.measurement == nil
-                            ? "Scanning known storage roots"
-                            : "Refreshing, previous measurements remain visible"
+                        "Edith \(inventory.appVersion ?? "version unknown") · Measured \(measurement.collectedAt.formatted(date: .omitted, time: .shortened))"
                     )
-                    .font(.edithText(.caption))
-                    Button("Cancel scan") { model.cancelScan() }.buttonStyle(.edith(.secondary))
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
             if let message = model.load.errorMessage {
@@ -62,59 +48,71 @@ struct StoragePane: View {
         .onDisappear { model.cancelScan() }
     }
 
-    private func summary(_ inventory: StorageInventory, _ measurement: StorageMeasurement)
+    private func summary(_ measurement: StorageMeasurement, _ usage: [StorageUsage])
         -> some View
     {
-        PageCard(title: "Measured storage") {
-            StorageSizeLine(title: "Total across known roots", bytes: measurement.total)
-            StorageDistribution(categories: inventory.categories, measurement: measurement)
-            ForEach(inventory.categories) { category in
-                StorageSizeLine(title: category.title, bytes: category.bytes(in: measurement))
+        PageCard {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Edith is using")
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                    Text(StorageFormat.size(measurement.total))
+                        .font(.edithText(.largeTitle).weight(.semibold)).monospacedDigit()
+                }
+                Spacer(minLength: UIScale.pt(8))
+                if model.load.isRunning {
+                    LoadingIndicator()
+                    Button("Cancel") { model.cancelScan() }.buttonStyle(.edith(.secondary))
+                } else {
+                    Button("Refresh") { revision += 1 }.buttonStyle(.edith(.secondary))
+                }
             }
-            Text(
-                "Logical bytes are file contents. Allocated bytes are filesystem blocks, including directories. Hard links count once across categories, assigned to the first path in sorted traversal. APFS clones, compression and shared extents can make exclusive physical disk usage differ."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            Text(
-                "Measured \(measurement.collectedAt.formatted(date: .abbreviated, time: .shortened)). Files may change while scanning. Symbolic link targets and storage outside the known Edith roots are excluded."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            ForEach(measurement.issues, id: \.self) {
-                Text($0).font(.edithText(.caption)).foregroundStyle(.orange)
+            StorageBar(usage: usage, total: measurement.total.allocated)
+            if let largest = usage.first, measurement.total.allocated > 0 {
+                Text(
+                    "Largest: \(largest.item.title), \(StorageFormat.share(largest.bytes.allocated, of: measurement.total.allocated))"
+                )
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
             }
-            Divider()
-            Text("Edith \(inventory.appVersion ?? "version unknown") · macOS 14 or later")
-                .font(.edithText(.callout))
+            if !measurement.total.complete {
+                Text("Some files could not be read, so the real total may be higher.")
+                    .font(.edithText(.caption)).foregroundStyle(.orange)
+            }
         }
+        .accessibilityElement(children: .contain)
     }
 
-    private func areas(_ inventory: StorageInventory, _ measurement: StorageMeasurement)
+    private func breakdown(_ measurement: StorageMeasurement, _ usage: [StorageUsage])
         -> some View
     {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            PageSectionHeader(
-                "By feature",
-                subtitle:
-                    "\(inventory.areas.count) areas. Sizes are exclusive; nested folders count once."
-            )
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(
-                    compact, minimum: 300, spacing: 12, alignment: .top),
-                alignment: .leading, spacing: UIScale.pt(12)
-            ) {
-                ForEach(inventory.areas) { area in
-                    let bytes = area.bytes(in: measurement)
-                    PageCard(title: area.title) {
-                        if bytes.exists || !bytes.complete {
-                            StorageSizeLine(title: "Measured", bytes: bytes)
-                        }
-                        if bytes.exists {
-                            Button("Show in Finder") { reveal(area) }
-                                .buttonStyle(.edith(.secondary))
-                                .accessibilityLabel("Show \(area.title) storage in Finder")
-                        } else if bytes.complete {
-                            Text("Not created").font(.edithText(.callout))
-                                .foregroundStyle(.secondary)
+        let total = measurement.total.allocated
+        let large = usage.filter { StorageFormat.isLarge($0.bytes.allocated, of: total) }
+        let small = usage.filter { !StorageFormat.isLarge($0.bytes.allocated, of: total) }
+        return PageCard(title: "What is using space") {
+            VStack(spacing: 0) {
+                ForEach(Array(large.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 { Divider() }
+                    StorageRow(
+                        usage: entry, total: total,
+                        color: StorageBar.color(at: usage.firstIndex { $0.id == entry.id } ?? 0),
+                        reveal: { reveal(entry.item) })
+                }
+                if !small.isEmpty {
+                    Divider()
+                    Button(
+                        showsSmallItems
+                            ? "Hide smaller items"
+                            : "Show \(small.count) smaller items · \(StorageFormat.size(small.reduce(into: StorageBytes()) { $0.include($1.bytes) }))"
+                    ) { showsSmallItems.toggle() }
+                    .buttonStyle(.edith(.borderless))
+                    .padding(.vertical, UIScale.pt(6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsSmallItems {
+                        ForEach(small) { entry in
+                            Divider()
+                            StorageRow(
+                                usage: entry, total: total, color: StorageBar.otherColor,
+                                reveal: { reveal(entry.item) })
                         }
                     }
                 }
@@ -122,77 +120,95 @@ struct StoragePane: View {
         }
     }
 
-    private func reveal(_ area: StorageArea) {
-        let existing = area.roots.filter { FileManager.default.fileExists(atPath: $0.path) }
+    private func reveal(_ item: StorageItem) {
+        let existing = item.roots.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !existing.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(existing)
     }
 }
 
-struct StorageSizeLine: View {
-    let title: String
-    let bytes: StorageBytes
-    @Environment(\.compactLayout) private var compact
-
-    static func format(_ value: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+enum StorageFormat {
+    static func size(_ bytes: StorageBytes) -> String {
+        let value = ByteCountFormatter.string(fromByteCount: bytes.allocated, countStyle: .file)
+        return bytes.complete ? value : "At least \(value)"
     }
 
-    static func value(_ bytes: StorageBytes) -> String {
-        let prefix = bytes.complete ? "" : bytes.exists ? "Partial: " : "Unknown: measured "
-        return "\(prefix)\(format(bytes.logical)) logical · \(format(bytes.allocated)) allocated"
+    static func share(_ part: Int64, of total: Int64) -> String {
+        let fraction = Double(part) / Double(max(1, total))
+        return fraction < 0.01
+            ? "under 1%" : fraction.formatted(.percent.precision(.fractionLength(0)))
     }
+
+    static func isLarge(_ part: Int64, of total: Int64) -> Bool {
+        Double(part) >= Double(max(1, total)) * 0.01
+    }
+}
+
+struct StorageRow: View {
+    let usage: StorageUsage
+    let total: Int64
+    let color: Color
+    let reveal: () -> Void
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                Spacer(minLength: UIScale.pt(16))
-                Text(Self.value(bytes)).monospacedDigit().foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(title)
-                Text(Self.value(bytes)).monospacedDigit().foregroundStyle(.secondary)
-            }
+        HStack(spacing: UIScale.pt(10)) {
+            Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
+            Text(usage.item.title).font(.edithText(.callout)).lineLimit(1)
+            Spacer(minLength: UIScale.pt(8))
+            Text(StorageFormat.share(usage.bytes.allocated, of: total))
+                .font(.edithText(.caption)).foregroundStyle(.secondary).monospacedDigit()
+            Text(StorageFormat.size(usage.bytes))
+                .font(.edithText(.callout).weight(.medium)).monospacedDigit()
+                .frame(minWidth: UIScale.pt(76), alignment: .trailing)
+            Button(action: reveal) { Image(systemName: "folder") }
+                .buttonStyle(.edith(.iconOnly))
+                .help("Show in Finder")
+                .accessibilityLabel("Show \(usage.item.title) in Finder")
         }
-        .font(.edithText(compact ? .caption : .callout))
+        .padding(.vertical, UIScale.pt(6))
         .accessibilityElement(children: .combine)
     }
 }
 
-struct StorageDistribution: View {
-    let categories: [StorageCategory]
-    let measurement: StorageMeasurement
-    private let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .gray]
+struct StorageBar: View {
+    static let palette: [Color] = [.blue, .green, .orange, .purple, .pink]
+    static let otherColor = Color.gray.opacity(0.5)
+
+    static func color(at index: Int) -> Color {
+        index < palette.count ? palette[index] : otherColor
+    }
+
+    let usage: [StorageUsage]
+    let total: Int64
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Text(
-                "Distribution of measured allocated bytes\(measurement.total.complete ? "" : " (partial)")"
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                        let bytes = category.bytes(in: measurement).allocated
-                        if bytes > 0 {
-                            Rectangle().fill(colors[index % colors.count])
-                                .frame(
-                                    width: geometry.size.width * Double(bytes)
-                                        / Double(max(1, measurement.total.allocated)))
-                        }
-                    }
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                ForEach(segments, id: \.id) { segment in
+                    Rectangle().fill(segment.color)
+                        .frame(
+                            width: geometry.size.width * Double(segment.bytes)
+                                / Double(max(1, total)))
                 }
-            }
-            .frame(height: UIScale.pt(14)).clipShape(RoundedRectangle(cornerRadius: UIScale.pt(4)))
-            .accessibilityLabel("Storage distribution. Category sizes are listed below.")
-            ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                HStack(spacing: UIScale.pt(6)) {
-                    Circle().fill(colors[index % colors.count]).frame(
-                        width: UIScale.pt(7), height: UIScale.pt(7))
-                    Text(category.title).font(.edithText(.caption)).foregroundStyle(.secondary)
-                }
+                Spacer(minLength: 0)
             }
         }
+        .frame(height: UIScale.pt(12))
+        .background(Color.secondary.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(4)))
+        .accessibilityHidden(true)
+    }
+
+    private var segments: [(id: String, bytes: Int64, color: Color)] {
+        let leading = usage.prefix(Self.palette.count).enumerated()
+            .filter { StorageFormat.isLarge($0.element.bytes.allocated, of: total) }
+            .map {
+                (
+                    id: $0.element.id, bytes: $0.element.bytes.allocated,
+                    color: Self.color(at: $0.offset)
+                )
+            }
+        let rest = total - leading.reduce(0) { $0 + $1.bytes }
+        return rest > 0 ? leading + [(id: "rest", bytes: rest, color: Self.otherColor)] : leading
     }
 }

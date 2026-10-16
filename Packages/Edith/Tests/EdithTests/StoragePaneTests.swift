@@ -13,17 +13,17 @@ struct StoragePaneTests {
         _ = TestWindowHost.application
     }
 
-    @Test func unknownSizesNeverPresentAsKnownSavings() {
-        var unknown = StorageBytes()
-        unknown.complete = false
-        #expect(StorageSizeLine.value(unknown).hasPrefix("Unknown"))
-        unknown.exists = true
-        #expect(StorageSizeLine.value(unknown).hasPrefix("Partial"))
-        #expect(!StorageSizeLine.value(unknown).contains("saved"))
+    @Test func incompleteSizesReadAsLowerBounds() {
         var known = StorageBytes()
         known.logical = 2048
         known.allocated = 4096
-        #expect(StorageSizeLine.value(known) == "2 KB logical · 4 KB allocated")
+        #expect(StorageFormat.size(known) == "4 KB")
+        known.complete = false
+        #expect(StorageFormat.size(known) == "At least 4 KB")
+        #expect(StorageFormat.share(5, of: 1000) == "under 1%")
+        #expect(StorageFormat.share(500, of: 1000) == "50%")
+        #expect(!StorageFormat.isLarge(5, of: 1000))
+        #expect(StorageFormat.isLarge(10, of: 1000))
     }
 
     @Test func replacementAndCancellationRejectLateScanPublicationWhileRetainingContent()
