@@ -145,9 +145,13 @@ public enum CompanionSecrets {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecUseAuthenticationContext as String] = nonInteractiveContext()
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-            let data = item as? Data
-        else { return nil }
+        var status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecInteractionNotAllowed {
+            query[kSecUseAuthenticationContext as String] = nil
+            item = nil
+            status = SecItemCopyMatching(query as CFDictionary, &item)
+        }
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 

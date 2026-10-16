@@ -367,7 +367,7 @@ final class CompanionCaptureModel {
                     while !Task.isCancelled {
                         guard let self, !remoteStopped else { return }
                         await remoteAction("snapshot")
-                        do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                        do { try await Task.sleep(for: .milliseconds(60)) } catch { return }
                     }
                 }
             }

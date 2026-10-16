@@ -544,7 +544,7 @@
       "sources": [
         {
           "path": "Extensions/companion/Runtime.swift",
-          "sha256": "f6fc11caa4fd332410c9d17446670217b73821793904d502afa4f7b4bd2da5bf"
+          "sha256": "33c260ca7a7cc3c0465038f6b2bb3b8c7a98192b364850e7c2055e1ee882d63c"
         },
         {
           "path": "Extensions/companion/ViewModels/CompanionWorkspaceSession.swift",
