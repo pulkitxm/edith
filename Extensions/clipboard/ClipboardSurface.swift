@@ -35,32 +35,32 @@ import Foundation
         try Task.checkCancellation()
         guard !isStopped() else { throw ExtensionPeerError.unavailable }
         let field = tile.widget == .desk ? "clipboard" : nil
-        let selected = entries.filter { tile.sourceIDs?.contains(ClipboardCategory($0).id) ?? true }
+        let selected = entries.filter { tile.sourceIDs?.contains($0.kind.rawValue) ?? true }
         let arranged = Array(
-            ClipboardActions.arrange(
-                selected, pinToTop: ClipboardActions.pinToTopPreference()
-            ).prefix(tile.itemLimit))
+            selected.sorted {
+                $0.pinned == $1.pinned ? $0.createdAt > $1.createdAt : $0.pinned
+            }.prefix(tile.itemLimit))
         let showRows = tile.shows("items") && (field.map(tile.shows) ?? true)
         let previews = showRows && tile.shows("previews") ? await thumbnails(arranged) : [:]
         try Task.checkCancellation()
         let rows = arranged.map { entry in
-            let category = ClipboardCategory(entry)
             let title = Self.bounded(entry.displayPreview, bytes: 768)
             return SurfaceDataRow(
-                entry.id, sourceID: category.id,
-                title: title.isEmpty ? category.title : title,
+                entry.id, sourceID: entry.kind.rawValue,
+                title: title.isEmpty ? entry.kind.rawValue.capitalized : title,
                 detail: Self.bounded(
                     [
                         entry.sourceApp,
-                        entry.lastCopiedAt.formatted(date: .abbreviated, time: .shortened),
+                        ByteCountFormatter.string(
+                            fromByteCount: Int64(entry.size), countStyle: .file),
                     ].compactMap { $0 }.joined(separator: " · "), bytes: 512),
-                value: entry.pinned ? "Pinned" : "", icon: category.symbol, field: field,
+                value: entry.pinned ? "Pinned" : entry.kind.rawValue.capitalized,
+                icon: "doc.on.clipboard", field: field,
                 actions: [
                     .init("copy/" + entry.id, "Copy", "doc.on.doc", field: field),
                     .init(
                         "pin/" + entry.id, entry.pinned ? "Unpin" : "Pin",
                         entry.pinned ? "pin.slash" : "pin", field: field),
-                    .init("delete/" + entry.id, "Delete", "trash", field: field),
                 ], thumbnail: previews[entry.id])
         }
         return .init(
@@ -68,11 +68,14 @@ import Foundation
             metrics: field.map({ tile.shows($0) }) == false
                 ? []
                 : [
-                    .init("total", "Clips", "\(selected.count)"),
+                    .init("total", "Recent items", "\(selected.count)"),
                     .init("pinned", "Pinned", "\(selected.filter(\.pinned).count)"),
                 ], rows: rows,
-            sources: ClipboardCategory.allCases.map { .init($0.id, $0.title) },
-            message: selected.isEmpty ? "No matching clipboard history" : nil, updatedAt: Date())
+            sources: ClipboardEntry.Kind.allCases.map {
+                .init($0.rawValue, $0.rawValue.capitalized)
+            },
+            message: selected.isEmpty ? "No clipboard entries in this selection." : nil,
+            updatedAt: Date())
     }
 
     private func thumbnails(_ entries: [ClipboardEntry]) async -> [String: SurfaceThumbnail] {
@@ -154,8 +157,6 @@ import Foundation
                 throw ExtensionPeerError.invalidRequest
             }
             _ = try await client.mutate(.init(entry.pinned ? .unpin : .pin, ids: [entry.id]))
-        case "delete":
-            _ = try await client.mutate(.init(.delete, ids: [parts[1]]))
         default: throw ExtensionPeerError.invalidRequest
         }
     }

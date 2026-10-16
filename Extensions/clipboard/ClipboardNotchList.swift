@@ -29,7 +29,10 @@ struct ClipboardNotchList: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .pageTask(cancel: { history.stop() }) { history.start() }
+        .pageRefresh(interval: { .seconds(2) }, cancel: { history.stop() }) {
+            history.start()
+            history.reload()
+        }
     }
 
     private func row(_ entry: ClipboardEntry) -> some View {
