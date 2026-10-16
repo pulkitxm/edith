@@ -134,10 +134,13 @@ struct HostWorkspace: View {
                     Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: sidebarOpen
                 )
             } footer: {
-                if musicAdmission.eligible, musicSlots?.footer == true {
+                if musicFooterShown {
                     musicRegion(.footer).transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(
+                Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: musicFooterShown
+            )
             .navigationRoute(
                 "section", selection: binding,
                 isValid: { raw in raw.isEmpty || pages.contains { $0.id == raw } })
@@ -222,6 +225,8 @@ struct HostWorkspace: View {
         let visible: Bool
         var eligible: Bool { version != nil && mediaEnabled && !hidden && visible }
     }
+    private var musicFooterShown: Bool { musicAdmission.eligible && musicSlots?.footer == true }
+    private var musicSidebarShown: Bool { musicAdmission.eligible && musicSlots?.sidebar == true }
     private var musicAdmission: MusicAdmission {
         MusicAdmission(
             version: active.contains("music") ? marketplace.sessions.versions["music"] : nil,
@@ -318,8 +323,13 @@ struct HostWorkspace: View {
                 openPermissions: {
                     settings = "permissions"; selection = "settings"
                 }, enabled: sidebarOpen,
-                music: musicAdmission.eligible && musicSlots?.sidebar == true
-                    ? AnyView(musicRegion(.sidebar)) : nil)
+                music: musicSidebarShown
+                    ? AnyView(musicRegion(.sidebar)) : nil
+            )
+            .animation(
+                Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                value: musicSidebarShown
+            )
             HostAgentStatusBar(online: coreOnline, summary: coreSummary) {
                 settings = "agent"; selection = "settings"
             }

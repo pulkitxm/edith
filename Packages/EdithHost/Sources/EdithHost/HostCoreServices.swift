@@ -83,6 +83,10 @@ import SwiftUI
             failure = nil
             startSettingsScheduler()
             refreshExistingCompletions()
+            HostLegacyMigration.migrateMusicPlayerState(
+                defaults: defaults,
+                legacy: UserDefaults.standard.persistentDomain(
+                    forName: HostLegacyMigration.helperDomain) ?? [:])
             HostLegacyMigration.migrate(
                 defaults: defaults, extensionIDs: Set(marketplace.entries.map(\.id)),
                 downloadedIDs: marketplace.downloadedIDs)

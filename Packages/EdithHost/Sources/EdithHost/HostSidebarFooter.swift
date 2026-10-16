@@ -68,6 +68,7 @@ struct HostSidebarFooter: View {
     @State private var presenterSettings = false
     @State private var tile = SurfaceTile(.actions)
     @Environment(\.windowVisible) private var visible
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
     private var versions: [String: String] {
@@ -90,7 +91,12 @@ struct HostSidebarFooter: View {
                 || updater.updateReady != nil
             {
                 VStack(spacing: UIScale.pt(8)) {
-                    if let music { music }
+                    if let music {
+                        music.transition(
+                            Motion.transition(
+                                .move(edge: .bottom).combined(with: .opacity),
+                                reduceMotion: reduceMotion, preferCrossFade: false))
+                    }
                     if let version = updater.updateReady {
                         Button {
                             updater.checkForUpdates()
