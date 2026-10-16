@@ -2,6 +2,18 @@ import Foundation
 
 public enum ExtensionEngineError: Error, Equatable, Sendable {
     case unavailable, rejected, timedOut
+    case failed(String)
+}
+
+extension ExtensionEngineError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .unavailable: "The extension is not available."
+        case .rejected: "The extension rejected the request."
+        case .timedOut: "The extension did not answer in time."
+        case .failed(let message): message
+        }
+    }
 }
 
 public struct ExtensionEngineRequest: Codable, Sendable {
@@ -23,7 +35,7 @@ public struct ExtensionEngineRequest: Codable, Sendable {
     }
 
     public func validate() throws {
-        guard timeout.isFinite, timeout > 0, timeout <= 30,
+        guard timeout.isFinite, timeout > 0, timeout <= 600,
             !operation.isEmpty, operation.utf8.count <= 128,
             operation.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0)
@@ -39,11 +51,13 @@ public struct ExtensionEngineReply: Codable, Sendable {
     public let token: UUID
     public let ok: Bool
     public let payload: Data
+    public let message: String?
 
-    public init(token: UUID, ok: Bool, payload: Data = Data()) {
+    public init(token: UUID, ok: Bool, payload: Data = Data(), message: String? = nil) {
         self.token = token
         self.ok = ok
         self.payload = payload
+        self.message = message.map { String($0.prefix(512)) }
     }
 }
 

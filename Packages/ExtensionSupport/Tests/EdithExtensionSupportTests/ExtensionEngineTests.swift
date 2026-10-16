@@ -31,6 +31,24 @@ struct ExtensionEngineTests {
         #expect(ExtensionEngineClient(bridge: NSObject(), presentationID: presentation) == nil)
     }
 
+    @Test func failedRepliesCarryTheirMessageAndLongRequestsAreAdmitted() async throws {
+        let bridge = Bridge()
+        bridge.mode = "explain"
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        do {
+            _ = try await client.invoke("sample.read")
+            Issue.record("the request should have failed")
+        } catch {
+            #expect(error as? ExtensionEngineError == .failed("git is not installed"))
+            #expect(error.localizedDescription == "git is not installed")
+        }
+        bridge.mode = "echo"
+        #expect(try await client.invoke("sample.authors", timeout: 600) == Data("{}".utf8))
+        await #expect(throws: ExtensionEngineError.rejected) {
+            try await client.invoke("sample.authors", timeout: 601)
+        }
+    }
+
     @Test func clientCancellationTimeoutAndInvalidationCancelOnlyTheirOwnedRequests() async throws {
         let bridge = Bridge()
         bridge.mode = "hold"
@@ -222,8 +240,10 @@ struct ExtensionEngineTests {
                 callbacks[request.token] = completion; return
             }
             let reply = ExtensionEngineReply(
-                token: mode == "mismatch" ? UUID() : request.token, ok: mode != "reject",
-                payload: mode == "nonJSON" ? Data("malformed".utf8) : request.payload)
+                token: mode == "mismatch" ? UUID() : request.token,
+                ok: mode != "reject" && mode != "explain",
+                payload: mode == "nonJSON" ? Data("malformed".utf8) : request.payload,
+                message: mode == "explain" ? "git is not installed" : nil)
             completion((try? ExtensionEngineWire.encode(reply)) ?? Data())
         }
 

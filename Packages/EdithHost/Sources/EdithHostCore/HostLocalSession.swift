@@ -280,11 +280,18 @@ public final class HostLocalEngineBridge: NSObject {
                 outcome = .failure(error)
             }
             self?.tasks[token] = nil
+            var message: String?
+            if case .failure(let error) = outcome, !(error is CancellationError) {
+                message = (error as? ExtensionPeerError).flatMap { error in
+                    if case .rejected(let text) = error { return text }
+                    return nil
+                }
+            }
             reply.finish(
                 (try? ExtensionEngineWire.encode(
                     ExtensionEngineReply(
                         token: token, ok: (try? outcome.get()) != nil,
-                        payload: (try? outcome.get()) ?? Data()))) ?? Data())
+                        payload: (try? outcome.get()) ?? Data(), message: message))) ?? Data())
         }
     }
 

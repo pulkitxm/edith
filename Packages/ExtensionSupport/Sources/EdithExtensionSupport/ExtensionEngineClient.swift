@@ -55,6 +55,11 @@ public final class ExtensionEngineClient {
                         do {
                             let reply = try ExtensionEngineWire.decode(
                                 ExtensionEngineReply.self, from: bytes)
+                            if reply.token == request.token, !reply.ok,
+                                let message = reply.message, !message.isEmpty
+                            {
+                                throw ExtensionEngineError.failed(message)
+                            }
                             guard reply.token == request.token, reply.ok,
                                 reply.payload.count <= ExtensionEngineWire.maximumPayloadBytes,
                                 (try? JSONSerialization.jsonObject(
