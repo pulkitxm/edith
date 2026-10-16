@@ -45,7 +45,7 @@ struct CodeStatsHeader: View {
             }
         } accessory: {
             HStack(spacing: UIScale.pt(12)) {
-                if let profile = model.status?.state.profile {
+                ForEach(model.status?.state.profiles ?? [], id: \.id) { profile in
                     CodeStatsProfileBadge(profile: profile, dark: dark)
                 }
                 Spacer(minLength: UIScale.pt(8))

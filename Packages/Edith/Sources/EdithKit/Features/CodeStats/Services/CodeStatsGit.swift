@@ -324,13 +324,21 @@ public struct CodeStatsGit: Sendable {
         }
     }
 
-    public func cloneMirror(from url: String, to destination: URL) async throws {
+    func credentialEnvironment(token: String?) -> [String: String] {
+        guard credentialHelper != nil, let token else { return [:] }
+        return ["GH_TOKEN": token]
+    }
+
+    public func cloneMirror(from url: String, to destination: URL, token: String? = nil)
+        async throws
+    {
         let owner = destination.deletingLastPathComponent()
         let staging = CodeStatsRepositoryDiscovery.stagingURL(for: destination)
         try Self.ensureDirectory(owner)
         do {
             try await run(
-                ["clone", "--bare", "--quiet", url, staging.path], in: owner.path, network: true)
+                ["clone", "--bare", "--quiet", url, staging.path], in: owner.path, network: true,
+                extraEnvironment: credentialEnvironment(token: token))
             try await run(
                 ["config", "remote.origin.fetch", "+refs/heads/*:refs/heads/*"], in: staging.path)
             try FileManager.default.moveItem(at: staging, to: destination)
@@ -342,8 +350,10 @@ public struct CodeStatsGit: Sendable {
         }
     }
 
-    public func fetch(_ repository: CodeStatsRepository) async throws {
-        try await run(["fetch", "--all", "--prune", "--quiet"], in: repository.path, network: true)
+    public func fetch(_ repository: CodeStatsRepository, token: String? = nil) async throws {
+        try await run(
+            ["fetch", "--all", "--prune", "--quiet"], in: repository.path, network: true,
+            extraEnvironment: credentialEnvironment(token: token))
     }
 
     private static func ensureDirectory(_ url: URL) throws {

@@ -122,10 +122,11 @@ final class CodeStatsModel {
     }
 
     var seededIdentity: CodeStatsIdentity? {
-        guard identity.isEmpty, let lookup = profileLookup, let profile = lookup.profile else {
+        guard identity.isEmpty, let lookup = profileLookup, !lookup.profiles.isEmpty else {
             return nil
         }
-        return CodeStatsIdentity.seeded(login: profile.login, emails: lookup.emails)
+        return CodeStatsIdentity.seeded(
+            logins: lookup.profiles.map(\.login), emails: lookup.emails)
     }
 
     var schedule: CodeStatsSchedule {
@@ -345,7 +346,7 @@ final class CodeStatsModel {
     }
 
     func loadProfileIfNeeded() async {
-        guard profileLookup?.profile == nil else { return }
+        guard profileLookup?.profiles.isEmpty ?? true else { return }
         await loadProfile()
     }
 

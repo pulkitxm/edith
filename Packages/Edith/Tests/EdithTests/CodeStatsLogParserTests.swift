@@ -319,11 +319,24 @@ import Testing
         #expect(CodeStatsIdentity.escapeRegex("a(b)+c") == "a\\(b\\)\\+c")
     }
 
-    @Test func seedingFromAProfileUsesTheLoginAndEmails() {
+    @Test func seedingFromProfilesUsesEveryLoginAndEmail() {
         let seeded = CodeStatsIdentity.seeded(
-            login: "octocat", emails: ["1+octocat@users.noreply.github.com"])
-        #expect(seeded.substrings == ["octocat"])
-        #expect(seeded.labels == ["1+octocat@users.noreply.github.com", "*octocat*"])
+            logins: ["octocat", "worker"],
+            emails: ["1+octocat@users.noreply.github.com", "2+worker@users.noreply.github.com"])
+        #expect(seeded.substrings == ["octocat", "worker"])
+        #expect(
+            seeded.labels == [
+                "1+octocat@users.noreply.github.com", "2+worker@users.noreply.github.com",
+                "*octocat*", "*worker*",
+            ])
+    }
+
+    @Test func mergingKeepsExistingValuesAndSkipsCaseInsensitiveDuplicates() {
+        let existing = CodeStatsIdentity(substrings: ["OctoCat"], emails: ["Me@Example.com"])
+        let merged = existing.merging(
+            logins: ["octocat", "worker", ""], emails: ["me@example.com", "w@example.com"])
+        #expect(merged.substrings == ["OctoCat", "worker"])
+        #expect(merged.emails == ["Me@Example.com", "w@example.com"])
     }
 
     @Test func theFingerprintIgnoresOrderAndCaseButNotContent() {
