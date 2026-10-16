@@ -170,11 +170,11 @@
       "sources": [
         {
           "path": "Extensions/colorPicker/Runtime.swift",
-          "sha256": "810da1c400474614c7fa6ccda21de954b3779555da3eabf6615a5a4cfa5fa752"
+          "sha256": "dc17cb9a09078055a5409955669d5482284f8c0556bbb2521358540df62c1237"
         },
         {
           "path": "Extensions/colorPicker/Presentation.swift",
-          "sha256": "7c6c3ca340802e94dac0a1c74f13aee826d8c0fdbe9e09b13f530346efda2085"
+          "sha256": "704c957c5a088820f139aad5fdfa8c5fa7bed91996691e2ebc205742c7e8214e"
         }
       ]
     },
@@ -218,7 +218,7 @@
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
-          "sha256": "75a5089fd46721584acb22190089be88267edeb9a522e4d230a202dc18f4641f"
+          "sha256": "0ff24d95a29e8c330b77850e9edfd8d9579978f17f65267323c4274be88080be"
         }
       ]
     },
