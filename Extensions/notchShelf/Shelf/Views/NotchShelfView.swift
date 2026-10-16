@@ -36,7 +36,7 @@ struct NotchShelfContentView: View {
             .animation(glide, value: isExpanded)
             .animation(glide, value: controller.currentAlert)
             .animation(glide, value: controller.activeTab)
-            .animation(glide, value: controller.leadingGlance == nil)
+            .animation(glide, value: controller.nowPlaying)
             .animation(glide, value: controller.glanceWingWidth)
             .animation(glide, value: isHovering)
             .onReceive(
@@ -168,13 +168,17 @@ struct NotchShelfContentView: View {
             Button {
                 controller.openGlance(value, on: displayID)
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: value.icon)
-                    Text(value.value).monospacedDigit()
-                }.font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(value.urgent ? .orange : .white.opacity(0.85))
+                NotchGlanceLabel(glance: value)
+                    .foregroundStyle(
+                        value.urgency == 2
+                            ? Color.red : value.urgency == 1 ? .orange : .white.opacity(0.85)
+                    )
                     .frame(width: controller.glanceWingWidth, height: collapsedBase.height)
-            }.buttonStyle(.edith(.borderless)).help(value.title)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .help(value.detail + (value.value.isEmpty ? "" : ": " + value.value))
+            .accessibilityLabel(value.detail + ", " + value.value)
         } else {
             Color.clear.frame(width: controller.glanceWingWidth, height: collapsedBase.height)
         }
@@ -573,5 +577,24 @@ private struct ShelfItemView: View {
                 handedOffToSystemDrag = false
                 controller.endCanvasDrag()
             }
+    }
+}
+
+private struct NotchGlanceLabel: View {
+    let glance: NotchSurfaceGlance
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(5)) {
+                Image(systemName: glance.icon).font(.edithText(.caption2))
+                value
+            }.fixedSize(horizontal: true, vertical: false)
+            value
+        }
+    }
+
+    private var value: some View {
+        Text(glance.value).font(.edithText(.caption)).monospacedDigit()
+            .lineLimit(1).minimumScaleFactor(0.7)
     }
 }
