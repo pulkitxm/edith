@@ -98,6 +98,8 @@ import Testing
         let missing = MenuBarLimits.accountGroups(
             [expired], selectedID: nil, slots: [.session], masked: false)
         #expect(missing.first?.segments.first?.value == .missing)
+        #expect(missing.first?.hasPercent == false)
+        #expect(selected.first?.hasPercent == true)
     }
 
     @Test func menuBarAccountPreferenceAcceptsOnlyAnEmptyOrUUIDSelection() throws {

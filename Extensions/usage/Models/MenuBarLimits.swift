@@ -91,6 +91,13 @@ public struct MenuBarProviderGroup: Equatable, Sendable {
     public let accountHeader: String?
     public let remainingAccounts: Int
 
+    public var hasPercent: Bool {
+        segments.contains {
+            if case .percent = $0.value { return true }
+            return false
+        }
+    }
+
     public init(
         provider: LimitProvider, segments: [MenuBarLimitSegment], accountLabel: String? = nil,
         remainingAccounts: Int = 0, accountHeader: String? = nil

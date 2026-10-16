@@ -54,15 +54,17 @@ final class LimitsStatusItem {
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
         let accounts = store?.providerEnabled(.claude) == true ? store?.claudeAccounts ?? [] : []
-        let source = Self.stableProviders(providers, defaults: defaults).filter {
-            accounts.isEmpty || $0.provider != .claude
-        }
         let accountGroups = MenuBarLimits.accountGroups(
             accounts, selectedID: defaults.string(forKey: MenuBarLimits.accountSelectionKey),
             slots: MenuBarLimits.selection(for: .claude, defaults: defaults),
             masked: masked)
+        let showsAccounts =
+            !accounts.isEmpty && (masked || accountGroups.contains(where: \.hasPercent))
+        let source = Self.stableProviders(providers, defaults: defaults).filter {
+            !showsAccounts || $0.provider != .claude
+        }
         let groups =
-            accountGroups
+            (showsAccounts ? accountGroups : [])
             + MenuBarLimits.groups(
                 providers: source,
                 selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },

@@ -93,6 +93,7 @@ public enum LimitsCollector {
         ) { provider in
             switch provider {
             case .claude:
+                try? await UsageWorkerOperations.statusLineCommands?.ensureConnected()
                 return await fetchClaude()
             case .codex:
                 return (await fetchCodex(), nil)

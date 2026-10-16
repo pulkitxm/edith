@@ -34,6 +34,16 @@ final class UsageStatusLineConnection: @unchecked Sendable {
         }
     }
 
+    func ensureConnected() throws {
+        try withLock {
+            guard !ClaudeStatusLine.isOptedOut(defaults: defaults), executable != nil,
+                FileManager.default.fileExists(
+                    atPath: settings.deletingLastPathComponent().path)
+            else { return }
+            _ = try install()
+        }
+    }
+
     func suspendOwnedHook() throws {
         _ = try withLock { try suspend() }
     }

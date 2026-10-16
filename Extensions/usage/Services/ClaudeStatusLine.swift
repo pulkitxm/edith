@@ -39,6 +39,7 @@ public enum ClaudeStatusLine {
         "Connect Claude Code’s status line in Usage settings to collect its limits"
 
     static let recordInvocation = "invoke usage usage.statusline.hook --json - --raw"
+    static let legacyRecordInvocation = "usage statusline record"
     static let thenFlag = " --then "
 
     public static func settingsURL(
@@ -115,10 +116,20 @@ public enum ClaudeStatusLine {
     }
 
     public static func isRecorder(_ command: String) -> Bool {
-        command.contains(" \(recordInvocation)")
+        command.contains(" \(recordInvocation)") || isLegacyRecorder(command)
+    }
+
+    static func isLegacyRecorder(_ command: String) -> Bool {
+        command.contains(" \(legacyRecordInvocation)")
     }
 
     public static func wrappedCommand(in command: String) -> String? {
+        if isLegacyRecorder(command) {
+            guard let marker = command.range(of: legacyRecordInvocation + thenFlag) else {
+                return nil
+            }
+            return shellUnquoted(String(command[marker.upperBound...]))
+        }
         guard isRecorder(command),
             let marker = command.range(of: " edith-statusline" + thenFlag)
         else { return nil }
@@ -149,7 +160,8 @@ public enum ClaudeStatusLine {
         let previous = existing.flatMap { existing in
             let wrapped = wrappedCommand(in: existing)
             let canonical = Self.command(executable: executable, wrapping: wrapped)
-            return existing == ownedCommand || existing == canonical ? wrapped : existing
+            return existing == ownedCommand || existing == canonical || isLegacyRecorder(existing)
+                ? wrapped : existing
         }
         let installed = Self.command(executable: executable, wrapping: previous)
         try preserveOwnership(installed)

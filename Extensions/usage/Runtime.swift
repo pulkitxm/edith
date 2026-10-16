@@ -370,7 +370,7 @@ final class ExtensionRuntime: NSObject {
                 forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
             statusLineConnectionTask = Task {
-                try? await statusLine.resumeOwnedHook()
+                try? await statusLine.ensureConnected()
                 try? cliHooks.resumeOwnedHooks()
             }
             if !fixture {

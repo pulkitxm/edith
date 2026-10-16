@@ -245,4 +245,27 @@ import Testing
         #expect(ClaudeStatusLine.record(input, history: history) == nil)
         #expect(!FileManager.default.fileExists(atPath: history.path))
     }
+
+    @Test func recorderInstalledByTheV0318AppIsRecognizedAndUpgradedInPlace() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        let previous = "echo mine"
+        let legacy = "'\(executable)' usage statusline record --then 'echo mine'"
+        let bare = "'\(executable)' usage statusline record"
+        #expect(ClaudeStatusLine.isRecorder(legacy) && ClaudeStatusLine.isRecorder(bare))
+        #expect(ClaudeStatusLine.wrappedCommand(in: legacy) == previous)
+        #expect(ClaudeStatusLine.wrappedCommand(in: bare) == nil)
+
+        let original: [String: Any] = ["statusLine": ["type": "command", "command": legacy]]
+        try JSONSerialization.data(withJSONObject: original).write(to: settings)
+        #expect(ClaudeStatusLine.isInstalled(settings: settings))
+        #expect(
+            try ClaudeStatusLine.install(executable: executable, settings: settings) == .wrapped)
+        let upgraded = try #require(try document(at: settings)["statusLine"] as? [String: Any])
+        let command = try #require(upgraded["command"] as? String)
+        #expect(command.contains(ClaudeStatusLine.recordInvocation))
+        #expect(!command.contains(" usage statusline record"))
+        #expect(ClaudeStatusLine.wrappedCommand(in: command) == previous)
+    }
 }

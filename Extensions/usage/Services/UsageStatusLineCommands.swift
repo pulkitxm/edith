@@ -75,6 +75,23 @@ public actor UsageStatusLineCommands {
         }
     }
 
+    public func ensureConnected() async throws {
+        guard !stopping else { throw ExtensionPeerError.unavailable }
+        let connection = self.connection
+        let operation = Task.detached(priority: .utility) {
+            try connection.ensureConnected()
+            return Data()
+        }
+        let id = UUID()
+        operations[id] = operation
+        defer { operations[id] = nil }
+        try await withTaskCancellationHandler {
+            _ = try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
     public func execute(_ command: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
         guard !stopping, operations.count < 8 else { throw ExtensionPeerError.unavailable }
