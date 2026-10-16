@@ -26,6 +26,7 @@ import Observation
     private(set) var refreshing = false
     private(set) var notice: String?
     private(set) var failure: String?
+    private(set) var progressLine: String?
 
     init(invoke: @escaping Invoke, invalidate: @escaping @MainActor () -> Void = {}) {
         invokeOperation = invoke; invalidateClient = invalidate
@@ -208,6 +209,7 @@ import Observation
         let previous = refreshing
         refreshing = nextRefreshing
         notice = object["notice"] as? String
+        progressLine = object["progressLine"] as? String
         failure = object["failure"] as? String
         if previous != refreshing {
             UsageEvents.post(refreshing ? UsageEvents.refreshStarted : UsageEvents.refreshFinished)
@@ -247,6 +249,11 @@ import Observation
     func perform(_ command: String, object: [String: Any] = [:]) {
         guard !stopped else { return }
         let id = UUID()
+        let startsRefresh = command == "usage.refresh" || command == "usage.limits.refresh"
+        if startsRefresh, !refreshing {
+            refreshing = true
+            UsageEvents.post(UsageEvents.refreshStarted)
+        }
         tasks[id] = Task { [weak self] in
             guard let self else { return }
             defer { tasks[id] = nil }
@@ -254,6 +261,7 @@ import Observation
                 _ = try await invoke(
                     command, payload: JSONSerialization.data(withJSONObject: object))
                 failure = nil
+                try await refreshState()
             } catch { if !Task.isCancelled, !stopped { failure = error.localizedDescription } }
         }
     }

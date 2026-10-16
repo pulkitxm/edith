@@ -8,6 +8,13 @@ struct UsageUILimitsSummary: Codable, Sendable {
     let current: LimitsTopicSnapshot?
 }
 
+struct UsageMachineSummaryPayload: Codable, Equatable, Sendable {
+    let machineID: UUID
+    let cost: Double
+    let days: Int
+    let collectedAt: Double
+}
+
 struct UsageUILimits: Codable, Sendable {
     let providers: [LimitProvider: LimitsHistory.Latest]
     let points: [LimitPoint]
@@ -266,6 +273,17 @@ struct UsageUILimits: Codable, Sendable {
                 SurfaceHostContext.current?.activeIDs.contains("machines") == true
                 ? MachineRegistry.machines().filter { $0.id != Machine.localID } : []
             return try encoder.encode(machines)
+        case "usage.ui.machines.summaries":
+            try empty(object)
+            let machines =
+                SurfaceHostContext.current?.activeIDs.contains("machines") == true
+                ? MachineRegistry.machines().filter { $0.id != Machine.localID } : []
+            let summaries = machines.compactMap { try? UsageCLIMachines.summary($0) }.map {
+                UsageMachineSummaryPayload(
+                    machineID: $0.machineID, cost: $0.cost, days: $0.days,
+                    collectedAt: $0.collectedAt.timeIntervalSince1970)
+            }
+            return try encoder.encode(summaries)
         default: throw ExtensionPeerError.invalidRequest
         }
     }

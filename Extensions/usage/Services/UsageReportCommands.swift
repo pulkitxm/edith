@@ -60,6 +60,8 @@ actor UsageReportCommands {
                         as Any? ?? NSNull(),
                     "failure": controller.failure as Any? ?? NSNull(),
                     "notice": controller.notice as Any? ?? NSNull(),
+                    "progressLine": controller.refreshObservation?.events.reversed()
+                        .compactMap(MachineUsageRows.spoken).first as Any? ?? NSNull(),
                 ] as [String: Any]
             }
             return try encode(state)

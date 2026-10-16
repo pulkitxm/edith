@@ -227,6 +227,7 @@ final class UsageStore {
         limitsRequestTask = nil
         statusItem?.remove()
         statusItem = nil
+        UsageWorkerOperations.controller?.menuBarLive = false
         if let launchObserver {
             NotificationCenter.default.removeObserver(launchObserver)
             self.launchObserver = nil
@@ -253,6 +254,7 @@ final class UsageStore {
             item.remove()
             statusItem = nil
         }
+        UsageWorkerOperations.controller?.menuBarLive = statusItem != nil
     }
 
     func refreshMenuBarItem() {
@@ -272,7 +274,7 @@ final class UsageStore {
                     return
                 }
                 self.refreshingLimits = false
-                self.limitsError = "The Usage worker did not finish refreshing limits."
+                self.limitsError = "The background agent did not finish refreshing limits."
             }
         } catch {
             refreshingLimits = false

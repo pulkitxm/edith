@@ -6,79 +6,171 @@ struct UsageMachineSettingsRows: View {
     @Environment(\.usageUIClient) private var client
     @State private var machines: [Machine] = []
     @State private var selected: Set<UUID> = []
+    @State private var summaries: [UUID: UsageMachineSummaryPayload] = [:]
     @State private var failure: String?
-    @State private var forget: Machine?
+    @State private var status = ""
     @State private var operation: Task<Void, Never>?
+    @State private var collectingLocally = false
+
+    private var collecting: Bool {
+        client?.refreshing
+            ?? (collectingLocally || UsageWorkerOperations.controller?.refreshing == true)
+    }
 
     var body: some View {
-        Section("Remote usage") {
+        Section {
             if machines.isEmpty {
-                Text("Install and enable Machines to collect usage from your registered machines.")
+                Text("No machines are configured yet. Add one under Machines.")
                     .settingsCaption()
-            }
-            ForEach(machines) { machine in
-                HStack {
-                    Toggle(
-                        machine.name,
-                        isOn: Binding(
-                            get: { selected.contains(machine.id) }, set: { include(machine, $0) }))
-                    Button("Forget history", role: .destructive) { forget = machine }
+            } else {
+                ForEach(machines) { machine in
+                    row(machine)
                 }
-            }
-            if !machines.isEmpty {
-                Button("Refresh selected machines") {
-                    if let client {
-                        client.perform("usage.refresh", object: ["machinePolicy": "all"])
+                HStack(spacing: UIScale.pt(8)) {
+                    Text(statusText)
+                        .settingsCaption()
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    if collecting {
+                        SkeletonGroup {
+                            SkeletonBlock(width: 16, height: 16, corner: 8)
+                        }
+                        Button("Stop") { stop() }
                     } else {
-                        _ = try? UsageWorkerOperations.requestRefresh(machinePolicy: .all)
+                        Button("Collect now") { collect() }
+                            .disabled(selected.isEmpty)
                     }
                 }
             }
             if let failure { Text(failure).settingsCaption().foregroundStyle(.red) }
+        } header: {
+            Text("Collected over SSH")
+        } footer: {
+            Text(
+                "Edith runs its collector on a ticked machine over SSH and installs what it "
+                    + "is missing there. Each agent it finds arrives as its own usage source."
+            )
+            .font(.system(size: UIScale.pt(10)))
         }
-        .pageTask {
-            if let client = client {
-                machines = (try? await client.value("usage.ui.machines", as: [Machine].self)) ?? []
-            } else {
-                guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else {
-                    return
-                }
-                machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
+        .pageTask { await reload() }
+        .onChange(of: collecting) { was, now in
+            if was, !now {
+                status = client?.failure ?? "collected"
+                Task { await reload() }
             }
-            selected = Set(
-                (SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
-                    ?? []).compactMap(
-                        UUID.init(uuidString:)))
         }
         .onDisappear {
             operation?.cancel(); operation = nil
         }
-        .confirmationDialog(
-            "Forget this machine’s cached usage history?",
-            isPresented: Binding(get: { forget != nil }, set: { if !$0 { forget = nil } })
-        ) {
-            if let machine = forget {
-                Button("Forget " + machine.name, role: .destructive) {
-                    operation?.cancel()
-                    operation = Task {
-                        do {
-                            if let client {
-                                _ = try await client.invoke(
-                                    "usage.machines.forget",
-                                    payload: JSONSerialization.data(withJSONObject: [
-                                        "machineID": machine.id.uuidString, "confirm": true,
-                                    ]))
-                            } else {
-                                try await UsageWorkerOperations.forgetMachine(machine.id)
-                            }
-                        } catch {
-                            if !Task.isCancelled { failure = error.localizedDescription }
-                        }
-                    }
-                    forget = nil
+    }
+
+    private var statusText: String {
+        if collecting, let line = client?.progressLine { return line }
+        if !status.isEmpty { return status }
+        let count = selected.count
+        if count == 0 { return "No machines counted" }
+        return count == 1 ? "1 machine counted" : "\(count) machines counted"
+    }
+
+    private func row(_ machine: Machine) -> some View {
+        let on = selected.contains(machine.id)
+        let summary = summaries[machine.id]
+        return HStack(spacing: UIScale.pt(8)) {
+            Toggle(isOn: Binding(get: { on }, set: { include(machine, $0) })) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(machine.name)
+                    Text(detail(machine, summary)).settingsCaption()
                 }
             }
-            Button("Cancel", role: .cancel) { forget = nil }
+            Spacer(minLength: 0)
+            if summary != nil {
+                Button {
+                    forget(machine)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.edith(.borderless))
+                .help("Drop what \(machine.name) gave and stop counting it")
+                .accessibilityLabel("Forget history for \(machine.name)")
+            }
+        }
+    }
+
+    private func detail(_ machine: Machine, _ summary: UsageMachineSummaryPayload?) -> String {
+        guard let summary else { return machine.subtitle }
+        let when = Date(timeIntervalSince1970: summary.collectedAt)
+            .formatted(date: .abbreviated, time: .shortened)
+        return "\(DashFmt.usdFull(summary.cost)) · \(summary.days) days · \(when)"
+    }
+
+    private func reload() async {
+        if let client {
+            machines = (try? await client.value("usage.ui.machines", as: [Machine].self)) ?? []
+            let found =
+                (try? await client.value(
+                    "usage.ui.machines.summaries", as: [UsageMachineSummaryPayload].self)) ?? []
+            summaries = Dictionary(found.map { ($0.machineID, $0) }) { first, _ in first }
+        } else {
+            guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else {
+                return
+            }
+            machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
+            summaries = Dictionary(
+                machines.compactMap { machine in
+                    (try? UsageCLIMachines.summary(machine)).map {
+                        (
+                            machine.id,
+                            UsageMachineSummaryPayload(
+                                machineID: machine.id, cost: $0.cost, days: $0.days,
+                                collectedAt: $0.collectedAt.timeIntervalSince1970)
+                        )
+                    }
+                }
+            ) { first, _ in first }
+        }
+        selected = Set(
+            (SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
+                ?? []).compactMap(UUID.init(uuidString:)))
+    }
+
+    private func collect() {
+        status = "reaching the machines…"
+        if let client {
+            client.perform("usage.refresh", object: ["machinePolicy": "all"])
+        } else {
+            collectingLocally = true
+            _ = try? UsageWorkerOperations.requestRefresh(machinePolicy: .all)
+            collectingLocally = false
+        }
+    }
+
+    private func stop() {
+        if let client {
+            client.perform("usage.refresh.cancel")
+        } else {
+            Task { await UsageWorkerOperations.controller?.cancelRefresh() }
+        }
+        status = "stopped"
+    }
+
+    private func forget(_ machine: Machine) {
+        operation?.cancel()
+        operation = Task {
+            do {
+                if let client {
+                    _ = try await client.invoke(
+                        "usage.machines.forget",
+                        payload: JSONSerialization.data(withJSONObject: [
+                            "machineID": machine.id.uuidString, "confirm": true,
+                        ]))
+                } else {
+                    try await UsageWorkerOperations.forgetMachine(machine.id)
+                }
+                await reload()
+            } catch {
+                if !Task.isCancelled { failure = error.localizedDescription }
+            }
         }
     }
 

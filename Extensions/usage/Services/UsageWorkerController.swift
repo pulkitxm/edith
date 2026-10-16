@@ -208,6 +208,18 @@ public final class UsageWorkerController {
         guard !stopped else { throw ExtensionPeerError.unavailable }
     }
 
+    public var menuBarLive = false {
+        didSet { if menuBarLive != oldValue { backgroundContinuation?.yield() } }
+    }
+
+    private func cadence(for job: String) -> TimeInterval? {
+        let base = ambientPolicy.interval(for: job)
+        guard job == "usage.limits", menuBarLive else { return base }
+        return min(base ?? Self.liveLimitsInterval, Self.liveLimitsInterval)
+    }
+
+    private static let liveLimitsInterval: TimeInterval = 300
+
     func applyAmbientPolicy(context: NSDictionary) throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         try ambientPolicy.apply(context: context)
@@ -230,7 +242,7 @@ public final class UsageWorkerController {
     func requestPeriodicCollection(now: Date) throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         for job in ["usage.refresh", "usage.limits"] {
-            guard let interval = ambientPolicy.interval(for: job),
+            guard let interval = cadence(for: job),
                 now.timeIntervalSince(periodicAdmissions[job] ?? .distantPast) >= interval
             else { continue }
             if job == "usage.refresh" {
@@ -245,7 +257,7 @@ public final class UsageWorkerController {
     func nextPeriodicDelay(now: Date) -> TimeInterval? {
         guard !stopped else { return nil }
         return ["usage.refresh", "usage.limits"].compactMap { job in
-            ambientPolicy.interval(for: job).map { interval in
+            cadence(for: job).map { interval in
                 max(0, interval - now.timeIntervalSince(periodicAdmissions[job] ?? now))
             }
         }.min()
