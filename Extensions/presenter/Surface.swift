@@ -5,16 +5,11 @@ enum PresenterSurface {
     static func snapshot(_ state: PresenterRuntimeSnapshot) -> SurfaceSnapshot {
         .init(
             providerID: "presenter",
-            rows: [
-                .init(
-                    "presenter", title: "Presenter",
-                    detail: String((state.autoReason ?? "").prefix(256)),
-                    value: state.active ? "Presenting" : "Off", icon: "person.crop.rectangle")
-            ],
+            metrics: [.init("status", "Current state", state.manual ? "On" : "Off")],
             actions: [
                 .init(
-                    state.active ? "stop" : "start",
-                    state.active ? "Stop presenting" : "Start presenting", "person.crop.rectangle")
-            ])
+                    state.manual ? "stop" : "start", state.manual ? "Turn off" : "Turn on",
+                    "person.wave.2")
+            ], updatedAt: Date())
     }
 }

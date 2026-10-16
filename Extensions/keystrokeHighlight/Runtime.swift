@@ -151,9 +151,6 @@ final class ExtensionRuntime: NSObject {
                     defaultModifiers: controlKey | optionKey | cmdKey))
         }
         SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
-        if SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.active) == nil {
-            SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.active)
-        }
         synchronize()
         if observer == nil {
             observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
@@ -236,12 +233,7 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("Keystroke Highlight")
-                        } content: {
-                            Form { KeystrokeHighlightRows(presentation: presentation) }.formStyle(
-                                .grouped)
-                        }
+                        Form { KeystrokeHighlightRows(presentation: presentation) }.edithForm()
                     }
                 })
         case "synchronize":
@@ -282,6 +274,7 @@ final class ExtensionRuntime: NSObject {
                 defaults.set(
                     !defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active),
                     forKey: AppStorageKeys.KeystrokeHighlight.active)
+                IPC.post(IPC.Name.settingsChanged)
                 self?.synchronize()
             }
         }
