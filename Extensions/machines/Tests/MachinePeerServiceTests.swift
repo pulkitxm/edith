@@ -160,6 +160,27 @@ import Testing
         #expect(forwarded.count == 2)
     }
 
+    @Test func savedLoopbackForwardsAreListedForDatabaseRouting() async throws {
+        let (files, root, machine) = fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let usage = MachineUsageCollectionService(files: files) { _, _ in self.document }
+        let peer = MachinePeerService(
+            files: files, usage: usage, run: { _, _, _, _ in "" }, forward: { _, _ in true })
+        MachineRegistry.addForward(
+            PortForward(
+                machineID: machine.id, localPort: 15432, remotePort: 5432, title: "Primary"),
+            files)
+        MachineRegistry.addForward(
+            PortForward(
+                machineID: machine.id, localPort: 16379, remoteHost: "public.invalid",
+                remotePort: 6379), files)
+        let listed = try object(await peer.execute("machines.forward.list", payload: payload([:])))
+        let forwards = try #require(listed["forwards"] as? [[String: Any]])
+        #expect(forwards.count == 1)
+        #expect(forwards.first?["localPort"] as? Int == 15432)
+        #expect(forwards.first?["name"] as? String == "Primary")
+    }
+
     @Test func usageRejectsArbitraryInputsAndPreservesCompletedDataAfterFailure() async throws {
         let (files, root, machine) = fixture()
         defer { try? FileManager.default.removeItem(at: root) }

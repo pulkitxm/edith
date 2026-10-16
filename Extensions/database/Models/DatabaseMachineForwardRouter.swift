@@ -21,32 +21,82 @@ enum DatabaseMachineForwardRoutingError: LocalizedError, Equatable {
     }
 }
 
+struct DatabaseSavedMachineForward: Decodable, Equatable {
+    let localPort: Int
+    let name: String
+}
+
 enum DatabaseMachineForwardRouteResolver {
     static func ports(_ endpoints: [DatabaseNetworkEndpoint]) -> [Int] {
         Array(
             Set(
                 endpoints.filter {
-                    ["localhost", "127.0.0.1", "::1"].contains($0.host.lowercased())
+                    loopbackHosts.contains($0.host.lowercased())
                 }.map(\.port.value))
         ).sorted()
     }
+
+    static func resolve(
+        endpoints: [DatabaseNetworkEndpoint],
+        forwards: [DatabaseSavedMachineForward]
+    ) throws -> DatabaseSavedMachineForward? {
+        let ports = Set(ports(endpoints))
+        guard !ports.isEmpty else { return nil }
+        let matches = forwards.filter { ports.contains($0.localPort) }
+        guard matches.count <= 1 else {
+            throw DatabaseMachineForwardRoutingError.ambiguousPort(matches[0].localPort)
+        }
+        return matches.first
+    }
+
+    private static let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
 }
 
 @MainActor
 enum DatabaseMachineForwardRouter {
     static func prepare(_ connection: DatabaseConnectionSummary) async throws {
-        let ports = DatabaseMachineForwardRouteResolver.ports(connection.networkEndpoints)
-        var missing: [Int] = []
-        for port in ports.sorted() {
-            if !(await DatabaseLoopbackPortProbe.isReachable(port)) { missing.append(port) }
-        }
-        guard !missing.isEmpty, let endpoint = ExtensionPeerEndpoint.current(owner: "machines")
+        guard !DatabaseMachineForwardRouteResolver.ports(connection.networkEndpoints).isEmpty,
+            let endpoint = ExtensionPeerEndpoint.current(owner: "machines")
         else { return }
-        _ = try await endpoint.invoke(
-            "machines.forward.prepare", payload: JSONEncoder().encode(Prepare(ports: missing)))
+        try await prepare(
+            endpoints: connection.networkEndpoints,
+            forwards: {
+                let bytes = try await endpoint.invoke(
+                    "machines.forward.list", payload: Data("{}".utf8))
+                return try JSONDecoder().decode(SavedForwards.self, from: bytes).forwards
+            },
+            reachable: { await DatabaseLoopbackPortProbe.isReachable($0) },
+            start: { port in
+                _ = try await endpoint.invoke(
+                    "machines.forward.prepare",
+                    payload: JSONEncoder().encode(Prepare(ports: [port])))
+            })
+    }
+
+    static func prepare(
+        endpoints: [DatabaseNetworkEndpoint],
+        forwards: () async throws -> [DatabaseSavedMachineForward],
+        reachable: (Int) async -> Bool,
+        start: (Int) async throws -> Void
+    ) async throws {
+        guard
+            let forward = try DatabaseMachineForwardRouteResolver.resolve(
+                endpoints: endpoints, forwards: try await forwards())
+        else { return }
+        if await reachable(forward.localPort) { return }
+        do {
+            try await start(forward.localPort)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch ExtensionPeerError.rejected(_) {
+            throw DatabaseMachineForwardRoutingError.machineUnavailable(forward.name)
+        } catch {
+            throw DatabaseMachineForwardRoutingError.forwardUnavailable(forward.name)
+        }
     }
 
     private struct Prepare: Encodable { let ports: [Int] }
+    private struct SavedForwards: Decodable { let forwards: [DatabaseSavedMachineForward] }
 }
 
 private enum DatabaseLoopbackPortProbe {
