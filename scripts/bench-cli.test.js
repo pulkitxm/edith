@@ -8,7 +8,7 @@ import {
 
 test("CLI benchmark arguments have reproducible defaults", () => {
   expect(parseArguments([])).toEqual({
-    binary: "build/Build/Products/Release/ed",
+    binary: "dist/Edith.app/Contents/MacOS/ed",
     samples: 30,
     warmups: 3,
     label: "Edith CLI Release",

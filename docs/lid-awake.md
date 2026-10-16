@@ -13,8 +13,7 @@ System Settings so you can approve Edith's background item. This is a one-time
 approval for the helper that applies the privileged power setting. Later toggles
 are silent.
 
-The signed helper is embedded inside Edith's menu bar companion. If Edith reports
-that it is missing, reinstall the current app and reopen it before trying again.
+The downloaded extension runs its privileged role through the same signed Edith executable. If Edith reports a missing package or role, reinstall the compatible Lid Awake package from Extensions before trying again.
 
 ## Session choices
 
@@ -29,8 +28,7 @@ Choose one policy before starting:
 | 2 hours | The timer expires. |
 | Until lid reopens | The lid has closed and then opens again. |
 
-The timer and lid-cycle state are owned by the always-on menu bar companion, so
-closing the main Edith window does not cancel them.
+The timer and lid-cycle state are owned by the active extension worker, so closing the main Edith window does not cancel them.
 
 ## Battery and quit behavior
 
@@ -50,9 +48,15 @@ in a bag or another enclosed space while Lid Awake is active. Set a time limit o
 battery floor for unattended work, and confirm that the task no longer needs the
 machine before leaving it closed for a long period.
 
-Use `ed lid-awake status --json` to inspect the active session, deadline, battery
-pause and helper registration. The complete command workflows are in the
-[Lid Awake command reference](cli/lid-awake/README.md).
+Enable Lid Awake and keep Edith running before inspecting its active session:
+
+```sh
+ed invoke lidAwake lidAwake.status --json '{}'
+ed invoke lidAwake lidAwake.on --json '{"session":"fifteenMinutes"}'
+ed invoke lidAwake lidAwake.off --json '{}'
+```
+
+Starting still requires the extension's confirmation and privileged approval. See the [public invocation reference](cli/invoke/README.md) for availability and request limits.
 
 ## Attribution
 

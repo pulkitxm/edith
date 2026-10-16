@@ -1,0 +1,2097 @@
+{
+  "baseline": {
+    "installedBytes": 131607239,
+    "comparisonZipBytes": 59298754
+  },
+  "appWithoutExtensions": {
+    "installedBytes": 8845388,
+    "comparisonZipBytes": 4598014
+  },
+  "savedBytes": {
+    "installedBytes": 122761851,
+    "comparisonZipBytes": 54700740
+  },
+  "savedPercent": {
+    "installedBytes": 93.28,
+    "comparisonZipBytes": 92.25
+  },
+  "packages": [
+    {
+      "id": "appMaintenance",
+      "version": "1.0.0",
+      "downloadBytes": 9997576,
+      "installedBytes": 19718197,
+      "sha256": "bf00e47fd669bf606bc193bd6782f6f754629c4d7a3e5f93bebf5531ef4b6e74",
+      "releaseMetadataBytes": 536,
+      "sourceFingerprint": "9a19a709365c52e1cd16945f00100666c67c5144dd88d018193bdfe591cfebf4"
+    },
+    {
+      "id": "attention",
+      "version": "1.0.0",
+      "downloadBytes": 11989411,
+      "installedBytes": 24624632,
+      "sha256": "f866bfa4b1c5c325bf1925f5667b227958ec50de1bce00b8c8aa2abd496540b3",
+      "releaseMetadataBytes": 522,
+      "sourceFingerprint": "63d9bcf818646c9b25dd697aa679ff3d85035e15a5397d4b424d0185e9460451"
+    },
+    {
+      "id": "audioMixer",
+      "version": "1.0.0",
+      "downloadBytes": 9666170,
+      "installedBytes": 19044501,
+      "sha256": "f39098b590ed6cb191b7ac3fab810faff9daccd73c230f63aa4071459a20b46c",
+      "releaseMetadataBytes": 524,
+      "sourceFingerprint": "d8607a1ef79faaa1e59104d5fc4e95fbef106f4f92b0623527bc920d54dcc4fc"
+    },
+    {
+      "id": "bifrost",
+      "version": "1.0.0",
+      "downloadBytes": 9958852,
+      "installedBytes": 19651202,
+      "sha256": "25b0d2f57f33fd42117405d9cc0629e53fbb9b7935fd1f2cfccf665271c463a3",
+      "releaseMetadataBytes": 515,
+      "sourceFingerprint": "f9ab9f8804962636beacf84294c64d21a4aedee902ee9c46be7ec1660e61a1e6"
+    },
+    {
+      "id": "blitztree",
+      "version": "1.0.0",
+      "downloadBytes": 9300527,
+      "installedBytes": 18177428,
+      "sha256": "c0234d0368e3ea889c5188a47b2766d3fb53316810a174b5a8a1ca37ea28a385",
+      "releaseMetadataBytes": 521,
+      "sourceFingerprint": "a674fe6080b03dde6571317cef146ef512aebe02febe7b4f8ffa9e063bab2e15"
+    },
+    {
+      "id": "calendar",
+      "version": "1.0.0",
+      "downloadBytes": 9807714,
+      "installedBytes": 19313039,
+      "sha256": "dd845cafe760b11e234b9a5d8c293caa5f648156d75962ab1eb48fc7e5e00b3f",
+      "releaseMetadataBytes": 518,
+      "sourceFingerprint": "f7dc9be197296e4fa107fe84b198727d3131c50829510665c453f37545e0be07"
+    },
+    {
+      "id": "cleaner",
+      "version": "1.0.0",
+      "downloadBytes": 9759202,
+      "installedBytes": 19228648,
+      "sha256": "ed2829aeba59d633de85bb5439018102a55a4f97fbec4c6c718e7dce3fba1b0f",
+      "releaseMetadataBytes": 515,
+      "sourceFingerprint": "85120fc2f8ca0d0c6f58d065d90849b012a9c0f147db8ee3d9c2a28cbdb412d2"
+    },
+    {
+      "id": "clipboard",
+      "version": "1.0.0",
+      "downloadBytes": 10014580,
+      "installedBytes": 19723599,
+      "sha256": "72ce0109bb94fd6eeaab3fdaa82d3d03a948f3df420677bd36a08bd24241c82c",
+      "releaseMetadataBytes": 522,
+      "sourceFingerprint": "338d96eb4d13925535e103f12a3ddf53c57b49a433211b885c276c552b5c049a"
+    },
+    {
+      "id": "codeStats",
+      "version": "1.0.0",
+      "downloadBytes": 10418943,
+      "installedBytes": 20562564,
+      "sha256": "e167909dda69fa03b9cc167019674917305a0c743e7b5fb422849e78101e832d",
+      "releaseMetadataBytes": 522,
+      "sourceFingerprint": "29a5fdd6daf3ebc4ea507fe6482f373b75af595abaaafd4f50b074b8b74bd65c"
+    },
+    {
+      "id": "colorPicker",
+      "version": "1.0.0",
+      "downloadBytes": 9693344,
+      "installedBytes": 19094865,
+      "sha256": "a6e4ecad0ef28eb6864a9e7d33c17ca302fb810f2988f88a81aafc6d21716726",
+      "releaseMetadataBytes": 527,
+      "sourceFingerprint": "23203a1b4d141c7f978053ec7336b9a5f6a13b0c0c459a10a1dba1374238da72"
+    },
+    {
+      "id": "companion",
+      "version": "1.0.0",
+      "downloadBytes": 10879296,
+      "installedBytes": 21601268,
+      "sha256": "641ca2f15de1be23eeb3d3c4b423bd0abc87abe68a27d2c61cc02bbcb020501b",
+      "releaseMetadataBytes": 522,
+      "sourceFingerprint": "fcbf2998d8d1dd5707d171891c827acbc8db0aed038f1a215addddffb7b105a7"
+    },
+    {
+      "id": "database",
+      "version": "1.0.0",
+      "downloadBytes": 21217242,
+      "installedBytes": 47626656,
+      "sha256": "1a096dd8d3ad439d30b13e45694073a0afd4caee141a9b5ad76b2a3f60817380",
+      "releaseMetadataBytes": 519,
+      "sourceFingerprint": "212be8ca6a973ff93fb96bbf64ceb2bbd0f4834b65666ca940f236bdbb9466f2"
+    },
+    {
+      "id": "docs",
+      "version": "1.0.0",
+      "downloadBytes": 10630217,
+      "installedBytes": 21738361,
+      "sha256": "ff204cbaa385b98772e51d0e59e88dbaed746b61f0bdc360b442e3156b8404dc",
+      "releaseMetadataBytes": 507,
+      "sourceFingerprint": "0191f47073818d758ebdcb2c0400f8fbdaa173cbcefa9739835f12c7b73a7512"
+    },
+    {
+      "id": "downloads",
+      "version": "1.0.0",
+      "downloadBytes": 9901614,
+      "installedBytes": 19546084,
+      "sha256": "0c99808376f45559ab6b446d904b2d4e2a3ddf306738d1a39bc8674aa11e2c46",
+      "releaseMetadataBytes": 521,
+      "sourceFingerprint": "7cffe149272d27e614988431d010e1ab8605dd94dd569ed4ac6af8ecc7a771c5"
+    },
+    {
+      "id": "emoji",
+      "version": "1.0.0",
+      "downloadBytes": 9821917,
+      "installedBytes": 19472162,
+      "sha256": "43a035e148c8d0d4df82b303678befca65b916ed0560754110658235980a050c",
+      "releaseMetadataBytes": 509,
+      "sourceFingerprint": "e403ec50c5a211e8b941c3086590d962efa1269cfa23c53f794067a3c63e34c4"
+    },
+    {
+      "id": "focusDim",
+      "version": "1.0.0",
+      "downloadBytes": 9264420,
+      "installedBytes": 18110570,
+      "sha256": "6bd57d01dfcc5f70c1b9bcf3e8de5816188e24a84d6e3df0e0d3c3ac845a2603",
+      "releaseMetadataBytes": 518,
+      "sourceFingerprint": "fc765dfe23887f1c52bcad73b057ce230500214ea45c8822a88855867fd927c8"
+    },
+    {
+      "id": "herdr",
+      "version": "1.0.0",
+      "downloadBytes": 20974619,
+      "installedBytes": 44625524,
+      "sha256": "91686214317678c309583f25322d4e45eefc8ad4e09b1bafec3b0d0f431eaeb4",
+      "releaseMetadataBytes": 510,
+      "sourceFingerprint": "6b7162349e1977045eef883c7617bf8e8aee0cc56e2255ece0b267acea01c5dc"
+    },
+    {
+      "id": "homebrew",
+      "version": "1.0.0",
+      "downloadBytes": 9743101,
+      "installedBytes": 19194881,
+      "sha256": "d0c263e3544043e24658b3fca3ca72904a5005b58fe2bf3fcea0e5a41e5161e0",
+      "releaseMetadataBytes": 518,
+      "sourceFingerprint": "9af87bc4f4b6ba74645dbf42b8f4504bcc39d5df4c1c23ff27977b18eb3f042f"
+    },
+    {
+      "id": "jev",
+      "version": "1.0.0",
+      "downloadBytes": 9725931,
+      "installedBytes": 19163780,
+      "sha256": "a3a79d787d0d95b3ccc6c98c5e43758b2b553fb0d367d0a011e20289b9b250dc",
+      "releaseMetadataBytes": 503,
+      "sourceFingerprint": "635d58a3c8473f9ecd30ca5093a828d44b292c8a5be6996eed6abefcc360e65d"
+    },
+    {
+      "id": "keepAwake",
+      "version": "1.0.0",
+      "downloadBytes": 9247745,
+      "installedBytes": 18075840,
+      "sha256": "69b3ed7963adfe8c5a7196d1a3eadeb889d82a716f48e15b9ab5dd38891e0f84",
+      "releaseMetadataBytes": 521,
+      "sourceFingerprint": "9e42d9176baf8cab4e0502fc10c4789af25ecbd61af9399a0d7f9e480dd04c28"
+    },
+    {
+      "id": "keystrokeHighlight",
+      "version": "1.0.0",
+      "downloadBytes": 9287625,
+      "installedBytes": 18146326,
+      "sha256": "bcbb8dfd0eab45631b350b59c5dd5d468cfd90b5671bbb48d022d4d758ad4a7e",
+      "releaseMetadataBytes": 548,
+      "sourceFingerprint": "72291ed71ef411914f0739e4ad98ff8273174a8feb65d5b846c129a783e0c3f5"
+    },
+    {
+      "id": "latex",
+      "version": "1.0.0",
+      "downloadBytes": 10162505,
+      "installedBytes": 20298033,
+      "sha256": "c83ee50a29567ac5b7d3cb536ac66dbe2df6e1ad8b1896cd34a5c74895a0ee71",
+      "releaseMetadataBytes": 510,
+      "sourceFingerprint": "363417da621bfb6a7088a043b072be2069e207abce60207715c4bba0faabadf6"
+    },
+    {
+      "id": "lidAwake",
+      "version": "1.0.0",
+      "downloadBytes": 9751328,
+      "installedBytes": 19250939,
+      "sha256": "6591bb28163a384828c88d369d8f9dc4b2395f827d324a0e3154ed48c9d3290a",
+      "releaseMetadataBytes": 518,
+      "sourceFingerprint": "917f1681f6699d980f01c292e7ebdea931d1187be45b91b5749e274bdad926d0"
+    },
+    {
+      "id": "machines",
+      "version": "1.0.0",
+      "downloadBytes": 21181604,
+      "installedBytes": 45131441,
+      "sha256": "d358cdc3e0be465fe7fd6238335bf8d0388616461c05df1ea13de7174af6530d",
+      "releaseMetadataBytes": 519,
+      "sourceFingerprint": "90c8908dea84c8d3346bf06b07511ce8060b5fcc027cf03217caf0db98c800f0"
+    },
+    {
+      "id": "micMute",
+      "version": "1.0.0",
+      "downloadBytes": 9267665,
+      "installedBytes": 18110404,
+      "sha256": "59fe2d235a4135a8a5cec04f7e3564d7042758cff901a440b794fb97ee35c83c",
+      "releaseMetadataBytes": 515,
+      "sourceFingerprint": "eb3f3cedf806f4ca3618dcec0ab903e6680176e4f8e0656da9c0f55eaebf2c62"
+    },
+    {
+      "id": "music",
+      "version": "1.0.0",
+      "downloadBytes": 15341428,
+      "installedBytes": 32720684,
+      "sha256": "91468b97df77c444dfa96d69a68a28aa083562273d66704834d31928aba1fe2d",
+      "releaseMetadataBytes": 510,
+      "sourceFingerprint": "03212634ecc8d0827bae05e73c3e2275bdd6cfa8d63c27673acce8351c3e2f1a"
+    },
+    {
+      "id": "notchShelf",
+      "version": "1.0.0",
+      "downloadBytes": 10541761,
+      "installedBytes": 20811180,
+      "sha256": "351f630d05b185fd7ffc02af5049fbd9e8fd32ed1acafed635eaa2d35f86a1bf",
+      "releaseMetadataBytes": 525,
+      "sourceFingerprint": "651d6877a8ce227f4ab39c04b3cbe3d2fb7ed328679192ec8e2123674e05fd9a"
+    },
+    {
+      "id": "plugins",
+      "version": "1.0.0",
+      "downloadBytes": 10153179,
+      "installedBytes": 20446572,
+      "sha256": "7093a899e2af7bbc503054b00968a87b46706426d816c8be819b8ed2a605a53f",
+      "releaseMetadataBytes": 516,
+      "sourceFingerprint": "bf6b5a6e3a126e567015abfd4b2f4c35b4e7839a325e20af68cdb5f08bffc33c"
+    },
+    {
+      "id": "presenter",
+      "version": "1.0.0",
+      "downloadBytes": 9704460,
+      "installedBytes": 19112109,
+      "sha256": "54a132cd255eaa6060fb8b5481b9308948dcbbf02047cccde83fe2c8239f030a",
+      "releaseMetadataBytes": 521,
+      "sourceFingerprint": "9a3eda407956f641e879395abcb126f54797c5d832f3686b431665904edd40a6"
+    },
+    {
+      "id": "quinjet",
+      "version": "1.0.0",
+      "downloadBytes": 19407479,
+      "installedBytes": 41555272,
+      "sha256": "078b4e8fa08afaca8e80ff3740d7c552c4fdbc2c130b9aacaf37af9f33fcb9cf",
+      "releaseMetadataBytes": 516,
+      "sourceFingerprint": "90fa24bd1b3eb92d06bda06b21af3c3637d0920bfc1d702a54ecc3a0a04cdcd9"
+    },
+    {
+      "id": "seoAudit",
+      "version": "1.0.0",
+      "downloadBytes": 10159962,
+      "installedBytes": 20046411,
+      "sha256": "c6202a4e09cdf3abccb3b79c81159d3dfaed3cc653829cc66fd7a867a52b3e41",
+      "releaseMetadataBytes": 519,
+      "sourceFingerprint": "87c86d9545d3e05f6d23f7bf18153601fb9fcb33826777bd42bdb5fb631249ec"
+    },
+    {
+      "id": "studio",
+      "version": "1.0.0",
+      "downloadBytes": 16673935,
+      "installedBytes": 33489430,
+      "sha256": "571d7f62e39bbf28aefd6744dee7da151b26d958c5ffd6b0f99fea8b2dc3e072",
+      "releaseMetadataBytes": 513,
+      "sourceFingerprint": "d2d0a0fc4ecdf19619bdc28957ac510540f37ac8425662b29ee4cb009e838580"
+    },
+    {
+      "id": "system",
+      "version": "1.0.0",
+      "downloadBytes": 9706685,
+      "installedBytes": 19128383,
+      "sha256": "57556dece843ed53690b82a8c4bec0e540c9c0ee4720bb70bf92297982babc35",
+      "releaseMetadataBytes": 512,
+      "sourceFingerprint": "9688f9a48a380cceb2cae35f780992af610611d2693c2acd09b7298618c6faa3"
+    },
+    {
+      "id": "systemStats",
+      "version": "1.0.0",
+      "downloadBytes": 9728647,
+      "installedBytes": 19163297,
+      "sha256": "211b183cf4a93daaa41c7c4b91e32b0d6a8e80a4d70fe961ae949169cb4faa7f",
+      "releaseMetadataBytes": 527,
+      "sourceFingerprint": "38a140ad5c1cdc96d2ae359650455e98fdb174f1cff27e8c1e18595526264c40"
+    },
+    {
+      "id": "terminal",
+      "version": "1.0.0",
+      "downloadBytes": 18170091,
+      "installedBytes": 38432377,
+      "sha256": "abba282c03657853aded6009935a6162d46e8872e83b1d8d3d5ae79a7b33273a",
+      "releaseMetadataBytes": 519,
+      "sourceFingerprint": "c1698c92018a22899ddc018c7eca511b4b6e0a52adca31830ecdc12c24790917"
+    },
+    {
+      "id": "timeLapse",
+      "version": "1.0.0",
+      "downloadBytes": 9467896,
+      "installedBytes": 18521252,
+      "sha256": "64820b72159a95f8084cb70541fd7642e637d8b254e96db97ae22b42d26a0589",
+      "releaseMetadataBytes": 521,
+      "sourceFingerprint": "cea9a2236116faa4b46330fc9b0212f5c717cad35c978b495a54f120f4df2f20"
+    },
+    {
+      "id": "usage",
+      "version": "1.0.0",
+      "downloadBytes": 11539721,
+      "installedBytes": 23168170,
+      "sha256": "ad98121d2beec5c583d0e244471ee145fda0b38eda44af1a09e8846a3d2882d5",
+      "releaseMetadataBytes": 510,
+      "sourceFingerprint": "3385f35a4e7ca573d6222689a04ea0942aef3087240e674c8139ea4141d7cf17"
+    },
+    {
+      "id": "virtualCamera",
+      "version": "1.0.0",
+      "downloadBytes": 27350658,
+      "installedBytes": 57880253,
+      "sha256": "70717f2a66f7f99bcae53ddc0312da58ea26af2b552c2c33c26ef789549d4a43",
+      "releaseMetadataBytes": 534,
+      "sourceFingerprint": "e29cab940e8c811e2dbdb94d58fcb572ea79b94c36e9b889e71cec7bc8cbbcb9"
+    },
+    {
+      "id": "windowSweaters",
+      "version": "1.0.0",
+      "downloadBytes": 9329651,
+      "installedBytes": 18232284,
+      "sha256": "3713499a1c0e193847dc38b6fb41f7037307467f231b537a5e89c4e17f43ad23",
+      "releaseMetadataBytes": 536,
+      "sourceFingerprint": "1075e67b06c6d380c491325c62b5a08692a568ef84fbffe9faa2ef6498ad7606"
+    }
+  ],
+  "packageHostProvenance": {
+    "keepAwake": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "keepAwake/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "48fd1b1a151586f9f44d749dd3069f2ae2486f98539993cc68b3657271a00f3b",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "48fd1b1a151586f9f44d749dd3069f2ae2486f98539993cc68b3657271a00f3b",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "keepAwake/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "ad56e69c6c17de990b1414f52b91be04203c7df1c841f0b70d82d96a4bb5d9dd",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "ad56e69c6c17de990b1414f52b91be04203c7df1c841f0b70d82d96a4bb5d9dd",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "audioMixer": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "audioMixer/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "7c7e87523b5968b0b367e65f91ef2085c409524e1356c77e7e194ae7884a0f94",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "7c7e87523b5968b0b367e65f91ef2085c409524e1356c77e7e194ae7884a0f94",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "audioMixer/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2a0c3bd9adeb44b318cfc79604c97efcce03ec31fb58ebb2e44ff7be1e437f81",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2a0c3bd9adeb44b318cfc79604c97efcce03ec31fb58ebb2e44ff7be1e437f81",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "focusDim": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "focusDim/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "404738f138b78500af3f6f32be3a1558d9eaed1237758c0397658b2a65ceb2c5",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "404738f138b78500af3f6f32be3a1558d9eaed1237758c0397658b2a65ceb2c5",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "focusDim/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "e27b133d28f6f9923f5114cc97f1fbb5c08c4e8ddfbf542ca88489aadff21f9f",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "e27b133d28f6f9923f5114cc97f1fbb5c08c4e8ddfbf542ca88489aadff21f9f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "windowSweaters": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "windowSweaters/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "67764205157e682e4d4c3bdbe4ed4ec2b9115998aeb1c1d752813d7a184af00b",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "67764205157e682e4d4c3bdbe4ed4ec2b9115998aeb1c1d752813d7a184af00b",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "windowSweaters/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2fbd129a49186fc05a929bdb6951517cfd8a61df62fe4680b4d5f8d0ac185b8f",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2fbd129a49186fc05a929bdb6951517cfd8a61df62fe4680b4d5f8d0ac185b8f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "micMute": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "micMute/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "3876259d6351a8c501f4f6370dae6329805bbd32a8dd6c94eb6efa6e2d900f7c",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "3876259d6351a8c501f4f6370dae6329805bbd32a8dd6c94eb6efa6e2d900f7c",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "micMute/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "f77a2b04237bb86f052dcc8a1e765990ffd7287b1e833237fcf1d76a68be148c",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "f77a2b04237bb86f052dcc8a1e765990ffd7287b1e833237fcf1d76a68be148c",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "keystrokeHighlight": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "keystrokeHighlight/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "c71f15754e3ac7fe052c9084e08a1d95079672aa2a549d6553f7714f2482da8f",
+          "installedBytes": 6963536,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963536,
+            "signedSHA256": "c71f15754e3ac7fe052c9084e08a1d95079672aa2a549d6553f7714f2482da8f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "keystrokeHighlight/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "a33c29c907288cd44cc626480b0bcb9ec0fda045840d61e44a4814de7d56f00e",
+          "installedBytes": 6963088,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963088,
+            "signedSHA256": "a33c29c907288cd44cc626480b0bcb9ec0fda045840d61e44a4814de7d56f00e",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "presenter": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "presenter/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "39500f4f529898e5a10a32246d3bdbcfb4714cd8241a7722b194f821287f8e38",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "39500f4f529898e5a10a32246d3bdbcfb4714cd8241a7722b194f821287f8e38",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "presenter/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "9d6e6c609e605292c2f56f7179d4aec5edf2ab198d8cc2915ae57a3bfde6dabd",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "9d6e6c609e605292c2f56f7179d4aec5edf2ab198d8cc2915ae57a3bfde6dabd",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "colorPicker": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "colorPicker/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "f978188115d2edb2a2b456985792ea669aba6a95df3ad67feb76926ae419289a",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "f978188115d2edb2a2b456985792ea669aba6a95df3ad67feb76926ae419289a",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "colorPicker/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "6f5ba07319612d357d79572f1c4f763482e43f333c08a48569adf31d7c75b309",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "6f5ba07319612d357d79572f1c4f763482e43f333c08a48569adf31d7c75b309",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "systemStats": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "systemStats/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "3cba20e3920b79189e62340c2af49a3044a8c9db7135bf43c02cbeaf69cd7bcf",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "3cba20e3920b79189e62340c2af49a3044a8c9db7135bf43c02cbeaf69cd7bcf",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "systemStats/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "88934b212600b4210d3a84ffe458a015dbcadd1088bdbe1d4abd51f92d90ff34",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "88934b212600b4210d3a84ffe458a015dbcadd1088bdbe1d4abd51f92d90ff34",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "emoji": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "emoji/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "3dd458a306c1acdc2df461c32802c6ff2463011f38c646c3cf3fa5d9c459f0a8",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "3dd458a306c1acdc2df461c32802c6ff2463011f38c646c3cf3fa5d9c459f0a8",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "emoji/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "345329aa32bd86a42a1f3252d34e697c7baca427915fd6d5b67112170487f143",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "345329aa32bd86a42a1f3252d34e697c7baca427915fd6d5b67112170487f143",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "homebrew": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "homebrew/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "6e5e2a6aa3952c425d82dc7db0af6a9b45a1cde4637b35ab4c853e7b57406c22",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "6e5e2a6aa3952c425d82dc7db0af6a9b45a1cde4637b35ab4c853e7b57406c22",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "homebrew/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "885aa32694166f2e9b17caa20c1ba889926f54c979677615d26243c8c35a7776",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "885aa32694166f2e9b17caa20c1ba889926f54c979677615d26243c8c35a7776",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "calendar": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "calendar/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "380e73da4176a967aa9d0e859dc90ea0b1659a160fe9b38d5a4b2f03d43578a0",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "380e73da4176a967aa9d0e859dc90ea0b1659a160fe9b38d5a4b2f03d43578a0",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "calendar/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "5c65e18ad9e951c0d2f28a3363b8ca5ae6f776a22a3931a3e7dcdc9f7926b79d",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "5c65e18ad9e951c0d2f28a3363b8ca5ae6f776a22a3931a3e7dcdc9f7926b79d",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "jev": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "jev/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "e205afe6e6ddb30e9cae48051c00948845871a2a92a725b371fd76cb7eb2d7f0",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "e205afe6e6ddb30e9cae48051c00948845871a2a92a725b371fd76cb7eb2d7f0",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "jev/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "aa7844f9e935b383bc506a71cce1c683cfaf5fbfbeacc334c032115b18e212fe",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "aa7844f9e935b383bc506a71cce1c683cfaf5fbfbeacc334c032115b18e212fe",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "system": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "system/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "c070a6f1eea68eba57fdaa9c690e656c9ab2af7f0cf04640053350a5299a752b",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "c070a6f1eea68eba57fdaa9c690e656c9ab2af7f0cf04640053350a5299a752b",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "system/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "c2900b4f81d43fd3987bfd1c6aed47f6462c77374b6f7bee6cb3eda349ab36ff",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "c2900b4f81d43fd3987bfd1c6aed47f6462c77374b6f7bee6cb3eda349ab36ff",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "timeLapse": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "timeLapse/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "3af4224f63492d64a495ed166ad408193c78f8cdf3b6ebfdc8641846d76a4da2",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "3af4224f63492d64a495ed166ad408193c78f8cdf3b6ebfdc8641846d76a4da2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "timeLapse/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "eb08ff7272ff780dfd5498978d5a1673e0ecf66e85414d0c3e1a2f83b28e4df7",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "eb08ff7272ff780dfd5498978d5a1673e0ecf66e85414d0c3e1a2f83b28e4df7",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "cleaner": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "cleaner/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "42e261c9074505d14cac1e49e15a7b4cadbb1ec8570cd812656eb165eb10a54f",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "42e261c9074505d14cac1e49e15a7b4cadbb1ec8570cd812656eb165eb10a54f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "cleaner/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "853ba93be4bbbaafc2804b07b93c85a369fd4f7eb8393e43644c950513548742",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "853ba93be4bbbaafc2804b07b93c85a369fd4f7eb8393e43644c950513548742",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "appMaintenance": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "appMaintenance/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "c3d931ef1efea784c3a6972c2a703719010464b535c3f023fbf20e11c56eecb2",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "c3d931ef1efea784c3a6972c2a703719010464b535c3f023fbf20e11c56eecb2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "appMaintenance/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2c4488c8d0be1e3b5ff5dc09dbc8531965d8212ed02a52ffb403e71daa3cad7c",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2c4488c8d0be1e3b5ff5dc09dbc8531965d8212ed02a52ffb403e71daa3cad7c",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "blitztree": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "blitztree/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "e0e984570db72baa902d77bfbf96f927dfe064333adbe99e3d04e497e27982d2",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "e0e984570db72baa902d77bfbf96f927dfe064333adbe99e3d04e497e27982d2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "blitztree/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "d44e060623ddd0160227ad63fa7454a497beebdcd5e30f46d7474deb3bcbdf0d",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "d44e060623ddd0160227ad63fa7454a497beebdcd5e30f46d7474deb3bcbdf0d",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "plugins": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "plugins/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "5c3989a90bf4d7e11c1ed5677ab8602542f2575a9436a584538891be09912952",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "5c3989a90bf4d7e11c1ed5677ab8602542f2575a9436a584538891be09912952",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "plugins/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2368c7bdc290deb88a1240a990083c99d1cc038dd2c8e597026c94dbbf0aea92",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2368c7bdc290deb88a1240a990083c99d1cc038dd2c8e597026c94dbbf0aea92",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "notchShelf": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "notchShelf/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "4020e7c6c72976f244d4055ba62e823e2b9e643b049faaaad6a93461bac58c37",
+          "installedBytes": 6963616,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963616,
+            "signedSHA256": "4020e7c6c72976f244d4055ba62e823e2b9e643b049faaaad6a93461bac58c37",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "notchShelf/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "41bb8c93ca5e7c2583d416963ac4e4927225b441ebdcf72dd36fae24e5e35796",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "41bb8c93ca5e7c2583d416963ac4e4927225b441ebdcf72dd36fae24e5e35796",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "clipboard": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "clipboard/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "3bc1cd8c25bc2aea6c124ff1ab956f86fd014f6863efb130202b48ec7b6d03da",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "3bc1cd8c25bc2aea6c124ff1ab956f86fd014f6863efb130202b48ec7b6d03da",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "clipboard/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "8e56b4acbca832aaebe58c82f8b866c435f2e8060d54b876b1f13f94661c6515",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "8e56b4acbca832aaebe58c82f8b866c435f2e8060d54b876b1f13f94661c6515",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "music": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "music/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "c308a1eaa5cc2d94f09f2d5f9266ec63288a29bbe549d7af813ae9c6810fb8a2",
+          "installedBytes": 6963616,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963616,
+            "signedSHA256": "c308a1eaa5cc2d94f09f2d5f9266ec63288a29bbe549d7af813ae9c6810fb8a2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "music/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "5a00e1243162a728286c1ea26132213086a932b5a096d57e9a062aa2c0f54794",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "5a00e1243162a728286c1ea26132213086a932b5a096d57e9a062aa2c0f54794",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "docs": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "docs/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "864f78d625ac84347462f7c13445a4e2a86ef2894a28cbe86afd9deeed12caa5",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "864f78d625ac84347462f7c13445a4e2a86ef2894a28cbe86afd9deeed12caa5",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "docs/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "d93dac0f9881023091d4d1186226706b23f5adbc88918ae7271994498fb9bb9f",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "d93dac0f9881023091d4d1186226706b23f5adbc88918ae7271994498fb9bb9f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "latex": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "latex/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "e16e42d857435433b81d0b3a406fc771878a55f2c9b10295946b938221bd1b81",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "e16e42d857435433b81d0b3a406fc771878a55f2c9b10295946b938221bd1b81",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "latex/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "ff2121ae17edfc5f7ecbd21604b46db3a5395542615705ac5c5f3a3198fa095f",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "ff2121ae17edfc5f7ecbd21604b46db3a5395542615705ac5c5f3a3198fa095f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "companion": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "companion/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "14684b8fec0414c96ab2e7725a14a0e7d672d02a0abe9cbe29c6b47655c69676",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "14684b8fec0414c96ab2e7725a14a0e7d672d02a0abe9cbe29c6b47655c69676",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "companion/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "177cc1503232a57425cdddf6af194896d7dc3e734a0ff87a390471a4eb348ae4",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "177cc1503232a57425cdddf6af194896d7dc3e734a0ff87a390471a4eb348ae4",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "terminal": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "terminal/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "8f2a6467e52a5f46b1069554bb692847bba56bc0e6a941af06d4b3e892c47d3a",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "8f2a6467e52a5f46b1069554bb692847bba56bc0e6a941af06d4b3e892c47d3a",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "terminal/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2482ab487e2dd0de74704f56e65a5076e3f20eafcee3e8003950f598ca231c11",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2482ab487e2dd0de74704f56e65a5076e3f20eafcee3e8003950f598ca231c11",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "studio": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "studio/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "30189945b9ab6905007e4e98632b8cfb16f0f2f3741198645ec2b1c38781b470",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "30189945b9ab6905007e4e98632b8cfb16f0f2f3741198645ec2b1c38781b470",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "studio/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "c74e6934ccdab29bb08e5a3f0ee6adec082d74455fbcf142745d81f2ea33ceec",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "c74e6934ccdab29bb08e5a3f0ee6adec082d74455fbcf142745d81f2ea33ceec",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "usage": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "usage/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "ee664386b118e0a110680301087b2166863d96e36554ac0e3497f5c46ed89329",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "ee664386b118e0a110680301087b2166863d96e36554ac0e3497f5c46ed89329",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "usage/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "c444c461461e392524cdbc247d84361a58f7c67410dd97b2cd02820e344ac72b",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "c444c461461e392524cdbc247d84361a58f7c67410dd97b2cd02820e344ac72b",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "bifrost": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "bifrost/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "042af988d1b964fbf9e273eeee2cb9bf10ca063d47f14e13cd4b850819aae5a2",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "042af988d1b964fbf9e273eeee2cb9bf10ca063d47f14e13cd4b850819aae5a2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "bifrost/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "330552c222841913b3d329028bd0f3c1fd8ec1f4f7e4ec95e3fe4fa203ca2933",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "330552c222841913b3d329028bd0f3c1fd8ec1f4f7e4ec95e3fe4fa203ca2933",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "lidAwake": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "lidAwake/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "a62e1686b2f4a0f402d5648508bcd02310b16e69e8bf4229a4de6b3a1f30d268",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "a62e1686b2f4a0f402d5648508bcd02310b16e69e8bf4229a4de6b3a1f30d268",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "lidAwake/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "29c80844ed2154496675e876ed5c1298b002a9314e24823f52f5304b825a50df",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "29c80844ed2154496675e876ed5c1298b002a9314e24823f52f5304b825a50df",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "attention": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "attention/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "9cb33b66f871fadede41f126bab91ed73b1ef00598e92c7c2b41bac3bc72b05e",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "9cb33b66f871fadede41f126bab91ed73b1ef00598e92c7c2b41bac3bc72b05e",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "attention/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "4ed7ce796150bc08bc010b559ab52ce8921a5c929d7c9075c152d0922970248c",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "4ed7ce796150bc08bc010b559ab52ce8921a5c929d7c9075c152d0922970248c",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "machines": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "machines/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "f4ccf4ce4bcb30cbd919b8584f9d6f6cbf350cc0eb872ee9432014c8ee287d78",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "f4ccf4ce4bcb30cbd919b8584f9d6f6cbf350cc0eb872ee9432014c8ee287d78",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "machines/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "28310b9cd8cedea9fc0647ee25165ddfd98e29ebaab9b0f22eae9810e5dc5bca",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "28310b9cd8cedea9fc0647ee25165ddfd98e29ebaab9b0f22eae9810e5dc5bca",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "downloads": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "downloads/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "2501d992b5e2653b6063f196f21a11110136ee00c8a2a0b98e3765c1e9597f7d",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "2501d992b5e2653b6063f196f21a11110136ee00c8a2a0b98e3765c1e9597f7d",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "downloads/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "73a2c5d61334d31f6f15d208713b8e1977a218ffab54a9ae696fda17249967c4",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "73a2c5d61334d31f6f15d208713b8e1977a218ffab54a9ae696fda17249967c4",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "seoAudit": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "seoAudit/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "e813c3072626e505a6a8288e107924a9f03be67a0276d54bf14e4854e9f5cef2",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "e813c3072626e505a6a8288e107924a9f03be67a0276d54bf14e4854e9f5cef2",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "seoAudit/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "b66e7c6e36c02fe096f891a8bd3b70b537dbaa7bb06acca3c7acb57efbcd8e01",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "b66e7c6e36c02fe096f891a8bd3b70b537dbaa7bb06acca3c7acb57efbcd8e01",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "virtualCamera": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "virtualCamera/CameraCarrier.app/Contents/MacOS/Edith",
+          "sha256": "197bbeaa83edd7764b2341b5b33ce1da56a64ed8aa6a74d0ea72736f7fb3264e",
+          "installedBytes": 6963088,
+          "frozenExecutableProvenance": "2094eca6617c09f93164f3972b0f89637782239a642f92f826972efed2a0ea2e",
+          "codeIdentity": {
+            "signedBytes": 6963088,
+            "signedSHA256": "197bbeaa83edd7764b2341b5b33ce1da56a64ed8aa6a74d0ea72736f7fb3264e",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "virtualCamera/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "0ce7adb3ddf73d66efeed30a8343cf9bcc3807bd9cc5efa3bf1b76aef0b2a195",
+          "installedBytes": 6963552,
+          "frozenExecutableProvenance": "2094eca6617c09f93164f3972b0f89637782239a642f92f826972efed2a0ea2e",
+          "codeIdentity": {
+            "signedBytes": 6963552,
+            "signedSHA256": "0ce7adb3ddf73d66efeed30a8343cf9bcc3807bd9cc5efa3bf1b76aef0b2a195",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "virtualCamera/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "3f1c072556c89905a069feafc3790a89984f829c5f42cab754eb7e128069c2b1",
+          "installedBytes": 6963104,
+          "frozenExecutableProvenance": "2094eca6617c09f93164f3972b0f89637782239a642f92f826972efed2a0ea2e",
+          "codeIdentity": {
+            "signedBytes": 6963104,
+            "signedSHA256": "3f1c072556c89905a069feafc3790a89984f829c5f42cab754eb7e128069c2b1",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ],
+      "syntheticHost": {
+        "identifier": "com.pulkit.edith.tests.worker-e7099d3f-ffd1-400c-a1e6-e54a8ccaf43c",
+        "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+        "sourceExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+        "executableBeforeSigningSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+        "executableAfterSigningSHA256": "2094eca6617c09f93164f3972b0f89637782239a642f92f826972efed2a0ea2e",
+        "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584"
+      },
+      "syntheticHostReceiptSHA256": "f3c76d85fbfee7e06a7ae90027de280caa552dc32c496aa212cd176fd5735ea1"
+    },
+    "codeStats": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "codeStats/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "9efb5515fbae880ff71932ca686755dc2d2e3ca5cc2a2ac56b8a6fb22ca68a2f",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "9efb5515fbae880ff71932ca686755dc2d2e3ca5cc2a2ac56b8a6fb22ca68a2f",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "codeStats/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "e291db5b5cc2dc7153e7c0f9b4f83761342b0c28b15df4b085fdd95ceefc65af",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "e291db5b5cc2dc7153e7c0f9b4f83761342b0c28b15df4b085fdd95ceefc65af",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "herdr": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "herdr/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "54eb132135617634f648aac2b72217fecc09dc7bf518297d78ddb2c141319362",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "54eb132135617634f648aac2b72217fecc09dc7bf518297d78ddb2c141319362",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "herdr/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "cb1ff796363abf1bf3b4e143abdfb3ee46030c12448434e53f12af6a76c83b2a",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "cb1ff796363abf1bf3b4e143abdfb3ee46030c12448434e53f12af6a76c83b2a",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "quinjet": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "quinjet/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "7a774bd0b280699c9ebc848cf7199ecc72345c3d74ee91fdeb214def6603b72d",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "7a774bd0b280699c9ebc848cf7199ecc72345c3d74ee91fdeb214def6603b72d",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "quinjet/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "4a3bbfc925a6bd04c83dd46f85cf5587bbd75d345af6b5e3974069a0a4963152",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "4a3bbfc925a6bd04c83dd46f85cf5587bbd75d345af6b5e3974069a0a4963152",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    },
+    "database": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceHostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+      "unsignedExecutableSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+      "executables": [
+        {
+          "member": "database/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/MacOS/Edith",
+          "sha256": "e635594dac9a8a0b6448fa11bbfd30c91705cb9ac70ba57f76068a9a72e47e75",
+          "installedBytes": 6963520,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963520,
+            "signedSHA256": "e635594dac9a8a0b6448fa11bbfd30c91705cb9ac70ba57f76068a9a72e47e75",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "96f30f58c0f18c31358a7b14f324a3a8c95fa308b3e467cac4ff25a2227f86fd",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        },
+        {
+          "member": "database/ExtensionCarrier.app/Contents/MacOS/Edith",
+          "sha256": "2d6f8d2609e546633d117401e24153a1c9d6c7b65fa72aa1b3ddd3c2d002aace",
+          "installedBytes": 6963072,
+          "frozenExecutableProvenance": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "codeIdentity": {
+            "signedBytes": 6963072,
+            "signedSHA256": "2d6f8d2609e546633d117401e24153a1c9d6c7b65fa72aa1b3ddd3c2d002aace",
+            "rawUnsignedBytes": 6949152,
+            "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+            "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+          }
+        }
+      ]
+    }
+  },
+  "sourceFingerprints": {
+    "appMaintenance": "9a19a709365c52e1cd16945f00100666c67c5144dd88d018193bdfe591cfebf4",
+    "attention": "63d9bcf818646c9b25dd697aa679ff3d85035e15a5397d4b424d0185e9460451",
+    "audioMixer": "d8607a1ef79faaa1e59104d5fc4e95fbef106f4f92b0623527bc920d54dcc4fc",
+    "bifrost": "f9ab9f8804962636beacf84294c64d21a4aedee902ee9c46be7ec1660e61a1e6",
+    "blitztree": "a674fe6080b03dde6571317cef146ef512aebe02febe7b4f8ffa9e063bab2e15",
+    "calendar": "f7dc9be197296e4fa107fe84b198727d3131c50829510665c453f37545e0be07",
+    "cleaner": "85120fc2f8ca0d0c6f58d065d90849b012a9c0f147db8ee3d9c2a28cbdb412d2",
+    "clipboard": "338d96eb4d13925535e103f12a3ddf53c57b49a433211b885c276c552b5c049a",
+    "codeStats": "29a5fdd6daf3ebc4ea507fe6482f373b75af595abaaafd4f50b074b8b74bd65c",
+    "colorPicker": "23203a1b4d141c7f978053ec7336b9a5f6a13b0c0c459a10a1dba1374238da72",
+    "companion": "fcbf2998d8d1dd5707d171891c827acbc8db0aed038f1a215addddffb7b105a7",
+    "database": "212be8ca6a973ff93fb96bbf64ceb2bbd0f4834b65666ca940f236bdbb9466f2",
+    "docs": "0191f47073818d758ebdcb2c0400f8fbdaa173cbcefa9739835f12c7b73a7512",
+    "downloads": "7cffe149272d27e614988431d010e1ab8605dd94dd569ed4ac6af8ecc7a771c5",
+    "emoji": "e403ec50c5a211e8b941c3086590d962efa1269cfa23c53f794067a3c63e34c4",
+    "focusDim": "fc765dfe23887f1c52bcad73b057ce230500214ea45c8822a88855867fd927c8",
+    "herdr": "6b7162349e1977045eef883c7617bf8e8aee0cc56e2255ece0b267acea01c5dc",
+    "homebrew": "9af87bc4f4b6ba74645dbf42b8f4504bcc39d5df4c1c23ff27977b18eb3f042f",
+    "jev": "635d58a3c8473f9ecd30ca5093a828d44b292c8a5be6996eed6abefcc360e65d",
+    "keepAwake": "9e42d9176baf8cab4e0502fc10c4789af25ecbd61af9399a0d7f9e480dd04c28",
+    "keystrokeHighlight": "72291ed71ef411914f0739e4ad98ff8273174a8feb65d5b846c129a783e0c3f5",
+    "latex": "363417da621bfb6a7088a043b072be2069e207abce60207715c4bba0faabadf6",
+    "lidAwake": "917f1681f6699d980f01c292e7ebdea931d1187be45b91b5749e274bdad926d0",
+    "machines": "90c8908dea84c8d3346bf06b07511ce8060b5fcc027cf03217caf0db98c800f0",
+    "micMute": "eb3f3cedf806f4ca3618dcec0ab903e6680176e4f8e0656da9c0f55eaebf2c62",
+    "music": "03212634ecc8d0827bae05e73c3e2275bdd6cfa8d63c27673acce8351c3e2f1a",
+    "notchShelf": "651d6877a8ce227f4ab39c04b3cbe3d2fb7ed328679192ec8e2123674e05fd9a",
+    "plugins": "bf6b5a6e3a126e567015abfd4b2f4c35b4e7839a325e20af68cdb5f08bffc33c",
+    "presenter": "9a3eda407956f641e879395abcb126f54797c5d832f3686b431665904edd40a6",
+    "quinjet": "90fa24bd1b3eb92d06bda06b21af3c3637d0920bfc1d702a54ecc3a0a04cdcd9",
+    "seoAudit": "87c86d9545d3e05f6d23f7bf18153601fb9fcb33826777bd42bdb5fb631249ec",
+    "studio": "d2d0a0fc4ecdf19619bdc28957ac510540f37ac8425662b29ee4cb009e838580",
+    "system": "9688f9a48a380cceb2cae35f780992af610611d2693c2acd09b7298618c6faa3",
+    "systemStats": "38a140ad5c1cdc96d2ae359650455e98fdb174f1cff27e8c1e18595526264c40",
+    "terminal": "c1698c92018a22899ddc018c7eca511b4b6e0a52adca31830ecdc12c24790917",
+    "timeLapse": "cea9a2236116faa4b46330fc9b0212f5c717cad35c978b495a54f120f4df2f20",
+    "usage": "3385f35a4e7ca573d6222689a04ea0942aef3087240e674c8139ea4141d7cf17",
+    "virtualCamera": "e29cab940e8c811e2dbdb94d58fcb572ea79b94c36e9b889e71cec7bc8cbbcb9",
+    "windowSweaters": "1075e67b06c6d380c491325c62b5a08692a568ef84fbffe9faa2ef6498ad7606"
+  },
+  "hostComponents": {
+    "hostAndCLI": 6963056,
+    "appUpdater": 1441041,
+    "resources": 434809,
+    "bundleMetadata": 6482
+  },
+  "selectedExtensionScenarios": [
+    {
+      "name": "Daily tools",
+      "extensions": [
+        "calendar",
+        "clipboard",
+        "systemStats",
+        "usage"
+      ],
+      "installedBytes": 90213493,
+      "extensionDownloadBytes": 41090662
+    },
+    {
+      "name": "Development tools",
+      "extensions": [
+        "terminal",
+        "database",
+        "docs",
+        "codeStats"
+      ],
+      "installedBytes": 137205346,
+      "extensionDownloadBytes": 60436493
+    },
+    {
+      "name": "Media tools",
+      "extensions": [
+        "virtualCamera",
+        "studio",
+        "audioMixer",
+        "music",
+        "timeLapse"
+      ],
+      "installedBytes": 170501508,
+      "extensionDownloadBytes": 78500087
+    }
+  ],
+  "migratedExtensionPackages": {
+    "downloadBytes": 468938701,
+    "installedBytes": 951938618,
+    "releaseMetadataBytes": 20259,
+    "releaseAssetBytes": 468958960
+  },
+  "appWithMigratedExtensions": {
+    "installedBytes": 960784006,
+    "comparisonZipAndPackageBytes": 473536715
+  },
+  "measuredAtUTC": "2026-10-10T19:23:06+00:00",
+  "status": "all-indexed-packages-measured",
+  "migratedExtensions": 39,
+  "indexedExtensions": 39,
+  "unmeasuredExtensions": [],
+  "hostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+  "hostCodeIdentity": {
+    "signedBytes": 6963056,
+    "signedSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+    "rawUnsignedBytes": 6949152,
+    "rawUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+    "normalizedUnsignedSHA256": "51d0210cad7e7cfa7d44c87af0bb1bd72cd156ea785ffc176a0146be962a3584",
+    "normalization": "arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1"
+  },
+  "measurement": {
+    "sourceMode": "final",
+    "expectedSourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+    "currentSource": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceTreeDirty": false
+    },
+    "baselineSourceCommit": "91d0e13de56aaf297ad4630d2c36ef124da5bf0c",
+    "baselineBuild": {
+      "sourceCommit": "91d0e13de56aaf297ad4630d2c36ef124da5bf0c",
+      "configuration": "Release",
+      "architecture": "arm64",
+      "signature": "ad-hoc",
+      "xcode": "27.0 (27A266a)",
+      "sdk": "27.0",
+      "ghosttySourceCommit": "88f57ee66eeaad4da77b414b245f7b6693348985",
+      "ghosttyArchive": "verified cache from clean pinned source build"
+    },
+    "hostBuild": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "sourceTreeDirty": false,
+      "configuration": "Release",
+      "optimization": "Osize",
+      "linkTimeOptimization": "full",
+      "architecture": "arm64",
+      "signature": "ad-hoc",
+      "xcode": "Xcode 27.0\nBuild version 27A266a",
+      "sdk": "27.0"
+    },
+    "packageSource": "local-build-artifacts",
+    "artifactPublication": "not-verified",
+    "sourceFingerprintsVerified": true,
+    "carrierHostProvenanceVerified": true,
+    "carrierExecutableMethod": "Sealed frozen-host provenance and SHA-256 after strictly verified signature removal and arm64 terminal LINKEDIT mapping normalization in private temporary files. Actual signed and raw unsigned checksums and expanded bytes remain recorded. Synthetic Camera hosts require a source-bound clone receipt and matching code and resources.",
+    "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
+    "installedMethod": "Logical regular-file bytes, excluding filesystem allocation rounding, receipts, caches, user data, retained versions and OS-managed deployment copies.",
+    "verificationScope": "Package archive size, SHA-256, expanded bytes and CRC. Source fingerprints when supplied. Final reports also bind carrier code and source provenance. This report does not run lifecycle, visual, signing or cloud publication checks."
+  },
+  "surfaceCustomization": {
+    "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
+    "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
+    "layoutContractVersion": 1,
+    "verification": "not-measured-by-size-report"
+  },
+  "measurementQualification": {
+    "measuredShippingSourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+    "measuredCheckoutClean": true,
+    "reviewedShippingEquivalentCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+    "all39CurrentShippingFingerprintsUnchanged": true,
+    "sourceFingerprintsSHA256": "b163ddcb1ab28733150092943e944d5d874e0ec8036a02e9b42195ff45b1dba0",
+    "staticSizeCoverage": 39,
+    "lifecycle": {
+      "passed": 39,
+      "pendingRetest": 0,
+      "lastObservedFailedIDs": [],
+      "historicalFailedIDs": [
+        "herdr",
+        "quinjet"
+      ],
+      "cohorts": [
+        {
+          "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+          "hostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "passed": 37
+        },
+        {
+          "sourceCommit": "46f04593d9cb00eb375842ff739b8a662d25c6b8",
+          "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+          "passedIDs": [
+            "quinjet"
+          ],
+          "failedIDs": [
+            "herdr"
+          ],
+          "quinjetStatusSHA256": "965f4c393d4b7b1e28e6346c41d3c1762972608b7ac9455ee1341f172a7f00fa",
+          "quinjetZIP_SHA256": "0559c058cec866e994ce84817cfa334171590782a23123239dc0b48aee16a99a",
+          "quinjetZIPBytes": 19407524,
+          "quinjetExpandedBytes": 41555367
+        },
+        {
+          "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+          "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+          "harnessSHA256": "0d24cdaebc0cca252a680414052ba48ed59516181b09184a6b2bb5047c3d6734",
+          "passedIDs": [
+            "herdr"
+          ],
+          "herdrStatusSHA256": "5c502f41bd6d723b0d4774f6a2079bcb9859e5ed4dd240834c2175ef28431ec2",
+          "herdrDrainReceiptSHA256": "cc3f50e2991f7fda4aed0d552c08cfba0028f40343800a6c27a5f1089742a1ab",
+          "herdrZIP_SHA256": "e9c743c4e9d1b6397f757efd4fe32bb3048b8202e4785aa3b89e094aa0611fd5",
+          "herdrZIPBytes": 20974663,
+          "herdrExpandedBytes": 44625619,
+          "nativeWindowValidated": false,
+          "managedNativeViewValidated": false,
+          "disabledOwnedProcesses": 0
+        }
+      ],
+      "qualification": "39 distinct owners passed headless lifecycle assertions across three explicitly identified snapshots: 37 at measured bc66, Quinjet at 46f, and Herdr at abe20. Historical failures remain preserved. The two measured static-only package artifacts are not relabeled as runtime-tested archives by the separate-source retries. All 39 owner coverage is source-qualified, not a claim of one identical host binary or managed UI/hardware parity.",
+      "allOwnersRuntimeAtCurrentSource": false,
+      "aggregateReceiptSHA256": "3620ede541f7b04aba3b4d028e4ffec09369621b70ee7756424894d5db3734d0"
+    },
+    "staticOnlyArtifactIDs": [
+      "herdr",
+      "quinjet"
+    ],
+    "managedNativeViewValidated": false,
+    "nativeOwnerMatrix": {
+      "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "passedOwners": 39,
+      "selectedMethods": 232,
+      "scope": "Selected pure and injected source-admitted native tests only; no managed GUI, real providers or hardware functionality proof.",
+      "receiptSHA256": "1aa26ca38cc7e148dde3cf2a036dfe1b0560049141247d9d6f96b5d020e69a19",
+      "combinedResultSHA256": "705cb92aafed0bf64c82167e30f0d051c4595a4f7593bcc3c81b289cf7f6e798"
+    },
+    "hostedOriginalJourneyValidated": false,
+    "productionReleaseDownloadVerified": false,
+    "notarizationVerified": false,
+    "signingCategory": "local ad-hoc development artifacts",
+    "hostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+    "emptyHostComparisonZIP_SHA256": "ca39370e44cfe1717b662a8f02d56ff301ba811c23b53c33b89318eac6dc9a97",
+    "interpretation": "Source-mode final means complete clean measured-source size coverage, not completed lifecycle, managed UI, cloud publication or distribution readiness.",
+    "portableScriptTests": {
+      "sourceCommit": "aa24af4fb9a521e25a98d925e8f1053ab40d9ff0",
+      "passed": 831,
+      "skipped": 13,
+      "failed": 0,
+      "tests": 844,
+      "files": 79,
+      "seconds": 119.26,
+      "scope": "Portable scripts with synthetic HOME and native/UI/provider opt-ins disabled."
+    },
+    "localReleaseAssets": {
+      "measuredSourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "archives": 39,
+      "archiveBytes": 468938701,
+      "metadataBytes": 20259,
+      "releaseChecksumAssetBytes": 3094,
+      "completeLocalReleaseAssetBytes": 468962054,
+      "checksumFormat": "SHA256, two spaces, id.zip, newline",
+      "scope": "Actual retained local development ZIP, JSON and checksum assets only; production release assets remain unverified."
+    },
+    "retryHostBuild": {
+      "sourceCommit": "46f04593d9cb00eb375842ff739b8a662d25c6b8",
+      "installedBytes": 8845416,
+      "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+      "normalizedUnsignedSHA256": "76a1c97ccee3d26457a59ee17afd6f1d030fd336ca0ef9bbbfe5c4a11e23538a",
+      "byteIdentityEqualsMeasuredHost": false,
+      "qualification": "Separately built development host, 28 more installed bytes. Its actual code/signature hashes are different; measured bc66 host and all39 size totals remain unchanged."
+    },
+    "staticOnlyArtifactQualification": "The measured bc66 Herdr and Quinjet archives have static size/provenance proof. Separate qualified retry archives demonstrate owner lifecycle behavior without changing their measured table entries.",
+    "currentEmptyHostBuild": {
+      "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+      "installedBytes": 8845416,
+      "installedBytesAboveMeasuredHost": 28,
+      "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+      "byteIdentityEquals46RetryHost": true,
+      "byteIdentityEqualsMeasuredHost": false,
+      "qualification": "Fresh exact-source development build and strict signature verified. The actual signed executable matches the separate 46f retry build, not measured bc66. No current controlled comparison ZIP or production DMG size is claimed; measured totals remain unchanged."
+    },
+    "hostedDiagnostics": {
+      "status": "passed",
+      "uniqueMethods": 711,
+      "jobURL": "https://github.com/pulkitxm/edith/actions/runs/38079680276/job/114293832855",
+      "scope": "Separate hosted diagnostic tier only. Its 9 transport cases also appear in 461 Core cases, followed by 250 UI cases, yielding 711 unique methods and 720 executions. This historical snapshot is not the current-parent CI result, 13-stage original UI journey or all 39 managed original views.",
+      "sourceCommit": "423c953e06b255d540a35abf5281ed3acbae70c5",
+      "executions": 720,
+      "transportMethods": 9,
+      "coreMethods": 461,
+      "uiMethods": 250,
+      "receiptSHA256": "92b35f711a6454480923df65a5dd8e2e2094bf617bd82da2d33c90c237e9056b",
+      "resultSHA256": "ec3e477716fc880b181fbcd49cd589dff8693b1d533d8c9bc25618944227dc94",
+      "ownedSurvivors": 0
+    },
+    "currentCI": {
+      "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+      "status": "failed",
+      "testMethods": 718,
+      "suites": 122,
+      "failures": 1,
+      "failureTest": "HostPrivilegedProcessTests.disablingOnePrivilegedWorkerReleasesItsProcessAndKeepsTheOtherAlive",
+      "failure": "Synthetic privileged-process fixture timed out; correction and verification are pending.",
+      "jobURL": "https://github.com/pulkitxm/edith/actions/runs/38081804854/job/114300189127"
+    },
+    "pendingVerification": [
+      "13-stage original hosted UI journey",
+      "All 39 original managed native views",
+      "Production signed catalog and release downloads",
+      "Production signing and notarization",
+      "Current CI privileged-process fixture correction"
+    ]
+  }
+}
