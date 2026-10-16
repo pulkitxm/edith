@@ -15,7 +15,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var appStarted = false
     private var launchCleanupTask: Task<Void, Never>?
     private var helperMaintenanceTask: Task<Void, Never>?
-    private var marketplaceUpdateTask: Task<Void, Never>?
     private let lidAwakeDaemonRegistrar = LidAwakeDaemonRegistrar()
     private let agentRegistrar = AgentRegistrar()
     private let postLaunch = StartupCoordinator()
@@ -89,11 +88,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 self.helperMaintenanceTask?.cancel()
                 self.helperMaintenanceTask = Task.detached(priority: .utility) {
                     await launchHelperIfNeeded()
-                }
-            },
-            StartupPhase(name: "main.extensions") { [weak self] in
-                self?.marketplaceUpdateTask = Task {
-                    await MarketplaceModel.shared.updateEnabledExtensionsOnLaunch()
                 }
             },
             StartupPhase(name: "main.sectionMenu") { SectionWindowMenu.install() },
@@ -198,7 +192,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
         flushSettingsChangedBroadcast()
         launchCleanupTask?.cancel()
         helperMaintenanceTask?.cancel()
-        marketplaceUpdateTask?.cancel()
         postLaunch.cancel()
     }
 

@@ -219,9 +219,9 @@ describe("Claude Code cloud receipts", () => {
     try {
       await writeFile(
         join(root, "session.jsonl"),
-        `${[receipt("local"), receipt("missing", { requestId: undefined })]
+        [receipt("local"), receipt("missing", { requestId: undefined })]
           .map(JSON.stringify)
-          .join("\n")}\n`,
+          .join("\n") + "\n",
       );
       const local = await localClaudeReceipts(root);
       expect(
@@ -249,7 +249,7 @@ describe("Claude Code cloud receipts", () => {
       ];
       await writeFile(
         join(projects, "session.jsonl"),
-        `${rows.map(JSON.stringify).join("\n")}\n`,
+        rows.map(JSON.stringify).join("\n") + "\n",
       );
       archive = new BillingArchive(join(root, "history"));
       archive.bootstrap({ generatedAt: "2026-10-01T12:00:00Z", blocks: [] });

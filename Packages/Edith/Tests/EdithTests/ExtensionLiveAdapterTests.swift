@@ -54,10 +54,9 @@ import EdithCore
         #expect(result == .uninstalled("Install Deno to download and convert media."))
     }
 
-    @Test func keepAwakeRequiresItsDownloadedPackage() async {
+    @Test func keepAwakeReadinessDoesNotDependOnSystem() async {
         let result = await ExtensionLiveAdapters.readiness(for: "keepAwake")
-        #expect(
-            result == .uninstalled("Download this extension from Extensions before enabling it."))
+        #expect(result == .ready("Keep Awake is ready to prevent idle sleep without System."))
     }
 
     @Test func catalogCoversEveryPreviouslyDeferredExtension() {

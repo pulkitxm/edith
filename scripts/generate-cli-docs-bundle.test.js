@@ -1,80 +1,33 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import {
-    bundlePaths,
-    collectPages,
-    parseArguments,
-    renderBundle,
+  bundlePath,
+  collectPages,
+  parseArguments,
+  renderBundle,
 } from "./generate-cli-docs-bundle.mjs";
 
 test("docs bundle arguments accept only --check", () => {
-    expect(parseArguments([])).toEqual({ check: false });
-    expect(parseArguments(["--check"])).toEqual({ check: true });
-    expect(() => parseArguments(["--write"])).toThrow("unknown flag: --write");
+  expect(parseArguments([])).toEqual({ check: false });
+  expect(parseArguments(["--check"])).toEqual({ check: true });
+  expect(() => parseArguments(["--write"])).toThrow("unknown flag: --write");
 });
 
 test("docs bundle renders one sorted page per line", () => {
-    const rendered = renderBundle([
-        { path: "a.md", markdown: "# A\n" },
-        { path: "b/README.md", markdown: "# B\n" },
-    ]);
-    expect(rendered.split("\n")).toHaveLength(5);
-    expect(JSON.parse(rendered).map((page) => page.path)).toEqual([
-        "a.md",
-        "b/README.md",
-    ]);
+  const rendered = renderBundle([
+    { path: "a.md", markdown: "# A\n" },
+    { path: "b/README.md", markdown: "# B\n" },
+  ]);
+  expect(rendered.split("\n")).toHaveLength(5);
+  expect(JSON.parse(rendered).map((page) => page.path)).toEqual([
+    "a.md",
+    "b/README.md",
+  ]);
 });
 
 test("the committed docs bundle matches docs/cli", () => {
-    const pages = collectPages();
-    expect(pages.map((page) => page.path)).toContain("invoke/README.md");
-    expect(pages.map((page) => page.path)).toContain("extensions/enable.md");
-    expect(pages.map((page) => page.path)).toContain("README.md");
-    expect(bundlePaths).toContain(
-        "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
-    );
-    for (const bundlePath of bundlePaths)
-        expect(readFileSync(bundlePath, "utf8")).toBe(renderBundle(pages));
-});
-
-const providerGroups = () => {
-    const names = new Set();
-    const walk = (directory) => {
-        for (const entry of readdirSync(directory, { withFileTypes: true })) {
-            const path = join(directory, entry.name);
-            if (entry.isDirectory()) {
-                if (entry.name !== "Tests" && entry.name !== ".build")
-                    walk(path);
-            } else if (
-                entry.name.endsWith(".swift") &&
-                path.includes("/CLI/")
-            ) {
-                const source = readFileSync(path, "utf8");
-                for (const match of source.matchAll(
-                    /CommandConfiguration\(\s*commandName: "([^"]+)"[^)]*?subcommands:/g,
-                ))
-                    names.add(match[1]);
-            }
-        }
-    };
-    walk("Extensions");
-    return [...names].sort();
-};
-
-test("every provider command group has a reference page", () => {
-    const pages = collectPages();
-    const documented = new Set(
-        pages.flatMap((page) =>
-            [
-                ...page.markdown.matchAll(
-                    /`ed ((?:[a-z][\w-]*)(?: [a-z][\w-]*)*)/g,
-                ),
-            ].flatMap((match) => match[1].split(" ")),
-        ),
-    );
-    const groups = providerGroups();
-    expect(groups.length).toBeGreaterThan(20);
-    expect(groups.filter((group) => !documented.has(group))).toEqual([]);
-    expect(pages.length).toBeGreaterThan(400);
+  const pages = collectPages();
+  expect(pages.length).toBeGreaterThan(300);
+  expect(pages.map((page) => page.path)).toContain("README.md");
+  expect(readFileSync(bundlePath, "utf8")).toBe(renderBundle(pages));
 });

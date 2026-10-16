@@ -29,10 +29,6 @@ public enum AppStorageKeys {
         public static let updateRetries = "appUpdateRetries"
     }
 
-    public enum Extensions {
-        public static let automaticUpdates = "extensionAutomaticUpdates"
-    }
-
     public enum Update {
         public static let automaticChecks = "SUEnableAutomaticChecks"
         public static let checkInterval = "SUScheduledCheckInterval"

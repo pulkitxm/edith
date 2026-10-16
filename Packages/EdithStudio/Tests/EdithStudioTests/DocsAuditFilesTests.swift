@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import ExtensionMarketplace
+import ZIPFoundation
 
 @testable import EdithStudio
 

@@ -123,22 +123,6 @@ finish_isolation() {
 }
 trap finish_isolation EXIT
 mkdir -p "$EDITH_DATA_ROOT" "$EDITH_CLOUD_ROOT" "$EDITH_DATABASE_HOME"
-node ../../scripts/extension-host-abi.mjs --write ../.. >/dev/null
-
-parser_scratch=()
-parser_next_scratch=0
-for parser_argument in "$@"; do
-    if [[ "$parser_next_scratch" -eq 1 ]]; then
-        parser_scratch=(--scratch-path "$parser_argument")
-        parser_next_scratch=0
-    elif [[ "$parser_argument" == --scratch-path ]]; then
-        parser_next_scratch=1
-    elif [[ "$parser_argument" == --scratch-path=* ]]; then
-        parser_scratch=(--scratch-path "${parser_argument#--scratch-path=}")
-    fi
-done
-[[ "$parser_next_scratch" -eq 0 ]] || fail_isolation "--scratch-path needs a path."
-python3 -I -B ../../scripts/prepare-argument-parser.py "$(pwd -P)" ${parser_scratch[@]+"${parser_scratch[@]}"}
 
 DEV="$(xcode-select -p)"
 FW="$DEV/Library/Developer/Frameworks"

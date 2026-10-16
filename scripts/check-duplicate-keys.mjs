@@ -6,7 +6,6 @@ const FOR_KEY = /forKey:\s*"([^"\\]{3,})"/g;
 export function findLiterals(text) {
   const found = [];
   for (const m of text.matchAll(FOR_KEY)) {
-    if (/\.removeValue\(\s*$/.test(text.slice(0, m.index))) continue;
     const line = text.slice(0, m.index).split("\n").length;
     found.push({ literal: m[1], line });
   }
@@ -31,20 +30,13 @@ export function scanFiles(files) {
   return findings;
 }
 
-export function isShippingSource(path) {
-  return (
-    path.endsWith(".swift") &&
-    !path.startsWith("Packages/Edith/") &&
-    !/(^|\/)(Tests|Vendor|vendor)\//.test(path)
-  );
-}
-
 function main() {
   const files = execSync("git ls-files '*.swift'", { encoding: "utf8" })
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter(isShippingSource);
+    .filter((f) => !/^Packages\/Edith\/Vendor\//.test(f))
+    .filter((f) => !/(^|\/)Tests\//.test(f));
 
   const loaded = files.map((path) => ({
     path,
@@ -69,7 +61,7 @@ function main() {
     `\n${findings.length} UserDefaults key(s) spelled out independently in more than one file.`,
   );
   console.error(
-    "Add one constant to the owning extension or ExtensionSupport and reference it from every site instead.",
+    "Add one constant to AppStorageKeys (Packages/Edith/Sources/EdithKit/Core/Defaults/AppStorageKeys.swift) and reference it from every site instead.",
   );
   process.exit(1);
 }
