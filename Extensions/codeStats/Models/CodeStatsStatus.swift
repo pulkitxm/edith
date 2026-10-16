@@ -26,11 +26,12 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
     public var active: CodeStatsActiveRun?
     public var waitingFor: String?
     public var firstAttemptAt: Date?
+    public var cancelRequested: Bool?
 
     public init(
         lastRun: CodeStatsRunResult? = nil, lastRunAt: Date? = nil, reportedAt: Date? = nil,
         profile: CodeStatsProfile? = nil, active: CodeStatsActiveRun? = nil,
-        waitingFor: String? = nil, firstAttemptAt: Date? = nil
+        waitingFor: String? = nil, firstAttemptAt: Date? = nil, cancelRequested: Bool? = nil
     ) {
         self.lastRun = lastRun
         self.lastRunAt = lastRunAt
@@ -39,6 +40,7 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
         self.active = active
         self.waitingFor = waitingFor
         self.firstAttemptAt = firstAttemptAt
+        self.cancelRequested = cancelRequested
     }
 
     public var scheduleBase: Date? { lastRunAt ?? firstAttemptAt }

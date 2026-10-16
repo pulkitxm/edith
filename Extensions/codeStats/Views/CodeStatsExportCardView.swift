@@ -14,7 +14,10 @@ public struct CodeStatsExportDeck: ExportCardDeck {
         self.init(
             snapshot: snapshot,
             delivery: remote.map { bridge in
-                { try await bridge.deliver($0, name: $1, save: $2) }
+                {
+                    let message = try await bridge.deliver($0, name: $1, save: $2)
+                    return message == CodeStatsExportDelivery.cancelledMessage ? "" : message
+                }
             })
     }
     public var cards: [CodeStatsExportCard] { CodeStatsExportCard.allCases }

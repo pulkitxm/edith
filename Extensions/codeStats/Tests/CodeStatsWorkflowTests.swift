@@ -200,6 +200,20 @@ struct CodeStatsWorkflowHarness {
         #expect(status.state.waitingFor == "Drive")
     }
 
+    @Test func aRunWhoseCancelWasRequestedIsRecoveredAsCancelled() async throws {
+        let harness = try CodeStatsWorkflowHarness()
+        defer { harness.fixture.remove() }
+        let started = Date(timeIntervalSince1970: 1_700_000_000)
+        try harness.store.saveState(
+            CodeStatsState(
+                active: CodeStatsActiveRun(trigger: .manual, startedAt: started),
+                cancelRequested: true))
+        let workflow = await harness.workflow()
+        let status = try await harness.status(workflow)
+        #expect(status.state.lastRun?.outcome == .cancelled)
+        #expect(harness.store.loadState().cancelRequested == nil)
+    }
+
     @Test func anInterruptedRunIsRecoveredWithoutRestarting() async throws {
         let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }

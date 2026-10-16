@@ -406,14 +406,19 @@ final class CodeStatsModel {
 
     func start() async {
         guard !isStarting else { return }
-        isStarting = true
-        defer { isStarting = false }
         do {
-            _ = try await service.start()
-            await loadStatus()
+            try await startOrThrow()
         } catch {
             surface(error)
         }
+    }
+
+    func startOrThrow() async throws {
+        guard !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+        _ = try await service.start()
+        await loadStatus()
     }
 
     func cancel() async {
@@ -458,13 +463,23 @@ final class CodeStatsModel {
 
     func chooseFolder(_ path: String) async {
         do {
-            if let remote { try await remote.folder(path); await loadStatus(); return }
-            _ = try CodeStatsPreferences.selectFolder(
-                path, defaults: defaults, homeDirectory: CodeStatsExecutionEnvironment.home)
-            await loadStatus()
+            _ = try await selectFolder(path)
         } catch {
             surface(error)
         }
+    }
+
+    func selectFolder(_ path: String) async throws -> String {
+        let selected: String
+        if let remote {
+            selected = try await remote.folder(path).path
+        } else {
+            selected = try CodeStatsPreferences.selectFolder(
+                path, defaults: defaults, homeDirectory: CodeStatsExecutionEnvironment.home
+            ).path
+        }
+        await loadStatus()
+        return selected
     }
 
     func useSeededIdentity() {

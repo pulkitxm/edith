@@ -83,10 +83,10 @@ import Foundation
         }
         let totals = report.totals
         let metrics: [SurfaceMetric] = [
-            .init("commits", "Commits", CodeStatsNumberFormat.grouped(totals.commits)),
-            .init("lines", "Lines", CodeStatsNumberFormat.compact(totals.authored)),
-            .init("streak", "Streak", "\(totals.currentStreak)d"),
-            .init("activeDays", "Active days", CodeStatsNumberFormat.grouped(totals.activeDays)),
+            .init("commits", "Commits", "\(totals.commits)"),
+            .init("lines", "Authored lines", CodeStatsNumberFormat.compact(totals.authored)),
+            .init("streak", "Current streak", "\(totals.currentStreak)d"),
+            .init("activeDays", "Active days", "\(totals.activeDays)"),
             .init("net", "Net lines", CodeStatsNumberFormat.compact(totals.net)),
         ]
         let rows = report.repositories.prefix(tile.itemLimit).map { repository in
@@ -94,8 +94,8 @@ import Foundation
                 "repository:" + digest(repository.repository), sourceID: repository.repository,
                 title: repository.repository,
                 detail: tile.shows("languages") ? repository.topLanguage ?? "" : "",
-                value: "\(CodeStatsNumberFormat.grouped(repository.commits)) commits",
-                icon: "arrow.triangle.branch", field: "repositories")
+                value: "\(repository.commits) commits",
+                icon: "curlybraces", field: "repositories")
         }
         let projection = CodeStatsProjection(report: history, calendar: calendar)
         let days = projection.heatWeeks.flatMap(\.cells).compactMap { cell -> SurfaceCalendarDay? in
@@ -129,6 +129,8 @@ import Foundation
                 ],
             calendars: days.isEmpty ? [] : [.init("activity", "Code activity", days: days)],
             sources: table.repositories.prefix(100).map { .init($0, $0) },
+            message: "\(report.startDay) to \(report.endDay) · \(totals.repositories) repositories"
+                + (tile.sourceIDs == nil ? "" : " · Selected repositories only"),
             updatedAt: store.loadState().reportedAt)
     }
 

@@ -19,6 +19,29 @@ import Testing
         return (model, agent)
     }
 
+    @Test func folderAndRefreshFailuresReachTheCallerInsteadOfTheModelAlert() async throws {
+        let (model, _) = await model()
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing-\(UUID().uuidString)").path
+        await #expect(throws: (any Error).self) { _ = try await model.selectFolder(missing) }
+        #expect(model.errorMessage == nil)
+        let failing = CodeStatsModel(
+            service: CodeStatsPageService(
+                status: { throw CodeStatsFailure(.unavailable, "git is missing") },
+                report: { _ in nil },
+                start: { throw CodeStatsFailure(.unavailable, "git is missing") },
+                cancel: { throw CodeStatsFailure(.unavailable, "git is missing") },
+                profile: { throw CodeStatsFailure(.unavailable, "git is missing") },
+                authors: { [] }, updates: { AsyncStream { $0.finish() } }),
+            defaults: UserDefaults(suiteName: "test.edith.code-stats-start.\(UUID())")!)
+        do {
+            try await failing.startOrThrow()
+            Issue.record("the refresh should have failed")
+        } catch {
+            #expect(error.localizedDescription.contains("git is missing"))
+        }
+    }
+
     @Test func selectionSurvivesPageRecreationAndRefresh() async {
         let (model, agent) = await model()
         let defaults = UserDefaults(suiteName: "test.edith.persisted-filters.\(UUID())")!

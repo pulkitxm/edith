@@ -145,18 +145,15 @@ struct CodeStatsRows: View {
         panel.message = "Choose the folder for your GitHub mirror"
         guard CodeStatsExecutionEnvironment.fixtureHome == nil else { return }
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            if model.remote != nil {
-                Task {
-                    await model.chooseFolder(url.path); folder = url.path
-                }; return
+        refreshTask?.cancel()
+        refreshTask = Task {
+            do {
+                folder = try await model.selectFolder(url.path)
+                message = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                message = error.localizedDescription
             }
-            folder = try CodeStatsPreferences.selectFolder(
-                url.path, homeDirectory: CodeStatsExecutionEnvironment.home
-            ).path
-            message = nil
-        } catch {
-            message = error.localizedDescription
         }
     }
 
@@ -177,10 +174,11 @@ struct CodeStatsRows: View {
         refreshTask?.cancel()
         refreshTask = Task {
             do {
-                await model.start()
+                try await model.startOrThrow()
                 try Task.checkCancellation()
                 message = "Refreshing in the background."
             } catch {
+                guard !CodeStatsCancellation.isSilent(error), !Task.isCancelled else { return }
                 message = error.localizedDescription
             }
         }

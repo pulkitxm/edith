@@ -136,9 +136,12 @@ public actor CodeStatsWorkflow {
 
     public func recoverInterruptedRun() {
         guard let active = state.active else { return }
+        let cancelled = state.cancelRequested == true
         state.active = nil
+        state.cancelRequested = nil
         state.lastRun = CodeStatsRunResult(
-            outcome: .interrupted, startedAt: active.startedAt, finishedAt: environment.now())
+            outcome: cancelled ? .cancelled : .interrupted, startedAt: active.startedAt,
+            finishedAt: environment.now())
         persist()
     }
 
@@ -291,6 +294,8 @@ public actor CodeStatsWorkflow {
 
     public func cancel() async throws {
         guard let active = state.active, let task = runTask else { return }
+        state.cancelRequested = true
+        persist()
         task.cancel()
         await task.value
         if state.active?.taskID == active.taskID {
@@ -468,6 +473,7 @@ public actor CodeStatsWorkflow {
     private func complete(_ result: CodeStatsRunResult, _ run: CodeStatsActiveRun) {
         guard state.active?.taskID == run.taskID else { return }
         state.active = nil
+        state.cancelRequested = nil
         progress = nil
         state.lastRun = result
         if let profile = result.profile { state.profile = profile }

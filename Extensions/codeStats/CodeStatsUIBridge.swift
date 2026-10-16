@@ -9,6 +9,7 @@ struct CodeStatsPNGDelivery: Codable { let data: Data; let name: String; let sav
 
 @MainActor struct CodeStatsExportDelivery {
     static let maximumBytes = 4 * 1024 * 1024
+    static let cancelledMessage = "Save cancelled"
     let chooseSaveURL: (String) async throws -> URL?
     let copy: (Data) throws -> Void
     var write: (Data, URL) throws -> Void = ExportDelivery.write
@@ -48,7 +49,7 @@ struct CodeStatsPNGDelivery: Codable { let data: Data; let name: String; let sav
         if request.save {
             let url = try await chooseSaveURL(request.name)
             try Task.checkCancellation()
-            guard let url else { return "Save cancelled" }
+            guard let url else { return Self.cancelledMessage }
             try write(request.data, url)
             return "Saved to " + url.lastPathComponent
         }
@@ -66,18 +67,25 @@ struct CodeStatsUIPreferences: Codable {
 }
 
 struct CodeStatsUIBridge: Sendable {
-    let invoke: @MainActor @Sendable (String, Data) async throws -> Data
+    static let authorsTimeout: Double = 600
+    static let profileTimeout: Double = 120
+
+    let invoke: @MainActor @Sendable (String, Data, Double) async throws -> Data
     @MainActor init(client: ExtensionEngineClient) {
-        invoke = { try await client.invoke($0, payload: $1) }
+        invoke = { try await client.invoke($0, payload: $1, timeout: $2) }
+    }
+    init(invoke: @escaping @MainActor @Sendable (String, Data, Double) async throws -> Data) {
+        self.invoke = invoke
     }
     init(invoke: @escaping @MainActor @Sendable (String, Data) async throws -> Data) {
-        self.invoke = invoke
+        self.invoke = { operation, payload, _ in try await invoke(operation, payload) }
     }
 
     @MainActor private func read<T: Decodable>(
-        _ operation: String, payload: Data = Data("{}".utf8), as: T.Type = T.self
+        _ operation: String, payload: Data = Data("{}".utf8), timeout: Double = 30,
+        as: T.Type = T.self
     ) async throws -> T {
-        let data = try await invoke("codeStats.ui." + operation, payload)
+        let data = try await invoke("codeStats.ui." + operation, payload, timeout)
         return try JSONDecoder().decode(T.self, from: data)
     }
     @MainActor var service: CodeStatsPageService {
@@ -87,8 +95,9 @@ struct CodeStatsUIBridge: Sendable {
                 try await read("report", payload: JSONEncoder().encode(CodeStatsReportQuery(range)))
             },
             facts: { try await read("facts") }, start: { try await read("start") },
-            cancel: { try await read("cancel") }, profile: { try await read("profile") },
-            authors: { try await read("authors") },
+            cancel: { try await read("cancel") },
+            profile: { try await read("profile", timeout: Self.profileTimeout) },
+            authors: { try await read("authors", timeout: Self.authorsTimeout) },
             updates: {
                 AsyncStream { continuation in
                     let task = Task {
@@ -107,10 +116,11 @@ struct CodeStatsUIBridge: Sendable {
     }
     @MainActor func deliver(_ data: Data, name: String, save: Bool) async throws -> String {
         let request = CodeStatsPNGDelivery(data: data, name: name, save: save)
-        return try await read("export", payload: JSONEncoder().encode(request))
+        return try await read("export", payload: JSONEncoder().encode(request), timeout: 600)
     }
-    @MainActor func folder(_ path: String) async throws {
-        _ = try await invoke("codeStats.ui.folder", JSONEncoder().encode(path))
+    @MainActor func folder(_ path: String) async throws -> CodeStatsFolderSelection {
+        let data = try await invoke("codeStats.ui.folder", JSONEncoder().encode(path), 30)
+        return try JSONDecoder().decode(CodeStatsFolderSelection.self, from: data)
     }
     @MainActor func settings(_ defaults: UserDefaults) async throws {
         let request = CodeStatsUIPreferences(
@@ -119,7 +129,7 @@ struct CodeStatsUIBridge: Sendable {
             includeForks: defaults.bool(forKey: AppStorageKeys.CodeStats.includeForks),
             includeArchived: defaults.object(forKey: AppStorageKeys.CodeStats.includeArchived)
                 as? Bool ?? true)
-        _ = try await invoke("codeStats.ui.settings", JSONEncoder().encode(request))
+        _ = try await invoke("codeStats.ui.settings", JSONEncoder().encode(request), 30)
     }
     @MainActor static func execute(
         _ command: String, payload: Data, workflow: CodeStatsWorkflow,
