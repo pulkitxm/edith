@@ -52,7 +52,7 @@ final class UsagePresenterState {
 
 extension View {
     func presenterBlur(_ hidden: Bool) -> some View {
-        blur(radius: hidden ? UIScale.pt(6) : 0).accessibilityHidden(hidden)
+        blur(radius: hidden ? UIScale.pt(4) : 0).accessibilityHidden(hidden)
     }
 }
 

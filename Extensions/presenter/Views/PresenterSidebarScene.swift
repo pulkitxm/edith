@@ -19,11 +19,7 @@ struct PresenterSidebarScene: View {
         else { return nil }
         if let presentation {
             return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        PresenterSidebarScene(presentation: presentation)
-                    }
-                })
+                rootView: ExtensionPageHost { PresenterSidebarScene(presentation: presentation) })
         }
         return NSHostingController(rootView: ExtensionPageHost { PresenterSidebarScene() })
     }
