@@ -27,8 +27,8 @@ struct QuinjetProjectPicker: View {
                 QuinjetRemoteProjectPicker(
                     model: model, tab: tab, machines: machines, machine: machine, remote: remote,
                     picker: picker, selectMachine: select)
-            } else if let machine = selectedMachine, let picker = tab.folderPicker,
-                let error = picker.errorMessage ?? tab.errorMessage
+            } else if let machine = selectedMachine,
+                let error = tab.folderPicker?.errorMessage ?? tab.errorMessage
             {
                 ContentUnavailableView {
                     Label("Machine unavailable", systemImage: "exclamationmark.triangle")

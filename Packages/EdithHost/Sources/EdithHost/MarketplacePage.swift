@@ -178,8 +178,9 @@ struct MarketplacePage: View {
             enabled: Binding(
                 get: { marketplace.surfaceAvailability.activeIDs.contains(entry.id) },
                 set: { value in Task { await suites.select(entry, enabled: value) } }),
-            toggleDisabled: marketplace.installed[entry.id] == nil
-                || marketplace.sessions.pendingDisableIDs.contains(entry.id)
+            toggleDisabled: marketplace.sessions.pendingDisableIDs.contains(entry.id)
+                || (marketplace.installed[entry.id] == nil
+                    && marketplace.available[entry.id] == nil)
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(status(entry)).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -251,8 +252,9 @@ struct MarketplacePage: View {
                     marketplace.installedVersions[entry.id]?.isEmpty == false
                         ? "Update" : "Download"
                 ) {
-                    selected = entry
+                    Task { await suites.select(entry, enabled: true) }
                 }
+                .disabled(marketplace.available[entry.id] == nil)
             }
             if marketplace.operationID != entry.id,
                 marketplace.installedVersions[entry.id]?.isEmpty == false

@@ -5,13 +5,18 @@ import Testing
 
 struct KeepAwakeExtensionSurfaceTests {
     @Test func liveStateIsPreservedInTheSurfaceContract() throws {
-        let off = KeepAwakeSurface.snapshot(preventingSleep: false, requested: false)
-        let failed = KeepAwakeSurface.snapshot(preventingSleep: false, requested: true)
-        #expect(off.rows.first?.value == "Off")
+        let off = KeepAwakeSurface.snapshot(requested: false)
+        let on = KeepAwakeSurface.snapshot(requested: true)
+        #expect(off.metrics.first?.title == "Current state")
+        #expect(off.metrics.first?.value == "Off")
+        #expect(off.rows.isEmpty && off.message == nil)
         #expect(off.actions.first?.id == "enable")
-        #expect(failed.actions.first?.id == "disable")
-        #expect(failed.message != nil)
-        _ = try SurfaceSnapshot.decode(failed.encoded(), providerID: "keepAwake")
+        #expect(off.actions.first?.title == "Turn on")
+        #expect(off.actions.first?.icon == "moon.zzz")
+        #expect(on.metrics.first?.value == "On")
+        #expect(on.actions.first?.id == "disable")
+        #expect(on.actions.first?.title == "Turn off")
+        _ = try SurfaceSnapshot.decode(on.encoded(), providerID: "keepAwake")
     }
     @Test @MainActor func currentActionsToggleTheOwnedAssertionAndRejectStaleTokens() async throws {
         let name = "test.surface.keepAwake." + UUID().uuidString

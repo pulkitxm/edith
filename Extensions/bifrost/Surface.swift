@@ -8,7 +8,7 @@ import Foundation
     private let privacy: @MainActor () -> [String: String]
     init(
         store: BifrostStore,
-        open: @escaping @MainActor (String) -> Void = { BifrostPanel.shared.show(query: $0) },
+        open: @escaping @MainActor (String) -> Void = { BifrostPanel.shared.toggle(query: $0) },
         privacy: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         }
@@ -64,34 +64,25 @@ import Foundation
     }
 
     private func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {
-        let field = tile.widget == .desk ? "bifrost" : nil
-        guard field == nil || tile.shows("bifrost") else { return .init(providerID: "bifrost") }
-        let rows = Array(store.applications.prefix(tile.itemLimit)).map { application in
+        let rows = Array(store.applications.prefix(40)).map { application in
             SurfaceDataRow(
                 Self.actionID(application), sourceID: "applications",
-                title: String(application.name.prefix(120)),
-                detail: application.bundleID ?? "Application", icon: "app", field: field,
-                actions: [.init(Self.actionID(application), "Open", "arrow.up.right", field: field)]
+                title: String(application.name.prefix(120)), icon: "app",
+                actions: [.init(Self.actionID(application), "Launch", "arrow.up.right")]
             )
         }
         return .init(
             providerID: "bifrost",
-            metrics: [
-                .init("applications", "Applications", "\(store.applications.count)"),
-                .init("sources", "Sources", "\(BifrostSource.enabled().count)"),
-            ], rows: rows,
-            actions: [
-                .init("open", "Open Bifrost", "command", field: field),
-                .init("reindex", "Rebuild index", "arrow.clockwise", field: field),
-            ], sources: [.init("applications", "Applications")],
-            message: store.isIndexing ? "Updating application index" : nil,
+            metrics: [.init("apps", "Indexed apps", "\(store.applications.count)")],
+            rows: rows,
+            actions: [.init("open", "Open launcher", "magnifyingglass")],
+            sources: [.init("applications", "Applications")],
             updatedAt: store.indexedAt)
     }
 
     private func perform(_ id: String) async throws {
         switch id {
         case "open": open("")
-        case "reindex": store.reindex()
         default:
             guard let application = store.applications.first(where: { Self.actionID($0) == id }),
                 !BifrostFixture.enabled,

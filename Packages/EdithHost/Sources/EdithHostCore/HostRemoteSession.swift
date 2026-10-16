@@ -94,6 +94,14 @@ public final class HostRemoteSession {
         Set(retained.values.map { $0.configuration.package.id })
     }
 
+    public static func killAllForQuit() {
+        for session in retained.values {
+            guard let peer = session.peer, peer.pid > 1 else { continue }
+            session.nativeProcesses.terminate(owner: peer.pid)
+            kill(peer.pid, SIGKILL)
+        }
+    }
+
     private init(
         identity: AppExtensionIdentity, configuration: HostRemoteConfiguration,
         executable: URL, lease: PackageFileLock, engineIdentity: HostRemoteKernelIdentity?,

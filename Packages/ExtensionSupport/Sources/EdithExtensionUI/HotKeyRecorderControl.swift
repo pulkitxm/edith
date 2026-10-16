@@ -5,52 +5,92 @@ import SwiftUI
 
 public struct HotKeyRecorderControl: View {
     private let keyPrefix: String
-    @AppStorage private var label: String
+    private let defaultLabel: String
     @State private var recording = false
     @State private var monitor: Any?
+    @State private var label = ""
 
     public init(keyPrefix: String, defaultLabel: String) {
         self.keyPrefix = keyPrefix
-        _label = AppStorage(
-            wrappedValue: defaultLabel, keyPrefix + "Label", store: SharedDefaults.store)
+        self.defaultLabel = defaultLabel
     }
 
     public var body: some View {
-        Button(recording ? "Press a shortcut. Escape cancels." : label) {
-            if recording { stop() } else { start() }
+        Button {
+            recording ? stop() : start()
+        } label: {
+            Text(recording ? "Press shortcut…" : label)
+                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .kerning(recording ? 0 : 2)
+                .padding(.vertical, UIScale.pt(2))
+                .padding(.horizontal, UIScale.pt(6))
         }
-        .buttonStyle(.edith(.secondary))
-        .onDisappear { stop() }
+        .onAppear { label = currentLabel }
+        .onDisappear { if recording { stop() } }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: UserDefaults.didChangeNotification, object: SharedDefaults.store)
+        ) { _ in
+            if !recording { label = currentLabel }
+        }
+        .help("Click, then press the new shortcut (Esc cancels)")
+    }
+
+    private var currentLabel: String {
+        SharedDefaults.store.string(forKey: keyPrefix + "Label") ?? defaultLabel
     }
 
     private func start() {
         recording = true
+        NSApp.activate(ignoringOtherApps: true)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 { stop(); return nil }
-            let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            guard !flags.isEmpty else { return nil }
-            var modifiers = 0
-            var prefix = ""
-            if flags.contains(.control) { modifiers |= controlKey; prefix += "⌃" }
-            if flags.contains(.option) { modifiers |= optionKey; prefix += "⌥" }
-            if flags.contains(.shift) { modifiers |= shiftKey; prefix += "⇧" }
-            if flags.contains(.command) { modifiers |= cmdKey; prefix += "⌘" }
-            let key =
-                event.keyCode == 49
-                ? "Space" : (event.charactersIgnoringModifiers ?? "").uppercased()
-            guard !key.isEmpty else { return nil }
-            SharedDefaults.store.set(Int(event.keyCode), forKey: keyPrefix + "Code")
-            SharedDefaults.store.set(modifiers, forKey: keyPrefix + "Mods")
-            label = prefix + key
-            IPC.post(IPC.Name.settingsChanged)
-            stop()
+            handle(event)
             return nil
         }
     }
 
     private func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
         recording = false
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
+        }
+        label = currentLabel
+    }
+
+    private func handle(_ event: NSEvent) {
+        if event.keyCode == 53 {
+            stop()
+            return
+        }
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard flags.contains(.command) || flags.contains(.option) || flags.contains(.control)
+        else { return }
+        var mods = 0
+        var symbols = ""
+        if flags.contains(.control) {
+            mods |= controlKey
+            symbols += "⌃"
+        }
+        if flags.contains(.option) {
+            mods |= optionKey
+            symbols += "⌥"
+        }
+        if flags.contains(.shift) {
+            mods |= shiftKey
+            symbols += "⇧"
+        }
+        if flags.contains(.command) {
+            mods |= cmdKey
+            symbols += "⌘"
+        }
+        let label = HotKeyGlyph.label(
+            modifiers: symbols, keyCode: Int(event.keyCode),
+            characters: event.charactersIgnoringModifiers)
+        SharedDefaults.store.set(Int(event.keyCode), forKey: keyPrefix + "Code")
+        SharedDefaults.store.set(mods, forKey: keyPrefix + "Mods")
+        SharedDefaults.store.set(label, forKey: keyPrefix + "Label")
+        IPC.post(IPC.Name.settingsChanged)
+        stop()
     }
 }

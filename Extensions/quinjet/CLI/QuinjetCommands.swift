@@ -600,7 +600,13 @@ enum QuinjetCLIEnvironment {
         async throws -> Int32
     {
         if request.terminal == .cmux {
-            _ = try await QuinjetCMUXLauncher.launch(request: request, replacing: nil)
+            do {
+                _ = try await QuinjetCMUXLauncher.launch(request: request, replacing: nil)
+            } catch QuinjetLaunchError.cmuxUnavailable {
+                throw CLIFailure.unavailable(
+                    "cmux is not installed in Applications",
+                    hint: "install cmux, or omit --cmux to launch in this terminal")
+            }
             return 0
         }
         if !noninteractive {

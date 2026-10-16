@@ -109,7 +109,7 @@ enum UsageNativeAssembly {
                     detailNode)
                 return node
             }
-            block["projects"] = projectNodes(detail)
+            block["projects"] = projectNodes(detail.filter { !$0.project.root.isEmpty })
             daily.append(block)
         }
         let sourceOrder = [

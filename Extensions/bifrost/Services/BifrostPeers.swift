@@ -100,4 +100,14 @@ public enum BifrostPeers {
     @MainActor public static func open(owner: String) async throws {
         _ = try await invoke(owner: owner, command: "extension.open")
     }
+
+    public static func pick(owner: String) async throws {
+        struct Action: Encodable {
+            let action = "pick"
+            let value = ""
+        }
+        _ = try await invoke(
+            owner: owner, command: "\(owner).ui.action",
+            payload: JSONEncoder().encode(Action()))
+    }
 }

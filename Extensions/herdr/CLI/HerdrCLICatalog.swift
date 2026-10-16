@@ -1,4 +1,5 @@
 import ArgumentParser
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
@@ -7,6 +8,7 @@ import Foundation
         try JSONSerialization.data(withJSONObject: [
             "version": 1, "owner": "herdr", "commands": commands(HerdrCLICommand.self, route: []),
             "settings": [], "acceptsInput": true,
+            "parserHelp": [try ExtensionCLICatalog.parserHelp(HerdrCLICommand.self)],
             "coreOwner": try HerdrAgentCLIExecution.catalog(),
         ])
     }

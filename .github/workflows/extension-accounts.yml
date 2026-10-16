@@ -51,8 +51,7 @@ jobs:
         id: ghostty-toolchain
         if: "matrix.target == 'ci-extension-herdr-accounts'"
         run: |
-          command -v zig >/dev/null 2>&1 || brew install zig
-          test "$(zig version)" = "0.16.0"
+          source scripts/ci-setup-zig.sh
           echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
       - name: Reuse verified terminal native resources
         if: "matrix.target == 'ci-extension-herdr-accounts'"

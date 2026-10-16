@@ -127,10 +127,16 @@ struct StudioPage: View {
             case let .tool(id): return model.job(id) != nil
             case let .commandVideoEditor(id): return model.remoteCommandRequest?.requestID == id
             case let .imageEditor(url), let .pdfEditor(url, _):
-                return url.isFileURL && url.path.hasPrefix("/")
+                return url.isFileURL && FileManager.default.fileExists(atPath: url.path)
             case let .videoEditor(media, project):
-                return project?.isFileURL == true || !media.isEmpty
-            case let .compare(original, revised): return original.isFileURL && revised.isFileURL
+                if let project {
+                    return project.isFileURL && FileManager.default.fileExists(atPath: project.path)
+                }
+                return !media.isEmpty
+            case let .compare(original, revised):
+                return original.isFileURL && revised.isFileURL
+                    && FileManager.default.fileExists(atPath: original.path)
+                    && FileManager.default.fileExists(atPath: revised.path)
             }
         }
         switch route {
@@ -200,7 +206,7 @@ struct StudioPage: View {
     }
 
     private func accept(_ urls: [URL]) {
-        let files = model.facade == nil ? StudioLibraryStore.expand(urls) : urls
+        let files = StudioLibraryStore.expand(urls)
         guard !files.isEmpty, acceptsDrops else { return }
         model.add(files)
         if case let .tool(id) = model.route, let job = model.job(id) {

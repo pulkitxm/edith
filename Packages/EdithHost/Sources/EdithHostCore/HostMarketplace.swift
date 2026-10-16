@@ -153,10 +153,12 @@ public final class HostMarketplace {
         }
         await checkForUpdates(now: now)
         guard error == nil, !offline else { return }
+        var failed = false
         for id in downloadedIDs.sorted() where updateAvailable(id: id) {
             await download(id: id)
-            if error != nil { return }
+            if error != nil { failed = true }
         }
+        guard !failed else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
     }

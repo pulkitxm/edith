@@ -45,7 +45,7 @@ struct ClipboardHistoryView: View {
                 Text(error).settingsCaption().foregroundStyle(.red).padding(.horizontal)
             }
             Divider()
-            SearchField(placeholder: "Search…", text: $filterText)
+            SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
                 .padding(UIScale.pt(10))
             List(filtered) { entry in
                 row(entry)

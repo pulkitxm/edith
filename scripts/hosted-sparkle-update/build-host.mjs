@@ -106,7 +106,7 @@ export async function buildSparkleHost({
   const overlays = {};
   const pins = { sourceCommit, issuerPublicKey, signingRequirement };
   for (const [name, transform] of [
-    ["HostApplication.swift", originalShellFixtureOverlay],
+    ["HostRuntime.swift", originalShellFixtureOverlay],
     ["HostWorkspace.swift", fixtureNavigationOverlay],
     ["HostPermissions.swift", fixturePermissionOverlay],
     ["HostRemoteContentPresenter.swift", fixturePresenterOverlay],

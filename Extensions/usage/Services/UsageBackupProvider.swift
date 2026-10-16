@@ -109,7 +109,7 @@ import IOKit.ps
             return Data("{\"cancelled\":true}".utf8)
         case "backup.synchronize":
             await events?.cancel()
-            return try await exportCurrent()
+            return try await exportCurrent(restore: true)
         default: throw ExtensionPeerError.invalidRequest
         }
     }
@@ -126,10 +126,10 @@ import IOKit.ps
     func restoreOnEnable() async -> Bool {
         guard !stopping else { return false }
         guard cloudEnabled else { return true }
-        return await transfer(usage: true, limits: true, export: false)
+        return await transfer(usage: true, limits: true, restore: true, export: false)
     }
 
-    func startScheduling(debounce: Duration = .milliseconds(100), restorePending: Bool = false) {
+    func startScheduling(debounce: Duration = .seconds(60), restorePending: Bool = false) {
         guard !stopping, events == nil else { return }
         observedCloudEnabled = cloudEnabled
         needsRestore = restorePending && cloudEnabled
@@ -146,7 +146,7 @@ import IOKit.ps
                     try Task.checkCancellation()
                     needsRestore = false
                 }
-                _ = try await exportCurrent()
+                _ = try await exportCurrent(restore: false)
             })
         for name in [UsageEvents.usageUpdated, UsageEvents.limitsUpdated] {
             observers.append(
@@ -193,11 +193,11 @@ import IOKit.ps
         for task in pending { await task.value }
     }
 
-    private func exportCurrent() async throws -> Data {
+    private func exportCurrent(restore: Bool) async throws -> Data {
         guard cloudEnabled, exportEnabled else { return Data("{\"enabled\":false}".utf8) }
         let usage = defaults.object(forKey: AppStorageKeys.Backup.usage) as? Bool ?? true
         let limits = defaults.object(forKey: AppStorageKeys.Backup.limits) as? Bool ?? true
-        guard await transfer(usage: usage, limits: limits, export: true) else {
+        guard await transfer(usage: usage, limits: limits, restore: restore, export: true) else {
             try Task.checkCancellation()
             throw ExtensionPeerError.rejected(
                 "Usage backup could not finish. Retry after iCloud has downloaded the files.")
@@ -214,7 +214,7 @@ import IOKit.ps
         _ = await work?.value
     }
 
-    private func transfer(usage: Bool, limits: Bool, export: Bool) async -> Bool {
+    private func transfer(usage: Bool, limits: Bool, restore: Bool, export: Bool) async -> Bool {
         guard !stopping, work == nil else { return false }
         ownedCancelled = false
         let cancellation = UsageBackupCancellation()
@@ -234,10 +234,10 @@ import IOKit.ps
                     let completed =
                         name == "usage.json"
                         ? usageBackupTransferUsage(
-                            localURL: local, cloudURL: remote, shouldRestore: true,
+                            localURL: local, cloudURL: remote, shouldRestore: restore,
                             shouldExport: export, restoreToken: token)
                         : usageBackupTransferLimits(
-                            localURL: local, cloudURL: remote, shouldRestore: true,
+                            localURL: local, cloudURL: remote, shouldRestore: restore,
                             shouldExport: export, restoreToken: token)
                     if !completed { return false }
                 }

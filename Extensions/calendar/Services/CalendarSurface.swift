@@ -97,9 +97,15 @@ final class CalendarSurface {
                 icon: "calendar", actions: actions)
         }
         return .init(
-            providerID: "calendar", rows: rows, sources: sources,
+            providerID: "calendar", rows: rows,
+            facts: nextMeetingFacts(now: now), sources: sources,
             message: events.isEmpty ? "No upcoming meetings in this selection." : nil,
             updatedAt: now)
+    }
+
+    private func nextMeetingFacts(now: Date) -> [String: Double] {
+        let next = store.events.filter { !$0.isAllDay && $0.end > now }.map(\.start).min()
+        return next.map { ["nextMeetingStart": $0.timeIntervalSince1970] } ?? [:]
     }
 
     private func selected(

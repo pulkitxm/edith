@@ -127,59 +127,81 @@ import Testing
             try await worker.execute("quinjet.projects", payload: Data("{}".utf8))
         }
     }
-    @Test func surfacesFilterSourcesRespectPrivacyAndRejectRetiredActions() async throws {
+    @Test func surfacesShowGitHubPullRequestsFilterByRepositoryAndKind() async throws {
         let worker = QuinjetWorker(client: client, automaticActions: false)
         await worker.start()
-        let surface = QuinjetSurface(
-            worker: worker, privacyValues: { ["active": "1"] })
-        let request = SurfaceSnapshotRequest(target: .notch, tile: .init(.ability("quinjet")))
+        let response = Self.pullResponse
+        let github = QuinjetGitHubClient { arguments in
+            arguments.contains("user") ? Data("octo\n".utf8) : response
+        }
+        let request = SurfaceSnapshotRequest(target: .home, tile: .init(.github))
+        let surface = QuinjetSurface(worker: worker, github: github, privacyValues: { [:] })
         let snapshot = try SurfaceSnapshot.decode(
             await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "quinjet")),
             providerID: "quinjet")
-        #expect(snapshot.rows.isEmpty && snapshot.sources.isEmpty && snapshot.actions.isEmpty)
+        #expect(snapshot.metrics.map(\.value) == ["2", "1", "1", "1"])
+        #expect(snapshot.rows.map(\.id) == ["PR_review", "PR_authored"])
+        #expect(snapshot.rows.first?.value == "Review requested")
+        #expect(snapshot.sources.map(\.id) == ["acme/api", "acme/web"])
+        var tile = SurfaceTile(.github)
+        tile.sourceIDs = ["acme/web"]
+        let filtered = try await surface.snapshot(tile)
+        #expect(filtered.rows.map(\.id) == ["PR_authored"])
+        tile.sourceIDs = nil
+        tile.contentKinds = ["review"]
+        let reviews = try await surface.snapshot(tile)
+        #expect(reviews.rows.map(\.id) == ["PR_review"])
+        let action = try #require(snapshot.rows.first?.actions.first?.id)
+        #expect(action == "open/PR_review")
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform",
-                payload: SurfaceActionRequest(
-                    snapshot: request,
-                    actionID: "open"
-                ).encoded(providerID: "quinjet"))
-        }
-        let visible = QuinjetSurface(worker: worker, privacyValues: { [:] })
-        var hidden = SurfaceTile(.ability("quinjet"))
-        hidden.sourceIDs = ["unavailable-source"]
-        let filtered = try SurfaceSnapshot.decode(
-            await visible.execute(
-                "surface.snapshot",
-                payload: SurfaceSnapshotRequest(target: .home, tile: hidden).encoded(
-                    providerID: "quinjet")),
-            providerID: "quinjet")
-        #expect(filtered.rows.isEmpty)
-        hidden.sourceIDs = ["local"]
-        hidden.hiddenFields = ["metadata"]
-        let fields = try SurfaceSnapshot.decode(
-            await visible.execute(
-                "surface.snapshot",
-                payload: SurfaceSnapshotRequest(target: .home, tile: hidden).encoded(
-                    providerID: "quinjet")),
-            providerID: "quinjet")
-        #expect(fields.rows.count == 1 && fields.rows.first?.detail == "")
-        let full = try visible.snapshot(.init(.ability("quinjet")))
-        let action = try #require(full.rows.first?.actions.first?.id)
-        let id = worker.model.selected
-        _ = worker.model.addPickerTab()
-        _ = try await worker.execute(
-            "quinjet.session.close",
-            payload: JSONSerialization.data(withJSONObject: ["sessionID": id.uuidString]))
-        await #expect(throws: ExtensionPeerError.self) {
-            try await visible.execute(
-                "surface.perform",
-                payload: SurfaceActionRequest(snapshot: request, actionID: action).encoded(
+                payload: SurfaceActionRequest(snapshot: request, actionID: "open/unknown").encoded(
                     providerID: "quinjet"))
+        }
+        let hidden = QuinjetSurface(
+            worker: worker, github: github, privacyValues: { ["active": "1"] })
+        let covered = try SurfaceSnapshot.decode(
+            await hidden.execute(
+                "surface.snapshot", payload: request.encoded(providerID: "quinjet")),
+            providerID: "quinjet")
+        #expect(covered.rows.isEmpty && covered.message == "Hidden while presenting.")
+        await worker.shutdown()
+    }
+    @Test func gitHubFailuresSurfaceReadableErrors() async throws {
+        let worker = QuinjetWorker(client: client, automaticActions: false)
+        await worker.start()
+        let surface = QuinjetSurface(
+            worker: worker,
+            github: QuinjetGitHubClient { _ in throw QuinjetGitHubError.authentication },
+            privacyValues: { [:] })
+        await #expect(throws: QuinjetGitHubError.self) {
+            try await surface.snapshot(.init(.github))
+        }
+        let malformed = QuinjetSurface(
+            worker: worker, github: QuinjetGitHubClient { _ in Data("not json".utf8) },
+            privacyValues: { [:] })
+        await #expect(throws: QuinjetGitHubError.self) {
+            try await malformed.snapshot(.init(.github))
         }
         await worker.shutdown()
     }
+    private static let pullResponse = Data(
+        """
+        {"data":{
+          "authored":{"pageInfo":{"hasNextPage":false},"nodes":[
+            {"id":"PR_authored","url":"https://github.com/acme/web/pull/7","title":"Add tile",
+             "number":7,"isDraft":false,"updatedAt":"2026-01-02T00:00:00Z",
+             "reviewDecision":"APPROVED","repository":{"nameWithOwner":"acme/web"},
+             "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS"}}}]}}]},
+          "review":{"pageInfo":{"hasNextPage":false},"nodes":[
+            {"id":"PR_review","url":"https://github.com/acme/api/pull/9","title":"Fix auth",
+             "number":9,"isDraft":false,"updatedAt":"2026-01-01T00:00:00Z",
+             "reviewDecision":null,"repository":{"nameWithOwner":"acme/api"},
+             "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE"}}}]}}]},
+          "assigned":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}
+        """.utf8)
     @Test func oversizedNativeMetadataIsRejectedBeforeCurrentSelectionsAreAdmitted() async throws {
         let client = QuinjetClient { _ in
             try JSONEncoder().encode([

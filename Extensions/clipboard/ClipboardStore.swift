@@ -51,6 +51,7 @@ final class ClipboardStore {
     init(client: ClipboardClient, capturesPasteboard: Bool = true) {
         self.client = client
         self.capturesPasteboard = capturesPasteboard
+        if capturesPasteboard { lastChangeCount = NSPasteboard.general.changeCount }
         let dnc = DistributedNotificationCenter.default()
         observers = [
             dnc.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) {
@@ -149,9 +150,7 @@ final class ClipboardStore {
     }
 
     private func updateTimer() {
-        guard !commandTasks.closed, visibility.active, capturesPasteboard,
-            SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled),
-            !ClipboardCapturePolicy.isPaused()
+        guard !commandTasks.closed, visibility.active, capturesPasteboard
         else { timer?.cancel(); timer = nil; return }
         guard timer == nil, timerDrains.isEmpty else { return }
         let interval = configuredInterval

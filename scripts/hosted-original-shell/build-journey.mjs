@@ -34,7 +34,7 @@ const sources = join(packageDirectory, "Sources/EdithHost");
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const overlays = {};
 for (const [name, transform] of [
-  ["HostApplication.swift", originalShellFixtureOverlay],
+  ["HostRuntime.swift", originalShellFixtureOverlay],
   ["HostWorkspace.swift", fixtureNavigationOverlay],
   ["HostPermissions.swift", fixturePermissionOverlay],
   ["HostRemoteContentPresenter.swift", fixturePresenterOverlay],

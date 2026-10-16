@@ -145,6 +145,48 @@ import EdithExtensionSupport
         #expect(model.applications.map(\.name) == ["Example"])
     }
 
+    @Test func uiSnapshotServesPersistedInventoryBeforeTheRefreshScanFinishes() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshots = AppMaintenanceSnapshotStore(
+            fileURL: directory.appendingPathComponent("snapshot.json"))
+        let application = Self.application
+        try await snapshots.save(
+            AppMaintenanceSnapshot(applications: [application], updates: [Self.storeItem]))
+        let gate = DiscoveryGate()
+        let model = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: snapshots,
+            inventory: { _ in
+                await gate.wait()
+                return [application]
+            },
+            discover: { _, _, _, _ in [] })
+        let decoder = JSONDecoder()
+
+        let first = try decoder.decode(
+            AppMaintenanceUISnapshot.self,
+            from: try await AppMaintenanceUICommands.execute(
+                "maintenance.ui.snapshot", payload: Data("{}".utf8), model: model))
+        #expect(first.phase == .ready)
+        #expect(first.applications.map(\.name) == ["Example"])
+        #expect(first.updates.map(\.id) == [Self.storeItem.id])
+
+        let action = AppMaintenanceUIAction(
+            operation: "refresh", value: nil, item: nil, enabled: false, integer: nil,
+            number: 86_400, previewToken: model.previewToken)
+        let refreshed = try decoder.decode(
+            AppMaintenanceUISnapshot.self,
+            from: try await AppMaintenanceUICommands.execute(
+                "maintenance.ui.action", payload: JSONEncoder().encode(action), model: model))
+        #expect(refreshed.phase == .ready)
+        #expect(refreshed.checkingUpdates)
+        #expect(refreshed.applications.map(\.name) == ["Example"])
+        gate.open()
+        #expect(await Self.wait { !model.checkingUpdates })
+    }
+
     @Test func secondRefreshKeepsApplicationsVisible() async throws {
         let directory = try Self.directory()
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -49,5 +50,22 @@ import Testing
         let loading = Task { await context.load() }
         await Task.yield(); context.shutdown(); await loading.value
         #expect(!context.loaded && context.index == nil)
+    }
+
+    @Test func answersTheCLICatalogWithoutTheBuiltInHelpCommand() throws {
+        let data = try ExtensionCLICatalog.data(
+            BifrostCLICommand.self, owner: "bifrost", payload: Data("{}".utf8), streaming: true)
+        let value = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(value["owner"] as? String == "bifrost")
+        let commands = try #require(value["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        #expect(routes.contains(["bifrost", "calc"]))
+        #expect(!routes.contains { $0.last == "help" })
+        let help = try #require((value["parserHelp"] as? [[String: Any]])?.first)
+        let root = try #require(help["command"] as? [String: Any])
+        let names = (root["subcommands"] as? [[String: Any]] ?? []).compactMap {
+            $0["commandName"] as? String
+        }
+        #expect(!names.contains("help"))
     }
 }

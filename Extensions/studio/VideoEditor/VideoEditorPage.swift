@@ -381,16 +381,7 @@ struct VideoEditorPage: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        if model.facade != nil {
-                            if let image = placing ? model.remoteFocusFrame : model.remoteFrame {
-                                Image(decorative: image, scale: 1).resizable().aspectRatio(
-                                    contentMode: .fit)
-                            } else {
-                                LoadingIndicator("Preparing video preview").foregroundStyle(.white)
-                            }
-                        } else {
-                            EditorPlayerView(player: placing ? model.focusPlayer : model.player)
-                        }
+                        EditorPlayerView(player: placing ? model.focusPlayer : model.player)
                         if placing {
                             ZoomFocusRegion(
                                 display: source,

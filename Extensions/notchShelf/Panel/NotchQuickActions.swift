@@ -54,6 +54,7 @@ extension NotchPanelEngine {
             guard !controller.privacy.hides(tile.widget) else {
                 throw ExtensionPeerError.unavailable
             }
+            if providerID == "colorPicker" { controller.collapseNow() }
             do {
                 if providerID == "lidAwake", actionID == "on", let session = request.session {
                     struct Input: Encodable { let session: NotchLidAwakeSession }
@@ -83,7 +84,7 @@ extension NotchPanelEngine {
                 controller.presentFailure(Self.quickActionFailureAlert(providerID, error))
                 return try await quickActionState(request, controller: controller, allowed: allowed)
             }
-            controller.collapseNow()
+            if providerID != "colorPicker" { controller.collapseNow() }
         } else if request.providerID != nil || request.actionID != nil || request.session != nil {
             throw ExtensionPeerError.invalidRequest
         }

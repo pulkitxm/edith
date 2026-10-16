@@ -326,7 +326,7 @@ private struct HerdrSearchDecider: JevDeciding {
     @Test func commandKOpensSearchOnlyInTheMainWindowOnSessions() {
         let store = HerdrStore()
         let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
-        main.identifier = NSUserInterfaceItemIdentifier("edith.extension.herdr")
+        store.movePage(from: nil, to: main)
         let other = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
 
         #expect(!SessionSearchCommand.perform(in: nil, store: store, sessionsOnScreen: { true }))

@@ -16,7 +16,7 @@ import Testing
         try #require(ready())
     }
 
-    @Test func originalVideoControlsEditNativeProjectAndReceiveEngineRenderedFrames() async throws {
+    @Test func originalVideoControlsEditNativeProjectAndPlayLocally() async throws {
         let root = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let movie = try await VideoEditorServiceTests.movie(in: root)
@@ -38,19 +38,18 @@ import Testing
             return try await sessions.execute(
                 operation, payload: payload, resources: resources, work: work)
         }
-        var sandboxBuilds = 0
-        let editor = VideoEditorModel(
-            previewBuilder: { _ in
-                sandboxBuilds += 1
-                throw StudioError.failed(
-                    "A readonly controller must not construct a render pipeline.")
-            }, facade: facade)
+        let editor = VideoEditorModel(facade: facade)
         editor.openProject(at: source)
-        try await waitUntil { editor.remoteFrame != nil || editor.errorMessage != nil }
+        try await waitUntil {
+            editor.previewReady && editor.pipeline != nil || editor.errorMessage != nil
+        }
         #expect(editor.errorMessage == nil && editor.project?.title == "Synthetic timeline")
-        #expect(editor.pipeline == nil && editor.previewMetadata != nil && sandboxBuilds == 0)
-        let frame = try #require(editor.remoteFrame)
-        #expect(frame.width > 0 && frame.height > 0)
+        #expect(editor.pipeline != nil && editor.previewMetadata != nil)
+        #expect(editor.player.currentItem != nil && editor.duration > 0)
+        editor.togglePlayback()
+        try await waitUntil { editor.playbackRate != 0 }
+        editor.pausePlayback()
+        try await waitUntil { editor.playbackRate == 0 }
         editor.seek(to: 0.5)
         editor.splitAtPlayhead()
         try await waitUntil {
@@ -87,10 +86,10 @@ import Testing
                 "fps": 15, "width": 0, "loop": true,
             ])
         #expect(result.bytes > 0 && result.duration > 0)
-        #expect(project.clips.count == 2 && sandboxBuilds == 0)
+        #expect(project.clips.count == 2)
         editor.close(); await work.stopAndWait(); await sessions.stopAndWait();
         resources.shutdown(); facade.stop()
-        #expect(editor.pipeline == nil)
+        #expect(editor.player.currentItem == nil)
     }
     @Test func nativeOpenRelinksMissingMediaAndCopiesUnregisteredLibraryProjects() async throws {
         let root = try VideoEditorServiceTests.folder()
@@ -129,7 +128,7 @@ import Testing
                 "replacements": [asset.id: movie.path],
             ])
         let state: StudioUIVideoState = try await facade.download(handle)
-        #expect(try state.project?.value.assets.first?.url == movie && state.preview != nil)
+        #expect(try state.project?.value.assets.first?.url == movie)
         #expect(try Data(contentsOf: source) == original)
         let library = VideoProject.openScreenLibraryURL
         try FileManager.default.createDirectory(at: library, withIntermediateDirectories: true)
@@ -194,8 +193,8 @@ import Testing
             remote.message == nil && !finished
                 && remote.route == .commandVideoEditor(request.requestID))
         let editor = try #require(remote.remoteCommandEditor)
-        #expect(editor.remoteFrame != nil && editor.pipeline == nil)
         try await editor.mountRemoteCommand(request)
+        #expect(editor.previewReady && editor.pipeline != nil)
         try await opening.value
         #expect(finished && bridge.pending == nil)
         remote.shutdown(); engine.shutdown(); await work.stopAndWait();

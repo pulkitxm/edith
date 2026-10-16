@@ -69,7 +69,7 @@ import Testing
             + "jobPhase=\(String(describing: job?.phase)) jobProgress=\(job?.progress ?? -1) "
             + "nativePhase=\(state?.phase ?? "nil") nativeProgress=\(state?.progress ?? -1) "
             + "nativeFailure=\(state?.failure ?? "nil") reportFrames=\(job?.report?.frameCount ?? -1) "
-            + "session=\(editor?.remoteSessionID != nil) frame=\(editor?.remoteFrame != nil) "
+            + "session=\(editor?.remoteSessionID != nil) ready=\(editor?.previewReady == true) "
             + "clips=\(editor?.project?.clips.count ?? -1) preparing=\(editor?.isPreparingPreview ?? false) "
             + "editorError=\(editor?.errorMessage ?? "nil") \(requests.snapshot)"
     }
@@ -163,7 +163,7 @@ import Testing
                 diagnostics: {
                     diagnostics(runtime, requests: requests, facade: old, editor: editor)
                 }
-            ) { editor.remoteFrame != nil || editor.errorMessage != nil }
+            ) { editor.previewReady || editor.errorMessage != nil }
             #expect(editor.errorMessage == nil)
             let id = try #require(editor.remoteSessionID)
             old.exporter.start(to: output) { progress in

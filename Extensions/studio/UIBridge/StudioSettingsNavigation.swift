@@ -10,6 +10,7 @@ import Foundation
 
     private let bridge: NSObject
     private var pending: [UUID: Pending] = [:]
+    private var surfacing: [UUID: Task<Void, Never>] = [:]
     private var invalidated = false
 
     init?(bridge: NSObject?) {
@@ -29,7 +30,16 @@ import Foundation
         return Data("{}".utf8)
     }
 
-    private func navigate(_ presentationID: UUID) async throws {
+    func surface() {
+        let id = UUID()
+        let task = Task { [weak self] in
+            defer { self?.surfacing[id] = nil }
+            try? await self?.navigate(nil)
+        }
+        surfacing[id] = task
+    }
+
+    private func navigate(_ presentationID: UUID?) async throws {
         try Task.checkCancellation()
         guard !invalidated, pending.count < 8 else { throw ExtensionPeerError.unavailable }
         let id = UUID()
@@ -57,12 +67,12 @@ import Foundation
                             } ?? .success(()))
                     }
                 }
-                let token = navigate(
-                    bridge, selector,
-                    [
-                        "section": "studio", "presentationID": presentationID.uuidString,
-                        "location": "settings",
-                    ] as NSDictionary, completion)
+                var destination: [String: String] = ["section": "studio"]
+                if let presentationID {
+                    destination["presentationID"] = presentationID.uuidString
+                    destination["location"] = "settings"
+                }
+                let token = navigate(bridge, selector, destination as NSDictionary, completion)
                 if let token, UUID(uuidString: token as String) != nil {
                     pending[id]?.token = token
                 } else {
@@ -83,6 +93,7 @@ import Foundation
     func invalidate() {
         guard !invalidated else { return }
         invalidated = true
+        for task in surfacing.values { task.cancel() }
         for id in Array(pending.keys) {
             finish(id, result: .failure(ExtensionPeerError.unavailable), cancel: true)
         }
@@ -90,8 +101,10 @@ import Foundation
 
     func stopAndWait() async {
         let deadlines = pending.values.map(\.deadline)
+        let tasks = Array(surfacing.values)
         invalidate()
         for task in deadlines { await task.value }
+        for task in tasks { await task.value }
     }
 
     private func finish(

@@ -214,7 +214,7 @@
       "sources": [
         {
           "path": "Extensions/emoji/Runtime.swift",
-          "sha256": "36babb24a0a1fca87853fd75d2c8ff1f0c9f6d696e08084b9e7efa8c48dc9162"
+          "sha256": "bf084eebb7b425246d6a1f39cc5540ef2693e94db0dea85e0265bb94b72b0f39"
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
@@ -236,11 +236,11 @@
       "sources": [
         {
           "path": "Extensions/homebrew/Runtime.swift",
-          "sha256": "e37ba5a493ce88ea3cf6cd423abfd3fa5b4c3c19e4fed3e8a6b56c86db2020a5"
+          "sha256": "853e359b106968a622b2ca9949922a8fccd4085219330499f8c0db18d1b9dcdf"
         },
         {
           "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
-          "sha256": "be02ffa9e123f968060fdeeead80e711c514437aba00d953e6f8226b961119f4"
+          "sha256": "11dbf67ef5980c9793abaf7120b2373229cce30709bb47279766bc124756ea1c"
         }
       ]
     },
@@ -372,7 +372,7 @@
         },
         {
           "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
-          "sha256": "edaef18e0167c4f521a026bf78139caa861439709f097331e98362134a1032a3"
+          "sha256": "98f06adfdb4d5ebce56c226a3f8132e07124eb94cd10483753420b341863001c"
         }
       ]
     },
@@ -482,7 +482,7 @@
         },
         {
           "path": "Extensions/music/UI/Runtime.swift",
-          "sha256": "74f224e6d368694291bf38fd1b806efbedb817d72a1dd7bc2b84fe017f1a249b"
+          "sha256": "883e578e465533119c6aaec4466928475e88622dbeaa4760b8ac17c426d213c1"
         }
       ]
     },
@@ -500,7 +500,7 @@
       "sources": [
         {
           "path": "Extensions/docs/Runtime.swift",
-          "sha256": "6cc04b778b03005e1d07273948d10d3f0d120a15224d79ff81badff864a53b7e"
+          "sha256": "c4535e0a86aa9c952307d3fccd74e94d88afd7f24dd8f91c374b8423242364b6"
         },
         {
           "path": "Extensions/docs/DocsUIBridge.swift",
@@ -588,7 +588,7 @@
       "sources": [
         {
           "path": "Extensions/studio/Runtime.swift",
-          "sha256": "a7d78e5b7f6728da94e1c6e91d09756ee4a2dbdf8a92f8f59d033b5f87949660"
+          "sha256": "2a431dc9f4f0976859b630e032fd07d80b2841a9567a3792a1c91721d9128c6e"
         },
         {
           "path": "Extensions/studio/UIBridge/StudioUIScene.swift",
@@ -632,11 +632,11 @@
       "sources": [
         {
           "path": "Extensions/bifrost/Runtime.swift",
-          "sha256": "c061de5ea3b2d141ed5aa749828dcfc9f9f684b2ee33d7a0dcefc8e3dd66134f"
+          "sha256": "3ee57725825babda1ae9f5b5ed4c67d6d1c2cf9ef4c076127097dd2f04da962e"
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "c1336e48bd3f36ac47246292945c19ab50d8c1bea466835f487d564cadba5573"
+          "sha256": "2e89c8f6fa09ae80de0ff7d08193544efc6a3f030fd5c0e175e4fa54023b35b2"
         }
       ]
     },
@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "083bb3a79e6a7da6b5d261787eec890c7ceac3d12c320c7a3a359f3d6248c1e4"
+          "sha256": "b17caf94525871a827020f0f3042b2658d342238c354efe302ad02c2120de065"
         }
       ]
     },
@@ -830,7 +830,7 @@
         },
         {
           "path": "Extensions/quinjet/ViewModels/QuinjetPageModel.swift",
-          "sha256": "b422b324f7b08ff2a83a4b78b3fe55e608913305e9c91532a17ab9eca88630f4"
+          "sha256": "2f76bfbc4a8a17c848ffa1392a062ee49e82f26c969becaccebbbd5069e4974b"
         }
       ]
     },

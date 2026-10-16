@@ -5,9 +5,11 @@ import Observation
 
 @MainActor @Observable final class EmbeddedMusicRemote {
     static let shared = EmbeddedMusicRemote()
+    static let searchPageSize = 40
     private(set) var tracks: [EmbeddedTrack] = []
     private(set) var entriesLoaded = false
     private(set) var searchLoaded = false
+    private(set) var catalogLoaded = false
     private(set) var favouritesLoaded = false
     private(set) var folderPath = ""
     private(set) var folders: [EmbeddedMusicFolder] = []
@@ -35,6 +37,13 @@ import Observation
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var stopTask: Task<Void, Never>?
+    @ObservationIgnored private var catalogTask: Task<Void, Never>?
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var searchDebounceTask: Task<Void, Never>?
+    @ObservationIgnored private var catalogGeneration: UInt64 = 0
+    @ObservationIgnored private var listingGeneration: UInt64 = 0
+    @ObservationIgnored private var searchGeneration: UInt64 = 0
+    @ObservationIgnored var searchDelay: Duration = .milliseconds(200)
     @ObservationIgnored private var retiredClients: [RetiredClient] = []
     private struct RetiredClient {
         weak var value: ExtensionEngineClient?
@@ -49,7 +58,11 @@ import Observation
     private var readQuery: EmbeddedMusicUIQuery?
     private var folderCache: [String: [EmbeddedMusicFolder]] = [:]
 
-    var current: EmbeddedTrack? { tracks.first { $0.relativePath == currentFile } }
+    var current: EmbeddedTrack? {
+        currentFile.map {
+            EmbeddedTrack(url: EmbeddedTrackMeta.url(for: $0), relativePath: $0)
+        }
+    }
     var elapsed: Double {
         min(duration, max(0, elapsedBase + (isPlaying ? Date().timeIntervalSince(sampledAt) : 0)))
     }
@@ -96,7 +109,10 @@ import Observation
         retiredClients.append(RetiredClient(value: client))
     }
 
-    func start() { rescan() }
+    func start() {
+        rescan()
+        if !entriesLoaded { showCachedListing() }
+    }
 
     private func ownedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never>
     {
@@ -151,6 +167,8 @@ import Observation
         EmbeddedPlaybackLevel.shared.reset()
         for task in ownedTasks.values { task.cancel() }
         tasks.removeAll()
+        catalogTask = nil; searchTask = nil; searchDebounceTask = nil
+        catalogGeneration &+= 1; listingGeneration &+= 1; searchGeneration &+= 1
         for client in clients.values { retire(client) }
         clients.removeAll(); invoke = nil
         tracks = []; folders = []; folderTracks = []; searchTracks = []; searchFolders = []
@@ -161,6 +179,7 @@ import Observation
         EmbeddedMusicTools.shared.installed = []; EmbeddedMusicTools.shared.installing = nil
         EmbeddedMusicTools.shared.error = nil
         entriesLoaded = false; searchLoaded = false; favouritesLoaded = false
+        catalogLoaded = false
         folderCache.removeAll(); EmbeddedTrackMeta.clear()
         EmbeddedMusicAccounts.shared.reset()
         EmbeddedMusicDetailPresenter.shared.dismiss()
@@ -196,16 +215,15 @@ import Observation
                     EmbeddedPlaybackLevel.shared.update(level)
                 } catch {
                     guard !Task.isCancelled, self.levelGeneration == token else { return }
-                    self.libraryError = error.localizedDescription
                 }
-                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                do { try await Task.sleep(for: .milliseconds(66)) } catch { return }
             }
         }
     }
 
     func rescan(force: Bool = false) {
         guard !suspended, let invoke else { return }
-        let request = EmbeddedMusicUIQuery(path: folderPath, search: query, cursor: cursor)
+        let request = EmbeddedMusicUIQuery(path: folderPath, cursor: cursor)
         if !force, readTask != nil, readQuery == request { return }
         readTask?.cancel(); generation &+= 1
         let token = generation
@@ -221,11 +239,7 @@ import Observation
                 try Task.checkCancellation()
                 guard let self, self.generation == token else { return }
                 self.apply(value)
-                self.libraryError = nil
-            } catch {
-                guard !Task.isCancelled, let self, self.generation == token else { return }
-                self.libraryError = error.localizedDescription
-            }
+            } catch {}
         }
     }
 
@@ -237,16 +251,17 @@ import Observation
             .init(url: entry.url, relativePath: entry.path)
         }
         EmbeddedTrackMeta.root = value.root
-        tracks = value.tracks.map(track); folders = value.folders.map(folder)
-        folderTracks = value.folderTracks.map(track); searchTracks = value.searchTracks.map(track)
-        searchFolders = value.searchFolders.map(folder); favourites = value.favourites.map(track)
+        let nextFolders = value.folders.map(folder)
+        let nextTracks = value.folderTracks.map(track)
+        let listingChanged = entriesLoaded && (folders != nextFolders || folderTracks != nextTracks)
+        folders = nextFolders; folderTracks = nextTracks; favourites = value.favourites.map(track)
         favouritePaths = Set(favourites.map(\.relativePath))
         currentFile = value.playback.path; isPlaying = value.playback.playing
         elapsedBase = value.playback.elapsed; sampledAt = Date(); duration = value.playback.duration
         volume = value.playback.volume; shuffling = value.playback.shuffle;
         looping = value.playback.repeating
         restorePending = value.restorePending
-        entriesLoaded = true; searchLoaded = true; favouritesLoaded = true
+        entriesLoaded = true; favouritesLoaded = true
         folderCache[folderPath] = folders
         EmbeddedMusicVideoSession.apply(value.videoControl)
         EmbeddedMusicAccounts.shared.apply(value)
@@ -256,6 +271,7 @@ import Observation
         applyPreferences(value.preferences)
 
         cursor = value.cursor
+        if listingChanged, catalogLoaded { refreshCatalog() }
         EmbeddedMusicPrivacyState.shared.active = value.privacy
         for event in value.events {
             if let object = try? JSONSerialization.jsonObject(with: event.data) as? [String: Any] {
@@ -265,11 +281,13 @@ import Observation
         if let intent = value.folderIntent, intent.revision > folderIntentRevision {
             folderIntentRevision = intent.revision
             let changed = folderPath != intent.path || showingFavourites || !query.isEmpty
-            folderPath = intent.path; showingFavourites = false; query = ""
+            folderPath = intent.path; showingFavourites = false
             if changed {
-                folders = []; folderTracks = []; searchTracks = []; searchFolders = []
-                entriesLoaded = false; searchLoaded = false
+                folders = []; folderTracks = []
+                entriesLoaded = false
+                clearSearch()
                 rescan()
+                showCachedListing()
             }
         }
     }
@@ -322,7 +340,9 @@ import Observation
                     action: .init(kind: kind, path: path, target: target, value: value))
                 self.rescan(force: true)
             } catch {
-                if !Task.isCancelled { self.libraryError = error.localizedDescription }
+                if !Task.isCancelled, kind.mutatesLibrary {
+                    self.libraryError = error.localizedDescription
+                }
             }
         }
     }
@@ -342,11 +362,7 @@ import Observation
                 _ = try await invoke("music.ui.spotify", payload)
                 guard !Task.isCancelled, let self, self.lifecycle == token else { return }
                 self.rescan()
-            } catch {
-                if !Task.isCancelled, self?.lifecycle == token {
-                    self?.libraryError = error.localizedDescription
-                }
-            }
+            } catch {}
         }
     }
     func streamingArtwork(_ url: URL) async throws -> Data {
@@ -368,10 +384,128 @@ import Observation
             .init(id: $0.id, name: $0.name)
         }
     }
-    func noteSearch(_ text: String) { query = text; rescan() }
+    func noteSearch(_ text: String) {
+        searchDebounceTask?.cancel(); searchDebounceTask = nil
+        query = text
+        guard !text.isEmpty else { clearSearch(); return }
+        guard !suspended, invoke != nil else { return }
+        let delay = searchDelay
+        let path = folderPath
+        searchDebounceTask = ownedTask { [weak self] in
+            do { try await Task.sleep(for: delay) } catch { return }
+            guard let self, self.query == text, self.folderPath == path else { return }
+            self.searchDebounceTask = nil
+            self.loadSearch(matching: text)
+        }
+    }
+
+    func loadCatalog() {
+        guard !catalogLoaded, catalogTask == nil else { return }
+        refreshCatalog()
+    }
+
+    private func clearSearch() {
+        searchDebounceTask?.cancel(); searchDebounceTask = nil
+        searchTask?.cancel(); searchTask = nil
+        searchGeneration &+= 1
+        query = ""
+        searchTracks = []; searchFolders = []; searchLoaded = false
+    }
+
+    private func refreshCatalog() {
+        guard !suspended, invoke != nil else { return }
+        catalogTask?.cancel()
+        catalogGeneration &+= 1
+        let token = catalogGeneration
+        catalogTask = ownedTask { [weak self] in
+            guard let self else { return }
+            defer { if self.catalogGeneration == token { self.catalogTask = nil } }
+            guard let data = try? await self.dataRequest("music.ui.catalog"),
+                let entries = try? JSONDecoder().decode([EmbeddedMusicUIEntry].self, from: data),
+                (try? EmbeddedMusicUIListing(folders: [], tracks: entries).validate()) != nil,
+                !Task.isCancelled, self.catalogGeneration == token
+            else { return }
+            self.tracks = entries.map { .init(url: $0.url, relativePath: $0.path) }
+            self.catalogLoaded = true
+        }
+    }
+
+    private func showCachedListing() {
+        guard !suspended, invoke != nil else { return }
+        let path = folderPath
+        listingGeneration &+= 1
+        let token = listingGeneration
+        let lifecycleToken = lifecycle
+        _ = ownedTask { [weak self] in
+            guard let self,
+                let data = try? await self.dataRequest(
+                    "music.ui.cachedListing",
+                    payload: JSONEncoder().encode(EmbeddedMusicUIQuery(path: path))),
+                let cached = try? JSONDecoder().decode(EmbeddedMusicUIListing?.self, from: data),
+                (try? cached.validate()) != nil,
+                !Task.isCancelled, self.listingGeneration == token,
+                self.lifecycle == lifecycleToken,
+                self.folderPath == path, !self.entriesLoaded
+            else { return }
+            self.folders = cached.folders.map { .init(url: $0.url, relativePath: $0.path) }
+            self.folderTracks = cached.tracks.map { .init(url: $0.url, relativePath: $0.path) }
+            self.folderCache[path] = self.folders
+            self.entriesLoaded = true
+        }
+    }
+
+    private func loadSearch(matching text: String) {
+        searchTask?.cancel()
+        searchGeneration &+= 1
+        let token = searchGeneration
+        let path = folderPath
+        let pageSize = EmbeddedMusicRemote.searchPageSize
+        searchTask = ownedTask { [weak self] in
+            guard let self else { return }
+            defer { if self.searchGeneration == token { self.searchTask = nil } }
+            guard
+                let first = await self.searchPage(
+                    path: path, text: text, skip: 0, limit: pageSize),
+                !Task.isCancelled, self.searchGeneration == token
+            else { return }
+            self.searchTracks = first.tracks.map { .init(url: $0.url, relativePath: $0.path) }
+            self.searchFolders = first.folders.map { .init(url: $0.url, relativePath: $0.path) }
+            self.searchLoaded = true
+            guard
+                let rest = await self.searchPage(
+                    path: path, text: text, skip: pageSize, limit: nil),
+                !Task.isCancelled, self.searchGeneration == token
+            else { return }
+            self.searchTracks += rest.tracks.map { .init(url: $0.url, relativePath: $0.path) }
+            self.searchFolders += rest.folders.map { .init(url: $0.url, relativePath: $0.path) }
+        }
+    }
+
+    private func searchPage(path: String, text: String, skip: Int, limit: Int?) async
+        -> EmbeddedMusicUIListing?
+    {
+        let request = EmbeddedMusicUISearchRequest(
+            path: path, search: text, skip: skip, limit: limit)
+        guard let payload = try? JSONEncoder().encode(request),
+            let data = try? await dataRequest("music.ui.search", payload: payload),
+            let page = try? JSONDecoder().decode(EmbeddedMusicUIListing.self, from: data),
+            (try? page.validate()) != nil
+        else { return nil }
+        return page
+    }
     func subfolders(of path: String) -> [EmbeddedMusicFolder]? { folderCache[path] }
     func open(_ folder: EmbeddedMusicFolder) { navigate(to: folder.relativePath) }
-    func navigate(to path: String) { folderPath = path; showingFavourites = false; rescan() }
+    func navigate(to path: String) {
+        showingFavourites = false
+        let moved = folderPath != path
+        if moved {
+            entriesLoaded = false
+            clearSearch()
+        }
+        folderPath = path
+        rescan()
+        if moved { showCachedListing() }
+    }
     func reveal(_ track: EmbeddedTrack) {
         let path = (track.relativePath as NSString).deletingLastPathComponent
         send(.openMusic, path: path, target: "folder")
@@ -387,10 +521,23 @@ import Observation
     func playPause() { send(.playPause) }
     func pausePlayback() { send(.pause) }
     func resumePlayback() { send(.resume) }
-    func next() { send(.next) }
-    func previous() { send(.previous) }
-    func seek(to fraction: Double) { send(.seek, value: min(max(fraction, 0), 1)) }
-    func setVolume(_ value: Double) { send(.volume, value: min(max(value, 0), 1)) }
+    func next() { leaveVideo(); send(.next) }
+    func previous() { leaveVideo(); send(.previous) }
+    func seek(to fraction: Double) {
+        let clamped = min(max(fraction, 0), 1)
+        if duration > 0 { elapsedBase = clamped * duration; sampledAt = Date() }
+        send(.seek, value: clamped)
+    }
+    func setVolume(_ value: Double) {
+        let clamped = min(max(value, 0), 1)
+        volume = clamped
+        send(.volume, value: clamped)
+    }
+    private func leaveVideo() {
+        let presenter = EmbeddedMusicDetailPresenter.shared
+        guard presenter.track?.isVideo == true, !presenter.followsPlayback else { return }
+        presenter.dismiss()
+    }
     func toggleLoop() { send(.repeating) }
     func toggleShuffle() { send(.shuffle) }
     func chooseLibrary() { send(.chooseLibrary) }

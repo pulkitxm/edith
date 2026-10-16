@@ -266,6 +266,7 @@ final class ExtensionRuntime: NSObject {
             } catch { return ["ok": false] as NSDictionary }
             if fixture == nil, navigation == nil {
                 navigation = StudioSettingsNavigation(bridge: input["hostNavigation"] as? NSObject)
+                VideoEditorOpenBridge.shared.present = { [weak self] in self?.surfaceEditor() }
             }
             model?.start()
             if fixture == nil { TextEditingCommands.install() }
@@ -319,6 +320,12 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func surfaceEditor() {
+        guard !stopping else { return }
+        for scene in uiScenes.values where scene.route == .main { scene.model.facade?.refresh() }
+        navigation?.surface()
+    }
+
     private func retire(_ scene: StudioUIScene) {
         scene.stop()
         let id = UUID()
@@ -351,6 +358,7 @@ final class ExtensionRuntime: NSObject {
         uiScenes.removeAll()
         navigation?.invalidate()
         navigation = nil
+        VideoEditorOpenBridge.shared.present = {}
         if hadEngine || hadUI { TextEditingCommands.shutdown() }
         let task = Task {
             for scene in closingScenes { await scene.value }

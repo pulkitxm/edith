@@ -637,7 +637,7 @@ test("standalone terminal consumers get verified native prerequisites independen
   );
   const tests = job.steps.find((step) => step.name === "Tests");
   expect(setup.if).toBe("matrix.ghostty == true");
-  expect(setup.run).toContain("brew install zig");
+  expect(setup.run).toContain("source scripts/ci-setup-zig.sh");
   expect(setup.run).toContain("extension-ghostty-native.mjs --fingerprint");
   expect(cache.if).toBe("matrix.ghostty == true");
   expect(cache.with.path).toBe("Extensions/terminal/Native/vendor");

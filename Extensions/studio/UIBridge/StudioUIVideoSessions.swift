@@ -7,15 +7,7 @@ import Foundation
     private final class Session {
         let model: VideoEditorModel
         var accessed = ContinuousClock.now
-        var generator: AVAssetImageGenerator?
-        var pipeline: VideoRenderPipeline?
-        var focusGenerator: AVAssetImageGenerator?
-        var focusDocument: Data?
         init(_ model: VideoEditorModel) { self.model = model }
-        func cancelFrames() {
-            generator?.cancelAllCGImageGeneration(); focusGenerator?.cancelAllCGImageGeneration()
-            generator = nil; focusGenerator = nil; pipeline = nil; focusDocument = nil
-        }
     }
     private(set) var export: StudioUIVideoExport?
     var onExport: ((StudioUIVideoExport?) -> Void)?
@@ -36,15 +28,12 @@ import Foundation
         "studio.ui.video.export.clear": ["id", "token"],
         "studio.ui.video.reject": ["id", "requestID", "message"],
         "studio.ui.video.preflight": ["id", "path"],
-        "studio.ui.video.loop": ["id", "enabled"],
         "studio.ui.video.reset": ["id"],
         "studio.ui.video.create": ["id"],
         "studio.ui.video.open": ["id", "path", "replacements", "revision"],
         "studio.ui.video.snapshot": ["id"], "studio.ui.video.close": ["id"],
         "studio.ui.video.update": ["id", "project", "revision", "output"],
-        "studio.ui.video.frame": ["id", "time", "focus"],
-        "studio.ui.video.seek": ["id", "time"], "studio.ui.video.play": ["id"],
-        "studio.ui.video.pause": ["id"], "studio.ui.video.import": ["id", "paths"],
+        "studio.ui.video.import": ["id", "paths"],
         "studio.ui.video.action": ["id", "action", "clipID", "assetID", "denoise"],
         "studio.ui.video.export": [
             "id", "format", "output", "settings", "quality", "fps", "width", "loop",
@@ -158,15 +147,11 @@ import Foundation
         let model = session.model
         switch operation {
         case "studio.ui.video.snapshot": return try snapshot(session, resources: resources)
-        case "studio.ui.video.loop":
-            guard let enabled = object["enabled"] as? Bool else {
-                throw ExtensionPeerError.invalidRequest
-            }; model.loopPlayback = enabled
         case "studio.ui.video.reset":
-            model.newProject(); session.cancelFrames();
+            model.newProject()
             VideoEditorOpenBridge.shared.activeEditor = model
         case "studio.ui.video.close":
-            sessions[id] = nil; session.cancelFrames()
+            sessions[id] = nil
             if VideoEditorOpenBridge.shared.activeEditor === model {
                 VideoEditorOpenBridge.shared.activeEditor = nil
             }
@@ -223,71 +208,8 @@ import Foundation
                         player = nil
                     }
                     model.acceptExternalProject(next, prepared: pipeline, playbackPlayer: player)
-                    session.cancelFrames()
                     return try self.snapshot(session, resources: resources)
                 })
-        case "studio.ui.video.frame":
-            guard let time = object["time"] as? Double, time.isFinite, time >= 0,
-                let focus = object["focus"] as? Bool
-            else { throw ExtensionPeerError.invalidRequest }
-            guard let pipeline = model.pipeline, let project = model.project else {
-                return try encoder.encode(
-                    resources.store(
-                        encoder.encode(
-                            StudioUIVideoFrame(
-                                image: nil, playhead: model.playhead, rate: model.player.rate))))
-            }
-            let generator: AVAssetImageGenerator
-            if focus {
-                var source = project; source.root["zoomRanges"] = []
-                let bytes = try StudioUIVideoProject(source).document
-                if session.focusDocument != bytes || session.focusGenerator == nil {
-                    let native = try await VideoRenderPipeline.make(
-                        project: source, previewOnly: true)
-                    session.focusGenerator?.cancelAllCGImageGeneration()
-                    let value = AVAssetImageGenerator(asset: native.composition)
-                    value.videoComposition = native.videoComposition
-                    value.requestedTimeToleranceBefore = .zero;
-                    value.requestedTimeToleranceAfter = .zero
-                    session.focusGenerator = value; session.focusDocument = bytes
-                }
-                guard let value = session.focusGenerator else {
-                    throw ExtensionPeerError.unavailable
-                }; generator = value
-            } else {
-                if session.pipeline?.composition !== pipeline.composition
-                    || session.generator == nil
-                {
-                    session.generator?.cancelAllCGImageGeneration()
-                    let value = AVAssetImageGenerator(asset: pipeline.composition)
-                    value.videoComposition = pipeline.videoComposition
-                    value.requestedTimeToleranceBefore = .zero;
-                    value.requestedTimeToleranceAfter = .zero
-                    session.generator = value; session.pipeline = pipeline
-                }
-                guard let value = session.generator else { throw ExtensionPeerError.unavailable };
-                generator = value
-            }
-            let position = model.player.rate == 0 ? time : model.playhead
-            let selected = min(
-                max(0, position),
-                max(0, pipeline.duration - pipeline.videoComposition.frameDuration.seconds))
-            let frame = try await withTaskCancellationHandler {
-                try await generator.image(at: CMTime(seconds: selected, preferredTimescale: 60_000))
-            } onCancel: {
-                generator.cancelAllCGImageGeneration()
-            }
-            try Task.checkCancellation()
-            let value = try StudioUIVideoFrame(
-                image: StudioUIImageData(frame.image), playhead: position, rate: model.player.rate)
-            return try encoder.encode(resources.store(encoder.encode(value)))
-        case "studio.ui.video.seek":
-            guard let time = object["time"] as? Double, time.isFinite,
-                (0...model.duration).contains(time)
-            else { throw ExtensionPeerError.invalidRequest }
-            model.seek(to: time)
-        case "studio.ui.video.play": model.togglePlayback()
-        case "studio.ui.video.pause": model.player.pause(); model.focusPlayer.pause()
         case "studio.ui.video.import":
             guard let paths = object["paths"] as? [String], !paths.isEmpty,
                 paths.count <= StudioCommands.maximumPaths
@@ -375,7 +297,6 @@ import Foundation
     func suspend() {
         stopped = true
         timer?.cancel()
-        for session in sessions.values { session.cancelFrames() }
     }
 
     func stopAndWait() async {
@@ -393,9 +314,7 @@ import Foundation
         let revision = model.project?.fileRevision?.value.hexDigest
         let state = try StudioUIVideoState(
             project: model.project.map(StudioUIVideoProject.init),
-            preview: model.pipeline.map(StudioUIVideoPreview.init), revision: revision,
-            playhead: model.playhead,
-            rate: model.player.rate, preparing: model.isPreparingPreview, error: model.errorMessage,
+            revision: revision, preparing: model.isPreparingPreview, error: model.errorMessage,
             externalSyncMessage: model.externalSyncMessage,
             permissionSettingsURL: model.permissionSettingsURL, export: export,
             audioStatus: model.audioStatus,
@@ -415,7 +334,7 @@ import Foundation
                 guard let self, !self.stopped else { return }
                 for (id, session) in self.sessions
                 where session.accessed.duration(to: .now) >= .seconds(60) {
-                    self.sessions[id] = nil; session.cancelFrames();
+                    self.sessions[id] = nil
                     await session.model.stopAndWait()
                 }
             }

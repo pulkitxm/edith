@@ -10,7 +10,6 @@ import Foundation
         "studio.ui.settings.preferences": ["mode", "folder"],
         "studio.ui.facts": ["path"],
         "studio.ui.clearMissing": [],
-        "studio.ui.thumbnail": ["path", "side"],
         "studio.ui.preview": ["toolID", "path", "settings"],
         "studio.ui.workflow.save": ["workflow"],
         "studio.ui.workflow.remove": ["id"],
@@ -56,16 +55,6 @@ import Foundation
             let remaining = try StudioMediaLibrary.remove(missing, defaults: model.defaults)
             model.refreshLibrary()
             return try encoder.encode(remaining)
-        case "studio.ui.thumbnail":
-            let url = try path(object)
-            guard let side = object["side"] as? Double, side.isFinite, (1...640).contains(side)
-            else {
-                throw ExtensionPeerError.invalidRequest
-            }
-            let image = await StudioThumbnails.shared.thumbnail(for: url, side: side)
-            let bytes = image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?
-                .representation(using: .png, properties: [:])
-            return try encoder.encode(bytes)
         case "studio.ui.preview":
             guard let id = object["toolID"] as? String, let tool = StudioCatalog.tool(id) else {
                 throw ExtensionPeerError.invalidRequest
@@ -200,6 +189,7 @@ import Foundation
         value.installing = model.installing
         value.installLog = model.installLog
         value.message = model.message
+        value.messageRevision = model.messageRevision
         value.presentation = model.embeddedPresentation
         value.export = model.exportState
         value.pendingOpen = VideoEditorOpenBridge.shared.pending?.request

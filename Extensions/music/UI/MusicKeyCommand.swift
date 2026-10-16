@@ -48,3 +48,64 @@ public enum EmbeddedMusicKeyCommand {
         return responder is NSTextField
     }
 }
+
+@MainActor
+enum EmbeddedMusicKeyMonitor {
+    private static var monitor: Any?
+    private static var holders = 0
+
+    static var isInstalled: Bool { monitor != nil }
+
+    static func acquire() {
+        holders += 1
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let handled = MainActor.assumeIsolated {
+                guard !videoClaims(event) else { return false }
+                return dispatch(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            }
+            return handled ? nil : event
+        }
+    }
+
+    static func release() {
+        holders = max(0, holders - 1)
+        guard holders == 0, let monitor else { return }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+    }
+
+    static func dispatch(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        let accounts = EmbeddedMusicAccounts.shared
+        switch accounts.selected {
+        case .local:
+            let remote = EmbeddedMusicRemote.shared
+            return EmbeddedMusicKeyCommand.handle(
+                keyCode: keyCode, modifiers: modifiers, active: remote.current != nil,
+                .init(
+                    playPause: { remote.playPause() },
+                    seekBy: { remote.nudgeSeek($0) },
+                    volumeBy: { remote.nudgeVolume($0) }))
+        case .spotify:
+            let spotify = accounts.spotify
+            return EmbeddedMusicKeyCommand.handle(
+                keyCode: keyCode, modifiers: modifiers, active: spotify.connected,
+                .init(
+                    playPause: { spotify.send(["action": "toggle"]) },
+                    seekBy: { spotify.seek(by: $0) },
+                    volumeBy: { spotify.setVolume(spotify.volume + $0) }))
+        default:
+            return false
+        }
+    }
+
+    private static func videoClaims(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 49, let view = event.window?.contentView else { return false }
+        return containsVideoKeyView(view)
+    }
+
+    private static func containsVideoKeyView(_ view: NSView) -> Bool {
+        String(describing: type(of: view)) == "VideoPlaybackKeyView"
+            || view.subviews.contains(where: containsVideoKeyView)
+    }
+}

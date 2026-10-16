@@ -316,6 +316,17 @@ import ViewInspector
         }
     }
 
+    @Test func surfacingTheEditorNavigatesTheMainWindowToStudioWithoutAPresentation() async throws {
+        let probe = StudioSettingsNavigationProbe()
+        let navigation = try #require(StudioSettingsNavigation(bridge: probe))
+        navigation.surface()
+        try await waitUntil { probe.input != nil }
+        #expect(probe.input?["section"] as? String == "studio")
+        #expect(probe.input?["location"] == nil && probe.input?["presentationID"] == nil)
+        probe.completion?(nil)
+        await navigation.stopAndWait()
+    }
+
     @Test func originalSettingsFormLaysOutNeverVisibleAtBothWidthsZoomAndColorSchemes() async throws
     {
         let application = NSApplication.shared

@@ -225,7 +225,7 @@ import Testing
     @Test(arguments: [
         "inputTokens", "cost", "chatCost", "modelCost", "hours", "duplicateChat", "duplicateRow",
     ])
-    func retainedIdentityRefusesAuthoritativeChangesAndPreservesMultiplicity(_ mutation: String)
+    func retainedIdentityKeepsAChangedBaselineAndPreservesMultiplicity(_ mutation: String)
         throws
     {
         let previous = try retainedCostFixture()
@@ -269,10 +269,23 @@ import Testing
             }
         }
         #expect(UsageHistory.isValidDocument(changed))
-        #expect(UsageHistory.mergeRefresh(fresh: changed, previous: previous) == nil)
-        #expect(UsageHistory.mergeRefresh(fresh: changed, previous: changed) == nil)
-        #expect(UsageHistory.merge(local: previous, cloud: changed) == nil)
-        #expect(UsageHistory.merge(local: changed, cloud: previous) == nil)
+        let recorded =
+            try #require(blocks(try object(previous)).first)["candidates"] as? [Any] ?? []
+        for value in [
+            UsageHistory.mergeRefresh(fresh: changed, previous: previous),
+            UsageHistory.merge(local: previous, cloud: changed),
+        ] {
+            let result = try #require(value)
+            #expect(UsageHistory.isValidDocument(result))
+            let block = try #require(blocks(try object(result)).first)
+            #expect((block["candidates"] as? [Any])?.count == recorded.count + 1)
+        }
+        for value in [
+            UsageHistory.mergeRefresh(fresh: changed, previous: changed),
+            UsageHistory.merge(local: changed, cloud: previous),
+        ] {
+            #expect(value.map(UsageHistory.isValidDocument) == true)
+        }
     }
 
     private func retainedCostFixture() throws -> Data {

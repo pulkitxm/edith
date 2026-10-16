@@ -141,4 +141,16 @@ import Testing
         return try JSONDecoder().decode(
             ExtensionCLIReply.self, from: await worker.execute("herdr.agent.cli", payload: payload))
     }
+
+    @Test func catalogCarriesParserMetadataWithoutTheBuiltInHelpCommand() throws {
+        let value = try #require(
+            JSONSerialization.jsonObject(with: HerdrCLICatalog.data()) as? [String: Any])
+        let help = try #require((value["parserHelp"] as? [[String: Any]])?.first)
+        let root = try #require(help["command"] as? [String: Any])
+        #expect(root["commandName"] as? String == "herdr")
+        let names = (root["subcommands"] as? [[String: Any]] ?? []).compactMap {
+            $0["commandName"] as? String
+        }
+        #expect(names.contains("ls") && !names.contains("help"))
+    }
 }

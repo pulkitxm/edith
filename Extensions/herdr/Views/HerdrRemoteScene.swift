@@ -8,6 +8,15 @@ struct HerdrRemoteScene: View {
     let target: String
     let token: UUID
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
+    @State private var keyMonitor = HerdrPageKeyMonitor()
+
+    private var detailSurface: HerdrAgentDetailSurface {
+        switch location {
+        case "herdr.agent": .agentWindow
+        case "herdr.space": .space(hasAgent: store.uiSpaces[target]?.selectedTab?.agentTab != nil)
+        default: .elsewhere
+        }
+    }
 
     var body: some View {
         Group {
@@ -34,6 +43,20 @@ struct HerdrRemoteScene: View {
                 ) { EmptyView() }
             }
         }
+        .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
+        .onAppear {
+            keyMonitor.active = automaticActions
+            keyMonitor.install(store: store) { store, event, window in
+                store.performSceneKey(
+                    characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
+                    repeats: event.isARepeat, in: window, surface: detailSurface)
+            }
+        }
+        .onDisappear {
+            keyMonitor.active = false
+            keyMonitor.remove()
+        }
+        .onChange(of: automaticActions) { keyMonitor.active = automaticActions }
         .task(id: automaticActions) {
             if automaticActions { await store.watch() } else { store.stopWatching() }
         }

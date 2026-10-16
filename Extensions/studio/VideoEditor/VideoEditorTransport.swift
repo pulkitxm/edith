@@ -31,7 +31,7 @@ struct VideoEditorTransport: View {
             }
             .accessibilityLabel("Previous frame").help("Previous frame")
             Button(action: model.togglePlayback) {
-                Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill")
+                Image(systemName: model.playbackRate == 0 ? "play.fill" : "pause.fill")
                     .frame(width: UIScale.pt(30))
             }
             .accessibilityLabel("Play or pause").help("Play or pause (Space)")
@@ -46,7 +46,7 @@ struct VideoEditorTransport: View {
             } label: {
                 Image(systemName: model.loopPlayback ? "repeat.circle.fill" : "repeat")
             }
-            .disabled(model.pipeline == nil)
+            .disabled(model.previewMetadata == nil)
             .accessibilityLabel("Loop playback").help("Loop playback")
         }
     }

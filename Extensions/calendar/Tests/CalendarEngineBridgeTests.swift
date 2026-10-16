@@ -26,9 +26,30 @@ import Testing
         #expect(facade.events.first?.notes == "Private notes")
         fixture.allowed = false
         await facade.refreshAndWait()
-        #expect(!facade.authorized && facade.events.isEmpty)
+        #expect(!facade.authorized && facade.events.map(\.id) == ["owned"])
         await facade.performAndWait(.join, eventID: "owned")
         #expect(facade.error != nil && fixture.opened.count == 3)
+    }
+
+    @Test func metadataServesThePersistedAgendaWithoutFetchingOrAccess() async throws {
+        let cached = CalendarEventPayload(
+            id: "cached", title: "Synthetic cached event", start: Date(),
+            end: Date().addingTimeInterval(600), isAllDay: false)
+        var fetches = 0
+        let store = CalendarStore(
+            snapshotStore: CalendarAgendaSnapshotStore(events: [cached]),
+            fetch: { _ in
+                fetches += 1
+                return []
+            })
+        let presentation = CalendarPresentationState(channel: nil)
+        let engine = CalendarUIEngine(
+            store: store, presentation: presentation, authorized: { false })
+        defer { engine.shutdown(); store.shutdown(); presentation.shutdown() }
+        let reply = try await engine.execute("calendar.ui.metadata", payload: Data("{}".utf8))
+        let snapshot = try JSONDecoder().decode(CalendarUISnapshot.self, from: reply)
+        #expect(!snapshot.authorized && snapshot.events.map(\.id) == ["cached"])
+        #expect(fetches == 0)
     }
 
     @Test func onePresentationCanDisappearWithoutDisablingOtherPresentations() async throws {

@@ -160,7 +160,7 @@ test("original owner Python imports preserve tracked source for host-building ta
     rmSync(directory, { recursive: true, force: true });
   }
   expect(job.steps.filter((step) => step.run).map((step) => step.run)).toEqual([
-    "command -v zig >/dev/null 2>&1 || brew install zig",
+    "source scripts/ci-setup-zig.sh",
     "python3 scripts/hosted-native-owner-tests.py",
   ]);
 });

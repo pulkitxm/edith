@@ -266,6 +266,10 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             }
     }
 
+    public static func declaresCommands(_ owner: String) -> Bool {
+        prefixes[owner]?.isEmpty == false
+    }
+
     public static let prefixes: [String: Set<String>] = [
         "host": [
             "config", "app", "permissions", "guide", "schema", "version", "status", "install",
@@ -318,7 +322,7 @@ public struct HostCLIProviderRegistry: Sendable {
         var providers: [Provider] = []
         var issues: [String: String] = [:]
         for state in states
-        where state.available && HostCLIProviderCatalog.prefixes[state.id] != nil {
+        where state.available && HostCLIProviderCatalog.declaresCommands(state.id) {
             try Task.checkCancellation()
             do {
                 let data = try await invoke(

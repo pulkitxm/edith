@@ -28,6 +28,7 @@ struct NotchBrowserPane<Leading: View>: View {
             }
         }
         .overlay(alignment: .bottom) { NotchBrowserResizeHandles(store: store) }
+        .background(NotchBrowserKeyEquivalents(store: store))
         .onAppear { if automaticActions { store.appeared() } }
     }
 
@@ -59,6 +60,39 @@ struct NotchBrowserPane<Leading: View>: View {
         }
         .animation(.easeOut(duration: 0.18), value: store.toast)
         .presenterCover(NotchPresenterState.shared.hides(.browser))
+    }
+}
+
+struct NotchBrowserKeyEquivalents: NSViewRepresentable {
+    let store: NotchBrowserStore
+
+    func makeNSView(context: Context) -> NotchBrowserKeyEquivalentView {
+        NotchBrowserKeyEquivalentView(store: store)
+    }
+
+    func updateNSView(_ view: NotchBrowserKeyEquivalentView, context: Context) {
+        view.store = store
+    }
+}
+
+final class NotchBrowserKeyEquivalentView: NSView {
+    var store: NotchBrowserStore
+
+    init(store: NotchBrowserStore) {
+        self.store = store
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard window?.isKeyWindow == true else { return false }
+        return store.handleKeyEquivalent(event)
     }
 }
 

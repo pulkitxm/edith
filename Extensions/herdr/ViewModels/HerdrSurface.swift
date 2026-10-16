@@ -110,6 +110,13 @@ import Foundation
         return SurfaceSnapshot(
             providerID: "herdr", metrics: metrics, rows: rows,
             actions: [.init("open", "Open Herdr", "macwindow")],
+            facts: [
+                "working": Double(presentation.working), "waiting": Double(presentation.waiting),
+                "stuck": Double(presentation.stuck), "quiet": Double(presentation.quiet),
+                "errors": Double(presentation.errors), "active": Double(presentation.active),
+                "permissions": Double(presentation.approvals.count),
+                "monitoringStalls": activity.settings.monitorTerminalAttention ? 1 : 0,
+            ],
             sources: all.providerChoices(including: tile.sourceIDs ?? []),
             message: rows.isEmpty
                 ? "No sessions match this widget. Configure provider hooks in Herdr's Agent connections."
