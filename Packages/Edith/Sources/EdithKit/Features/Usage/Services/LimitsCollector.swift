@@ -36,11 +36,30 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
     public let refreshedAt: Date
     public let providers: [LimitsProviderSnapshot]
     public let failure: String?
+    public let claudeAccounts: [ClaudeAccountLimits]
 
-    public init(refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?) {
+    public init(
+        refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?,
+        claudeAccounts: [ClaudeAccountLimits] = []
+    ) {
         self.refreshedAt = refreshedAt
         self.providers = providers
         self.failure = failure
+        self.claudeAccounts = claudeAccounts
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case refreshedAt, providers, failure, claudeAccounts
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        refreshedAt = try container.decode(Date.self, forKey: .refreshedAt)
+        providers = try container.decode([LimitsProviderSnapshot].self, forKey: .providers)
+        failure = try container.decodeIfPresent(String.self, forKey: .failure)
+        claudeAccounts =
+            try container.decodeIfPresent([ClaudeAccountLimits].self, forKey: .claudeAccounts)
+            ?? []
     }
 }
 
@@ -77,9 +96,11 @@ public enum LimitsCollector {
         connectClaude: @Sendable () -> Void = { LimitsCollector.connectClaudeStatusLine() },
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
-        await collect(
+        await collectConfigured(
             providers: enabledProviders(defaults: defaults), force: force,
-            refreshSession: refreshSession, announce: announce
+            refreshSession: refreshSession, announce: announce,
+            accountDirectory: { ClaudeAccountStorage.defaultDirectory },
+            loadAccounts: { try await ClaudeAccountStorage(directory: $0).load().accounts }
         ) { provider in
             switch provider {
             case .claude:
@@ -105,14 +126,52 @@ public enum LimitsCollector {
         }
     }
 
-    static func collect(
+    static func collectConfigured(
         providers: [LimitProvider], force: Bool = false,
         refreshSession: LimitsRefreshSession, now: Date = Date(),
         announce: @Sendable (Notification.Name) -> Void,
+        accountDirectory: () throws -> URL,
+        loadAccounts: (URL) async throws -> [ClaudeAccount],
+        fetchAccount:
+            @escaping @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {
+                try await ClaudeLimitsReader.fetch(account: $0, directory: $1)
+            }, fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
+    ) async -> LimitsTopicSnapshot {
+        var accounts: [ClaudeAccount] = []
+        var directory: URL?
+        if providers.contains(.claude) {
+            do {
+                directory = try accountDirectory()
+                accounts = try await loadAccounts(directory!)
+            } catch {
+                return .init(
+                    refreshedAt: now, providers: [],
+                    failure: "Account limits configuration could not be loaded.")
+            }
+        }
+        let collector = refreshSession.accountCollector
+        return await collect(
+            providers: providers.filter { $0 != .claude || accounts.isEmpty },
+            leaseProviders: providers, force: force,
+            refreshSession: refreshSession, now: now, announce: announce,
+            fetchAccounts: {
+                guard let directory, !accounts.isEmpty else { return [] }
+                return try await collector.refresh(
+                    accounts: accounts, directory: directory, now: now, fetch: fetchAccount)
+            }, fetch: fetch)
+    }
+
+    static func collect(
+        providers: [LimitProvider], leaseProviders: [LimitProvider]? = nil, force: Bool = false,
+        refreshSession: LimitsRefreshSession, now: Date = Date(),
+        announce: @Sendable (Notification.Name) -> Void,
+        fetchAccounts: () async throws -> [ClaudeAccountLimits] = { [] },
         fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
     ) async -> LimitsTopicSnapshot {
         let paused: [LimitsProviderSnapshot]
-        switch await refreshSession.begin(force: force, providers: providers, now: now) {
+        switch await refreshSession.begin(
+            force: force, providers: leaseProviders ?? providers, now: now)
+        {
         case .cached(let snapshot): return snapshot
         case .collect(let providers): paused = providers
         }
@@ -130,8 +189,19 @@ public enum LimitsCollector {
                 deadlines[provider] = deadline
             }
         }
+        let accounts: [ClaudeAccountLimits]
+        var accountFailure: String?
+        do {
+            accounts = try await fetchAccounts()
+        } catch {
+            accounts = []
+            accountFailure = "Account limits are unavailable."
+        }
         let snapshot = LimitsTopicSnapshot(
-            refreshedAt: now, providers: snapshots, failure: snapshots.compactMap(\.error).first)
+            refreshedAt: now, providers: snapshots,
+            failure: snapshots.compactMap(\.error).first
+                ?? accountFailure ?? accounts.compactMap(\.limits.error).first,
+            claudeAccounts: accounts)
         await refreshSession.finish(snapshot, retryNotBefore: deadlines)
         announce(IPC.Name.limitsUpdated)
         return snapshot

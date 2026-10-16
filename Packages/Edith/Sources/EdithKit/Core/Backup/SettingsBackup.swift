@@ -1048,7 +1048,7 @@ final class SettingsBackup {
     nonisolated static let sharedKeys = baseSharedKeys.union(registryV2Keys)
 
     nonisolated static let deviceLocalKeys: Set<String> = [
-        AgentService.stateKey, AppStorageKeys.Herdr.pendingOpen,
+        AgentService.stateKey, AppStorageKeys.Herdr.pendingOpen, MenuBarLimits.accountSelectionKey,
         AppStorageKeys.Studio.folder, AppStorageKeys.Studio.library,
         AppStorageKeys.Bifrost.indexedAt, "bifrostWindowPositionX", "bifrostWindowPositionY",
         "extensionsExpand", "hasPromptedPermissions", AppStorageKeys.Backup.lastBackupAt,
