@@ -4,7 +4,7 @@ import Testing
 @testable import LaTeXExtension
 
 @Suite(.serialized) @MainActor struct LaTeXSurfaceTests {
-    @Test func projectSourcesFieldsLimitsAndActionsUseCurrentLibraryData() async throws {
+    @Test func rowsComeFromTheStoredLibraryWithASingleOpenAction() async throws {
         let fixture = try LaTeXSurfaceFixture()
         defer { fixture.cleanup() }
         let calls = LaTeXSurfaceCalls()
@@ -13,20 +13,21 @@ import Testing
                 await calls.record(tool); return Data()
             })
         let surface = LaTeXSurface(model: model, privacyValues: { [:] })
-        var tile = SurfaceTile(.ability("latex"));
-        tile.sourceIDs = [fixture.projects[0].id.uuidString]
-        tile.itemLimit = 1; tile.hiddenFields = ["compiler", "reviews"]
+        var tile = SurfaceTile(.ability("latex"))
+        tile.sourceIDs = [fixture.projects[1].id.uuidString]
         let request = SurfaceSnapshotRequest(target: .notch, tile: tile)
         let snapshot = try SurfaceSnapshot.decode(
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "latex")),
             providerID: "latex")
-        #expect(snapshot.rows.map(\.id) == [fixture.projects[0].id.uuidString])
-        #expect(snapshot.sources.count == 2 && snapshot.metrics.map(\.id) == ["projects"])
-        #expect(snapshot.rows[0].detail == "mock.tex")
-        #expect(snapshot.rows[0].actions.count == 2)
-        #expect(await calls.tools.isEmpty)
-        for invalid in ["build/" + fixture.projects[1].id.uuidString, "invalid-synthetic-action"] {
+        #expect(snapshot.rows.map(\.id) == [fixture.projects[1].id.uuidString])
+        #expect(snapshot.sources.count == 2)
+        #expect(snapshot.rows[0].detail == "example/mock" && snapshot.rows[0].value == "PR #10")
+        #expect(snapshot.rows[0].icon == "doc.richtext")
+        #expect(snapshot.rows[0].actions.map(\.title) == ["Open document"])
+        #expect(snapshot.message == nil)
+        #expect(model.selectedID == nil)
+        for invalid in ["build/" + fixture.projects[0].id.uuidString, "invalid-synthetic-action"] {
             await #expect(throws: ExtensionPeerError.self) {
                 try await surface.execute(
                     "surface.perform",
@@ -34,49 +35,14 @@ import Testing
                         providerID: "latex"))
             }
         }
-        tile.hiddenFields = ["build"]
-        await #expect(throws: ExtensionPeerError.self) {
-            try await surface.execute(
-                "surface.perform",
-                payload: SurfaceActionRequest(
-                    snapshot: .init(target: .home, tile: tile),
-                    actionID: "build/" + fixture.projects[0].id.uuidString
-                ).encoded(providerID: "latex"))
-        }
-        #expect(await calls.tools.isEmpty)
-        await model.shutdown()
-    }
-
-    @Test func compilationUsesTheSelectedProjectAndTheOwnedCompiler() async throws {
-        let fixture = try LaTeXSurfaceFixture()
-        defer { fixture.cleanup() }
-        try Data("%PDF-1.7\nsynthetic\n%%EOF".utf8).write(to: fixture.projects[0].pdfURL)
-        let calls = LaTeXSurfaceCalls()
-        let model = fixture.model(
-            service: .init { tool, _, _, _ in
-                await calls.record(tool); return Data("synthetic compiler output".utf8)
-            })
-        let surface = LaTeXSurface(model: model, privacyValues: { [:] })
-        let request = SurfaceSnapshotRequest(target: .home, tile: SurfaceTile(.ability("latex")))
         _ = try await surface.execute(
             "surface.perform",
             payload: SurfaceActionRequest(
-                snapshot: request,
-                actionID: "build/" + fixture.projects[0].id.uuidString
+                snapshot: request, actionID: "open/" + fixture.projects[1].id.uuidString
             ).encoded(providerID: "latex"))
-        for _ in 0..<100 {
-            let tools = await calls.tools
-            if !model.busy && !tools.isEmpty { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(await calls.tools == ["tectonic"])
-        #expect(
-            model.selectedID == fixture.projects[0].id && model.message == "PDF compiled on disk.")
+        #expect(model.selectedID == nil && !model.busy)
+        #expect(await calls.tools.isEmpty)
         await model.shutdown()
-        await #expect(throws: ExtensionPeerError.self) {
-            try await surface.execute(
-                "surface.snapshot", payload: request.encoded(providerID: "latex"))
-        }
     }
 
     @Test func presenterMasksTheLibraryBeforeAnyStorageOrToolWork() async throws {
