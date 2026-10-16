@@ -456,7 +456,7 @@
       "sources": [
         {
           "path": "Extensions/clipboard/Runtime.swift",
-          "sha256": "bea0bd74f15f4d4e052f8a1464a0ef5f65b578c7577953ec1ab2487f0aa4d7b0"
+          "sha256": "2697db5f489036be04141018983e27dd6ed5508d62190e59c42bae46148dc28f"
         },
         {
           "path": "Extensions/clipboard/ClipboardPresentation.swift",
