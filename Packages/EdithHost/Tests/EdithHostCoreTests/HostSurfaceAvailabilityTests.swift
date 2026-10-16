@@ -119,11 +119,25 @@ import Testing
         let layout = SurfaceLayout.standard(.notch)
         #expect(
             SurfaceNotchTab.visible(layout: layout, activeIDs: ["notchShelf"])
-                == [.home, .files, .camera])
+                == [.home, .agents, .files, .camera])
         #expect(
             SurfaceNotchTab.visible(
                 layout: layout, activeIDs: ["notchShelf"], browserEnabled: true)
-                == [.home, .browser, .files, .camera])
+                == [.home, .agents, .browser, .files, .camera])
+    }
+
+    @Test func audioTabNeedsApplicationAudioSupport() {
+        let layout = SurfaceLayout.standard(.notch)
+        let active: Set<String> = ["notchShelf", "audioMixer"]
+        #expect(
+            SurfaceNotchTab.visible(
+                layout: layout, activeIDs: active, applicationAudioSupported: false
+            ).contains(.audio) == false)
+        #expect(
+            SurfaceNotchTab.visible(
+                layout: layout, activeIDs: active, applicationAudioSupported: true
+            )
+            .contains(.audio))
     }
 
     @Test func glanceSettingsSurviveMissingProvidersWithoutRequestingTheirData() throws {
