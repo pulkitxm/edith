@@ -37,7 +37,7 @@ import Testing
         let owner = makeOwner(recorder)
         let bridge = Bridge(owner: owner)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-        let model = HomebrewPageModel(engineClient: client)
+        let model = HomebrewPageModel(engineClient: client, memory: HomebrewListingMemory())
         model.activate(kind: .formula)
         try await wait { model.loaded && !model.isBusy }
         #expect(model.status?.available == true)
@@ -62,7 +62,7 @@ import Testing
         let owner = makeOwner(recorder)
         let bridge = Bridge(owner: owner)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-        let model = HomebrewPageModel(engineClient: client)
+        let model = HomebrewPageModel(engineClient: client, memory: HomebrewListingMemory())
         model.activate(kind: .formula)
         try await wait { model.loaded && model.packages.map(\.name) == ["synthetic-formula"] }
         #expect(model.isBusy)
@@ -91,12 +91,121 @@ import Testing
         recorder.holdOutdated = true
         let bridge = Bridge(owner: owner)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-        let model = HomebrewPageModel(engineClient: client)
+        let model = HomebrewPageModel(engineClient: client, memory: HomebrewListingMemory())
         await model.loadCachedListing()
         model.activate(kind: .formula)
         try await wait { model.loaded && model.packages.map(\.name).contains("cached-formula") }
         #expect(model.isBusy)
         recorder.holdOutdated = false
+        try await wait { !model.isBusy }
+        #expect(model.packages.map(\.name) == ["synthetic-formula"])
+        model.shutdown(); client.invalidate(); await owner.shutdownAndWait()
+    }
+
+    @Test func snapshotRequestReturnsCachedListingWhileRefreshIsBlocked() async throws {
+        let recorder = Requests()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = HomebrewListingStore(
+            fileURL: directory.appendingPathComponent("listing.json"))
+        let seed = HomebrewListingSnapshot(
+            status: HomebrewStatus(available: true, executable: "/synthetic/brew", version: "x"),
+            packages: [
+                .formula: [
+                    HomebrewPackage(
+                        kind: .formula, name: "cached-formula", displayName: "cached-formula",
+                        installedVersions: ["1"])
+                ]
+            ])
+        try await store.save(seed)
+        recorder.holdInventory = true
+        let owner = makeOwner(recorder, store: store)
+        let refresh = Task {
+            try await owner.execute("homebrew.list", payload: Data("{\"kind\":\"formula\"}".utf8))
+        }
+        try await wait { recorder.arguments.contains { $0.first == "info" } }
+        let cached = await ownerCache(owner)
+        #expect(cached?.packages[.formula]?.map(\.name) == ["cached-formula"])
+        #expect(cached?.status.available == true)
+        recorder.holdInventory = false
+        _ = try await refresh.value
+        #expect(await ownerCache(owner)?.packages[.formula]?.map(\.name) == ["synthetic-formula"])
+        #expect(await store.load()?.packages[.formula]?.map(\.name) == ["synthetic-formula"])
+        await owner.shutdownAndWait()
+    }
+
+    @Test func streamedInventoryIsPersistedAndSurvivesTheCallerLeaving() async throws {
+        let recorder = Requests()
+        recorder.holdOutdated = true
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = HomebrewListingStore(
+            fileURL: directory.appendingPathComponent("listing.json"))
+        let owner = makeOwner(recorder, store: store)
+        let visit = Task {
+            try await owner.execute("homebrew.list", payload: Data("{\"kind\":\"formula\"}".utf8))
+        }
+        try await wait { recorder.arguments.contains { $0.first == "outdated" } }
+        visit.cancel()
+        await #expect(throws: CancellationError.self) { try await visit.value }
+        await owner.flushPersistence()
+        #expect(await store.load()?.packages[.formula]?.map(\.name) == ["synthetic-formula"])
+        #expect(await ownerCache(owner)?.packages[.formula]?.map(\.name) == ["synthetic-formula"])
+        recorder.holdOutdated = false
+        await owner.shutdownAndWait()
+    }
+
+    @Test func secondVisitRendersRememberedListingOnTheFirstFrame() async throws {
+        let recorder = Requests()
+        let owner = makeOwner(recorder)
+        let bridge = Bridge(owner: owner)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let memory = HomebrewListingMemory()
+        let first = HomebrewPageModel(engineClient: client, memory: memory)
+        #expect(!first.loaded && first.packages.isEmpty)
+        first.activate(kind: .formula)
+        try await wait { first.loaded && !first.isBusy }
+        first.shutdown()
+        let second = HomebrewPageModel(engineClient: client, memory: memory)
+        #expect(second.loaded && second.loading.state == .content)
+        #expect(second.packages.map(\.name) == ["synthetic-formula"])
+        #expect(second.status?.available == true)
+        second.shutdown(); client.invalidate(); await owner.shutdownAndWait()
+    }
+
+    @Test func cachedListingIsShownBeforeTheFirstEngineRefreshReplies() async throws {
+        let recorder = Requests()
+        recorder.holdInventory = true
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = HomebrewListingStore(
+            fileURL: directory.appendingPathComponent("listing.json"))
+        try await store.save(
+            HomebrewListingSnapshot(
+                status: HomebrewStatus(
+                    available: true, executable: "/synthetic/brew", version: "x"),
+                packages: [
+                    .formula: [
+                        HomebrewPackage(
+                            kind: .formula, name: "cached-formula", displayName: "cached-formula",
+                            installedVersions: ["1"])
+                    ]
+                ]))
+        let owner = makeOwner(recorder, store: store)
+        let bridge = Bridge(owner: owner)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let model = HomebrewPageModel(engineClient: client, memory: HomebrewListingMemory())
+        await model.loadCachedListing(showing: .formula)
+        #expect(model.packages.map(\.name) == ["cached-formula"])
+        #expect(model.loading.state == .content)
+        model.activate(kind: .formula)
+        try await wait { model.isBusy && model.loading.isRefreshing }
+        #expect(model.loading.state == .content)
+        #expect(model.packages.map(\.name) == ["cached-formula"])
+        recorder.holdInventory = false
         try await wait { !model.isBusy }
         #expect(model.packages.map(\.name) == ["synthetic-formula"])
         model.shutdown(); client.invalidate(); await owner.shutdownAndWait()
@@ -128,7 +237,7 @@ import Testing
         let owner = HomebrewEngineCommands(defaults: defaults)
         let bridge = Bridge(owner: owner)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-        let model = HomebrewPageModel(engineClient: client)
+        let model = HomebrewPageModel(engineClient: client, memory: HomebrewListingMemory())
         #expect(try await model.preferredKind() == .cask)
         model.savePreferredKind(.formula)
         try await wait { defaults.string(forKey: AppStorageKeys.Homebrew.defaultKind) == "formula" }
@@ -224,6 +333,9 @@ import Testing
                 if request.arguments.first == "install", recorder.hold {
                     try await Task.sleep(for: .seconds(30))
                 }
+                while request.arguments.first == "info", recorder.holdInventory {
+                    try await Task.sleep(for: .milliseconds(10))
+                }
                 while request.arguments.first == "outdated", recorder.holdOutdated {
                     try await Task.sleep(for: .milliseconds(10))
                 }
@@ -264,6 +376,11 @@ import Testing
         var holdOutdated: Bool {
             get { outdatedLock.withLock { outdatedHeld } }
             set { outdatedLock.withLock { outdatedHeld = newValue } }
+        }
+        private var inventoryHeld = false
+        var holdInventory: Bool {
+            get { outdatedLock.withLock { inventoryHeld } }
+            set { outdatedLock.withLock { inventoryHeld = newValue } }
         }
         var directory: URL?
         var arguments: [[String]] { lock.withLock { values } }

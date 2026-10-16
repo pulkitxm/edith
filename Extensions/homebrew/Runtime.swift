@@ -52,7 +52,7 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             stopUI()
             uiClient = client
-            uiModel = HomebrewPageModel(engineClient: client)
+            uiModel = HomebrewPageModel(engineClient: client, memory: .shared)
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
