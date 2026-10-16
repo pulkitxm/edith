@@ -10,12 +10,12 @@ chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
 hex = "0.4"
 lexopt = "0.3"
-pdf-extract = "0.12.0"
+pdf-extract = { version = "0.13.0", path = "pdf-extract" }
 redis = { version = "1", features = ["tokio-comp"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "multipart", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml_ng = "0.10.0"
+serde-saphyr = { version = "1.3.0", default-features = false, features = ["deserialize"] }
 sha2 = "0.11"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "chrono", "uuid", "json", "macros"] }
 tempfile = "3"

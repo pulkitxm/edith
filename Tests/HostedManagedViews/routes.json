@@ -1,0 +1,860 @@
+{
+  "schema": 1,
+  "reviewedSource": "db8e8b7aaacab570cb8a2a417b1290d0c66596d1",
+  "owners": [
+    {
+      "id": "keepAwake",
+      "location": "settings",
+      "section": "keepAwake",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/keepAwake/Runtime.swift",
+          "sha256": "8623bd9d01ce7526e502843c693256db98d5c9b4a6f2dec32e8d85731f58df53"
+        },
+        {
+          "path": "Extensions/keepAwake/Presentation.swift",
+          "sha256": "753f4941634cf19bf6fe88d1d892a0782f7ea13d42c0c8a2d260b1da8746f2f1"
+        }
+      ]
+    },
+    {
+      "id": "audioMixer",
+      "location": "main",
+      "section": "audioMixer",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote model has no local mixer/tap. View appearance reads authenticated audioMixer.ui.snapshot. Volume actions are forbidden.",
+      "sources": [
+        {
+          "path": "Extensions/audioMixer/Runtime.swift",
+          "sha256": "9a143a36ace725b79db5793486709eeaf705d00d1a2a8488801043093f3ce2d7"
+        },
+        {
+          "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
+          "sha256": "ff90799ad00db1dab2e5c095babd7a07f12dbb91bea8584fb45438e87cea845f"
+        }
+      ]
+    },
+    {
+      "id": "focusDim",
+      "location": "settings",
+      "section": "focusDim",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/focusDim/Runtime.swift",
+          "sha256": "0dfd33aed73ab7407161424744c9d466a27593135c04ceab865cfc6e79bc8d4b"
+        },
+        {
+          "path": "Extensions/focusDim/Presentation.swift",
+          "sha256": "8b5b4e1b2437da814dc4714dce7d2c35c906f8ceb0458b2027c179fb042b6ee6"
+        }
+      ]
+    },
+    {
+      "id": "windowSweaters",
+      "location": "settings",
+      "section": "windowSweaters",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/windowSweaters/Runtime.swift",
+          "sha256": "a195a37c99701da4352fc38736efee63eafa1518acf440cb830704daab630be9"
+        },
+        {
+          "path": "Extensions/windowSweaters/Presentation.swift",
+          "sha256": "7a9cff144301cd6b65c2413dd91e20d6f254dea685415f56b3c01c1344647fb3"
+        }
+      ]
+    },
+    {
+      "id": "micMute",
+      "location": "settings",
+      "section": "micMute",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/micMute/Runtime.swift",
+          "sha256": "1e99883ab2de0b96b813a570436cbd2616bf4a323bb0730d47d835dfbaac9a06"
+        },
+        {
+          "path": "Extensions/micMute/Presentation.swift",
+          "sha256": "1a084ba19bf8d531d6719c796d24b1d5bffcbaab26d2bdf87b1d85d7501caba7"
+        }
+      ]
+    },
+    {
+      "id": "keystrokeHighlight",
+      "location": "settings",
+      "section": "keystrokeHighlight",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/keystrokeHighlight/Runtime.swift",
+          "sha256": "ee13965efada5721467904c4b32373138c0c03c2e15bcbbfb742791267c309b5"
+        },
+        {
+          "path": "Extensions/keystrokeHighlight/Presentation.swift",
+          "sha256": "3e355eb832ae70c6f20dece6a3f526ec461bbef3ec3a7d966821477d5e751a4f"
+        }
+      ]
+    },
+    {
+      "id": "presenter",
+      "location": "settings",
+      "section": "presenter",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/presenter/Runtime.swift",
+          "sha256": "e15b84ede72f3ccf54cedda7096bc398978d1a976adcdb572e27baac24c19f80"
+        },
+        {
+          "path": "Extensions/presenter/Presentation.swift",
+          "sha256": "0a1204d429c851d8513b1156c4d0fb8dee6c85f91d55caad081909722886d794"
+        }
+      ]
+    },
+    {
+      "id": "colorPicker",
+      "location": "settings",
+      "section": "colorPicker",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/colorPicker/Runtime.swift",
+          "sha256": "dc17cb9a09078055a5409955669d5482284f8c0556bbb2521358540df62c1237"
+        },
+        {
+          "path": "Extensions/colorPicker/Presentation.swift",
+          "sha256": "704c957c5a088820f139aad5fdfa8c5fa7bed91996691e2ebc205742c7e8214e"
+        }
+      ]
+    },
+    {
+      "id": "systemStats",
+      "location": "settings",
+      "section": "systemStats",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/systemStats/Runtime.swift",
+          "sha256": "abd80ed42a9e984c214f93f2da6bd65a6adb9816903efc7a69730e120fca338d"
+        },
+        {
+          "path": "Extensions/systemStats/Presentation.swift",
+          "sha256": "59552aa8d8dfbec82dfb79cbe9ee09623b2e33d1a7c8516b4c917918f38b9210"
+        }
+      ]
+    },
+    {
+      "id": "emoji",
+      "location": "settings",
+      "section": "emoji",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/emoji/Runtime.swift",
+          "sha256": "1a5090b3bae5b233c91505b10d99457265c5e9582ea83e3cde5088a867fc921b"
+        },
+        {
+          "path": "Extensions/emoji/Presentation.swift",
+          "sha256": "0ff24d95a29e8c330b77850e9edfd8d9579978f17f65267323c4274be88080be"
+        }
+      ]
+    },
+    {
+      "id": "homebrew",
+      "location": "main",
+      "section": "homebrew",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote page client with nil local listing store. No brew search/mutation/install/update. Automatic task visibility disabled.",
+      "sources": [
+        {
+          "path": "Extensions/homebrew/Runtime.swift",
+          "sha256": "ed91e0c0807e7fbe2b95a403698b2ada27078e1d34cff2211d89e5faadcad244"
+        },
+        {
+          "path": "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
+          "sha256": "ada5f8b2719c99d7018686d50b41492e14dcf2834c1c5a2dd976e4604c4b753f"
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "location": "main",
+      "section": "calendar",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "CalendarUIPresentation reads the actual synthetic engine without EventKit access in remote UI; its original controller owns the facade and joins retirement after release. Calendar13 separately tests the actual user lifecycle.",
+      "sources": [
+        {
+          "path": "Extensions/calendar/Runtime.swift",
+          "sha256": "47c5cb5c062f8daffd275cd69d86716c47d6def85af5f4ea9d695306f77797ac"
+        },
+        {
+          "path": "Extensions/calendar/Views/CalendarUIPresentation.swift",
+          "sha256": "0806f5558493757f7dcf770d610e9f03c5b6d582ab0ac020bff3100d15d9e27e"
+        }
+      ]
+    },
+    {
+      "id": "jev",
+      "location": "settings",
+      "section": "jev",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote status/model only. No keychain/key write/probe/API action.",
+      "sources": [
+        {
+          "path": "Extensions/jev/Runtime.swift",
+          "sha256": "41260febdd2d115151a1607e2f5fafd38c8654794bc1d43977d5bf33d7d802a5"
+        },
+        {
+          "path": "Extensions/jev/ViewModels/JevSettingsModel.swift",
+          "sha256": "cc9f8abf084e06df50a83ff3c62d8d269bcb247d6d31c26d9018ca8855655659"
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "location": "main",
+      "section": "system",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote RunningAppsModel only. No application/process quit/remove/open action.",
+      "sources": [
+        {
+          "path": "Extensions/system/Runtime.swift",
+          "sha256": "9d1db328af7fe98b4af0b1160f5af24d4faf25e44696463109fe00c0492e47c3"
+        },
+        {
+          "path": "Extensions/system/ViewModels/RunningAppsModel.swift",
+          "sha256": "63f8cf7fefb0b5a257b0991e30cd893b7f8673d4b0648d74fbd710b03d42e18e"
+        }
+      ]
+    },
+    {
+      "id": "timeLapse",
+      "location": "main",
+      "section": "timeLapse",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote recorder/library route all enumeration/capture/export to engine. Source refresh, record, microphone and export actions are forbidden.",
+      "sources": [
+        {
+          "path": "Extensions/timeLapse/Runtime.swift",
+          "sha256": "4877734cdcbe6bb3fc251dac51124cd84e225dba7f74761bf400b69138c0f775"
+        },
+        {
+          "path": "Extensions/timeLapse/TimeLapseRecorder.swift",
+          "sha256": "82b46875e7f2bbc857561408e70a47d06a33e7143c2021262134b1909e032dc9"
+        }
+      ]
+    },
+    {
+      "id": "cleaner",
+      "location": "main",
+      "section": "cleaner",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote cleaner model only. No scan/delete/Trash action.",
+      "sources": [
+        {
+          "path": "Extensions/cleaner/Runtime.swift",
+          "sha256": "2b903a8b6fbb6cf79a2dbfddd826c919de2b580053e237b1b54f133a5f6a45d3"
+        },
+        {
+          "path": "Extensions/cleaner/CleanerModel.swift",
+          "sha256": "e03ae4d9c08f600677b741bf0b5f0c61f2bfdd066c8160281eaa35652b2e9a62"
+        }
+      ]
+    },
+    {
+      "id": "appMaintenance",
+      "location": "main",
+      "section": "appMaintenance",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Per-presentation remote model with fixed original main route. No scan/install/quit/remove/archive action.",
+      "sources": [
+        {
+          "path": "Extensions/appMaintenance/Runtime.swift",
+          "sha256": "19dd34c9cda4bcb3d5bbe588ce90daca4812068e40bed5e9081b3428ffd42452"
+        },
+        {
+          "path": "Extensions/appMaintenance/AppMaintenanceModel.swift",
+          "sha256": "4edf63d44307e542a53a12a79fd994d3f715648e03b80913707fab75a27d3782"
+        }
+      ]
+    },
+    {
+      "id": "blitztree",
+      "location": "main",
+      "section": "blitztree",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote filesystem model only. No project selection/filesystem scan/delete/reveal action.",
+      "sources": [
+        {
+          "path": "Extensions/blitztree/Runtime.swift",
+          "sha256": "7ea337d379343f72932a86df00e7050bb50c40aed6aff82766a303b97d54bf87"
+        },
+        {
+          "path": "Extensions/blitztree/BlitzTreeModel.swift",
+          "sha256": "3904b0127ee219fd01397950cce32a1f7cbe4d182c73a9f9599672e57aa0fe72"
+        }
+      ]
+    },
+    {
+      "id": "plugins",
+      "location": "main",
+      "section": "plugins",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": true,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Production factory rejects synthetic presentation. Exact test-only factory overlay and readonly synthetic transport required. Installer, discover and copy actions forbidden.",
+      "sources": [
+        {
+          "path": "Extensions/plugins/Runtime.swift",
+          "sha256": "f825fc0f869e1c56f4ed59909fb4c69fb46f86aff655a86163b0c00970acfd60"
+        },
+        {
+          "path": "Extensions/plugins/SkillsModel.swift",
+          "sha256": "138ac8f05be91437d974bc0462996d5c9b04e380176a208460b1836055f7b536"
+        }
+      ]
+    },
+    {
+      "id": "notchShelf",
+      "location": "settings",
+      "section": "extension",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Original settings route only. No panel controller, display attach, browser, Bluetooth, camera or customize command. Strict engine declines real features.",
+      "sources": [
+        {
+          "path": "Extensions/notchShelf/Runtime.swift",
+          "sha256": "5f99da890ffec228781ca78d7173635847b078d2fa3514cdf3611f72542f70da"
+        },
+        {
+          "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
+          "sha256": "e388434a3a928a5715406eeb358ee2f8cc73a9b571b9c54454fd8f0e9568e892"
+        }
+      ]
+    },
+    {
+      "id": "clipboard",
+      "location": "main",
+      "section": "clipboard",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote ClipboardPresentation only. No pasteboard, accessibility paste, file open/copy/pin/delete action.",
+      "sources": [
+        {
+          "path": "Extensions/clipboard/Runtime.swift",
+          "sha256": "a604f9a605c00d79fd146b260216a7e14737f9e947c1d679ac467f85d0d15242"
+        },
+        {
+          "path": "Extensions/clipboard/ClipboardPresentation.swift",
+          "sha256": "557cdac799da8791085f06b10ec4c64b1e36d6341739d83126ae1abd9165a90f"
+        }
+      ]
+    },
+    {
+      "id": "music",
+      "location": "main",
+      "section": "music",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "The actual embedded main page uses a presentation-owned remote client and joined retirement. The signed functional fixture admits preference reads and four original settings actions only; browser, video, playback, media and download actions remain unavailable. This route qualifies view creation only.",
+      "sources": [
+        {
+          "path": "Extensions/music/Runtime.swift",
+          "sha256": "29b1c033b8d246e4eb8c26cbcdf0c278804f0c211b1bf966102fd230c736bbb5"
+        },
+        {
+          "path": "Extensions/music/UI/Runtime.swift",
+          "sha256": "883e578e465533119c6aaec4466928475e88622dbeaa4760b8ac17c426d213c1"
+        }
+      ]
+    },
+    {
+      "id": "docs",
+      "location": "main",
+      "section": "docs",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote browser model. No user project enumeration or document open/save/copy action.",
+      "sources": [
+        {
+          "path": "Extensions/docs/Runtime.swift",
+          "sha256": "950f48503ee8d322ceffd42ede20115f1b8f3501012a6067137cdbd6a56c8b83"
+        },
+        {
+          "path": "Extensions/docs/DocsUIBridge.swift",
+          "sha256": "20b5d7ad46e0d95b517d98798307f2673969aa169a4447dda2287e2d043021b7"
+        }
+      ]
+    },
+    {
+      "id": "latex",
+      "location": "main",
+      "section": "latex",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote editor and tool bridge. No compiler/file/tool startup in UI constructor. No build/open/export action.",
+      "sources": [
+        {
+          "path": "Extensions/latex/Runtime.swift",
+          "sha256": "e1d442b10d7373bf41414e80550960b6dab1926f63d54803100cb5bff079ba2a"
+        },
+        {
+          "path": "Extensions/latex/LaTeXModel.swift",
+          "sha256": "ea76a4d7dfd7aaa9024d3442f8452608b65093001394672b6bbdc728bf694c5a"
+        }
+      ]
+    },
+    {
+      "id": "companion",
+      "location": "main",
+      "section": "companion",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote capture constructor returns before outbox observer and recording allocation. Remote transport rejects local URLSession. Keep default owned Home tab, no capture/backend setup/reason actions.",
+      "sources": [
+        {
+          "path": "Extensions/companion/Runtime.swift",
+          "sha256": "33c260ca7a7cc3c0465038f6b2bb3b8c7a98192b364850e7c2055e1ee882d63c"
+        },
+        {
+          "path": "Extensions/companion/ViewModels/CompanionWorkspaceSession.swift",
+          "sha256": "f9c8d4e1e04a75bdf36861520483eab72980ab089fdd418a6c926d630bc6870f"
+        }
+      ]
+    },
+    {
+      "id": "terminal",
+      "location": "main",
+      "section": "terminal",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Only original main TerminalPage exists. windowVisible=false prevents onWindowShow first-PTY admission. No terminal input/open/newtab/drop action.",
+      "sources": [
+        {
+          "path": "Extensions/terminal/Runtime.swift",
+          "sha256": "6f19ba8117352860f1925853b489a850aff549ee250f80db683e45ca1bfcc8a5"
+        },
+        {
+          "path": "Extensions/terminal/TerminalTabsModel.swift",
+          "sha256": "7a7a9cc0aaa0686e72ed3abddea4a88200ceb27c41aa8cb6f3f9781acf1536a9"
+        }
+      ]
+    },
+    {
+      "id": "studio",
+      "location": "main",
+      "section": "studio",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": true,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Production factory rejects synthetic presentation. Exact test-only factory overlay and readonly synthetic transport required. Model loadsState=false, facade owns remote requests. No media/tool/render/import actions.",
+      "sources": [
+        {
+          "path": "Extensions/studio/Runtime.swift",
+          "sha256": "f650ccedb1ea76539eecf6b88ef03538a37dacfd50d4ba5ec17d6fb5103f00f5"
+        },
+        {
+          "path": "Extensions/studio/UIBridge/StudioUIScene.swift",
+          "sha256": "09ed1311c14543ea53fccbf6d32327658b602eab0d78874be0fac150f1548b64"
+        }
+      ]
+    },
+    {
+      "id": "usage",
+      "location": "main",
+      "section": "usage",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote presentation only, no local collector. No collect/project/hook/limits/network/export action.",
+      "sources": [
+        {
+          "path": "Extensions/usage/Runtime.swift",
+          "sha256": "48959d55717d2329f73baaff0cdc670c8076729b87d03048f2c6e419e8967c17"
+        },
+        {
+          "path": "Extensions/usage/Views/UsageUIPresentation.swift",
+          "sha256": "838a623ebea3a464c9919c0997f23b7e5d75fd9dae2dfeaf8452c99d606f4328"
+        }
+      ]
+    },
+    {
+      "id": "bifrost",
+      "location": "settings",
+      "section": "bifrost",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote BifrostUIContext observes only owned UI defaults. No local shared panel, clipboard, indexing, shell or shortcut action.",
+      "sources": [
+        {
+          "path": "Extensions/bifrost/Runtime.swift",
+          "sha256": "3ee57725825babda1ae9f5b5ed4c67d6d1c2cf9ef4c076127097dd2f04da962e"
+        },
+        {
+          "path": "Extensions/bifrost/BifrostUIContext.swift",
+          "sha256": "7f4f61c0222a903590984cbe29c8fc810d1eeddd4c8a43e36961aa6ceb3b9ae1"
+        }
+      ]
+    },
+    {
+      "id": "lidAwake",
+      "location": "settings",
+      "section": "lidAwake",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; no utility action or settings mutation.",
+      "sources": [
+        {
+          "path": "Extensions/lidAwake/Runtime.swift",
+          "sha256": "5344288b0b6e444c1727a54ffa39833d3b4b28b9100f91a3cb66ce4164db7d52"
+        },
+        {
+          "path": "Extensions/lidAwake/Views/LidAwakeSettingsModel.swift",
+          "sha256": "8326e4b3083355561a74b3efb2af1f57bb7178e0a017f66cbe89542bb401ac59"
+        }
+      ]
+    },
+    {
+      "id": "attention",
+      "location": "main",
+      "section": "attention",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Main route creates a presentation-owned remote AttentionPageModel and client with an unused local repository. Hidden presentation gates page work. Strict engine fixture uses synthetic SQLite data with collection and network disabled. stopUI cancels loading and invalidates the client; stop/disable drain commands and services. No tracking, focus, categorization, settings mutation, browser, clipboard, accessibility or backup actions.",
+      "sources": [
+        {
+          "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
+          "sha256": "46516a251aab75cdb925ffce4edd89a1b58c99b03edb082ac5b72d1882857600"
+        }
+      ]
+    },
+    {
+      "id": "machines",
+      "location": "main",
+      "section": "machines",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Facade polling only authenticated state/heartbeat. No connection, preview, file, terminal or machine action. Closed engine fixture disables health observation.",
+      "sources": [
+        {
+          "path": "Extensions/machines/Runtime.swift",
+          "sha256": "a3152c867f39eaa5599242509c7bcb67726347c7fcf741fe6a10ae33c8f464b6"
+        },
+        {
+          "path": "Extensions/machines/Services/MachineUIClient.swift",
+          "sha256": "9d84710fc398ebf3439115f56cf2388a24393a9a37a8a0a6e994a789f8310656"
+        }
+      ]
+    },
+    {
+      "id": "downloads",
+      "location": "main",
+      "section": "downloads",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote tool/downloader bridge. No URL/download/install/tool launch. Automatic view tasks disabled.",
+      "sources": [
+        {
+          "path": "Extensions/downloads/Runtime.swift",
+          "sha256": "f613270c7fc2f79c1d4275326337653754e2c451921010028e1a5d8dee7cb2dd"
+        },
+        {
+          "path": "Extensions/downloads/DownloadsUIBridge.swift",
+          "sha256": "337cd4b7e5d9438225295f364268163f09e67e74028a8baab9ea17b48665c971"
+        }
+      ]
+    },
+    {
+      "id": "seoAudit",
+      "location": "main",
+      "section": "seoAudit",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote service/cache only. No project creation, audit, navigation, screenshot or image fetch action; automatic visibility tasks disabled.",
+      "sources": [
+        {
+          "path": "Extensions/seoAudit/Runtime.swift",
+          "sha256": "413f52f34c3beb86db86fc261dd8965f19a0cab201ce62338f54ecb6b38e3887"
+        },
+        {
+          "path": "Extensions/seoAudit/ViewModels/SEOAuditModel.swift",
+          "sha256": "40ba526c1e7f66ee6d644942549d5f28cfc06bfddae3749e79e9baee54788418"
+        }
+      ]
+    },
+    {
+      "id": "virtualCamera",
+      "location": "main",
+      "section": "virtualCamera",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote page constructs denied camera-access provider, empty sources and no install entitlement. No preview/live/permission/device/HAL/OBS actions.",
+      "sources": [
+        {
+          "path": "Extensions/virtualCamera/Runtime.swift",
+          "sha256": "f35e6e4df4f3ea6a5d086dd6125b9cf36e3e319fb4043aa602131d07171f743f"
+        },
+        {
+          "path": "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
+          "sha256": "cc0ccf845b64b4e703326a836e41dffc5c9fcb4c55d1bd44ff0234a0c36824a8"
+        }
+      ]
+    },
+    {
+      "id": "codeStats",
+      "location": "main",
+      "section": "codeStats",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Remote service/model only. No Git scan, project discovery, schedule/power observers or report export action.",
+      "sources": [
+        {
+          "path": "Extensions/codeStats/Runtime.swift",
+          "sha256": "341c27c60aea45f3635f4d2ec017546c7b4931fcb4235e997c650435087d476c"
+        },
+        {
+          "path": "Extensions/codeStats/CodeStatsUIBridge.swift",
+          "sha256": "87cd5ed9777045cd1b435cb60189919d1274c3e08881c28e1690e55dbbe30fd4"
+        }
+      ]
+    },
+    {
+      "id": "herdr",
+      "location": "main",
+      "section": "herdr",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Original page projection through the authenticated client includes bounded account UUID associations and a rendering-only account model. No credentials, agent spawn, connection, terminal, hook, approval or send action.",
+      "sources": [
+        {
+          "path": "Extensions/herdr/Runtime.swift",
+          "sha256": "a2edd399916e0b85ee885cdd8ce3ab24e456aed3d8e09c937be5795310db4c60"
+        },
+        {
+          "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
+          "sha256": "31adec12d2830729c0d8fc5f0b2d1b2625173ba1948d9f77640d8b251d98c65b"
+        }
+      ]
+    },
+    {
+      "id": "quinjet",
+      "location": "main",
+      "section": "quinjet",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Original remote page owns its preference model through the same authenticated client. Construction issues no preference request; hidden presentation gates preference, discovery and theme tasks. stopRendering and shutdown cancel preference requests and remote rendering. No preference save, project session creation/restart/input, terminal launch or action.",
+      "sources": [
+        {
+          "path": "Extensions/quinjet/Runtime.swift",
+          "sha256": "fb70d9c7fa2523a3073ceaed61e9323f306f0c210de11737e2ea864f331a0912"
+        },
+        {
+          "path": "Extensions/quinjet/ViewModels/QuinjetPageModel.swift",
+          "sha256": "2f76bfbc4a8a17c848ffa1392a062ee49e82f26c969becaccebbbd5069e4974b"
+        }
+      ]
+    },
+    {
+      "id": "database",
+      "location": "main",
+      "section": "database",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Original remote session/page, engine SQLite synthetic data only. No query/import/export or external connection action.",
+      "sources": [
+        {
+          "path": "Extensions/database/Runtime.swift",
+          "sha256": "f39e0109d2ddd48335887385352bf24be0ec47524470d588a6aa82cda54e9404"
+        },
+        {
+          "path": "Extensions/database/DatabaseUIClient.swift",
+          "sha256": "f9bc9c65b9f1bc23625e3a109ec2e4e42ca7c0d8857a019124d707a693402f7c"
+        }
+      ]
+    }
+  ]
+}
