@@ -16,7 +16,7 @@ struct HostApplication: App {
     private var runtime: HostRuntime { delegate.runtime }
 
     var body: some Scene {
-        WindowGroup("Edith", id: "main") {
+        Window("Edith", id: "main") {
             GeometryReader { geometry in
                 Group {
                     if let marketplace = runtime.marketplace {
@@ -78,10 +78,6 @@ struct HostApplication: App {
         .commands {
             CommandGroup(replacing: .appTermination) {
                 Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")
-            }
-            CommandGroup(after: .appInfo) {
-                Button("Check for App Updates") { runtime.updater.checkForUpdates() }.disabled(
-                    !runtime.updater.available)
             }
         }
         Settings { HostSettingsRedirect() }
