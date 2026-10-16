@@ -82,7 +82,7 @@ struct CleanerCard: View {
 
     private var intro: some View {
         HStack {
-            Text("Scan build caches, package managers, tool logs, and your drives.")
+            Text("Scan build caches, package managers, Claude Code logs, and your drives.")
                 .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
             Button("Scan") { openPicker(scan: true) }
@@ -474,7 +474,8 @@ private struct CleanerCategoryRow: View {
             if isExpanded {
                 if showItemFilter {
                     SearchField(
-                        placeholder: "Filter \(category.items.count) items", text: $itemFilter
+                        placeholder: "Filter \(category.items.count) items", text: $itemFilter,
+                        compact: true
                     )
                     .padding(.leading, UIScale.pt(26)).padding(.bottom, UIScale.pt(4))
                 }
