@@ -30,6 +30,13 @@ public final class HostExtensionSessions {
     }
     public private(set) var versions: [String: String] = [:]
     public private(set) var failures: Set<String> = []
+    public private(set) var failureReasons: [String: String] = [:]
+    @ObservationIgnored public var retryDelays: [Duration] = [
+        .seconds(1), .seconds(5), .seconds(30),
+    ]
+    @ObservationIgnored public var sleep: @Sendable (Duration) async throws -> Void = {
+        try await Task.sleep(for: $0)
+    }
     public private(set) var pendingDisableIDs: Set<String> {
         didSet {
             defaults.set(pendingDisableIDs.sorted(), forKey: "pendingDisableExtensions")
@@ -46,6 +53,9 @@ public final class HostExtensionSessions {
     @ObservationIgnored private let create: @MainActor (ExtensionPackage) throws -> HostWorker
     @ObservationIgnored private var workers: [String: HostWorker] = [:]
     @ObservationIgnored private var packages: [String: ExtensionPackage] = [:]
+    @ObservationIgnored private var retryPackages: [String: ExtensionPackage] = [:]
+    @ObservationIgnored private var retryTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var retryAttempts: [String: Int] = [:]
 
     public init(
         defaults: UserDefaults, create: @escaping @MainActor (ExtensionPackage) throws -> HostWorker
@@ -126,6 +136,8 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
+        cancelRetry(id)
+        retryPackages[id] = package
         if pendingDisableIDs.contains(id) {
             packages[id] = package
             try await disable(id: id, remember: false)
@@ -140,7 +152,8 @@ public final class HostExtensionSessions {
             } else {
                 pendingDisableIDs.remove(id)
                 states[id] = .active
-                failures.remove(id)
+                clearFailure(id)
+                retryAttempts[id] = nil
                 save(enabledIDs.union([id]))
                 return
             }
@@ -152,7 +165,7 @@ public final class HostExtensionSessions {
         }
         pendingDisableIDs.remove(id)
         states[id] = .starting
-        failures.remove(id)
+        clearFailure(id)
         do {
             let worker = try package.admitting(
                 hostABI: HostContract.compatibility, architecture: "arm64",
@@ -166,8 +179,13 @@ public final class HostExtensionSessions {
                 self.ambientPolicyCoordinator.release(owner: id)
                 self.ambientPolicyCoordinator.invalidate()
                 if self.states[id] != .stopping {
+                    let wasActive = self.states[id] == .active
                     self.states[id] = .failed
                     self.failures.insert(id)
+                    if wasActive {
+                        self.failureReasons[id] = "The extension process exited unexpectedly."
+                        self.scheduleRetry(id)
+                    }
                 }
             }
             worker.didRequestNavigation = { [weak self, weak worker] request in
@@ -201,6 +219,7 @@ public final class HostExtensionSessions {
             versions[id] = package.version
             packages[id] = package
             states[id] = .active
+            retryAttempts[id] = nil
             save(enabledIDs.union([id]))
             ambientPolicyCoordinator.invalidate()
         } catch {
@@ -210,7 +229,51 @@ public final class HostExtensionSessions {
             }
             states[id] = .failed
             failures.insert(id)
+            failureReasons[id] = Self.reason(error)
+            scheduleRetry(id)
             throw error
+        }
+    }
+
+    public func retryFailed(packages available: [String: ExtensionPackage]) async {
+        for id in states.filter({ $0.value == .failed }).keys.sorted()
+        where automaticallyEnabledIDs.contains(id) {
+            guard let package = available[id] ?? retryPackages[id] else { continue }
+            retryAttempts[id] = 0
+            try? await enable(package)
+        }
+    }
+
+    private static func reason(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+    }
+
+    private func clearFailure(_ id: String) {
+        failures.remove(id)
+        failureReasons[id] = nil
+    }
+
+    private func cancelRetry(_ id: String) {
+        retryTasks[id]?.cancel()
+        retryTasks[id] = nil
+    }
+
+    private func scheduleRetry(_ id: String) {
+        let attempt = retryAttempts[id] ?? 0
+        guard retryTasks[id] == nil, attempt < retryDelays.count,
+            automaticallyEnabledIDs.contains(id), retryPackages[id] != nil
+        else { return }
+        retryAttempts[id] = attempt + 1
+        let delay = retryDelays[attempt]
+        let sleep = sleep
+        retryTasks[id] = Task { @MainActor [weak self] in
+            do { try await sleep(delay) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            retryTasks[id] = nil
+            guard states[id] == .failed, automaticallyEnabledIDs.contains(id),
+                let package = retryPackages[id]
+            else { return }
+            try? await enable(package)
         }
     }
 
@@ -222,6 +285,7 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
+        cancelRetry(id)
         if remember, enabledIDs.contains(id) || workers[id] != nil { pendingDisableIDs.insert(id) }
         states[id] = .stopping
         ambientPolicyCoordinator.release(owner: id)
@@ -260,7 +324,9 @@ public final class HostExtensionSessions {
         packages[id] = nil
         versions[id] = nil
         states[id] = .disabled
-        failures.remove(id)
+        clearFailure(id)
+        retryAttempts[id] = nil
+        retryPackages[id] = nil
     }
 
     public func show(id: String) async throws {
@@ -351,6 +417,7 @@ public final class HostExtensionSessions {
     @discardableResult public func shutdown(reason: HostWorkerStopReason = .shutdown) async -> Bool
     {
         var completed = true
+        for id in Array(retryTasks.keys) { cancelRetry(id) }
         let ids = Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
             HostRemoteCarrierCheckIn.extensionIDs
         ).union(pendingDisableIDs).union(pendingRecoveryIDs)
