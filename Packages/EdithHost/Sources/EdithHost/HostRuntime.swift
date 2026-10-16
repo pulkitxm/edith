@@ -240,6 +240,9 @@ import SwiftUI
                 await slots.stop()
                 await services.shutdown(); core.shutdown(); control.shutdown()
             }
+            NotificationCenter.default.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in Task { @MainActor in await loaded.retryFailedExtensions() } }
             await services.start()
             await loaded.loadCachedCatalog()
             await loaded.refreshCatalogIfStale()

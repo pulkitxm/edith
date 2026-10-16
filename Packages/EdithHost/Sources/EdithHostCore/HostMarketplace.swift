@@ -127,6 +127,11 @@ public final class HostMarketplace {
         await sessions.restore(packages: installed)
     }
 
+    public func retryFailedExtensions() async {
+        guard operationID == nil else { return }
+        await sessions.retryFailed(packages: installed)
+    }
+
     public func refreshCatalogIfStale(now: Date = Date()) async {
         if catalog != nil,
             let refreshed = preferences.object(forKey: Self.lastCatalogRefreshKey) as? Date,
