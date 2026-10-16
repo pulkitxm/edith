@@ -8,27 +8,17 @@ struct MicMuteRows: View {
         var inMenuBar = true
 
     var body: some View {
-        Section("Control") {
-            Toggle(
-                "Mute microphones",
-                isOn: Binding(
-                    get: { presentation.state.muted },
-                    set: { presentation.perform($0 ? "mute" : "unmute") })
-            )
-            .disabled(!presentation.active)
+        Section {
             LabeledContent("Shortcut") {
                 HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
             }
+            Text("Use this shortcut to mute or unmute every microphone system-wide.")
+                .settingsCaption()
             Toggle("Show in the menu bar", isOn: $inMenuBar.notifyingSettingsChange())
-            Text(
-                "The shortcut and menu bar control mute every microphone. Disabling the extension restores the previous microphone controls."
-            )
-            .settingsCaption()
-            if let error = presentation.state.error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                Button("Retry") { presentation.perform("retry") }
-            }
+            Text("The menu bar icon shows the current mute state and toggles it on click.")
+                .settingsCaption()
         }
+        .disabled(!presentation.active)
+        .opacity(presentation.active ? 1 : 0.5)
     }
 }

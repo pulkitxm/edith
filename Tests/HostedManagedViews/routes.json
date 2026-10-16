@@ -60,11 +60,11 @@
       "sources": [
         {
           "path": "Extensions/focusDim/Runtime.swift",
-          "sha256": "6b1c787f7a10bc9980aceb407f82d0bf92cc1e2ae75c5c74628c3ebbfa3f84de"
+          "sha256": "0dfd33aed73ab7407161424744c9d466a27593135c04ceab865cfc6e79bc8d4b"
         },
         {
           "path": "Extensions/focusDim/Presentation.swift",
-          "sha256": "b784f1e30c755b0313402802dcf40daf9e44f6479e901ba2617c12c524fccbef"
+          "sha256": "8b5b4e1b2437da814dc4714dce7d2c35c906f8ceb0458b2027c179fb042b6ee6"
         }
       ]
     },
@@ -104,11 +104,11 @@
       "sources": [
         {
           "path": "Extensions/micMute/Runtime.swift",
-          "sha256": "ac36c625eb33716f5b47561ce2bef71ffb856d64a1e2b6dfecd9e9dac92ed546"
+          "sha256": "1e99883ab2de0b96b813a570436cbd2616bf4a323bb0730d47d835dfbaac9a06"
         },
         {
           "path": "Extensions/micMute/Presentation.swift",
-          "sha256": "79807a79cf5a0f5eb6e75302b44a5f05145c4da16a67582af14df330650a8e7f"
+          "sha256": "1a084ba19bf8d531d6719c796d24b1d5bffcbaab26d2bdf87b1d85d7501caba7"
         }
       ]
     },
@@ -192,11 +192,11 @@
       "sources": [
         {
           "path": "Extensions/systemStats/Runtime.swift",
-          "sha256": "ea7417f59baedfca9696a0899517293bf26259d82d616ccff9e3476120127849"
+          "sha256": "abd80ed42a9e984c214f93f2da6bd65a6adb9816903efc7a69730e120fca338d"
         },
         {
           "path": "Extensions/systemStats/Presentation.swift",
-          "sha256": "bd85284b002b438f9ed0a733ffdf5ff9a763a84cff9e4aefaafa16882a830292"
+          "sha256": "59552aa8d8dfbec82dfb79cbe9ee09623b2e33d1a7c8516b4c917918f38b9210"
         }
       ]
     },

@@ -137,8 +137,9 @@ final class ControlPresentation {
     private var baseline: [String: Any] = [:]
     private var reading = false
     private var reads: [UUID: Task<Void, Never>] = [:]
-    private static let pendingPreferencesKey = "utilityControlsPendingPreferences"
+    private static let pendingPreferencesKey = "systemStatsPendingPreferences"
     private var applying = false
+    private var engineSynced = false
     private var stopped = false
     private var revision = 0
 
@@ -156,7 +157,7 @@ final class ControlPresentation {
             }
         baseline = ControlPresentationContract.values(
             from: defaults, keys: ControlPresentationContract.writable)
-        if !active { load.setContent() }
+        load.setContent()
         start()
     }
 
@@ -278,7 +279,7 @@ final class ControlPresentation {
         do {
             var data = try await invoke("systemStats.ui.read", Data("{}".utf8))
             guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-            if !ready, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
+            if !engineSynced, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
                 _ = try await invoke("systemStats.ui.update", queued)
                 guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
                 if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
@@ -287,6 +288,7 @@ final class ControlPresentation {
                 data = try await invoke("systemStats.ui.read", Data("{}".utf8))
             }
             let packet = try JSONDecoder().decode(ControlPresentationPacket.self, from: data)
+            engineSynced = true
             let values = try ControlPresentationContract.decode(
                 packet.preferences, keys: ControlPresentationContract.readable)
             guard !stopped, revision == self.revision, load.isCurrent(request), writing == nil,
@@ -294,12 +296,17 @@ final class ControlPresentation {
             else {
                 return
             }
+            let stored = ControlPresentationContract.values(
+                from: defaults, keys: ControlPresentationContract.readable)
+            let differs = !(stored as NSDictionary).isEqual(to: values)
             applying = true
-            for key in ControlPresentationContract.readable {
-                if let value = values[key] {
-                    defaults.set(value, forKey: key)
-                } else {
-                    defaults.removeObject(forKey: key)
+            if differs {
+                for key in ControlPresentationContract.readable {
+                    if let value = values[key] {
+                        defaults.set(value, forKey: key)
+                    } else {
+                        defaults.removeObject(forKey: key)
+                    }
                 }
             }
             baseline = ControlPresentationContract.values(
@@ -308,7 +315,7 @@ final class ControlPresentation {
             error = nil
             load.complete(request)
             applying = false
-            IPC.post(IPC.Name.settingsChanged)
+            if differs { IPC.post(IPC.Name.settingsChanged) }
         } catch {
             if !stopped {
                 load.fail(request, error: error)
@@ -385,9 +392,6 @@ struct ControlSettingsHost<Content: View>: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                     Button("Retry", action: retry)
                 }.padding()
-            }
-            if presentation.active, !presentation.ready {
-                Button("Load settings", action: retry).padding()
             }
             PageLoading(
                 state: presentation.load.state, title: "Settings unavailable",

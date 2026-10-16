@@ -21,6 +21,17 @@ public enum StatusItemMenu {
     }
 
     @MainActor
+    public static func quitEdith() {
+        if let host = NSRunningApplication(processIdentifier: getppid()),
+            host.bundleIdentifier != nil
+        {
+            host.terminate()
+        } else {
+            NSApp.terminate(nil)
+        }
+    }
+
+    @MainActor
     public static func show(from item: NSStatusItem) {
         let menu = NSMenu()
         let open = NSMenuItem(
@@ -44,19 +55,7 @@ private final class StatusMenuHandler: NSObject {
     }
 
     @objc func quit() {
-        MainActor.assumeIsolated { StatusItemQuit.perform() }
+        MainActor.assumeIsolated { StatusItemMenu.quitEdith() }
     }
-}
 
-enum StatusItemQuit {
-    @MainActor
-    static func perform() {
-        if let host = NSRunningApplication(processIdentifier: getppid()),
-            host.bundleIdentifier != nil
-        {
-            host.terminate()
-        } else {
-            NSApp.terminate(nil)
-        }
-    }
 }

@@ -127,11 +127,6 @@ public final class HostMarketplace {
         await sessions.restore(packages: installed)
     }
 
-    public func retryFailedExtensions() async {
-        guard operationID == nil else { return }
-        await sessions.retryFailed(packages: installed)
-    }
-
     public func refreshCatalogIfStale(now: Date = Date()) async {
         if catalog != nil,
             let refreshed = preferences.object(forKey: Self.lastCatalogRefreshKey) as? Date,
@@ -187,11 +182,26 @@ public final class HostMarketplace {
         operationID = id
         error = nil
         defer { operationID = nil }
-        do { try await sessions.disable(id: id) } catch {
+        do {
+            try await sessions.disable(id: id)
+            resetPreferencesOnDisable(id: id)
+        } catch {
             self.error =
                 (error as? HostWorkerError)?.disableMessage
                 ?? "Cleanup is pending. Retry disable after restoring system settings or finishing macOS approval."
         }
+    }
+
+    private static let preferencesResetOnDisable: [String: [String]] = [
+        "focusDim": ["focusDimActive", "focusDimEnabled"],
+        "keystrokeHighlight": ["keystrokeHighlightActive", "keystrokeHighlightEnabled"],
+    ]
+
+    private func resetPreferencesOnDisable(id: String) {
+        guard let keys = Self.preferencesResetOnDisable[id],
+            let defaults = UserDefaults(suiteName: identity.extensionDefaultsSuite(id))
+        else { return }
+        for key in keys { defaults.set(false, forKey: key) }
     }
 
     public func show(id: String) async {

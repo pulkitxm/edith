@@ -92,13 +92,11 @@ final class ExtensionRuntime: NSObject {
                 return try await SurfaceCommandService.execute(
                     providerID: "systemStats", command: command, payload: payload,
                     snapshot: { _ in
-                        SystemStatsSurface.snapshot(
+                        let volume = Self.dataVolume()
+                        return SystemStatsSurface.snapshot(
                             cpu: service.snapshot.cpu, memory: service.snapshot.memory,
-                            freeDiskBytes: self.fixture != nil
-                                ? 1_000_000
-                                : try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
-                                    .volumeAvailableCapacityForImportantUsageKey
-                                ]).volumeAvailableCapacityForImportantUsage)
+                            freeDiskBytes: self.fixture != nil ? 1_000_000 : volume?.free,
+                            totalDiskBytes: self.fixture != nil ? 4_000_000 : volume?.total)
                     },
                     perform: { action in
                         throw ExtensionPeerError.invalidRequest
@@ -267,6 +265,20 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private static func dataVolume() -> (free: Int64, total: Int64)? {
+        let url =
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: "/")
+        guard
+            let values = try? url.resourceValues(forKeys: [
+                .volumeAvailableCapacityForImportantUsageKey, .volumeAvailableCapacityKey,
+                .volumeTotalCapacityKey,
+            ]), let free = VolumeCapacity.availableBytes(in: values),
+            let total = values.volumeTotalCapacity
+        else { return nil }
+        return (free, Int64(total))
     }
 
     private func startOwned(_ input: NSDictionary) -> NSObject {

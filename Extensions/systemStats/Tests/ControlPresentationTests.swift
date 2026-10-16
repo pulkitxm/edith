@@ -73,7 +73,6 @@ import Testing
                 defaults: defaults,
                 state: ControlPresentationState(muted: true, cpu: 80, memory: 75)))
         await read.value
-        #expect(!model.ready)
         #expect(!model.state.muted)
         model.perform("foreign")
         await model.refresh()
@@ -290,8 +289,7 @@ import Testing
                 defaults: defaults, state: ControlPresentationState())
         }
         await model.refresh()
-        #expect(model.load.state == .error)
-        #expect(!model.ready)
+        #expect(model.load.errorMessage != nil)
         #expect(model.error != nil)
         fail = false
         await model.refresh()

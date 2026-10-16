@@ -45,6 +45,20 @@ struct HostExtensionReview: View {
             presentationID: presentationID)
     }
 
+    static func idealHeight(for id: String) -> Double {
+        switch id {
+        case "micMute", "systemStats": 300
+        case "attention": 440
+        case "machines": 420
+        case "lidAwake": 400
+        case "music": 460
+        case "focusDim", "colorPicker", "keystrokeHighlight": 430
+        case "system": 500
+        case "presenter": 580
+        default: 620
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -54,9 +68,15 @@ struct HostExtensionReview: View {
                     Button("Open", action: open).buttonStyle(.edith(.secondary)).disabled(busy)
                 }
                 if installed, !pending {
-                    Button(active ? "Disable" : "Enable") {
-                        perform { await suites.select(entry, enabled: !active) }
-                    }.buttonStyle(.edith(.secondary)).disabled(busy)
+                    Toggle(
+                        isOn: Binding(
+                            get: { active },
+                            set: { wanted in
+                                perform { await suites.select(entry, enabled: wanted) }
+                            })
+                    ) { Text("\(entry.title) enabled") }
+                    .labelsHidden().toggleStyle(.switch).disabled(busy)
+                    .accessibilityLabel("\(entry.title) enabled")
                 }
             }.padding(.horizontal, UIScale.pt(28)).padding(.vertical, UIScale.pt(18))
             Divider()
@@ -138,7 +158,7 @@ struct HostExtensionReview: View {
             }.padding(.horizontal, UIScale.pt(18)).padding(.vertical, UIScale.pt(12)).background(
                 .bar)
         }
-        .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(620))
+        .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(Self.idealHeight(for: entry.id)))
         .tracksWindowVisibility()
         .interactiveDismissDisabled(busy)
         .onDisappear {

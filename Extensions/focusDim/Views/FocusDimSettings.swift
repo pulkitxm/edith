@@ -15,33 +15,62 @@ struct FocusDimSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Dim now", isOn: $active)
-                LabeledContent("Intensity", value: "\(Int(intensity * 100))%")
-                Slider(value: $intensity, in: FocusDimMath.intensityRange)
-                LabeledContent("Animation", value: String(format: "%.2fs", animationDuration))
-                Slider(value: $animationDuration, in: FocusDimMath.animationDurationRange)
-                EdithSegmentedPicker(
-                    "Other displays", selection: $mode,
-                    options: FocusDimDisplayMode.allCases.map(\.rawValue),
-                    label: {
-                        $0 == FocusDimDisplayMode.perScreenFront.rawValue
-                            ? "Highlight front window" : "Dim unfocused fully"
-                    })
-                LabeledContent("Toggle hotkey") {
+                Toggle("Dim now", isOn: $active.notifyingSettingsChange())
+                Text(
+                    "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
+                )
+                .settingsCaption()
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    LabeledContent("Intensity") {
+                        Text("\(Int(intensity * 100))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: $intensity.notifyingSettingsChange(),
+                        in: FocusDimMath.intensityRange)
+                    Text("How dark the background gets.")
+                        .settingsCaption()
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    LabeledContent("Animation") {
+                        Text(String(format: "%.2fs", animationDuration))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(
+                        value: $animationDuration.notifyingSettingsChange(),
+                        in: FocusDimMath.animationDurationRange)
+                    Text("How quickly the dim follows you when switching apps.")
+                        .settingsCaption()
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    EdithSegmentedPicker(
+                        "Other displays", selection: $mode.notifyingSettingsChange(),
+                        options: FocusDimDisplayMode.allCases.map(\.rawValue),
+                        label: {
+                            $0 == FocusDimDisplayMode.perScreenFront.rawValue
+                                ? "Highlight front window" : "Dim unfocused fully"
+                        })
+                    Text(
+                        "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
+                    )
+                    .settingsCaption()
+                }
+                LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
+                } label: {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Toggle hotkey")
+                        InfoDot("Flip dimming on or off from anywhere.")
+                    }
                 }
                 Button("Allow Screen Recording") { presentation.perform("screenRecording") }
                     .disabled(!presentation.active)
-            } header: {
-                Text("Focus Dim").font(.edithText(.title)).bold()
             }
+            .disabled(!presentation.active)
+            .opacity(presentation.active ? 1 : 0.5)
         }
-        .formStyle(.grouped)
-        .onChange(of: active) { changed() }
-        .onChange(of: intensity) { changed() }
-        .onChange(of: animationDuration) { changed() }
-        .onChange(of: mode) { changed() }
+        .edithForm()
     }
-
-    private func changed() { IPC.post(IPC.Name.settingsChanged) }
 }
