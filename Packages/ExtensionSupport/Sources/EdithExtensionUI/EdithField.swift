@@ -3,6 +3,7 @@ import SwiftUI
 
 struct EdithFieldSurface: ViewModifier {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let focused: Bool
     var compact = false
@@ -25,7 +26,8 @@ struct EdithFieldSurface: ViewModifier {
                 RoundedRectangle(cornerRadius: radius)
                     .strokeBorder(border, lineWidth: UIScale.pt(focused || invalid ? 1.5 : 1))
             )
-            .animation(.easeOut(duration: 0.12), value: focused)
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: focused)
     }
 }
 
@@ -49,6 +51,7 @@ public struct EdithTextField: View {
     var compact = false
     var clearable = false
     var typeAhead = false
+    var searchable = false
     var invalid = false
     var focus: FocusState<Bool>.Binding?
     var onSubmit: (() -> Void)?
@@ -56,13 +59,14 @@ public struct EdithTextField: View {
     public init(
         placeholder: String, text: Binding<String>, icon: String? = nil,
         font: Font? = nil, alignment: TextAlignment = .leading, compact: Bool = false,
-        clearable: Bool = false, typeAhead: Bool = false, invalid: Bool = false,
+        clearable: Bool = false, typeAhead: Bool = false, searchable: Bool = false,
+        invalid: Bool = false,
         focus: FocusState<Bool>.Binding? = nil, onSubmit: (() -> Void)? = nil
     ) {
         self.placeholder = placeholder; _text = text; self.icon = icon; self.font = font
         self.alignment = alignment; self.compact = compact; self.clearable = clearable
-        self.typeAhead = typeAhead; self.invalid = invalid; self.focus = focus;
-        self.onSubmit = onSubmit
+        self.typeAhead = typeAhead; self.searchable = searchable; self.invalid = invalid
+        self.focus = focus; self.onSubmit = onSubmit
     }
 
     private var dark: Bool { scheme == .dark }
@@ -80,13 +84,16 @@ public struct EdithTextField: View {
             if clearable, !text.isEmpty {
                 Button {
                     text = ""
+                    (focus ?? $localFocus).wrappedValue = true
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: UIScale.pt(fontSize)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Clear this field")
+                .accessibilityLabel("Clear \(placeholder)")
             }
         }
         .edithFieldSurface(focused: focused, compact: compact, invalid: invalid)
@@ -102,14 +109,20 @@ public struct EdithTextField: View {
             .focused(focus ?? $localFocus)
             .focusEffectDisabled()
             .textEditingCommands()
-            .onExitCommand { (focus ?? $localFocus).wrappedValue = false }
+            .onExitCommand {
+                if searchable, !text.isEmpty {
+                    text = ""
+                } else {
+                    (focus ?? $localFocus).wrappedValue = false
+                }
+            }
             .onSubmit { onSubmit?() }
     }
 
     @ViewBuilder
     private var typeAheadAnchor: some View {
-        if typeAhead {
-            TypeAheadAnchor()
+        if typeAhead || searchable {
+            TypeAheadAnchor(typeAhead: typeAhead)
         }
     }
 }
@@ -132,7 +145,7 @@ public struct SearchField: View {
     public var body: some View {
         EdithTextField(
             placeholder: placeholder, text: $text, icon: "magnifyingglass", compact: compact,
-            clearable: true, typeAhead: typeAhead, focus: focus)
+            clearable: true, typeAhead: typeAhead, searchable: true, focus: focus)
     }
 }
 
@@ -160,9 +173,11 @@ public struct EdithNumberField: View {
 }
 
 private struct TypeAheadAnchor: NSViewRepresentable {
+    let typeAhead: Bool
+
     func makeNSView(context: Context) -> NSView {
         let anchor = NSView(frame: .zero)
-        TypeAhead.shared.register(anchor: anchor)
+        TypeAhead.shared.register(anchor: anchor, typeAhead: typeAhead)
         return anchor
     }
 
@@ -171,6 +186,6 @@ private struct TypeAheadAnchor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        TypeAhead.shared.register(anchor: nsView)
+        TypeAhead.shared.register(anchor: nsView, typeAhead: typeAhead)
     }
 }

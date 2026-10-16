@@ -36,4 +36,23 @@ struct InputFocusTests {
         #expect(!TypeAhead.shared.focusField(in: window))
         #expect(!TestWindowHost.isExposedOnDesktop(window))
     }
+
+    @Test func commandFSelectsTheSearchFieldAndSearchOnlyAnchorsIgnoreTypeAhead() {
+        #expect(InputFocus.isSearchShortcut(characters: "f", modifiers: [.command]))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: [.command, .shift]))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: []))
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 260, height: 100))
+        defer { window.orderOut(nil) }
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 100))
+        let field = NSTextField(frame: NSRect(x: 10, y: 10, width: 220, height: 28))
+        field.stringValue = "query"
+        let anchor = NSView(frame: field.frame)
+        root.addSubview(field); root.addSubview(anchor)
+        window.contentView = root
+        TypeAhead.shared.register(anchor: anchor, typeAhead: false)
+        defer { TypeAhead.shared.unregister(anchor: anchor) }
+        #expect(!TypeAhead.shared.focusField(in: window, typeAheadOnly: true))
+        #expect(TypeAhead.shared.focusField(in: window, selectAll: true))
+        #expect(field.currentEditor()?.selectedRange == NSRange(location: 0, length: 5))
+    }
 }

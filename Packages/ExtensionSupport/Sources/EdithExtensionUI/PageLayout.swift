@@ -262,7 +262,7 @@ public struct PageSectionHeader<Trailing: View>: View {
                 ScrollView(.horizontal) {
                     trailing()
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.automatic)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -312,7 +312,7 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
                     ScrollView(.horizontal) {
                         trailing()
                     }
-                    .scrollIndicators(.hidden)
+                    .scrollIndicators(.automatic)
                 }
             }
             accessory()
