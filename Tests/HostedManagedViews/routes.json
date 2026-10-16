@@ -522,11 +522,11 @@
       "sources": [
         {
           "path": "Extensions/latex/Runtime.swift",
-          "sha256": "9e377efc4d6c79d01e9771ff6b306c725e9c3096f03ee51eb3f84cb109af841e"
+          "sha256": "e1d442b10d7373bf41414e80550960b6dab1926f63d54803100cb5bff079ba2a"
         },
         {
           "path": "Extensions/latex/LaTeXModel.swift",
-          "sha256": "b64dee3bdfdd2d51f10a4b724f0249d4d1ef5caabb1ae0e41806e4cc214acb05"
+          "sha256": "ea76a4d7dfd7aaa9024d3442f8452608b65093001394672b6bbdc728bf694c5a"
         }
       ]
     },

@@ -125,35 +125,9 @@ public struct LaTeXProjectStore: Sendable {
         return try JSONDecoder().decode([LaTeXProject].self, from: Data(contentsOf: url))
     }
 
-    public func loadDraft() throws -> LaTeXDraft? {
-        let file = url.deletingLastPathComponent().appendingPathComponent("draft.json")
-        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
-        return try JSONDecoder().decode(LaTeXDraft.self, from: Data(contentsOf: file))
-    }
-
-    public func saveDraft(_ draft: LaTeXDraft?) throws {
-        let file = url.deletingLastPathComponent().appendingPathComponent("draft.json")
-        guard let draft else {
-            if FileManager.default.fileExists(atPath: file.path) {
-                try FileManager.default.removeItem(at: file)
-            }
-            return
-        }
-        let data = try JSONEncoder().encode(draft)
-        try FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: file, options: .atomic)
-    }
-
     public func save(_ projects: [LaTeXProject]) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(projects).write(to: url, options: .atomic)
     }
-}
-
-public struct LaTeXDraft: Codable, Sendable {
-    public let projectID: UUID
-    public let text: String
-    public let original: LaTeXSource
 }

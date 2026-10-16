@@ -24,6 +24,7 @@ struct LaTeXUISnapshot: Codable {
     let hasRepositoryBuild: Bool
     let buildURL: URL?
     let message: String?
+    let loadError: String?
     let tools: LaTeXToolsSnapshot
 
     @MainActor init(model: LaTeXModel) throws {
@@ -45,7 +46,8 @@ struct LaTeXUISnapshot: Codable {
         log = model.log; buildGeneration = model.buildGeneration
         busy = model.busy; buildingPDF = model.buildingPDF
         hasRepositoryBuild = model.hasRepositoryBuild; buildURL = model.buildURL
-        message = model.message; tools = model.tools.snapshot
+        message = model.message; loadError = model.load.errorMessage
+        tools = model.tools.snapshot
     }
 }
 
@@ -163,7 +165,6 @@ struct LaTeXPDFChunkRequest: Codable { let projectID: UUID; let generation: UUID
                             "Save or discard the current source first.")
                     }
                     await model.select(id)
-                    model.requestEditor()
                 } else {
                     guard model.selectedID == id, !model.busy else {
                         throw ExtensionPeerError.invalidRequest
@@ -186,9 +187,6 @@ struct LaTeXPDFChunkRequest: Codable { let projectID: UUID; let generation: UUID
                     case "review": model.refreshReview()
                     case "merge": model.merge(automatically: request.automatically ?? false)
                     case "reveal": model.revealSource()
-                    case "openPDF": try model.deliverPDF(save: false)
-                    case "savePDF": try model.deliverPDF(save: true)
-                    case "buildURL": try model.deliverBuildURL()
                     default: throw ExtensionPeerError.invalidRequest
                     }
                 }
