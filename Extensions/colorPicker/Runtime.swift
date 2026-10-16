@@ -94,16 +94,18 @@ final class ExtensionRuntime: NSObject {
             if let help = try await ColorCLIExecution.help(request) {
                 return try JSONEncoder().encode(help)
             }
-            guard self.service != nil else { throw ExtensionPeerError.unavailable }
-            guard let service = self.service else { throw ExtensionPeerError.unavailable }
+            let service = self.service
+            if request.arguments.first == "pick", service == nil {
+                throw ExtensionPeerError.unavailable
+            }
             let reply = try await ColorCLIExecution.run(
                 request, defaults: SharedDefaults.store,
-                pick: { service.pick() },
+                pick: { service?.pick() },
                 write: { value in
-                    if self.fixture != nil { return service.writeFixtureCopy(value) }
+                    if self.fixture != nil { return service?.writeFixtureCopy(value) ?? false }
                     NSPasteboard.general.clearContents()
                     return NSPasteboard.general.setString(value, forType: .string)
-                }, changed: { service.reloadHistory() })
+                }, changed: { service?.reloadHistory() })
             return try JSONEncoder().encode(reply)
         }
         if command.hasPrefix("colorPicker.ui.") {
@@ -148,18 +150,17 @@ final class ExtensionRuntime: NSObject {
         guard let service = self.service else { throw ExtensionPeerError.unavailable }
         return try await SurfaceCommandService.execute(
             providerID: "colorPicker", command: command, payload: payload,
-            snapshot: { _ in
-                ColorPickerSurface.snapshot(history: service.history, error: service.copyError)
+            snapshot: { tile in
+                try await ColorPickerSurface.snapshot(
+                    tile: tile, clipboardActive: ColorPickerClipboardPeer.active,
+                    pinToTop: ColorPickerClipboardPeer.pinToTop,
+                    entries: { try await ColorPickerClipboardPeer.entries() })
             },
             perform: { action in
                 if action == "pick" {
                     service.pick()
-                } else if let color = service.history.first(where: {
-                    "copy:" + $0.id.uuidString == action
-                }) {
-                    service.copyDefault(color)
                 } else {
-                    throw ExtensionPeerError.invalidRequest
+                    try await ColorPickerClipboardPeer.perform(action)
                 }
             })
     }

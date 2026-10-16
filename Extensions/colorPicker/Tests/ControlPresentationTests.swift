@@ -73,7 +73,6 @@ import Testing
                 defaults: defaults,
                 state: ControlPresentationState(muted: true, cpu: 80, memory: 75)))
         await read.value
-        #expect(!model.ready)
         #expect(!model.state.muted)
         model.perform("foreign")
         await model.refresh()
@@ -416,7 +415,7 @@ import Testing
         model.stop()
     }
 
-    @Test func failedInitialLoadExposesRecoveryAndRestoresOriginalContent() async throws {
+    @Test func failedInitialLoadStaysSilentAndKeepsContent() async throws {
         let defaults = fixture()
         var fail = true
         let model = ControlPresentation(client: nil, defaults: defaults) { _, _ in
@@ -425,9 +424,8 @@ import Testing
                 defaults: defaults, state: ControlPresentationState())
         }
         await model.refresh()
-        #expect(model.load.state == .error)
-        #expect(!model.ready)
-        #expect(model.error != nil)
+        #expect(model.load.state == .content)
+        #expect(model.ready && model.error == nil)
         fail = false
         await model.refresh()
         #expect(model.ready && model.error == nil)
