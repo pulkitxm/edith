@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import Foundation
 
 enum TerminalSettingsKeys {
-    static let fontSize = "terminalFontSize"
+    static let fontSize = AppStorageKeys.Herdr.terminalFontSize
     static let shell = "terminalShell"
     static let loginShell = "terminalLoginShell"
     static let startFolder = "terminalStartFolder"

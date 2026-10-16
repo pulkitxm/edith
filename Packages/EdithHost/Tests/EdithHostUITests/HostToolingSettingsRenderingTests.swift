@@ -80,8 +80,9 @@ import Testing
                         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 8) {
                             if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
                                 colors.insert(
-                                    UInt32(color.redComponent * 255) << 16 | UInt32(
-                                        color.greenComponent * 255) << 8
+                                    UInt32(color.alphaComponent * 255) << 24
+                                        | UInt32(color.redComponent * 255) << 16
+                                        | UInt32(color.greenComponent * 255) << 8
                                         | UInt32(color.blueComponent * 255))
                             }
                         }

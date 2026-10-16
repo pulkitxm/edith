@@ -50,6 +50,7 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
         let action: Action
         let succeeded: Bool
         let message: String
+        var stamp = 0
     }
     typealias Execute = @Sendable ([String]) async throws -> ExtensionCLIReply
     static let autoRefreshKey = "completionsAutoRefresh"
@@ -57,6 +58,8 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
     private let copy: (String) -> Void
     private let defaults: UserDefaults
     private var generation = 0
+    private var outcomeStamp = 0
+    private var outcomeClear: Task<Void, Never>?
     private var work: Task<Void, Never>?
     private(set) var status: HostToolingStatus?
     private(set) var refreshing = false
@@ -101,6 +104,29 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
         return tools.missing.isEmpty
             ? tools.linked.joined(separator: ", ")
             : "\(tools.linked.joined(separator: ", ")) (missing \(tools.missing.joined(separator: ", ")))"
+    }
+
+    func phase(of action: Action) -> HostToolingActionPhase {
+        if running == action { return .running }
+        guard let outcome, outcome.action == action else { return .idle }
+        return outcome.succeeded ? .done : .failed
+    }
+
+    func outcome(for actions: [Action]) -> Outcome? {
+        guard let outcome, actions.contains(outcome.action) else { return nil }
+        return outcome
+    }
+
+    private func show(_ action: Action, succeeded: Bool, message: String) {
+        outcomeStamp += 1
+        let stamp = outcomeStamp
+        outcome = Outcome(action: action, succeeded: succeeded, message: message, stamp: stamp)
+        outcomeClear?.cancel()
+        outcomeClear = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(succeeded ? 4 : 8))
+            guard !Task.isCancelled, let self, self.outcome?.stamp == stamp else { return }
+            self.outcome = nil
+        }
     }
 
     var toolsHelp: String {
@@ -168,12 +194,12 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
             }
             try Task.checkCancellation()
             guard token == generation else { return }
-            outcome = Outcome(action: action, succeeded: true, message: message)
+            show(action, succeeded: true, message: message)
         } catch {
             guard token == generation, !Task.isCancelled else { return }
             if action != .copySourceLine { await refresh() }
             guard token == generation, !Task.isCancelled else { return }
-            outcome = Outcome(action: action, succeeded: false, message: error.localizedDescription)
+            show(action, succeeded: false, message: error.localizedDescription)
         }
     }
 
@@ -181,6 +207,8 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
         generation += 1
         work?.cancel()
         work = nil
+        outcomeClear?.cancel()
+        outcomeClear = nil
         refreshing = false
         running = nil
     }
@@ -207,7 +235,7 @@ struct HostToolingStatus: Decodable, Equatable, Sendable {
                         ? reply.stderr : "Could not install every completion script: \(detail)")
             }
             return
-                "Wrote \(result.installed.count) completion \(result.installed.count == 1 ? "script" : "scripts"). Restart your shell to load them."
+                "Wrote \(result.installed.count == 1 ? "1 script" : "\(result.installed.count) scripts") and the ~/.zshrc line. Run  exec zsh  in any open terminal."
         }
         guard reply.exitCode == 0 else {
             throw HostCLIError.rejected(
