@@ -171,8 +171,8 @@ final class CompanionSetupModel: Identifiable {
                 stages = value.stages; deploying = value.deploying; deployError = value.deployError
                 deployed = value.deployed
                 if action == "begin" { step = value.step }
-                if !value.probing, !value.deploying { break }
-                try await Task.sleep(for: .milliseconds(250))
+                if !value.probing, !value.deploying, !value.working { break }
+                try await Task.sleep(for: .milliseconds(100))
                 value = try await remote.setup(.init(action: "snapshot"))
             }
         } catch { if !Task.isCancelled { deployError = error.localizedDescription } }
