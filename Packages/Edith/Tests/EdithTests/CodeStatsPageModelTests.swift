@@ -204,6 +204,21 @@ import Testing
         #expect(agent.recorded.contains("cancel"))
     }
 
+    @Test func settingsChangesAreSavedForTheAgent() async {
+        let defaults = UserDefaults(suiteName: defaultsName)!
+        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
+        let model = model(agent)
+        await model.setSchedule(.weekly(weekday: 6, hour: 22))
+        await model.setIncludeForks(true)
+        await model.setIncludeArchived(false)
+        let saved = CodeStatsPreferences.load(from: defaults)
+        #expect(saved.schedule == .weekly(weekday: 6, hour: 22))
+        #expect(saved.includeForks)
+        #expect(!saved.includeArchived)
+        await model.setSchedule(CodeStatsScheduleKind.daily)
+        #expect(CodeStatsPreferences.schedule(in: defaults) == .daily(hour: 22))
+    }
+
     @Test func discoveredAuthorsFollowIdentityEdits() async {
         let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
         let model = model(agent)

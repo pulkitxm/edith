@@ -6,6 +6,7 @@ struct CodeStatsHeader: View {
     let model: CodeStatsModel
     @Environment(\.colorScheme) private var scheme
     @State private var sharePresentation: ExportCardPresentation<CodeStatsExportDeck>?
+    @State private var settingsPresented = false
 
     private var dark: Bool { scheme == .dark }
 
@@ -25,6 +26,14 @@ struct CodeStatsHeader: View {
                     sharePresentation = ExportCardPresentation(
                         deck: CodeStatsExportDeck(snapshot: shareSnapshot),
                         title: "Share code stats")
+                }
+                if model.phase != .setup {
+                    Button {
+                        settingsPresented = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .help("Code Stats settings")
                 }
                 if model.isRunning {
                     Button {
@@ -55,6 +64,9 @@ struct CodeStatsHeader: View {
             }
         }
         .exportCardPresentation(item: $sharePresentation)
+        .edithSheet(isPresented: $settingsPresented) {
+            CodeStatsSettingsSheet(model: model)
+        }
     }
 }
 

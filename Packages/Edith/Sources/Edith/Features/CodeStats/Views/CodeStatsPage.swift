@@ -1,4 +1,3 @@
-import AppKit
 import EdithKit
 import SwiftUI
 
@@ -73,7 +72,7 @@ struct CodeStatsPage: View {
         case .loading, .firstRun:
             EmptyView()
         case .setup:
-            CodeStatsSetupView(model: model, choose: chooseFolder)
+            CodeStatsSetupView(model: model)
         case .unavailable:
             EmptyView()
         case .content:
@@ -122,15 +121,7 @@ struct CodeStatsPage: View {
     }
 
     private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        panel.message = "Choose the folder for your GitHub mirror"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await model.chooseFolder(url.path) }
+        CodeStatsFolderPanel.choose(for: model)
     }
 }
 

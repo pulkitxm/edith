@@ -207,6 +207,7 @@ enum CodeStatsCLI {
             "gitAvailable": .bool(status.gitAvailable),
             "githubAvailable": .bool(status.githubAvailable),
             "logins": .array(status.state.profiles.map { .string($0.login) }),
+            "excludedAccounts": .array(status.settings.excludedAccounts.map { .string($0) }),
             "running": .bool(status.isRunning),
             "taskID": .optional(status.state.active?.taskID.uuidString),
             "progress": progress(status.progress),
