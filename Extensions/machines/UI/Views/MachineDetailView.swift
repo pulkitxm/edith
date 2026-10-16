@@ -199,6 +199,7 @@ struct MachineWindowView: View {
                 .onAppear {
                     if case .disconnected = session.state { session.start() }
                 }
+                .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
             }
         }
     }
@@ -211,6 +212,8 @@ enum MachineWindow {
             MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        client.enqueue { try await client.openWindow(.init(kind: .machine, machineID: machineID)) }
+        client.enqueue {
+            try await client.openWindow(.init(kind: .machine, machineID: machineID, title: title))
+        }
     }
 }

@@ -9,6 +9,15 @@ enum HostSectionOpenMode {
     case alwaysNew
 }
 
+struct HostWindowStyle {
+    var tabbingIdentifier: String? = "EdithSection"
+    var autosaveName: String? = "EdithSectionWindow"
+    var subtitle: String?
+    var fullSizeContent = false
+
+    static let section = HostWindowStyle()
+}
+
 enum HostWindowTabCommand: Equatable {
     case select(Int)
     case next
@@ -99,21 +108,45 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     }
 
     func openOwned(
-        id: UUID, kind: HostMachinesWindowTarget.Kind, controller: NSViewController,
+        id: UUID, target: HostMachinesWindowTarget, controller: NSViewController,
         didClose: @escaping () -> Void
     ) -> NSWindow {
-        let title: String
         let symbol: String
-        switch kind {
-        case .machine: title = "Machine"; symbol = "server.rack"
-        case .files: title = "Files"; symbol = "folder"
-        case .docker: title = "Docker"; symbol = "shippingbox"
-        case .terminal: title = "Terminal"; symbol = "terminal"
+        let fallback: String
+        let size: NSSize
+        let minimum: NSSize
+        var chrome = HostWindowStyle()
+        let machine = target.machineID.uuidString
+        switch target.kind {
+        case .machine:
+            symbol = "server.rack"; fallback = "Machine"
+            size = NSSize(width: 900, height: 620); minimum = NSSize(width: 600, height: 440)
+            chrome.tabbingIdentifier = "EdithMachine"
+            chrome.autosaveName = "EdithMachine." + machine
+        case .files:
+            symbol = "folder"; fallback = "Files"
+            size = NSSize(width: 940, height: 620); minimum = NSSize(width: 620, height: 400)
+            chrome.tabbingIdentifier = "EdithFinder"
+            chrome.autosaveName = "EdithFinderWindow"
+            chrome.subtitle = target.subtitle
+            chrome.fullSizeContent = true
+        case .docker:
+            symbol = "shippingbox"; fallback = "Docker"
+            size = NSSize(width: 1020, height: 660); minimum = NSSize(width: 720, height: 460)
+            chrome.tabbingIdentifier = "EdithDocker"
+            chrome.autosaveName = "EdithDockerWindow"
+        case .terminal:
+            symbol = "terminal"; fallback = "Terminal"
+            size = NSSize(width: 900, height: 560); minimum = NSSize(width: 520, height: 320)
+            chrome.tabbingIdentifier = "EdithTerminal"
+            chrome.autosaveName = "EdithTerminalWindow"
         }
         let page = HostNavigationPage(
-            id: "machines.window." + id.uuidString, title: title, symbol: symbol,
-            extensionID: "machines")
-        return create(page: page, controller: controller, mode: .alwaysNew, didClose: didClose)
+            id: "machines.window." + id.uuidString, title: target.title ?? fallback,
+            symbol: symbol, extensionID: "machines")
+        return create(
+            page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
+            contentSize: size, minimumSize: minimum, chrome: chrome)
     }
 
     func closeOwned(id: UUID) {
@@ -130,7 +163,10 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         return create(
             page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
             contentSize: NSSize(width: target.width, height: target.height),
-            minimumSize: NSSize(width: target.minimumWidth, height: target.minimumHeight))
+            minimumSize: NSSize(width: target.minimumWidth, height: target.minimumHeight),
+            chrome: HostWindowStyle(
+                tabbingIdentifier: nil,
+                autosaveName: target.location == "herdr.space" ? "EdithHerdrSpaceWindow" : "EdithHerdrAgentWindow"))
     }
 
     func closeHerdrOwned(id: UUID) {
@@ -158,7 +194,8 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     private func create(
         page: HostNavigationPage, controller: NSViewController, mode: HostSectionOpenMode,
         didClose: (() -> Void)?, contentSize: NSSize = HostSectionWindows.baseContentSize,
-        minimumSize: NSSize = HostSectionWindows.baseMinimumSize
+        minimumSize: NSSize = HostSectionWindows.baseMinimumSize,
+        chrome: HostWindowStyle = .section
     ) -> NSWindow {
         let visible = visibleFrame()
         let size = HostWindowFramePolicy.fitted(contentSize, visible: visible.size)
@@ -168,18 +205,24 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         window.isRestorable = false
         window.contentMinSize = HostWindowFramePolicy.fitted(
             minimumSize, visible: visible.size)
-        window.tabbingMode = .automatic
-        window.tabbingIdentifier = "EdithSection"
+        if let tabbingIdentifier = chrome.tabbingIdentifier {
+            window.tabbingMode = .automatic
+            window.tabbingIdentifier = tabbingIdentifier
+        } else {
+            window.tabbingMode = .disallowed
+        }
+        if let subtitle = chrome.subtitle { window.subtitle = subtitle }
+        if chrome.fullSizeContent { window.styleMask.insert(.fullSizeContentView) }
         window.identifier = NSUserInterfaceItemIdentifier("EdithSection." + page.id)
         window.contentViewController = controller
         window.setContentSize(size)
         window.delegate = self
         let host = mode == .reuseMostRecent ? entries.first?.window : nil
         entries.insert(Entry(window: window, page: page, didClose: didClose), at: 0)
-        if let host, host.isVisible {
+        if let host, host.isVisible, chrome.tabbingIdentifier != nil {
             host.addTabbedWindow(window, ordered: .above)
         } else if saveFrames {
-            window.setFrameAutosaveName("EdithSectionWindow")
+            if let name = chrome.autosaveName { window.setFrameAutosaveName(name) }
             if window.frame.origin == .zero { window.center() }
             offset(window, inside: visible)
         }

@@ -78,6 +78,13 @@ final class HostMachinesWindows {
         else { throw HostWorkerError.rejected }
         try target.validate()
         let owner = try origin(request)
+        if let existing = presentations.first(where: {
+            guard let other = $0.value.machinesWindow else { return false }
+            return other.kind == target.kind && other.machineID == target.machineID
+                && other.path == target.path
+        })?.key, windows.focusExisting("machines.window." + existing.uuidString) {
+            return
+        }
         let id = UUID()
         presentations[id] = request
         let task = Task { [self] in try await mount(request, target: target, owner: owner, id: id) }
@@ -104,7 +111,7 @@ final class HostMachinesWindows {
                 throw HostWorkerError.rejected
             }
             let window = windows.openOwned(
-                id: id, kind: target.kind,
+                id: id, target: target,
                 controller: NSHostingController(
                     rootView: HostOwnedRemoteContent(controller: controller))
             ) {

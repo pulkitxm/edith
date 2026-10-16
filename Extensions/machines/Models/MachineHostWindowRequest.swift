@@ -6,9 +6,12 @@ struct MachineHostWindowRequest: Codable, Equatable, Sendable {
     var machineID: UUID
     var path: String?
     var presentationID: UUID?
+    var title: String?
+    var subtitle: String?
 
     func validate() throws {
         guard path.map({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }) ?? true,
+            [title, subtitle].allSatisfy({ $0.map { $0.utf8.count <= 512 && !$0.utf8.contains(0) } ?? true }),
             path == nil || kind == .files
         else { throw MachineUIError.invalidRequest }
     }
@@ -50,6 +53,8 @@ struct MachineHostWindowRequest: Codable, Equatable, Sendable {
             "presentationID": presentation.uuidString,
         ]
         if let path = request.path { input["path"] = path }
+        if let title = request.title { input["title"] = title }
+        if let subtitle = request.subtitle { input["subtitle"] = subtitle }
         let id = UUID()
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
