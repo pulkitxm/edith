@@ -129,12 +129,17 @@ struct CodeStatsUIBridge: Sendable {
             throw ExtensionPeerError.invalidRequest
         }
         switch command {
-        case "codeStats.ui.status", "codeStats.ui.facts", "codeStats.ui.start",
+        case "codeStats.ui.status":
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            if let cached = await workflow.cachedStatus() {
+                return try JSONEncoder().encode(cached)
+            }
+            return try await workflow.perform(operation: CodeStatsCommand.status, payload: Data())
+        case "codeStats.ui.facts", "codeStats.ui.start",
             "codeStats.ui.cancel", "codeStats.ui.profile", "codeStats.ui.authors":
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
             let operation: String
             switch command {
-            case "codeStats.ui.status": operation = CodeStatsCommand.status
             case "codeStats.ui.facts": operation = CodeStatsCommand.facts
             case "codeStats.ui.start": operation = CodeStatsCommand.start
             case "codeStats.ui.cancel": operation = CodeStatsCommand.cancel
