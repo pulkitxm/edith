@@ -6,6 +6,8 @@ import Foundation
         let continuation: CheckedContinuation<Void, Never>
         let timer: Task<Void, Never>?
     }
+    static let ambientCadence: TimeInterval = 30
+    static let remoteAmbientCadence: TimeInterval = 120
     private let interval: @MainActor () -> TimeInterval?
     private let now: @MainActor () -> ContinuousClock.Instant
     private let sleep: Sleep
@@ -29,7 +31,10 @@ import Foundation
 
     func admit(_ key: String) async -> Bool {
         while !stopped, !Task.isCancelled {
-            let cadence = interval()
+            let cadence = interval().map {
+                key.hasPrefix("remote.") && $0 >= Self.ambientCadence
+                    ? max($0, Self.remoteAmbientCadence) : $0
+            }
             if cadence != intervals[key] {
                 if lastAdmissions[key] != nil { lastAdmissions[key] = now() }
                 intervals[key] = cadence

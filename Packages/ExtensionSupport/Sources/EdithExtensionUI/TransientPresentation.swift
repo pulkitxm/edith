@@ -5,13 +5,14 @@ private struct TransientPresentation: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     let dismissible: Bool
     let dismissOnEscape: Bool
+    var onEscape: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
             .background(
                 SheetDismissalMonitor(
                     dismissible: dismissible, dismissOnEscape: dismissOnEscape,
-                    dismiss: { dismiss() })
+                    dismiss: { dismiss() }, onEscape: onEscape)
             )
             .interactiveDismissDisabled(!dismissible)
     }
@@ -21,12 +22,14 @@ struct SheetDismissalMonitor: NSViewRepresentable {
     let dismissible: Bool
     let dismissOnEscape: Bool
     let dismiss: () -> Void
+    var onEscape: (() -> Void)?
 
     func makeNSView(context: Context) -> SheetDismissalView {
         let view = SheetDismissalView()
         view.dismissible = dismissible
         view.dismissOnEscape = dismissOnEscape
         view.dismiss = dismiss
+        view.onEscape = onEscape
         return view
     }
 
@@ -34,6 +37,7 @@ struct SheetDismissalMonitor: NSViewRepresentable {
         view.dismissible = dismissible
         view.dismissOnEscape = dismissOnEscape
         view.dismiss = dismiss
+        view.onEscape = onEscape
     }
 
     static func dismantleNSView(_ view: SheetDismissalView, coordinator: ()) {
@@ -45,6 +49,7 @@ final class SheetDismissalView: NSView {
     var dismissible = true
     var dismissOnEscape = true
     var dismiss: (() -> Void)?
+    var onEscape: (() -> Void)?
     private var monitor: Any?
 
     override func viewDidMoveToWindow() {
@@ -55,7 +60,11 @@ final class SheetDismissalView: NSView {
             [weak self] event in
             let dismissed = MainActor.assumeIsolated {
                 guard let self, self.shouldDismiss(for: event) else { return false }
-                self.dismiss?()
+                if event.type == .keyDown, let onEscape = self.onEscape {
+                    onEscape()
+                } else {
+                    self.dismiss?()
+                }
                 return true
             }
             return dismissed ? nil : event
@@ -72,7 +81,7 @@ final class SheetDismissalView: NSView {
             return SheetDismissalPolicy.escape(
                 keyCode: event.keyCode, modifiers: event.modifierFlags,
                 ownsKeyWindow: event.window === sheet && NSApp.keyWindow === sheet,
-                dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+                dismissible: dismissible, dismissOnEscape: dismissOnEscape || onEscape != nil)
         }
         guard event.type == .leftMouseDown, event.window === parent else { return false }
         let location = parent.convertPoint(toScreen: event.locationInWindow)
@@ -97,9 +106,11 @@ enum SheetDismissalPolicy {
 
 extension View {
     public func transientPresentation(
-        dismissible: Bool = true, dismissOnEscape: Bool = true
+        dismissible: Bool = true, dismissOnEscape: Bool = true, onEscape: (() -> Void)? = nil
     ) -> some View {
-        modifier(TransientPresentation(dismissible: dismissible, dismissOnEscape: dismissOnEscape))
+        modifier(
+            TransientPresentation(
+                dismissible: dismissible, dismissOnEscape: dismissOnEscape, onEscape: onEscape))
     }
 
     public func edithSheet<Content: View>(
