@@ -19,6 +19,7 @@ import SwiftUI
     private(set) var herdrWindows: HostHerdrWindows?
     private(set) var herdrInteractions: HostHerdrInteractions?
     private(set) var notchStartup: HostNotchStartup?
+    @ObservationIgnored private var notchAlerts: HostNotchAlerts?
     private(set) var startupError = false
     @ObservationIgnored private var startup: Task<Void, Never>?
     @ObservationIgnored private unowned let delegate: HostApplicationDelegate
@@ -188,6 +189,10 @@ import SwiftUI
             terminalWindows = ownedTerminal
             remotePresenter = presenter
             marketplace = loaded
+            let alerts = HostNotchAlerts(
+                namespace: identity.identifier, version: { updater.updateReady })
+            alerts.start()
+            notchAlerts = alerts
             let services = try HostCoreServices(
                 identity: identity, marketplace: loaded,
                 togglePanel: { delegate.showMainWindow() })

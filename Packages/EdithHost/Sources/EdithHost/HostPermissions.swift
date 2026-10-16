@@ -61,7 +61,14 @@ import UserNotifications
     private(set) var requesting: HostPermission?
     private let environment: HostPermissionEnvironment
     private var revision = 0
-    init(environment: HostPermissionEnvironment = .live) { self.environment = environment }
+    private let recordPrompt: @MainActor () -> Void
+    init(
+        environment: HostPermissionEnvironment = .live,
+        recordPrompt: @escaping @MainActor () -> Void = { HostPermissionPromptTracker.record() }
+    ) {
+        self.environment = environment
+        self.recordPrompt = recordPrompt
+    }
 
     func refresh() async {
         revision += 1
@@ -74,6 +81,7 @@ import UserNotifications
         guard !permission.grantsOnFirstUse, requesting == nil else { return }
         requesting = permission
         defer { requesting = nil }
+        recordPrompt()
         await environment.request(permission)
         guard !Task.isCancelled else { return }
         await refresh()
