@@ -66,43 +66,6 @@ struct StoragePaneTests {
         #expect(await gate.cancelled == 2)
     }
 
-    @Test func clearingCachesKeepsRuntimeAndUserData() async throws {
-        let fixture = try StorageFixture()
-        defer { fixture.clean() }
-        let caches = fixture.caches
-        let model = StoragePaneModel(clearCaches: {
-            try StoragePaneModel.clearCaches(at: caches)
-        })
-        await model.refresh(inventory: fixture.inventory())
-        await model.clean(.caches)
-        #expect(model.removalError == nil)
-        #expect(model.removalNotice?.contains("User data is retained") == true)
-        #expect(model.cleaning == nil)
-        let manager = FileManager.default
-        #expect(!manager.fileExists(atPath: caches.appendingPathComponent("favicons").path))
-        #expect(
-            manager.fileExists(atPath: caches.appendingPathComponent("Runtime/broker.lock").path))
-        #expect(
-            manager.fileExists(
-                atPath: fixture.support.appendingPathComponent("Cache/SEOAudit/lighthouse.json")
-                    .path))
-        #expect(
-            manager.fileExists(atPath: fixture.support.appendingPathComponent("edith.sqlite").path))
-        await model.refresh(inventory: fixture.inventory())
-        let measurement = try #require(model.measurement)
-        #expect(measurement.sum(["caches"]).logical == 0)
-        #expect(measurement.sum(["runtime"]).logical == 150)
-        #expect(measurement.total.logical == StorageFixture.totalLogical - 600)
-    }
-
-    @Test func failedLogCleanupReportsAnErrorWithoutANotice() async {
-        let model = StoragePaneModel(pruneLogs: { throw CocoaError(.fileWriteNoPermission) })
-        await model.clean(.logs)
-        #expect(model.removalNotice == nil)
-        #expect(model.removalError?.hasPrefix("Some logs could not be removed.") == true)
-        #expect(model.cleaning == nil)
-    }
-
     @Test func storageRendersAtCompactRegularZoomAndBothSchemes() async throws {
         let fixture = try StorageFixture()
         defer { fixture.clean() }

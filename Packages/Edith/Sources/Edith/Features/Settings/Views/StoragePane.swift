@@ -30,7 +30,6 @@ struct StoragePane: View {
                 Spacer(minLength: UIScale.pt(8))
                 Button(model.load.isRunning ? "Restart scan" : "Refresh") { revision += 1 }
                     .buttonStyle(.edith(.secondary))
-                    .disabled(model.cleaning != nil)
             }
             PageLoading(
                 state: model.load.state, message: "Refresh to measure storage.", layout: .list,
@@ -39,7 +38,6 @@ struct StoragePane: View {
                 if let inventory = model.inventory, let measurement = model.measurement {
                     summary(inventory, measurement)
                     areas(inventory, measurement)
-                    cleanup(measurement)
                 }
             }
             if model.load.isRunning {
@@ -54,11 +52,8 @@ struct StoragePane: View {
                     Button("Cancel scan") { model.cancelScan() }.buttonStyle(.edith(.secondary))
                 }
             }
-            if let message = model.removalError ?? model.load.errorMessage {
+            if let message = model.load.errorMessage {
                 Text(message).font(.edithText(.callout)).foregroundStyle(.orange)
-            }
-            if let notice = model.removalNotice {
-                Text(notice).font(.edithText(.callout)).foregroundStyle(.secondary)
             }
         }
         .pageTask(id: revision, cancel: model.cancelScan) {
@@ -125,39 +120,6 @@ struct StoragePane: View {
                 }
             }
         }
-    }
-
-    private func cleanup(_ measurement: StorageMeasurement) -> some View {
-        PageCard(title: "Clean up") {
-            StorageSizeLine(
-                title: "Caches, excluding runtime files", bytes: measurement.sum(["caches"]))
-            StorageSizeLine(title: "Logs, including recent ones", bytes: measurement.sum(["logs"]))
-            Text(
-                "Clearing caches keeps runtime files and everything in Application Support. Edith rebuilds caches as needed. Removing old logs keeps the last seven days."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            HStack(spacing: UIScale.pt(8)) {
-                cleanupButton(
-                    .caches, title: "Clear caches", label: "Clear Edith caches, keep user data")
-                cleanupButton(
-                    .logs, title: "Remove old logs",
-                    label: "Remove Edith logs older than seven days")
-            }
-        }
-    }
-
-    private func cleanupButton(_ action: StorageCleanup, title: String, label: String)
-        -> some View
-    {
-        Button(model.cleaning == action ? "Clearing" : title, role: .destructive) {
-            Task {
-                await model.clean(action)
-                revision += 1
-            }
-        }
-        .buttonStyle(.edith(.secondary))
-        .disabled(model.cleaning != nil)
-        .accessibilityLabel(label)
     }
 
     private func reveal(_ area: StorageArea) {
