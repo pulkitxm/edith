@@ -76,7 +76,7 @@ open class HostWorkerNavigationClient: NSObject {
     public func openWindow(_ input: NSDictionary, completion: @escaping (NSString?) -> Void)
         -> NSString?
     {
-        let keys = ["kind", "machineID", "path", "presentationID"]
+        let keys = ["kind", "machineID", "path", "presentationID", "title", "subtitle"]
         guard input.allKeys.allSatisfy({ ($0 as? String).map(keys.contains) == true }),
             keys.allSatisfy({ input[$0] == nil || input[$0] is String }),
             let kind = (input["kind"] as? String).flatMap(
@@ -85,7 +85,8 @@ open class HostWorkerNavigationClient: NSObject {
             let presentation = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
         else { completion("The owning window request was rejected."); return nil }
         let target = HostMachinesWindowTarget(
-            kind: kind, machineID: machine, path: input["path"] as? String)
+            kind: kind, machineID: machine, path: input["path"] as? String,
+            title: input["title"] as? String, subtitle: input["subtitle"] as? String)
         let request = HostWorkerNavigationRequest(
             configuration: configuration,
             presentationID: presentation, machinesWindow: target)

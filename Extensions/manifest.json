@@ -2404,6 +2404,7 @@
         "Extensions/machines/Support/UserOperationCatalog.swift",
         "Extensions/machines/UI/MachinePageTabs.swift",
         "Extensions/machines/UI/MachinePresentation.swift",
+        "Extensions/machines/UI/MachineWindowCommands.swift",
         "Extensions/machines/UI/Services/DockerLogDefaults.swift",
         "Extensions/machines/UI/Services/FinderDefaults.swift",
         "Extensions/machines/UI/Services/FinderKeyboard.swift",

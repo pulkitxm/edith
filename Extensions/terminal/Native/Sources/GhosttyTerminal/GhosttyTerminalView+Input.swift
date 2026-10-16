@@ -445,7 +445,7 @@ extension GhosttyTerminalView {
         guard let target = terminalTargetAtPointer(),
             Self.linkTarget(
                 for: target, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
+                allowsLocalFiles: allowsLocalFileLinks) != nil
         else { return nil }
         return target
     }
@@ -718,7 +718,7 @@ extension GhosttyTerminalView {
         if let link,
             Self.linkTarget(
                 for: link, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
+                allowsLocalFiles: allowsLocalFileLinks) != nil
         {
             let open = menu.addItem(
                 withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")

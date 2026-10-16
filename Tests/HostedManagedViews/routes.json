@@ -694,7 +694,7 @@
       "sources": [
         {
           "path": "Extensions/machines/Runtime.swift",
-          "sha256": "76bc87b0f5056bbe3ee3b7f6249e0dec77c6271a3c517e8f3448b6213adcadcf"
+          "sha256": "a3152c867f39eaa5599242509c7bcb67726347c7fcf741fe6a10ae33c8f464b6"
         },
         {
           "path": "Extensions/machines/Services/MachineUIClient.swift",
@@ -808,7 +808,7 @@
         },
         {
           "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
-          "sha256": "7d7ee9168c534c43a6b791b7202157ed8bd9317769092b736dff91c7d983cdd9"
+          "sha256": "31adec12d2830729c0d8fc5f0b2d1b2625173ba1948d9f77640d8b251d98c65b"
         }
       ]
     },

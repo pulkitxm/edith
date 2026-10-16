@@ -95,6 +95,16 @@ import GhosttyTerminal
                 environment: launch.environment, currentDirectory: NSHomeDirectory(),
                 startupCommand: nil)
         }
+        if !session.isLocal, request.directory == nil, session.remotePlatform != .windows,
+            session.state.isConnected, let connection = session.connectionRef
+        {
+            return MachinePTYLaunch(
+                executable: SSHConnection.executable.path,
+                arguments: connection.terminalArguments(),
+                environment: MachineTerminalEnvironment.unnested(
+                    environment + connection.terminalEnvironment()),
+                currentDirectory: NSHomeDirectory(), startupCommand: nil)
+        }
         guard session.isLocal || session.state.isConnected,
             let launch = MachineTerminalLaunchPlan.make(
                 isLocal: session.isLocal, connection: session.connectionRef,

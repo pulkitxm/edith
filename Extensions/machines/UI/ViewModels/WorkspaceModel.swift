@@ -342,6 +342,8 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
+        .onAppear { MachineWindowCommands.shared.workspaceAppeared() }
+        .onDisappear { MachineWindowCommands.shared.workspaceDisappeared() }
         .navigationRoute(
             "focus", selection: focusBinding, isValid: focusIsValid,
             isReady: { await model.awaitInitialLoad() }
@@ -514,6 +516,7 @@ struct WorkspaceNodeView: View {
         switch node {
         case let .pane(pane):
             WorkspacePaneView(pane: pane, size: size, model: model, machines: machines, dark: dark)
+                .environment(\.compactLayout, size.width < UIScale.pt(640))
                 .frame(width: size.width, height: size.height)
         case let .split(split):
             splitBody(split)

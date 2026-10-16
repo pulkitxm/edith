@@ -485,7 +485,7 @@ struct MachineOverviewTab: View {
     private var metricsGrid: some View {
         MetricsGridLayout(spacing: UIScale.pt(12)) {
             metricCard(
-                "CPU", value: session.sample.map { String(format: "%.0f%%", $0.cpu.total) } ?? ",",
+                "CPU", value: session.sample.map { String(format: "%.0f%%", $0.cpu.total) } ?? "\u{2014}",
                 fraction: (session.sample?.cpu.total ?? 0) / 100, history: session.cpuHistory,
                 maximum: 100, color: DashSkin.accent(dark),
                 footnote: session.sample.map { sample in
@@ -495,7 +495,7 @@ struct MachineOverviewTab: View {
                 } ?? "")
             metricCard(
                 "Memory",
-                value: session.sample.map { String(format: "%.0f%%", $0.mem.usedPercent) } ?? ",",
+                value: session.sample.map { String(format: "%.0f%%", $0.mem.usedPercent) } ?? "\u{2014}",
                 fraction: (session.sample?.mem.usedPercent ?? 0) / 100, history: session.memHistory,
                 maximum: 100, color: DashSkin.sage,
                 footnote: session.sample.map {

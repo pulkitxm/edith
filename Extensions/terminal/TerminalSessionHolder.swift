@@ -202,6 +202,16 @@ import Observation
             default: return
             }
         }
+        switch (events.last, event) {
+        case (.resize, .resize):
+            events[events.count - 1] = event
+            return
+        case let (.input(queued), .input(data)) where queued.count + data.count <= 16_384:
+            events[events.count - 1] = .input(queued + data)
+            queuedBytes += bytes
+            return
+        default: break
+        }
         guard events.count < 256, queuedBytes + bytes <= 262_144 else {
             fail("The terminal input queue is full.")
             return

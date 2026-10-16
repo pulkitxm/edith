@@ -772,7 +772,7 @@ struct DockerContainerDetail: View {
                 Spacer(minLength: 0)
             }
             if shown.isEmpty {
-                Text(",")
+                Text("\u{2014}")
                     .font(DashSkin.mono(11))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -796,17 +796,17 @@ struct DockerContainerDetail: View {
     private var statsView: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             statCard(
-                "CPU", value: live.cpuPercent.map { String(format: "%.1f%%", $0) } ?? ",",
+                "CPU", value: live.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "\u{2014}",
                 history: model.cpuHistory, color: DashSkin.accent(dark))
             statCard(
                 "Memory",
-                value: live.memUsedBytes.map { ByteFormatter.string($0) } ?? ",",
+                value: live.memUsedBytes.map { ByteFormatter.string($0) } ?? "\u{2014}",
                 history: model.memHistory, color: DashSkin.sage)
             HStack(spacing: UIScale.pt(20)) {
-                statItem("Network in", live.netRxBytes.map { ByteFormatter.string($0) } ?? ",")
-                statItem("Network out", live.netTxBytes.map { ByteFormatter.string($0) } ?? ",")
+                statItem("Network in", live.netRxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
+                statItem("Network out", live.netTxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
                 statItem(
-                    "Memory limit", live.memLimitBytes.map { ByteFormatter.string($0) } ?? ",")
+                    "Memory limit", live.memLimitBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
             }
             Spacer(minLength: 0)
         }

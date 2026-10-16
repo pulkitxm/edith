@@ -16,6 +16,7 @@ public struct MachineSurfaceItem: Equatable, Sendable {
     private let open: @MainActor (UUID) -> Void
     private let stopped: @MainActor () -> Bool
     private let privacy: @MainActor () -> [String: String]
+    private let health: @MainActor () async -> MachineHealthSnapshot?
     private var actions: [UUID: UUID] = [:]
 
     public init(
@@ -24,22 +25,30 @@ public struct MachineSurfaceItem: Equatable, Sendable {
         stopped: @escaping @MainActor () -> Bool,
         privacy: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
-        }
+        },
+        health: @escaping @MainActor () async -> MachineHealthSnapshot? = { nil }
     ) {
         self.items = items; self.open = open; self.stopped = stopped; self.privacy = privacy
+        self.health = health
     }
 
     public func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped() else { throw ExtensionPeerError.unavailable }
         return try await SurfaceCommandService.execute(
             providerID: "machines", command: command,
-            payload: payload, snapshot: { try self.snapshot($0) },
+            payload: payload, snapshot: { try await self.snapshot($0) },
             perform: { try self.perform($0) },
             privacyValues: privacy)
     }
 
-    private func snapshot(_ tile: SurfaceTile) throws -> SurfaceSnapshot {
+    private func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {
         guard !stopped() else { throw ExtensionPeerError.unavailable }
+        let report = await health()
+        try Task.checkCancellation()
+        guard !stopped() else { throw ExtensionPeerError.unavailable }
+        let monitored = report.map { !$0.skipped } ?? false
+        let reachable = Dictionary(
+            (report?.machines ?? []).map { ($0.id, $0.reachable) }, uniquingKeysWith: { $1 })
         let all = items()
         guard all.count <= 1_025, Set(all.map(\.id)).count == all.count else {
             throw ExtensionPeerError.invalidRequest
@@ -52,20 +61,34 @@ public struct MachineSurfaceItem: Equatable, Sendable {
             SurfaceDataRow(
                 item.id.uuidString, sourceID: item.id.uuidString,
                 title: String(item.name.prefix(128)), detail: String(item.detail.prefix(256)),
-                value: item.connected ? "Connected" : "Disconnected", icon: "server.rack",
+                value: monitored
+                    ? (reachable[item.id.uuidString] == true ? "Online" : "Offline") : "Unknown",
+                icon: "desktopcomputer",
                 field: field,
                 actions: [
-                    .init(actions[item.id]!.uuidString, "Open", "arrow.up.forward", field: field)
+                    .init(
+                        actions[item.id]!.uuidString, "Open fleet", "arrow.up.right", field: field)
                 ])
+        }
+        var metrics: [SurfaceMetric] = [.init("total", "Registered", "\(selected.count)")]
+        if monitored {
+            let online = selected.filter { reachable[$0.id.uuidString] == true }.count
+            metrics.insert(
+                contentsOf: [
+                    .init("online", "Reachable", "\(online)"),
+                    .init("offline", "Unreachable", "\(selected.count - online)"),
+                ], at: 0)
+        } else {
+            metrics.insert(.init("status", "Health monitoring", "Off"), at: 0)
         }
         return SurfaceSnapshot(
             providerID: "machines",
-            metrics: [
-                .init("total", "Machines", "\(selected.count)"),
-                .init("online", "Connected", "\(selected.filter(\.connected).count)"),
-            ], rows: rows,
+            metrics: metrics, rows: rows,
             sources: all.map { .init($0.id.uuidString, String($0.name.prefix(128))) },
-            message: selected.isEmpty ? "No matching machines" : nil, updatedAt: Date())
+            message: monitored
+                ? (selected.isEmpty ? "No machines in this selection." : nil)
+                : "Reachability monitoring is off.",
+            updatedAt: report?.checkedAt ?? Date())
     }
 
     private func perform(_ action: String) throws {

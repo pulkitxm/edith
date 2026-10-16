@@ -264,11 +264,11 @@ private struct FinderListRow: View {
                 .frame(width: UIScale.pt(16), height: UIScale.pt(16))
             nameLabel
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(entry.modified.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? ",")
+            Text(entry.modified.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "\u{2014}")
                 .font(DashSkin.mono(10))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(130), alignment: .trailing)
-            Text(entry.isDirectory ? "," : ByteFormatter.string(entry.sizeBytes))
+            Text(entry.isDirectory ? "\u{2014}" : ByteFormatter.string(entry.sizeBytes))
                 .font(DashSkin.mono(10))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(78), alignment: .trailing)

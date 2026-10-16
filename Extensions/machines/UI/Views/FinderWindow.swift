@@ -490,7 +490,9 @@ enum FinderWindow {
             return
         }
         client.enqueue {
-            try await client.openWindow(.init(kind: .files, machineID: session.id, path: path))
+            try await client.openWindow(.init(
+                    kind: .files, machineID: session.id, path: path, title: session.machine.name,
+                    subtitle: path ?? (session.isLocal ? "Home" : "Files")))
         }
     }
 }

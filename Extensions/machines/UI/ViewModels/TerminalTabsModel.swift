@@ -297,7 +297,9 @@ enum TerminalWindow {
             return
         }
         client.enqueue {
-            try await client.openWindow(.init(kind: .terminal, machineID: session.id))
+            try await client.openWindow(.init(
+                kind: .terminal, machineID: session.id,
+                title: "Terminal \u{00B7} \(session.machine.name)"))
         }
     }
 }

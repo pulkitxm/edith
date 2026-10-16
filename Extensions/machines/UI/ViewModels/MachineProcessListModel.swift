@@ -31,6 +31,20 @@ enum MachineProcessProjection {
 }
 
 @MainActor
+enum MachineProcessModels {
+    private static var models: [UUID: MachineProcessListModel] = [:]
+
+    static func model(for machineID: UUID) -> MachineProcessListModel {
+        if let existing = models[machineID] { return existing }
+        let created = MachineProcessListModel()
+        models[machineID] = created
+        return created
+    }
+
+    static func reset() { models.removeAll() }
+}
+
+@MainActor
 @Observable
 final class MachineProcessListModel {
     var query = ""

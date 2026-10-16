@@ -346,7 +346,7 @@ struct DockerConsoleView: View {
             .map {
                 DockerRow(
                     id: $0.name, title: $0.name, subtitle: $0.driver,
-                    trailing: $0.sizeBytes.map { ByteFormatter.string($0) } ?? ",",
+                    trailing: $0.sizeBytes.map { ByteFormatter.string($0) } ?? "\u{2014}",
                     symbol: "externaldrive", badge: $0.inUse ? "in use" : nil)
             }
     }
@@ -503,6 +503,11 @@ enum DockerWindow {
             MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
             return
         }
-        client.enqueue { try await client.openWindow(.init(kind: .docker, machineID: session.id)) }
+        client.enqueue {
+            try await client.openWindow(
+                .init(
+                    kind: .docker, machineID: session.id,
+                    title: "Docker \u{00B7} \(session.machine.name)"))
+        }
     }
 }
