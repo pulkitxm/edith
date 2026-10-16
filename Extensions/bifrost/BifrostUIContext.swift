@@ -6,6 +6,7 @@ import Observation
 struct BifrostUISettings: Codable {
     let values: [String: String]
     let index: BifrostIndex?
+    var usage: String? = nil
 }
 struct BifrostUIChange: Codable { let key: String; let value: String }
 
@@ -72,6 +73,9 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             applying = true
             defer { applying = false }
             for (key, text) in value.values { try Self.set(key, value: text) }
+            if let usage = value.usage, usage.utf8.count <= 1_048_576 {
+                SharedDefaults.store.set(usage, forKey: AppStorageKeys.Bifrost.usage)
+            }
             previous = value.values; index = value.index; loaded = true
             applying = false
         } catch { if !stopped, !Task.isCancelled { self.error = error.localizedDescription } }
@@ -196,7 +200,8 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             return try JSONEncoder().encode(
                 BifrostUISettings(
                     values: Dictionary(uniqueKeysWithValues: keys.map { ($0, text($0)) }),
-                    index: BifrostIndexStore.shared.load()))
+                    index: BifrostIndexStore.shared.load(),
+                    usage: SharedDefaults.store.string(forKey: AppStorageKeys.Bifrost.usage)))
         case "bifrost.ui.set":
             let change = try JSONDecoder().decode(BifrostUIChange.self, from: payload)
             try set(change.key, value: change.value)

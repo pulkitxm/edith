@@ -123,6 +123,13 @@ struct BifrostRows: View {
             }
         }
         .onAppear { index = BifrostUIContext.loadIndex() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                await BifrostUIContext.current?.load()
+                index = BifrostUIContext.loadIndex()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: BifrostIPC.Name.bifrostIndexChanged)) {
             _ in
             index = BifrostUIContext.loadIndex()
