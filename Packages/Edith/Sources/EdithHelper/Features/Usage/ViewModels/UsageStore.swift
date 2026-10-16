@@ -95,6 +95,7 @@ final class UsageStore: FeatureModule {
     private(set) var limitsError: String?
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
+    private(set) var claudeAccounts: [ClaudeAccountLimits] = []
 
     private var claudeUnavailable = false
     private var launchObserver: NSObjectProtocol?
@@ -280,6 +281,7 @@ final class UsageStore: FeatureModule {
             week = Self.fresh(claude.week)
             fableWeek = Self.fresh(claude.fable)
         }
+        claudeAccounts = snapshot.claudeAccounts
         await reloadLimitsFromHistory()
         limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
         refreshingLimits = false
