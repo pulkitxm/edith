@@ -22,8 +22,6 @@ struct StoragePaneTests {
         #expect(StorageFormat.size(known) == "At least 4 KB")
         #expect(StorageFormat.share(5, of: 1000) == "under 1%")
         #expect(StorageFormat.share(500, of: 1000) == "50%")
-        #expect(!StorageFormat.isLarge(5, of: 1000))
-        #expect(StorageFormat.isLarge(10, of: 1000))
     }
 
     @Test func replacementAndCancellationRejectLateScanPublicationWhileRetainingContent()

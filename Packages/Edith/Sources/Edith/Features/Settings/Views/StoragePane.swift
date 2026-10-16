@@ -86,29 +86,29 @@ struct StoragePane: View {
         -> some View
     {
         let total = measurement.total.allocated
-        let large = usage.filter { StorageFormat.isLarge($0.bytes.allocated, of: total) }
-        let small = usage.filter { !StorageFormat.isLarge($0.bytes.allocated, of: total) }
+        let top = usage.prefix(StorageFormat.visibleRows)
+        let rest = usage.dropFirst(StorageFormat.visibleRows)
         return PageCard(title: "What is using space") {
             VStack(spacing: 0) {
-                ForEach(Array(large.enumerated()), id: \.element.id) { index, entry in
+                ForEach(Array(top.enumerated()), id: \.element.id) { index, entry in
                     if index > 0 { Divider() }
                     StorageRow(
                         usage: entry, total: total,
-                        color: StorageBar.color(at: usage.firstIndex { $0.id == entry.id } ?? 0),
+                        color: StorageBar.color(at: index),
                         reveal: { reveal(entry.item) })
                 }
-                if !small.isEmpty {
+                if !rest.isEmpty {
                     Divider()
                     Button(
                         showsSmallItems
                             ? "Hide smaller items"
-                            : "Show \(small.count) smaller items · \(StorageFormat.size(small.reduce(into: StorageBytes()) { $0.include($1.bytes) }))"
+                            : "Show \(rest.count) smaller items · \(StorageFormat.size(rest.reduce(into: StorageBytes()) { $0.include($1.bytes) }))"
                     ) { showsSmallItems.toggle() }
                     .buttonStyle(.edith(.borderless))
                     .padding(.vertical, UIScale.pt(6))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if showsSmallItems {
-                        ForEach(small) { entry in
+                        ForEach(Array(rest)) { entry in
                             Divider()
                             StorageRow(
                                 usage: entry, total: total, color: StorageBar.otherColor,
@@ -139,9 +139,7 @@ enum StorageFormat {
             ? "under 1%" : fraction.formatted(.percent.precision(.fractionLength(0)))
     }
 
-    static func isLarge(_ part: Int64, of total: Int64) -> Bool {
-        Double(part) >= Double(max(1, total)) * 0.01
-    }
+    static let visibleRows = 6
 }
 
 struct StorageRow: View {
@@ -201,7 +199,6 @@ struct StorageBar: View {
 
     private var segments: [(id: String, bytes: Int64, color: Color)] {
         let leading = usage.prefix(Self.palette.count).enumerated()
-            .filter { StorageFormat.isLarge($0.element.bytes.allocated, of: total) }
             .map {
                 (
                     id: $0.element.id, bytes: $0.element.bytes.allocated,
