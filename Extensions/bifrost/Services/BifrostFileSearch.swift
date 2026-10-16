@@ -88,7 +88,8 @@ public enum BifrostFileSearch {
         run: (URL, [String]) async -> String? = { executable, arguments in
             let result = await BifrostCommandExecution.run(
                 executable: executable, arguments: arguments,
-                commandLabel: executable.lastPathComponent, timeout: 10)
+                commandLabel: executable.lastPathComponent, mergesStandardError: false,
+                timeout: 10)
             return try? result.get()
         },
         runRemote: (String, String) async -> String? = { host, command in

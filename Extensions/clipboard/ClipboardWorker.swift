@@ -97,8 +97,7 @@ import Foundation
         }
         if command == "clipboard.captureStatus" {
             return try JSONSerialization.data(withJSONObject: [
-                "enabled": defaults.bool(forKey: AppStorageKeys.Clipboard.enabled),
-                "monitoring": store.isCapturing,
+                "monitoring": store.isCapturing
             ])
         }
         guard ClipboardServiceOperation.internalOperations.contains(command) else {

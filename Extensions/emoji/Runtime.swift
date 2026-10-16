@@ -305,7 +305,7 @@ final class ExtensionRuntime: NSObject {
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
                         PageWorkspace {
-                            PageHeader("Emoji")
+                            PageHeader("Emoji Picker")
                         } content: {
                             Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
                                 .grouped)
@@ -347,7 +347,7 @@ final class ExtensionRuntime: NSObject {
 
     private func showPanel() {
         guard !suspended, fixture == nil else { return }
-        EmojiPanel.shared.show()
+        EmojiPanel.shared.toggle()
     }
 
     private func registerHotKey() {

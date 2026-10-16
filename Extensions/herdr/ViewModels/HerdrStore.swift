@@ -290,7 +290,7 @@ final class HerdrStore {
         }
     }
 
-    @ObservationIgnored private let pageWindows = NSHashTable<NSWindow>.weakObjects()
+    @ObservationIgnored let pageWindows = NSHashTable<NSWindow>.weakObjects()
     @ObservationIgnored private var tabsBeforeRetarget: [HerdrTab]?
     let terminalPanels: HerdrTerminalPanels
     let messaging: HerdrMessaging
@@ -742,7 +742,7 @@ final class HerdrStore {
         for task in spaces { await task.value }
         for task in presentations { await task.value }
         for holder in holders { await holder.stopRenderingAndWait() }
-        await HerdrWorkOwnership.shutdown()
+        if uiClient == nil { await HerdrWorkOwnership.shutdown() }
     }
 
     func shutdown() async {

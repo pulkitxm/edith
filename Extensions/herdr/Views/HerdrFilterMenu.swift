@@ -63,7 +63,8 @@ struct HerdrFilterButton: View {
 
     @ViewBuilder private var badge: some View {
         if active {
-            Text("\(chips.count + (store.accountFilter == nil ? 0 : 1))")
+            let count = chips.count + (store.accountFilter == nil ? 0 : 1)
+            Text(count > 9 ? "9+" : "\(count)")
                 .font(DashSkin.mono(8, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, UIScale.pt(3))

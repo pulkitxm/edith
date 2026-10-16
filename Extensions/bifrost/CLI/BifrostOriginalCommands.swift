@@ -25,7 +25,7 @@ struct BifrostCLICommand: AsyncParsableCommand {
     static func requireExtension() throws {
         guard
             SharedDefaults.store.object(forKey: AppStorageKeys.Bifrost.enabled) as? Bool
-                == true
+                != false
         else {
             throw CLIFailure.unavailable(
                 "the Bifrost extension is off",

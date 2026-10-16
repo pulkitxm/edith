@@ -38,7 +38,7 @@
       "sources": [
         {
           "path": "Extensions/audioMixer/Runtime.swift",
-          "sha256": "a438493bbdbe725bc82b7a20d3cc3abe1af9f320655bd186bc53c4192b8aa448"
+          "sha256": "44dd46b2f2328c30c900c1ca2eff0be7a9efe13f7e28e14f7ebf4399915d0f2a"
         },
         {
           "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
@@ -214,7 +214,7 @@
       "sources": [
         {
           "path": "Extensions/emoji/Runtime.swift",
-          "sha256": "50f9763eac338f2ac18ac608a67704dfa2a0effcb9680ab7fcce834c09caf786"
+          "sha256": "1a5090b3bae5b233c91505b10d99457265c5e9582ea83e3cde5088a867fc921b"
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
@@ -482,7 +482,7 @@
         },
         {
           "path": "Extensions/music/UI/Runtime.swift",
-          "sha256": "74f224e6d368694291bf38fd1b806efbedb817d72a1dd7bc2b84fe017f1a249b"
+          "sha256": "883e578e465533119c6aaec4466928475e88622dbeaa4760b8ac17c426d213c1"
         }
       ]
     },
@@ -588,7 +588,7 @@
       "sources": [
         {
           "path": "Extensions/studio/Runtime.swift",
-          "sha256": "1ce6b572570d871d31a669b5e08fe503f74197e07c20e0c4c985f382f8196053"
+          "sha256": "f650ccedb1ea76539eecf6b88ef03538a37dacfd50d4ba5ec17d6fb5103f00f5"
         },
         {
           "path": "Extensions/studio/UIBridge/StudioUIScene.swift",
@@ -636,7 +636,7 @@
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "c1336e48bd3f36ac47246292945c19ab50d8c1bea466835f487d564cadba5573"
+          "sha256": "2e89c8f6fa09ae80de0ff7d08193544efc6a3f030fd5c0e175e4fa54023b35b2"
         }
       ]
     },
@@ -676,7 +676,7 @@
       "sources": [
         {
           "path": "Extensions/attention/NativeRuntime/Sources/AttentionNative/AttentionExtensionController.swift",
-          "sha256": "309a819e00475b4a9fb4feec06081e6627db11d231d22321cd23a30066a00209"
+          "sha256": "26830f4e5c446ad8d3ebd585326eecd0a1247f9ee23e03b4d43b8d7ac296c990"
         }
       ]
     },
@@ -804,7 +804,7 @@
       "sources": [
         {
           "path": "Extensions/herdr/Runtime.swift",
-          "sha256": "8ce8c0a608553eadfcc27b5cdb08ccd3fceb6622c40e13b82e3cdb541601c459"
+          "sha256": "a2edd399916e0b85ee885cdd8ce3ab24e456aed3d8e09c937be5795310db4c60"
         },
         {
           "path": "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
@@ -830,7 +830,7 @@
         },
         {
           "path": "Extensions/quinjet/ViewModels/QuinjetPageModel.swift",
-          "sha256": "b422b324f7b08ff2a83a4b78b3fe55e608913305e9c91532a17ab9eca88630f4"
+          "sha256": "2f76bfbc4a8a17c848ffa1392a062ee49e82f26c969becaccebbbd5069e4974b"
         }
       ]
     },

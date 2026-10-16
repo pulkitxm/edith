@@ -96,7 +96,6 @@ final class StudioImageEditorModel {
     private var loadTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var thumbnailTask: Task<Void, Never>?
-    private var layerTask: Task<Void, Never>?
     private var faceTask: Task<Void, Never>?
     let loading = ContentLoad()
     let rendering = ContentLoad()
@@ -134,23 +133,9 @@ final class StudioImageEditorModel {
         let url = self.url
         let previewSize = Self.previewSize
         loadTask = work.start { [weak self] in
-            let loaded: Result<StudioImageSource, Error>
-            if let facade = self?.facade {
-                do {
-                    let handle: StudioUIResource = try await facade.read(
-                        "studio.ui.image.load", object: ["path": url.path])
-                    let value: StudioUIImageData = try await facade.download(handle)
-                    guard let image = value.image else {
-                        throw StudioError.unreadable(url.lastPathComponent)
-                    }
-                    loaded = .success(
-                        StudioImageSource(image: image, originalSize: value.originalSize))
-                } catch { loaded = .failure(error) }
-            } else {
-                loaded = await Task.detached(priority: .userInitiated) {
-                    StudioImageEditorWork.loadSource(url, maxPixelSize: previewSize)
-                }.value
-            }
+            let loaded = await Task.detached(priority: .userInitiated) {
+                StudioImageEditorWork.loadSource(url, maxPixelSize: previewSize)
+            }.value
             guard let self, self.loading.isCurrent(request) else { return }
             switch loaded {
             case let .success(image):
@@ -186,7 +171,6 @@ final class StudioImageEditorModel {
         loadTask?.cancel()
         renderTask?.cancel()
         thumbnailTask?.cancel()
-        layerTask?.cancel()
         faceTask?.cancel()
     }
 
@@ -247,30 +231,10 @@ final class StudioImageEditorModel {
             }
             guard let self, self.rendering.isCurrent(request) else { return }
             let document = self.document
-            let rendered: Result<StudioImageEditorWork.Rendered, Error>
-            if let facade = self.facade {
-                do {
-                    let uploaded = try await facade.upload(document)
-                    let handle: StudioUIResource = try await facade.read(
-                        "studio.ui.image.render",
-                        object: [
-                            "document": try facade.object(uploaded), "size": size,
-                            "geometry": wantsGeometry,
-                        ])
-                    let value: StudioUIImageRender = try await facade.download(handle)
-                    guard let preview = value.preview.image else {
-                        throw StudioError.unreadable(self.url.lastPathComponent)
-                    }
-                    rendered = .success(
-                        StudioImageEditorWork.Rendered(
-                            preview: preview, geometry: value.geometry?.image))
-                } catch { rendered = .failure(error) }
-            } else {
-                rendered = await Task.detached(priority: .userInitiated) {
-                    StudioImageEditorWork.render(
-                        document, source: source, size: size, geometry: wantsGeometry)
-                }.value
-            }
+            let rendered = await Task.detached(priority: .userInitiated) {
+                StudioImageEditorWork.render(
+                    document, source: source, size: size, geometry: wantsGeometry)
+            }.value
             guard self.rendering.isCurrent(request) else { return }
             self.renderingFast = false
             switch rendered {
@@ -299,29 +263,9 @@ final class StudioImageEditorModel {
         thumbnailTask?.cancel()
         let document = self.document
         thumbnailTask = work.start { [weak self] in
-            let thumbnails: [ImageFilterPreset: CGImage]
-            if let facade = self?.facade {
-                do {
-                    let uploaded = try await facade.upload(document)
-                    let handle: StudioUIResource = try await facade.read(
-                        "studio.ui.image.thumbnails",
-                        object: ["document": try facade.object(uploaded)])
-                    let values: [String: StudioUIImageData] = try await facade.download(handle)
-                    thumbnails = values.reduce(into: [:]) { result, value in
-                        if let preset = ImageFilterPreset(rawValue: value.key),
-                            let image = value.value.image
-                        {
-                            result[preset] = image
-                        }
-                    }
-                } catch {
-                    if !Task.isCancelled { self?.status = error.localizedDescription }; return
-                }
-            } else {
-                thumbnails = await Task.detached(priority: .utility) {
-                    StudioImageEditorWork.filterThumbnails(document, source: source)
-                }.value
-            }
+            let thumbnails = await Task.detached(priority: .utility) {
+                StudioImageEditorWork.filterThumbnails(document, source: source)
+            }.value
             guard let self, !Task.isCancelled else { return }
             self.filterThumbnails = thumbnails
         }
@@ -372,19 +316,6 @@ final class StudioImageEditorModel {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         guard panel.runModal() == .OK, let file = panel.url else { return }
-        if let facade {
-            layerTask?.cancel()
-            layerTask = work.start { [weak self] in
-                do {
-                    let handle: StudioUIResource = try await facade.read(
-                        "studio.ui.image.load", object: ["path": file.path])
-                    let data: StudioUIImageData = try await facade.download(handle)
-                    guard let self, !Task.isCancelled, let size = data.originalSize else { return }
-                    self.insertImageLayer(file, size: size)
-                } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
-            }
-            return
-        }
         guard let info = StudioImageIO.info(file) else { return }
         insertImageLayer(file, size: CGSize(width: info.width, height: info.height))
     }
@@ -458,18 +389,7 @@ final class StudioImageEditorModel {
         let strength = redactStrength
         let image = StudioImageSource(image: preview)
         faceTask = work.start { [weak self] in
-            let faces: [StudioRect]
-            if let facade = self?.facade, let document = self?.document {
-                do {
-                    let uploaded = try await facade.upload(document)
-                    faces = try await facade.read(
-                        "studio.ui.image.faces", object: ["document": try facade.object(uploaded)])
-                } catch {
-                    if !Task.isCancelled { self?.status = error.localizedDescription }; return
-                }
-            } else {
-                faces = await StudioImageEditorWork.faces(in: image)
-            }
+            let faces = await StudioImageEditorWork.faces(in: image)
             guard let self, !Task.isCancelled else { return }
             guard !faces.isEmpty else {
                 self.status = "No faces found in this picture."

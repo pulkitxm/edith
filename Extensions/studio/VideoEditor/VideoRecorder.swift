@@ -89,8 +89,7 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
             guard !commandsSuspended, !resetting else { throw CancellationError() }
             displays = content.displays
             windows = content.windows.filter {
-                $0.isOnScreen && $0.windowLayer == 0
-                    && $0.owningApplication?.processID != ProcessInfo.processInfo.processIdentifier
+                $0.frame.width > 100 && $0.frame.height > 100 && !($0.title ?? "").isEmpty
             }
             if source.isEmpty, let display = displays.first {
                 source = "display:\(display.displayID)"

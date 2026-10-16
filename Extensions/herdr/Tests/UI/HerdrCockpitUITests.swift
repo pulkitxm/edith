@@ -550,7 +550,8 @@ private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
         let store = HerdrStore(defaults: detailDefaults(), liveWatcher: { _ in })
         store.apply([detailHost])
         let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
-        main.identifier = NSUserInterfaceItemIdentifier("edith.extension.herdr")
+        main.identifier = NSUserInterfaceItemIdentifier("EdithMainWindow")
+        store.movePage(from: nil, to: main)
         let other = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
 
         #expect(store.detailOpen)

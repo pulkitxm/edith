@@ -9,9 +9,7 @@ enum KeepAwakeSurface {
         try await SurfaceCommandService.execute(
             providerID: "keepAwake", command: command, payload: payload,
             snapshot: { _ in
-                snapshot(
-                    preventingSleep: store.preventingSleep,
-                    requested: defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+                snapshot(requested: defaults.bool(forKey: AppStorageKeys.General.preventSleep))
             },
             perform: { action in
                 defaults.set(action == "enable", forKey: AppStorageKeys.General.preventSleep)
@@ -19,19 +17,14 @@ enum KeepAwakeSurface {
             })
     }
 
-    static func snapshot(preventingSleep: Bool, requested: Bool) -> SurfaceSnapshot {
+    static func snapshot(requested: Bool) -> SurfaceSnapshot {
         .init(
             providerID: "keepAwake",
-            rows: [
-                .init(
-                    "awake", title: "Keep awake", value: preventingSleep ? "Awake" : "Off",
-                    icon: "cup.and.saucer.fill")
-            ],
+            metrics: [.init("status", "Current state", requested ? "On" : "Off")],
             actions: [
                 .init(
-                    requested ? "disable" : "enable", requested ? "Allow sleep" : "Keep awake",
-                    "power")
-            ],
-            message: requested && !preventingSleep ? "The system could not prevent sleep." : nil)
+                    requested ? "disable" : "enable", requested ? "Turn off" : "Turn on",
+                    "moon.zzz")
+            ])
     }
 }

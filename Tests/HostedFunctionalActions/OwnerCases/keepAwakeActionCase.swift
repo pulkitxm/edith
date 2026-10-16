@@ -76,7 +76,7 @@ final class KeepAwakeActionCase: HostedFunctionalActionCase {
         let bytes = try await transport.readAuthoritative(
             "surface.snapshot", payload: request.encoded(providerID: Self.owner))
         let snapshot = try SurfaceSnapshot.decode(bytes, providerID: Self.owner)
-        guard snapshot.rows.first(where: { $0.id == "awake" })?.value == "Awake" else {
+        guard snapshot.metrics.first(where: { $0.id == "status" })?.value == "On" else {
             throw HostedFunctionalActionError.invalid
         }
         return try JSONSerialization.data(

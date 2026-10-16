@@ -1,8 +1,22 @@
 # Agent guide
 
-GitHub Actions only runs checks. Workflows live in `.github/workflows/`, and
-Dependabot in `.github/dependabot.yml`. A pull request runs the checks and a
-push to `main` runs them again, but nothing on GitHub publishes a release.
+Builds, tests and releases run locally. GitHub's macOS runners take hours for
+39 extensions, so agents do not use GitHub Actions for builds. Workflows live
+in `.github/workflows/` and Dependabot in `.github/dependabot.yml`, but nothing
+on GitHub publishes a release.
+
+## Skip GitHub CI
+
+- End every commit message and every pull request title with `[skip ci]`.
+  GitHub then runs no workflow for that commit. A squash merge takes its
+  subject from the pull request title, so the commit on `main` is skipped too.
+- Before merging, run `make local-checks` and the narrow tests for what you
+  changed: the extension's `make ci-extension-<id>` target or its own
+  Makefile `test` target, and `swift test --filter` for host packages.
+- Leave the marker out only when the maintainer asks for a GitHub run.
+- Cancel stale queued runs with `pukbot workflow cancel --repo pulkitxm/edith
+  --json <run-id>`.
+
 Releases are published locally from the maintainer's Mac after every commit
 that lands on `main`. See Releases below.
 

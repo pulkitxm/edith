@@ -111,7 +111,11 @@ final class StudioModel {
     var environment = StudioEnvironment()
     var installing: StudioEngine?
     var installLog: String?
-    var message: String?
+    var message: String? {
+        didSet { if message != nil { messageRevision &+= 1 } }
+    }
+    private(set) var messageRevision = 0
+    private var observedMessageRevision: Int?
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
     var commandEditor: VideoEditorOpenBridge.Presentation?
@@ -356,6 +360,7 @@ final class StudioModel {
                 facade.action("studio.ui.workflow.save", object: ["workflow": object]) {
                     [weak self] in
                     self?.editingWorkflow = nil
+                    self?.notice = "Saved \(draft.workflow.name)"
                 }
             } catch { draft.failure = error.localizedDescription }
             return
@@ -439,7 +444,12 @@ final class StudioModel {
 
     func add(_ urls: [URL]) {
         guard !isStopped else { return }
-        if let facade { facade.add(urls); return }
+        if let facade {
+            let added = StudioLibraryQuery.newItems(
+                StudioLibraryStore.expand(urls), existing: files)
+            facade.add(urls) { [weak self] in self?.announce(added: added) }
+            return
+        }
         let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
         let added = StudioLibraryQuery.newItems(StudioLibraryStore.expand(urls), existing: current)
         do {
@@ -449,6 +459,10 @@ final class StudioModel {
             message = error.localizedDescription
             return
         }
+        announce(added: added)
+    }
+
+    private func announce(added: [StudioFileItem]) {
         if added.count == 1, let only = added.first {
             notice = "Added \(only.name)"
         } else if added.count > 1 {
@@ -507,7 +521,7 @@ final class StudioModel {
 
     func refreshFacts(for url: URL) {
         facts[url] = nil
-        if facade == nil { StudioThumbnails.shared.forget(url) }
+        StudioThumbnails.shared.forget(url)
     }
 
     func open(_ tool: StudioTool, with urls: [URL]) {
@@ -679,7 +693,10 @@ final class StudioModel {
     func trashProject(_ project: VideoProject.Listing) {
         guard !isStopped else { return }
         if let facade {
-            facade.action("studio.ui.project.trash", object: ["path": project.url.path]); return
+            facade.action("studio.ui.project.trash", object: ["path": project.url.path]) {
+                [weak self] in self?.notice = "Moved \(project.title) to Trash"
+            }
+            return
         }
         let id = UUID()
         projectRemovalTasks[id] = work.start { [weak self] in
@@ -786,9 +803,18 @@ final class StudioModel {
         environment = state.environment.value
         destinationMode = state.destinationMode
         destinationFolder = state.destinationFolder
+        let installed = installing
         installing = state.installing
         installLog = state.installLog
-        if let failure = state.message { message = failure }
+        if let installed, state.installing == nil, state.message == nil {
+            notice = "\(installed.title) is ready"
+        }
+        if let observed = observedMessageRevision {
+            if let failure = state.message, state.messageRevision != observed {
+                message = failure
+            }
+        }
+        observedMessageRevision = state.messageRevision
         selection.formIntersection(StudioLibraryQuery.urls(files))
         if let presentation = state.presentation, presentation.token != presentationToken {
             do {

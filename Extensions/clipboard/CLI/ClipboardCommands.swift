@@ -37,14 +37,9 @@ enum ClipboardBridge {
     {
         let all = try await entries()
         guard !all.isEmpty else {
-            let recording =
-                ClipboardCLIEnvironment.defaults.object(forKey: AppStorageKeys.Clipboard.enabled)
-                as? Bool ?? true
             throw CLIFailure.unavailable(
                 "the clipboard history is empty",
-                hint: recording
-                    ? "Edith records what you copy while it is running"
-                    : "turn the Clipboard extension on with `ed extensions enable clipboard`")
+                hint: "Edith records what you copy while it is running")
         }
         guard index >= 1, index <= all.count else {
             throw CLIFailure.notFound(

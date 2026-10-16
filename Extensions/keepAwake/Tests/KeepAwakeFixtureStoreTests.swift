@@ -35,15 +35,16 @@ import Testing
             "surface.snapshot", payload: request.encoded(providerID: "keepAwake"), store: store,
             defaults: defaults)
         #expect(
-            try SurfaceSnapshot.decode(initial, providerID: "keepAwake").rows.first?.value == "Off")
+            try SurfaceSnapshot.decode(initial, providerID: "keepAwake").metrics.first?.value
+                == "Off")
         let enable = SurfaceActionRequest(snapshot: request, actionID: "enable")
         let enabled = try await KeepAwakeSurface.execute(
             "surface.perform", payload: enable.encoded(providerID: "keepAwake"), store: store,
             defaults: defaults)
         #expect(store.preventingSleep)
         #expect(
-            try SurfaceSnapshot.decode(enabled, providerID: "keepAwake").rows.first?.value
-                == "Awake")
+            try SurfaceSnapshot.decode(enabled, providerID: "keepAwake").metrics.first?.value
+                == "On")
         await #expect(throws: ExtensionPeerError.self) {
             _ = try await KeepAwakeSurface.execute(
                 "surface.perform", payload: enable.encoded(providerID: "keepAwake"), store: store,
