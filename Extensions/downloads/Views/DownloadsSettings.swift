@@ -8,7 +8,6 @@ struct DownloadsSettings: View {
     private var tools: DownloadsTools { downloader.tools }
     @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
         var downloadKind = DownloadKind.post.rawValue
-    @State private var folderError: String?
 
     var body: some View {
         PageWorkspace {
@@ -20,21 +19,6 @@ struct DownloadsSettings: View {
                 })
         } content: {
             Form {
-                Section("Downloads") {
-                    EdithSegmentedPicker(
-                        "Default format", selection: $downloadKind,
-                        options: DownloadKind.allCases.map(\.rawValue),
-                        label: { DownloadKind(rawValue: $0)?.title ?? $0 })
-                    Text(
-                        "Audio uses your chosen audio folder. Other media defaults to Downloads/Edith. Every request can choose its own output folder."
-                    ).font(.edithText(.caption)).foregroundStyle(.secondary)
-                    LabeledContent("Audio folder") {
-                        Button("Choose folder...", action: chooseAudioFolder)
-                    }
-                    Text(downloader.defaultDirectory(for: .audio).path).font(.edithText(.caption))
-                        .textSelection(.enabled)
-                    if let folderError { Text(folderError).foregroundStyle(.red) }
-                }
                 Section("Download tools") {
                     Text(
                         "Add the tools required for the media you want to save."
@@ -57,6 +41,17 @@ struct DownloadsSettings: View {
                         tools.refresh(); downloader.checkAvailability()
                     }
                 }
+                Section("Downloads") {
+                    Picker("Default format", selection: $downloadKind) {
+                        ForEach(DownloadKind.allCases, id: \.rawValue) { kind in
+                            Text(kind.title).tag(kind.rawValue)
+                        }
+                    }
+                    Text(
+                        "Save videos, photos and entire posts. Install gallery-dl above for images and carousels. Audio defaults to Music; other media defaults to Downloads/Edith."
+                    ).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    Button("Open Downloads") { ExtensionPresentation.showWindow() }
+                }
             }.edithForm()
         }.pageTask {
             tools.refresh(); downloader.checkAvailability()
@@ -64,16 +59,5 @@ struct DownloadsSettings: View {
         .onChange(of: downloadKind) { _, value in
             if let kind = DownloadKind(rawValue: value) { downloader.setPreferredKind(kind) }
         }
-    }
-    private func chooseAudioFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        panel.message = "Choose where audio downloads are saved"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        downloader.setAudioDirectory(url)
-        folderError = nil
     }
 }

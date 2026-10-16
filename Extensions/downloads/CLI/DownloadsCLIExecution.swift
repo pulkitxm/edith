@@ -94,3 +94,24 @@ import Foundation
         try await mutate(.cancel(id: nil, includeQueued: true, reason: "Cancelled")).mutation
     }
 }
+
+enum DownloadsCLIAliases {
+    static let names = ["downloads", "dl"]
+
+    static func expanded(_ catalog: Data) throws -> Data {
+        guard var root = try JSONSerialization.jsonObject(with: catalog) as? [String: Any],
+            let commands = root["commands"] as? [[String: Any]]
+        else { throw ExtensionPeerError.invalidRequest }
+        var all = commands
+        for name in names {
+            for var command in commands {
+                guard var route = command["route"] as? [String], !route.isEmpty else { continue }
+                route[0] = name
+                command["route"] = route
+                all.append(command)
+            }
+        }
+        root["commands"] = all
+        return try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
+    }
+}

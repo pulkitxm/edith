@@ -281,7 +281,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         "machines": ["machines"], "herdr": ["herdr"], "quinjet": ["quinjet"],
         "studio": ["studio"], "database": ["database"], "docs": ["docs"],
         "latex": ["latex"], "companion": ["companion"], "bifrost": ["bifrost"],
-        "plugins": ["skills"], "downloads": ["download"], "seoAudit": ["seo"],
+        "plugins": ["skills"], "downloads": ["download", "downloads", "dl"], "seoAudit": ["seo"],
         "codeStats": ["code-stats"], "clipboard": ["clipboard"], "attention": ["attention"],
         "notchShelf": ["shelf", "browser"], "colorPicker": ["color", "colour"],
         "emoji": ["emoji"], "presenter": ["presenter"], "lidAwake": ["lid-awake"],

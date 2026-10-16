@@ -28,8 +28,10 @@ final class ExtensionRuntime: NSObject {
             self.activeCalls += 1
             defer { self.activeCalls -= 1 }
             if command == "downloads.cli.catalog" {
-                return try ExtensionCLICatalog.data(
-                    DownloadCommand.self, owner: "downloads", payload: payload, streaming: true)
+                return try DownloadsCLIAliases.expanded(
+                    ExtensionCLICatalog.data(
+                        DownloadCommand.self, owner: "downloads", payload: payload,
+                        streaming: true))
             }
             if command.hasPrefix("downloads.cli.") {
                 if self.cliStreams == nil {

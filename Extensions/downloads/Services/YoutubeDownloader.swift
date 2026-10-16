@@ -298,6 +298,7 @@ public final class YoutubeDownloader {
         self.remote = remote
         tools = remote.map { DownloadsTools(remote: $0) } ?? .shared
         observesWorker = start
+        if remote != nil { tools.didChange = { [weak self] in self?.checkAvailability() } }
         guard start else { return }
         checkAvailability()
         streamTask = Task { [weak self, client] in
@@ -328,10 +329,10 @@ public final class YoutubeDownloader {
             unavailableReason = problem
         } else if !snapshot.enabled {
             unavailableReason =
-                "Downloads are disabled."
+                "Downloads are disabled. Enable the Downloads extension to continue."
         } else if snapshot.executable == nil {
             unavailableReason =
-                "yt-dlp is not installed. Install yt-dlp in Downloads settings to save media."
+                "yt-dlp is not installed. Open Downloads extension settings to install it."
         } else if ytdlpVersion != nil {
             unavailableReason = nil
         }
@@ -378,7 +379,7 @@ public final class YoutubeDownloader {
                 unavailableReason =
                     status.installed
                     ? nil
-                    : "yt-dlp is not installed. Install yt-dlp in Downloads settings to save media."
+                    : "yt-dlp is not installed. Open Downloads extension settings to install it."
                 ytdlpVersion = status.version
             } catch is CancellationError {
                 return
@@ -546,14 +547,15 @@ public final class YoutubeDownloader {
     private func remoteResult(_ id: UUID?, action: String, directory: URL? = nil) {
         guard !stopped else { return }
         guard let remote else { return }
+        let silent = action == "open" || action == "reveal"
         let token = UUID()
         mutationTasks[token] = Task {
             defer { mutationTasks[token] = nil }
             do {
                 try await remote.perform(.init(action: action, id: id, directory: directory))
                 try Task.checkCancellation()
-                checkAvailability()
-            } catch { if !Task.isCancelled { errorMessage = error.localizedDescription } }
+                if !silent { checkAvailability() }
+            } catch { if !Task.isCancelled, !silent { errorMessage = error.localizedDescription } }
         }
     }
 

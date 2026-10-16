@@ -716,7 +716,7 @@
       "sources": [
         {
           "path": "Extensions/downloads/Runtime.swift",
-          "sha256": "865367cf8e97f18c165c11150f4789d878bdd4bb304cdc63b43a3b6eaa00b8fb"
+          "sha256": "f613270c7fc2f79c1d4275326337653754e2c451921010028e1a5d8dee7cb2dd"
         },
         {
           "path": "Extensions/downloads/DownloadsUIBridge.swift",
