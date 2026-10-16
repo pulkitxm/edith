@@ -227,7 +227,7 @@ struct RateLimitsDialsView: View {
                         .padding(UIScale.pt(presentation?.tile.dense == true ? 8 : 12))
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .background(
-                            Color.secondary.opacity(0.06),
+                            DashSkin.paper(dark),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                     }
                 }
@@ -243,7 +243,7 @@ struct RateLimitsDialsView: View {
                 Text("\(Int(window.percent))% used").font(.edithText(.caption)).monospacedDigit()
             }
             GeometryReader { proxy in
-                Capsule().fill(Color.secondary.opacity(0.15))
+                Capsule().fill(DashSkin.line(dark))
                     .overlay(alignment: .leading) {
                         Capsule().fill(
                             presentation?.tile.accent == false
