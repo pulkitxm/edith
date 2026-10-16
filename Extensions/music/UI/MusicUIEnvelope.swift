@@ -131,6 +131,15 @@ enum EmbeddedMusicUIActionKind: String, Codable, CaseIterable, Sendable {
     case connectYoutube, disconnectYoutube, reloadYoutube, openChrome
     case videoOpen, videoClose
     case crossfade, fadeLength, barCollapsed, barAutoHide, gridView, installTool, refreshTools
+
+    var mutatesLibrary: Bool {
+        switch self {
+        case .createFolder, .move, .rename, .delete, .renameFolder, .deleteFolder, .chooseLibrary:
+            true
+        default:
+            false
+        }
+    }
 }
 
 struct EmbeddedMusicUIAction: Codable, Sendable {

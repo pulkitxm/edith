@@ -157,6 +157,7 @@ import SwiftUI
     private weak var presentedController: NSViewController?
     private var closed = false
     private var detached = false
+    private var keysHeld = false
     var isMain: Bool { location == "main" }
     var usesRemoteClient: Bool { client != nil }
     var isRetained: Bool { !closed && (pending || presentedController != nil) }
@@ -212,8 +213,13 @@ import SwiftUI
         }
     }
 
+    private var holdsKeys: Bool {
+        client != nil && ["main", "music.footer", "music.sidebar"].contains(location)
+    }
+
     func attach() {
         if let client { EmbeddedMusicRemote.shared.configure(client) }
+        if holdsKeys, !keysHeld { keysHeld = true; EmbeddedMusicKeyMonitor.acquire() }
     }
 
     func matches(_ context: NSDictionary) -> Bool {
@@ -283,6 +289,7 @@ import SwiftUI
         beginShutdown()
         guard !detached else { return }
         detached = true
+        if keysHeld { keysHeld = false; EmbeddedMusicKeyMonitor.release() }
         if let client { EmbeddedMusicRemote.shared.detach(client) }
     }
 }

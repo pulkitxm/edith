@@ -33,12 +33,12 @@ enum EmbeddedMusicSceneRoute: String, CaseIterable {
         case .footer:
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    EmbeddedMusicSceneLoad { EmbeddedMusicFooterScene() }
+                    EmbeddedMusicSceneLoad { EmbeddedMusicFooterScene().musicWindowDetail() }
                 })
         case .sidebar:
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    EmbeddedMusicSceneLoad { EmbeddedMusicSidebarScene() }
+                    EmbeddedMusicSceneLoad { EmbeddedMusicSidebarScene().musicWindowDetail() }
                 })
         case .detail:
             return NSHostingController(

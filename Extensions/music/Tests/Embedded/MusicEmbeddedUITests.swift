@@ -248,9 +248,9 @@ import Testing
         let invalidData = try JSONEncoder().encode(invalid)
         remote.configure { _, _ in invalidData }
         remote.rescan()
-        for _ in 0..<20 where remote.libraryError == nil { await Task.yield() }
-        #expect(remote.libraryError != nil)
-        #expect(remote.tracks.isEmpty)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(remote.libraryError == nil)
+        #expect(!remote.entriesLoaded)
         var pending: CheckedContinuation<Data, Error>?
         var reads = 0
         let encoded = try JSONEncoder().encode(state())
@@ -336,8 +336,8 @@ import Testing
         for _ in 0..<20 { await Task.yield() }
         #expect(levels.level == EmbeddedPlaybackLevel.neutral)
         remote.configure { _, _ in try JSONEncoder().encode(2.0) }
-        for _ in 0..<20 where remote.libraryError == nil { await Task.yield() }
-        #expect(remote.libraryError != nil)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(remote.libraryError == nil)
         #expect(levels.level == EmbeddedPlaybackLevel.neutral)
     }
 

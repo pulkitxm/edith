@@ -965,7 +965,7 @@ private struct EmbeddedDownloadThumb: View {
             if EmbeddedMediaDownloadInput.isDirectImage(url)
                 || EmbeddedYoutubeDownloader.thumbnailURL(for: url) != nil
             {
-                EmbeddedDownloadImage(url: url, placeholder: { placeholder })
+                EmbeddedDownloadImage(url: url, height: height, placeholder: { placeholder })
 
             } else {
                 placeholder
