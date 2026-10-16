@@ -623,7 +623,10 @@ struct MachinesTerminalCommand: AsyncParsableCommand {
 
 enum MachineTerminalBroadcastCLI {
     static func machine(_ query: String) throws -> Machine {
-        if ["local", "localhost", "this mac"].contains(query.lowercased()) { return .local }
+        let normalized = query.lowercased().replacingOccurrences(of: " ", with: "-")
+        if ["local", "localhost", "this-mac", "thismac", "mac"].contains(normalized) {
+            return .local
+        }
         let machines = [Machine.local] + MachineDirectory.load().filter { $0.id != Machine.localID }
         return try MachineDirectory.resolve(query, in: machines)
     }

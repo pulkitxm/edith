@@ -12,12 +12,11 @@ struct MachineProcessesTab: View {
     let session: MachineSession
     @Environment(\.compactLayout) private var compact
     @Environment(\.machineViewPresented) private var presented
-    @State private var fallback = MachineProcessListModel()
     @State private var pendingKill: MachineProcess?
     @State private var message: String?
     @State private var columns = TableColumnCustomization<MachineProcess>()
 
-    private var model: MachineProcessListModel { fallback }
+    private var model: MachineProcessListModel { MachineProcessModels.model(for: session.id) }
 
     var body: some View {
         @Bindable var model = model

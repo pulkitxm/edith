@@ -76,7 +76,7 @@ struct MachineTerminalTab: View {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
                     wantsFocus: wantsFocus,
-                    onDropFiles: uploadDrop,
+                    onDropFiles: session.isLocal ? nil : uploadDrop,
                     onFocus: onFocus, hostPaneAction: hostPaneAction
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -17,6 +17,7 @@ final class FinderModel {
     var path: String
     var entries: [RemoteFileEntry] = [] { didSet { updateEntryProjection() } }
     let listingLoad = ContentLoad()
+    private let mutationLoad = ContentLoad()
     var loading: Bool { listingLoad.isRunning }
     var errorMessage: String?
     var statusMessage: String?
@@ -1449,7 +1450,8 @@ extension FinderModel {
     ) async {
         guard let client = session.uiClient else { return }
         let requestedPath = path
-        let request = listingLoad.begin()
+        let load = [.load, .places, .home, .search].contains(operation) ? listingLoad : mutationLoad
+        let request = load.begin()
         let value = MachineFileRequest(
             viewID: remoteViewID, machineID: session.id, operation: operation,
             path: path, selection: selection, text: text, paths: paths, permanently: permanently,
@@ -1457,7 +1459,7 @@ extension FinderModel {
         do {
             let task = Task { [self] in
                 try await client.files(value) { [weak self] progress in
-                    guard let self, listingLoad.isCurrent(request), path == requestedPath else {
+                    guard let self, load.isCurrent(request), path == requestedPath else {
                         return
                     }
                     self.progress = progress
@@ -1472,7 +1474,7 @@ extension FinderModel {
                 task.cancel()
             }
             try Task.checkCancellation()
-            guard listingLoad.isCurrent(request), path == requestedPath else { return }
+            guard load.isCurrent(request), path == requestedPath else { return }
             path = result.path; entries = result.entries; selection = result.selection
             freeSpaceKB = result.freeSpaceKB; places = result.places;
             searchResults = result.searchResults
@@ -1482,13 +1484,13 @@ extension FinderModel {
             pendingConflict = result.conflict.map {
                 PendingConflict(intent: $0.intent, destination: $0.destination, names: $0.names)
             }
-            listingLoad.complete(request)
+            load.complete(request)
         } catch {
-            guard !Task.isCancelled, listingLoad.isCurrent(request) else {
-                listingLoad.cancel(request); return
+            guard !Task.isCancelled, load.isCurrent(request) else {
+                load.cancel(request); return
             }
             errorMessage = error.localizedDescription
-            listingLoad.fail(request, message: error.localizedDescription)
+            load.fail(request, message: error.localizedDescription)
         }
     }
 }
