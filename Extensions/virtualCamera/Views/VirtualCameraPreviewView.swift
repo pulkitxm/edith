@@ -9,6 +9,7 @@ final class VirtualCameraPreviewDisplay: @unchecked Sendable {
     private var pending: CVPixelBuffer?
     private var scheduled = false
     @MainActor private(set) var current: CVPixelBuffer?
+    @MainActor private(set) var sequence = 0
     @MainActor private let views = NSHashTable<VirtualCameraPreviewNSView>.weakObjects()
     @MainActor var onAvailabilityChanged: ((Bool) -> Void)?
 
@@ -35,6 +36,7 @@ final class VirtualCameraPreviewDisplay: @unchecked Sendable {
         guard let next else { return }
         let firstFrame = current == nil
         current = next
+        sequence &+= 1
         for view in views.allObjects { view.show(next) }
         if firstFrame { onAvailabilityChanged?(true) }
     }

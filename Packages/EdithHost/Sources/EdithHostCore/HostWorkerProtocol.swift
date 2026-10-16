@@ -136,6 +136,7 @@ public struct HostWorkerRequest: Codable, Sendable {
 }
 
 public struct HostWorkerResponse: Codable, Sendable {
+    public static let preventsQuitMessage = "preventsQuit"
     public let token: UUID
     public let ok: Bool
     public let version: String?
@@ -331,6 +332,19 @@ public struct HostWorkerFrames: Sendable {
         guard data.count <= maximumBytes else { throw HostWorkerError.invalidResponse }
         data.append(10)
         return data
+    }
+}
+
+extension HostWorkerError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .exited: "The extension process exited before it finished starting."
+        case .timedOut: "The extension process did not answer in time."
+        case .invalidResponse: "The extension process sent an invalid response."
+        case .rejected: "The extension process rejected the request."
+        case .stillRunning: "The extension process is still running."
+        case let .disableRejected(message): message
+        }
     }
 }
 

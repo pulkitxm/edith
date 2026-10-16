@@ -9,6 +9,11 @@ import Testing
             HostContract.permitsLaunching(
                 identifier: "com.pulkit.edith",
                 bundleURL: URL(fileURLWithPath: "/Applications/Edith.app")))
+        #expect(
+            HostContract.permitsLaunching(
+                identifier: "com.pulkit.edith",
+                bundleURL: URL(fileURLWithPath: "/Users/synthetic/Applications/Edith.app"),
+                homeDirectory: URL(fileURLWithPath: "/Users/synthetic")))
         for path in ["/synthetic/dist/Edith.app", "/Applications/Edith Copy.app", "/tmp/Edith.app"]
         {
             let bundle = URL(fileURLWithPath: path)

@@ -17,19 +17,9 @@ struct BifrostSettings: View {
     var context: BifrostUIContext? = nil
     var body: some View {
         PageWorkspace {
-            PageHeader(
-                "Bifrost",
-                accessory: {
-                    Text("Apps, commands, clipboard history and file search").font(
-                        .edithText(.caption)
-                    ).foregroundStyle(.secondary)
-                })
+            PageHeader("Bifrost")
         } content: {
-            if context == nil || context?.loaded == true {
-                Form { BifrostRows() }.formStyle(.grouped)
-            } else {
-                PageLoading(state: .loading, layout: .cards) { EmptyView() }
-            }
+            Form { BifrostRows() }.formStyle(.grouped).edithForm()
         }.pageTask { await context?.load() }
     }
 }

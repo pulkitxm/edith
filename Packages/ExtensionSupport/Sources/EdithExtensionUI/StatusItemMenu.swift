@@ -24,7 +24,7 @@ public enum StatusItemMenu {
     public static func show(from item: NSStatusItem) {
         let menu = NSMenu()
         let open = NSMenuItem(
-            title: "Open Settings", action: #selector(StatusMenuHandler.open), keyEquivalent: "")
+            title: "Open Edith", action: #selector(StatusMenuHandler.open), keyEquivalent: "")
         open.target = handler
         menu.addItem(open)
         menu.addItem(.separator())
@@ -44,13 +44,19 @@ private final class StatusMenuHandler: NSObject {
     }
 
     @objc func quit() {
+        MainActor.assumeIsolated { StatusItemQuit.perform() }
+    }
+}
+
+enum StatusItemQuit {
+    @MainActor
+    static func perform() {
         if let host = NSRunningApplication(processIdentifier: getppid()),
             host.bundleIdentifier != nil
         {
             host.terminate()
         } else {
-            MainActor.assumeIsolated { NSApp.terminate(nil) }
+            NSApp.terminate(nil)
         }
     }
-
 }

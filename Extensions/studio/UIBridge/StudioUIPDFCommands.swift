@@ -11,11 +11,6 @@ struct StudioUIPDFLoad: Codable, Sendable {
     let failure: String?
 }
 
-struct StudioUIPDFChange: Codable, Sendable {
-    let snapshot: PDFEditSession.Snapshot
-    let status: String?
-}
-
 struct StudioUISignature: Codable, Sendable {
     let url: URL
     let image: StudioUIImageData
@@ -35,7 +30,6 @@ struct StudioUIVisualDifference: Codable, Sendable {
 @MainActor enum StudioUIPDFCommands {
     private static let fields: [String: Set<String>] = [
         "studio.ui.pdf.load": ["path", "password"],
-        "studio.ui.pdf.change": ["path", "snapshot", "action", "parameters"],
         "studio.ui.pdf.export": ["path", "snapshot", "output", "suffix", "flatten"],
         "studio.ui.pdf.signatures.list": [],
         "studio.ui.pdf.signatures.save": ["image"],
@@ -95,120 +89,39 @@ struct StudioUIVisualDifference: Codable, Sendable {
                         resource: nil, needsPassword: needsPassword,
                         wrongPassword: wrongPassword, failure: error.localizedDescription))
             }
-        case "studio.ui.pdf.export", "studio.ui.pdf.change":
+        case "studio.ui.pdf.export":
             let url = try path(object, "path")
             let snapshot: PDFEditSession.Snapshot = try consume(
                 object["snapshot"], resources: resources)
             guard let session = PDFEditSession(snapshot: snapshot, source: url) else {
                 throw StudioError.unreadable(url.lastPathComponent)
             }
-            if operation == "studio.ui.pdf.export" {
-                guard let flatten = object["flatten"] as? Bool,
-                    let suffix = object["suffix"] as? String,
-                    StudioPDFEditorMode.allCases.contains(where: { $0.suffix == suffix })
-                else { throw ExtensionPeerError.invalidRequest }
-                let target =
-                    try (object["output"] as? String).map(StudioCommands.localPath)
-                    ?? StudioPDFEditorText.defaultOutput(
-                        for: url, suffix: suffix, destination: model.destination)
-                return try encoder.encode(
-                    work.start { progress in
-                        let task = Task.detached(priority: .userInitiated) {
-                            try await session.export(
-                                to: target, flatten: flatten, progress: progress)
-                        }
-                        try await withTaskCancellationHandler {
-                            try await task.value
-                        } onCancel: {
-                            task.cancel()
-                        }
-                        try Task.checkCancellation()
-                        model.add([target])
-                        model.recordSaved(
-                            toolID: "pdf."
-                                + (StudioPDFEditorMode.allCases.first(where: { $0.suffix == suffix }
-                                )?.rawValue ?? "annotate"), title: "PDF editor", outputs: [target])
-                        return try JSONEncoder().encode(target)
-                    })
-            }
-            guard let action = object["action"] as? String,
-                let parameters = object["parameters"] as? [String: Any]
+            guard let flatten = object["flatten"] as? Bool,
+                let suffix = object["suffix"] as? String,
+                StudioPDFEditorMode.allCases.contains(where: { $0.suffix == suffix })
             else { throw ExtensionPeerError.invalidRequest }
-            let allowed: Set<String>
-            switch action {
-            case "insert": allowed = ["file", "page"]
-            case "extract": allowed = ["pages", "output"]
-            case "trim", "fields": allowed = []
-            case "redactions": allowed = ["terms", "emails", "phones", "cards"]
-            default: throw ExtensionPeerError.invalidRequest
-            }
-            guard Set(parameters.keys) == allowed else { throw ExtensionPeerError.invalidRequest }
+            let target =
+                try (object["output"] as? String).map(StudioCommands.localPath)
+                ?? StudioPDFEditorText.defaultOutput(
+                    for: url, suffix: suffix, destination: model.destination)
             return try encoder.encode(
-                work.start { _ in
+                work.start { progress in
                     let task = Task.detached(priority: .userInitiated) {
-                        try Task.checkCancellation()
-                        let status: String?
-                        switch action {
-                        case "insert":
-                            guard let page = parameters["page"] as? Int,
-                                (0...session.pageCount).contains(page)
-                            else {
-                                throw ExtensionPeerError.invalidRequest
-                            }
-                            _ = try session.insertPages(from: path(parameters, "file"), at: page)
-                            status = nil
-                        case "extract":
-                            guard let pages = parameters["pages"] as? [Int], !pages.isEmpty,
-                                pages.count <= 50_000,
-                                pages.allSatisfy({ (0..<session.pageCount).contains($0) })
-                            else { throw ExtensionPeerError.invalidRequest }
-                            let target = try path(parameters, "output")
-                            try session.extractPages(pages, to: target)
-                            status =
-                                "Saved \(pages.count) page\(pages.count == 1 ? "" : "s") to \(target.lastPathComponent)."
-                        case "trim":
-                            let count = try session.trimMargins(pages: Array(0..<session.pageCount))
-                            status =
-                                count == 0
-                                ? "No white margins to trim."
-                                : "Trimmed \(count) page\(count == 1 ? "" : "s")."
-                        case "fields":
-                            let count = session.detectFormFields()
-                            status =
-                                count == 0
-                                ? "No blanks or boxes found to turn into fields."
-                                : "Added \(count) field\(count == 1 ? "" : "s")."
-                        case "redactions":
-                            guard let terms = parameters["terms"] as? String,
-                                terms.utf8.count <= 65_536,
-                                let emails = parameters["emails"] as? Bool,
-                                let phones = parameters["phones"] as? Bool,
-                                let cards = parameters["cards"] as? Bool
-                            else { throw ExtensionPeerError.invalidRequest }
-                            var patterns: [PDFRedaction.Pattern] = []
-                            if emails { patterns.append(.email) };
-                            if phones { patterns.append(.phone) };
-                            if cards { patterns.append(.card) }
-                            let count = session.markRedactions(
-                                terms: PDFRedaction.terms(from: terms), patterns: patterns)
-                            status =
-                                count == 0
-                                ? "No matches found."
-                                : "Marked \(count) match\(count == 1 ? "" : "es")."
-                        default: throw ExtensionPeerError.invalidRequest
-                        }
-                        try Task.checkCancellation()
-                        guard let snapshot = session.snapshot() else {
-                            throw StudioError.unreadable(url.lastPathComponent)
-                        }
-                        return StudioUIPDFChange(snapshot: snapshot, status: status)
+                        try await session.export(
+                            to: target, flatten: flatten, progress: progress)
                     }
-                    let value = try await withTaskCancellationHandler {
+                    try await withTaskCancellationHandler {
                         try await task.value
                     } onCancel: {
                         task.cancel()
                     }
-                    return try JSONEncoder().encode(resources.store(JSONEncoder().encode(value)))
+                    try Task.checkCancellation()
+                    model.add([target])
+                    model.recordSaved(
+                        toolID: "pdf."
+                            + (StudioPDFEditorMode.allCases.first(where: { $0.suffix == suffix }
+                            )?.rawValue ?? "annotate"), title: "PDF editor", outputs: [target])
+                    return try JSONEncoder().encode(target)
                 })
         case "studio.ui.pdf.signatures.list":
             let signatures = try await BlockingWork.perform {

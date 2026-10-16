@@ -242,18 +242,17 @@ final class AppVolumeTap: AudioMixerTapControlling, @unchecked Sendable {
 
     func destroy() {
         if let procID {
-            guard AudioDeviceStop(aggregateID, procID) == noErr,
-                AudioDeviceDestroyIOProcID(aggregateID, procID) == noErr
-            else { return }
+            AudioDeviceStop(aggregateID, procID)
+            AudioDeviceDestroyIOProcID(aggregateID, procID)
             queue.sync {}
         }
         procID = nil
         if aggregateID != 0 {
-            guard AudioHardwareDestroyAggregateDevice(aggregateID) == noErr else { return }
+            AudioHardwareDestroyAggregateDevice(aggregateID)
             aggregateID = 0
         }
         if tapID != 0 {
-            guard AudioHardwareDestroyProcessTap(tapID) == noErr else { return }
+            AudioHardwareDestroyProcessTap(tapID)
             tapID = 0
         }
         retirement.continuation.finish()

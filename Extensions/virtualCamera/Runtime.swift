@@ -3,6 +3,7 @@ import AppKit
 import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
+import Carbon.HIToolbox
 import Foundation
 import CoreMedia
 import CoreMediaIO
@@ -25,7 +26,7 @@ final class ExtensionRuntime: NSObject {
             guard let worker = self?.worker, !worker.draining else {
                 throw ExtensionPeerError.unavailable
             }
-            if command.hasPrefix("camera."),
+            if command == "camera.snapshot",
                 SurfacePrivacyState.hides(
                     .ability("virtualCamera"),
                     values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
@@ -186,10 +187,11 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost { VirtualCameraPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize": worker?.installHotKey()
         case "stop":
             stopUI()
             commands.shutdown(); cliStreams?.stop()
+            HotKeyRegistrar.shutdown()
             worker?.engine.shutdown()
             worker = nil
             InputFocus.uninstall()
@@ -327,6 +329,7 @@ enum CameraCarrierLaunchEnvironment {
     private let actions = VirtualCameraActionBridge()
     private let manager: VirtualCameraExtensionManager
     private var drainTask: Task<Void, Never>?
+    private var microphoneWarmup: Task<Void, Never>?
     private(set) var draining = false
     static let pendingKey = "cameraPendingDisable"
 
@@ -425,14 +428,36 @@ enum CameraCarrierLaunchEnvironment {
             || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
         if !draining {
             engine.start(); actions.install(engine: engine)
-
+            installHotKey()
+            if !fixture {
+                let privilege = ExtensionPrivilegedClient(
+                    owner: "virtualCamera", source: layout.privileged, version: version)
+                microphoneWarmup = Task { [client] in
+                    guard privilege.status == .enabled else { return }
+                    try? await client.prepareMicrophone()
+                }
+            }
         }
     }
 
     func markDraining() { draining = true }
 
+    func installHotKey() {
+        guard !fixture, !draining else { return }
+        HotKeyRegistrar.configure(
+            ExtensionHotKeyBinding(
+                id: HotKeyCatalog.virtualCamera, carbonID: 11,
+                prefix: "virtualCameraHotKey", defaultCode: kVK_ANSI_V,
+                defaultModifiers: controlKey | optionKey | cmdKey))
+        HotKeyRegistrar.install(HotKeyCatalog.virtualCamera) { [engine] in
+            engine.togglePause()
+        }
+    }
+
     func beginDrain() {
         draining = true
+        microphoneWarmup?.cancel()
+        HotKeyRegistrar.shutdown()
         ui.beginSuspension()
         model.beginSuspension()
         manager.beginSuspension()

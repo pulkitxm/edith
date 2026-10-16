@@ -1504,6 +1504,27 @@ private struct SurfaceWidgetPreview: View {
                             in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
                 }
             }
+        case .ability("audioMixer"):
+            VStack(spacing: UIScale.pt(6)) {
+                ForEach(
+                    [
+                        ("Music", "sample.music", "65%", "speaker.wave.2"),
+                        ("Browser", "sample.browser", "Muted", "speaker.slash"),
+                    ], id: \.0
+                ) { row in
+                    HStack(spacing: UIScale.pt(8)) {
+                        Image(systemName: row.3).frame(width: UIScale.pt(20))
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(row.0).font(.edithText(.callout))
+                            if tile.showDetails {
+                                Text(row.1).font(.edithText(.caption)).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Text(row.2).font(.edithText(.callout)).monospacedDigit()
+                    }
+                }
+            }
         case .ability:
             Label(tile.widget.summary, systemImage: tile.widget.icon)
                 .font(.edithText(.caption)).foregroundStyle(.secondary)

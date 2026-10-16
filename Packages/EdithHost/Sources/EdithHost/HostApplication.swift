@@ -16,7 +16,7 @@ struct HostApplication: App {
     private var runtime: HostRuntime { delegate.runtime }
 
     var body: some Scene {
-        WindowGroup("Edith", id: "main") {
+        Window("Edith", id: "main") {
             GeometryReader { geometry in
                 Group {
                     if let marketplace = runtime.marketplace {
@@ -30,7 +30,7 @@ struct HostApplication: App {
                                     $0, presenter: runtime.remotePresenter)
                             },
                             coreOnline: runtime.coreServices?.online ?? false,
-                            coreSummary: runtime.coreServices?.activityLabel ?? "Starting",
+                            coreSummary: runtime.coreServices?.sidebarSummary ?? "Starting",
                             sectionWindows: runtime.sectionWindows,
                             windowNavigation: runtime.windowNavigation,
                             musicSlots: runtime.musicSlots
@@ -40,7 +40,7 @@ struct HostApplication: App {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
                     } else {
-                        Text("Opening Edith")
+                        Color.clear
                     }
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
@@ -79,10 +79,7 @@ struct HostApplication: App {
             CommandGroup(replacing: .appTermination) {
                 Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")
             }
-            CommandGroup(after: .appInfo) {
-                Button("Check for App Updates") { runtime.updater.checkForUpdates() }.disabled(
-                    !runtime.updater.available)
-            }
+            CommandGroup(replacing: .newItem) {}
         }
         Settings { HostSettingsRedirect() }
     }

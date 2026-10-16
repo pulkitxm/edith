@@ -422,6 +422,59 @@ import Testing
         #expect(await restarted.sessions.shutdown())
     }
 
+    @Test func startFailureDuringUpdateRetriesUntilTheExtensionIsActive() async throws {
+        let fixture = try Fixture(failingWorkers: 1..<3)
+        defer { fixture.clean() }
+        fixture.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(50)) }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        await #expect(throws: HostWorkerError.rejected) {
+            try await fixture.sessions.applyUpdate(fixture.package("1.1.0"))
+        }
+        #expect(fixture.sessions.states["sample"] == .failed)
+        #expect(
+            fixture.sessions.failureReasons["sample"]
+                == HostWorkerError.rejected.errorDescription)
+        try await fixture.waitUntil { fixture.sessions.states["sample"] == .active }
+        #expect(fixture.sessions.failureReasons["sample"] == nil)
+        #expect(fixture.sessions.failures.isEmpty)
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.processIdentifiers["sample"] != nil)
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func startFailureAtLaunchBacksOffThenRecoversOnTheNextTrigger() async throws {
+        let fixture = try Fixture(failingWorkers: 0..<4)
+        defer { fixture.clean() }
+        fixture.sessions.retryDelays = Array(repeating: .milliseconds(1), count: 3)
+        fixture.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(1)) }
+        let package = fixture.package("1.0.0")
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        await fixture.sessions.restore(packages: ["sample": package])
+        try await fixture.waitUntil { fixture.records.workers.count == 4 }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(fixture.records.workers.count == 4)
+        #expect(fixture.sessions.states["sample"] == .failed)
+        #expect(fixture.sessions.failureReasons["sample"] != nil)
+        await fixture.sessions.retryFailed(packages: ["sample": package])
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.failureReasons["sample"] == nil)
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func shutdownCancelsPendingRetries() async throws {
+        let fixture = try Fixture(failingWorkers: 0..<1)
+        defer { fixture.clean() }
+        fixture.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(50)) }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        await fixture.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(fixture.sessions.states["sample"] == .failed)
+        await fixture.sessions.shutdown()
+        let created = fixture.records.workers.count
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(fixture.records.workers.count == created)
+        #expect(fixture.sessions.states["sample"] == .failed)
+    }
+
     @MainActor private final class WorkerRecords { var workers: [HostWorker] = [] }
 
     @MainActor private struct Fixture {
@@ -432,7 +485,8 @@ import Testing
 
         init(
             rejectVersion: String? = nil, rejectDisable: Bool = false,
-            suite existingSuite: String? = nil, mode: String? = nil
+            suite existingSuite: String? = nil, mode: String? = nil,
+            failingWorkers: Range<Int> = 0..<0
         ) throws {
             suite = existingSuite ?? "com.pulkit.edith.tests.sessions.\(UUID().uuidString)"
             defaults = try #require(UserDefaults(suiteName: suite))
@@ -451,7 +505,9 @@ import Testing
                     executable: URL(fileURLWithPath: "/usr/bin/python3"),
                     arguments: [
                         script.path,
-                        mode
+                        failingWorkers.contains(records.workers.count)
+                            ? "reject"
+                            : mode
                             ?? (package.version == rejectVersion
                                 ? "reject" : rejectDisable ? "reject-disable-once" : "normal"),
                     ], requestTimeout: .seconds(2))
@@ -466,6 +522,14 @@ import Testing
                 downloadURL: URL(
                     string: "https://github.com/example/app/releases/download/fixture/\(id).zip")!,
                 sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+        }
+
+        func waitUntil(_ condition: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(10)
+            while !condition() {
+                guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
 
         func clean() { defaults.removePersistentDomain(forName: suite) }

@@ -41,13 +41,27 @@ struct HostWorkflowPackageReview: Equatable {
 }
 
 @MainActor @Observable final class HostWorkflowOnboardingModel {
-    enum Stage: Equatable { case workflows, review, installing, finished }
+    enum Stage: Equatable {
+        case workflows, review, installing, finished
+
+        var position: Int {
+            switch self {
+            case .workflows: 0
+            case .review: 1
+            case .installing: 2
+            case .finished: 3
+            }
+        }
+    }
     enum InstallState: Equatable { case waiting, installing, ready, failed(String) }
     static let reviewPendingKey = HostSettingsCatalog.onboardingReviewPendingKey
     static let workflowKey = HostSettingsCatalog.workflowKey
     let entries: [HostExtension]
     private(set) var presented = false
-    private(set) var stage = Stage.workflows
+    private(set) var stage = Stage.workflows {
+        didSet { advancing = stage.position >= oldValue.position }
+    }
+    private(set) var advancing = true
     private(set) var workflow = HostWorkflow.custom
     private(set) var icloudBackup = true
     private(set) var selected = Set<String>()

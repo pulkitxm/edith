@@ -110,6 +110,7 @@ final class ControlPresentation {
     private(set) var error: String?
     let load = ContentLoad()
     var ready: Bool { load.hasContent }
+    private var synced = false
     var running: Bool { !stopped }
     let active: Bool
     private let defaults: UserDefaults
@@ -142,7 +143,7 @@ final class ControlPresentation {
             }
         baseline = ControlPresentationContract.values(
             from: defaults, keys: ControlPresentationContract.writable)
-        if !active { load.setContent() }
+        load.setContent()
         start()
     }
 
@@ -256,7 +257,7 @@ final class ControlPresentation {
         do {
             var data = try await invoke("emoji.ui.read", Data("{}".utf8))
             guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-            if !ready, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
+            if !synced, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
                 _ = try await invoke("emoji.ui.update", queued)
                 guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
                 if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
@@ -283,16 +284,14 @@ final class ControlPresentation {
             baseline = ControlPresentationContract.values(
                 from: defaults, keys: ControlPresentationContract.writable)
             state = packet.state
+            synced = true
             error = nil
             load.complete(request)
             applying = false
             IPC.post(IPC.Name.settingsChanged)
         } catch {
             if !stopped {
-                load.fail(request, error: error)
-                if !(error is CancellationError), !Task.isCancelled {
-                    self.error = error.localizedDescription
-                }
+                load.cancel(request)
             }
         }
     }
@@ -369,14 +368,7 @@ struct ControlSettingsHost<Content: View>: View {
                     Button("Retry", action: retry)
                 }.padding()
             }
-            if presentation.active, !presentation.ready {
-                Button("Load settings", action: retry).padding()
-            }
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .list, retry: retry
-            ) { content() }
+            content()
         }
         .pageRefresh(
             active: presentation.active && presentation.running,

@@ -82,6 +82,25 @@ import Testing
         #expect(model.stage == .workflows)
     }
 
+    @Test func helperMusicPlayerStateIsCopiedOnceWithoutOverwriting() {
+        let suite = Suite()
+        defer { suite.remove() }
+        suite.defaults.set(0.3, forKey: "musicVolume")
+        let legacy: [String: Any] = [
+            "musicVolume": 0.9, "musicLooping": true, "musicLastTrack": "Mock/Garden.mp3",
+            "musicLastPosition": 42.0, "unrelated": 1,
+        ]
+        HostLegacyMigration.migrateMusicPlayerState(defaults: suite.defaults, legacy: legacy)
+        #expect(suite.defaults.double(forKey: "musicVolume") == 0.3)
+        #expect(suite.defaults.bool(forKey: "musicLooping"))
+        #expect(suite.defaults.string(forKey: "musicLastTrack") == "Mock/Garden.mp3")
+        #expect(suite.defaults.double(forKey: "musicLastPosition") == 42)
+        #expect(suite.defaults.object(forKey: "unrelated") == nil)
+        suite.defaults.removeObject(forKey: "musicLooping")
+        HostLegacyMigration.migrateMusicPlayerState(defaults: suite.defaults, legacy: legacy)
+        #expect(suite.defaults.object(forKey: "musicLooping") == nil)
+    }
+
     @Test func everyLegacyAbilityMapsToAShippingExtension() throws {
         let manifest = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

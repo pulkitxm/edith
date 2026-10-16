@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionUI
+import ServiceManagement
 import SwiftUI
 
 struct HostBackgroundPage: View {
@@ -27,14 +28,12 @@ struct HostBackgroundPage: View {
     var body: some View {
         Form {
             Section("Status") {
-                LabeledContent(
-                    "Registration", value: services.online ? "Running with Edith" : "Not running")
+                LabeledContent("Registration", value: HostLoginItem.registration.title)
                 if let runtime = services.snapshot {
                     LabeledContent(
                         "Uptime",
-                        value: Duration.seconds(max(0, Date().timeIntervalSince(runtime.startedAt)))
-                            .formatted(
-                                .units(allowed: [.hours, .minutes, .seconds], width: .abbreviated)))
+                        value: HostCompactDuration.text(Date().timeIntervalSince(runtime.startedAt))
+                    )
                     LabeledContent(
                         "Memory",
                         value: ByteCountFormatter.string(
@@ -44,17 +43,35 @@ struct HostBackgroundPage: View {
                     DisclosureGroup("Technical details") {
                         LabeledContent(
                             "Build",
-                            value: Bundle.main.object(
-                                forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                            value: runtime.agent?.build
+                                ?? Bundle.main.object(
+                                    forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                                 ?? "Development")
                         LabeledContent("Process", value: String(runtime.pid))
-                        LabeledContent("Store", value: "Private task journal")
+                        if let schema = runtime.agent?.schemaVersion {
+                            LabeledContent("Store schema", value: String(schema))
+                        }
+                    }
+                } else if services.starting {
+                    SkeletonGroup {
+                        ForEach(["Uptime", "Memory", "CPU"], id: \.self) { title in
+                            LabeledContent(title) { SkeletonBlock(width: 90, height: 12) }
+                        }
                     }
                 }
                 HStack {
                     Button("Restart") { Task { await services.restart() } }.disabled(
-                        services.starting)
+                        services.starting || services.snapshot == nil)
                     Button("Copy log command") { services.copyLogCommand() }
+                    if HostLoginItem.registration.needsAttention {
+                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                    }
+                }
+                if HostLoginItem.registration == .awaitingApproval {
+                    Text(
+                        "macOS is waiting for you to allow Edith's background agent in "
+                            + "Login Items and Extensions."
+                    ).settingsCaption()
                 }
                 if let failure = services.panelFailure {
                     Text(failure).settingsCaption().foregroundStyle(.orange)
@@ -69,32 +86,25 @@ struct HostBackgroundPage: View {
                     marketplace: services.marketplace, presenter: presenter)
             }
             HostBackgroundJobsSection(model: model)
-            Section("Background tasks") {
-                if services.snapshot?.tasks.isEmpty != false {
-                    Text("Long-running actions appear here with their progress and result.")
-                        .settingsCaption()
-                }
-                ForEach((services.snapshot?.tasks ?? []).reversed()) { task in
-                    DisclosureGroup {
-                        LabeledContent("Task", value: task.id.uuidString)
-                        LabeledContent("Submitted", value: task.startedAt.formatted())
-                        if let finished = task.finishedAt {
-                            LabeledContent("Finished", value: finished.formatted())
-                        }
-                        if let message = task.message { Text(message).textSelection(.enabled) }
-                        if task.phase == .running {
-                            Button("Cancel task") { services.cancelTask(task.id) }
-                        }
-                    } label: {
-                        HStack {
-                            Text(task.title); Spacer();
-                            Text(task.phase.rawValue.capitalized).foregroundStyle(.secondary)
-                        }
+            HostBackgroundTasksSection(services: services)
+            Section("Diagnostics") {
+                Button {
+                    showingEvents = true
+                } label: {
+                    HStack {
+                        Label("Event timeline", systemImage: "waveform.path.ecg")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: UIScale.pt(16), height: UIScale.pt(20))
                     }
+                    .padding(.vertical, 6)
+                    .padding(.trailing, 8)
+                    .contentShape(Rectangle())
                 }
-                Text("Completed tasks remain available after restarting Edith.").settingsCaption()
+                .buttonStyle(.edith(.borderless))
             }
-            Section("Diagnostics") { Button("Event timeline") { showingEvents = true } }
         }
         .edithForm()
         .edithSheet(isPresented: $showingEvents) {

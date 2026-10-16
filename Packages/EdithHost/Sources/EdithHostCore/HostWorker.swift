@@ -202,6 +202,14 @@ public final class HostWorker {
         return try await request(HostWorkerRequest(operation: "status"))
     }
 
+    public func preventsQuit() async -> Bool {
+        guard ready,
+            let response = try? await request(
+                HostWorkerRequest(operation: "quitStatus"), timeout: .seconds(2))
+        else { return false }
+        return response.message == HostWorkerResponse.preventsQuitMessage
+    }
+
     public func prepareDisable(timeout: Duration? = nil) async throws {
         try await prepare(operation: "prepareDisable", timeout: timeout)
     }

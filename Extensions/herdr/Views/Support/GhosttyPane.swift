@@ -3,7 +3,9 @@ import EdithExtensionUI
 import GhosttyTerminal
 import SwiftUI
 
-extension GhosttyTerminalView: @retroactive DirectKeyboardInputResponder {}
+extension GhosttyTerminalView: @retroactive DirectKeyboardInputResponder,
+    @retroactive DirectScrollHandling
+{}
 
 extension GhosttyTheme {
     init(palette: TerminalPalette, fontSize: Double? = nil) {

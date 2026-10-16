@@ -120,7 +120,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             panel.show(
                 from: item, title: "System",
                 actions: [
-                    .init(title: "Open Settings…") { ExtensionPresentation.showWindow() }
+                    .init(title: "Open System…") { ExtensionPresentation.showWindow() }
                 ]
             ) {
                 SystemMenuReadings(snapshot: snapshot)

@@ -11,7 +11,7 @@ enum HostExtensionSettingsPolicy: Equatable {
             "presenter", "systemStats", "windowSweaters":
             .init(section: "extension", policy: .preferences)
         case "bifrost", "clipboard", "codeStats", "downloads", "lidAwake", "attention",
-            "appMaintenance", "studio", "quinjet", "notchShelf":
+            "appMaintenance", "studio", "quinjet", "notchShelf", "audioMixer":
             .init(section: "extension", policy: .active)
         case "jev": .init(section: "jev", policy: .active)
         case "usage": .init(section: "usage", policy: .active)

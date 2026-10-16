@@ -18,6 +18,14 @@ struct InputFocusTests {
                 characters: "a", modifiers: [], responder: EmbeddedKeyboardView()))
     }
 
+    @Test func commandFIsTheOnlySearchShortcut() {
+        #expect(InputFocus.isSearchShortcut(characters: "f", modifiers: [.command]))
+        #expect(InputFocus.isSearchShortcut(characters: "F", modifiers: [.command]))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: [.command, .shift]))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: []))
+        #expect(!InputFocus.isSearchShortcut(characters: "g", modifiers: [.command]))
+    }
+
     @Test func typeAheadOnlyTargetsTheOwningWindowAndUnregistersOnRemoval() {
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 260, height: 100))
         defer { window.orderOut(nil) }
