@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import QuartzCore
 
 @MainActor
@@ -11,6 +12,10 @@ final class HostNotchPanel: NSPanel {
             transferEvent = event
         }
         super.sendEvent(event)
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if TextEditingCommands.handle(event) { return true }
+        return super.performKeyEquivalent(with: event)
     }
     override var canBecomeKey: Bool { acceptsKeyFocus }
     override var canBecomeMain: Bool { false }
