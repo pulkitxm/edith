@@ -58,10 +58,11 @@ import Testing
         let object = try #require(
             try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         let accounts = try #require(object["accounts"] as? [[String: Any]])
-        #expect(Set(accounts[0].keys) == [
-            "id", "name", "authentication", "credential", "loginData", "remoteMachineID",
-            "isLoggedOut",
-        ])
+        #expect(
+            Set(accounts[0].keys) == [
+                "id", "name", "authentication", "credential", "loginData", "remoteMachineID",
+                "isLoggedOut",
+            ])
         #expect(accounts[1]["limitsProfileID"] as? String == limitsID.uuidString)
         #expect(object["defaultID"] as? String == tokenAccountID.uuidString)
         #expect(try JSONDecoder().decode(ClaudeAccountsState.self, from: encoded) == state)
@@ -80,9 +81,10 @@ import Testing
             id: tokenAccountID, eraseScopedSecret: { erased.record($0) })
         #expect(remaining.accounts.map(\.id) == [accountID] && remaining.defaultID == nil)
         #expect(
-            erased.values == [tokenAccountID, limitsID, pendingID].map {
-                directory.appendingPathComponent($0.uuidString, isDirectory: true)
-            })
+            erased.values
+                == [tokenAccountID, limitsID, pendingID].map {
+                    directory.appendingPathComponent($0.uuidString, isDirectory: true)
+                })
         let cleanup = try Data(contentsOf: directory.appendingPathComponent("limits-cleanup.json"))
         #expect(String(decoding: cleanup, as: UTF8.self) == "[]")
     }
@@ -92,7 +94,8 @@ import Testing
             fileURLWithPath:
                 "/Users/synthetic/Library/Application Support/Edith/Accounts", isDirectory: true
         ).appendingPathComponent(accountID.uuidString, isDirectory: true)
-        #expect(ClaudeAccountKeychain.service(profile: profile) == "Claude Code-credentials-3ec8c764")
+        #expect(
+            ClaudeAccountKeychain.service(profile: profile) == "Claude Code-credentials-3ec8c764")
         #expect(ClaudeAccountKeychain.service(profile: nil) == "Claude Code-credentials")
     }
 }
