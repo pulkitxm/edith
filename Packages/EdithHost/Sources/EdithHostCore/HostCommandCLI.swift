@@ -689,7 +689,8 @@ public struct HostCommandCLI: Sendable {
         else { return Data() }
         guard isatty(descriptor) == 0 else { throw HostCLIError.usage("Pipe input into stdin.") }
         var data = Data()
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        let idleTimeout: Duration = arguments.first == "latex" ? .seconds(120) : .seconds(5)
+        var deadline = ContinuousClock.now.advanced(by: idleTimeout)
         while ContinuousClock.now < deadline {
             try Task.checkCancellation()
             var event = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
@@ -703,6 +704,9 @@ public struct HostCommandCLI: Sendable {
             guard count >= 0 else { throw HostCLIError.usage("Could not read stdin.") }
             if count == 0 { return data }
             data.append(contentsOf: bytes.prefix(count))
+            if arguments.first == "latex" {
+                deadline = ContinuousClock.now.advanced(by: idleTimeout)
+            }
             guard data.count <= HostCLIInvocationContext.maximumInputBytes else {
                 throw HostCLIError.usage("Input exceeds 4 MiB.")
             }
