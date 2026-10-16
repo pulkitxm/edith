@@ -129,6 +129,11 @@ ci-comments:
 	bun scripts/strip-comments.mjs --selftest
 	bun scripts/strip-comments.mjs --check
 
+.PHONY: local-checks
+local-checks: ci-comments
+	bun test scripts/hosted-managed-views-contract.test.js scripts/hosted-original-shell-overlay.test.js scripts/ci-routing.test.js scripts/ci-test-plan.test.js scripts/hosted-native-owner-routing.test.js scripts/cli-docs.test.js scripts/generate-cli-docs-bundle.test.js
+	swift build --package-path Packages/EdithHost --target EdithHost -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
 .PHONY: ci-host-packaging-arguments
 ci-host-packaging-arguments:
 	bun test scripts/host-packaging-arguments.test.js scripts/build-install.test.js scripts/release-workflows.test.js --test-name-pattern 'host packaging and branch arguments|names each development build|DMG version preparation'
