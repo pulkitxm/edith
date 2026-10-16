@@ -119,6 +119,31 @@ import Testing
         #expect(!launch.local.contains("anything"))
     }
 
+    @Test func sharedClaudeOptionsJoinEveryClaudeLaunch() throws {
+        let defaults = Self.scratchDefaults()
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "", in: defaults)
+        let launch = HerdrLaunchOperations.agentLaunch(
+            kind: "Claude Code", name: "claude", pane: "w5:p1", options: .none,
+            defaults: defaults)
+        #expect(Array(launch.local.suffix(2)) == ["--", "--verbose"])
+        #expect(HerdrLaunchSettings.usesHerdrAgentStart(for: "Claude Code", in: defaults))
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "IS_DEMO=1", in: defaults)
+        #expect(!HerdrLaunchSettings.usesHerdrAgentStart(for: "Claude Code", in: defaults))
+        let exported = HerdrLaunchOperations.agentLaunch(
+            kind: "Claude Code", name: "claude", pane: "w5:p1", options: .none,
+            defaults: defaults)
+        #expect(exported.local.last == "export IS_DEMO=1; claude --verbose")
+        #expect(HerdrLaunchSettings.usesHerdrAgentStart(for: "Codex", in: defaults))
+        #expect(throws: ClaudeAccountError.self) {
+            try HerdrLaunchSettings.setSharedClaudeLaunch(
+                arguments: "", environment: "ANTHROPIC_API_KEY=synthetic", in: defaults)
+        }
+        #expect(HerdrLaunchSettings.sharedEnvironment(in: defaults) == "IS_DEMO=1")
+        #expect(defaults.string(forKey: "herdr.sharedClaudeArguments") == "--verbose")
+    }
+
     private static func scratchDefaults() -> UserDefaults {
         let suite = "HerdrLaunchSettingsTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
