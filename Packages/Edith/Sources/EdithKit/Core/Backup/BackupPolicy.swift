@@ -152,19 +152,3 @@ public enum BackupCadence {
         max(0, debounce - now.timeIntervalSince(change))
     }
 }
-
-public struct BackupFootprint: Codable, Identifiable, Equatable, Sendable {
-    public let id: String
-    public let title: String
-    public let url: URL
-    public let bytes: Int64
-    public let exists: Bool
-
-    public init(id: String, title: String, url: URL, bytes: Int64, exists: Bool) {
-        self.id = id
-        self.title = title
-        self.url = url
-        self.bytes = bytes
-        self.exists = exists
-    }
-}

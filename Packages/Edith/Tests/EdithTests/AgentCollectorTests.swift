@@ -316,24 +316,6 @@ import Testing
         #expect(result.classes.isEmpty)
     }
 
-    @Test func theDaemonInspectionMeasuresAFolderItCanSee() async throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Footprint.\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try Data(repeating: 7, count: 2_048).write(to: root.appendingPathComponent("a.bin"))
-
-        let missing = root.appendingPathComponent("missing")
-        let workflow = StorageInspectionWorkflow(
-            targets: [
-                .init(id: "data", title: "Data", url: root),
-                .init(id: "missing", title: "Missing", url: missing),
-            ], cloudDirectory: missing)
-        let result = try await workflow.inspect()
-        #expect(result.footprints.map(\.bytes) == [2_048, 0])
-        #expect(result.footprints.map(\.exists) == [true, false])
-    }
-
     private func makeDefaults() -> (UserDefaults, String) {
         let suiteName = "BackupPolicyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
