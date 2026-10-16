@@ -1031,8 +1031,7 @@
         "Extensions/clipboard/CLI/ClipboardCLIExecution.swift",
         "Extensions/clipboard/CLI/ClipboardCommands.swift",
         "Extensions/clipboard/ClipboardPreferences.swift",
-        "Extensions/clipboard/ClipboardPresentation.swift",
-        "Extensions/clipboard/ClipboardShortcutRecorder.swift"
+        "Extensions/clipboard/ClipboardPresentation.swift"
       ]
     },
     "minimumSystemVersion": "14.0.0",
