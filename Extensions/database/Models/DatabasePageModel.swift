@@ -1,4 +1,5 @@
 import DatabaseCore
+import DatabaseEngine
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -89,6 +90,14 @@ final class DatabasePageModel {
     }
 
     private static func message(for error: Error) -> String {
-        "Database could not open its local metadata. Retry to reopen it."
+        switch error {
+        case ExtensionEngineError.unavailable, DatabaseEngineError.stopped,
+            DatabaseEngineError.invalidStorage:
+            "The local database service is unavailable."
+        case ExtensionEngineError.timedOut:
+            "The local database service did not become ready in time."
+        default:
+            "The local database service could not be reached."
+        }
     }
 }

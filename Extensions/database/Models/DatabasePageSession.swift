@@ -18,6 +18,7 @@ final class DatabasePageSession {
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseWorkerClient(),
+        ensureReady: (@Sendable () async throws -> Void)? = nil,
         repair: @escaping @Sendable () async throws -> Void = {
             try await DatabaseWorkerClient.restart()
         },
@@ -28,7 +29,7 @@ final class DatabasePageSession {
         secretStore: (any DatabaseSecretStore)? = nil
     ) {
         page = DatabasePageModel(
-            ensureReady: { _ = try await sender.send(.connectionList(.init())) },
+            ensureReady: ensureReady ?? { _ = try await sender.send(.connectionList(.init())) },
             repairService: repair)
         connections = DatabaseConnectionWorkspaceModel(sender: sender, prepareConnection: prepare)
         management = DatabaseConnectionManagementModel(sender: sender)

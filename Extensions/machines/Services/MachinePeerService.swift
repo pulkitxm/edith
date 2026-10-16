@@ -98,6 +98,19 @@ import Foundation
                 throw ExtensionPeerError.unavailable
             }
             return try JSONEncoder().encode(Connected(connected: connected))
+        case "machines.forward.list":
+            try MachineCommandPayload.empty(payload)
+            let saved = MachineRegistry.forwards(files).filter {
+                Self.validPort($0.localPort) && Self.validPort($0.remotePort)
+                    && Self.loopback($0.remoteHost)
+            }
+            guard saved.count <= 1_024 else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                SavedForwards(
+                    forwards: saved.map {
+                        SavedForward(
+                            localPort: $0.localPort, name: String($0.displayName.prefix(256)))
+                    }))
         case "machines.forward.prepare":
             let request = try MachineCommandPayload.decode(
                 PrepareRequest.self, data: payload, required: ["ports"])
@@ -191,5 +204,7 @@ import Foundation
     private struct Hosts: Encodable { let machines: [Host] }
     private struct Output: Encodable { let output: String }
     private struct Connected: Encodable { let connected: Bool }
+    private struct SavedForward: Encodable { let localPort: Int; let name: String }
+    private struct SavedForwards: Encodable { let forwards: [SavedForward] }
     private struct Prepared: Encodable { let prepared: Bool; let name: String? }
 }

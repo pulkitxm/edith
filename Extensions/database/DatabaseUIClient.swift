@@ -14,8 +14,9 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
     private(set) var columns: Data?
     private(set) var privateContent = true
     private(set) var loaded = false
-    private(set) var failure: String?
     private var stopped = false
+    @ObservationIgnored private var flushing = false
+    @ObservationIgnored private var retryDelay: Task<Void, Never>?
     private let commandTasks = DatabaseTaskOwner()
 
     init(engine: ExtensionEngineClient) { self.engine = engine }
@@ -59,11 +60,9 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
             columns = state.columns
             privateContent = state.privateContent
             loaded = true
-            failure = nil
         } catch {
             guard !Task.isCancelled, !stopped else { return }
             privateContent = true
-            failure = "Database could not load its owned workspace. Retry to reconnect."
         }
     }
 
@@ -81,9 +80,16 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
         } catch { privateContent = true }
     }
 
+    func ensureReady() async throws {
+        if !loaded { await load() }
+        guard loaded else { throw ExtensionEngineError.unavailable }
+        _ = try await send(.connectionList(.init()))
+    }
+
     func makeSession() -> DatabasePageSession {
         DatabasePageSession(
             sender: self,
+            ensureReady: { try await self.ensureReady() },
             repair: { try await self.repair() },
             prepare: { try await self.prepare($0.id) },
             makeColumns: {
@@ -121,29 +127,27 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
                     self.columns = try DatabaseColumnsModel.mergedLayouts(
                         stored: saved.data,
                         updates: self.pendingColumns ?? Data(#"{"version":1,"layouts":[]}"#.utf8))
-                    self.failure = nil
                 } catch {
                     self.pendingColumns = try? DatabaseColumnsModel.mergedLayouts(
                         stored: value,
                         updates: self.pendingColumns ?? Data(#"{"version":1,"layouts":[]}"#.utf8))
-                    guard !Task.isCancelled, !self.stopped else { return }
-                    self.failure =
-                        "Column customization could not be saved. Retry before closing Database."
-                    return
+                    guard !Task.isCancelled, !self.stopped, !self.flushing else { return }
+                    let delay = Task { _ = try? await Task.sleep(for: .seconds(2)) }
+                    self.retryDelay = delay
+                    await delay.value
+                    self.retryDelay = nil
                 }
             }
         }
     }
 
-    func retryColumns() {
-        guard pendingColumns != nil, columnWriter == nil else { return }
+    func flushColumns() async {
+        guard pendingColumns != nil || columnWriter != nil else { return }
+        flushing = true
+        defer { flushing = false }
+        retryDelay?.cancel()
         startColumnWriter()
-    }
-
-    func flushColumns() async throws {
         if let columnWriter { await columnWriter.value }
-        try Task.checkCancellation()
-        guard pendingColumns == nil, !stopped else { throw ExtensionEngineError.unavailable }
     }
 
     func repair() async throws {
@@ -199,6 +203,7 @@ final class DatabaseUIClient: DatabaseBrokerCommandSending, DatabaseSecretStore 
         stopped = true
         commandTasks.cancel()
         columnWriter?.cancel()
+        retryDelay?.cancel()
     }
 
     func cancelAndWait() async {
@@ -230,39 +235,13 @@ struct DatabaseRemotePage: View {
     let session: DatabasePageSession
 
     var body: some View {
-        Group {
-            if client.loaded {
-                DatabasePage(session: session)
-                    .environment(\.databaseRemotePrivacy, client.privateContent)
-                    .overlay(alignment: .top) {
-                        if let failure = client.failure {
-                            VStack {
-                                Text(failure).font(.edithText(.callout))
-                                Button("Retry") { client.retryColumns() }
-                            }
-                            .padding().background(.regularMaterial).clipShape(
-                                RoundedRectangle(cornerRadius: 8))
-                        }
-                    }
-            } else {
-                PageScaffold {
-                    PageHeader("Database")
-                } content: {
-                    if let failure = client.failure {
-                        Text(failure)
-                        Button("Retry") { Task { await client.load() } }
-                    } else {
-                        ProgressView("Loading owned workspace")
-                    }
+        DatabasePage(session: session)
+            .environment(\.databaseRemotePrivacy, client.privateContent)
+            .pageTask {
+                while !Task.isCancelled {
+                    await client.refreshPrivacy()
+                    do { try await Task.sleep(for: .seconds(1)) } catch { return }
                 }
             }
-        }
-        .pageTask {
-            if !client.loaded { await client.load() }
-            while !Task.isCancelled {
-                await client.refreshPrivacy()
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
-            }
-        }
     }
 }
