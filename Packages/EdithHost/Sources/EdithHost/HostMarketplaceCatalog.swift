@@ -78,7 +78,7 @@ enum HostMarketplaceCatalog {
         "machines": "Your Mac and SSH machines, projects and services in one fleet.",
         "docs": "Browse and edit local documents and project notes.",
         "terminal": "A native terminal for local projects and SSH machines.",
-        "jev": "A personal agent for decisions, tasks and connected services.",
+        "jev": "Fast typed decisions from TypeSafe's Jev model",
     ]
     static func filter(_ entries: [HostExtension], query: String, category: String)
         -> [HostExtension]
