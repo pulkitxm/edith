@@ -40,7 +40,10 @@ struct RateLimitsDialsView: View {
         reloadJob?.cancel()
         reloadJob = Task {
             await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
-                latest in
+                history in
+                if latestLimits == nil { latestLimits = LimitsSnapshotCache.load() }
+                var latest = history
+                if latestLimits?.claudeUsesAccounts == true { latest[.claude] = nil }
                 latestProviders = latest
                 let hasAccounts = latestLimits?.claudeAccounts.isEmpty == false
                 let found = LimitProvider.allCases.filter {
@@ -174,7 +177,12 @@ struct RateLimitsDialsView: View {
         } else {
             SurfaceFittedGrid(count: providers.count, minimum: 240) {
                 ForEach(providers) { provider in
-                    if let latest = latestProviders[provider] {
+                    if provider == .claude, let accounts = latestLimits?.claudeAccounts,
+                        !accounts.isEmpty
+                    {
+                        ClaudeAccountLimitsView(accounts: accounts, compact: true)
+                            .presenterCover(.usage)
+                    } else if let latest = latestProviders[provider] {
                         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                             HStack(spacing: UIScale.pt(6)) {
                                 ProviderLogoView(provider).frame(
