@@ -8,7 +8,7 @@ import Testing
 @Suite(.serialized) @MainActor struct JevCLIBridgeTests {
     @Test func originalStatusKeyStdinAndClearPreviewUseOwnedKeyStore() async throws {
         let store = MemoryJevKeyStore()
-        let engine = JevEngine(store: store)
+        let engine = stubbedEngine(store: store)
         let status = try await JevCLIExecution.run(
             .init(arguments: ["status", "--json"]), engine: engine)
         #expect(
@@ -42,7 +42,7 @@ import Testing
         let directory = FileManager.default.currentDirectoryPath
         let reply = try await JevCLIExecution.run(
             .init(arguments: ["ask", "--request", "req.json"], workingDirectory: root.path),
-            engine: JevEngine(store: MemoryJevKeyStore()))
+            engine: stubbedEngine(store: MemoryJevKeyStore()))
         #expect(reply.exitCode == 4 && reply.stdout.isEmpty && reply.stderr.contains("hint:"))
         #expect(
             FileManager.default.currentDirectoryPath == directory
@@ -50,7 +50,7 @@ import Testing
     }
 
     @Test func originalHelpUsageAndMissingKeyFailuresKeepOutputStreams() async throws {
-        let engine = JevEngine(store: MemoryJevKeyStore())
+        let engine = stubbedEngine(store: MemoryJevKeyStore())
         for arguments in [["--help"], ["key", "--help"], ["ask", "--help"]] {
             let reply = try await JevCLIExecution.run(.init(arguments: arguments), engine: engine)
             #expect(reply.exitCode == 0 && reply.stderr.isEmpty && reply.stdout.contains("USAGE:"))
@@ -71,7 +71,7 @@ import Testing
     }
     @Test func streamedKeySetRetainsCallerInputAndOnlyTheOwningKeyStore() async throws {
         let store = MemoryJevKeyStore()
-        let commands = JevCommands(engine: JevEngine(store: store))
+        let commands = JevCommands(engine: stubbedEngine(store: store))
         let bridge = Bridge(commands: commands)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
         let encoder = JSONEncoder()
@@ -112,7 +112,7 @@ import Testing
 
     @Test func originalSettingsPaneModelUsesCheckedEngineAndStopCancelsLocalState() async throws {
         let store = MemoryJevKeyStore()
-        let commands = JevCommands(engine: JevEngine(store: store))
+        let commands = JevCommands(engine: stubbedEngine(store: store))
         let bridge = Bridge(commands: commands)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
         let model = JevSettingsModel(engineClient: client)
@@ -128,7 +128,12 @@ import Testing
         #expect(store.read() == .missing)
         model.shutdown(); client.invalidate(); await commands.shutdownAndWait()
         model.draft = "later"; model.save()
-        #expect(store.read() == .missing && !model.loading.isRunning)
+        #expect(store.read() == .missing && !model.isBusy)
+    }
+    private func stubbedEngine(store: MemoryJevKeyStore) -> JevEngine {
+        let (_, host) = JevStubProtocol.register { _, _ in (200, jevNoulResponse) }
+        return JevEngine(
+            store: store, makeClient: { JevStubProtocol.client(host: host, key: $0) })
     }
     private func wait(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(3)
