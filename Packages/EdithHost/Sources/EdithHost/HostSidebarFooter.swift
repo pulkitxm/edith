@@ -70,6 +70,12 @@ struct HostSidebarFooter: View {
     @Environment(\.windowVisible) private var visible
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var utilityTransition: AnyTransition {
+        Motion.transition(
+            .move(edge: .bottom).combined(with: .opacity), reduceMotion: reduceMotion,
+            preferCrossFade: false)
+    }
+
     private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
     private var versions: [String: String] {
         marketplace.sessions.versions.filter {
@@ -85,109 +91,97 @@ struct HostSidebarFooter: View {
     private var utilities: [HostSidebarUtility] {
         HostSidebarUtility.allCases.filter { versions[$0.id] != nil }
     }
-    private var populated: Bool {
-        music != nil || !utilities.isEmpty || missingPermissions || updater.updateReady != nil
-    }
     var body: some View {
         Group {
-            if populated {
-                VStack(spacing: 0) {
-                    Rectangle().fill(Color.primary.opacity(0.06)).frame(height: UIScale.pt(1))
-                    VStack(spacing: UIScale.pt(8)) {
-                        if let music {
-                            music.transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-                        if let version = updater.updateReady {
-                            Button {
-                                updater.checkForUpdates()
-                            } label: {
-                                HStack(spacing: UIScale.pt(6)) {
-                                    Image(systemName: "arrow.down.circle.fill")
-                                    Text("Update ready").font(
-                                        .system(size: UIScale.pt(11.5), weight: .semibold))
-                                    Text("v\(version)").font(
-                                        .system(size: UIScale.pt(10.5), weight: .medium)
-                                    ).opacity(0.75)
-                                    Spacer(minLength: 0)
-                                }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
-                                    .frame(height: UIScale.pt(28)).background(
-                                        .thinMaterial,
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                    )
-                            }.buttonStyle(.edith(.borderless)).help("Show update options")
-                        }
-                        utilityRow([.system, .keepAwake])
-                        utilityRow([.lidAwake, .keystrokeHighlight])
-                        if utilities.contains(.presenter) {
-                            HStack(spacing: 0) {
-                                utility(.presenter, background: false)
-                                Rectangle().fill(
-                                    HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                        ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
+            if music != nil || !utilities.isEmpty || missingPermissions
+                || updater.updateReady != nil
+            {
+                VStack(spacing: UIScale.pt(8)) {
+                    if let music { music }
+                    if let version = updater.updateReady {
+                        Button {
+                            updater.checkForUpdates()
+                        } label: {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                Text("Update ready").font(
+                                    .system(size: UIScale.pt(11.5), weight: .semibold))
+                                Text("v\(version)").font(
+                                    .system(size: UIScale.pt(10.5), weight: .medium)
+                                ).opacity(0.75)
+                                Spacer(minLength: 0)
+                            }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
+                                .frame(height: UIScale.pt(28)).background(
+                                    .thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9))
                                 )
-                                .frame(width: UIScale.pt(1), height: UIScale.pt(28))
-                                Button {
-                                    presenterSettings.toggle()
-                                } label: {
-                                    Image(systemName: "chevron.right").font(
-                                        .system(size: UIScale.pt(10), weight: .semibold)
-                                    )
-                                    .symbolEffect(.bounce, value: presenterSettings)
-                                    .frame(width: UIScale.pt(30), height: UIScale.pt(46))
-                                    .contentShape(
-                                        Rectangle())
-                                }.buttonStyle(.edith(.borderless)).help(
-                                    "Choose what Presenter mode blurs"
-                                )
-                                .accessibilityLabel("Presenter privacy settings")
-                                .popover(isPresented: $presenterSettings, arrowEdge: .leading) {
-                                    HostExtensionContent(
-                                        marketplace: marketplace, extensionID: "presenter",
-                                        location: "sidebar.utility", section: "privacy",
-                                        presenter: presenter, openMarketplace: openExtensions,
-                                        initialHeight: UIScale.pt(220)
-                                    )
-                                    .frame(width: UIScale.pt(250))
-                                    .frame(maxHeight: UIScale.pt(440))
-                                }
-                            }.foregroundStyle(
+                        }.buttonStyle(.edith(.borderless)).help("Show update options")
+                    }
+                    utilityRow([.system, .keepAwake])
+                    utilityRow([.lidAwake, .keystrokeHighlight])
+                    if utilities.contains(.presenter) {
+                        HStack(spacing: 0) {
+                            utility(.presenter, background: false)
+                            Rectangle().fill(
                                 HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                    ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
+                                    ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
+                            )
+                            .frame(width: UIScale.pt(1), height: UIScale.pt(28))
+                            Button {
+                                presenterSettings.toggle()
+                            } label: {
+                                Image(systemName: "chevron.right").font(
+                                    .system(size: UIScale.pt(10), weight: .semibold)
+                                ).symbolEffect(.bounce, value: presenterSettings)
+                                .frame(width: UIScale.pt(30), height: UIScale.pt(46)).contentShape(
+                                    Rectangle())
+                            }.buttonStyle(.edith(.borderless)).help(
+                                "Choose what Presenter mode blurs"
+                            )
+                            .accessibilityLabel("Presenter privacy settings")
+                            .popover(isPresented: $presenterSettings, arrowEdge: .leading) {
+                                HostExtensionContent(
+                                    marketplace: marketplace, extensionID: "presenter",
+                                    location: "sidebar.utility", section: "privacy",
+                                    presenter: presenter, openMarketplace: openExtensions
+                                )
+                                .frame(width: UIScale.pt(250), height: UIScale.pt(440))
+                            }
+                        }.foregroundStyle(
+                            HostSidebarUtility.presenter.isOn(snapshots["presenter"])
+                                ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
+                        )
+                        .background(
+                            HostSidebarUtility.presenter.isOn(snapshots["presenter"])
+                                ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                        .transition(utilityTransition)
+                    }
+                    if missingPermissions {
+                        Button(action: openPermissions) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                Text("Permissions need attention").font(
+                                    .system(size: UIScale.pt(11), weight: .medium))
+                                Spacer(minLength: 0)
+                            }.foregroundStyle(.orange).padding(.horizontal, UIScale.pt(8)).frame(
+                                height: UIScale.pt(26)
                             )
                             .background(
-                                HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                    ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
-                        }
-                        if missingPermissions {
-                            Button(action: openPermissions) {
-                                HStack(spacing: UIScale.pt(6)) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                    Text("Permissions need attention").font(
-                                        .system(size: UIScale.pt(11), weight: .medium))
-                                    Spacer(minLength: 0)
-                                }.foregroundStyle(.orange).padding(.horizontal, UIScale.pt(8))
-                                    .frame(
-                                        height: UIScale.pt(26)
-                                    )
-                                    .background(
-                                        Color.orange.opacity(0.14),
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
-                            }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
-                        }
-                        if let error {
-                            Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                        }
-                    }.padding(UIScale.pt(10))
-                }.transition(.move(edge: .bottom).combined(with: .opacity))
+                                Color.orange.opacity(0.14),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                        }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
+                    }
+                    if let error {
+                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
+                }.padding(UIScale.pt(10))
+                    .animation(
+                        Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                        value: utilities.map(\.rawValue))
             }
         }
-        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: populated)
-        .animation(
-            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: music != nil
-        )
         .pageTask(id: versions, active: enabled && !versions.isEmpty, cancel: clear) {
             repeat {
                 for utility in utilities {
@@ -215,8 +209,9 @@ struct HostSidebarFooter: View {
         let available = row.filter(utilities.contains)
         if available.count == 2 && sidebarWidth >= 220 {
             HStack(spacing: UIScale.pt(8)) { ForEach(available) { utility($0) } }
+                .transition(utilityTransition)
         } else {
-            ForEach(available) { utility($0) }
+            ForEach(available) { utility($0).transition(utilityTransition) }
         }
     }
 
@@ -226,7 +221,6 @@ struct HostSidebarFooter: View {
             background: background,
             action: { perform(value) }
         )
-        .disabled(actionTask != nil)
     }
 
     private func perform(_ utility: HostSidebarUtility) {
