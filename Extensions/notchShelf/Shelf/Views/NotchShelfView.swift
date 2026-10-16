@@ -159,11 +159,23 @@ struct NotchShelfContentView: View {
 
     @ViewBuilder private func glance(_ value: NotchSurfaceGlance?, leading: Bool) -> some View {
         if let value, value.source == .music, let client = controller as? NotchChromeClient {
-            NotchNativeSlotView(
+            let slot = NotchNativeSlotView(
                 client: client, tile: SurfaceTile(.music),
                 kind: leading ? .collapsedLeading : .collapsedTrailing
             )
             .frame(width: controller.glanceWingWidth, height: collapsedBase.height)
+            if leading {
+                Button {
+                    controller.openGlance(value, on: displayID)
+                } label: {
+                    slot.allowsHitTesting(false).contentShape(Rectangle())
+                }
+                .buttonStyle(.edith(.borderless))
+                .help(value.detail + (value.value.isEmpty ? "" : ": " + value.value))
+                .accessibilityLabel(value.detail + ", " + value.value)
+            } else {
+                slot
+            }
         } else if let value {
             Button {
                 controller.openGlance(value, on: displayID)

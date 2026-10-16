@@ -34,19 +34,24 @@ final class AudioMixerSurface {
         }
         engine.refresh()
         let apps = Array(engine.apps.prefix(100))
-        let sources = apps.map { SurfaceSourceChoice(Self.identity($0), Self.text($0.name)) }
-        let selected = apps.filter { tile.sourceIDs?.contains(Self.identity($0)) ?? true }
+        let sources = Dictionary(grouping: apps, by: \.bundleID).compactMap { id, group in
+            group.first.map { SurfaceSourceChoice(Self.text(id), Self.text($0.name)) }
+        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let selected = apps.filter { tile.sourceIDs?.contains(Self.text($0.bundleID)) ?? true }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         let rows = selected.prefix(min(32, tile.itemLimit)).map { app in
             let identity = Self.identity(app)
+            let muted = app.volume == 0
             return SurfaceDataRow(
-                identity, sourceID: identity, title: Self.text(app.name),
-                detail: Self.text(app.bundleID), value: String(Int(app.volume * 100)) + "%",
-                icon: app.volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                identity, sourceID: Self.text(app.bundleID), title: Self.text(app.name),
+                detail: Self.text(app.bundleID),
+                value: muted ? "Muted" : String(Int((app.volume * 100).rounded())) + "%",
+                icon: muted ? "speaker.slash" : "speaker.wave.2",
                 actions: [
                     .init(
-                        (app.volume == 0 ? "restore:" : "mute:") + identity,
-                        app.volume == 0 ? "Restore volume" : "Mute", "speaker.wave.2.fill",
-                        field: "volume")
+                        (muted ? "restore:" : "mute:") + identity,
+                        muted ? "Restore volume" : "Mute",
+                        muted ? "speaker.wave.2" : "speaker.slash", field: "volume")
                 ],
                 sliders: [
                     .init(
@@ -58,14 +63,15 @@ final class AudioMixerSurface {
             providerID: "audioMixer",
             metrics: [
                 .init("apps", "Playing apps", String(selected.count)),
-                .init("muted", "Muted apps", String(selected.filter { $0.volume == 0 }.count)),
+                .init("muted", "Muted", String(selected.filter { $0.volume == 0 }.count)),
             ],
-            rows: rows, actions: [.init("refresh", "Refresh", "arrow.clockwise")],
-            sources: sources, message: engine.errorMessage.map(Self.text), updatedAt: Date())
+            rows: rows, actions: [], sources: sources,
+            message: engine.errorMessage.map(Self.text)
+                ?? (selected.isEmpty ? "No app is producing audio in this selection." : nil),
+            updatedAt: Date())
     }
 
     private func perform(_ identifier: String) throws {
-        if identifier == "refresh" { engine.retry(); return }
         engine.refresh()
         for app in engine.apps {
             let identity = Self.identity(app)

@@ -300,6 +300,7 @@ public enum HostSettingsCatalog {
         AppStorageKeys.VirtualCamera.hotKeyCode,
         AppStorageKeys.VirtualCamera.hotKeyLabel,
         AppStorageKeys.VirtualCamera.hotKeyMods,
+        AppStorageKeys.VirtualCamera.state,
         AppStorageKeys.WindowSweaters.accessibilityFocus,
         AppStorageKeys.WindowSweaters.anchor,
         AppStorageKeys.WindowSweaters.basket,

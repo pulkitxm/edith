@@ -54,6 +54,7 @@ import WebKit
             return snapshot
         }
         MusicHostNavigation.reset()
+        trackHostSlots()
         worker.accounts.spotify.receiveUIEvent = { [weak self] event in
             guard let self, let data = try? JSONSerialization.data(withJSONObject: event),
                 data.count <= 262_144
@@ -76,6 +77,35 @@ import WebKit
         .init(folders: folders.map(entry), tracks: tracks.map(entry))
     }
 
+    private func hostSlots() -> (footer: Bool, sidebar: Bool) {
+        let accounts = worker.accounts
+        let title: String?
+        switch accounts.selected {
+        case .local: title = worker.player.current?.title
+        case .spotify: title = accounts.spotify.title.isEmpty ? nil : accounts.spotify.title
+        case .youtubeMusic: title = accounts.youtubeConnected ? "YouTube Music" : nil
+        }
+        let defaults = SharedDefaults.store
+        let visible =
+            accounts.playerReady
+            && (!defaults.bool(forKey: AppStorageKeys.Music.barAutoHide) || title != nil)
+        let collapsed = defaults.bool(forKey: AppStorageKeys.Music.barCollapsed)
+        return (visible && !collapsed, visible && collapsed)
+    }
+
+    private func trackHostSlots() {
+        guard !stopped else { return }
+        withObservationTracking {
+            _ = hostSlots()
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, !self.stopped else { return }
+                self.invalidateHostSlots()
+                self.trackHostSlots()
+            }
+        }
+    }
+
     func execute(_ operation: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -94,21 +124,9 @@ import WebKit
                 return try JSONEncoder().encode(
                     MusicUISettings(version: version, preferences: preferences()))
             }
-            let accounts = worker.accounts
-            let title: String?
-            switch accounts.selected {
-            case .local: title = worker.player.current?.title
-            case .spotify: title = accounts.spotify.title.isEmpty ? nil : accounts.spotify.title
-            case .youtubeMusic: title = accounts.youtubeConnected ? "YouTube Music" : nil
-            }
-            let defaults = SharedDefaults.store
-            let visible =
-                accounts.playerReady
-                && (!defaults.bool(forKey: AppStorageKeys.Music.barAutoHide) || title != nil)
-            let collapsed = defaults.bool(forKey: AppStorageKeys.Music.barCollapsed)
+            let slots = hostSlots()
             return try JSONEncoder().encode(
-                MusicHostSlots(
-                    version: version, footer: visible && !collapsed, sidebar: visible && collapsed))
+                MusicHostSlots(version: version, footer: slots.footer, sidebar: slots.sidebar))
         case "music.ui.level":
             return try JSONEncoder().encode(worker.player.readLevel())
         case "music.ui.cachedListing":
@@ -376,6 +394,7 @@ import WebKit
             panel.allowsMultipleSelection = false; panel.prompt = "Choose"
             panel.message = "Choose your music folder"
             libraryPanel = panel
+            panel.level = .modalPanel; NSApp.activate(ignoringOtherApps: true)
             defer { libraryPanel = nil }
             let response = await withTaskCancellationHandler {
                 await panel.begin()

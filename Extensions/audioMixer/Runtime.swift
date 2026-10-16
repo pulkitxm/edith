@@ -33,22 +33,13 @@ final class ExtensionRuntime: NSObject {
                 return try JSONEncoder().encode(
                     try await AudioCLIExecution.run(request, engine: engine))
             }
-            if command == "audioMixer.ui.snapshot" {
-                guard payload == Data("{}".utf8), let engine = self?.engine as? MixerEngine else {
-                    throw ExtensionPeerError.invalidRequest
+            if command.hasPrefix("audioMixer.ui."), let engine = self?.engine as? MixerEngine {
+                if let reply = try AudioMixerUICommand.execute(
+                    command, payload: payload, engine: engine)
+                {
+                    return reply
                 }
-                engine.refresh()
-                let apps = engine.apps.map {
-                    AudioMixerAppRecord(
-                        objectID: $0.objectID, pid: $0.pid, bundleID: $0.bundleID, name: $0.name,
-                        volume: Double($0.volume))
-                }
-                let icons = Dictionary(
-                    uniqueKeysWithValues: engine.apps.compactMap { app in
-                        AudioMixerIcon.png(app.icon).map { (String(app.objectID), $0) }
-                    })
-                return try JSONEncoder().encode(
-                    AudioMixerUISnapshot(apps: apps, icons: icons, error: engine.errorMessage))
+                throw ExtensionPeerError.invalidRequest
             }
             if command == "audioMixer.request" {
                 guard let engine = self?.engine as? MixerEngine,
@@ -92,6 +83,13 @@ final class ExtensionRuntime: NSObject {
             guard !commandsSuspended, uiDrains.count < 8 else {
                 return ["ok": false] as NSDictionary
             }
+            if input["location"] as? String == "settings" {
+                guard input["section"] as? String == "extension" else {
+                    return ["ok": false] as NSDictionary
+                }
+                stopUI(); uiLocation = "settings"
+                return ["ok": true] as NSDictionary
+            }
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
@@ -101,11 +99,16 @@ final class ExtensionRuntime: NSObject {
         case "stopUI": stopUI()
         case "view":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
+            if uiLocation == "settings" {
+                return NSHostingController(rootView: ExtensionPageHost { AudioMixerSettingsPage() })
+            }
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
             if #available(macOS 14.4, *), let engine = uiModel as? AudioMixerRemoteModel {
                 if uiLocation == "notch" {
                     return NSHostingController(
-                        rootView: ExtensionPageHost { AudioMixerView(engine: engine) })
+                        rootView: ExtensionPageHost {
+                            AudioMixerView(engine: engine, notch: true)
+                        })
                 }
                 return NSHostingController(
                     rootView: ExtensionPageHost {
@@ -118,7 +121,9 @@ final class ExtensionRuntime: NSObject {
             }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    Text("Per-app volume needs macOS 14.4 or later.")
+                    Text("Per-app volume needs macOS 14.4 or later")
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break

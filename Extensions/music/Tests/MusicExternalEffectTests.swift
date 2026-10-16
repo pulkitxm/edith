@@ -102,6 +102,33 @@ import Testing
         #expect(external.systemResourceCount == 0)
     }
 
+    @Test func presentationReadFindsAlreadyPlayingAppWithoutNotification() async {
+        var scripts: [ExternalApp] = []
+        let effects = ExternalMusicEffects(
+            isInert: false,
+            observeExternal: { _, _ in NSObject() }, removeExternal: { _ in },
+            observeCommand: { _ in NSObject() }, observeState: { _ in NSObject() },
+            removeLocal: { _ in }, isRunning: { $0 == .spotify },
+            readPlayback: { app, _ in
+                scripts.append(app)
+                return ExternalPlayback(
+                    track: .init(
+                        app: app, title: "Mock Garden", artist: "Mock Artist", isPlaying: true,
+                        duration: 100),
+                    position: 25, volume: 0.5, shuffling: false, repeating: false,
+                    canShuffle: true, canRepeat: true)
+            },
+            postState: { _ in })
+        let external = ExternalMusic(effects: effects)
+        defer { external.stop() }
+        external.start()
+        #expect(external.current == nil)
+        await external.refreshPresentationPlayback()
+        #expect(scripts == [.spotify])
+        #expect(external.current?.title == "Mock Garden")
+        #expect(external.current?.isPlaying == true)
+    }
+
     @Test func stopRejectsLatePlaybackAndCancelsObservationOwnership() async throws {
         var receive: (@MainActor ([AnyHashable: Any]) -> Void)?
         var pending: CheckedContinuation<ExternalPlayback?, Error>?

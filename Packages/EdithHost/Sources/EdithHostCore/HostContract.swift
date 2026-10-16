@@ -6,9 +6,20 @@ public enum HostContract {
     public static let version = 1
     public static let compatibility = MarketplaceConfiguration.workerHostABI
 
-    public static func permitsLaunching(identifier: String?, bundleURL: URL) -> Bool {
-        identifier != "com.pulkit.edith"
-            || bundleURL.standardizedFileURL.path == "/Applications/Edith.app"
+    public static func permitsLaunching(
+        identifier: String?, bundleURL: URL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
+        guard identifier == "com.pulkit.edith" else { return true }
+        let installed = [
+            URL(fileURLWithPath: "/Applications"),
+            homeDirectory.appendingPathComponent("Applications"),
+        ].map { canonicalPath($0.appendingPathComponent("Edith.app")) }
+        return installed.contains(canonicalPath(bundleURL))
+    }
+
+    private static func canonicalPath(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 }
 

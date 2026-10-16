@@ -7,10 +7,10 @@ import ImageIO
 
 struct CameraUISnapshot: Codable {
     let snapshot: VirtualCameraSnapshot
-    let preview: Data?
     let reference: Data?
     let previewFailure: String?
 }
+struct CameraUIFrame: Codable { let sequence: Int; let preview: Data? }
 struct CameraUIAsset: Codable { let path: String; let target: String }
 struct CameraUIImage: Codable { let image: Data? }
 struct CameraUISources: Codable {
@@ -44,27 +44,34 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
             return try JSONEncoder().encode(
                 CameraUISnapshot(
                     snapshot: snapshot,
-                    preview: model.display.current.flatMap {
-                        context.createCGImage(
-                            CIImage(cvPixelBuffer: $0), from: CIImage(cvPixelBuffer: $0).extent)
-                    }.flatMap(Self.image),
                     reference: model.previewReference.flatMap(Self.image),
                     previewFailure: model.previewFailure))
+        case "camera.ui.frame":
+            let input = try JSONDecoder().decode([String: Int].self, from: payload)
+            guard Set(input.keys) == ["after"], let after = input["after"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            renewLease()
+            let sequence = model.display.sequence
+            guard sequence != after, let buffer = model.display.current else {
+                return try JSONEncoder().encode(CameraUIFrame(sequence: sequence, preview: nil))
+            }
+            let image = CIImage(cvPixelBuffer: buffer)
+            return try JSONEncoder().encode(
+                CameraUIFrame(
+                    sequence: sequence,
+                    preview: context.createCGImage(image, from: image.extent).flatMap(Self.image)))
+        case "camera.ui.release":
+            try empty(payload)
+            lease?.cancel()
+            if previewVisible { model.disappear(); previewVisible = false }
+            return Data("{}".utf8)
+        case "camera.ui.preview":
+            let state = try validated(payload)
+            engine.previewComposition(state.composition)
+            return Data("{}".utf8)
         case "camera.ui.state":
-            let state = try JSONDecoder().decode(VirtualCameraState.self, from: payload)
-            guard state == state.sanitized(), state.output == .obs, state.scenes.count <= 64,
-                state.media.path.map({ $0.hasPrefix("/") && !$0.utf8.contains(0) }) ?? true
-            else { throw ExtensionPeerError.invalidRequest }
-            let current = VirtualCameraStore.referencedAssets(in: engine.snapshot().state)
-            let directory = VirtualCameraStore.assetsDirectory.standardizedFileURL.path + "/"
-            guard
-                VirtualCameraStore.referencedAssets(in: state).allSatisfy({ path in
-                    !path.utf8.contains(0)
-                        && (current.contains(path)
-                            || URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(
-                                directory))
-                })
-            else { throw ExtensionPeerError.invalidRequest }
+            let state = try validated(payload)
             VirtualCameraStore.save(state, to: defaults); engine.syncSettings(state);
             model.reloadState(state)
             VirtualCameraStore.pruneAssets(keeping: state)
@@ -123,6 +130,23 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
         default: throw ExtensionPeerError.invalidRequest
         }
         return try JSONEncoder().encode(engine.snapshot())
+    }
+    private func validated(_ payload: Data) throws -> VirtualCameraState {
+        let state = try JSONDecoder().decode(VirtualCameraState.self, from: payload)
+        guard state == state.sanitized(), state.output == .obs, state.scenes.count <= 64,
+            state.media.path.map({ $0.hasPrefix("/") && !$0.utf8.contains(0) }) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+        let current = VirtualCameraStore.referencedAssets(in: engine.snapshot().state)
+        let directory = VirtualCameraStore.assetsDirectory.standardizedFileURL.path + "/"
+        guard
+            VirtualCameraStore.referencedAssets(in: state).allSatisfy({ path in
+                !path.utf8.contains(0)
+                    && (current.contains(path)
+                        || URL(fileURLWithPath: path).resolvingSymlinksInPath().path.hasPrefix(
+                            directory))
+            })
+        else { throw ExtensionPeerError.invalidRequest }
+        return state
     }
     private static func image(_ image: CGImage) -> Data? {
         NSBitmapImageRep(cgImage: image).representation(

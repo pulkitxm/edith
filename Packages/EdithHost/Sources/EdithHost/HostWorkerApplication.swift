@@ -21,6 +21,7 @@ final class HostWorkerApplication {
     private var navigation: HostWorkerNavigationClient?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
+    private let quitForwarder = HostWorkerQuitForwarder()
     private let nativeAdmission = ExtensionNativeTaskAdmission()
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
@@ -40,6 +41,7 @@ final class HostWorkerApplication {
 
     func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        quitForwarder.install()
         #if EDITH_FUNCTIONAL_FIXTURE
         resourceObservers.append(
             NotificationCenter.default.addObserver(
@@ -180,6 +182,20 @@ final class HostWorkerApplication {
                     try control.send(
                         HostWorkerResponse(
                             token: request.token, ok: true, version: configuration?.version))
+                    continue
+                }
+                if request.operation == "quitStatus" {
+                    let prevents = runtimes.contains { runtime in
+                        guard runtime.role == .app, let id = configuration?.extensionID else {
+                            return false
+                        }
+                        let status = try? runtime.response(id: id, operation: "status")
+                        return status?["preventsQuit"] as? Bool == true
+                    }
+                    try control.send(
+                        HostWorkerResponse(
+                            token: request.token, ok: true, version: configuration?.version,
+                            message: prevents ? HostWorkerResponse.preventsQuitMessage : nil))
                     continue
                 }
                 if request.operation == "prepareDisable" {
@@ -596,5 +612,20 @@ final class HostWorkerApplication {
         defaults.set(configuration.zoom, forKey: AppStorageKeys.General.mainWindowZoom)
         UIScale.apply(configuration.zoom)
         EdithExtensionUI.applyAppearance(configuration.appearance)
+    }
+}
+
+private final class HostWorkerQuitForwarder: NSObject {
+    func install() {
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(forward(_:reply:)),
+            forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEQuitApplication))
+    }
+
+    @objc private func forward(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let host = NSRunningApplication(processIdentifier: getppid()),
+            host.bundleIdentifier == Bundle.main.bundleIdentifier
+        else { return }
+        host.terminate()
     }
 }

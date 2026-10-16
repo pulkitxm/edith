@@ -1,4 +1,6 @@
 import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import EdithHostCore
 import UserNotifications
 
@@ -9,6 +11,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
     var shutdown: (@MainActor () async -> Void)?
     var stopWorkers: (@MainActor () -> Void)?
+    var preventsQuit: (@MainActor () async -> Bool)?
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
     var mainWindow: @MainActor () -> NSWindow? = {
@@ -17,7 +20,34 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var launchesRuntime = true
     private(set) lazy var runtime = HostRuntime(delegate: self)
     private var terminating = false
+    private var deferringQuit = false
+    private var quitConfirmed = false
+    private var quitCancelled = false
     private(set) var launchedAtLogin = false
+    private var windowCloseObserver: NSObjectProtocol?
+
+    static func applyConfiguredActivationPolicy(defaults: UserDefaults = SharedDefaults.store) {
+        let showsDock =
+            defaults.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool ?? true
+        NSApp.setActivationPolicy(showsDock ? .regular : .accessory)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    private func dropToAccessoryWhenWindowless() {
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: nil, queue: .main
+        ) { _ in
+            DispatchQueue.main.async {
+                let presenting = NSApp.windows.contains {
+                    ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
+                }
+                if !presenting { NSApp.setActivationPolicy(.accessory) }
+            }
+        }
+    }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
@@ -42,6 +72,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func showMainWindow(_ ownedWindow: NSWindow? = nil) {
+        if NSApp.activationPolicy() == .accessory { Self.applyConfiguredActivationPolicy() }
         if let window = ownedWindow ?? mainWindow() {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
@@ -58,6 +89,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        Self.applyConfiguredActivationPolicy()
         let event = NSAppleEventManager.shared().currentAppleEvent
         launchedAtLogin =
             event?.eventID == kAEOpenApplication
@@ -73,12 +105,39 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        InputFocus.install()
+        ScrollForwarding.install()
+        dropToAccessoryWhenWindowless()
         if launchesRuntime { runtime.launch() }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if deferringQuit { quitCancelled = true }
+        return true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let shutdown else { return .terminateNow }
         guard !terminating else { return .terminateCancel }
+        if let preventsQuit, !quitConfirmed {
+            guard !deferringQuit else { return .terminateCancel }
+            deferringQuit = true
+            quitCancelled = false
+            Task {
+                if await preventsQuit() {
+                    NSApp.hide(nil)
+                    while !quitCancelled, await preventsQuit() {
+                        try? await Task.sleep(for: .seconds(1))
+                    }
+                }
+                deferringQuit = false
+                guard !quitCancelled else { return }
+                quitConfirmed = true
+                HostQuit.terminate()
+                quitConfirmed = false
+            }
+            return .terminateCancel
+        }
         terminating = true
         HostQuit.conceal()
         NSApp.setActivationPolicy(.prohibited)

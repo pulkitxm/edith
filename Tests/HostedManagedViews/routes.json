@@ -38,11 +38,11 @@
       "sources": [
         {
           "path": "Extensions/audioMixer/Runtime.swift",
-          "sha256": "44dd46b2f2328c30c900c1ca2eff0be7a9efe13f7e28e14f7ebf4399915d0f2a"
+          "sha256": "9a143a36ace725b79db5793486709eeaf705d00d1a2a8488801043093f3ce2d7"
         },
         {
           "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
-          "sha256": "55871991b1fd9eb44d3f767f9f5612649ffe05cdb7d8bc85c9b554d0fb394513"
+          "sha256": "ff90799ad00db1dab2e5c095babd7a07f12dbb91bea8584fb45438e87cea845f"
         }
       ]
     },
@@ -170,11 +170,11 @@
       "sources": [
         {
           "path": "Extensions/colorPicker/Runtime.swift",
-          "sha256": "810da1c400474614c7fa6ccda21de954b3779555da3eabf6615a5a4cfa5fa752"
+          "sha256": "dc17cb9a09078055a5409955669d5482284f8c0556bbb2521358540df62c1237"
         },
         {
           "path": "Extensions/colorPicker/Presentation.swift",
-          "sha256": "7c6c3ca340802e94dac0a1c74f13aee826d8c0fdbe9e09b13f530346efda2085"
+          "sha256": "704c957c5a088820f139aad5fdfa8c5fa7bed91996691e2ebc205742c7e8214e"
         }
       ]
     },
@@ -218,7 +218,7 @@
         },
         {
           "path": "Extensions/emoji/Presentation.swift",
-          "sha256": "75a5089fd46721584acb22190089be88267edeb9a522e4d230a202dc18f4641f"
+          "sha256": "0ff24d95a29e8c330b77850e9edfd8d9579978f17f65267323c4274be88080be"
         }
       ]
     },
@@ -636,7 +636,7 @@
         },
         {
           "path": "Extensions/bifrost/BifrostUIContext.swift",
-          "sha256": "2e89c8f6fa09ae80de0ff7d08193544efc6a3f030fd5c0e175e4fa54023b35b2"
+          "sha256": "7f4f61c0222a903590984cbe29c8fc810d1eeddd4c8a43e36961aa6ceb3b9ae1"
         }
       ]
     },
@@ -760,11 +760,11 @@
       "sources": [
         {
           "path": "Extensions/virtualCamera/Runtime.swift",
-          "sha256": "b782562942070b8caa682b0484ddb27e80c520148559637ac8c2b86785f2cc3c"
+          "sha256": "f35e6e4df4f3ea6a5d086dd6125b9cf36e3e319fb4043aa602131d07171f743f"
         },
         {
           "path": "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-          "sha256": "9e0eedeca249edeefd1f22cc1e3017dcd8c5ea4de47bed662ea24d45a582025e"
+          "sha256": "cc0ccf845b64b4e703326a836e41dffc5c9fcb4c55d1bd44ff0234a0c36824a8"
         }
       ]
     },

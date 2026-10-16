@@ -97,10 +97,15 @@ struct HostEntry: AppExtension {
         guard
             HostContract.permitsLaunching(
                 identifier: Bundle.main.bundleIdentifier, bundleURL: Bundle.main.bundleURL)
-
         else {
             FileHandle.standardError.write(
                 Data("Install Edith in /Applications before starting the release app.\n".utf8))
+            let interactive =
+                !(arguments.first?.hasPrefix("--") ?? false)
+                && ProcessInfo.processInfo.environment["EDITH_CLI"] != "1"
+            if interactive {
+                MainActor.assumeIsolated { HostInstallLocationAlert.refuse() }
+            }
             exit(1)
         }
         if arguments.count == 2,

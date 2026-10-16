@@ -243,6 +243,18 @@ import Foundation
                 AppStorageKeys.Extensions.automaticUpdates, .bool, group: "panel",
                 summary: "Automatically update downloaded extensions.", fallback: .bool(true)),
             .init(
+                AppStorageKeys.Update.automaticChecks, .bool, group: "system",
+                summary: "Check for updates on a schedule.", scope: "standard",
+                fallback: .bool(true)),
+            .init(
+                AppStorageKeys.Update.checkInterval, .number, group: "system",
+                summary: "Seconds between scheduled update checks.", scope: "standard",
+                fallback: .number(86_400)),
+            .init(
+                AppStorageKeys.Update.automaticDownloads, .bool, group: "system",
+                summary: "Download and install updates automatically.", scope: "standard",
+                fallback: .bool(true)),
+            .init(
                 AppStorageKeys.Backup.icloud, .bool, group: "backup",
                 summary: "Use iCloud for owned backups.", fallback: .bool(true)),
             .init(

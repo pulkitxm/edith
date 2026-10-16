@@ -153,6 +153,24 @@ public struct HostToolingCLI: Sendable {
         }
     }
 
+    public func installMissingLinks() {
+        let manager = FileManager.default
+        guard manager.isExecutableFile(atPath: executable.path) else { return }
+        let names = ["ed", "edith"].filter { !ownedLink(directory.appendingPathComponent($0)) }
+        guard !names.isEmpty else { return }
+        try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        for name in names {
+            let file = directory.appendingPathComponent(name)
+            if let destination = try? manager.destinationOfSymbolicLink(atPath: file.path) {
+                guard destination.contains("Edith") else { continue }
+                try? manager.removeItem(at: file)
+            } else if manager.fileExists(atPath: file.path) {
+                continue
+            }
+            try? manager.createSymbolicLink(at: file, withDestinationURL: executable)
+        }
+    }
+
     private func links(target: URL, remove: Bool) throws -> HostCLIJSON {
         let manager = FileManager.default
         if !remove {
