@@ -51,11 +51,14 @@ enum HostLoginItem {
     }
 
     private static func retireLegacyServices() {
-        let services = [
-            SMAppService.loginItem(identifier: "com.pulkit.edith.helper.v2"),
-            SMAppService.loginItem(identifier: "com.pulkit.edith.helper"),
-            SMAppService.agent(plistName: "com.pulkit.edith.agent.plist"),
+        let identifiers = [
+            "com.pulkit.edith.helper.v2", "com.pulkit.edith.helper", "com.pulkit.edith.statusbar",
+            "com.pulkit.edith.panel", "com.pulkit.edith.bar", "com.pulkit.edith.menubar",
         ]
+        let services =
+            identifiers.map { SMAppService.loginItem(identifier: $0) } + [
+                SMAppService.agent(plistName: "com.pulkit.edith.agent.plist")
+            ]
         for service in services where service.status != .notRegistered {
             service.unregister { _ in }
         }

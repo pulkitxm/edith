@@ -78,6 +78,12 @@ import UserNotifications
         await environment.request(permission)
         guard !Task.isCancelled else { return }
         await refresh()
+        Task { [weak self] in
+            for delay in [Duration.milliseconds(500), .milliseconds(1_000)] {
+                do { try await Task.sleep(for: delay) } catch { return }
+                await self?.refresh()
+            }
+        }
     }
     func openSettings(_ permission: HostPermission) -> Bool {
         permission.settingsURL.map(environment.openSettings) ?? false

@@ -158,6 +158,13 @@ import Testing
         #expect(actions.array?.first?.object?["needs"] == .string("menuBar"))
         #expect(try await app.execute(["quit", "--json"]).exitCode == 0 && calls.isEmpty)
         #expect(try await app.execute(["relaunch", "--json"]).exitCode == 0 && calls.isEmpty)
+        let completePreview = try await app.execute(["quit", "--completely", "--json"])
+        #expect(completePreview.exitCode == 0 && calls.isEmpty)
+        #expect(completePreview.stdout.contains("\"completely\":true"))
+        _ = try await app.execute(["quit", "--completely", "--yes", "--json"])
+        #expect(calls.last?.0 == "quit" && calls.last?.1["completely"] == .bool(true))
+        _ = try await app.execute(["quit", "--yes", "--json"])
+        #expect(calls.last?.1["completely"] == .bool(false))
         _ = try await app.execute(["clear-updates", "--yes", "--json"])
         #expect(calls.last?.0 == "clear-updates")
         #expect(
@@ -175,7 +182,7 @@ import Testing
         for arguments in [
             ["navigate", "settings//general"], ["reveal", "--tab", "updates"],
             ["reveal", "settings", "--list"], ["updates", "--limit", "0"],
-            ["quit", "--yes", "--yes"],
+            ["quit", "--yes", "--yes"], ["relaunch", "--completely", "--yes"],
         ] {
             await #expect(throws: HostCLIError.self) { try await app.execute(arguments) }
         }

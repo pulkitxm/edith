@@ -94,6 +94,11 @@ struct HostPermissionsPane: View {
         .pageTask(id: marketplace.surfaceAvailability.activeIDs.sorted()) {
             await permissions.refresh()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            Task { await permissions.refresh() }
+        }
     }
 
     private var summary: some View {
