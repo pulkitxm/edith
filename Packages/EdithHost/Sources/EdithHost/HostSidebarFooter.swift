@@ -222,7 +222,9 @@ struct HostSidebarFooter: View {
 
     private func utility(_ value: HostSidebarUtility, background: Bool = true) -> some View {
         HostSidebarUtilityButton(
-            utility: value, active: actions.isOn(value, preventSleep: preventSleep), theme: theme,
+            utility: value,
+            active: value != .system && actions.isOn(value, preventSleep: preventSleep),
+            theme: theme,
             background: background,
             action: { perform(value) }
         )
@@ -296,11 +298,16 @@ struct HostSidebarUtilityButton: View {
     let theme: Color
     var background = true
     let action: () -> Void
+    @State private var clicks = 0
     var body: some View {
-        Button(action: action) {
+        Button {
+            clicks += 1
+            action()
+        } label: {
             VStack(spacing: UIScale.pt(4)) {
                 Image(systemName: utility == .keepAwake && active ? "moon.zzz.fill" : utility.icon)
-                    .font(.system(size: UIScale.pt(14))).symbolEffect(.bounce, value: active)
+                    .font(.system(size: UIScale.pt(14)))
+                    .symbolEffect(.bounce, value: utility == .system ? clicks : (active ? 1 : 0))
                 Text(utility.title).font(.system(size: UIScale.pt(10), weight: .medium)).lineLimit(
                     1)
             }.frame(maxWidth: .infinity).padding(.vertical, UIScale.pt(8))

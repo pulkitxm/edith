@@ -54,7 +54,9 @@ extension NotchPanelEngine {
             guard !controller.privacy.hides(tile.widget) else {
                 throw ExtensionPeerError.unavailable
             }
-            if providerID == "colorPicker" { controller.collapseNow() }
+            if providerID == "colorPicker" || (providerID == "system" && actionID == "cleanKeys") {
+                controller.collapseNow()
+            }
             do {
                 if providerID == "lidAwake", actionID == "on", let session = request.session {
                     struct Input: Encodable { let session: NotchLidAwakeSession }
