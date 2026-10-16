@@ -436,7 +436,8 @@ struct MusicStreamingControls: View {
                         ? "repeat.1" : "repeat"
                 )
                 .foregroundStyle(
-                    accounts.spotify.library.repeatMode == "off" ? Color.secondary : Color.themeAccent)
+                    accounts.spotify.library.repeatMode == "off"
+                        ? Color.secondary : Color.themeAccent)
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel(
                 "Repeat: \(accounts.spotify.library.repeatMode)")
         }

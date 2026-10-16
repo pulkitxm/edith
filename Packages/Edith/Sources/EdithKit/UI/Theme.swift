@@ -83,7 +83,7 @@ enum ThemeColor {
 public final class ThemeStore {
     public static let shared = ThemeStore(defaults: SharedDefaults.store)
 
-    public private(set) var theme: AppTheme
+    public internal(set) var theme: AppTheme
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var observer: ThemeDefaultsObserver?
 

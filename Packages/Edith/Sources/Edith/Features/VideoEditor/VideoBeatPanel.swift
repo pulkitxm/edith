@@ -478,7 +478,8 @@ private struct VideoMeasuredWaveform: View {
                         Path(
                             CGRect(
                                 x: start * scale, y: 0, width: (end - start) * scale,
-                                height: size.height)), with: .color(Color.themeAccent.opacity(0.08)))
+                                height: size.height)),
+                        with: .color(Color.themeAccent.opacity(0.08)))
                 }
                 for bin in result.waveform {
                     let x = Double(bin.startSample) / result.sampleRate * scale
