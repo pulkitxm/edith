@@ -23,4 +23,9 @@ extension NotchShelfController {
         installContextObserver()
         beginGlanceRefresh()
     }
+
+    func glanceProviderChanged(_ owner: String) {
+        guard !stopped, glanceProviderIDs.contains(owner) else { return }
+        enqueueCallback { [weak self] in _ = await self?.refreshGlance(owner) }
+    }
 }

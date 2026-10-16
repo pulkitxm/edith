@@ -40,7 +40,12 @@ final class NotchShelfController {
     private(set) var expandedDisplay: CGDirectDisplayID?
     private(set) var hoverDisplay: CGDirectDisplayID?
     var activeTab: NotchTab = .home
-    var layoutEditing = false { didSet { updatePanelFrames() } }
+    var layoutEditing = false {
+        didSet {
+            homeContentHeight = nil
+            updatePanelFrames()
+        }
+    }
     private var homeContentHeight: CGFloat?
     let context: SurfaceHostContext
     let layouts: SurfaceLayoutStore
@@ -50,13 +55,16 @@ final class NotchShelfController {
     private var hostDisplaySizes: [UInt32: CGSize] = [:]
     private(set) var activeIDs: Set<String> = []
     private(set) var surfaceSnapshots: [String: SurfaceSnapshot] = [:]
+    private(set) var glanceNow = Date()
     private var glanceTask: Task<Void, Never>?
+    private var glanceClockTask: Task<Void, Never>?
+    private var lastGlanceWidth: CGFloat = 0
     private var glanceTasks: [UUID: Task<Void, Never>] = [:]
     private var callbackTasks: [UUID: Task<Void, Never>] = [:]
     private var promiseOwners: [UUID: NotchPromiseCallbackOwnership] = [:]
     private var shareWaiters: [CheckedContinuation<Void, Never>] = []
     private var teardown: Task<Void, Never>?
-    private var stopped = false
+    private(set) var stopped = false
     private var startsServices = false
     private let hostOwned: Bool
     private var hostOption = false
@@ -281,51 +289,77 @@ final class NotchShelfController {
 
     func installContextObserver() {
         contextObserver = context.sharedState.observe { [weak self] owner in
-            guard owner == "host" || owner == "presenter" else { return }
-            MainActor.assumeIsolated { self?.synchronize() }
+            MainActor.assumeIsolated {
+                if owner == "host" || owner == "presenter" {
+                    self?.synchronize()
+                } else {
+                    self?.glanceProviderChanged(owner)
+                }
+            }
         }
     }
 
     func beginGlanceRefresh() {
         guard !stopped else { return }
         glanceTask?.cancel()
+        glanceClockTask?.cancel()
         let token = UUID()
         let task = Task { [weak self] in
             defer { self?.glanceTasks[token] = nil }
             while !Task.isCancelled {
                 guard let self, !self.stopped else { return }
-                let providers = self.glanceProviderIDs
-                for id in providers.sorted() {
-                    let widget = Self.glanceWidget(id)
-                    guard !self.isExpanded, self.activeIDs.contains(id), !self.privacy.hides(widget)
-                    else { continue }
-                    var tile = SurfaceTile(widget)
-                    tile.itemLimit = 1
-                    if widget == .agents {
-                        tile.hiddenFields = []
-                        tile.sourceIDs = self.surfaceLayout.notchAgentSources
-                        tile.includeSubagents = self.surfaceLayout.notchIncludeSubagents
-                    }
-                    do {
-                        let snapshot = try await self.requests.snapshot(
-                            providerID: id, target: .notch, tile: tile)
-                        guard !self.stopped, !Task.isCancelled, self.activeIDs.contains(id),
-                            !self.privacy.hides(widget)
-                        else { continue }
-                        self.recordSurfaceSnapshot(snapshot)
-                        self.updatePanelFrames()
-                    } catch {
-                        guard !self.stopped, !Task.isCancelled else { return }
-                        self.surfaceSnapshots.removeValue(forKey: id)
-                    }
+                for id in self.glanceProviderIDs.sorted() {
+                    guard await self.refreshGlance(id) else { return }
                 }
-                do { try await Task.sleep(for: .seconds(15)) } catch { return }
-                guard !self.stopped else { return }
-                self.updatePanelFrames()
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
         }
         glanceTask = task
         glanceTasks[token] = task
+        let clockToken = UUID()
+        let clock = Task { [weak self] in
+            defer { self?.glanceTasks[clockToken] = nil }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard let self, !self.stopped else { return }
+                self.glanceNow = Date()
+                self.syncGlanceWidth()
+            }
+        }
+        glanceClockTask = clock
+        glanceTasks[clockToken] = clock
+    }
+
+    func refreshGlance(_ id: String) async -> Bool {
+        let widget = Self.glanceWidget(id)
+        guard !stopped, activeIDs.contains(id), !privacy.hides(widget) else { return true }
+        var tile = SurfaceTile(widget)
+        tile.itemLimit = 1
+        tile.hiddenFields = []
+        if widget == .agents {
+            tile.sourceIDs = surfaceLayout.notchAgentSources
+            tile.includeSubagents = surfaceLayout.notchIncludeSubagents
+        }
+        do {
+            let snapshot = try await requests.snapshot(providerID: id, target: .notch, tile: tile)
+            guard !stopped, !Task.isCancelled, activeIDs.contains(id), !privacy.hides(widget)
+            else { return true }
+            recordSurfaceSnapshot(snapshot)
+            glanceNow = Date()
+            syncGlanceWidth()
+        } catch {
+            guard !stopped, !Task.isCancelled else { return false }
+            surfaceSnapshots.removeValue(forKey: id)
+            syncGlanceWidth()
+        }
+        return true
+    }
+
+    func syncGlanceWidth() {
+        let width = glanceWingWidth
+        guard width != lastGlanceWidth else { return }
+        lastGlanceWidth = width
+        updatePanelFrames()
     }
 
     private var alertsEnabled: Bool { flag(AppStorageKeys.Notch.alertsEnabled, default: true) }
@@ -406,7 +440,7 @@ final class NotchShelfController {
         hideAlert()
     }
 
-    private func enqueueCallback(
+    func enqueueCallback(
         whileStopping: Bool = false, _ operation: @escaping @MainActor () async -> Void
     ) {
         guard whileStopping || !stopped else { return }
