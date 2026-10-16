@@ -70,7 +70,7 @@ test("only authenticated connected scenes contribute managed process receipts", 
   );
   const result = fixturePresenterOverlay(source);
   expect(result.indexOf("try HostGUIFixture.recordUI(handle)")).toBeGreaterThan(
-    result.indexOf("try await manager.connectScene("),
+    result.indexOf("let presented = try await manager.presentScene("),
   );
   expect(() => fixturePresenterOverlay(source + source)).toThrow();
   expect(source).not.toContain("HostGUIFixture.recordUI(handle)");
