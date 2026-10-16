@@ -14,6 +14,7 @@ enum HostExtensionSettingsPolicy: Equatable {
             "appMaintenance", "studio", "quinjet", "notchShelf", "audioMixer":
             .init(section: "extension", policy: .active)
         case "jev": .init(section: "jev", policy: .active)
+        case "blitztree": .init(section: "extension", policy: .active)
         case "usage": .init(section: "usage", policy: .active)
         case "music": .init(section: "music", policy: .active)
         default: nil

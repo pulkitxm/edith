@@ -10,6 +10,7 @@ final class ExtensionRuntime: NSObject {
     private var model: BlitzTreeModel?
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
+    private var uiSettings = false
     private var commandDrain: Task<Void, Never>?
     private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
@@ -22,18 +23,8 @@ final class ExtensionRuntime: NSObject {
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "blitztree", command: command, payload: payload,
-                    snapshot: { tile in BlitzTreeSurface.snapshot(model) },
-                    perform: { action in
-                        switch action {
-                        case "choose": model.chooseFolder()
-                        case "rescan":
-                            guard let root = model.root else {
-                                throw ExtensionPeerError.invalidRequest
-                            }; model.scan(root, remember: false)
-                        case "cancel": model.cancel()
-                        default: throw ExtensionPeerError.invalidRequest
-                        }
-                    })
+                    snapshot: { _ in BlitzTreeSurface.snapshot() },
+                    perform: { _ in throw ExtensionPeerError.invalidRequest })
             }
             return try await BlitzTreeCommands.execute(command, payload: payload, model: model)
         }
@@ -117,11 +108,15 @@ final class ExtensionRuntime: NSObject {
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client; uiModel = BlitzTreeModel(engineClient: client)
+            uiSettings = input["location"] as? String == "settings"
             TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
+            if uiSettings {
+                return NSHostingController(rootView: ExtensionPageHost { BlitzTreeSettings() })
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost { BlitzTreePage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
