@@ -38,11 +38,11 @@
       "sources": [
         {
           "path": "Extensions/audioMixer/Runtime.swift",
-          "sha256": "44dd46b2f2328c30c900c1ca2eff0be7a9efe13f7e28e14f7ebf4399915d0f2a"
+          "sha256": "9a143a36ace725b79db5793486709eeaf705d00d1a2a8488801043093f3ce2d7"
         },
         {
           "path": "Extensions/audioMixer/AudioMixerRemoteModel.swift",
-          "sha256": "55871991b1fd9eb44d3f767f9f5612649ffe05cdb7d8bc85c9b554d0fb394513"
+          "sha256": "ff90799ad00db1dab2e5c095babd7a07f12dbb91bea8584fb45438e87cea845f"
         }
       ]
     },

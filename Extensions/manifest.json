@@ -65,7 +65,9 @@
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs"
     ],
-    "dependencies": [],
+    "dependencies": [
+      "notchShelf"
+    ],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",

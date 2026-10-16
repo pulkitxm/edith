@@ -154,6 +154,39 @@ private final class SurfaceTapProbe: AudioMixerTapControlling {
         }
     }
 
+    @Test func widgetUsesBundleSourcesMutedCopyAndSortedRows() throws {
+        guard #available(macOS 14.4, *) else { return }
+        let engine = MixerEngine(
+            snapshotLoader: {
+                .init(
+                    apps: [
+                        .init(
+                            objectID: 2, pid: 11, bundleID: "b.browser", name: "Browser",
+                            icon: nil, volume: 1),
+                        .init(
+                            objectID: 1, pid: 10, bundleID: "a.music", name: "Music", icon: nil,
+                            volume: 1),
+                    ], outputUID: "synthetic")
+            },
+            tapFactory: { _, _, _ in .success(SurfaceTapProbe()) })
+        defer { engine.shutdown() }
+        engine.refresh()
+        engine.setVolume(try #require(engine.apps.first { $0.name == "Music" }), 0.655)
+        engine.setVolume(try #require(engine.apps.first { $0.name == "Browser" }), 0)
+        let surface = AudioMixerSurface(engine: engine, privacyValues: { [:] })
+        let all = surface.snapshot(.init(.ability("audioMixer")))
+        #expect(all.rows.map(\.title) == ["Browser", "Music"])
+        #expect(all.rows.map(\.value) == ["Muted", "66%"])
+        #expect(all.rows.map(\.icon) == ["speaker.slash", "speaker.wave.2"])
+        #expect(all.sources.map(\.id) == ["b.browser", "a.music"])
+        #expect(all.metrics.last?.title == "Muted")
+        #expect(all.actions.isEmpty)
+        var tile = SurfaceTile(.ability("audioMixer"))
+        tile.sourceIDs = ["nothing.here"]
+        #expect(
+            surface.snapshot(tile).message == "No app is producing audio in this selection.")
+    }
+
     private func app(_ objectID: UInt32, pid: Int32 = 900) -> MixerApp {
         .init(
             objectID: objectID, pid: pid, bundleID: "org.example.audio.\(objectID)",

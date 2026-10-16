@@ -20,17 +20,23 @@ struct AudioMixerUISnapshot: Codable {
 
 @available(macOS 14.4, *) @MainActor @Observable
 final class AudioMixerRemoteModel: AudioMixerPresenting {
+    private static var cache: (apps: [MixerApp], error: String?)?
     private(set) var apps: [MixerApp] = []
     private(set) var errorMessage: String?
     private let client: ExtensionEngineClient
     private var poll: Task<Void, Never>?
     private var action: Task<Void, Never>?
     private var revision = 0
+    private var activeAction: Int?
     private var stopped = false
     private var attachments = 0
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
-    init(client: ExtensionEngineClient) { self.client = client }
+    init(client: ExtensionEngineClient) {
+        self.client = client
+        if let cached = Self.cache { apps = cached.apps; errorMessage = cached.error }
+        _ = track { [self] in await refresh() }
+    }
     func viewAppeared() {
         guard !stopped else { return }
         attachments += 1
@@ -38,7 +44,7 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         poll = track { [self] in
             while !Task.isCancelled {
                 await refresh()
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
             }
         }
     }
@@ -51,30 +57,42 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         guard !stopped else { return }
         action?.cancel()
         revision += 1
-        action = track { [self] in await refresh() }
+        let generation = revision
+        activeAction = generation
+        action = track { [self] in
+            await exchange("audioMixer.ui.retry", Data("{}".utf8), generation: generation)
+        }
     }
     func setVolume(_ app: MixerApp, _ volume: Float) {
         guard !stopped, volume.isFinite, (0...1).contains(volume),
-            apps.contains(where: {
+            let index = apps.firstIndex(where: {
                 $0.objectID == app.objectID && $0.pid == app.pid && $0.bundleID == app.bundleID
             })
         else { return }
+        apps[index].volume = volume
         action?.cancel(); revision += 1
         let generation = revision
+        activeAction = generation
         let request = AudioMixerRuntimeRequest(
             request: .volume, volume: Double(volume), deadline: Date().addingTimeInterval(8),
             target: .init(objectID: app.objectID, pid: app.pid, bundleID: app.bundleID))
         action = track { [self] in
-            do {
-                let payload = try JSONSerialization.data(withJSONObject: request.payload)
-                let data = try await client.invoke("audioMixer.request", payload: payload)
-                let result = try JSONDecoder().decode(AudioMixerListSnapshot.self, from: data)
-                guard !stopped, !Task.isCancelled, generation == revision else { return }
-                publish(result.apps, icons: [:]); errorMessage = nil
-            } catch is CancellationError {} catch {
-                guard !stopped, generation == revision else { return }
-                errorMessage = error.localizedDescription
-            }
+            guard let payload = try? JSONSerialization.data(withJSONObject: request.payload)
+            else { return }
+            await exchange("audioMixer.ui.volume", payload, generation: generation)
+        }
+    }
+    private func exchange(_ operation: String, _ payload: Data, generation: Int) async {
+        defer { if activeAction == generation { activeAction = nil } }
+        do {
+            let data = try await client.invoke(operation, payload: payload)
+            let snapshot = try JSONDecoder().decode(AudioMixerUISnapshot.self, from: data)
+            guard !stopped, !Task.isCancelled, generation == revision else { return }
+            publish(snapshot.apps, icons: snapshot.icons); errorMessage = snapshot.error
+            remember()
+        } catch is CancellationError {} catch {
+            guard !stopped, generation == revision else { return }
+            errorMessage = error.localizedDescription
         }
     }
     private func refresh() async {
@@ -82,13 +100,16 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         do {
             let data = try await client.invoke("audioMixer.ui.snapshot")
             let snapshot = try JSONDecoder().decode(AudioMixerUISnapshot.self, from: data)
-            guard !stopped, !Task.isCancelled, generation == revision else { return }
+            guard !stopped, !Task.isCancelled, generation == revision, activeAction == nil
+            else { return }
             publish(snapshot.apps, icons: snapshot.icons); errorMessage = snapshot.error
+            remember()
         } catch is CancellationError {} catch {
             guard !stopped, generation == revision else { return }
             errorMessage = error.localizedDescription
         }
     }
+    private func remember() { Self.cache = (apps, errorMessage) }
     private func publish(_ records: [AudioMixerAppRecord], icons: [String: Data]) {
         apps = records.map { record in
             MixerApp(
@@ -117,7 +138,7 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
     }
 
     func stop() {
-        stopped = true; revision += 1
+        stopped = true; revision += 1; activeAction = nil
         poll?.cancel(); poll = nil
         action?.cancel(); action = nil
         attachments = 0
