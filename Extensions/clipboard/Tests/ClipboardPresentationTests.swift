@@ -89,22 +89,23 @@ import Testing
     }
 
     @Test func closingClearsHistoryAndCoalescesPreferenceEdits() async throws {
-        var saved: [ClipboardPreferences] = []
+        var saved: [[String: Any]] = []
         let presentation = ClipboardPresentation(send: { operation, payload in
-            guard operation == "clipboard.ui.preferences.set" else {
+            guard operation == "clipboard.ui.preferences.patch" else {
                 throw ExtensionPeerError.invalidRequest
             }
-            saved.append(try ClipboardMessage.decode(ClipboardPreferences.self, from: payload))
-            return Data("{}".utf8)
+            saved.append(
+                try #require(JSONSerialization.jsonObject(with: payload) as? [String: Any]))
+            return try ClipboardMessage.encode(ClipboardPreferences())
         })
         for count in 1...20 { presentation.preferences.maxItems = count; presentation.save() }
         for _ in 0..<100 where saved.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(saved.map(\.maxItems) == [20])
+        #expect(saved.map { $0["maxItems"] as? Int } == [20])
         presentation.preferences.maxItems = 21
         presentation.save()
         presentation.stop()
         try await Task.sleep(for: .milliseconds(180))
-        #expect(saved.map(\.maxItems) == [20])
+        #expect(saved.map { $0["maxItems"] as? Int } == [20])
         #expect(presentation.history.entries.isEmpty)
         #expect(presentation.history.copiedID == nil)
     }
@@ -168,7 +169,7 @@ import Testing
         #expect(runtime.responds(to: NSSelectorFromString("prepareToStopWithCompletion:")))
     }
 
-    @Test func retentionAndPrivacyPreferencesAreValidatedBeforeWriting() throws {
+    @Test func retentionAndPrivacyPreferencesAreClampedBeforeWriting() throws {
         let suite = "clipboard-preferences-test-" + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -183,7 +184,32 @@ import Testing
         try preferences.save(defaults)
         #expect(ClipboardPreferences.read(defaults) == preferences)
         preferences.checkInterval = .nan
-        #expect(throws: ExtensionPeerError.self) { try preferences.save(defaults) }
-        #expect(ClipboardPreferences.read(defaults).checkInterval.isFinite)
+        preferences.maxAgeDays = 45
+        try preferences.save(defaults)
+        let clamped = ClipboardPreferences.read(defaults)
+        #expect(clamped.checkInterval == ClipboardIndex.defaultCheckInterval)
+        #expect(clamped.maxAgeDays == 30)
+    }
+
+    @Test func patchesCarryOnlyChangedKeysAndKeepConcurrentValues() throws {
+        let suite = "clipboard-patch-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let base = ClipboardPreferences.read(defaults)
+        var edited = base
+        edited.maxItems = 55
+        var concurrent = base
+        concurrent.capturePaused = true
+        try concurrent.save(defaults)
+        let patch = try edited.changes(from: base)
+        let keys = try #require(JSONSerialization.jsonObject(with: patch) as? [String: Any])
+        #expect(Set(keys.keys) == ["maxItems"])
+        try ClipboardPreferences.patched(defaults, with: patch).save(defaults)
+        let merged = ClipboardPreferences.read(defaults)
+        #expect(merged.maxItems == 55)
+        #expect(merged.capturePaused)
+        #expect(throws: ExtensionPeerError.self) {
+            try ClipboardPreferences.patched(defaults, with: Data(#"{"unknown":1}"#.utf8))
+        }
     }
 }
