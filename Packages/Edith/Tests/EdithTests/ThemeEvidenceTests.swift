@@ -126,7 +126,7 @@ private struct ThemeEvidenceView: View {
                 Text("Edith theme system")
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                 Text(
-                    "Neutral app surfaces with theme-aware database workspaces and terminals"
+                    "Neutral app surfaces and terminals with theme-aware database workspaces"
                 )
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(DashSkin.inkSoft(true))

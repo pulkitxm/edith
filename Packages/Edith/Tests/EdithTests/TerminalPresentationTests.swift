@@ -46,11 +46,14 @@ import Testing
         #expect(holder.themeApplicationCount == 1)
     }
 
-    @Test func terminalPaletteChangesWithTheAppTheme() {
+    @Test func terminalKeepsItsBackgroundWhileTheCaretFollowsTheTheme() {
         let blue = TerminalPalette.edith(dark: true, theme: .blue)
         let orange = TerminalPalette.edith(dark: true, theme: .orange)
 
         #expect(blue != orange)
+        #expect(blue.background.isEqual(orange.background))
+        #expect(blue.foreground.isEqual(orange.foreground))
+        #expect(!blue.caret.isEqual(orange.caret))
         #expect(blue.ansi.count == 16)
         #expect(orange.ansi.count == 16)
         #expect(!blue.selectionBackground.isEqual(blue.background))

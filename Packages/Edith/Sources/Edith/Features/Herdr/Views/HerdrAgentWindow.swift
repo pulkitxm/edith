@@ -145,7 +145,7 @@ struct HerdrTitlebarViewPicker: View {
             .frame(width: UIScale.pt(228))
             .widgetBar(
                 cornerRadius: 8,
-                fill: DashSkin.paper(dark, theme: theme),
+                fill: DashSkin.paper(dark),
                 stroke: accent.opacity(dark ? 0.5 : 0.35)
             )
             Button {
@@ -155,14 +155,14 @@ struct HerdrTitlebarViewPicker: View {
             } label: {
                 Image(systemName: "sidebar.right")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark, theme: theme).opacity(0.72))
+                    .foregroundStyle(DashSkin.ink(dark).opacity(0.72))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .padding(UIScale.pt(2))
                     .widgetBar(
                         cornerRadius: 8,
                         fill: store.detailOpen
                             ? accent.opacity(dark ? 0.24 : 0.16)
-                            : DashSkin.paper(dark, theme: theme),
+                            : DashSkin.paper(dark),
                         stroke: accent.opacity(dark ? 0.5 : 0.35)
                     )
             }
@@ -186,7 +186,7 @@ private struct HerdrTitlebarViewButton: View {
 
     private var accent: Color { DashSkin.accent(dark, theme: theme) }
     private var foreground: Color {
-        selected ? accent : DashSkin.ink(dark, theme: theme).opacity(hovered ? 0.92 : 0.68)
+        selected ? accent : DashSkin.ink(dark).opacity(hovered ? 0.92 : 0.68)
     }
 
     var body: some View {
