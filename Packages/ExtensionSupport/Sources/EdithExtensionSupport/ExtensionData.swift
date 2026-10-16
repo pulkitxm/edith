@@ -12,7 +12,7 @@ public enum ExtensionData {
         "usage": "", "herdr": "", "clipboard": "", "attention": "", "studio": "",
         "notchShelf": "", "latex": "", "calendar": "", "appMaintenance": "", "music": "",
         "seoAudit": "", "machines": "machines", "codeStats": "code-stats",
-        "virtualCamera": "virtual-camera", "companion": "machines", "database": "database",
+        "virtualCamera": "virtual-camera", "companion": "", "database": "database",
         "timeLapse": "", "downloads": "data", "homebrew": "",
     ]
 
@@ -31,10 +31,7 @@ public enum ExtensionData {
         ],
         "seoAudit": ["SEOAudit"], "machines": ["machines"], "codeStats": ["code-stats"],
         "virtualCamera": ["virtual-camera"],
-        "companion": [
-            "machines/companion-config.json", "machines/companion-deployment.json",
-            "machines/companion-outbox",
-        ],
+        "companion": ["companion-config.json", "companion-deployment.json", "companion-outbox"],
         "database": ["database"], "timeLapse": ["video-projects/TimeLapses"],
         "downloads": [
             "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
