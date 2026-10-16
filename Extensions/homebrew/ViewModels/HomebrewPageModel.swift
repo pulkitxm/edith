@@ -37,6 +37,8 @@ final class HomebrewPageModel {
     private let client: HomebrewPageClient
     private let store: HomebrewListingStore?
     private var task: Task<Void, Never>?
+    private(set) var isMutating = false
+    private var silentCancellation = false
     private var preferenceTask: Task<Void, Never>?
     private var cachedPackages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
     private var didRestoreSnapshot = false
@@ -156,7 +158,7 @@ final class HomebrewPageModel {
         _ action: HomebrewMutation, package: HomebrewPackage,
         query: String, kind: HomebrewPackageKind
     ) {
-        begin(title: operationTitle(action, package: package)) { generation in
+        begin(title: operationTitle(action, package: package), mutation: true) { generation in
             do {
                 let result = try await self.client.mutate(
                     action, kind: package.kind, name: package.name)
@@ -180,6 +182,12 @@ final class HomebrewPageModel {
                 self.fail(error, generation: generation)
             }
         }
+    }
+
+    func cancelDiscovery() {
+        guard !isMutating, task != nil else { return }
+        silentCancellation = true
+        cancel()
     }
 
     @discardableResult
@@ -258,11 +266,14 @@ final class HomebrewPageModel {
     }
 
     private func begin(
-        title: String, operation: @escaping @MainActor (UInt64) async -> Void
+        title: String, mutation: Bool = false,
+        operation: @escaping @MainActor (UInt64) async -> Void
     ) {
         task?.cancel()
         let generation = loading.begin()
         isBusy = true
+        isMutating = mutation
+        silentCancellation = false
         isCancelling = false
         operationTitle = title
         errorMessage = nil
@@ -273,10 +284,11 @@ final class HomebrewPageModel {
             if loading.owns(generation), Task.isCancelled {
                 loading.cancel(generation)
                 isBusy = false
+                isMutating = false
                 isCancelling = false
                 operationTitle = nil
                 task = nil
-                resultMessage = "Homebrew operation cancelled."
+                if !silentCancellation { resultMessage = "Homebrew operation cancelled." }
             }
         }
     }
@@ -285,6 +297,7 @@ final class HomebrewPageModel {
         guard isCurrent(generation) else { return }
         loading.complete(generation)
         isBusy = false
+        isMutating = false
         isCancelling = false
         operationTitle = nil
         task = nil
@@ -294,11 +307,12 @@ final class HomebrewPageModel {
         guard loading.owns(generation) else { return }
         loading.fail(generation, error: error)
         isBusy = false
+        isMutating = false
         isCancelling = false
         operationTitle = nil
         task = nil
         if error is CancellationError {
-            resultMessage = "Homebrew operation cancelled."
+            if !silentCancellation { resultMessage = "Homebrew operation cancelled." }
         } else {
             errorMessage = error.localizedDescription
         }

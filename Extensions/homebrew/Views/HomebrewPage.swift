@@ -53,7 +53,7 @@ struct HomebrewMaintenanceView: View {
                 }
             }
         }
-        .pageTask(cancel: { model.cancel() }) {
+        .pageTask(cancel: { model.cancelDiscovery() }) {
             async let restored = try? await model.preferredKind()
             await model.loadCachedListing(showing: kind)
             if let restored = await restored, !Task.isCancelled {
