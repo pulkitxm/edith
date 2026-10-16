@@ -15,17 +15,38 @@ public enum MusicEvents {
         public static let requestNowPlayingState = "music.external.requestState"
     }
 
+    private static var distributedNamespace: String? {
+        ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+    }
+
+    private static let distributedRequestBridge: NSObjectProtocol? = {
+        guard let namespace = distributedNamespace else { return nil }
+        return DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(namespace + ".requestMusicState"), object: nil,
+            queue: .main
+        ) { _ in
+            NotificationCenter.default.post(
+                name: Notification.Name(Name.requestMusicState), object: nil)
+        }
+    }()
+
     public static func post(_ name: String, userInfo: [String: Any]? = nil) {
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: Notification.Name(name), object: nil, userInfo: userInfo)
+        }
+        if name == Name.musicState, let namespace = distributedNamespace {
+            DistributedNotificationCenter.default().postNotificationName(
+                Notification.Name(namespace + ".musicState"), object: nil, userInfo: userInfo,
+                deliverImmediately: true)
         }
     }
 
     public static func observe(
         _ name: String, handler: @escaping () -> Void
     ) -> NSObjectProtocol {
-        NotificationCenter.default.addObserver(
+        if name == Name.requestMusicState { _ = distributedRequestBridge }
+        return NotificationCenter.default.addObserver(
             forName: Notification.Name(name), object: nil, queue: .main
         ) { _ in handler() }
     }

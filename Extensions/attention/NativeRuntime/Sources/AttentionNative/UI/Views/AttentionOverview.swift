@@ -417,7 +417,7 @@ struct AttentionEdithPanel: View {
         let rows = (model.summary.dimension(dimension)?.rows ?? []).prefix(7).map { row in
             AttentionRankRow(
                 label: dimension == AttentionTag.page
-                    ? (SurfaceWidget(rawValue: row.key)?.title ?? row.key) : row.key,
+                    ? (AttentionPageTitles.title(row.key) ?? row.key) : row.key,
                 value: row.duration, detail: nil,
                 color: AttentionPalette.accent(dark))
         }
@@ -594,4 +594,20 @@ struct AttentionListeningPanel: View {
             }
         }
     }
+}
+
+enum AttentionPageTitles {
+    static let titles: [String: String] = [
+        "home": "Home", "machines": "Fleet", "docs": "Docs", "agents": "Agents",
+        "dashboard": "Usage", "herdr": "Sessions", "quinjet": "Review", "companion": "Memory",
+        "plugins": "Plugins", "appMaintenance": "Maintenance", "blitztree": "BlitzTree",
+        "system": "System", "runningApps": "Running apps", "desk": "Desk", "media": "Media",
+        "studio": "Studio", "latex": "LaTeX", "timeLapse": "Screen Recorder",
+        "downloads": "Downloads", "music": "Music", "calendar": "Calendar",
+        "virtualCamera": "Virtual Camera", "data": "Data", "database": "Database",
+        "attention": "Attention", "seoAudit": "Site Audit", "codeStats": "Code Stats",
+        "extensions": "Extensions", "settings": "Settings", "about": "About",
+    ]
+
+    static func title(_ key: String) -> String? { titles[key] }
 }

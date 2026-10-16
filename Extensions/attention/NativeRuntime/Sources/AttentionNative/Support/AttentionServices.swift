@@ -52,7 +52,8 @@ enum AttentionCloudStorage {
         guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
             return false
         }
-        return FileManager.default.fileExists(atPath: directory.deletingLastPathComponent().path)
+        let cloudDocs = directory.deletingLastPathComponent().deletingLastPathComponent()
+        return FileManager.default.fileExists(atPath: cloudDocs.path)
     }
 }
 
