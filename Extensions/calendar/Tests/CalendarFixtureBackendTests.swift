@@ -21,7 +21,7 @@ import Testing
         backend.store.start()
         #expect(backend.store.authStatus == .fullAccess)
         backend.store.refreshAuthStatus()
-        for location in [CalendarUISceneRoute.Location.main, .home, .notch] {
+        for location in [CalendarUISceneRoute.Location.main, .settings, .home, .notch] {
             let bridge = CalendarFixtureRuntimeBridge(runtime: runtime)
             let client = try #require(
                 ExtensionEngineClient(bridge: bridge, presentationID: bridge.presentationID))
@@ -34,12 +34,16 @@ import Testing
             let tile = SurfaceTile(.calendar)
             let scene = CalendarUIPresentation(
                 facade: facade,
-                route: .init(location: location, tile: location == .main ? nil : tile))
+                route: .init(
+                    location: location,
+                    tile: location == .main || location == .settings ? nil : tile))
             defer { scene.shutdown() }
             let controller = try #require(scene.controller())
             switch location {
             case .main:
                 #expect(controller is NSHostingController<ExtensionPageHost<CalendarPage>>)
+            case .settings:
+                #expect(controller is NSHostingController<ExtensionPageHost<CalendarSettingsScene>>)
             case .home:
                 #expect(controller is NSHostingController<ExtensionPageHost<CalendarHomeScene>>)
             case .notch:
