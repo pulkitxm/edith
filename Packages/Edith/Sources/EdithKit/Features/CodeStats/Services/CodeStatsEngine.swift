@@ -79,7 +79,9 @@ public actor CodeStatsEngine {
         var forks = Set<String>()
         if let github {
             do {
-                profiles = try await github.profiles()
+                profiles = try await github.profiles().filter {
+                    settings.includes(account: $0.login)
+                }
             } catch {
                 issue = Self.issue(error)
             }

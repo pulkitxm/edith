@@ -6,21 +6,27 @@ public struct CodeStatsSettings: Codable, Equatable, Sendable {
     public var includeForks: Bool
     public var includeArchived: Bool
     public var schedule: CodeStatsSchedule
+    public var excludedAccounts: [String]
 
     public init(
         folder: String? = nil, identity: CodeStatsIdentity = CodeStatsIdentity(),
         includeForks: Bool = false, includeArchived: Bool = true,
-        schedule: CodeStatsSchedule = .manual
+        schedule: CodeStatsSchedule = .manual, excludedAccounts: [String] = []
     ) {
         self.folder = folder
         self.identity = identity
         self.includeForks = includeForks
         self.includeArchived = includeArchived
         self.schedule = schedule
+        self.excludedAccounts = excludedAccounts
     }
 
     public func includes(_ repository: CodeStatsRemoteRepository) -> Bool {
         (includeForks || !repository.isFork) && (includeArchived || !repository.isArchived)
+    }
+
+    public func includes(account login: String) -> Bool {
+        !excludedAccounts.contains { $0.caseInsensitiveCompare(login) == .orderedSame }
     }
 }
 

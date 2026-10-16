@@ -128,6 +128,7 @@ public enum AppStorageKeys {
         public static let includeArchived = "codeStatsIncludeArchived"
         public static let identitySubstrings = "codeStatsIdentitySubstrings"
         public static let identityEmails = "codeStatsIdentityEmails"
+        public static let excludedAccounts = "codeStatsExcludedAccounts"
     }
 
     public enum ColorPicker {

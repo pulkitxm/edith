@@ -276,10 +276,12 @@ public actor CodeStatsWorkflow {
         }
         do {
             let profiles = try await github.profiles()
+            let settings = environment.settings()
+            let counted = profiles.filter { settings.includes(account: $0.login) }
             var emails: [String] = []
-            for profile in profiles { emails += await github.emails(for: profile) }
-            if state.profiles != profiles {
-                state.profiles = profiles
+            for profile in counted { emails += await github.emails(for: profile) }
+            if state.profiles != counted {
+                state.profiles = counted
                 persist()
                 await announce()
             }
@@ -351,7 +353,9 @@ public actor CodeStatsWorkflow {
         }
         let github = environment.github()
         if let github, let profiles = try? await github.profiles() {
-            settings.identity = await seed(profiles, github: github, context: context)
+            settings.identity = await seed(
+                profiles.filter { settings.includes(account: $0.login) }, github: github,
+                context: context)
         }
         let engine = environment.makeEngine(github, git, environment.store, environment.probe)
         let (updates, continuation) = AsyncStream.makeStream(

@@ -51,7 +51,15 @@ public enum CodeStatsPreferences {
             identity: identity(in: defaults),
             includeForks: defaults.bool(forKey: Keys.includeForks),
             includeArchived: defaults.object(forKey: Keys.includeArchived) as? Bool ?? true,
-            schedule: schedule(in: defaults))
+            schedule: schedule(in: defaults),
+            excludedAccounts: defaults.stringArray(forKey: Keys.excludedAccounts) ?? [])
+    }
+
+    public static func setAccount(_ login: String, included: Bool, in defaults: UserDefaults) {
+        let excluded = (defaults.stringArray(forKey: Keys.excludedAccounts) ?? []).filter {
+            $0.caseInsensitiveCompare(login) != .orderedSame
+        }
+        defaults.set(included ? excluded : excluded + [login], forKey: Keys.excludedAccounts)
     }
 
     public static func schedule(in defaults: UserDefaults) -> CodeStatsSchedule {

@@ -768,6 +768,9 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.CodeStats.identityEmails, .stringList, group: "codestats",
             summary: "Author emails that mark a commit as yours."),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.excludedAccounts, .stringList, group: "codestats",
+            summary: "gh account logins whose repositories are not synced or counted."),
     ]
 
     private static let studio: [SettingDefinition] = [

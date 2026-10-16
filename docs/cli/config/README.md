@@ -191,6 +191,7 @@ not here cannot be set, and `import` skips it.
 | `codeStatsIncludeArchived` | bool | `true` | shared | Mirror and count archived repositories. |
 | `codeStatsIdentitySubstrings` | stringList | none | shared | Name or login fragments that mark a commit as yours. |
 | `codeStatsIdentityEmails` | stringList | none | shared | Author emails that mark a commit as yours. |
+| `codeStatsExcludedAccounts` | stringList | none | shared | gh account logins whose repositories are not synced or counted. |
 
 ### `machines`
 
