@@ -55,7 +55,7 @@ import Foundation
                 info: info(), startedAt: startedAt,
                 agent: HostAppDiagnosticsCLI.core(
                     snapshot: service?.snapshot, online: service?.online == true,
-                    state: service?.activityLabel.lowercased() ?? "unavailable",
+                    state: HostLoginItem.registration.rawValue,
                     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
                         ?? "development"),
                 extensionIDs: Array(marketplace.sessions.activeIDs))

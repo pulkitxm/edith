@@ -30,7 +30,7 @@ struct HostApplication: App {
                                     $0, presenter: runtime.remotePresenter)
                             },
                             coreOnline: runtime.coreServices?.online ?? false,
-                            coreSummary: runtime.coreServices?.activityLabel ?? "Starting",
+                            coreSummary: runtime.coreServices?.sidebarSummary ?? "Starting",
                             sectionWindows: runtime.sectionWindows,
                             windowNavigation: runtime.windowNavigation,
                             musicSlots: runtime.musicSlots

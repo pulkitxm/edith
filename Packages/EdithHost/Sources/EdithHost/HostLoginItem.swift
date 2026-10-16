@@ -4,6 +4,30 @@ import ServiceManagement
 enum HostLoginItem {
     static let approvalRequestedKey = "host.loginItem.approvalRequested"
 
+    enum Registration: String {
+        case notRegistered, enabled, awaitingApproval, notFound
+
+        var title: String {
+            switch self {
+            case .notRegistered: "Not registered"
+            case .enabled: "Enabled"
+            case .awaitingApproval: "Waiting for approval"
+            case .notFound: "Not found"
+            }
+        }
+
+        var needsAttention: Bool { self != .enabled }
+    }
+
+    static var registration: Registration {
+        switch SMAppService.mainApp.status {
+        case .enabled: .enabled
+        case .requiresApproval: .awaitingApproval
+        case .notFound: .notFound
+        default: .notRegistered
+        }
+    }
+
     static func register(defaults: UserDefaults = .standard) {
         retireLegacyServices()
         let service = SMAppService.mainApp
