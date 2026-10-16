@@ -17,7 +17,7 @@ import Testing
         #expect(admission.lowerBound < rejection.lowerBound)
         #expect(rejection.lowerBound < installation.lowerBound)
         #expect(source.components(separatedBy: "TextEditingCommands.install()").count == 2)
-        #expect(try branch("stopUI", in: source).contains("stopUI()"))
+        #expect(try branch("stopUI", in: source).contains("releasePresentation()"))
         #expect(try branch("stop", in: source).contains("stopUI()"))
         let stop = try #require(source.range(of: "private func stopUI()"))
         let teardown = source[stop.lowerBound...]
