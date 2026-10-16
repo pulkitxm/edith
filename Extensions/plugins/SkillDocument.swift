@@ -49,7 +49,7 @@ public struct SkillDocument: Codable, Sendable, Equatable {
             NSPasteboard.general.clearContents()
             return NSPasteboard.general.setString(markdown, forType: .string)
         },
-        cacheDirectory: URL = ExtensionData.root.appendingPathComponent("cache"),
+        cacheDirectory: URL = ExtensionData.root.appendingPathComponent("plugins/cache"),
         fetch: @escaping @Sendable (URL) async throws -> Data = { url in
             try await SkillDocumentStore.download(url)
         }

@@ -8,11 +8,14 @@ import Testing
         let suite = "plugins.surface.tests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let model = SkillsModel(defaults: defaults, detectAgents: { [] })
+        let agents = [
+            SkillAgent("first", "First", "/synthetic/first", []),
+            SkillAgent("second", "Second", "/synthetic/second", []),
+        ]
+        let model = SkillsModel(defaults: defaults, detectAgents: { agents })
         defer { Task { await model.shutdown() } }
         let surface = PluginsSurface(model: model)
         var tile = SurfaceTile(.ability("plugins"))
-        tile.sourceIDs = [model.skills[0].id]
         tile.itemLimit = 1
         tile.showDetails = false
         tile.showActions = false
@@ -22,10 +25,11 @@ import Testing
                 providerID: "plugins"))
         let result = try SurfaceSnapshot.decode(data, providerID: "plugins")
         #expect(result.rows.count == 1)
-        #expect(result.rows.first?.id == model.skills[0].id)
-        #expect(result.rows.first?.detail == "")
+        #expect(result.rows.first?.id == "first" && result.rows.first?.icon == "terminal")
+        #expect(result.metrics.map(\.title) == ["Detected agents", "Available skills"])
+        #expect(result.metrics.map(\.value) == ["2", "\(model.skills.count)"])
         #expect(result.actions.isEmpty)
-        #expect(result.sources.count == 4)
+        #expect(result.sources.isEmpty && result.message == nil)
         #expect(model.documents.cachedDocument(for: model.skills[0]) == nil)
         #expect(model.installedAgents.isEmpty)
         #expect(!model.isInstalling)

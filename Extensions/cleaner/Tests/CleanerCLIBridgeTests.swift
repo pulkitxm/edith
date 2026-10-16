@@ -81,4 +81,47 @@ import Testing
                 "cleaner.ui.snapshot", payload: Data("{}".utf8), model: model)
         }
     }
+
+    @Test func consecutiveRemoteSelectionsShareOneScanTokenAndDriveLoadingIsReported() async throws
+    {
+        let suite = "synthetic.cleaner.rapid." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = CleanerModel(
+            defaults: defaults,
+            services: CleanerServices(
+                drives: {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    return []
+                },
+                scan: { _, _, _ in
+                    .init(categories: [
+                        .init(
+                            id: "synthetic", name: "Cache", detail: "Fixture",
+                            items: [
+                                .init(
+                                    id: "a", name: "A", path: URL(fileURLWithPath: "/synthetic/a"),
+                                    sizeBytes: 8, selected: true),
+                                .init(
+                                    id: "b", name: "B", path: URL(fileURLWithPath: "/synthetic/b"),
+                                    sizeBytes: 8, selected: true),
+                            ])
+                    ])
+                }))
+        _ = try await CleanerCommands.execute("cleaner.scan", payload: Data(), model: model)
+        let token = model.previewToken
+        for item in ["a", "b"] {
+            let action = CleanerUIAction(
+                operation: "item", value: "synthetic", item: item, previewToken: token)
+            _ = try await CleanerUICommands.execute(
+                "cleaner.ui.action", payload: JSONEncoder().encode(action), model: model)
+        }
+        #expect(model.selectedItemCount == 0 && model.previewToken == token)
+        let drives = CleanerUIAction(
+            operation: "drives", value: nil, item: nil, previewToken: token)
+        let reply = try await CleanerUICommands.execute(
+            "cleaner.ui.action", payload: JSONEncoder().encode(drives), model: model)
+        #expect(try JSONDecoder().decode(CleanerUISnapshot.self, from: reply).loadingDriveOptions)
+        await model.shutdown()
+    }
 }

@@ -350,7 +350,7 @@
         },
         {
           "path": "Extensions/cleaner/CleanerModel.swift",
-          "sha256": "1cd1c40c5730dca290dd672d01d4e68fe2b59bbcbe2e0008dd5adecb245f53cf"
+          "sha256": "e03ae4d9c08f600677b741bf0b5f0c61f2bfdd066c8160281eaa35652b2e9a62"
         }
       ]
     },
@@ -416,7 +416,7 @@
         },
         {
           "path": "Extensions/plugins/SkillsModel.swift",
-          "sha256": "b058327b148330ade7dede072df6e3757706c5acdb234043a373ec5c147915a1"
+          "sha256": "138ac8f05be91437d974bc0462996d5c9b04e380176a208460b1836055f7b536"
         }
       ]
     },

@@ -16,8 +16,8 @@ import Testing
         #expect(probe.calls == 1)
         #expect(model.latestEstimate?.reclaimableBytes == 32)
         #expect(model.latestEstimate?.categoryCount == 1)
-        #expect(model.scanned)
-        #expect(model.uiSnapshot().categories.map(\.id) == ["fixture-cache"])
+        #expect(!model.scanned && !model.scanning)
+        #expect(model.categories.isEmpty && model.logs.isEmpty)
         #expect(CleanerSurface.snapshot(model).metrics.first?.value == JunkScanner.format(32))
         #expect(CleanerSurface.snapshot(model).updatedAt == clock.now())
         #expect(model.lastReclaimed == 0)
@@ -66,7 +66,7 @@ import Testing
         #expect(probe.calls == 1)
     }
 
-    @Test func explicitScanCoalescesWithBackgroundEstimate() async throws {
+    @Test func estimateNeverTouchesThePageState() async throws {
         let fixture = CleanerBackgroundFixture()
         defer { fixture.remove() }
         let clock = CleanerBackgroundClock()
@@ -75,12 +75,13 @@ import Testing
         let model = fixture.model(clock: clock, probe: probe, gate: gate)
         let estimate = Task { await model.estimateIfDue(onBattery: false) }
         #expect(await wait { gate.started })
-        model.scan()
-        #expect(probe.calls == 1)
+        #expect(!model.scanning && !model.scanned)
+        #expect(model.categories.isEmpty && model.drives.isEmpty && model.logs.isEmpty)
         gate.open()
         await estimate.value
         #expect(probe.calls == 1)
-        #expect(model.scanned)
+        #expect(!model.scanning && !model.scanned && model.categories.isEmpty)
+        #expect(model.latestEstimate?.reclaimableBytes == 32)
         await model.shutdown()
     }
 
