@@ -93,12 +93,15 @@ private struct NotificationFixture {
         let fixture = try NotificationFixture()
         defer { fixture.close() }
         let snapshot = fixture.limits()
+        let cache = fixture.root.appendingPathComponent("limits-snapshot.json")
         let job = LimitsCollectorJob(
             notify: { try await fixture.service.evaluateLimits($0, now: fixture.now) },
+            save: { try LimitsSnapshotCache.save($0, url: cache) },
             refresh: { snapshot })
 
         let result = try #require(try await job.run())
         #expect(try AgentPayload.decode(LimitsTopicSnapshot.self, from: result) == snapshot)
+        #expect(LimitsSnapshotCache.load(url: cache) == snapshot)
         let deliveries = try await fixture.service.pending(now: fixture.now)
         #expect(
             deliveries.map(\.identifier)

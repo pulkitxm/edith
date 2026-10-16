@@ -41,7 +41,8 @@ public actor LimitsRefreshSession {
                 LimitsTopicSnapshot(
                     refreshedAt: latest.refreshedAt, providers: paused,
                     failure: paused.compactMap(\.error).first,
-                    claudeAccounts: latest.claudeAccounts))
+                    claudeAccounts: latest.claudeAccounts,
+                    claudeUsesAccounts: latest.claudeUsesAccounts))
         }
         collecting = true
         return .collect(paused)

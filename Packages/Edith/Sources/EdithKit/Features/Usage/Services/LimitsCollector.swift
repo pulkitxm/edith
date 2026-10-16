@@ -37,19 +37,21 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
     public let providers: [LimitsProviderSnapshot]
     public let failure: String?
     public let claudeAccounts: [ClaudeAccountLimits]
+    public let claudeUsesAccounts: Bool
 
     public init(
         refreshedAt: Date, providers: [LimitsProviderSnapshot], failure: String?,
-        claudeAccounts: [ClaudeAccountLimits] = []
+        claudeAccounts: [ClaudeAccountLimits] = [], claudeUsesAccounts: Bool = false
     ) {
         self.refreshedAt = refreshedAt
         self.providers = providers
         self.failure = failure
         self.claudeAccounts = claudeAccounts
+        self.claudeUsesAccounts = claudeUsesAccounts || !claudeAccounts.isEmpty
     }
 
     private enum CodingKeys: String, CodingKey {
-        case refreshedAt, providers, failure, claudeAccounts
+        case refreshedAt, providers, failure, claudeAccounts, claudeUsesAccounts
     }
 
     public init(from decoder: any Decoder) throws {
@@ -60,6 +62,9 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
         claudeAccounts =
             try container.decodeIfPresent([ClaudeAccountLimits].self, forKey: .claudeAccounts)
             ?? []
+        claudeUsesAccounts =
+            try container.decodeIfPresent(Bool.self, forKey: .claudeUsesAccounts)
+            ?? !claudeAccounts.isEmpty
     }
 }
 
@@ -154,6 +159,7 @@ public enum LimitsCollector {
             providers: providers.filter { $0 != .claude || accounts.isEmpty },
             leaseProviders: providers, force: force,
             refreshSession: refreshSession, now: now, announce: announce,
+            claudeUsesAccounts: !accounts.isEmpty,
             fetchAccounts: {
                 let subscribed = accounts.filter(\.hasSubscriptionLimits)
                 guard let directory, !subscribed.isEmpty else { return [] }
@@ -166,6 +172,7 @@ public enum LimitsCollector {
         providers: [LimitProvider], leaseProviders: [LimitProvider]? = nil, force: Bool = false,
         refreshSession: LimitsRefreshSession, now: Date = Date(),
         announce: @Sendable (Notification.Name) -> Void,
+        claudeUsesAccounts: Bool = false,
         fetchAccounts: () async throws -> [ClaudeAccountLimits] = { [] },
         fetch: (LimitProvider) async -> (LimitsProviderSnapshot, Date?)
     ) async -> LimitsTopicSnapshot {
@@ -202,7 +209,7 @@ public enum LimitsCollector {
             refreshedAt: now, providers: snapshots,
             failure: snapshots.compactMap(\.error).first
                 ?? accountFailure ?? accounts.compactMap(\.limits.error).first,
-            claudeAccounts: accounts)
+            claudeAccounts: accounts, claudeUsesAccounts: claudeUsesAccounts)
         await refreshSession.finish(snapshot, retryNotBefore: deadlines)
         announce(IPC.Name.limitsUpdated)
         return snapshot
