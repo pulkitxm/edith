@@ -37,8 +37,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var remoteExportRetirement: TimeLapseRemoteExportRetirement?
     var exportRetirementError: String? { remoteExportRetirement?.lastError }
     private var remoteRevision = 0
-    private var permissionTask: Task<Void, Never>?
     private var receivedRemoteSettings = false
+    @ObservationIgnored private var syncedConfiguration: TimeLapseUIStart?
+    @ObservationIgnored private var configureTask: Task<Void, Never>?
     @ObservationIgnored private var sourceSnapshot: TimeLapseSources?
     @ObservationIgnored private var thumbnailCache: [String: CGImage] = [:]
     private let thumbnailLoader = TimeLapseThumbnailLoader()
@@ -50,7 +51,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private let callbacks = TimeLapseRecorderCallbacks()
     private var startTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
-    private var activeSession: UUID?
+    private(set) var activeSession: UUID?
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
@@ -68,45 +69,63 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         self.engineClient = engineClient
         exportLibrary = nil
         library = TimeLapseLibraryModel(
+            recordings: TimeLapseUIMemory.recordings,
             read: { _ in
                 let data = try await engineClient.invoke("recording.ui.library")
-                return try JSONDecoder().decode([TimeLapseRecording].self, from: data)
+                let recordings = try JSONDecoder().decode([TimeLapseRecording].self, from: data)
+                await MainActor.run { TimeLapseUIMemory.recordings = recordings }
+                return recordings
             },
             write: { recording, quality, destination in
                 let payload = try JSONEncoder().encode(
                     TimeLapseUIExport(
                         id: recording.id, quality: quality, destination: destination.path))
+                await retirement.reset()
                 let data = try await engineClient.invoke("recording.ui.export", payload: payload)
                 let job = try JSONDecoder().decode(TimeLapseUIExportStatus.self, from: data)
-                let poll = try JSONEncoder().encode(["token": job.token])
-                do {
-                    while true {
-                        try Task.checkCancellation()
-                        let result = try await engineClient.invoke(
-                            "recording.ui.exportPoll", payload: poll)
-                        let status = try JSONDecoder().decode(
-                            TimeLapseUIExportStatus.self, from: result)
-                        guard status.token == job.token else {
-                            throw ExtensionPeerError.invalidRequest
-                        }
-                        if status.complete {
-                            if let error = status.error { throw ExtensionPeerError.rejected(error) }
-                            return
-                        }
-                        try await Task.sleep(for: .milliseconds(150))
-                    }
-                } catch {
-                    guard Task.isCancelled else { throw error }
-                    let cancellation = Task {
-                        await retirement.wait(token: job.token, payload: poll) {
-                            try await engineClient.invoke($0, payload: $1)
-                        }
-                    }
-                    await cancellation.value
-                    throw CancellationError()
-                }
+                try await Self.follow(job.token, engineClient: engineClient, retirement: retirement)
+            },
+            follow: { token in
+                await retirement.reset()
+                try await Self.follow(token, engineClient: engineClient, retirement: retirement)
             })
         super.init()
+        if let memory = TimeLapseUIMemory.snapshot { applyRemote(memory) }
+    }
+
+    nonisolated private static func follow(
+        _ token: UUID, engineClient: ExtensionEngineClient,
+        retirement: TimeLapseRemoteExportRetirement
+    ) async throws {
+        let job = TimeLapseUIExportStatus(token: token, complete: false, error: nil)
+        let poll = try JSONEncoder().encode(["token": job.token])
+        do {
+            while true {
+                try Task.checkCancellation()
+                let result = try await engineClient.invoke(
+                    "recording.ui.exportPoll", payload: poll)
+                let status = try JSONDecoder().decode(TimeLapseUIExportStatus.self, from: result)
+                guard status.token == job.token else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                if status.complete {
+                    if let error = status.error { throw ExtensionPeerError.rejected(error) }
+                    return
+                }
+                try await Task.sleep(for: .milliseconds(150))
+            }
+        } catch {
+            guard Task.isCancelled else { throw error }
+            if await retirement.cancelRequested {
+                let cancellation = Task {
+                    await retirement.wait(token: job.token, payload: poll) {
+                        try await engineClient.invoke($0, payload: $1)
+                    }
+                }
+                await cancellation.value
+            }
+            throw CancellationError()
+        }
     }
 
     init(exportLibrary: TimeLapseExportLibrary) {
@@ -148,7 +167,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         }
     }
 
-    func uiSnapshot() -> TimeLapseUISnapshot {
+    func uiSnapshot(export: TimeLapseUIExportStatus? = nil) -> TimeLapseUISnapshot {
         .init(
             settings: settings, displays: displays, windows: windows, microphones: microphones,
             sourceMode: sourceMode, selectedDisplays: selectedDisplays,
@@ -159,10 +178,10 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             lastDirectory: lastDirectory,
             preview: preview.flatMap {
                 NSBitmapImageRep(cgImage: $0).representation(
-                    using: .jpeg, properties: [.compressionFactor: 0.75])
+                    using: .jpeg, properties: [.compressionFactor: 0.95])
             },
             sourceRevision: sourceRevision, sourceError: sourceLoad.errorMessage,
-            sourcesLoaded: sourceLoad.hasContent)
+            sourcesLoaded: sourceLoad.hasContent, export: export)
     }
 
     func refreshRemote() async {
@@ -194,6 +213,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             selectedDisplays = value.selectedDisplays
             selectedWindows = value.selectedWindows; microphone = value.microphone
             receivedRemoteSettings = true
+            syncedConfiguration = configuration
         }
         displays = value.displays; windows = value.windows; microphones = value.microphones
         recording = value.recording; busy = value.busy; error = value.error;
@@ -208,6 +228,34 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         } else if value.sourcesLoaded {
             sourceLoad.setContent()
         }
+        if let export = value.export, !export.complete, !library.exporting, !stopped {
+            library.resume(token: export.token)
+        }
+        TimeLapseUIMemory.snapshot = value.withoutPreview()
+    }
+
+    var configuration: TimeLapseUIStart {
+        .init(
+            settings: settings, sourceMode: sourceMode, displays: selectedDisplays,
+            windows: selectedWindows, microphone: microphone)
+    }
+
+    func pushConfiguration() {
+        guard let engineClient, !stopped, receivedRemoteSettings, !recording, !busy,
+            configuration != syncedConfiguration
+        else { return }
+        syncedConfiguration = configuration
+        let previous = configureTask
+        configureTask = launch { [self] in
+            await previous?.value
+            guard !stopped, let payload = try? JSONEncoder().encode(configuration) else { return }
+            _ = try? await engineClient.invoke("recording.ui.configure", payload: payload)
+        }
+    }
+
+    func cancelExport() {
+        remoteExportRetirement?.requestCancel()
+        library.cancelExport()
     }
 
     var canStart: Bool {
@@ -225,10 +273,6 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         operation:
             @escaping @Sendable () async throws -> (TimeLapseSources, [TimeLapseMicrophoneChoice]) =
             {
-                guard CGPreflightScreenCaptureAccess() else {
-                    throw TimeLapseError.encoding(
-                        "Allow Screen Recording in System Settings, then refresh sources.")
-                }
                 async let sources = TimeLapseSources.load()
                 async let microphones = TimeLapseMicrophoneChoice.load()
                 return try await (sources, microphones)
@@ -284,14 +328,22 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         guard !exportOnly else { return nil }
         if let engineClient {
             guard !stopped else { return nil }
+            let key = "\(mode)-\(id)-\(sourceRevision)"
+            if let image = thumbnailCache[key] { return image }
+            let revision = sourceRevision
             do {
                 let payload = try JSONEncoder().encode(TimeLapseUIThumbnail(mode: mode, id: id))
                 let data = try await engineClient.invoke("recording.ui.thumbnail", payload: payload)
                 let result = try JSONDecoder().decode(TimeLapseUIImage.self, from: data)
-                guard !stopped, !Task.isCancelled else { return nil }
-                return result.image.flatMap {
+                guard !stopped, !Task.isCancelled, revision == sourceRevision else { return nil }
+                let image = result.image.flatMap {
                     NSImage(data: $0)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
                 }
+                if let image {
+                    if thumbnailCache.count >= 32 { thumbnailCache.removeAll() }
+                    thumbnailCache[key] = image
+                }
+                return image
             } catch { return nil }
         }
         guard !stopped, !recording, let sources = sourceSnapshot else { return nil }
@@ -320,18 +372,6 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         guard !stopped else { return }
         if visible { previewConsumers.insert(consumer) } else { previewConsumers.remove(consumer) }
         writer?.setPreviewEnabled(previewVisible)
-    }
-
-    func requestScreenPermission() {
-        guard !stopped, !exportOnly else { return }
-        if let engineClient {
-            permissionTask?.cancel()
-            permissionTask = launch {
-                _ = try? await engineClient.invoke("recording.ui.permission")
-            }
-        } else {
-            _ = CGRequestScreenCaptureAccess()
-        }
     }
 
     func start() async {
@@ -613,7 +653,6 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         exportLibrary?.closeAdmission()
         library.beginSuspension()
         callbacks.close()
-        permissionTask?.cancel()
         sourceLoad.cancel()
         startTask?.cancel()
         for id in cancellableTasks { tasks[id]?.cancel() }
@@ -919,8 +958,17 @@ struct TimeLapseSavedRecordingScope: Sendable {
     }
 }
 
+@MainActor enum TimeLapseUIMemory {
+    static var snapshot: TimeLapseUISnapshot?
+    static var recordings: [TimeLapseRecording] = []
+}
+
 @MainActor final class TimeLapseRemoteExportRetirement {
     private(set) var lastError: String?
+    private(set) var cancelRequested = false
+
+    func reset() { cancelRequested = false }
+    func requestCancel() { cancelRequested = true }
 
     func wait(
         token: UUID, payload: Data,

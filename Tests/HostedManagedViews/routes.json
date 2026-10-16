@@ -324,11 +324,11 @@
       "sources": [
         {
           "path": "Extensions/timeLapse/Runtime.swift",
-          "sha256": "650d5e38a7525ff64be9908c9b3bbe869f492170899b099dc9a4689aefd867db"
+          "sha256": "4877734cdcbe6bb3fc251dac51124cd84e225dba7f74761bf400b69138c0f775"
         },
         {
           "path": "Extensions/timeLapse/TimeLapseRecorder.swift",
-          "sha256": "4608e3a84488f872db4a3d9d191a710dedba23b6eb5c5e0877a48f6dafc1df12"
+          "sha256": "82b46875e7f2bbc857561408e70a47d06a33e7143c2021262134b1909e032dc9"
         }
       ]
     },

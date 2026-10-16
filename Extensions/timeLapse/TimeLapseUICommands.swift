@@ -23,8 +23,20 @@ struct TimeLapseUISnapshot: Codable {
     let sourceRevision: Int
     let sourceError: String?
     let sourcesLoaded: Bool
+    let export: TimeLapseUIExportStatus?
+
+    func withoutPreview() -> Self {
+        .init(
+            settings: settings, displays: displays, windows: windows, microphones: microphones,
+            sourceMode: sourceMode, selectedDisplays: selectedDisplays,
+            selectedWindows: selectedWindows, microphone: microphone, recording: recording,
+            busy: busy, error: error, startedAt: startedAt, frames: frames, bytes: bytes,
+            playbackSeconds: playbackSeconds, lastDirectory: lastDirectory, preview: nil,
+            sourceRevision: sourceRevision, sourceError: sourceError,
+            sourcesLoaded: sourcesLoaded, export: export)
+    }
 }
-struct TimeLapseUIStart: Codable {
+struct TimeLapseUIStart: Codable, Equatable {
     let settings: TimeLapseSettings; let sourceMode: String; let displays: Set<UInt32>;
     let windows: Set<UInt32>; let microphone: String
 }
@@ -44,7 +56,6 @@ struct TimeLapseUIImage: Codable { let image: Data? }
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var actionEpoch = UUID()
     private var exportTask: Task<Void, Never>?
-    private var exportLease: Task<Void, Never>?
     private var exportStatus: TimeLapseUIExportStatus?
     init(recorder: TimeLapseRecorder) { self.recorder = recorder }
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -76,8 +87,18 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 TimeLapseUIImage(
                     image: image.flatMap {
                         NSBitmapImageRep(cgImage: $0).representation(
-                            using: .jpeg, properties: [.compressionFactor: 0.75])
+                            using: .jpeg, properties: [.compressionFactor: 0.95])
                     }))
+        case "recording.ui.configure":
+            let input = try JSONDecoder().decode(TimeLapseUIStart.self, from: payload)
+            try input.settings.validate()
+            guard action == nil, !recorder.recording, !recorder.busy,
+                ["displays", "windows"].contains(input.sourceMode), input.displays.count <= 16,
+                input.windows.count <= 16, input.microphone.utf8.count <= 1_024
+            else { throw ExtensionPeerError.invalidRequest }
+            recorder.settings = input.settings; recorder.sourceMode = input.sourceMode
+            recorder.selectedDisplays = input.displays; recorder.selectedWindows = input.windows
+            recorder.microphone = input.microphone
         case "recording.ui.start":
             let input = try JSONDecoder().decode(TimeLapseUIStart.self, from: payload)
             try input.settings.validate()
@@ -108,9 +129,6 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 if actionEpoch == epoch { action = nil }
             }
             await Task.yield()
-        case "recording.ui.permission":
-            try empty(payload)
-            _ = CGRequestScreenCaptureAccess()
         case "recording.ui.library":
             try empty(payload)
             return try JSONEncoder().encode(try await recorder.readRecordings())
@@ -142,7 +160,6 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 }
                 exportTask = nil
             }
-            renewExportLease(token)
             return try JSONEncoder().encode(exportStatus)
         case "recording.ui.exportPoll", "recording.ui.exportCancel":
             let values = try JSONDecoder().decode([String: UUID].self, from: payload)
@@ -153,8 +170,6 @@ struct TimeLapseUIImage: Codable { let image: Data? }
                 let pending = exportTask
                 pending?.cancel()
                 await pending?.value
-            } else if !status.complete {
-                renewExportLease(status.token)
             }
             try recorder.requireExportLibraryCurrent()
             return try JSONEncoder().encode(exportStatus)
@@ -162,7 +177,7 @@ struct TimeLapseUIImage: Codable { let image: Data? }
         }
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        return try JSONEncoder().encode(recorder.uiSnapshot())
+        return try JSONEncoder().encode(recorder.uiSnapshot(export: exportStatus))
     }
     private func empty(_ data: Data) throws {
         guard data == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
@@ -175,15 +190,8 @@ struct TimeLapseUIImage: Codable { let image: Data? }
             recorder.showPreview(false, consumer: previewConsumer)
         }
     }
-    private func renewExportLease(_ token: UUID) {
-        exportLease?.cancel()
-        exportLease = launch { [self] in
-            do { try await Task.sleep(for: .seconds(10)) } catch { return }
-            if exportStatus?.token == token && exportStatus?.complete == false {
-                exportTask?.cancel()
-            }
-        }
-    }
+    func finishExport() async { await exportTask?.value }
+
     func shutdownAndWait() async {
         let pending = Array(tasks.values)
         shutdown()
@@ -202,7 +210,7 @@ struct TimeLapseUIImage: Codable { let image: Data? }
 
     func shutdown() {
         for task in tasks.values { task.cancel() }
-        exportTask?.cancel(); exportLease?.cancel()
+        exportTask?.cancel()
         stopped = true; action?.cancel(); action = nil
         previewLease?.cancel(); previewLease = nil
         recorder.showPreview(false, consumer: previewConsumer)

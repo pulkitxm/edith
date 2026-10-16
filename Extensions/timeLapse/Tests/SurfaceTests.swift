@@ -16,15 +16,17 @@ struct TimeLapseSurfaceTests {
         var tile = SurfaceTile(.ability("timeLapse"))
         let snapshot = TimeLapseSurface.snapshot(
             recorder, recordings: [recording], tile: tile, now: Date(timeIntervalSince1970: 110))
-        #expect(snapshot.metrics.first { $0.id == "elapsed" }?.value == "10 s")
-        #expect(snapshot.actions.map(\.id) == ["stop"])
-        #expect(snapshot.rows.first?.actions.first?.id == "reveal:" + session.id.uuidString)
-        #expect(snapshot.rows.first?.sourceID == ScreenRecordingMode.standard.rawValue)
+        #expect(snapshot.metrics.first { $0.id == "elapsed" }?.value == "0m 10s")
+        #expect(snapshot.actions.map(\.id) == ["open"])
+        #expect(snapshot.rows.map(\.id) == ["active", session.id.uuidString])
+        #expect(snapshot.rows.last?.actions.first?.id == "reveal:" + session.id.uuidString)
+        #expect(snapshot.rows.last?.sourceID == ScreenRecordingMode.standard.rawValue)
+        #expect(snapshot.metrics.first { $0.id == "state" }?.value == "Recording")
         #expect(snapshot.sources.map(\.id) == ScreenRecordingMode.allCases.map(\.rawValue))
         tile.contentKinds = ["recordings"]
         tile.sourceIDs = [ScreenRecordingMode.timeLapse.rawValue]
         let selected = TimeLapseSurface.snapshot(recorder, recordings: [recording], tile: tile)
-        #expect(selected.actions.isEmpty && selected.rows.isEmpty)
+        #expect(selected.rows.isEmpty && selected.actions.map(\.id) == ["open"])
         #expect(selected.metrics.map(\.id) == ["recordings"])
         tile = .init(.ability("timeLapse")); tile.hiddenFields = ["frames", "size"]
         let filtered = SurfaceCommandService.project(snapshot, tile: tile)

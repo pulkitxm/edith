@@ -78,6 +78,34 @@ import Testing
         await owner.shutdown()
     }
 
+    @Test func detachedUIKeepsExportRunningAndANewUIResumesIt() async throws {
+        guard #available(macOS 15.0, *) else { return }
+        let probe = try SavedExportProbe()
+        let owner = TimeLapseRecorder(exportLibrary: try probe.library())
+        let commands = TimeLapseUICommands(recorder: owner)
+        let bridge = Bridge(commands: commands)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let first = TimeLapseRecorder(engineClient: client)
+        await first.library.refresh()
+        let recording = try #require(first.library.recordings.first)
+        first.library.export(recording, quality: .original, to: probe.scope.destination)
+        await probe.waitForStart()
+        await bridge.waitForExportPoll()
+        await first.shutdown()
+        #expect(!bridge.operations.contains("recording.ui.exportCancel"))
+        let second = TimeLapseRecorder(engineClient: client)
+        await second.refreshRemote()
+        #expect(second.library.exporting)
+        probe.release()
+        await second.library.finishExport()
+        #expect(second.library.message == "Export finished.")
+        #expect(probe.exports == 1)
+        await second.shutdown()
+        client.invalidate()
+        await commands.shutdownAndWait()
+        await owner.shutdown()
+    }
+
     @Test func originalRemoteCancelWaitsForSavedExporterCallbackReturn() async throws {
         guard #available(macOS 15.0, *) else {
             Issue.record("Saved recording export checks require macOS 15 or later.")
@@ -95,7 +123,7 @@ import Testing
         remote.library.export(recording, quality: .original, to: probe.scope.destination)
         await probe.waitForStart()
         await bridge.waitForExportPoll()
-        remote.library.cancelExport()
+        remote.cancelExport()
         await probe.waitForCancellation()
         #expect(remote.library.exporting && !probe.returned)
         #expect(bridge.operations.contains("recording.ui.exportCancel"))

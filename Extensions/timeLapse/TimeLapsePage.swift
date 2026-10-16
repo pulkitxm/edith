@@ -5,6 +5,21 @@ import EdithExtensionUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct TimeLapseSettingsPage: View {
+    var body: some View {
+        Form {
+            Section("Recorder") {
+                Button("Open Screen Recorder") { ExtensionPresentation.showWindow() }
+                Text(
+                    "Record displays or selected windows at normal speed, or choose Time-lapse. Choose export quality after stopping."
+                )
+                .settingsCaption()
+            }
+        }
+        .edithForm()
+    }
+}
+
 @available(macOS 15.0, *)
 struct TimeLapseControls: View {
     @State private var recorder: TimeLapseRecorder
@@ -79,18 +94,6 @@ struct TimeLapseControls: View {
                     Text("Enable Screen Recorder in Extensions to record.")
                         .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }
-                if recorder.sourceLoad.errorMessage != nil {
-                    Button("Allow Screen Recording") {
-                        recorder.requestScreenPermission()
-                        if let url = URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                        ) {
-                            NSWorkspace.shared.open(url)
-                        }
-                        sourcesRefresh += 1
-                    }
-                }
                 if let error = recorder.error {
                     Label(error, systemImage: "exclamationmark.circle")
                         .font(.edithText(.callout)).foregroundStyle(.red).textSelection(.enabled)
@@ -102,7 +105,15 @@ struct TimeLapseControls: View {
                 }
             }
         }
-        .pageRefresh(interval: { .seconds(1) }) { await recorder.refreshRemote() }
+        .pageTask {
+            while !Task.isCancelled {
+                await recorder.refreshRemote()
+                guard !Task.isCancelled else { return }
+                let delay: Duration = recorder.recording ? .milliseconds(100) : .seconds(1)
+                do { try await Task.sleep(for: delay) } catch { return }
+            }
+        }
+        .onChange(of: recorder.configuration) { _, _ in recorder.pushConfiguration() }
         .navigationTitle("Screen Recorder")
         .edithSheet(isPresented: $choosingSources, dismissible: false) {
             TimeLapseSourcePicker(recorder: recorder, compact: narrow)
@@ -434,7 +445,7 @@ struct TimeLapseControls: View {
                 HStack {
                     LoadingIndicator("Exporting video")
                     Spacer()
-                    Button("Cancel export") { libraryModel.cancelExport() }
+                    Button("Cancel export") { recorder.cancelExport() }
                 }
             }
         } label: {

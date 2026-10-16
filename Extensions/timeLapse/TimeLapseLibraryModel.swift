@@ -17,6 +17,8 @@ final class TimeLapseLibraryModel {
     @ObservationIgnored private let write:
         @Sendable (TimeLapseRecording, TimeLapseExportQuality, URL) async throws -> Void
 
+    @ObservationIgnored private let follow: (@Sendable (UUID) async throws -> Void)?
+
     init(
         recordings: [TimeLapseRecording] = [],
         read: @escaping @Sendable (URL) async throws -> [TimeLapseRecording] = {
@@ -26,8 +28,10 @@ final class TimeLapseLibraryModel {
             @escaping @Sendable (TimeLapseRecording, TimeLapseExportQuality, URL) async throws ->
             Void = {
                 try await TimeLapseExporter.export($0, quality: $1, to: $2)
-            }
+            },
+        follow: (@Sendable (UUID) async throws -> Void)? = nil
     ) {
+        self.follow = follow
         self.recordings = recordings
         self.read = read
         self.write = write
@@ -63,20 +67,31 @@ final class TimeLapseLibraryModel {
     func export(
         _ recording: TimeLapseRecording, quality: TimeLapseExportQuality, to destination: URL
     ) {
+        let write = write
+        run(success: "Saved \(destination.lastPathComponent).") {
+            try await write(recording, quality, destination)
+        }
+    }
+
+    func resume(token: UUID) {
+        guard let follow else { return }
+        run(success: "Export finished.") { try await follow(token) }
+    }
+
+    private func run(success: String, operation: @escaping @Sendable () async throws -> Void) {
         guard !stopped, exportTask == nil else { return }
         let request = exportLoad.begin(preservingContent: false)
         message = nil
-        let write = write
         exportTask = Task { [self] in
             defer {
                 if exportLoad.isRunning { exportLoad.cancel(request) }
                 exportTask = nil
             }
             do {
-                try await write(recording, quality, destination)
+                try await operation()
                 try Task.checkCancellation()
                 guard exportLoad.isCurrent(request) else { return }
-                message = "Saved \(destination.lastPathComponent)."
+                message = success
                 exportLoad.complete(request)
             } catch is CancellationError {
                 guard !stopped else { return }
