@@ -291,12 +291,21 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controller.view)
-        NSLayoutConstraint.activate([
+        var constraints = [
             controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             controller.view.topAnchor.constraint(equalTo: view.topAnchor),
-            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
+        ]
+        if Self.measuresContent(request), let container = view as? HostRemoteContainerView {
+            container.measuredContent = controller.view
+            container.measured = { [weak self] height in self?.applyContentHeight(height) }
+        } else {
+            constraints.append(controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor))
+        }
+        NSLayoutConstraint.activate(constraints)
+    }
+    static func measuresContent(_ request: HostExtensionContentRequest) -> Bool {
+        !["main", "settings", "music.detail", "machines.window"].contains(request.location)
     }
     private func mountRemote() {
         guard let remote else { return }
@@ -364,8 +373,12 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     }
     func receive(_ event: HostRemoteEvent) {
         guard !detached, event.presentationID == request.presentationID, event.kind == "height",
-            let height = event.height, height.isFinite, (0...16_384).contains(height),
-            !["main", "settings", "music.detail", "machines.window"].contains(request.location)
+            let height = event.height, Self.measuresContent(request)
+        else { return }
+        applyContentHeight(height)
+    }
+    private func applyContentHeight(_ height: Double) {
+        guard !detached, height.isFinite, (0...16_384).contains(height), height != contentHeight
         else { return }
         contentHeight = height
         if isViewLoaded, let view = view as? HostRemoteContainerView {
@@ -480,7 +493,13 @@ private final class HostRemoteContainerView: NSView {
         moved?()
     }
     var contentHeight: Double?
+    weak var measuredContent: NSView?
+    var measured: ((Double) -> Void)?
     override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: contentHeight ?? NSView.noIntrinsicMetric)
+    }
+    override func layout() {
+        super.layout()
+        if let measuredContent, let measured { measured(measuredContent.frame.height) }
     }
 }

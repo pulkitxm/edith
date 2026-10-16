@@ -183,14 +183,14 @@ struct HostNotchPanelCoordinatorTests {
         #expect(fixture.leases.allSatisfy { $0.closed })
     }
 
-    @Test func nativeApprovalFailureIsPublishedIntoOriginalChrome() async throws {
+    @Test func nativeCardFailureIsPublishedIntoOriginalChrome() async throws {
         let fixture = NotchCoordinatorFixture()
         fixture.failMusicApproval = true
         let coordinator = fixture.coordinator()
         try await coordinator.start(version: "1.0.0", screens: fixture.screens)
         await settle { fixture.transport.measures.count == 1 }
         let failure = try #require(fixture.transport.measures.first)
-        #expect(failure.error?.contains("Approve this extension") == true)
+        #expect(failure.error == "The extension card could not open.")
         #expect(failure.slotID == fixture.transport.current?.states.first?.slots.first?.id)
         #expect(failure.presentationID == fixture.screens.first?.presentationID)
         #expect(coordinator.attachedSceneCount == 1)
