@@ -3,7 +3,7 @@ import Foundation
 
 public enum SharedDefaults {
     public static let suiteName = AppBuildIdentity.sharedDefaults
-    private static var activeSuiteName: String {
+    public static var activeSuiteName: String {
         ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? suiteName
     }
     public static let registeredDefaults: [String: Any] = [

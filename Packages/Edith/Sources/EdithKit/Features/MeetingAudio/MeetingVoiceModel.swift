@@ -1,5 +1,5 @@
 import Foundation
-import MeetingVoiceRuntime
+import ExtensionMarketplace
 
 public struct MeetingVoiceModel: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID = UUID()
@@ -9,19 +9,39 @@ public struct MeetingVoiceModel: Codable, Equatable, Identifiable, Sendable {
 }
 
 public final class MeetingVoiceInference {
+    private typealias Create =
+        @convention(c) (
+            UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafeMutablePointer<CChar>?, Int
+        ) -> UnsafeMutableRawPointer?
+    private typealias Destroy = @convention(c) (UnsafeMutableRawPointer?) -> Void
+    private typealias Convert =
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<Float>?, Int, Float,
+            UnsafeMutablePointer<Float>?, Int, UnsafeMutablePointer<Int32>?,
+            UnsafeMutablePointer<CChar>?, Int
+        ) -> Int32
+    private let library: ExtensionNativeLibrary
+    private let destroy: Destroy
+    private let conversion: Convert
     private let handle: UnsafeMutableRawPointer
 
     public init(model: MeetingVoiceModel) throws {
+        library = try ExtensionNativeLibrary.load(
+            id: "audioMixer", store: MarketplaceServices.store,
+            hostABI: MarketplaceConfiguration.hostABI, verify: MarketplaceServices.verifyBundle)
+        let create = try library.symbol("MeetingVoiceCreate", as: Create.self)
+        destroy = try library.symbol("MeetingVoiceDestroy", as: Destroy.self)
+        conversion = try library.symbol("MeetingVoiceConvert", as: Convert.self)
         var error = [CChar](repeating: 0, count: 2048)
         guard
-            let handle = MeetingVoiceCreate(model.encoderPath, model.voicePath, &error, error.count)
+            let handle = create(model.encoderPath, model.voicePath, &error, error.count)
         else {
             throw MeetingAudioLibrary.error(String(cString: error))
         }
         self.handle = handle
     }
 
-    deinit { MeetingVoiceDestroy(handle) }
+    deinit { destroy(handle) }
 
     public func convert(_ samples: [Float], transpose: Float = 0) throws -> (
         samples: [Float], rate: Int
@@ -34,7 +54,7 @@ public final class MeetingVoiceInference {
         var rate: Int32 = 0
         var error = [CChar](repeating: 0, count: 2048)
         let count = samples.withUnsafeBufferPointer { audio in
-            MeetingVoiceConvert(
+            conversion(
                 handle, audio.baseAddress, audio.count, transpose, &output, output.count, &rate,
                 &error, error.count)
         }
