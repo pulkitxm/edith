@@ -997,6 +997,7 @@
         "Extensions/clipboard/ClipboardIgnore.swift",
         "Extensions/clipboard/ClipboardIndex.swift",
         "Extensions/clipboard/ClipboardMessage.swift",
+        "Extensions/clipboard/ClipboardNotchList.swift",
         "Extensions/clipboard/ClipboardNotifications.swift",
         "Extensions/clipboard/ClipboardOperations.swift",
         "Extensions/clipboard/ClipboardPage.swift",

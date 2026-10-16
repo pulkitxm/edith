@@ -438,7 +438,7 @@
         },
         {
           "path": "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
-          "sha256": "794cef02b5fc1c896a74a9ff70415be06a167a0e311237e5a7287678ad51b08f"
+          "sha256": "e388434a3a928a5715406eeb358ee2f8cc73a9b571b9c54454fd8f0e9568e892"
         }
       ]
     },
@@ -456,7 +456,7 @@
       "sources": [
         {
           "path": "Extensions/clipboard/Runtime.swift",
-          "sha256": "0a2ac13f9d0d828b460ef89293c14a3bb5b4e7d112da72ce62ea8dae595d5b3a"
+          "sha256": "a604f9a605c00d79fd146b260216a7e14737f9e947c1d679ac467f85d0d15242"
         },
         {
           "path": "Extensions/clipboard/ClipboardPresentation.swift",

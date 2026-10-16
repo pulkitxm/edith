@@ -55,30 +55,60 @@ extension NotchPanelEngine {
                 throw ExtensionPeerError.unavailable
             }
             if providerID == "colorPicker" { controller.collapseNow() }
-            if providerID == "lidAwake", actionID == "on", let session = request.session {
-                struct Input: Encodable { let session: NotchLidAwakeSession }
-                let version = controller.context.activeVersions[providerID]
-                let channel = controller.context.sharedState
-                let endpoint = try ExtensionPeerEndpoint(
-                    namespace: channel.namespace, owner: providerID,
-                    directory: channel.root.appendingPathComponent("Commands"))
-                _ = try await endpoint.invoke(
-                    "lidAwake.on", payload: JSONEncoder().encode(Input(session: session)),
-                    timeout: 30)
-                try Task.checkCancellation()
-                guard controller.isRunning, controller.context.activeVersions[providerID] == version
-                else { throw CancellationError() }
-            } else {
-                let snapshot = try await controller.requests.snapshot(
-                    providerID: providerID, target: .notch, tile: tile)
-                _ = try await controller.requests.perform(
-                    providerID: providerID, target: .notch, tile: tile, snapshot: snapshot,
-                    actionID: actionID)
+            do {
+                if providerID == "lidAwake", actionID == "on", let session = request.session {
+                    struct Input: Encodable { let session: NotchLidAwakeSession }
+                    let version = controller.context.activeVersions[providerID]
+                    let channel = controller.context.sharedState
+                    let endpoint = try ExtensionPeerEndpoint(
+                        namespace: channel.namespace, owner: providerID,
+                        directory: channel.root.appendingPathComponent("Commands"))
+                    _ = try await endpoint.invoke(
+                        "lidAwake.on", payload: JSONEncoder().encode(Input(session: session)),
+                        timeout: 30)
+                    try Task.checkCancellation()
+                    guard controller.isRunning,
+                        controller.context.activeVersions[providerID] == version
+                    else { throw CancellationError() }
+                } else {
+                    let snapshot = try await controller.requests.snapshot(
+                        providerID: providerID, target: .notch, tile: tile)
+                    _ = try await controller.requests.perform(
+                        providerID: providerID, target: .notch, tile: tile, snapshot: snapshot,
+                        actionID: actionID)
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                controller.collapseNow()
+                controller.presentFailure(Self.quickActionFailureAlert(providerID, error))
+                return try await quickActionState(request, controller: controller, allowed: allowed)
             }
             if providerID != "colorPicker" { controller.collapseNow() }
         } else if request.providerID != nil || request.actionID != nil || request.session != nil {
             throw ExtensionPeerError.invalidRequest
         }
+        return try await quickActionState(request, controller: controller, allowed: allowed)
+    }
+
+    static func quickActionFailureAlert(_ providerID: String, _ error: Error) -> NotchAlert {
+        let title: String
+        switch providerID {
+        case "lidAwake": title = "Lid Awake failed"
+        case "music": title = "Music action failed"
+        default: title = "Quick action failed"
+        }
+        return NotchAlert(
+            id: providerID == "lidAwake" ? "lid-awake.action" : providerID + ".action",
+            icon: "exclamationmark.circle.fill", tint: "#e0664f", title: title,
+            subtitle: error.localizedDescription, priority: .high,
+            autoHide: providerID == "lidAwake" ? 5 : 3)
+    }
+
+    private func quickActionState(
+        _ request: NotchQuickActionRequest, controller: NotchShelfController,
+        allowed: [String: [String]]
+    ) async throws -> Data {
         var snapshots: [String: SurfaceSnapshot] = [:]
         var errors: [String: String] = [:]
         for provider in allowed.keys.sorted() where controller.activeIDs.contains(provider) {
@@ -97,23 +127,25 @@ extension NotchPanelEngine {
     }
 }
 
+@MainActor enum NotchQuickActionCache {
+    static var last = NotchQuickActionState(snapshots: [:], errors: [:])
+}
+
 struct NotchQuickActionsView: View {
     let client: NotchChromeClient
     let tile: SurfaceTile
-    @State private var state = NotchQuickActionState(snapshots: [:], errors: [:])
+    @State private var state = NotchQuickActionCache.last
+    @State private var optimistic: [String: Bool] = [:]
     @State private var pendingLidAwakeSession: NotchLidAwakeSession?
     @State private var task: Task<Void, Never>?
-    @State private var error: String?
     @Environment(\.surfacePresentation) private var presentation
-    private var activeAwake: Bool {
-        state.snapshots["keepAwake"]?.actions.contains { $0.id == "disable" } == true
+    private func isActive(_ provider: String, stop: String) -> Bool {
+        optimistic[provider]
+            ?? (state.snapshots[provider]?.actions.contains { $0.id == stop } == true)
     }
-    private var activeLid: Bool {
-        state.snapshots["lidAwake"]?.actions.contains { $0.id == "off" } == true
-    }
-    private var activePresenter: Bool {
-        state.snapshots["presenter"]?.actions.contains { $0.id == "stop" } == true
-    }
+    private var activeAwake: Bool { isActive("keepAwake", stop: "disable") }
+    private var activeLid: Bool { isActive("lidAwake", stop: "off") }
+    private var activePresenter: Bool { isActive("presenter", stop: "stop") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -160,11 +192,8 @@ struct NotchQuickActionsView: View {
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let error = error ?? state.errors.values.sorted().first {
-                Text(error).font(.edithText(.caption2)).foregroundStyle(.orange)
-            }
         }.padding(presentation?.padding ?? 14)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 .white.opacity(0.045),
                 in: RoundedRectangle(cornerRadius: presentation?.cornerRadius ?? 12)
@@ -185,8 +214,10 @@ struct NotchQuickActionsView: View {
                 Text("The Mac will keep drawing power and shedding heat. Do not put it in a bag.")
             }
             .pageTask(id: client.snapshot?.revision, active: client.isExpanded) {
-                do { state = try await client.quickActions(tile: tile) } catch {
-                    if !Task.isCancelled { self.error = error.localizedDescription }
+                if let fresh = try? await client.quickActions(tile: tile) {
+                    state = fresh
+                    NotchQuickActionCache.last = fresh
+                    optimistic = [:]
                 }
             }.onDisappear {
                 task?.cancel(); task = nil
@@ -212,7 +243,7 @@ struct NotchQuickActionsView: View {
                 .background(
                     active ? tile.highlightColor : Color.white.opacity(0.055),
                     in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions || task != nil)
+        }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
     }
     private func detail(_ title: String) -> String {
         switch title {
@@ -226,13 +257,24 @@ struct NotchQuickActionsView: View {
     private func perform(
         _ providerID: String, _ actionID: String, session: NotchLidAwakeSession? = nil
     ) {
-        guard task == nil else { return }
+        switch (providerID, actionID) {
+        case ("keepAwake", "enable"), ("presenter", "start"), ("lidAwake", "on"):
+            optimistic[providerID] = true
+        case ("keepAwake", "disable"), ("presenter", "stop"), ("lidAwake", "off"):
+            optimistic[providerID] = false
+        default: break
+        }
+        let previous = task
         task = Task {
-            defer { task = nil }
-            do {
-                state = try await client.quickActions(
-                    tile: tile, providerID: providerID, actionID: actionID, session: session)
-            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            if let fresh = try? await client.quickActions(
+                tile: tile, providerID: providerID, actionID: actionID, session: session)
+            {
+                state = fresh
+                NotchQuickActionCache.last = fresh
+            }
+            optimistic[providerID] = nil
         }
     }
 }
