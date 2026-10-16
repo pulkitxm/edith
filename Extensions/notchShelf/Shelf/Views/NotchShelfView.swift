@@ -308,7 +308,12 @@ struct NotchShelfContentView: View {
                     .font(.system(size: 11.5, weight: .medium))
                 Text(tab.title)
                     .font(.system(size: 11, weight: .semibold)).fixedSize()
-
+                if tab == .agents, controller.pendingPermissions > 0 {
+                    Text("\(controller.pendingPermissions)")
+                        .font(.edithText(.caption2)).monospacedDigit()
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.orange.opacity(active ? 0.25 : 0.3), in: Capsule())
+                }
             }
             .padding(.horizontal, 10)
             .frame(height: 24)
@@ -524,13 +529,13 @@ private struct ShelfItemView: View {
             .aspectRatio(contentMode: .fit)
             .frame(width: 38, height: 38)
             .clipShape(RoundedRectangle(cornerRadius: 4))
-            .opacity(controller.hides(.ability("notchShelf")) ? 0 : 1)
+            .presenterCover(controller.hides(.ability("notchShelf")))
             Text(item.name)
                 .font(.system(size: 10))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .frame(width: 64)
-                .redacted(reason: controller.hides(.ability("notchShelf")) ? .privacy : [])
+                .presenterBlur(controller.hides(.ability("notchShelf")))
         }
         .padding(4)
         .background(

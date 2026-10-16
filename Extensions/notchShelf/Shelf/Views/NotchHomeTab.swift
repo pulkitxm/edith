@@ -10,18 +10,11 @@ struct NotchHomeTab: View {
 
     var body: some View {
         Group {
-            if layout.visible.isEmpty {
-                VStack(spacing: UIScale.pt(12)) {
-                    Text("Enable extensions to add their widgets to the Notch.").font(
-                        .edithText(.callout))
-                    Button("Customize") { controller.openCustomization() }.buttonStyle(
-                        .edith(.secondary))
-                }.padding(UIScale.pt(24))
-            } else if layout.notchHorizontal {
+            if layout.notchHorizontal {
                 SurfaceShelf(
                     layout: layout, editing: controller.layoutEditing, selected: selected,
                     select: { selected = $0 },
-                    inspect: { controller.openCustomization(tileID: $0) },
+                    inspect: { openEditor($0) },
                     reorder: reorder, configure: configure, add: add,
                     measuredHeight: controller.measureHomeContent
                 ) { tile in tileContent(tile) }
@@ -31,7 +24,7 @@ struct NotchHomeTab: View {
                         layout: layout, singleColumn: false, editing: controller.layoutEditing,
                         selected: selected, select: { selected = $0 },
                         place: { widget, _ in add(widget) },
-                        inspect: { controller.openCustomization(tileID: $0) }, reorder: reorder,
+                        inspect: { openEditor($0) }, reorder: reorder,
                         configure: { tile in
                             controller.chromeLayouts.update(.notch) { $0.position(tile) }
                         },
@@ -43,8 +36,16 @@ struct NotchHomeTab: View {
                     ) { tile in tileContent(tile) }
                 }
             }
+            if layout.visible.isEmpty, !controller.layoutEditing {
+                Button("Add widgets") { openEditor() }.padding(20)
+            }
         }.environment(\.colorScheme, .dark)
             .padding(.horizontal, 16).padding(.bottom, 14)
+    }
+
+    private func openEditor(_ tileID: String? = nil) {
+        controller.collapseNow()
+        controller.openCustomization(tileID: tileID)
     }
 
     private func tileContent(_ tile: SurfaceTile) -> some View {
@@ -72,7 +73,7 @@ struct NotchHomeTab: View {
                         layout.tiles[index].hidden = true
                     }
                 }
-                Button("Open widget editor") { controller.openCustomization(tileID: tile.id) }
+                Button("Open widget editor") { openEditor(tile.id) }
             }
     }
 

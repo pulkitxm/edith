@@ -52,10 +52,12 @@ struct NotchWorkerOwnershipTests {
         ])
         controller.synchronize()
         #expect(controller.activeTab == .home)
-        #expect(Set(controller.visibleTabs) == [.home, .files, .camera])
+        #expect(Set(controller.visibleTabs) == [.home, .agents, .files, .camera])
         #expect(controller.requests.versions == ["notchShelf": "2"])
         controller.selectTab(.agents)
-        #expect(controller.activeTab == .home)
+        #expect(controller.activeTab == .agents)
+        controller.selectTab(.clipboard)
+        #expect(controller.activeTab == .agents)
     }
 
     @Test func savedLayoutAndTabOrderSurviveUnavailableProviders() throws {
@@ -68,7 +70,7 @@ struct NotchWorkerOwnershipTests {
             $0.hiddenTabs = ["camera"]
             $0.notchLeadingGlance = .nextMeeting
         }
-        #expect(controller.visibleTabs == [.files, .home])
+        #expect(controller.visibleTabs == [.files, .home, .agents])
         #expect(controller.layouts.notch.tiles.contains(tile))
         #expect(controller.leadingGlance == nil)
         let restored = SurfaceLayoutStore(defaults: context.defaults)
