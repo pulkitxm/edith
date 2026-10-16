@@ -11,6 +11,11 @@ private actor AccountLimitsProbe {
     func leave() { active -= 1 }
 }
 
+private actor FetchedAccountNames {
+    private(set) var names: [String] = []
+    func append(_ name: String) { names.append(name) }
+}
+
 @Suite struct ClaudeAccountLimitsTests {
     private let directory = URL(fileURLWithPath: "/synthetic/accounts")
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -19,11 +24,15 @@ private actor AccountLimitsProbe {
         .init(name: name, credential: "synthetic-token-" + name)
     }
 
+    private func subscribedAccount(_ name: String = "Synthetic account") -> ClaudeAccount {
+        .init(name: name, authentication: .browserLogin)
+    }
+
     @Test func configuredAccountsReplaceAmbientClaudeAndDisabledClaudeDoesNotReadAccounts()
         async throws
     {
         let probe = AccountLimitsProbe()
-        let configured = [account()]
+        let configured = [subscribedAccount()]
         let snapshot = await LimitsCollector.collectConfigured(
             providers: [.claude, .codex], refreshSession: LimitsRefreshSession(), now: now,
             announce: { _ in }, accountDirectory: { directory }, loadAccounts: { _ in configured },
@@ -56,6 +65,50 @@ private actor AccountLimitsProbe {
         }
         #expect(disabled.claudeAccounts.isEmpty)
         #expect(await probe.calls == 1)
+    }
+
+    @Test func onlyAccountsWithConnectedSubscriptionsShowLimits() async throws {
+        var linked = account("Linked token")
+        linked.limitsProfileID = UUID()
+        var loggedOut = subscribedAccount("Logged out login")
+        loggedOut.isLoggedOut = true
+        let configured = [
+            account("Token only"), linked, subscribedAccount("Subscription login"),
+            ClaudeAccount(name: "API key", authentication: .apiKey, credential: "synthetic-key"),
+            loggedOut,
+        ]
+        let fetched = FetchedAccountNames()
+        let snapshot = await LimitsCollector.collectConfigured(
+            providers: [.claude], refreshSession: LimitsRefreshSession(), now: now,
+            announce: { _ in }, accountDirectory: { directory }, loadAccounts: { _ in configured },
+            fetchAccount: { account, _ in
+                await fetched.append(account.name)
+                return .init(
+                    provider: .claude, session: .init(percent: 23, resetsAt: nil), week: nil)
+            }
+        ) { provider in
+            Issue.record("Configured accounts read ambient \(provider) limits")
+            return (.init(provider: provider, session: nil, week: nil), nil)
+        }
+        #expect(snapshot.providers.isEmpty)
+        #expect(
+            snapshot.claudeAccounts.map(\.name).sorted() == ["Linked token", "Subscription login"])
+        #expect(await fetched.names.sorted() == ["Linked token", "Subscription login"])
+
+        let unsubscribed = await LimitsCollector.collectConfigured(
+            providers: [.claude], refreshSession: LimitsRefreshSession(), now: now,
+            announce: { _ in }, accountDirectory: { directory },
+            loadAccounts: { _ in [account("Token only")] },
+            fetchAccount: { _, _ in
+                Issue.record("Unsubscribed account fetched limits")
+                return .init(provider: .claude, session: nil, week: nil)
+            }
+        ) { provider in
+            Issue.record("Configured accounts read ambient \(provider) limits")
+            return (.init(provider: provider, session: nil, week: nil), nil)
+        }
+        #expect(unsubscribed.providers.isEmpty)
+        #expect(unsubscribed.claudeAccounts.isEmpty)
     }
 
     @Test func explicitCancellationErrorsNeverBecomeCachedAccountFailures() async throws {
@@ -188,7 +241,7 @@ private actor AccountLimitsProbe {
 
     @Test func pausedAmbientProvidersRetainNamedAccountQuotaAndItsIndependentCache() async throws {
         let session = LimitsRefreshSession()
-        let configured = [account()]
+        let configured = [subscribedAccount()]
         let named = AccountLimitsProbe()
         let ambient = AccountLimitsProbe()
         let fetchAccount: @Sendable (ClaudeAccount, URL) async throws -> LimitsProviderSnapshot = {

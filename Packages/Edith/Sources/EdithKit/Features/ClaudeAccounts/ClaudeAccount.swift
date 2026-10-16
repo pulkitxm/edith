@@ -25,6 +25,10 @@ public struct ClaudeAccount: Codable, Equatable, Identifiable, Sendable {
     public var limitsProfileID: UUID?
     public var isLoggedOut = false
 
+    public var hasSubscriptionLimits: Bool {
+        !isLoggedOut && (authentication == .browserLogin || limitsProfileID != nil)
+    }
+
     public init(
         id: UUID = UUID(), name: String, authentication: Authentication = .oauthToken,
         credential: String = ""
