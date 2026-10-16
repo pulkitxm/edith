@@ -20,7 +20,10 @@ final class HostRemoteEngineCalls {
 
     func request(_ request: ExtensionEngineRequest) async throws -> Data {
         try request.validate()
-        guard !invalidated, authorize(), pending.count < 8, pending[request.token] == nil else {
+        guard !invalidated, authorize(),
+            pending.count < ExtensionEngineWire.maximumConcurrentRequests,
+            pending[request.token] == nil
+        else {
             throw HostWorkerError.rejected
         }
         let data = try ExtensionEngineWire.encode(request)

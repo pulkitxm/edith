@@ -27,7 +27,9 @@ public final class ExtensionEngineClient {
             presentationID: presentationID, operation: operation, payload: payload, timeout: timeout
         )
         try request.validate()
-        guard !invalidated, pending.count < 8 else { throw ExtensionEngineError.unavailable }
+        guard !invalidated, pending.count < ExtensionEngineWire.maximumConcurrentRequests else {
+            throw ExtensionEngineError.unavailable
+        }
         let data = try ExtensionEngineWire.encode(request)
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

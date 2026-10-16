@@ -13,6 +13,37 @@ private actor CommandCleanupGate {
 }
 
 @MainActor @Suite struct ExtensionCommandRegistryTests {
+    @Test func acceptsMoreThanEightConcurrentCommandsAndAnswersReadsWhileSlowOnesRun()
+        async throws
+    {
+        let registry = ExtensionCommandRegistry()
+        let slow = 12
+        var held = 0
+        for _ in 0..<slow {
+            registry.invoke(
+                ["token": UUID().uuidString, "command": "slow", "payload": Data("{}".utf8)],
+                completion: { _, _ in }
+            ) { _, payload in
+                try await Task.sleep(for: .seconds(30))
+                return payload
+            }
+            held += 1
+        }
+        var answered = 0
+        for _ in 0..<12 {
+            let reply = await withCheckedContinuation { continuation in
+                registry.invoke(
+                    ["token": UUID().uuidString, "command": "read", "payload": Data("{}".utf8)],
+                    completion: { payload, message in continuation.resume(returning: payload) }
+                ) { _, payload in payload }
+            }
+            if (reply as Data?) == Data("{}".utf8) { answered += 1 }
+        }
+        #expect(held == slow)
+        #expect(answered == 12)
+        await registry.shutdownAndWait()
+    }
+
     #if EDITH_FUNCTIONAL_FIXTURE
     @Test(arguments: [false, true])
     func cancellationAndRetirementStartObserveActualPendingOwner(cancelAll: Bool) async throws {
@@ -248,8 +279,9 @@ private actor CommandCleanupGate {
     }
     @Test func cancelledCommandsRetainAdmissionUntilTheirCleanupFinishes() async throws {
         let registry = ExtensionCommandRegistry()
-        let gates = (0..<8).map { _ in CommandCleanupGate() }
-        let tokens = (0..<8).map { _ in UUID().uuidString }
+        let limit = ExtensionPeerEndpoint.maximumConcurrentCommands
+        let gates = (0..<limit).map { _ in CommandCleanupGate() }
+        let tokens = (0..<limit).map { _ in UUID().uuidString }
         for (token, gate) in zip(tokens, gates) {
             registry.invoke(
                 ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
