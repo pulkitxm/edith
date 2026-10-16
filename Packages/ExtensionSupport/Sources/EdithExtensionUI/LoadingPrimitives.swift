@@ -69,7 +69,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                         }
                     }
             } else if state == .loading {
-                SkeletonGroup { placeholder() }
+                DeferredPlaceholder { SkeletonGroup { placeholder() } }
             } else {
                 unavailable
             }
@@ -360,5 +360,24 @@ public struct SkeletonBlock: View {
                     .mask(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
             }
             .accessibilityHidden(true)
+    }
+}
+
+private struct DeferredPlaceholder<Placeholder: View>: View {
+    @ViewBuilder let placeholder: () -> Placeholder
+    @State private var shown = false
+
+    var body: some View {
+        ZStack {
+            if shown {
+                placeholder()
+            } else {
+                Color.clear
+            }
+        }
+        .task {
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            shown = true
+        }
     }
 }
