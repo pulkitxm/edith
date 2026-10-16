@@ -523,6 +523,7 @@
         "Extensions/jev/Models/JevModels.swift",
         "Extensions/jev/Models/JevText.swift",
         "Extensions/jev/Runtime.swift",
+        "Extensions/jev/Services/JevFind.swift",
         "Extensions/jev/Services/JevClient.swift",
         "Extensions/jev/Services/JevCommands.swift",
         "Extensions/jev/Services/JevEngine.swift",
