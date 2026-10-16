@@ -9,6 +9,13 @@ final class TerminalSessionHolder {
     typealias GhosttyInputDelivery = @MainActor (GhosttyTerminalView, String) -> Bool
     typealias GhosttyCloseRequest = @MainActor (GhosttyTerminalView) -> Bool
 
+    private enum InputEvent {
+        case input(Data)
+        case resize(UInt16, UInt16)
+    }
+
+    private static let inputChunkBytes = 16_384
+
     private struct PendingUserClose {
         let viewID: ObjectIdentifier
         let generation: Int
@@ -27,7 +34,7 @@ final class TerminalSessionHolder {
     }
     private var closingTask: Task<Void, Never>?
     private var queuedExternalInput = Data()
-    private var inputEvents = 0
+    private var inputQueue: [InputEvent] = []
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -148,58 +155,72 @@ final class TerminalSessionHolder {
 
     private func enqueueInput(_ bytes: Data) {
         guard !bytes.isEmpty else { return }
-        let chunks = (bytes.count + 16_383) / 16_384
-        guard inputBytes + queuedExternalInput.count + bytes.count <= 262_144,
-            inputEvents + chunks <= 256
-        else { fail("The terminal input queue is full."); return }
-        for offset in stride(from: 0, to: bytes.count, by: 16_384) {
-            enqueueInputChunk(bytes.subdata(in: offset..<min(offset + 16_384, bytes.count)))
+        for offset in stride(from: 0, to: bytes.count, by: Self.inputChunkBytes) {
+            enqueueInputChunk(
+                bytes.subdata(in: offset..<min(offset + Self.inputChunkBytes, bytes.count)))
         }
     }
 
     private func enqueueInputChunk(_ bytes: Data) {
-        guard !bytes.isEmpty, bytes.count <= 16_384,
-            inputBytes + queuedExternalInput.count + bytes.count <= 262_144, inputEvents < 256
-        else { fail("The terminal input queue is full."); return }
-        guard let client = engineClient, let request = engineRequest, request.handle != nil else {
+        guard !bytes.isEmpty, bytes.count <= Self.inputChunkBytes else { return }
+        guard inputBytes + queuedExternalInput.count + bytes.count <= 262_144 else {
+            fail("The terminal input queue is full."); return
+        }
+        guard engineClient != nil, engineRequest?.handle != nil else {
             queuedExternalInput += bytes
             return
         }
-        let previous = inputTask
-        let generation = generation
-        inputBytes += bytes.count
-        inputEvents += 1
-        inputTask = Task { [weak self] in
-            await previous?.value
-            guard let self else { return }
-            defer { inputBytes -= bytes.count; inputEvents -= 1 }
-            guard !Task.isCancelled, generation == self.generation else { return }
-            var input = request; input.operation = .input; input.bytes = bytes
-            do { _ = try await client.terminal(input) } catch {
-                if !Task.isCancelled, generation == self.generation {
-                    fail(error.localizedDescription)
-                }
+        if case let .input(queued)? = inputQueue.last,
+            queued.count + bytes.count <= Self.inputChunkBytes
+        {
+            inputQueue[inputQueue.count - 1] = .input(queued + bytes)
+        } else {
+            guard inputQueue.count < 256 else {
+                fail("The terminal input queue is full."); return
             }
+            inputQueue.append(.input(bytes))
         }
+        inputBytes += bytes.count
+        drainInput()
     }
 
     private func enqueueResize(columns: UInt16, rows: UInt16) {
-        guard let client = engineClient, var request = engineRequest else { return }
+        guard engineClient != nil, var request = engineRequest else { return }
         request.columns = columns; request.rows = rows
-        if request.handle == nil { engineRequest = request; return }
-        guard inputEvents < 256 else { fail("The terminal input queue is full."); return }
-        inputEvents += 1
-        let previous = inputTask
+        engineRequest = request
+        if request.handle == nil { return }
+        if case .resize? = inputQueue.last {
+            inputQueue[inputQueue.count - 1] = .resize(columns, rows)
+        } else {
+            guard inputQueue.count < 256 else {
+                fail("The terminal input queue is full."); return
+            }
+            inputQueue.append(.resize(columns, rows))
+        }
+        drainInput()
+    }
+
+    private func drainInput() {
+        guard inputTask == nil, let client = engineClient else { return }
         let generation = generation
         inputTask = Task { [weak self] in
-            await previous?.value
             guard let self else { return }
-            defer { inputEvents -= 1 }
-            guard !Task.isCancelled, generation == self.generation else { return }
-            request.operation = .resize
-            do { _ = try await client.terminal(request) } catch {
-                if !Task.isCancelled, generation == self.generation {
-                    fail(error.localizedDescription)
+            defer { if self.generation == generation { self.inputTask = nil } }
+            while !Task.isCancelled, self.generation == generation, !self.inputQueue.isEmpty {
+                guard var request = self.engineRequest, request.handle != nil else { return }
+                let event = self.inputQueue.removeFirst()
+                switch event {
+                case let .input(bytes):
+                    self.inputBytes -= bytes.count
+                    request.operation = .input; request.bytes = bytes
+                case let .resize(columns, rows):
+                    request.operation = .resize; request.columns = columns; request.rows = rows
+                }
+                do { _ = try await client.terminal(request) } catch {
+                    if !Task.isCancelled, generation == self.generation {
+                        self.fail(error.localizedDescription)
+                    }
+                    return
                 }
             }
         }
@@ -207,7 +228,8 @@ final class TerminalSessionHolder {
 
     private func fail(_ message: String) {
         engineTask?.cancel()
-        inputTask?.cancel()
+        inputTask?.cancel(); inputTask = nil
+        inputQueue.removeAll(); inputBytes = 0
         externalIO?.invalidate()
         started = false
         exitMessage = message
@@ -286,6 +308,7 @@ final class TerminalSessionHolder {
         dropTask?.cancel(); dropTask = nil
         engineTask?.cancel(); closingTask = engineTask; engineTask = nil
         inputTask?.cancel(); inputTask = nil
+        inputQueue.removeAll(); inputBytes = 0
         linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
         engineClient?.terminalUI.unregister(self)
@@ -452,6 +475,7 @@ final class TerminalSessionHolder {
         let closeCompletion = takeUserCloseCompletion(for: view)
         engineTask?.cancel(); closingTask = engineTask; engineTask = nil
         inputTask?.cancel(); inputTask = nil
+        inputQueue.removeAll(); inputBytes = 0
         linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
         queuedGhosttyInput = ""
