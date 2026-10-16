@@ -273,7 +273,7 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
+            guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
             else { return ["ok": false] as NSDictionary }
             do {
                 let verified = try Self.admitFixtureContext(input)

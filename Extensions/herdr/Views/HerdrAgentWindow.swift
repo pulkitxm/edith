@@ -37,7 +37,7 @@ enum HerdrAgentWindow {
 
     static func open(agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
         if store.uiClient != nil { store.requestPresentation(kind: "agent", id: agent.id); return }
-        guard Bundle.main.bundleURL.pathExtension != "appex" else { return }
+        guard !ExtensionHostRole.isInterfaceProcess else { return }
         store.usage.record(agent)
         if raise(agent.id) { return }
         let tab = store.detachedTab(for: agent)

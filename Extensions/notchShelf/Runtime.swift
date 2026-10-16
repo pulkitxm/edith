@@ -285,7 +285,7 @@ final class ExtensionRuntime: NSObject {
 
     #endif
     private func executePanel(_ command: String, payload: Data) async throws -> Data {
-        guard Bundle.main.bundleURL.pathExtension != "appex",
+        guard !ExtensionHostRole.isInterfaceProcess,
             payload.count <= NotchPanelEngine.maximumBytes,
             let context = contextSource()
         else { throw ExtensionPeerError.invalidRequest }
@@ -638,7 +638,7 @@ final class ExtensionRuntime: NSObject {
                 startRequested = false
                 return ["ok": false] as NSDictionary
             }
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 let context = contextSource()

@@ -108,7 +108,7 @@ final class HerdrQuinjetSession {
         configuration: QuinjetLaunchConfiguration, launchEnabled: Bool, attempt: Int
     ) async {
         guard attempt == generation, !Task.isCancelled else { return }
-        guard Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard !ExtensionHostRole.isInterfaceProcess else {
             errorMessage = "Only the owning engine can prepare a diff."
             return
         }

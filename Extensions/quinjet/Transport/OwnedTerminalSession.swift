@@ -84,7 +84,7 @@ enum OwnedTerminalContext {
     private var drainTask: Task<Void, Never>?
 
     init(launch: OwnedTerminalLaunch) throws {
-        guard Bundle.main.bundleURL.pathExtension != "appex" else {
+        guard !ExtensionHostRole.isInterfaceProcess else {
             throw ExtensionPeerError.rejected("Only the owning engine can launch a terminal.")
         }
         let registry = OwnedTerminalContext.registry

@@ -64,15 +64,11 @@ final class HostNotchSceneLease {
         manager: HostRemoteSessionManager, request: HostExtensionContentRequest
     ) async throws -> HostNotchSceneLease {
         let handle = try await manager.scene(for: request)
-        let remote = EXHostViewController()
-        remote.configuration = .init(
-            appExtension: handle.identity, sceneID: handle.sceneIdentifier)
         let controller = HostRemoteViewController(
-            request: request, remote: remote,
-            connect: { connection, state, receive in
-                try await handle.connect(
-                    through: connection, compact: state.compact, visible: state.visible,
-                    width: state.width, receive: receive)
+            request: request,
+            present: { state in
+                try await manager.presentScene(
+                    handle, compact: state.compact, visible: state.visible, width: state.width)
             },
             update: { state in
                 try await handle.update(

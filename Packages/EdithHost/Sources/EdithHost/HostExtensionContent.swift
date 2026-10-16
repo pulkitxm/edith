@@ -10,6 +10,21 @@ typealias HostExtensionContentRequest = EdithHostCore.HostExtensionContentReques
 @MainActor protocol HostExtensionContentPresenting: AnyObject {
     func controller(for request: HostExtensionContentRequest) async throws -> NSViewController
     func endPresentation(id: UUID)
+    func park(key: String, version: String, presentationID: UUID, controller: NSViewController)
+    func unpark(key: String, version: String) -> (
+        presentationID: UUID, controller: NSViewController
+    )?
+}
+
+extension HostExtensionContentPresenting {
+    func park(key: String, version: String, presentationID: UUID, controller: NSViewController) {
+        endPresentation(id: presentationID)
+    }
+    func unpark(key: String, version: String) -> (
+        presentationID: UUID, controller: NSViewController
+    )? {
+        nil
+    }
 }
 
 struct HostExtensionContent: View {
@@ -26,8 +41,6 @@ struct HostExtensionContent: View {
     @State private var presentationID = UUID()
     @State private var error: String?
     @State private var retry = 0
-    @State private var browser = false
-    @State private var approvalRequired = false
     @State private var contentHeight: Double?
     @State private var release: (@MainActor () -> Void)?
     @Environment(\.compactLayout) private var compact
@@ -42,6 +55,11 @@ struct HostExtensionContent: View {
                 && !marketplace.pendingRemovalIDs.contains(extensionID)
                 && !marketplace.sessions.pendingDisableIDs.contains(extensionID))
     }
+    private var parkingKey: String? {
+        guard location == "main", surface == nil, navigation == nil else { return nil }
+        return extensionID + "\u{0}" + (section ?? "")
+    }
+    private var installedVersion: String { marketplace.installed[extensionID]?.version ?? "" }
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
@@ -50,6 +68,7 @@ struct HostExtensionContent: View {
             if let controller {
                 HostEmbeddedController(controller: controller, compact: compact, visible: visible)
                     .frame(height: contentHeight.map { CGFloat($0) })
+                    .id(ObjectIdentifier(controller))
             } else if !eligible {
                 ContentUnavailableView {
                     Label(title, systemImage: "puzzlepiece.extension")
@@ -71,10 +90,6 @@ struct HostExtensionContent: View {
                 } description: {
                     Text(error)
                 } actions: {
-                    if approvalRequired {
-                        Button("Extension settings") { browser = true }.buttonStyle(
-                            .edith(.secondary))
-                    }
                     Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
                 }
             } else {
@@ -94,6 +109,17 @@ struct HostExtensionContent: View {
             release = nil
             guard eligible, automaticActions, let presenter, !Task.isCancelled else { return }
             release = clear
+            if let parkingKey,
+                let parked = presenter.unpark(key: parkingKey, version: installedVersion)
+            {
+                presentationID = parked.presentationID
+                if let remote = parked.controller as? HostRemoteViewController {
+                    remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
+                    contentHeight = remote.contentHeight
+                }
+                controller = parked.controller
+                return
+            }
             let token = navigation?.delivery.id ?? UUID()
             presentationID = token
             do {
@@ -150,19 +176,12 @@ struct HostExtensionContent: View {
             } catch {
                 navigation?.delivery.reject(error)
                 guard !Task.isCancelled else { return }
-                approvalRequired = error is HostRemoteAvailabilityError
-                self.error =
-                    approvalRequired
-                    ? "Approve this extension in macOS extension settings to open its interface."
-                    : "The extension page could not open."
+                self.error = "The extension page could not open."
             }
         }
         .onDisappear {
             clear()
             release = nil
-        }
-        .edithSheet(isPresented: $browser, onDismiss: { retry += 1 }) {
-            HostExtensionBrowser().frame(width: 560, height: 340)
         }
     }
     private struct Request: Equatable {
@@ -172,8 +191,15 @@ struct HostExtensionContent: View {
     }
     private func clear() {
         navigation?.delivery.reject()
-        presenter?.endPresentation(id: presentationID); controller = nil; error = nil
-        contentHeight = nil; approvalRequired = false
+        if let parkingKey, let controller, error == nil {
+            presenter?.park(
+                key: parkingKey, version: installedVersion, presentationID: presentationID,
+                controller: controller)
+        } else {
+            presenter?.endPresentation(id: presentationID)
+        }
+        controller = nil; error = nil
+        contentHeight = nil
     }
 }
 
@@ -197,14 +223,4 @@ struct HostEmbeddedController: NSViewControllerRepresentable {
         guard let height = remote.contentHeight else { return nil }
         return CGSize(width: proposal.width ?? controller.view.bounds.width, height: height)
     }
-}
-
-struct HostExtensionBrowser: NSViewControllerRepresentable {
-    func makeNSViewController(context: Context) -> EXAppExtensionBrowserViewController {
-        let browser = EXAppExtensionBrowserViewController()
-        browser.preferredContentSize = NSSize(width: 560, height: 340)
-        return browser
-    }
-    func updateNSViewController(_ controller: EXAppExtensionBrowserViewController, context: Context)
-    {}
 }

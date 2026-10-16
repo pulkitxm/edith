@@ -226,7 +226,7 @@ final class ExtensionRuntime: NSObject {
             do { fixture = try fixtureAdmission(input) != nil } catch {
                 return ["ok": false] as NSDictionary
             }
-            guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+            guard uiClient == nil, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             guard let suite = input["defaultsSuite"] as? String,

@@ -140,7 +140,7 @@ final class ExtensionRuntime: NSObject {
             return binding.execute(input)
         case "stopUI": retireUI()
         case "start":
-            guard !draining, uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
+            guard !draining, uiLocation == nil, !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
