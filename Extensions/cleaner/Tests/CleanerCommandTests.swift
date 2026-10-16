@@ -27,8 +27,7 @@ import Testing
         }
         _ = try await CleanerCommands.execute("cleaner.scan", payload: Data(), model: model)
         let oldPreview = model.previewToken.uuidString
-        model.toggleAll()
-        model.toggleAll()
+        _ = try await CleanerCommands.execute("cleaner.scan", payload: Data(), model: model)
         for (confirmed, token) in [(false, model.previewToken.uuidString), (true, oldPreview)] {
             await #expect(throws: ExtensionPeerError.self) {
                 try await CleanerCommands.execute(

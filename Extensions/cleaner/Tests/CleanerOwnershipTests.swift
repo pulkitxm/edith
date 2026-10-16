@@ -32,7 +32,7 @@ import Testing
         model.addCustomFolder("/synthetic/disabled")
         model.toggleDrive("/synthetic/disabled")
         #expect(model.customFolders.isEmpty)
-        #expect(preferences.defaults.object(forKey: "cleaner.selectedDrives") == nil)
+        #expect(preferences.defaults.object(forKey: "cleanerSelectedDrives") == nil)
         #expect(await gate.calls == 1)
     }
 
@@ -112,7 +112,7 @@ import Testing
         #expect(await gate.calls == 1)
     }
 
-    @Test func selectionInvalidatesPreviewAndPersistsInItsOwnPreferences() async throws {
+    @Test func selectionKeepsThePreviewAndPersistsInItsOwnPreferences() async throws {
         let preferences = try CleanerPreferencesFixture()
         let services = CleanerServices(drives: { [] }, scan: { _, _, _ in Self.result() })
         let model = CleanerModel(defaults: preferences.defaults, services: services)
@@ -121,7 +121,7 @@ import Testing
         let preview = model.previewToken
         #expect(model.selectedItemCount == 1)
         model.toggleItem(categoryID: "synthetic", itemID: "selected")
-        #expect(model.previewToken != preview)
+        #expect(model.previewToken == preview)
         #expect(model.selectedItemCount == 0)
         await model.shutdown()
         let restored = CleanerModel(defaults: preferences.defaults, services: services)

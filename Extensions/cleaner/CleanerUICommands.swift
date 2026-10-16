@@ -13,6 +13,7 @@ struct CleanerUISnapshot: Codable {
     let customFolders: [String]
     let driveSelection: Set<String>?
     let operationTitle: String
+    let loadingDriveOptions: Bool
 }
 struct CleanerUIAction: Codable {
     let operation: String; let value: String?; let item: String?; let previewToken: UUID

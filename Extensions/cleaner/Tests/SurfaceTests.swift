@@ -5,7 +5,7 @@ import Testing
 
 @Suite @MainActor
 struct CleanerSurfaceTests {
-    @Test func ScanResultsBecomeLiveMetricsWithoutOfferingDestructiveActions() async throws {
+    @Test func ScanResultsBecomeEstimateMetricsWithoutRowsOrActions() async throws {
         let defaults = UserDefaults(suiteName: "test.cleaner.surface." + UUID().uuidString)!
         let model = CleanerModel(
             defaults: defaults,
@@ -24,14 +24,13 @@ struct CleanerSurfaceTests {
                     ])
                 }))
         #expect(CleanerSurface.snapshot(model).metrics.isEmpty)
-        #expect(CleanerSurface.snapshot(model).actions.first?.id == "scan")
+        #expect(CleanerSurface.snapshot(model).actions.isEmpty)
         model.scan()
-        #expect(CleanerSurface.snapshot(model).actions.first?.id == "cancel")
         await model.finishWork()
         let snapshot = CleanerSurface.snapshot(model)
-        #expect(snapshot.rows.first?.title == "Synthetic cache")
+        #expect(snapshot.rows.isEmpty && snapshot.actions.isEmpty)
         #expect(snapshot.metrics.map(\.id) == ["space", "categories"])
-        #expect(snapshot.actions.map(\.id) == ["scan"])
+        #expect(snapshot.metrics.map(\.title) == ["Reclaimable", "Categories"])
         _ = try SurfaceSnapshot.decode(snapshot.encoded(), providerID: "cleaner")
         await model.shutdown()
     }

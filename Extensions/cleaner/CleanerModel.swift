@@ -14,13 +14,16 @@ struct CleanerEstimateSnapshot: Codable, Sendable {
 @MainActor
 @Observable
 final class CleanerModel {
-    private static let confirmedExternalPathsKey = "cleaner.confirmedExternalPaths"
+    private static let confirmedExternalPathsKey = "cleanerConfirmedExternalPaths"
+    private static let selectedDrivesKey = "cleanerSelectedDrives"
+    private static let customFoldersKey = "cleanerCustomFolders"
+    private static let selectionOverridesKey = "cleanerSelectionOverrides"
+    private static let categoryDefaultsKey = "cleanerCategoryDefaults"
     static let backgroundEstimateKey = "cleaner.backgroundEstimate"
 
     private(set) var previewToken = UUID()
     private(set) var categories: [JunkCategory] = [] {
         didSet {
-            previewToken = UUID()
             try? ExtensionSharedState.current?.publish([
                 "reclaimableBytes": String(reclaimableTotal)
             ])
@@ -29,15 +32,25 @@ final class CleanerModel {
     private(set) var scanning = false
     private(set) var scanned = false
     private(set) var logs: [String] = []
-    var logsExpanded = false
+    var logsExpanded = false {
+        didSet { rememberUIState() }
+    }
     private(set) var lastReclaimed: Int64 = 0
     private(set) var drives: [DriveInfo] = []
     private(set) var driveOptions: [DriveInfo] = []
     let driveOptionsLoad = ContentLoad()
-    var loadingDriveOptions: Bool { driveOptionsLoad.isRunning }
+    var loadingDriveOptions: Bool {
+        remote ? remoteLoadingDriveOptions || driveRequestInFlight : driveOptionsLoad.isRunning
+    }
+    private var remoteLoadingDriveOptions = false
+    private var driveRequestInFlight = false
     private(set) var customFolders: [String] = []
-    var search = ""
-    private(set) var expanded: Set<String> = []
+    var search = "" {
+        didSet { rememberUIState() }
+    }
+    private(set) var expanded: Set<String> = [] {
+        didSet { rememberUIState() }
+    }
     private var driveSelection: Set<String>?
     private var scanToken: CleanerCancellation?
     private let defaults: UserDefaults
@@ -51,7 +64,12 @@ final class CleanerModel {
     private var driveTask: Task<Void, Never>?
     private var engineClient: ExtensionEngineClient?
     private var remoteGeneration = 0
-    private var remoteTask: Task<Void, Never>?
+    private var remoteQueue: [CleanerUIAction] = []
+    private var remoteDrain: Task<Void, Never>?
+    private var logCollapse: Task<Void, Never>?
+    private var estimateTask: Task<Void, Never>?
+    private var estimateToken: CleanerCancellation?
+    private var cleaning = false
     private(set) var stopped = false
     private(set) var operationTitle = "Scanning…"
 
@@ -77,11 +95,11 @@ final class CleanerModel {
         }
         let confirmed = Set(
             defaults.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
-        if let raw = defaults.array(forKey: "cleaner.selectedDrives") as? [String] {
+        if let raw = defaults.array(forKey: Self.selectedDrivesKey) as? [String] {
             let kept = raw.filter { Self.pathIsAllowed($0, confirmed: confirmed) }
             driveSelection = Set(kept)
         }
-        if let raw = defaults.array(forKey: "cleaner.customFolders") as? [String] {
+        if let raw = defaults.array(forKey: Self.customFoldersKey) as? [String] {
             let kept = raw.filter { Self.pathIsAllowed($0, confirmed: confirmed) }
             customFolders = kept
         }
@@ -90,6 +108,28 @@ final class CleanerModel {
     convenience init(engineClient: ExtensionEngineClient, defaults: UserDefaults) {
         self.init(defaults: defaults)
         self.engineClient = engineClient
+        if let memory = Self.uiMemory {
+            seed(memory.snapshot)
+            logsExpanded = memory.logsExpanded
+            search = memory.search
+            expanded = memory.expanded
+        }
+    }
+
+    struct UIMemory {
+        var snapshot: CleanerUISnapshot
+        var logsExpanded: Bool
+        var search: String
+        var expanded: Set<String>
+    }
+    static var uiMemory: UIMemory?
+
+    private func rememberUIState() {
+        guard remote, var memory = Self.uiMemory else { return }
+        memory.logsExpanded = logsExpanded
+        memory.search = search
+        memory.expanded = expanded
+        Self.uiMemory = memory
     }
 
     var remote: Bool { engineClient != nil }
@@ -100,7 +140,7 @@ final class CleanerModel {
             scanned: scanned,
             logs: logs, lastReclaimed: lastReclaimed, drives: drives, driveOptions: driveOptions,
             customFolders: customFolders, driveSelection: driveSelection,
-            operationTitle: operationTitle)
+            operationTitle: operationTitle, loadingDriveOptions: driveOptionsLoad.isRunning)
     }
 
     func refreshRemote() async {
@@ -113,7 +153,8 @@ final class CleanerModel {
     }
 
     private func refreshRemoteWork() async {
-        guard let engineClient, !stopped, !suspending, remoteTask == nil else { return }
+        guard let engineClient, !stopped, !suspending, remoteDrain == nil, remoteQueue.isEmpty
+        else { return }
         let generation = remoteGeneration
         do {
             let data = try await engineClient.invoke("cleaner.ui.snapshot")
@@ -126,35 +167,67 @@ final class CleanerModel {
         }
     }
 
-    private func applyRemote(_ value: CleanerUISnapshot) {
+    private func seed(_ value: CleanerUISnapshot) {
         categories = value.categories; previewToken = value.previewToken
         scanning = value.scanning; scanned = value.scanned; logs = value.logs
-        lastReclaimed = value.lastReclaimed; drives = value.drives;
+        lastReclaimed = value.lastReclaimed; drives = value.drives
         driveOptions = value.driveOptions
         customFolders = value.customFolders; driveSelection = value.driveSelection
         operationTitle = value.operationTitle
+        remoteLoadingDriveOptions = value.loadingDriveOptions
+    }
+
+    private func applyRemote(_ value: CleanerUISnapshot) {
+        let wasScanning = scanning
+        seed(value)
+        Self.uiMemory = UIMemory(
+            snapshot: value, logsExpanded: logsExpanded, search: search, expanded: expanded)
+        if value.scanning, !wasScanning {
+            logCollapse?.cancel()
+            logCollapse = nil
+            logsExpanded = true
+        } else if !value.scanning, wasScanning, value.scanned {
+            collapseLogsSoon()
+        }
+    }
+
+    private func collapseLogsSoon() {
+        logCollapse?.cancel()
+        logCollapse = track { [self] in
+            do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
+            guard !stopped, !suspending, !scanning else { return }
+            withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
+        }
     }
 
     private func sendRemote(_ operation: String, value: String? = nil, item: String? = nil) {
-        guard let engineClient, !stopped, !suspending else { return }
-        remoteTask?.cancel(); remoteGeneration += 1
-        let generation = remoteGeneration
-        let request = CleanerUIAction(
-            operation: operation, value: value, item: item, previewToken: previewToken)
-        remoteTask = track { [self] in
-            defer { if generation == remoteGeneration { remoteTask = nil } }
-            do {
-                let payload = try JSONEncoder().encode(request)
-                let data = try await engineClient.invoke(
-                    "cleaner.ui.action", payload: payload, timeout: 30)
-                guard !stopped, !suspending, !Task.isCancelled, generation == remoteGeneration
-                else { return }
-                applyRemote(try JSONDecoder().decode(CleanerUISnapshot.self, from: data))
-            } catch is CancellationError {} catch {
-                if !stopped, !suspending, generation == remoteGeneration {
+        guard engineClient != nil, !stopped, !suspending, remoteQueue.count < 64 else { return }
+        remoteGeneration += 1
+        remoteQueue.append(
+            CleanerUIAction(
+                operation: operation, value: value, item: item, previewToken: previewToken))
+        guard remoteDrain == nil else { return }
+        remoteDrain = track { [self] in
+            defer { remoteDrain = nil }
+            guard let engineClient else { return }
+            var latest: CleanerUISnapshot?
+            while !remoteQueue.isEmpty {
+                let request = remoteQueue.removeFirst()
+                do {
+                    let payload = try JSONEncoder().encode(request)
+                    let data = try await engineClient.invoke(
+                        "cleaner.ui.action", payload: payload, timeout: 30)
+                    guard !stopped, !suspending, !Task.isCancelled else { return }
+                    latest = try JSONDecoder().decode(CleanerUISnapshot.self, from: data)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !stopped, !suspending else { return }
                     log(error.localizedDescription)
                 }
+                if request.operation == "drives" { driveRequestInFlight = false }
             }
+            if let latest { applyRemote(latest) }
         }
     }
 
@@ -165,21 +238,21 @@ final class CleanerModel {
         guard !customFolders.contains(standardizedPath) else { return }
         confirmExternalPathIfNeeded(standardizedPath)
         customFolders.append(standardizedPath)
-        defaults.set(customFolders, forKey: "cleaner.customFolders")
+        defaults.set(customFolders, forKey: Self.customFoldersKey)
         var selection = driveSelection ?? ["/"]
         selection.insert(standardizedPath)
         driveSelection = selection
-        defaults.set(Array(selection), forKey: "cleaner.selectedDrives")
+        defaults.set(Array(selection), forKey: Self.selectedDrivesKey)
     }
 
     func removeCustomFolder(_ path: String) {
         if remote { sendRemote("removeFolder", value: path); return }
         guard !stopped, !suspending else { return }
         customFolders.removeAll { $0 == path }
-        defaults.set(customFolders, forKey: "cleaner.customFolders")
+        defaults.set(customFolders, forKey: Self.customFoldersKey)
         driveSelection?.remove(path)
         if driveSelection != nil {
-            defaults.set(Array(driveSelection ?? []), forKey: "cleaner.selectedDrives")
+            defaults.set(Array(driveSelection ?? []), forKey: Self.selectedDrivesKey)
         }
         removeExternalConfirmation(path)
     }
@@ -226,9 +299,10 @@ final class CleanerModel {
     }
 
     func loadDriveOptions() {
-        if remote { sendRemote("drives"); return }
+        if remote { driveRequestInFlight = true; sendRemote("drives"); return }
         guard !stopped, !suspending else { return }
         driveTask?.cancel()
+        driveOptionsLoad.begin()
         driveTask = track { [self] in
             await driveOptionsLoad.perform(operation: { [services] in await services.drives() }) {
                 guard !stopped, !suspending else { return }
@@ -253,7 +327,7 @@ final class CleanerModel {
             selection.insert(id)
         }
         driveSelection = selection
-        defaults.set(Array(selection), forKey: "cleaner.selectedDrives")
+        defaults.set(Array(selection), forKey: Self.selectedDrivesKey)
     }
 
     private static func pathIsAllowed(_ path: String, confirmed: Set<String>) -> Bool {
@@ -300,25 +374,51 @@ final class CleanerModel {
 
     func estimateIfDue(onBattery: Bool) async {
         guard !stopped, !suspending, !remote, !Task.isCancelled, !onBattery, !scanning,
-            workTask == nil,
+            workTask == nil, estimateTask == nil,
             latestEstimate.map({ now().timeIntervalSince($0.scannedAt) < 604_800 }) != true
         else { return }
-        scan(background: true)
-        let task = commandWork
-        let cancel = commandCancellation()
+        let token = CleanerCancellation()
+        estimateToken = token
+        guard
+            let task = track({ [self, services] in
+                let result = await services.scan([], token) { _ in }
+                guard !stopped, !suspending, !token.isCancelled else { return }
+                recordEstimate(
+                    CleanerEstimateSnapshot(
+                        scannedAt: now(),
+                        reclaimableBytes: result.categories.reduce(0) { $0 + $1.sizeBytes },
+                        categoryCount: result.categories.count))
+            })
+        else { return }
+        estimateTask = task
         await withTaskCancellationHandler {
-            await task?.value
+            await task.value
         } onCancel: {
-            cancel()
+            token.cancel(); task.cancel()
+        }
+        if estimateToken === token { estimateToken = nil; estimateTask = nil }
+    }
+
+    private func recordEstimate(_ estimate: CleanerEstimateSnapshot) {
+        latestEstimate = estimate
+        if let data = try? JSONEncoder().encode(estimate), data.count <= 1_024 {
+            defaults.set(data, forKey: Self.backgroundEstimateKey)
+        }
+        if !scanned {
+            try? ExtensionSharedState.current?.publish([
+                "reclaimableBytes": String(estimate.reclaimableBytes)
+            ])
         }
     }
 
     func stopBackgroundEstimates() {
         backgroundEstimates?.cancel()
+        estimateToken?.cancel()
+        estimateTask?.cancel()
         cancelScan()
     }
 
-    func scan(background: Bool = false) {
+    func scan() {
         if remote { sendRemote("scan"); return }
         guard !scanning, !stopped, !suspending else { return }
         cancelScan()
@@ -327,6 +427,7 @@ final class CleanerModel {
         scanned = false
         logs = []
         logsExpanded = true
+        previewToken = UUID()
         categories = []
         drives = []
         let token = CleanerCancellation()
@@ -335,17 +436,14 @@ final class CleanerModel {
         let categoryChoices = categoryDefaults
         workTask = track { [self, services] in
             defer { finish(token) }
-            var roots: [URL] = []
-            if !background {
-                let all = await services.drives()
-                guard owns(token), !token.isCancelled else { return }
-                driveOptions = all
-                drives = JunkScanner.drivesForScanning(all, selectedDriveIDs: driveSelection)
-                let home = FileManager.default.homeDirectoryForCurrentUser
-                roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
-                roots += customFolders.filter { isDriveSelected($0) }.map {
-                    URL(fileURLWithPath: $0)
-                }
+            let all = await services.drives()
+            guard owns(token), !token.isCancelled else { return }
+            driveOptions = all
+            drives = JunkScanner.drivesForScanning(all, selectedDriveIDs: driveSelection)
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
+            roots += customFolders.filter { isDriveSelected($0) }.map {
+                URL(fileURLWithPath: $0)
             }
             let updates = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
             let result = await withTaskGroup(of: Void.self) { group in
@@ -365,6 +463,7 @@ final class CleanerModel {
                 log("Cancelled.")
                 return
             }
+            previewToken = UUID()
             categories = result.categories.map {
                 Self.applyChoices($0, items: choices, categories: categoryChoices)
             }
@@ -374,14 +473,10 @@ final class CleanerModel {
             log("Done · \(JunkScanner.format(reclaimableTotal)) reclaimable.")
             scanned = true
             scanning = false
-            let estimate = CleanerEstimateSnapshot(
-                scannedAt: now(), reclaimableBytes: reclaimableTotal,
-                categoryCount: categories.count)
-            latestEstimate = estimate
-            if let data = try? JSONEncoder().encode(estimate), data.count <= 1_024 {
-                defaults.set(data, forKey: Self.backgroundEstimateKey)
-            }
-            guard !background else { return }
+            recordEstimate(
+                CleanerEstimateSnapshot(
+                    scannedAt: now(), reclaimableBytes: reclaimableTotal,
+                    categoryCount: categories.count))
             do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
             if owns(token), !token.isCancelled {
                 withAnimation(.easeInOut(duration: 0.35)) { logsExpanded = false }
@@ -396,6 +491,7 @@ final class CleanerModel {
     private func finish(_ token: CleanerCancellation) {
         guard scanToken === token else { return }
         scanning = false
+        cleaning = false
         scanToken = nil
         workTask = nil
     }
@@ -407,6 +503,7 @@ final class CleanerModel {
 
     func cancelScan() {
         if remote { sendRemote("cancel"); return }
+        guard !cleaning else { return }
         scanToken?.cancel()
         workTask?.cancel()
     }
@@ -457,8 +554,9 @@ final class CleanerModel {
         stopBackgroundEstimates()
         await backgroundEstimates?.value
         backgroundEstimates = nil
-        remoteGeneration += 1; remoteTask?.cancel()
-        await remoteTask?.value; remoteTask = nil
+        remoteGeneration += 1; remoteDrain?.cancel(); logCollapse?.cancel()
+        await remoteDrain?.value; remoteDrain = nil
+        remoteQueue.removeAll(); driveRequestInFlight = false
         cancelScan()
         driveTask?.cancel()
         driveOptionsLoad.cancel()
@@ -493,8 +591,8 @@ final class CleanerModel {
     }
 
     func toggleAll() {
-        if remote { sendRemote("all"); return }
         guard !stopped, !suspending else { return }
+        defer { if remote { sendRemote("all") } }
         let selectAll = overallSelection != .all
         var itemChoices = overrides
         var categoryChoices = categoryDefaults
@@ -510,8 +608,8 @@ final class CleanerModel {
     }
 
     func toggleCategory(_ id: String) {
-        if remote { sendRemote("category", value: id); return }
         guard !stopped, !suspending else { return }
+        defer { if remote { sendRemote("category", value: id) } }
         guard let index = categories.firstIndex(where: { $0.id == id }) else { return }
         let selectAll = categories[index].selection != .all
         var itemChoices = overrides
@@ -528,8 +626,8 @@ final class CleanerModel {
     }
 
     func toggleItem(categoryID: String, itemID: String) {
-        if remote { sendRemote("item", value: categoryID, item: itemID); return }
         guard !stopped, !suspending else { return }
+        defer { if remote { sendRemote("item", value: categoryID, item: itemID) } }
         guard let categoryIndex = categories.firstIndex(where: { $0.id == categoryID }),
             let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
         else { return }
@@ -551,7 +649,8 @@ final class CleanerModel {
         guard !items.isEmpty else { return }
         cancelScan()
         scanning = true
-        operationTitle = "Cleaning…"
+        cleaning = true
+        operationTitle = "Scanning…"
         let token = CleanerCancellation()
         scanToken = token
         workTask = track { [self, services] in
@@ -559,23 +658,23 @@ final class CleanerModel {
             guard owns(token) else { return }
             lastReclaimed = result.reclaimedBytes
             finish(token)
-            if !token.isCancelled { scan() }
+            scan()
         }
     }
 
     private var overrides: [String: Bool] {
         get {
-            (defaults.dictionary(forKey: "cleaner.selectionOverrides") ?? [:])
+            (defaults.dictionary(forKey: Self.selectionOverridesKey) ?? [:])
                 .compactMapValues { $0 as? Bool }
         }
-        set { defaults.set(newValue, forKey: "cleaner.selectionOverrides") }
+        set { if !remote { defaults.set(newValue, forKey: Self.selectionOverridesKey) } }
     }
 
     private var categoryDefaults: [String: Bool] {
         get {
-            (defaults.dictionary(forKey: "cleaner.categoryDefaults") ?? [:])
+            (defaults.dictionary(forKey: Self.categoryDefaultsKey) ?? [:])
                 .compactMapValues { $0 as? Bool }
         }
-        set { defaults.set(newValue, forKey: "cleaner.categoryDefaults") }
+        set { if !remote { defaults.set(newValue, forKey: Self.categoryDefaultsKey) } }
     }
 }
