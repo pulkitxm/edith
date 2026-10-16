@@ -17,7 +17,7 @@ import Foundation
 
     public func execute(_ arguments: [String]) async throws -> ExtensionCLIReply {
         var args = try HostCLIArguments(
-            arguments, flags: ["--json", "--yes", "--list", "--no-wait"],
+            arguments, flags: ["--json", "--yes", "--list", "--no-wait", "--completely"],
             options: ["--dir", "--tab", "--limit"])
         let requested = args.words.isEmpty ? "actions" : args.words.removeFirst()
         let action = requested == "ls" ? "actions" : requested
@@ -98,17 +98,24 @@ import Foundation
             if let tab = args.options["--tab"] { payload["tab"] = .string(tab) }
             payload["list"] = .bool(args.flags.contains("--list"))
         case "quit", "relaunch", "clear-updates":
-            try args.require(words: 0...0, flags: ["--json", "--yes"])
+            let completely = action == "quit" && args.flags.contains("--completely")
+            let allowed =
+                action == "quit" ? ["--json", "--yes", "--completely"] : ["--json", "--yes"]
+            try args.require(words: 0...0, flags: Set(allowed))
+            if action == "quit" { payload["completely"] = .bool(completely) }
             if !args.flags.contains("--yes") {
-                let preview: HostCLIJSON = .object([
+                var fields: [String: HostCLIJSON] = [
                     "action": .string(action), "targets": .strings(["this Edith installation"]),
                     "applied": .bool(false), "changed": .bool(false),
                     "requiresConfirmation": .bool(true),
-                ])
+                ]
+                if action == "quit" { fields["completely"] = .bool(completely) }
+                let preview: HostCLIJSON = .object(fields)
                 return json
                     ? try HostCLIOutput.json(preview)
                     : try HostCLIOutput.text(
-                        "would \(action) this Edith installation; pass --yes to apply")
+                        "would \(completely ? "quit completely" : action) this Edith installation;"
+                            + " pass --yes to apply")
             }
         default: try args.require(words: 0...0, flags: ["--json"])
         }
@@ -186,6 +193,9 @@ import Foundation
                     }))
         }
         if let string = value.string { return try HostCLIOutput.text(string) }
+        if action == "quit", value.object?["completely"]?.bool == true {
+            return try HostCLIOutput.text("quit Edith requested")
+        }
         if ["open", "quit", "test-notification"].contains(action) {
             return try HostCLIOutput.text(action + " requested")
         }

@@ -2,7 +2,6 @@ import AppKit
 import EdithExtensionSupport
 import EdithHostCore
 import Foundation
-import UserNotifications
 
 @MainActor final class HostAppCLIAdapter {
     typealias Navigation = @MainActor (String, String?) throws -> [String: Any]
@@ -56,7 +55,7 @@ import UserNotifications
                 info: info(), startedAt: startedAt,
                 agent: HostAppDiagnosticsCLI.core(
                     snapshot: service?.snapshot, online: service?.online == true,
-                    state: service?.activityLabel.lowercased() ?? "unavailable",
+                    state: HostLoginItem.registration.rawValue,
                     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
                         ?? "development"),
                 extensionIDs: Array(marketplace.sessions.activeIDs))
@@ -108,9 +107,13 @@ import UserNotifications
         case "open":
             showMainWindow(); return .object(["action": .string(action), "requested": .bool(true)])
         case "quit":
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [quit] in quit() }
+            let completely = payload["completely"]?.bool == true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [quit] in
+                if completely { quit() } else { HostQuit.closeWindows() }
+            }
             return .object([
-                "action": .string(action), "requested": .bool(true), "changed": .bool(true),
+                "action": .string(action), "completely": .bool(completely),
+                "requested": .bool(true), "changed": .bool(true),
             ])
         case "relaunch": return try await relaunch()
         case "check-updates":
@@ -185,13 +188,10 @@ import UserNotifications
             ])
         case "snapshot": return try snapshots(directory: payload["dir"]?.string)
         case "test-notification":
-            let content = UNMutableNotificationContent()
-            content.title = "Edith"; content.body = "Notifications are working.";
-            content.sound = .default
-            try await UNUserNotificationCenter.current().add(
-                UNNotificationRequest(
-                    identifier: "edith-test-" + UUID().uuidString, content: content, trigger: nil))
-            return .object(["action": .string(action), "requested": .bool(true)])
+            let status = await HostNotifications.sendTest()
+            return .object([
+                "action": .string(action), "requested": .bool(true), "status": .string(status),
+            ])
         case "clean-keys":
             let request = try HostCLIRequest(
                 action: .invoke, id: "system", operation: "system.cleanKeys", timeout: 3)
