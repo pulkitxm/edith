@@ -83,7 +83,10 @@ final class AttentionSurface {
                         session.id, sourceID: "focus", title: String(session.name.prefix(300)),
                         field: "session")
                 ],
-                actions: [.init("focus.finish", "Finish", "stop.fill")], updatedAt: now)
+                actions: [.init("focus.finish", "Finish", "stop.fill")],
+                facts: ["focusEndsAt": session.startedAt.addingTimeInterval(session.plannedDuration)
+                    .timeIntervalSince1970],
+                updatedAt: now)
         }
         return SurfaceSnapshot(
             providerID: "attention",
