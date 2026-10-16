@@ -28,41 +28,7 @@ struct EmbeddedMusicSettings: View {
                 })
         } content: {
             Form {
-                Section("Library and playback") {
-                    LabeledContent("Streaming accounts") {
-                        Button("Connect in Music", action: openLibrary)
-                    }
-                    LabeledContent("Music folder") {
-                        HStack {
-                            Button("Choose folder...", action: chooseLibrary)
-                            Button("Open in Finder") {
-                                EmbeddedMusicRemote.shared.openLibrary()
-                            }
-                        }
-                    }
-                    if let openError { Text(openError).foregroundStyle(.red) }
-                    Toggle("Fade between tracks", isOn: model.boolean(.crossfade, \.crossfade))
-                    if model.boolean(.crossfade, \.crossfade).wrappedValue {
-                        LabeledContent("Fade length") {
-                            Text(String(format: "%.1fs", model.fadeLength.wrappedValue))
-                                .monospacedDigit()
-                        }
-                        Slider(value: model.fadeLength, in: EmbeddedMusicFade.secondsRange)
-                        Text("How long the old track fades out while the next one fades in.").font(
-                            .edithText(.caption)
-                        ).foregroundStyle(.secondary)
-                    }
-                }
-                .disabled(!model.loaded || model.closed)
-                .opacity(model.loaded && !model.closed ? 1 : 0.5)
-                EmbeddedMusicBarRows(model: model)
-                if let error = model.error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.edithText(.caption))
-                    Button("Try again") { Task { await model.refresh() } }
-                }
-                Section("Download tools") {
+                Section("Command-line tools") {
                     Text(
                         "These tools save YouTube audio, videos, images and posts to your library."
                     ).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -79,10 +45,50 @@ struct EmbeddedMusicSettings: View {
                             }
                         }
                     }
-                    if let error = tools.error { Text(error).foregroundStyle(.red) }
+                    if let error = tools.error {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red).font(.edithText(.caption))
+                    }
                     Button("Check tools again") {
                         tools.refresh();
                     }
+                }
+                Section {
+                    LabeledContent("Streaming accounts") {
+                        Button("Connect in Music", action: openLibrary)
+                    }
+                    LabeledContent("Music folder") {
+                        HStack {
+                            Button("Choose folder...", action: chooseLibrary)
+                            Button("Open in Finder") {
+                                EmbeddedMusicRemote.shared.openLibrary()
+                            }
+                        }
+                    }
+                    if let openError {
+                        Label(openError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red).font(.edithText(.caption))
+                    }
+                    Toggle("Fade between tracks", isOn: model.boolean(.crossfade, \.crossfade))
+                    if model.boolean(.crossfade, \.crossfade).wrappedValue {
+                        LabeledContent("Fade length") {
+                            Text(String(format: "%.1fs", model.fadeLength.wrappedValue))
+                                .foregroundStyle(.secondary).monospacedDigit()
+                        }
+                        Slider(value: model.fadeLength, in: EmbeddedMusicFade.secondsRange)
+                        Text("How long the old track fades out while the next one fades in.").font(
+                            .edithText(.caption)
+                        ).foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!model.loaded || model.closed)
+                .opacity(model.loaded && !model.closed ? 1 : 0.5)
+                EmbeddedMusicBarRows(model: model)
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.edithText(.caption))
+                    Button("Try again") { Task { await model.refresh() } }
                 }
             }.edithForm()
         }

@@ -1296,7 +1296,7 @@ private struct EmbeddedMusicDetailSheet: View {
                 if isCurrent, !track.isVideo {
                     playerBlock
                 }
-                if let sourceURL {
+                if let sourceURL, sourceURL.scheme == "https" {
                     youtubeLink(sourceURL)
                 }
             }
@@ -1420,9 +1420,7 @@ private struct EmbeddedMusicDetailSheet: View {
     }
 
     private func youtubeLink(_ url: URL) -> some View {
-        Button {
-            remote.send(.openSource, path: track.relativePath)
-        } label: {
+        Link(destination: url) {
             HStack(spacing: UIScale.pt(6)) {
                 Image(systemName: "play.rectangle.fill")
                 Text("Open original on YouTube")
