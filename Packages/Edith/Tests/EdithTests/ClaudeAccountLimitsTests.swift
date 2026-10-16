@@ -64,6 +64,7 @@ private actor FetchedAccountNames {
             return (.init(provider: provider, session: nil, week: nil), nil)
         }
         #expect(disabled.claudeAccounts.isEmpty)
+        #expect(!disabled.claudeUsesAccounts)
         #expect(await probe.calls == 1)
     }
 
@@ -109,6 +110,7 @@ private actor FetchedAccountNames {
         }
         #expect(unsubscribed.providers.isEmpty)
         #expect(unsubscribed.claudeAccounts.isEmpty)
+        #expect(unsubscribed.claudeUsesAccounts)
     }
 
     @Test func explicitCancellationErrorsNeverBecomeCachedAccountFailures() async throws {
