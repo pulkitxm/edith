@@ -7,6 +7,10 @@ enum KeepAwakeKeys {
     static let enabled = "keepAwakeEnabled"
 }
 
+extension UserDefaults {
+    @objc fileprivate dynamic var preventSleep: Bool { bool(forKey: "preventSleep") }
+}
+
 @MainActor
 final class KeepAwakeStore {
     private(set) var preventingSleep = false
@@ -19,6 +23,7 @@ final class KeepAwakeStore {
     private var assertionID: IOPMAssertionID?
     private var settingsObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    private var preventSleepObservation: NSKeyValueObservation?
     private var reconciliationTimer: Timer?
     private var stopped = false
     private var suspending = false
@@ -47,6 +52,12 @@ final class KeepAwakeStore {
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.syncPreventSleep() }
+        }
+        if notificationCenter === NotificationCenter.default {
+            preventSleepObservation = defaults.observe(\.preventSleep, options: [.new]) {
+                [weak self] _, _ in
+                Task { @MainActor in self?.syncPreventSleep() }
+            }
         }
         wakeObserver = workspaceNotifications.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -104,6 +115,8 @@ final class KeepAwakeStore {
         reconciliationTimer = nil
         if let settingsObserver { notificationCenter.removeObserver(settingsObserver) }
         settingsObserver = nil
+        preventSleepObservation?.invalidate()
+        preventSleepObservation = nil
         if let wakeObserver { workspaceNotifications.removeObserver(wakeObserver) }
         wakeObserver = nil
     }
