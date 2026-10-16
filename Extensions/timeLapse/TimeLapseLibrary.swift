@@ -11,12 +11,17 @@ struct TimeLapseRecording: Codable, Identifiable, Sendable {
     var id: UUID { session.id }
 
     static func load(in root: URL) throws -> [Self] {
-        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
-        let directories = try FileManager.default.contentsOfDirectory(
+        try load(in: root, limit: Int.max).recordings
+    }
+
+    static func load(in root: URL, limit: Int) throws -> (recordings: [Self], truncated: Bool) {
+        guard FileManager.default.fileExists(atPath: root.path) else { return ([], false) }
+        let all = try FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles])
-        return directories.compactMap { directory in
+        let directories = Array(all.prefix(limit))
+        let recordings: [Self] = directories.compactMap { directory in
             let metadata = directory.appendingPathComponent("session.json")
             guard
                 let values = try? directory.resourceValues(forKeys: [
@@ -36,6 +41,7 @@ struct TimeLapseRecording: Codable, Identifiable, Sendable {
             else { return nil }
             return Self(session: session, directory: directory)
         }.sorted { $0.session.startedAt > $1.session.startedAt }
+        return (recordings, all.count > limit)
     }
 }
 

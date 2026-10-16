@@ -14,6 +14,7 @@ final class ExtensionRuntime: NSObject {
     private var uiRecorder: NSObject?
     private var uiClient: ExtensionEngineClient?
     private var uiOperations: NSObject?
+    private var uiLocation: String?
     private var draining = false
     private var uiStops: [UUID: Task<Void, Never>] = [:]
     private let commands = ExtensionCommandRegistry()
@@ -45,14 +46,21 @@ final class ExtensionRuntime: NSObject {
                     providerID: "timeLapse", command: command, payload: payload,
                     snapshot: { tile in
                         let library = TimeLapseRecorder.libraryURL
-                        let recordings = try await BlockingWork.perform {
-                            try TimeLapseRecording.load(in: library)
+                        let loaded = try await BlockingWork.perform {
+                            try TimeLapseRecording.load(in: library, limit: 512)
                         }
                         return TimeLapseSurface.snapshot(
-                            recorder, recordings: recordings, tile: tile)
+                            recorder, recordings: loaded.recordings, truncated: loaded.truncated,
+                            tile: tile)
                     },
                     perform: { action in
-                        if action == "stop" {
+                        if action == "open" {
+                            ExtensionPresentation.showWindow()
+                        } else if action.hasPrefix("stop:") {
+                            guard recorder.recording, !recorder.busy,
+                                let id = recorder.activeSession,
+                                action == "stop:" + id.uuidString
+                            else { throw ExtensionPeerError.invalidRequest }
                             await recorder.stop()
                         } else {
                             let library = TimeLapseRecorder.libraryURL
@@ -110,11 +118,17 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         draining = true
         let recorder = recorder, operations = uiOperations
-        if #available(macOS 15.0, *) { (recorder as? TimeLapseRecorder)?.beginSuspension() }
-        commands.shutdown()
-        stopUI()
-        if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
         Task { [self, recorder, operations] in
+            if #available(macOS 15.0, *) {
+                if let recorder = recorder as? TimeLapseRecorder, recorder.recording {
+                    await recorder.stop()
+                }
+                await (operations as? TimeLapseUICommands)?.finishExport()
+                (recorder as? TimeLapseRecorder)?.beginSuspension()
+            }
+            commands.shutdown()
+            stopUI()
+            if #available(macOS 15.0, *) { (operations as? TimeLapseUICommands)?.shutdown() }
             await commands.shutdownAndWait()
             if #available(macOS 15.0, *) {
                 await (operations as? TimeLapseUICommands)?.shutdownAndWait()
@@ -169,23 +183,32 @@ final class ExtensionRuntime: NSObject {
                 } catch { return ["ok": false] as NSDictionary }
             }
         case "configureUI":
+            if input["location"] as? String == "settings" {
+                guard !draining, input["section"] as? String == "extension" else {
+                    return ["ok": false] as NSDictionary
+                }
+                stopUI(); uiLocation = "settings"
+                return ["ok": true] as NSDictionary
+            }
             guard !draining, uiStops.isEmpty,
                 let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            stopUI(); uiClient = client
+            stopUI(); uiClient = client; uiLocation = nil
             if #available(macOS 15.0, *) { uiRecorder = TimeLapseRecorder(engineClient: client) }
         case "stopUI": stopUI()
         case "view":
+            if uiLocation == "settings" {
+                return NSHostingController(rootView: ExtensionPageHost { TimeLapseSettingsPage() })
+            }
             guard uiClient != nil else { return ["ok": false] as NSDictionary }
             guard #available(macOS 15.0, *), let recorder = uiRecorder as? TimeLapseRecorder else {
                 return NSHostingController(
                     rootView: ExtensionPageHost {
-                        PageScaffold {
-                            PageHeader("Screen Recorder")
-                        } content: {
-                            Text("Screen recording requires macOS 15 or later.")
-                        }
+                        ContentUnavailableView(
+                            "Screen Recorder needs macOS 15", systemImage: "record.circle",
+                            description: Text(
+                                "Update macOS to record displays, windows and optional audio."))
                     })
             }
             return NSHostingController(
