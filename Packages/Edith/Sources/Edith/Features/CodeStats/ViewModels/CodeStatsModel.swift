@@ -122,11 +122,11 @@ final class CodeStatsModel {
     }
 
     var seededIdentity: CodeStatsIdentity? {
-        guard identity.isEmpty, let lookup = profileLookup, !lookup.profiles.isEmpty else {
-            return nil
-        }
-        return CodeStatsIdentity.seeded(
-            logins: lookup.profiles.map(\.login), emails: lookup.emails)
+        let settings = settings
+        guard identity.isEmpty, let lookup = profileLookup else { return nil }
+        let logins = lookup.profiles.map(\.login).filter { settings.includes(account: $0) }
+        guard !logins.isEmpty else { return nil }
+        return CodeStatsIdentity.seeded(logins: logins, emails: lookup.emails)
     }
 
     var settings: CodeStatsSettings {
@@ -420,6 +420,11 @@ final class CodeStatsModel {
 
     func setSchedule(_ next: CodeStatsSchedule) async {
         CodeStatsPreferences.setSchedule(next, in: defaults)
+        await loadStatus()
+    }
+
+    func setAccount(_ login: String, included: Bool) async {
+        CodeStatsPreferences.setAccount(login, included: included, in: defaults)
         await loadStatus()
     }
 

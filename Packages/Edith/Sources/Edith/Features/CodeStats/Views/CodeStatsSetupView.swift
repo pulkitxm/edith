@@ -166,9 +166,24 @@ struct CodeStatsSettingsSteps: View {
                 ?? (lookup == nil ? "Checking the GitHub CLI..." : "Signed in")
         ) {
             if let profiles = lookup?.profiles, !profiles.isEmpty {
-                HStack(spacing: UIScale.pt(16)) {
+                Text("Untick an account to stop syncing and counting its repositories.")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                HStack(spacing: UIScale.pt(20)) {
                     ForEach(profiles, id: \.id) { profile in
-                        CodeStatsProfileBadge(profile: profile, dark: dark)
+                        Toggle(
+                            isOn: Binding(
+                                get: { model.settings.includes(account: profile.login) },
+                                set: { included in
+                                    Task {
+                                        await model.setAccount(profile.login, included: included)
+                                    }
+                                })
+                        ) {
+                            CodeStatsProfileBadge(profile: profile, dark: dark)
+                        }
+                        .toggleStyle(.checkbox)
+                        .accessibilityLabel("Count @\(profile.login)")
                     }
                 }
             } else if let issue = lookup?.issue {
