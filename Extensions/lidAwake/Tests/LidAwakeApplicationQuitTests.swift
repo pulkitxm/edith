@@ -216,7 +216,7 @@ import Testing
             let engine = LidAwakeEngine(
                 defaults: defaults, readSystemState: { savedActive }, applySystemState: nil,
                 startServices: false, privilegedClient: client)
-            worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { true })
+            worker = LidAwakeWorker(defaults: defaults, engine: engine)
         }
         func clean() { defaults.removePersistentDomain(forName: suite) }
     }

@@ -51,8 +51,7 @@ import Foundation
                 throw ExtensionPeerError.invalidRequest
             }
         }
-        let state = try await worker.perform(
-            request, requiresConfirmation: request.operation == .on)
+        let state = try await worker.perform(request)
         return try JSONEncoder().encode(state)
     }
 
@@ -62,7 +61,7 @@ import Foundation
             return .init(providerID: "lidAwake")
         }
         let state = worker.engine.snapshot()
-        let action = state.requestedActive ? "off" : "on"
+        let action = state.active ? "off" : "on"
         return .init(
             providerID: "lidAwake",
             metrics: [
@@ -83,15 +82,22 @@ import Foundation
             ],
             actions: [
                 .init(
-                    action, state.requestedActive ? "Restore sleep" : "Keep awake",
-                    "laptopcomputer", field: field)
+                    action, state.active ? "Restore sleep" : "Keep awake",
+                    "laptopcomputer", field: field,
+                    confirmation: state.active
+                        ? nil
+                        : .init(
+                            title: "Keep running with the lid closed?",
+                            message: LidAwakeOperationExecution.preview(for: .on(state.session))?
+                                .warning ?? "",
+                            confirmTitle: "Turn On"))
             ],
             sources: [.init("sleep", "Sleep policy")], message: state.lastError)
     }
 
     private func perform(_ id: String) async throws {
         switch id {
-        case "on": _ = try await worker.perform(.on(.indefinite), requiresConfirmation: true)
+        case "on": _ = try await worker.perform(.on(worker.engine.snapshot().session))
         case "off": _ = try await worker.perform(.off)
         default: throw ExtensionPeerError.invalidRequest
         }
