@@ -42,9 +42,7 @@ public struct AppDiagnosticsSnapshot: Equatable, Sendable {
     }
 
     public var uptimeText: String {
-        let hours = uptimeSeconds / 3600
-        let minutes = (uptimeSeconds % 3600) / 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        CompactDuration.detailed(Double(uptimeSeconds), showsSeconds: false)
     }
 }
 

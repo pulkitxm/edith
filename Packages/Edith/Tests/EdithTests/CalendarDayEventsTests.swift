@@ -137,6 +137,8 @@ import Testing
         #expect(CalendarText.duration(for: Self.event(minutes: 30)) == "30 min")
         #expect(CalendarText.duration(for: Self.event(minutes: 60)) == "1 hr")
         #expect(CalendarText.duration(for: Self.event(minutes: 150)) == "2 hr 30 min")
+        #expect(CalendarText.duration(for: Self.event(minutes: 1_440)) == "1 day")
+        #expect(CalendarText.duration(for: Self.event(minutes: 3_030)) == "2 days 2 hr")
     }
 
     @Test func labelsAllDayEventsWithoutSecondaryTime() {
