@@ -184,9 +184,8 @@ struct StorageRow: View {
                             .font(.edithText(.callout).weight(.medium)).monospacedDigit()
                             .frame(minWidth: UIScale.pt(76), alignment: .trailing)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.row))
                 .accessibilityElement(children: .combine)
                 .accessibilityHint(expanded ? "Hides details" : "Shows what is inside")
                 .accessibilityAddTraits(.isButton)
@@ -199,7 +198,7 @@ struct StorageRow: View {
                 .help("Show in Finder")
                 .accessibilityLabel("Show \(usage.item.title) in Finder")
             }
-            .padding(.vertical, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(2))
             if expanded {
                 StorageRowDetails(usage: usage, contents: contents)
                     .padding(.leading, UIScale.pt(54))
