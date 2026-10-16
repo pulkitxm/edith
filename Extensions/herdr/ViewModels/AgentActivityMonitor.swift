@@ -16,6 +16,7 @@ final class AgentActivityMonitor {
     private(set) var activity = AgentActivitySnapshot()
     private(set) var deciding: Set<UUID> = []
     private(set) var decisionErrors: [UUID: String] = [:]
+    private var announcedApprovals: Set<UUID> = []
     private var observers = 0
     private var surfaceUntil = Date.distantPast
     private var stopped = false
@@ -83,6 +84,12 @@ final class AgentActivityMonitor {
         activity = value
         let live = Set(value.approvals.map(\.id))
         decisionErrors = decisionErrors.filter { live.contains($0.key) }
+        if uiClient == nil, live != announcedApprovals {
+            announcedApprovals = live
+            try? ExtensionSharedState.current?.publish([
+                "approvals": String(live.count), "revision": UUID().uuidString,
+            ])
+        }
     }
 
     func observe() async {
