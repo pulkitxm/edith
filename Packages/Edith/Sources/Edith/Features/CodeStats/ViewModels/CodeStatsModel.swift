@@ -124,7 +124,9 @@ final class CodeStatsModel {
     var seededIdentity: CodeStatsIdentity? {
         let settings = settings
         guard identity.isEmpty, let lookup = profileLookup else { return nil }
-        let logins = lookup.profiles.map(\.login).filter { settings.includes(account: $0) }
+        let logins = lookup.profiles.compactMap {
+            settings.includes(account: $0.login) ? $0.login : nil
+        }
         guard !logins.isEmpty else { return nil }
         return CodeStatsIdentity.seeded(logins: logins, emails: lookup.emails)
     }
