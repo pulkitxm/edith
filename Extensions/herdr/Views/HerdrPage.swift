@@ -1128,14 +1128,14 @@ struct HerdrPage: View {
     }
 
     private func openAgent(_ agent: HerdrAgent) {
-        if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+        if store.raiseSpace(containingAgent: agent.id) { return }
         let detaching = NSEvent.modifierFlags.contains(.command)
         if detaching {
             if store.uiClient == nil { store.close(agent.id, rememberingPlacement: false) }
             HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             return
         }
-        if HerdrAgentWindow.raise(agent.id) { return }
+        if store.raiseAgentWindow(agent.id) { return }
         store.open(agent)
     }
 

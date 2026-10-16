@@ -13,8 +13,8 @@ final class HerdrAgentActions {
     private(set) var openingTerminal: Set<String> = []
 
     func open(_ agent: HerdrAgent, store: HerdrStore) {
-        if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-        if HerdrAgentWindow.raise(agent.id) { return }
+        if store.raiseSpace(containingAgent: agent.id) { return }
+        if store.raiseAgentWindow(agent.id) { return }
         store.open(agent)
         store.revealWorkspaceWindow()
     }
@@ -120,8 +120,8 @@ struct HerdrAgentMenu: View {
             Button("Send Message…") {
                 onOpen()
                 let detached =
-                    HerdrSpaceWindow.raise(containingAgent: agent.id)
-                    || HerdrAgentWindow.raise(agent.id)
+                    store.raiseSpace(containingAgent: agent.id)
+                    || store.raiseAgentWindow(agent.id)
                 store.messaging.compose(to: agent, presenterID: detached ? agent.id : nil)
                 if !detached { store.revealWorkspaceWindow() }
             }

@@ -46,8 +46,15 @@ struct HerdrRemoteScene: View {
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
         .onAppear {
             keyMonitor.active = automaticActions
-            keyMonitor.install(store: store) { store, event, window in
-                store.performSceneKey(
+            keyMonitor.install(store: store) { [location, target] store, event, window in
+                if location == "herdr.space",
+                    store.performSpaceKey(
+                        characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
+                        modifiers: event.modifierFlags, in: window, spaceID: target)
+                {
+                    return true
+                }
+                return store.performSceneKey(
                     characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
                     repeats: event.isARepeat, in: window, surface: detailSurface)
             }

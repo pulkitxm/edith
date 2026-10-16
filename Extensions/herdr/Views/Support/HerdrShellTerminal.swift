@@ -27,6 +27,10 @@ struct HerdrShellTerminal: View {
             TerminalPane(
                 holder: holder, palette: .edith(dark: scheme == .dark), active: active,
                 wantsFocus: wantsFocus, fontSize: store.terminalSettings.fontSize, onFocus: onFocus)
+            if error == nil, !holder.started, holder.exitMessage == nil {
+                TerminalLoadingSkeleton(palette: .edith(dark: scheme == .dark))
+            }
+            TerminalDropTransferStatus(holder: holder)
             if let error {
                 VStack(spacing: UIScale.pt(10)) {
                     Text(error).font(.edithText(.body)).textSelection(.enabled)
