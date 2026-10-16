@@ -134,7 +134,7 @@ struct MarketplacePage: View {
 
     private func suiteHeader(_ suite: HostMarketplaceSuite, entries: [HostExtension]) -> some View {
         let enabled = suites.enabled(suite)
-        let onCount = entries.filter { marketplace.surfaceAvailability.activeIDs.contains($0.id) }
+        let onCount = entries.filter { shownOn($0.id) }
             .count
         return HStack(alignment: .center, spacing: UIScale.pt(10)) {
             Image(systemName: suite.symbol).font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -172,11 +172,11 @@ struct MarketplacePage: View {
     private func card(_ entry: HostExtension) -> some View {
         HostMarketplaceCard(
             entry: entry, dark: dark,
-            active: marketplace.surfaceAvailability.activeIDs.contains(entry.id),
+            active: shownOn(entry.id),
             subtitle: HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title,
             open: { open(entry) },
             enabled: Binding(
-                get: { marketplace.surfaceAvailability.activeIDs.contains(entry.id) },
+                get: { shownOn(entry.id) },
                 set: { value in Task { await suites.select(entry, enabled: value) } }),
             toggleDisabled: marketplace.sessions.pendingDisableIDs.contains(entry.id)
                 || (marketplace.installed[entry.id] == nil
@@ -216,10 +216,15 @@ struct MarketplacePage: View {
                 return "Disable pending · \(package.version)"
             }
             return
-                "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
+                "\(shownOn(entry.id) ? "Enabled" : "Disabled") · \(package.version)"
         }
         return marketplace.installedVersions[entry.id]?.isEmpty == false
             ? "Needs a compatible update" : "Not installed"
+    }
+
+    private func shownOn(_ id: String) -> Bool {
+        marketplace.surfaceAvailability.activeIDs.contains(id)
+            || marketplace.sessions.states[id] == .starting
     }
 
     @ViewBuilder private func controls(_ entry: HostExtension) -> some View {
@@ -266,7 +271,7 @@ struct MarketplacePage: View {
 
     private func open(_ entry: HostExtension) {
         HostExtensionActions.open(
-            entry, active: marketplace.surfaceAvailability.activeIDs.contains(entry.id),
+            entry, active: shownOn(entry.id),
             openPage: openExtension, showDetails: { selected = $0 })
     }
 

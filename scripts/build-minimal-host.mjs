@@ -211,6 +211,7 @@ const plist = {
   CFBundleShortVersionString: "0.1.0",
   CFBundleVersion: "1",
   NSPrincipalClass: "NSApplication",
+  LSUIElement: true,
   NSCalendarsFullAccessUsageDescription:
     "Show your upcoming events in the Calendar extension.",
   NSCameraUsageDescription:

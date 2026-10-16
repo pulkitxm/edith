@@ -20,6 +20,8 @@
 	<string>336</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Edith controls playback and opens terminal sessions in the app you select.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
