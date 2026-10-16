@@ -31,6 +31,14 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
         }
     }
 
+    var uiScope: AppMaintenanceUIScope {
+        switch self {
+        case .removal: .removal
+        case .history: .history
+        case .updates, .packages, .cleaner: .updates
+        }
+    }
+
     var usesApplicationInventory: Bool {
         switch self {
         case .packages, .cleaner: false
@@ -125,8 +133,10 @@ struct AppMaintenanceView: View {
         } content: {
             content
         }
+        .onChange(of: section, initial: true) { _, section in model.scope = section.uiScope }
+        .onChange(of: model.focusedUpdateID) { Task { await model.refreshRemote() } }
         .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
-        .pageTask(active: section.usesApplicationInventory, cancel: model.cancel) {
+        .pageTask(active: section.usesApplicationInventory, cancel: model.cancelDiscovery) {
             model.refresh(interval: updateRefreshInterval)
         }
         .pageRefresh(
@@ -193,56 +203,54 @@ struct AppMaintenanceView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     if section.usesApplicationInventory {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: UIScale.pt(10)) {
-                                Button {
-                                    showingUpdateSettings.toggle()
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .help("Update settings")
-                                .edithSheet(isPresented: $showingUpdateSettings) {
-                                    updateSettings
-                                }
-                                Menu {
-                                    Picker(
-                                        "Destination",
-                                        selection: Binding(
-                                            get: { installDestinationRaw },
-                                            set: { installDestinationRaw = $0 })
-                                    ) {
-                                        ForEach(
-                                            AppMaintenanceInstallDestination.allCases,
-                                            id: \.rawValue
-                                        ) {
-                                            destination in
-                                            Text(destination.title).tag(destination.rawValue)
-                                        }
-                                    }
-                                } label: {
-                                    Label(installDestination.title, systemImage: "folder")
-                                }
-                                if model.checkingUpdates {
-                                    Text("Checking updates")
-                                        .font(.system(size: UIScale.pt(12)))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Button {
-                                    showingDiskImagePicker = true
-                                } label: {
-                                    Label(
-                                        "Install Disk Image",
-                                        systemImage: "externaldrive.badge.plus")
-                                }
-                                .disabled(model.phase != .ready)
-                                Button {
-                                    model.refresh(interval: updateRefreshInterval)
-                                } label: {
-                                    Label("Refresh", systemImage: "arrow.clockwise")
-                                }
-                                .disabled(model.phase != .ready)
-                                .buttonStyle(.edith(.secondary))
+                        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
+                            Button {
+                                showingUpdateSettings.toggle()
+                            } label: {
+                                Image(systemName: "gearshape")
                             }
+                            .buttonStyle(.edith(.iconOnly))
+                            .accessibilityLabel("Update settings")
+                            .help("Update settings")
+                            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                            Menu {
+                                Picker(
+                                    "Destination",
+                                    selection: Binding(
+                                        get: { installDestinationRaw },
+                                        set: { installDestinationRaw = $0 })
+                                ) {
+                                    ForEach(
+                                        AppMaintenanceInstallDestination.allCases,
+                                        id: \.rawValue
+                                    ) {
+                                        destination in
+                                        Text(destination.title).tag(destination.rawValue)
+                                    }
+                                }
+                            } label: {
+                                Label(installDestination.title, systemImage: "folder")
+                            }
+                            if model.checkingUpdates {
+                                Text("Checking updates")
+                                    .font(.system(size: UIScale.pt(12)))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button {
+                                showingDiskImagePicker = true
+                            } label: {
+                                Label(
+                                    "Install Disk Image",
+                                    systemImage: "externaldrive.badge.plus")
+                            }
+                            .disabled(model.phase != .ready)
+                            Button {
+                                model.refresh(interval: updateRefreshInterval)
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(model.phase != .ready)
+                            .buttonStyle(.edith(.secondary))
                         }
                     }
                 }
@@ -308,8 +316,7 @@ struct AppMaintenanceView: View {
 
     private var removalInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search applications", text: $query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search applications", text: $query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
@@ -348,8 +355,7 @@ struct AppMaintenanceView: View {
 
     private var updateInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search updates", text: $query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search updates", text: $query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {
@@ -475,10 +481,10 @@ struct AppMaintenanceView: View {
     @ViewBuilder
     private var removalDetail: some View {
         if model.phase == .scanning {
-            PageSkeleton(layout: .list)
+            AppMaintenanceRemovalSkeleton()
         } else if model.phase == .removing || model.phase == .mounting {
             ZStack(alignment: .top) {
-                PageSkeleton(layout: .list)
+                AppMaintenanceRemovalSkeleton()
                 Text(progressMessage)
                     .settingsCaption()
                     .padding(.top, UIScale.pt(8))
@@ -511,7 +517,7 @@ struct AppMaintenanceView: View {
         if model.phase == .updating {
             ZStack(alignment: .bottomLeading) {
                 SkeletonGroup {
-                    PageSkeleton(layout: .cards)
+                    AppMaintenanceUpdateSkeleton()
                 }
                 Button("Cancel") { model.cancel() }
                     .padding(UIScale.pt(22))
@@ -892,5 +898,129 @@ private struct AppMaintenanceInstallReview: View {
         }
         .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(560))
         .interactiveDismissDisabled(installing)
+    }
+}
+
+private struct AppMaintenanceUpdateSkeleton: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            HStack(spacing: UIScale.pt(14)) {
+                SkeletonBlock(width: 54, height: 54, corner: 12)
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 156, height: 14)
+                    SkeletonBlock(width: 104, height: 9)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: UIScale.pt(6)) {
+                    SkeletonBlock(width: 86, height: 10)
+                    SkeletonBlock(width: 72, height: 8)
+                }
+            }
+            AppMaintenanceDetailSkeleton(lines: 4, height: 150)
+            AppMaintenanceDetailSkeleton(lines: 2, height: 104)
+            Spacer(minLength: 0)
+            HStack {
+                SkeletonBlock(width: 72, height: 30, corner: 7)
+                Spacer()
+                SkeletonBlock(width: 126, height: 32, corner: 7)
+            }
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceHistorySkeleton: View {
+    var body: some View {
+        VStack(spacing: UIScale.pt(14)) {
+            Spacer(minLength: 0)
+            SkeletonBlock(width: 44, height: 44, corner: 22)
+            SkeletonBlock(width: 154, height: 14)
+            VStack(spacing: UIScale.pt(6)) {
+                SkeletonBlock(width: 320, height: 9)
+                SkeletonBlock(width: 252, height: 9)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(22))
+    }
+}
+
+private struct AppMaintenanceDetailSkeleton: View {
+    let lines: Int
+    let height: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+            SkeletonBlock(width: 94, height: 10)
+            ForEach(0..<lines, id: \.self) { index in
+                SkeletonBlock(
+                    width: index == lines - 1 ? 214 : nil,
+                    height: 8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+    }
+}
+
+private struct AppMaintenanceRemovalSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: 0) {
+                HStack(spacing: UIScale.pt(12)) {
+                    SkeletonBlock(width: 48, height: 48, corner: 10)
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 148, height: 14)
+                        SkeletonBlock(width: 236, height: 9)
+                        SkeletonBlock(width: 184, height: 9)
+                    }
+                    Spacer()
+                    SkeletonBlock(width: 72, height: 28, corner: 7)
+                }
+                .padding(UIScale.pt(18))
+                Divider()
+                VStack(spacing: 0) {
+                    HStack {
+                        SkeletonBlock(width: 76, height: 9)
+                        Spacer()
+                    }
+                    .padding(.horizontal, UIScale.pt(16))
+                    .padding(.top, UIScale.pt(14))
+                    .padding(.bottom, UIScale.pt(7))
+                    ForEach(0..<6, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(10)) {
+                            SkeletonBlock(width: 14, height: 14, corner: 3)
+                            SkeletonBlock(width: 22, height: 22, corner: 5)
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                SkeletonBlock(
+                                    width: index.isMultiple(of: 2) ? 132 : 176,
+                                    height: 10)
+                                SkeletonBlock(width: 248, height: 8)
+                            }
+                            Spacer()
+                            SkeletonBlock(width: 48, height: 8)
+                            SkeletonBlock(width: 24, height: 24, corner: 6)
+                        }
+                        .padding(.horizontal, UIScale.pt(16))
+                        .padding(.vertical, UIScale.pt(9))
+                    }
+                    Spacer(minLength: 0)
+                }
+                Divider()
+                HStack {
+                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                        SkeletonBlock(width: 112, height: 10)
+                        SkeletonBlock(width: 62, height: 8)
+                    }
+                    Spacer()
+                    SkeletonBlock(width: 104, height: 32, corner: 7)
+                }
+                .padding(UIScale.pt(16))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Finding exact support files")
     }
 }

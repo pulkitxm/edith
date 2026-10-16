@@ -73,6 +73,17 @@ public struct AppUpdateItem: Identifiable, Codable, Equatable, Sendable {
         self.arguments = arguments
     }
 
+    func withoutNotes() -> AppUpdateItem { withNotes(nil) }
+
+    func withNotes(_ notes: String?) -> AppUpdateItem {
+        AppUpdateItem(
+            id: id, name: name, bundleID: bundleID, applicationPath: applicationPath,
+            source: source, currentVersion: currentVersion, availableVersion: availableVersion,
+            releaseTitle: releaseTitle, releaseNotes: notes, releaseURL: releaseURL,
+            confidence: confidence, checkedAt: checkedAt, action: action,
+            executablePath: executablePath, arguments: arguments)
+    }
+
     public var command: String { AppMaintenanceFiles.command([executablePath] + arguments) }
 }
 

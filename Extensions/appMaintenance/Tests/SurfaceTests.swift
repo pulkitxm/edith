@@ -18,7 +18,7 @@ struct AppMaintenanceSurfaceTests {
         var tile = SurfaceTile(.ability("appMaintenance"))
         let snapshot = AppMaintenanceSurface.snapshot(model, tile: tile)
         #expect(snapshot.rows.first?.sourceID == "appStore")
-        #expect(snapshot.rows.first?.value == "1 to 2")
+        #expect(snapshot.rows.first?.detail == "1 → 2")
         #expect(snapshot.rows.flatMap(\.actions).isEmpty)
         tile.sourceIDs = ["sparkle"]
         #expect(AppMaintenanceSurface.snapshot(model, tile: tile).rows.isEmpty)
