@@ -72,7 +72,7 @@ public actor JevEngine: JevDeciding {
     public static let creditPause: TimeInterval = 600
     public static let latencyWindow = 50
     public static let unreadableMessage =
-        "Edith can't read the saved TypeSafe key. Save it again in the Jev extension."
+        "Edith can't read the saved TypeSafe key. Save it again in Settings > Jev."
     public static let unsavedMessage =
         "Edith couldn't save the key to the Keychain. Remove the Edith Jev item in Keychain Access, then save it again."
 

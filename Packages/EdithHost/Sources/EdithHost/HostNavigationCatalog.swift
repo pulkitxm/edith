@@ -142,7 +142,7 @@ enum HostNavigationCatalog {
         .init(id: "about", title: "About", symbol: "info.circle", detachable: false),
     ]
     static let suiteProviders: [String: Set<String>] = [
-        "agents": ["usage", "herdr", "quinjet", "companion", "plugins", "jev"],
+        "agents": ["usage", "herdr", "quinjet", "companion", "plugins"],
         "maintenance": ["appMaintenance", "homebrew", "cleaner", "blitztree"],
         "system": [
             "system", "keepAwake", "lidAwake", "systemStats", "micMute",

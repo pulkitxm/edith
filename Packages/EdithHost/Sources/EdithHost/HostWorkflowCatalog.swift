@@ -24,7 +24,11 @@ enum HostWorkflow: String, CaseIterable, Identifiable, Sendable {
         case .custom: "Choose exactly the tools you want."
         }
     }
+    static let coreExtensionIDs: Set<String> = ["jev"]
     var suggestions: Set<String> {
+        Self.coreExtensionIDs.union(workflowSuggestions)
+    }
+    private var workflowSuggestions: Set<String> {
         switch self {
         case .agentic: ["usage", "herdr", "quinjet", "companion", "plugins"]
         case .creative: ["studio", "timeLapse", "music", "colorPicker", "downloads"]

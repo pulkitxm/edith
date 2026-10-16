@@ -32,6 +32,24 @@ import Foundation
         return try JSONSerialization.data(
             withJSONObject: [
                 "version": 1, "owner": "jev", "commands": commands, "settings": [],
+                "nativeTools": [
+                    [
+                        "name": "edith_find", "title": "Find an Edith tool",
+                        "summary":
+                            "Rank the Edith tools that serve a plain-language request, using TypeSafe Jev. "
+                            + "Returns tool names, summaries and probabilities.",
+                        "operation": "jev.find",
+                        "inputSchema": [
+                            "type": "object",
+                            "properties": [
+                                "request": [
+                                    "type": "string", "description": "What you want Edith to do.",
+                                ]
+                            ],
+                            "required": ["request"],
+                        ] as [String: Any],
+                    ] as [String: Any]
+                ],
                 "acceptsInput": true, "parserHelp": [help],
             ], options: [.sortedKeys, .withoutEscapingSlashes])
     }
