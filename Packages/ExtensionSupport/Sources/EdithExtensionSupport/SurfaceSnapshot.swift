@@ -45,14 +45,29 @@ public struct SurfaceMetric: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public struct SurfaceConfirmation: Codable, Equatable, Sendable {
+    public let title: String
+    public let message: String
+    public let confirmTitle: String
+
+    public init(title: String, message: String, confirmTitle: String) {
+        self.title = title; self.message = message; self.confirmTitle = confirmTitle
+    }
+}
+
 public struct SurfaceAction: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
     public let icon: String
     public let field: String?
+    public let confirmation: SurfaceConfirmation?
 
-    public init(_ id: String, _ title: String, _ icon: String, field: String? = nil) {
+    public init(
+        _ id: String, _ title: String, _ icon: String, field: String? = nil,
+        confirmation: SurfaceConfirmation? = nil
+    ) {
         self.id = id; self.title = title; self.icon = icon; self.field = field
+        self.confirmation = confirmation
     }
 }
 
@@ -192,6 +207,11 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
                 validText($0.id, maximum: 512) && validText($0.title, maximum: 256)
                     && validText($0.icon, maximum: 128)
                     && ($0.field.map { validText($0, maximum: 80) } ?? true)
+                    && ($0.confirmation.map {
+                        validText($0.title, maximum: 256)
+                            && validText($0.message, maximum: 1024, empty: true)
+                            && validText($0.confirmTitle, maximum: 64)
+                    } ?? true)
             }
     }
 

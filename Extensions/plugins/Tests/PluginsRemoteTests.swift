@@ -44,4 +44,27 @@ import Testing
         #expect(!engine.isStopped && engine.presentedSkill == skill)
         await engine.shutdown()
     }
+
+    @Test func dismissingTheSheetClearsTheOwnedPresentationAndDiscoveryDoesNotReopenIt()
+        async throws
+    {
+        let skill = EdithSkillLibrary.skills[0]
+        let agents = Array(SkillAgentCatalog.agents.prefix(1))
+        let suite = "plugins.remote.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let engine = SkillsModel(defaults: defaults, detectAgents: { agents })
+        let bridge = PluginsUIBridge(invoke: {
+            try await PluginsUIBridge.execute($0, payload: $1, model: engine)
+        })
+        let ui = SkillsModel(remote: bridge)
+        await ui.present(skill)
+        #expect(ui.presentedSkill == skill && engine.presentedSkill == skill)
+        await ui.dismissPresentation()
+        #expect(ui.presentedSkill == nil && engine.presentedSkill == nil)
+        await ui.discoverAgents()
+        #expect(ui.presentedSkill == nil)
+        await ui.shutdown()
+        await engine.shutdown()
+    }
 }

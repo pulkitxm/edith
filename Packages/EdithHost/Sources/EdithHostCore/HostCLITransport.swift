@@ -178,7 +178,9 @@ public enum HostCLITransport {
         guard let current = HostCLIProcess.read(getpid()) else { return false }
         let directory = URL(fileURLWithPath: current.executable).deletingLastPathComponent()
         let app = directory.deletingLastPathComponent().deletingLastPathComponent()
-        guard directory.lastPathComponent == "MacOS", app.pathExtension == "app" else {
+        guard directory.lastPathComponent == "MacOS", app.pathExtension == "app",
+            launchable(app)
+        else {
             return false
         }
         let process = Process()
@@ -192,6 +194,15 @@ public enum HostCLITransport {
             process.waitUntilExit()
         } catch { return false }
         return process.terminationStatus == 0
+    }
+}
+
+extension HostCLITransport {
+    static func launchable(_ app: URL) -> Bool {
+        let path = app.resolvingSymlinksInPath().standardizedFileURL.path
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let installed = ["/Applications/Edith.app", home + "/Applications/Edith.app"]
+        return installed.contains(path) || path.hasSuffix("/dist/Edith.app")
     }
 }
 

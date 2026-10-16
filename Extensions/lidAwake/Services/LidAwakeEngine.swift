@@ -183,8 +183,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         initialError: String? = nil, automaticStopRetries: Int = 1,
         privilegedClient: LidAwakePrivilegedClient? = nil,
         announceChange: @escaping @MainActor @Sendable () -> Void = {
-            NotificationCenter.default.post(
-                name: Notification.Name(LidAwakeNotifications.changed), object: nil)
+            LidAwakeNotifications.announce()
         }
     ) {
         self.privilegedClient = privilegedClient ?? LidAwakePrivilegedClient()
@@ -277,6 +276,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     }
 
     func requestApproval() throws { try privilegedClient.requestApproval() }
+    func registerHelperIfNeeded() { privilegedClient.registerIfNeeded() }
 
     func shutdown() {
         _ = stopEngine(force: false)
@@ -647,8 +647,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         },
         applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)? = nil,
         announceChange: @escaping @MainActor @Sendable () -> Void = {
-            NotificationCenter.default.post(
-                name: Notification.Name(LidAwakeNotifications.changed), object: nil)
+            LidAwakeNotifications.announce()
         }
     ) async -> LidAwakeOutcome {
         let systemActive: Bool

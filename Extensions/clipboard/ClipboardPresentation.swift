@@ -6,6 +6,7 @@ import SwiftUI
 
 @MainActor @Observable final class ClipboardPresentation {
     var preferences = ClipboardPreferences()
+    private var baseline = ClipboardPreferences()
     let preferencesLoad = ContentLoad()
     private(set) var error: String?
     let client: ClipboardClient
@@ -62,7 +63,8 @@ import SwiftUI
             return try ClipboardMessage.decode(ClipboardPreferences.self, from: data)
         }) { next in
             guard !stopped, generation == current else { return }
-            preferences = next
+            baseline = next
+            if preferenceTask == nil { preferences = next }
         }
         guard !Task.isCancelled, !stopped, generation == current else { return }
         error = preferencesLoad.errorMessage
@@ -71,14 +73,21 @@ import SwiftUI
     func save() {
         guard !stopped else { return }
         preferenceTask?.cancel()
-        let next = preferences
         preferenceTask = commandTasks.launch { [weak self] in
             do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
             guard let self, !Task.isCancelled, !self.stopped else { return }
-            self.perform {
-                _ = try await self.send(
-                    "clipboard.ui.preferences.set", ClipboardMessage.encode(next))
+            let next = self.preferences
+            guard let patch = try? next.changes(from: self.baseline), patch.count > 2 else {
+                self.preferenceTask = nil
+                return
             }
+            self.perform {
+                let data = try await self.send("clipboard.ui.preferences.patch", patch)
+                let saved = try ClipboardMessage.decode(ClipboardPreferences.self, from: data)
+                self.baseline = saved
+                if self.preferences == next { self.preferences = saved }
+            }
+            self.preferenceTask = nil
         }
     }
 

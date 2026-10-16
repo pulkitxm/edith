@@ -125,6 +125,37 @@ public actor HostMCPCLI {
         retired.removeAll()
     }
 
+    private static let findOperation = "jev.find"
+
+    private static func findArguments(_ arguments: HostCLIJSON, commands: [HostCLIProviderCommand])
+        -> HostCLIJSON
+    {
+        var object = arguments.object ?? [:]
+        object["tools"] = .array(
+            commands.map {
+                .object([
+                    "tool": .string($0.toolName), "summary": .string($0.summary),
+                    "area": .string($0.route.first ?? $0.toolName),
+                ])
+            })
+        return .object(object)
+    }
+
+    private func jevIsConfigured(_ registry: HostCLIProviderRegistry) async -> Bool {
+        guard
+            registry.providers.contains(where: {
+                ($0.catalog.nativeTools ?? []).contains { $0.operation == Self.findOperation }
+            }),
+            let request = try? HostCLIRequest(
+                action: .invoke, id: "jev", operation: "jev.status",
+                payload: Data("{\"probe\":false}".utf8), timeout: 2),
+            let data = try? await invoke(request),
+            let state = (try? JSONDecoder().decode(HostCLIJSON.self, from: data))?.object?["state"]?
+                .string
+        else { return false }
+        return state != "notConfigured" && state != "keyUnreadable"
+    }
+
     private static func publicCommand(_ command: HostCLIProviderCommand) -> Bool {
         command.route != ["agent", "activity", "hook"]
     }
@@ -148,7 +179,12 @@ public actor HostMCPCLI {
             let commands =
                 registry.providers.flatMap { $0.catalog.allCommands }.filter(Self.publicCommand)
                 + (coreCatalog?.commands ?? [])
-            let native = registry.providers.flatMap { $0.catalog.nativeTools ?? [] }.map(\.tool)
+            let jevConfigured = await jevIsConfigured(registry)
+            let native = registry.providers.flatMap { provider in
+                (provider.catalog.nativeTools ?? []).filter {
+                    $0.operation != Self.findOperation || jevConfigured
+                }
+            }.map(\.tool)
             return .object([
                 "tools": .array(
                     (commands.map(Self.tool) + native).sorted {
@@ -167,10 +203,17 @@ public actor HostMCPCLI {
             else { throw HostCLIError.usage("Invalid native tool arguments.") }
             guard try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state)
             else { throw HostCLIError.rejected("The native tool provider changed.") }
+            var arguments = params["arguments"] ?? .object([:])
+            if tool.operation == Self.findOperation {
+                let commands =
+                    registry.providers.flatMap { $0.catalog.allCommands }.filter(Self.publicCommand)
+                    + (coreCatalog?.commands ?? [])
+                arguments = Self.findArguments(arguments, commands: commands)
+            }
             let data = try await invoke(
                 HostCLIRequest(
                     action: .invoke, id: provider.state.id, operation: tool.operation,
-                    payload: (params["arguments"] ?? .object([:])).encoded()))
+                    payload: arguments.encoded()))
             try Task.checkCancellation()
             guard data.count <= 8 * 1024 * 1024,
                 try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state),

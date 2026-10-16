@@ -37,6 +37,7 @@ final class CompanionWorker {
 
     func start() {
         guard !isStopped else { return }
+        CompanionDeploymentStore.publishHostingMachine()
         monitor.start()
     }
 

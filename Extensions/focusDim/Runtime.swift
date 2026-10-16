@@ -78,11 +78,7 @@ final class ExtensionRuntime: NSObject {
         return try await SurfaceCommandService.execute(
             providerID: "focusDim", command: command, payload: payload,
             snapshot: { _ in
-                FocusDimSurface.snapshot(
-                    active: FocusDimState.isActive(),
-                    intensity: SharedDefaults.store.object(
-                        forKey: AppStorageKeys.FocusDim.intensity) as? Double
-                        ?? FocusDimMath.defaultIntensity)
+                FocusDimSurface.snapshot(active: FocusDimState.isActive())
             },
             perform: { action in
                 FocusDimState.setActive(action == "enable")

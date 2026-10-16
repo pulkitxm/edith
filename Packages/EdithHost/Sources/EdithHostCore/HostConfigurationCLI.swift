@@ -278,7 +278,7 @@ import Foundation
             .init(
                 AppStorageKeys.Permissions.filter, .string, group: "permissions",
                 summary: "Filter the Permissions page opens with.")
-        ]
+        ] + HostExtensionConfigurationSettings.all
 }
 
 struct HostCLIArguments {

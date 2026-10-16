@@ -19,7 +19,7 @@ enum LidAwakePrivilegedClientError: LocalizedError {
         case .helperUnavailable(.notFound):
             "The privileged carrier is missing. Update Edith and download Lid Awake again."
         case .helperUnavailable:
-            "Approve the privileged carrier from Lid Awake settings before changing lid sleep."
+            "Approve Edith in System Settings > General > Login Items & Extensions, then try again."
         case .connectionFailed(let detail): "Could not connect to the privileged carrier: " + detail
         case .remoteError(let error): error.localizedDescription
         case .timedOut: "The privileged carrier did not answer in time."
@@ -106,8 +106,14 @@ struct LidAwakeApplicationQuitContext: Sendable {
     var isUsable: Bool { state == .enabled }
     var hasOwnedLease: Bool { ownsLease }
     func requestApproval() throws { try approve() }
+    func registerIfNeeded() {
+        if state == .notRegistered { try? approve() }
+    }
     func setSleepDisabled(_ disable: Bool) async throws {
-        if let error = Self.requestError(for: state) { throw error }
+        if let error = Self.requestError(for: state) {
+            if state != .notFound { try? approve() }
+            throw error
+        }
         ownsLease = true
         _ = try await invoke("setSleepDisabled", JSONEncoder().encode(disable))
     }

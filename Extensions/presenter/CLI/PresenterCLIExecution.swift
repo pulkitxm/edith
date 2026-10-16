@@ -49,7 +49,7 @@ import Foundation
             if !route.isEmpty {
                 let entry: [String: Any] = [
                     "route": route, "operation": "presenter.cli", "summary": summary,
-                    "destructive": Set<String>(["start", "stop"]).contains(name), "timeout": 30,
+                    "destructive": Set<String>([]).contains(name), "timeout": 30,
                     "readsInput": false, "jsonOutput": false,
                 ]
                 commands.append(entry)

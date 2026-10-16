@@ -49,7 +49,7 @@ struct SkillsCommand: AsyncParsableCommand {
         if !ids.isEmpty { return try agents(ids) }
         let detected = try SkillsCLIEnvironment.detectAgents().map(\.id)
         let preferences =
-            SharedDefaults.store.dictionary(forKey: "plugins.agentSelections")
+            SharedDefaults.store.dictionary(forKey: AppStorageKeys.Skills.agentSelections)
             as? [String: Bool] ?? [:]
         let selected = detected.filter { preferences[$0] ?? true }
         return try agents(selected)

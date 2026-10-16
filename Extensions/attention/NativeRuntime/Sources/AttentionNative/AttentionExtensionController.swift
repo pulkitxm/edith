@@ -245,6 +245,7 @@ public final class AttentionExtensionController: NSObject {
                             marker: root.appendingPathComponent(
                                 AttentionLegacyHistoryImport.markerName),
                             into: database)
+                        _ = AttentionExtensionInstaller.refreshIfOutdated()
                         await service.start()
                     }
                 }

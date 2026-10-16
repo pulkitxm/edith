@@ -7,20 +7,13 @@ struct JevSettingsPane: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
-        PageScaffold {
-            PageHeader("Jev")
-        } content: {
-            PageLoading(
-                state: model.loading.state, message: "Jev could not load its settings.",
-                layout: .list, refreshing: model.loading.isRefreshing,
-                retry: { model.load(probe: false) }
-            ) {
-                PageCard(title: "TypeSafe API key") { keySection }
-                PageCard(title: "What Jev powers") { featuresSection }
-                PageCard(title: "Activity") { activitySection }
-            }
+        Form {
+            keySection
+            featuresSection
+            activitySection
         }
-        .pageTask(cancel: { model.cancel() }) {
+        .edithForm()
+        .pageTask {
             if automaticActionsEnabled { model.load(probe: false) }
         }
     }
@@ -54,24 +47,23 @@ struct JevSettingsPane: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.save() }
                 .accessibilityLabel("TypeSafe API key")
-                Button(model.loading.isRunning ? "Saving..." : "Save") {
+                Button(model.phase == .saving ? "Saving..." : "Save") {
                     model.save()
                 }
                 .disabled(
-                    model.draft.trimmingCharacters(in: .whitespaces).isEmpty
-                        || model.loading.isRunning)
+                    model.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.isBusy)
             }
             HStack(spacing: UIScale.pt(10)) {
-                Button(model.loading.isRunning ? "Checking..." : "Check key") {
+                Button(model.phase == .loading ? "Checking..." : "Check key") {
                     model.load(probe: true)
                 }
-                .disabled(model.status?.isConfigured != true || model.loading.isRunning)
+                .disabled(model.status?.isConfigured != true || model.isBusy)
                 Button("Remove key", role: .destructive) {
                     model.remove()
                 }
-                .disabled(model.status?.hasSavedKey != true || model.loading.isRunning)
+                .disabled(model.status?.hasSavedKey != true || model.isBusy)
             }
-            if let message = model.loading.errorMessage {
+            if case .failed(let message) = model.phase {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.orange)

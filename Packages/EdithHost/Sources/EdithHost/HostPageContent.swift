@@ -51,13 +51,44 @@ struct HostPageContent: View {
                 let child = HostNavigationCatalog.maintenanceDestination(
                     maintenanceSection, active: active), let id = child.extensionID
             {
-                content(id, section: child.id)
+                if id == "homebrew" {
+                    VStack(spacing: 0) {
+                        maintenanceHeader(current: child)
+                        Divider()
+                        content(id, section: child.id)
+                    }
+                } else {
+                    content(id, section: child.id)
+                }
             } else if let id = destination.extensionID {
                 content(id)
             } else {
                 landing
             }
         }
+    }
+    private func maintenanceHeader(current: HostNavigationSection) -> some View {
+        let sections = HostNavigationCatalog.maintenance.filter {
+            $0.extensionID.map(active.contains) ?? false
+        }
+        return PageHeader(
+            current.title,
+            trailing: {
+                Picker("Section", selection: $maintenanceSection) {
+                    ForEach(sections) { section in
+                        Label(section.title, systemImage: section.symbol).tag(section.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityLabel("App Maintenance section")
+            },
+            accessory: {
+                Text(current.summary)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            })
     }
     @ViewBuilder private var settingsContent: some View {
         switch settingsDestination {

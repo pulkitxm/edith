@@ -23,7 +23,7 @@ final class HomebrewSurface {
             return .init(
                 providerID: "homebrew",
                 sources: HomebrewPackageKind.allCases.map { .init($0.rawValue, $0.pluralTitle) },
-                message: "Open Homebrew to load the installed inventory.")
+                message: "Open Packages to load the installed inventory.")
         }
         return Self.snapshot(packages: cached.packages.values.flatMap { $0 }, tile: tile)
     }
@@ -39,15 +39,15 @@ final class HomebrewSurface {
         return .init(
             providerID: "homebrew",
             metrics: [
-                .init("packages", "Installed", selected.count.description),
-                .init("updates", "Updates", selected.filter(\.outdated).count.description),
+                .init("packages", "Installed packages", selected.count.description),
+                .init("updates", "Outdated", selected.filter(\.outdated).count.description),
             ],
-            rows: selected.prefix(100).map {
+            rows: selected.sorted { $0.outdated && !$1.outdated }.prefix(100).map {
                 .init(
                     $0.id, sourceID: $0.kind.rawValue, title: String($0.displayName.prefix(1024)),
-                    detail: String(($0.subtitle ?? "").prefix(4096)),
-                    value: String($0.versionSummary.prefix(256)),
-                    icon: $0.kind == .cask ? "app" : "shippingbox")
+                    detail: String($0.versionSummary.prefix(4096)),
+                    value: $0.outdated ? "Update available" : $0.kind.title,
+                    icon: "cube.box")
             }, actions: [],
             sources: HomebrewPackageKind.allCases.map { .init($0.rawValue, $0.pluralTitle) },
             updatedAt: updatedAt)

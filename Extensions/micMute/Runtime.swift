@@ -67,10 +67,11 @@ final class ExtensionRuntime: NSObject {
                 return try await SurfaceCommandService.execute(
                     providerID: "micMute", command: command, payload: payload,
                     snapshot: { _ in
-                        MicMuteSurface.snapshot(muted: service.muted, error: service.error)
+                        MicMuteSurface.snapshot(muted: service.muted)
                     },
                     perform: { action in
-                        service.setMuted(action == "mute")
+                        guard action == "toggle" else { throw ExtensionPeerError.invalidRequest }
+                        service.toggle()
                     })
             }
         }
@@ -169,11 +170,7 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("Mic Mute")
-                        } content: {
-                            Form { MicMuteRows(presentation: presentation) }.formStyle(.grouped)
-                        }
+                        Form { MicMuteRows(presentation: presentation) }.edithForm()
                     }
                 })
         case "synchronize":

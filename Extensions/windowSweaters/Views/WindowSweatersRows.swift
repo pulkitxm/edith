@@ -6,7 +6,7 @@ import SwiftUI
 struct WindowSweatersRows: View {
     private typealias Keys = AppStorageKeys.WindowSweaters
 
-    @AppStorage(SweaterState.enabledKey, store: SharedDefaults.store) private var enabled = false
+    let presentation: ControlPresentation
     @AppStorage(SweaterState.activeKey, store: SharedDefaults.store) private var active = true
     @AppStorage(Keys.pattern, store: SharedDefaults.store) private var pattern = "by-app"
     @AppStorage(Keys.stitch, store: SharedDefaults.store) private var stitch = SweaterStitch
@@ -170,7 +170,8 @@ struct WindowSweatersRows: View {
             )
             .settingsCaption()
         }
-
+        .disabled(!presentation.active)
+        .opacity(presentation.active ? 1 : 0.5)
     }
 
     private static func label(

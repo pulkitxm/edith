@@ -5,15 +5,11 @@ enum KeystrokeHighlightSurface {
     static func snapshot(active: Bool) -> SurfaceSnapshot {
         .init(
             providerID: "keystrokeHighlight",
-            rows: [
-                .init(
-                    "keys", title: "Keystroke Highlight",
-                    value: active ? "Showing keystrokes" : "Off", icon: "keyboard")
-            ],
+            metrics: [.init("status", "Current state", active ? "On" : "Off")],
             actions: [
                 .init(
-                    active ? "disable" : "enable", active ? "Hide keystrokes" : "Show keystrokes",
-                    "keyboard")
-            ])
+                    active ? "disable" : "enable", active ? "Turn off" : "Turn on",
+                    "keyboard.badge.ellipsis")
+            ], updatedAt: Date())
     }
 }

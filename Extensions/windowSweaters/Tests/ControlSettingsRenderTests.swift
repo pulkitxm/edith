@@ -34,7 +34,7 @@ import Testing
                     let content = state.withContext {
                         ExtensionPageHost {
                             ControlSettingsHost(presentation: model) {
-                                Form { WindowSweatersRows() }.formStyle(.grouped)
+                                Form { WindowSweatersRows(presentation: model) }.edithForm()
                             }
                         }
                     }

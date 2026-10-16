@@ -87,9 +87,7 @@ struct KeystrokeHighlightRows: View {
             }
 
             Section("Status") {
-                if !presentation.active {
-                    LabeledContent("Keyboard monitor", value: "Extension disabled")
-                } else if !active {
+                if !active {
                     LabeledContent("Keyboard monitor", value: "Paused")
                 } else if runtimeError.isEmpty {
                     LabeledContent(
@@ -103,6 +101,7 @@ struct KeystrokeHighlightRows: View {
                 }
             }
         }
-
+        .disabled(!presentation.active)
+        .opacity(presentation.active ? 1 : 0.5)
     }
 }

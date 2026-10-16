@@ -116,14 +116,14 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     @objc private func clicked() {
         guard let item else { return }
         StatusItemMenu.handleClick(on: item) {
-            let snapshot = snapshot
+            let readings = SystemMenuReadings(cpu: snapshot.cpu, memory: snapshot.memory)
             panel.show(
                 from: item, title: "System",
                 actions: [
                     .init(title: "Open System…") { ExtensionPresentation.showWindow() }
                 ]
             ) {
-                SystemMenuReadings(snapshot: snapshot)
+                readings
             }
         }
     }

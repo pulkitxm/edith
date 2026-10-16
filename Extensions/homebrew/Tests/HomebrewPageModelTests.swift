@@ -102,6 +102,27 @@ private func waitForHomebrewModel(
         #expect(await waitForHomebrewModel { !model.isBusy })
     }
 
+    @Test func reactivatingDiscoverKeepsTheSearchAndIgnoresActivationDuringAMutation() async {
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { request, _ in
+                if request.arguments.first == "install" {
+                    try await Task.sleep(for: .seconds(30))
+                }
+                return CLICommandResult(terminationStatus: 0, output: "")
+            }, store: store())
+        model.mode = .search
+        model.activate(kind: .formula)
+        #expect(!model.isBusy)
+        #expect(model.mode == .search)
+        model.mode = .installed
+        let package = HomebrewPackage(kind: .formula, name: "ripgrep", displayName: "ripgrep")
+        model.perform(.install, package: package, query: "", kind: .formula)
+        model.activate(kind: .formula)
+        #expect(model.isMutating)
+        model.cancel()
+        #expect(await waitForHomebrewModel { !model.isBusy })
+    }
+
     @Test func cachedListingShowsBeforeRefreshFinishes() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

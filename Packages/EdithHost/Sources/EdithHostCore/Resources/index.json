@@ -217,8 +217,8 @@
   },
   {
     "id": "docs",
-    "title": "Documents",
-    "symbolName": "doc.text",
+    "title": "Docs",
+    "symbolName": "book.closed",
     "category": "tools"
   },
   {
@@ -231,6 +231,6 @@
     "id": "jev",
     "title": "Jev",
     "symbolName": "sparkles",
-    "category": "agents"
+    "category": "tools"
   }
 ]
