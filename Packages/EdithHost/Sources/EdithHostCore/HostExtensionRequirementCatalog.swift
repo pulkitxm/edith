@@ -192,7 +192,7 @@ public enum HostExtensionRequirementCatalog {
             dependencies: [],
             setupInstruction: "The configured music library folder does not exist."),
         .init(
-            id: "docs", title: "Documents", original: nil, dependencies: [],
+            id: "docs", title: "Docs", original: nil, dependencies: [],
             setupInstruction:
                 "No original registry entry. A pure inspection from the extracted feature owner is required."
         ),
