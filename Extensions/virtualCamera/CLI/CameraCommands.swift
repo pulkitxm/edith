@@ -42,7 +42,7 @@ struct CameraCommand: AsyncParsableCommand {
 
     static func status() async throws -> VirtualCameraSnapshot {
         guard let engine = CameraCLIEnvironment.currentEngine else {
-            throw ExtensionPeerError.unavailable
+            return VirtualCameraSnapshot.stored()
         }
         return engine.snapshot()
     }
