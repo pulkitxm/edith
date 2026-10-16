@@ -51,6 +51,7 @@ public enum HostSettingsCatalog {
         "lidAwakeBatteryThreshold",
         "lidAwakeEnabled",
         "lidAwakeRestoreOnQuit",
+        "lidAwakeSession",
         "micHotKeyCode",
         "micHotKeyLabel",
         "micHotKeyMods",

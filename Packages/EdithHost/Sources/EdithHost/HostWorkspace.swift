@@ -310,7 +310,6 @@ struct HostWorkspace: View {
             .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showHints)
             .animation(
                 Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expansionRevision)
-            Rectangle().fill(Color.primary.opacity(0.06)).frame(height: UIScale.pt(1))
             HostSidebarFooter(
                 marketplace: marketplace, updater: updater, permissions: permissions,
                 theme: theme, sidebarWidth: liveSidebarWidth ?? sidebarWidth, presenter: presenter,

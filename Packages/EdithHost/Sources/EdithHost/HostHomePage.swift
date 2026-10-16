@@ -70,7 +70,8 @@ struct HostHomePage: View {
                 } else {
                     HostSurfaceCard(
                         marketplace: marketplace, target: .home, tile: tile,
-                        openExtension: openExtension, presenter: presenter)
+                        openExtension: openExtension, presenter: presenter,
+                        openExtensions: extensions)
                 }
             }
             if layout.visible.isEmpty, !editing, workflowSetup == nil {
@@ -197,6 +198,7 @@ struct HostSurfaceCard: View {
     let tile: SurfaceTile
     var openExtension: ((String) -> Void)? = nil
     var presenter: (any HostExtensionContentPresenting)? = nil
+    var openExtensions: (() -> Void)? = nil
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.compactLayout) private var compact
     @Environment(\.surfacePresentation) private var presentation
@@ -221,6 +223,12 @@ struct HostSurfaceCard: View {
                     openMarketplace: { openExtension?(provider.id) },
                     surface: HostNativeSurfaceRoute.request(
                         target: target, tile: tile, presentation: presentation))
+            } else if tile.widget == .actions, target == .home,
+                !marketplace.surfaces.privacy.hides(tile.widget)
+            {
+                HostQuickActionsCard(
+                    marketplace: marketplace, tile: tile, fill: fillHeight,
+                    openExtensions: openExtensions)
             } else {
                 genericCard
             }

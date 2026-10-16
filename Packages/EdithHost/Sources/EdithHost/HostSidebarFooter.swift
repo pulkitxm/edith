@@ -61,11 +61,11 @@ struct HostSidebarFooter: View {
     let openPermissions: () -> Void
     var enabled = true
     var music: AnyView? = nil
-    @State private var snapshots: [String: SurfaceSnapshot] = [:]
-    @State private var actionTask: Task<Void, Never>?
-    @State private var actionToken: UUID?
-    @State private var error: String?
+    @State private var actions = HostUtilityActions()
     @State private var presenterSettings = false
+    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store)
+    private var preventSleep = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tile = SurfaceTile(.actions)
     @Environment(\.windowVisible) private var visible
 
@@ -89,158 +89,195 @@ struct HostSidebarFooter: View {
             if music != nil || !utilities.isEmpty || missingPermissions
                 || updater.updateReady != nil
             {
-                VStack(spacing: UIScale.pt(8)) {
-                    if let music { music }
-                    if let version = updater.updateReady {
-                        Button {
-                            updater.checkForUpdates()
-                        } label: {
-                            HStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                Text("Update ready").font(
-                                    .system(size: UIScale.pt(11.5), weight: .semibold))
-                                Text("v\(version)").font(
-                                    .system(size: UIScale.pt(10.5), weight: .medium)
-                                ).opacity(0.75)
-                                Spacer(minLength: 0)
-                            }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
-                                .frame(height: UIScale.pt(28)).background(
-                                    .thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                )
-                        }.buttonStyle(.edith(.borderless)).help("Show update options")
-                    }
-                    utilityRow([.system, .keepAwake])
-                    utilityRow([.lidAwake, .keystrokeHighlight])
-                    if utilities.contains(.presenter) {
-                        HStack(spacing: 0) {
-                            utility(.presenter, background: false)
-                            Rectangle().fill(
-                                HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                    ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
-                            )
-                            .frame(width: UIScale.pt(1), height: UIScale.pt(28))
+                VStack(spacing: 0) {
+                    Divider()
+                    VStack(spacing: UIScale.pt(8)) {
+                        if let music { music }
+                        if let version = updater.updateReady {
                             Button {
-                                presenterSettings.toggle()
+                                updater.checkForUpdates()
                             } label: {
-                                Image(systemName: "chevron.right").font(
-                                    .system(size: UIScale.pt(10), weight: .semibold)
+                                HStack(spacing: UIScale.pt(6)) {
+                                    Image(systemName: "arrow.down.circle.fill")
+                                    Text("Update ready").font(
+                                        .system(size: UIScale.pt(11.5), weight: .semibold))
+                                    Text("v\(version)").font(
+                                        .system(size: UIScale.pt(10.5), weight: .medium)
+                                    ).opacity(0.75)
+                                    Spacer(minLength: 0)
+                                }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
+                                    .frame(height: UIScale.pt(28)).background(
+                                        .thinMaterial,
+                                        in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                                    )
+                            }.buttonStyle(.edith(.borderless)).help("Show update options")
+                        }
+                        utilityRow([.system, .keepAwake])
+                        utilityRow([.lidAwake, .keystrokeHighlight])
+                        if utilities.contains(.presenter) {
+                            HStack(spacing: 0) {
+                                utility(.presenter, background: false)
+                                Rectangle().fill(
+                                    actions.isOn(.presenter, preventSleep: preventSleep)
+                                        ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
                                 )
-                                .frame(width: UIScale.pt(30), height: UIScale.pt(46)).contentShape(
-                                    Rectangle())
-                            }.buttonStyle(.edith(.borderless)).help(
-                                "Choose what Presenter mode blurs"
-                            )
-                            .accessibilityLabel("Presenter privacy settings")
-                            .popover(isPresented: $presenterSettings, arrowEdge: .leading) {
-                                HostExtensionContent(
-                                    marketplace: marketplace, extensionID: "presenter",
-                                    location: "sidebar.utility", section: "privacy",
-                                    presenter: presenter, openMarketplace: openExtensions
+                                .frame(width: UIScale.pt(1), height: UIScale.pt(28))
+                                Button {
+                                    presenterSettings.toggle()
+                                } label: {
+                                    Image(systemName: "chevron.right").font(
+                                        .system(size: UIScale.pt(10), weight: .semibold)
+                                    )
+                                    .frame(width: UIScale.pt(30), height: UIScale.pt(46))
+                                    .contentShape(
+                                        Rectangle())
+                                }.buttonStyle(.edith(.borderless)).help(
+                                    "Choose what Presenter mode blurs"
                                 )
-                                .frame(width: UIScale.pt(250), height: UIScale.pt(440))
-                            }
-                        }.foregroundStyle(
-                            HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
-                        )
-                        .background(
-                            HostSidebarUtility.presenter.isOn(snapshots["presenter"])
-                                ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
-                    }
-                    if missingPermissions {
-                        Button(action: openPermissions) {
-                            HStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                Text("Permissions need attention").font(
-                                    .system(size: UIScale.pt(11), weight: .medium))
-                                Spacer(minLength: 0)
-                            }.foregroundStyle(.orange).padding(.horizontal, UIScale.pt(8)).frame(
-                                height: UIScale.pt(26)
+                                .accessibilityLabel("Presenter privacy settings")
+                                .popover(isPresented: $presenterSettings, arrowEdge: .leading) {
+                                    HostExtensionContent(
+                                        marketplace: marketplace, extensionID: "presenter",
+                                        location: "sidebar.utility", section: "privacy",
+                                        presenter: presenter, openMarketplace: openExtensions
+                                    )
+                                    .frame(width: UIScale.pt(250), height: UIScale.pt(440))
+                                }
+                            }.foregroundStyle(
+                                actions.isOn(.presenter, preventSleep: preventSleep)
+                                    ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
                             )
                             .background(
-                                Color.orange.opacity(0.14),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
-                        }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
-                    }
-                    if let error {
-                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                    }
-                }.padding(UIScale.pt(10))
+                                actions.isOn(.presenter, preventSleep: preventSleep)
+                                    ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                        }
+                        if missingPermissions {
+                            Button(action: openPermissions) {
+                                HStack(spacing: UIScale.pt(6)) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                    Text("Permissions need attention").font(
+                                        .system(size: UIScale.pt(11), weight: .medium))
+                                    Spacer(minLength: 0)
+                                }.foregroundStyle(.orange).padding(.horizontal, UIScale.pt(8))
+                                    .frame(
+                                        height: UIScale.pt(26)
+                                    )
+                                    .background(
+                                        Color.orange.opacity(0.14),
+                                        in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+                            }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
+                        }
+                    }.padding(UIScale.pt(10))
+                }
+                .transition(utilityTransition)
             }
         }
-        .pageTask(id: versions, active: enabled && !versions.isEmpty, cancel: clear) {
-            repeat {
-                for utility in utilities {
-                    let version = versions[utility.id]
-                    do {
-                        let snapshot = try await marketplace.surfaces.requests.snapshot(
-                            providerID: utility.id, target: .home, tile: tile)
-                        guard !Task.isCancelled, versions[utility.id] == version else { return }
-                        snapshots[utility.id] = snapshot
-                    } catch {
-                        guard !Task.isCancelled else { return }
-                        snapshots[utility.id] = nil
-                    }
-                }
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
-            } while !Task.isCancelled
+        .animation(
+            Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: utilities
+        )
+        .hostUtilityAlerts(actions, marketplace: marketplace, tile: tile) { id in versions[id] }
+        .pageTask(id: versions, active: enabled && !versions.isEmpty, cancel: actions.clear) {
+            await actions.poll(
+                utilities: utilities, marketplace: marketplace, tile: tile, versions: { versions })
         }
+        .onReceive(
+            DistributedNotificationCenter.default().publisher(
+                for: Notification.Name("edith.lidAwakeChanged"))
+        ) { _ in actions.refreshTick += 1 }
         .pageRefresh(active: enabled, interval: { .seconds(15) }) { await permissions.refresh() }
         .onChange(of: enabled) { if !enabled { clear() } }
-        .onChange(of: versions) { snapshots = snapshots.filter { versions[$0.key] != nil } }
+        .onChange(of: versions) {
+            actions.snapshots = actions.snapshots.filter { versions[$0.key] != nil }
+        }
         .onDisappear(perform: clear)
+    }
+
+    private var utilityTransition: AnyTransition {
+        Motion.transition(
+            .move(edge: .bottom).combined(with: .opacity), reduceMotion: reduceMotion,
+            preferCrossFade: false)
     }
 
     @ViewBuilder private func utilityRow(_ row: [HostSidebarUtility]) -> some View {
         let available = row.filter(utilities.contains)
         if available.count == 2 && sidebarWidth >= 220 {
             HStack(spacing: UIScale.pt(8)) { ForEach(available) { utility($0) } }
+                .transition(utilityTransition)
         } else {
-            ForEach(available) { utility($0) }
+            ForEach(available) { utility($0).transition(utilityTransition) }
         }
     }
 
     private func utility(_ value: HostSidebarUtility, background: Bool = true) -> some View {
         HostSidebarUtilityButton(
-            utility: value, active: value.isOn(snapshots[value.id]), theme: theme,
+            utility: value, active: actions.isOn(value, preventSleep: preventSleep), theme: theme,
             background: background,
             action: { perform(value) }
         )
-        .disabled(actionTask != nil)
     }
 
     private func perform(_ utility: HostSidebarUtility) {
-        guard actionTask == nil, enabled, visible, let version = versions[utility.id]
-        else { return }
-        let token = UUID(); actionToken = token; error = nil
-        actionTask = Task {
-            defer { if actionToken == token { actionTask = nil; actionToken = nil } }
-            do {
-                let current = try await marketplace.surfaces.requests.snapshot(
-                    providerID: utility.id, target: .home, tile: tile)
-                guard !Task.isCancelled, actionToken == token, versions[utility.id] == version,
-                    let action = utility.action(in: current)
-                else { return }
-                let result = try await marketplace.surfaces.requests.perform(
-                    providerID: utility.id, target: .home, tile: tile, snapshot: current,
-                    actionID: action.id)
-                guard !Task.isCancelled, actionToken == token, versions[utility.id] == version
-                else { return }
-                snapshots[utility.id] = result
-                error = result.message
-            } catch {
-                guard !Task.isCancelled, actionToken == token else { return }
-                self.error = "The action could not finish. Try again."
-            }
-        }
+        guard enabled, visible, let version = versions[utility.id] else { return }
+        actions.perform(
+            utility, marketplace: marketplace, tile: tile, version: version,
+            preventSleep: preventSleep, current: { versions[utility.id] })
     }
 
     private func clear() {
-        actionTask?.cancel(); actionTask = nil; actionToken = nil
-        snapshots.removeAll(); error = nil; presenterSettings = false
+        actions.clear(); presenterSettings = false
+    }
+}
+
+extension View {
+    func hostUtilityAlerts(
+        _ actions: HostUtilityActions, marketplace: HostMarketplace, tile: SurfaceTile,
+        version: @escaping @MainActor (String) -> String?
+    ) -> some View {
+        modifier(
+            HostUtilityAlerts(
+                actions: actions, marketplace: marketplace, tile: tile, version: version))
+    }
+}
+
+private struct HostUtilityAlerts: ViewModifier {
+    @Bindable var actions: HostUtilityActions
+    let marketplace: HostMarketplace
+    let tile: SurfaceTile
+    let version: @MainActor (String) -> String?
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Lid Awake could not change state",
+                isPresented: Binding(
+                    get: { actions.lidAwakeError != nil },
+                    set: { if !$0 { actions.lidAwakeError = nil } })
+            ) {
+                Button("OK") { actions.lidAwakeError = nil }
+            } message: {
+                Text(actions.lidAwakeError ?? "")
+            }
+            .alert(
+                actions.confirmation?.action.confirmation?.title ?? "",
+                isPresented: Binding(
+                    get: { actions.confirmation != nil },
+                    set: { if !$0 { actions.confirmation = nil } }),
+                presenting: actions.confirmation
+            ) { pending in
+                Button(pending.action.confirmation?.confirmTitle ?? "OK") {
+                    let utility = pending.utility
+                    actions.run(
+                        utility, action: pending.action, snapshot: pending.snapshot,
+                        marketplace: marketplace, tile: tile, version: pending.version,
+                        current: { version(utility.id) })
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text(pending.action.confirmation?.message ?? "")
+            }
     }
 }
 
