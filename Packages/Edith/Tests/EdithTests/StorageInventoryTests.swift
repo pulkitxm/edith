@@ -64,6 +64,31 @@ struct StorageInventoryTests {
                 "Tasks") == true)
     }
 
+    @Test func contentsListTheLargestEntriesWithoutOtherItemsData() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let inventory = fixture.inventory()
+        func contents(_ id: String) throws -> [String: Int64] {
+            let item = try #require(inventory.items.first { $0.id == id })
+            return Dictionary(
+                uniqueKeysWithValues: try inventory.contents(of: item).map {
+                    ($0.url.lastPathComponent, $0.bytes.logical)
+                })
+        }
+        #expect(
+            try contents("music") == [
+                "track.json": 2000, "cover.jpg": 500, "music-library-index.json": 100,
+            ])
+        #expect(try contents("other") == ["settings.json": 500, "Cache": 400])
+        #expect(try contents("cache") == ["favicons": 600, "Runtime": 150])
+        #expect(try contents("app") == ["Edith": 7000])
+        let item = try #require(inventory.items.first { $0.id == "music" })
+        #expect(
+            try inventory.contents(of: item, limit: 1).map(\.url.lastPathComponent) == [
+                "track.json"
+            ])
+    }
+
     @Test func databaseBackupsCountUnderTheAppDatabase() throws {
         let fixture = try StorageFixture()
         defer { fixture.clean() }

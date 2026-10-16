@@ -70,6 +70,10 @@ struct StoragePaneTests {
         let model = StoragePaneModel()
         await model.refresh(inventory: fixture.inventory())
         #expect(model.measurement != nil)
+        let music = try #require(model.inventory?.items.first { $0.id == "music" })
+        model.toggle(music)
+        while model.contents["music"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["music"]?.first?.url.lastPathComponent == "track.json")
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for (name, width, height, zoom, scheme) in [
@@ -112,6 +116,24 @@ struct StoragePaneTests {
             }
             #expect(!TestWindowHost.isExposedOnDesktop(window))
         }
+    }
+
+    @Test func togglingCollapsesAndRefreshReloadsOpenContents() async throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let model = StoragePaneModel()
+        await model.refresh(inventory: fixture.inventory())
+        let cache = try #require(model.inventory?.items.first { $0.id == "cache" })
+        model.toggle(cache)
+        #expect(model.expanded == ["cache"])
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.count == 2)
+        try fixture.file("Caches/huge.bin", count: 9000)
+        await model.refresh(inventory: fixture.inventory())
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.first?.url.lastPathComponent == "huge.bin")
+        model.toggle(cache)
+        #expect(model.expanded.isEmpty)
     }
 
     private actor ScanGate {

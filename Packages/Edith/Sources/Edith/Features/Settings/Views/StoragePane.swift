@@ -92,10 +92,7 @@ struct StoragePane: View {
             VStack(spacing: 0) {
                 ForEach(Array(top.enumerated()), id: \.element.id) { index, entry in
                     if index > 0 { Divider() }
-                    StorageRow(
-                        usage: entry, total: total,
-                        color: StorageBar.color(at: index),
-                        reveal: { reveal(entry.item) })
+                    row(entry, total: total, color: StorageBar.color(at: index))
                 }
                 if !rest.isEmpty {
                     Divider()
@@ -110,9 +107,7 @@ struct StoragePane: View {
                     if showsSmallItems {
                         ForEach(Array(rest)) { entry in
                             Divider()
-                            StorageRow(
-                                usage: entry, total: total, color: StorageBar.otherColor,
-                                reveal: { reveal(entry.item) })
+                            row(entry, total: total, color: StorageBar.otherColor)
                         }
                     }
                 }
@@ -120,10 +115,24 @@ struct StoragePane: View {
         }
     }
 
-    private func reveal(_ item: StorageItem) {
-        let existing = item.roots.filter { FileManager.default.fileExists(atPath: $0.path) }
+    private func row(_ usage: StorageUsage, total: Int64, color: Color) -> some View {
+        StorageRow(
+            usage: usage, total: total, color: color,
+            expanded: model.expanded.contains(usage.id),
+            contents: model.contents[usage.id],
+            toggle: { model.toggle(usage.item) })
+    }
+}
+
+enum StorageReveal {
+    static func show(_ urls: [URL]) {
+        let existing = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !existing.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(existing)
+    }
+
+    static func display(_ url: URL) -> String {
+        (url.path as NSString).abbreviatingWithTildeInPath
     }
 }
 
@@ -146,25 +155,125 @@ struct StorageRow: View {
     let usage: StorageUsage
     let total: Int64
     let color: Color
-    let reveal: () -> Void
+    let expanded: Bool
+    let contents: [StorageEntry]?
+    let toggle: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
-            Text(usage.item.title).font(.edithText(.callout)).lineLimit(1)
-            Spacer(minLength: UIScale.pt(8))
-            Text(StorageFormat.share(usage.bytes.allocated, of: total))
-                .font(.edithText(.caption)).foregroundStyle(.secondary).monospacedDigit()
-            Text(StorageFormat.size(usage.bytes))
-                .font(.edithText(.callout).weight(.medium)).monospacedDigit()
-                .frame(minWidth: UIScale.pt(76), alignment: .trailing)
-            Button(action: reveal) { Image(systemName: "folder") }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: UIScale.pt(10)) {
+                Button {
+                    withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                        toggle()
+                    }
+                } label: {
+                    HStack(spacing: UIScale.pt(10)) {
+                        Image(systemName: "chevron.right")
+                            .font(.edithText(.caption).weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .frame(width: UIScale.pt(10))
+                        Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                        Text(usage.item.title).font(.edithText(.callout)).lineLimit(1)
+                        Spacer(minLength: UIScale.pt(8))
+                        Text(StorageFormat.share(usage.bytes.allocated, of: total))
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Text(StorageFormat.size(usage.bytes))
+                            .font(.edithText(.callout).weight(.medium)).monospacedDigit()
+                            .frame(minWidth: UIScale.pt(76), alignment: .trailing)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(expanded ? "Hides details" : "Shows what is inside")
+                .accessibilityAddTraits(.isButton)
+                Button {
+                    StorageReveal.show(usage.item.roots)
+                } label: {
+                    Image(systemName: "folder")
+                }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Show in Finder")
                 .accessibilityLabel("Show \(usage.item.title) in Finder")
+            }
+            .padding(.vertical, UIScale.pt(6))
+            if expanded {
+                StorageRowDetails(usage: usage, contents: contents)
+                    .padding(.leading, UIScale.pt(38))
+                    .padding(.bottom, UIScale.pt(10))
+                    .transition(.opacity)
+            }
         }
-        .padding(.vertical, UIScale.pt(6))
-        .accessibilityElement(children: .combine)
+    }
+}
+
+struct StorageRowDetails: View {
+    let usage: StorageUsage
+    let contents: [StorageEntry]?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            if let contents {
+                if contents.isEmpty {
+                    Text("Nothing inside to list.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                } else {
+                    Text("Largest inside")
+                        .font(.edithText(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(contents) { entry in
+                        HStack(spacing: UIScale.pt(8)) {
+                            Image(systemName: entry.isDirectory ? "folder" : "doc")
+                                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                                .frame(width: UIScale.pt(14))
+                            Text(entry.url.lastPathComponent)
+                                .font(.edithText(.callout)).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength: UIScale.pt(8))
+                            Text(
+                                StorageFormat.share(
+                                    entry.bytes.allocated, of: usage.bytes.allocated)
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            Text(StorageFormat.size(entry.bytes))
+                                .font(.edithText(.callout)).monospacedDigit()
+                                .frame(minWidth: UIScale.pt(76), alignment: .trailing)
+                            Button {
+                                StorageReveal.show([entry.url])
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                            }
+                            .buttonStyle(.edith(.iconOnly))
+                            .help("Show in Finder")
+                            .accessibilityLabel("Show \(entry.url.lastPathComponent) in Finder")
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            } else {
+                HStack(spacing: UIScale.pt(8)) {
+                    LoadingIndicator()
+                    Text("Looking inside")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text("Stored in")
+                    .font(.edithText(.caption).weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(
+                    usage.item.roots.filter { FileManager.default.fileExists(atPath: $0.path) },
+                    id: \.path
+                ) { root in
+                    Text(StorageReveal.display(root))
+                        .font(.edithText(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(.top, UIScale.pt(4))
+        }
     }
 }
 
