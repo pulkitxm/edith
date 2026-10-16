@@ -19,7 +19,6 @@ import SwiftUI
     private(set) var herdrWindows: HostHerdrWindows?
     private(set) var herdrInteractions: HostHerdrInteractions?
     private(set) var notchStartup: HostNotchStartup?
-    @ObservationIgnored private var notchAlerts: HostNotchAlerts?
     private(set) var startupError = false
     @ObservationIgnored private var startup: Task<Void, Never>?
     @ObservationIgnored private unowned let delegate: HostApplicationDelegate
@@ -61,7 +60,10 @@ import SwiftUI
                 navigation: { action, route in
                     NavigationCommands.perform(action: action, route: route)
                 }, core: { [weak self] in self?.coreServices },
-                changed: { [weak self] in self?.coreServices?.panelShortcutChanged() })
+                changed: { [weak self] in
+                    self?.coreServices?.panelShortcutChanged()
+                    IPC.post(IPC.Name.settingsChanged)
+                })
             let control = HostCLIServer(identity: identity) { request in
                 if HostCoreCLIService.handles(request) {
                     return try await core.execute(request)
@@ -130,7 +132,7 @@ import SwiftUI
             loaded.sessions.didRequestNavigation = {
                 [
                     weak manager, weak navigation, weak ownedMachines, weak ownedHerdr,
-                    weak ownedTerminal, weak notch, weak self
+                    weak ownedTerminal, weak notch
                 ]
                 request in
                 guard let manager, let navigation, let ownedMachines, let ownedHerdr,
@@ -156,9 +158,6 @@ import SwiftUI
                     try await ownedHerdr.open(request)
                 } else if request.extensionID == "terminal" {
                     try await ownedTerminal.open(request)
-                } else if request.extensionID == "studio", request.location == "settings" {
-                    guard let windows = self?.sectionWindows, windows.open("studio") != nil
-                    else { throw HostWorkerError.rejected }
                 } else {
                     try await navigation.navigate(
                         extensionID: request.extensionID, version: request.version,
@@ -192,10 +191,6 @@ import SwiftUI
             terminalWindows = ownedTerminal
             remotePresenter = presenter
             marketplace = loaded
-            let alerts = HostNotchAlerts(
-                namespace: identity.identifier, version: { updater.updateReady })
-            alerts.start()
-            notchAlerts = alerts
             let services = try HostCoreServices(
                 identity: identity, marketplace: loaded,
                 togglePanel: { delegate.showMainWindow() })
@@ -225,7 +220,6 @@ import SwiftUI
                 HostRemoteSession.killAllForQuit()
                 services.killForQuit()
             }
-            delegate.preventsQuit = { await loaded.sessions.preventsQuit() }
             delegate.shutdown = {
                 await interactions.cancelPending()
                 let stops: [Task<Void, Never>] = [
@@ -240,9 +234,6 @@ import SwiftUI
                 await slots.stop()
                 await services.shutdown(); core.shutdown(); control.shutdown()
             }
-            NotificationCenter.default.addObserver(
-                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-            ) { _ in Task { @MainActor in await loaded.retryFailedExtensions() } }
             await services.start()
             await loaded.loadCachedCatalog()
             await loaded.refreshCatalogIfStale()
