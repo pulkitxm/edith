@@ -239,7 +239,9 @@ public enum CompanionShell {
                 return .failure(
                     CompanionShellFailure(
                         detail: stderrText.isEmpty
-                            ? "exited \(result.terminationStatus)" : stderrText))
+                            ? "exited \(result.terminationStatus) after possibly hitting the "
+                                + "\(Int(timeout))s limit"
+                            : stderrText))
             }
             return .success(result.standardOutput)
         } catch is CancellationError {

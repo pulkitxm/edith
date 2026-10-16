@@ -262,7 +262,7 @@ public struct PageSectionHeader<Trailing: View>: View {
                 ScrollView(.horizontal) {
                     trailing()
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.automatic)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -271,10 +271,10 @@ public struct PageSectionHeader<Trailing: View>: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             Text(title)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
+                .font(.edithText(.headline))
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
             }
         }

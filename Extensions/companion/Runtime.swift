@@ -180,7 +180,9 @@ final class ExtensionRuntime: NSObject {
             engineClient = client
             let bridge = CompanionUIBridge(client: client)
             CompanionTransport.shared.configureRemote(bridge)
-            uiWorkspace = CompanionWorkspaceSession(remote: bridge)
+            uiWorkspace = CompanionWorkspaceSession(
+                privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
+                remote: bridge)
             TextEditingCommands.install()
         case "stopUI":
             retireUI()
@@ -223,20 +225,7 @@ final class ExtensionRuntime: NSObject {
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let workspace = uiWorkspace else { return ["ok": false] as NSDictionary }
             return NSHostingController(
-                rootView: ExtensionPageHost {
-                    if workspace.preferences?.loaded != false {
-                        CompanionPage(session: workspace)
-                    } else {
-                        PageScaffold(header: { PageHeader("Companion") }) {
-                            PageLoading(
-                                state: workspace.preferences?.error == nil ? .loading : .error,
-                                message: workspace.preferences?.error
-                                    ?? "Loading Companion settings.", layout: .cards,
-                                retry: { workspace.preferences?.refresh() }
-                            ) { EmptyView() }
-                        }
-                    }
-                })
+                rootView: ExtensionPageHost { CompanionPage(session: workspace) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
