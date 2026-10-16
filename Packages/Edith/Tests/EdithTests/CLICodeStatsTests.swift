@@ -107,11 +107,12 @@ import Testing
             #expect(status.code == 0)
             #expect(status.object?["folder"] as? String == harness.mirror.path)
             #expect(status.object?["running"] as? Bool == false)
-            #expect(status.object?["login"] as? String == "octocat")
+            #expect(status.object?["logins"] as? [String] == ["octocat"])
             let lastRun = status.object?["lastRun"] as? [String: Any]
             #expect(lastRun?["outcome"] as? String == "completed")
             let human = await CLIProbe.capture(["code-stats", "status"])
             #expect(human.stdout.contains("last run: completed"))
+            #expect(human.stdout.contains("accounts: octocat"))
 
             let report = await CLIProbe.capture(
                 ["code-stats", "report", "--range", "all", "--json"])

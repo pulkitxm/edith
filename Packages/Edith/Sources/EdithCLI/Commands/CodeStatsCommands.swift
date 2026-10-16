@@ -206,7 +206,7 @@ enum CodeStatsCLI {
             "identity": identity(status.settings.identity),
             "gitAvailable": .bool(status.gitAvailable),
             "githubAvailable": .bool(status.githubAvailable),
-            "login": .optional(status.state.profile?.login),
+            "logins": .array(status.state.profiles.map { .string($0.login) }),
             "running": .bool(status.isRunning),
             "taskID": .optional(status.state.active?.taskID.uuidString),
             "progress": progress(status.progress),
@@ -232,6 +232,10 @@ enum CodeStatsCLI {
                     ? "none yet" : status.settings.identity.labels.joined(separator: ", ")),
             CodeStatsCLI.line("git", status.gitAvailable ? "installed" : "missing"),
             CodeStatsCLI.line("github", github(status)),
+            CodeStatsCLI.line(
+                "accounts",
+                status.state.profiles.isEmpty
+                    ? "none yet" : status.state.profiles.map(\.login).joined(separator: ", ")),
             CodeStatsCLI.line("last run", status.state.lastRun?.outcome.summary ?? "never"),
             CodeStatsCLI.line("updated", date(status.state.reportedAt)),
             CodeStatsCLI.line("next run", date(status.nextRunAt)),
@@ -547,7 +551,8 @@ struct CodeStatsIdentityCommand: AsyncParsableCommand {
         discussion: """
             Reads and changes which commits count as yours. An email matches an author email \
             exactly; any other value matches when the author name or email contains it. An \
-            empty list is filled from your GitHub profile on the next refresh.
+            empty list is filled from your GitHub accounts on the next refresh, and an account \
+            signed in to gh later is added on the refresh after it appears.
             Example: ed code-stats identity add you@example.com
             """,
         subcommands: [
@@ -577,7 +582,7 @@ struct CodeStatsIdentityListCommand: AsyncParsableCommand {
             if json {
                 CLIOut.json(CodeStatsCLI.identity(identity))
             } else if identity.isEmpty {
-                CLIOut.out("no identities yet; the next refresh adds your GitHub login")
+                CLIOut.out("no identities yet; the next refresh adds your GitHub logins")
             } else {
                 identity.labels.forEach(CLIOut.out)
             }

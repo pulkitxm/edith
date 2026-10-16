@@ -38,8 +38,18 @@ public struct CodeStatsIdentity: Codable, Equatable, Hashable, Sendable {
         }
     }
 
-    public static func seeded(login: String, emails: [String]) -> CodeStatsIdentity {
-        CodeStatsIdentity(substrings: login.isEmpty ? [] : [login], emails: emails)
+    public static func seeded(logins: [String], emails: [String]) -> CodeStatsIdentity {
+        CodeStatsIdentity().merging(logins: logins, emails: emails)
+    }
+
+    public func merging(logins: [String], emails: [String]) -> CodeStatsIdentity {
+        func appending(_ values: [String], to existing: [String]) -> [String] {
+            var seen = Set(existing.map { $0.lowercased() })
+            return existing
+                + values.filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        }
+        return CodeStatsIdentity(
+            substrings: appending(logins, to: substrings), emails: appending(emails, to: self.emails))
     }
 
     private static let regexMetacharacters = Set(".*+?^${}()|[]\\")

@@ -9,10 +9,10 @@ public enum CodeStatsIdentitySuggester {
     static let hostnameSuffixes = [".local", ".lan", ".localdomain", ".home", ".internal"]
 
     public static func suggestions(
-        authors: [CodeStatsAuthor], identity: CodeStatsIdentity, login: String?,
-        name: String?, agents: [String] = [], limit: Int = limit
+        authors: [CodeStatsAuthor], identity: CodeStatsIdentity, logins: [String],
+        names: [String], agents: [String] = [], limit: Int = limit
     ) -> [CodeStatsIdentitySuggestion] {
-        let references = references(identity: identity, login: login, name: name)
+        let references = references(identity: identity, logins: logins, names: names)
         guard !references.isEmpty else { return [] }
         let attribution = CodeStatsAttribution(identity: identity, agents: agents, owned: false)
         let counted = identity.matcher()
@@ -55,12 +55,11 @@ public enum CodeStatsIdentitySuggester {
         String(value.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
     }
 
-    static func references(identity: CodeStatsIdentity, login: String?, name: String?) -> Set<
-        String
-    > {
-        var values = identity.substrings + identity.emails.map(localPart)
-        if let login { values.append(login) }
-        if let name {
+    static func references(identity: CodeStatsIdentity, logins: [String], names: [String])
+        -> Set<String>
+    {
+        var values = identity.substrings + identity.emails.map(localPart) + logins
+        for name in names {
             values.append(name)
             values += name.split(whereSeparator: { $0 == " " || $0 == "-" }).map(String.init)
         }

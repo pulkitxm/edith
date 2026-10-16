@@ -84,12 +84,16 @@ struct CodeStatsSetupView: View {
     private var githubStep: some View {
         let lookup = model.profileLookup
         return step(
-            "GitHub", done: lookup?.profile != nil,
+            "GitHub", done: !(lookup?.profiles.isEmpty ?? true),
             detail: lookup?.issue.map { CodeStatsBanner.github($0).message }
                 ?? (lookup == nil ? "Checking the GitHub CLI..." : "Signed in")
         ) {
-            if let profile = lookup?.profile {
-                CodeStatsProfileBadge(profile: profile, dark: dark)
+            if let profiles = lookup?.profiles, !profiles.isEmpty {
+                HStack(spacing: UIScale.pt(16)) {
+                    ForEach(profiles, id: \.id) { profile in
+                        CodeStatsProfileBadge(profile: profile, dark: dark)
+                    }
+                }
             } else if let issue = lookup?.issue {
                 HStack(spacing: UIScale.pt(10)) {
                     if let command = CodeStatsBanner.github(issue).command {
@@ -112,7 +116,7 @@ struct CodeStatsSetupView: View {
         ) {
             if let seeded = model.seededIdentity {
                 HStack {
-                    Text("From your profile: " + seeded.labels.joined(separator: ", "))
+                    Text("From your GitHub accounts: " + seeded.labels.joined(separator: ", "))
                         .lineLimit(2)
                     Button("Use these") { model.useSeededIdentity() }
                 }

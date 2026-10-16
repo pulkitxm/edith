@@ -223,9 +223,9 @@ import Testing
         #expect(model.profileLookup?.issue == .signedOut)
         #expect(model.seededIdentity == nil)
         agent.profileLookup = CodeStatsProfileLookup(
-            profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
+            profiles: [CodeStatsProfile(id: 7, login: "octo")], emails: ["octo@example.com"])
         await model.loadProfileIfNeeded()
-        #expect(model.profileLookup?.profile?.login == "octo")
+        #expect(model.profileLookup?.profiles.map(\.login) == ["octo"])
         #expect(model.seededIdentity?.substrings == ["octo"])
         await model.loadProfileIfNeeded()
         #expect(agent.recorded.filter { $0 == "profile" }.count == 2)
