@@ -65,7 +65,7 @@ struct LidAwakeSettingsParityTests {
                 Issue.record("Preference writes must not change system state"); return .applied
             },
             startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { false })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         let bridge = LidSettingsBridge(surface: LidAwakeSurface(worker: worker, privacy: { [:] }))
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
         let model = LidAwakeSettingsModel(client: client)
@@ -104,7 +104,7 @@ struct LidAwakeSettingsParityTests {
         let engine = LidAwakeEngine(
             defaults: defaults, readSystemState: { false }, applySystemState: { _ in .applied },
             startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { false })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         defer { worker.shutdown() }
         #expect(!LidAwakeState.restoresOnQuit(defaults))
         let enabled = try await LidAwakeCLIExecution.run(
@@ -129,7 +129,7 @@ struct LidAwakeSettingsParityTests {
                 applySystemState: { value in
                     effects.append(value); return .applied
                 }, startServices: false)
-            let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { true })
+            let worker = LidAwakeWorker(defaults: defaults, engine: engine)
             _ = try await worker.perform(.on(.indefinite))
             _ = try await worker.perform(.setRestoreOnQuit(false))
             if forceDisable { try await worker.prepareDisable() }
@@ -147,7 +147,7 @@ struct LidAwakeSettingsParityTests {
         let engine = LidAwakeEngine(
             defaults: defaults, readSystemState: { false }, applySystemState: { _ in .applied },
             startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { false })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         defer { worker.shutdown() }
         let bridge = LidSettingsBridge(surface: LidAwakeSurface(worker: worker, privacy: { [:] }))
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
@@ -191,7 +191,7 @@ struct LidAwakeSettingsParityTests {
         let engine = LidAwakeEngine(
             defaults: defaults, readSystemState: { false }, applySystemState: { _ in .applied },
             startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { false })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         let model = LidAwakeOperationModel { request in try await worker.perform(request) }
         await model.refreshStatus()?.value
         defer { model.cancel(); worker.shutdown() }

@@ -9,15 +9,13 @@ import Foundation
     private var commandWorkClosed = false
     private let recoveryOnly: Bool
     private let defaults: UserDefaults
-    private let confirm: @MainActor () -> Bool
 
     init(
         defaults: UserDefaults = SharedDefaults.store, engine: LidAwakeEngine? = nil,
         recoveryOnly: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
-            == "1",
-        confirm: @escaping @MainActor () -> Bool = LidAwakeWorker.confirmActivation
+            == "1"
     ) {
-        self.defaults = defaults; self.confirm = confirm; self.recoveryOnly = recoveryOnly
+        self.defaults = defaults; self.recoveryOnly = recoveryOnly
         if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
         let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?
@@ -42,16 +40,14 @@ import Foundation
                 systemStateReader: systemStateReader)
         self.engine = created
         guard !recoveryOnly else { return }
+        if !fixture { created.registerHelperIfNeeded() }
         observer = NotificationCenter.default.addObserver(
             forName: Notification.Name("lidAwakeSettingsChanged"), object: nil, queue: .main
         ) { _ in MainActor.assumeIsolated { created.syncSettings() } }
     }
 
-    func perform(_ request: LidAwakeRequest, requiresConfirmation: Bool = false) async throws
-        -> LidAwakeSnapshot
-    {
+    func perform(_ request: LidAwakeRequest) async throws -> LidAwakeSnapshot {
         try requireCommandAdmission(request)
-        if requiresConfirmation, !confirm() { throw CancellationError() }
         try Task.checkCancellation()
         try requireCommandAdmission(request)
         return try await Self.perform(request, engine: engine, defaults: defaults)
@@ -137,13 +133,5 @@ import Foundation
         if let observer { NotificationCenter.default.removeObserver(observer) }; observer = nil
         engine.shutdown()
         defaults.set(false, forKey: LidAwakeState.enabledKey)
-    }
-
-    static func confirmActivation() -> Bool {
-        let alert = NSAlert(); alert.messageText = "Keep running with the lid closed?"
-        alert.informativeText =
-            LidAwakeOperationExecution.preview(for: .on(.indefinite))?.warning ?? ""
-        alert.addButton(withTitle: "Turn On"); alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
     }
 }

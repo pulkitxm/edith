@@ -333,6 +333,28 @@ public final class LidAwakeOperationModel: ObservableObject {
     }
 
     @discardableResult
+    public func performSilently(_ request: LidAwakeRequest) -> Task<Void, Never>? {
+        guard !commandWorkClosed, ownedTasks.count < 8 else { return nil }
+        let token = UUID()
+        let generation = generation
+        let task = Task { @MainActor [weak self, performer] in
+            defer { self?.ownedTasks[token] = nil }
+            do {
+                try Task.checkCancellation()
+                let snapshot = try await performer(request)
+                guard let self, self.generation == generation else { return }
+                lastSnapshot = snapshot
+            } catch is CancellationError {
+            } catch {
+                guard let self, self.generation == generation else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+        ownedTasks[token] = task
+        return task
+    }
+
+    @discardableResult
     public func refreshStatus() -> Task<Void, Never>? {
         guard !applying, !commandWorkClosed, ownedTasks.count < 8 else { return nil }
         task?.cancel()
@@ -385,15 +407,17 @@ public final class LidAwakeOperationModel: ObservableObject {
 public enum LidAwakeOperationExecution {
     public static func preview(for request: LidAwakeRequest) -> LidAwakeOperationPreview? {
         switch request {
-        case .on:
+        case .on(let session):
             .init(
-                operation: .on, summary: "Keep running with the lid closed.",
+                operation: .on,
+                summary:
+                    "Keep this Mac running with the lid closed for \(session.title.lowercased()).",
                 warning:
                     "The Mac will keep drawing power and shedding heat. Do not put it in a bag.")
         case .setRestoreOnQuit(false):
             .init(
                 operation: .restoreOnQuit,
-                summary: "Leave lid-close sleep disabled after quitting.",
+                summary: "Leave lid-close sleep disabled when Edith quits.",
                 warning: "Normal lid-close sleep must then be restored manually.")
         default: nil
         }
@@ -417,4 +441,11 @@ public enum LidAwakeOperationExecution {
 
 public enum LidAwakeNotifications {
     public static let changed = "lidAwakeChanged"
+    public static let distributed = "edith.lidAwakeChanged"
+
+    @MainActor public static func announce() {
+        NotificationCenter.default.post(name: Notification.Name(changed), object: nil)
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(distributed), object: nil, userInfo: nil, deliverImmediately: true)
+    }
 }
