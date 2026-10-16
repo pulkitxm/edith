@@ -152,6 +152,7 @@ def script_paths(name, batches):
 def check():
     catalog = load()
     failures = []
+    counts_by_group = {}
     for group in ("swift", "studio"):
         batches = catalog[group]
         complement(batches)
@@ -165,6 +166,7 @@ def check():
         for name, count in counts.items():
             if count == 0:
                 failures.append(f"{group} batch {name} matches nothing")
+        counts_by_group[group] = counts
     script_batches = catalog["scripts"]
     complement(script_batches)
     script_counts = {batch["name"]: 0 for batch in script_batches}
@@ -177,17 +179,12 @@ def check():
     for name, count in script_counts.items():
         if count == 0:
             failures.append(f"scripts batch {name} matches nothing")
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    listed = " ".join(re.findall(r"batches: ([a-z0-9 -]+)", workflow)).split()
-    expected = [batch["name"] for batch in catalog["swift"]]
-    if listed != expected:
-        failures.append(f"ci swift batches {listed} != {expected}")
     if failures:
         print("\n".join(failures), file=sys.stderr)
         return 1
     print(
         "swift "
-        + " ".join(f"{batch['name']}={sum(1 for identifier in discover('swift') if assign_swift(identifier, catalog['swift']) == [batch['name']])}" for batch in catalog["swift"])
+        + " ".join(f"{batch['name']}={counts_by_group['swift'][batch['name']]}" for batch in catalog["swift"])
     )
     return 0
 
