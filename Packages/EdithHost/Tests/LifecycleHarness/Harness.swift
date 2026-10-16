@@ -153,10 +153,6 @@ struct HostLifecycleHarness {
             false, forKey: "windowSweatersActive")
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "keystrokeHighlightActive")
-        if extensionID == "clipboard" {
-            UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
-                false, forKey: AppStorageKeys.Clipboard.enabled)
-        }
         let companionServer = extensionID == "companion" ? try CompanionFixtureServer() : nil
         defer { companionServer?.stop() }
         if let companionServer {
@@ -847,7 +843,7 @@ struct HostLifecycleHarness {
     {
         let statusData = try await endpoint.invoke("clipboard.captureStatus")
         let status = try JSONSerialization.jsonObject(with: statusData) as? [String: Any]
-        guard status?["enabled"] as? Bool == false, status?["monitoring"] as? Bool == false else {
+        guard status?["monitoring"] as? Bool == false else {
             throw NSError(
                 domain: "ClipboardFixture", code: 1,
                 userInfo: [

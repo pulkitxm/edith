@@ -21,10 +21,10 @@ import Testing
         while continuation == nil { await Task.yield() }
         presentation.stop()
         var late = ClipboardPreferences()
-        late.enabled = true
+        late.maxItems = 7
         continuation?.resume(returning: try ClipboardMessage.encode(late))
         await refresh.value
-        #expect(!presentation.preferences.enabled)
+        #expect(presentation.preferences.maxItems != 7)
         #expect(presentation.error == nil)
         #expect(invalidated)
         #expect(presentation.stopped)
