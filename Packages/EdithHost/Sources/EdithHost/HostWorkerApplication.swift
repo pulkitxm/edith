@@ -175,6 +175,13 @@ final class HostWorkerApplication {
                     }
                     continue
                 }
+                if request.operation == "concealForQuit" {
+                    HostQuit.conceal()
+                    try control.send(
+                        HostWorkerResponse(
+                            token: request.token, ok: true, version: configuration?.version))
+                    continue
+                }
                 if request.operation == "prepareDisable" {
                     prepareDisable(request)
                     continue
@@ -538,6 +545,7 @@ final class HostWorkerApplication {
     private func shutdown(token: UUID? = nil, reason: HostWorkerStopReason = .ownerLost) {
         guard !stopping else { return }
         stopping = true
+        if reason == .applicationQuit { HostQuit.conceal() }
         navigation?.invalidate()
         FileHandle.standardInput.readabilityHandler = nil
         parentWatcher?.cancel()
