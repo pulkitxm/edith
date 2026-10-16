@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import EdithHostCore
 import UserNotifications
 
@@ -73,6 +74,8 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        InputFocus.install()
+        ScrollForwarding.install()
         if launchesRuntime { runtime.launch() }
     }
 

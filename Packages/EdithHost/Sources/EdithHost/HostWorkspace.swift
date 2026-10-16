@@ -192,10 +192,14 @@ struct HostWorkspace: View {
             }
         }
         .onAppear { installKeys() }
-        .pageRefresh(active: windowVisible && automaticActions && sidebarOpen, interval: { .seconds(5) }) {
+        .pageRefresh(
+            active: windowVisible && automaticActions && sidebarOpen, interval: { .seconds(5) }
+        ) {
             await status.refresh(marketplace: marketplace, defaults: defaults)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) {
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+        ) {
             _ in dismissHints()
         }
         .onDisappear {
@@ -208,7 +212,7 @@ struct HostWorkspace: View {
                 hidden: musicAdmission.hidden)
             musicSlots?.setVisible(musicWindowID, visible: musicAdmission.visible)
         }
-        .onExitCommand { NSApp.keyWindow?.makeFirstResponder(nil) }
+        .onExitCommand { InputFocus.resignEditing() }
         .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
             guard let request = marketplace.surfaces.navigation.editorRequest else { return }
             request.save(to: defaults)
@@ -306,11 +310,12 @@ struct HostWorkspace: View {
                     }
                 }.padding(.horizontal, UIScale.pt(8)).padding(.top, UIScale.pt(8))
             }
-            .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: destination)
+            .animation(
+                Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: destination
+            )
             .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showHints)
             .animation(
                 Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: expansionRevision)
-            Rectangle().fill(Color.primary.opacity(0.06)).frame(height: UIScale.pt(1))
             HostSidebarFooter(
                 marketplace: marketplace, updater: updater, permissions: permissions,
                 theme: theme, sidebarWidth: liveSidebarWidth ?? sidebarWidth, presenter: presenter,
@@ -330,16 +335,18 @@ struct HostWorkspace: View {
                     Button("Pulkit") {
                         NSWorkspace.shared.open(URL(string: "https://pulkit.page")!)
                     }.buttonStyle(.edith(.borderless)).fontWeight(.semibold).foregroundStyle(theme)
+                        .help("pulkit.page")
                     Spacer(minLength: 0)
                     Button {
-                        creditHidden = true
+                        withAnimation(.easeOut(duration: 0.2)) { creditHidden = true }
                     } label: {
                         Image(systemName: "xmark").font(
                             .system(size: UIScale.pt(8), weight: .semibold)
-                        ).frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                        ).foregroundStyle(.tertiary).frame(
+                            width: UIScale.pt(16), height: UIScale.pt(16))
                     }.buttonStyle(.edith(.toolbar)).help("Hide this")
                 }.font(.system(size: UIScale.pt(10))).padding(.horizontal, UIScale.pt(8)).padding(
-                    .bottom, UIScale.pt(8))
+                    .vertical, UIScale.pt(8))
             }
         }
     }
@@ -389,7 +396,9 @@ struct HostWorkspace: View {
             }.buttonStyle(EdithButtonStyle(.row, selected: destination.id == page.id, tint: theme))
                 .padding(.leading, page.parentID == nil ? 0 : UIScale.pt(18))
                 .accessibilityValue(expandable ? (expanded(page) ? "Expanded" : "Collapsed") : "")
-                .help(detach == nil ? page.title : "\(page.title) (⌘-click to open in its own window)")
+                .help(
+                    detach == nil ? page.title : "\(page.title) (⌘-click to open in its own window)"
+                )
                 .contextMenu {
                     if let detach { Button("Open in New Window", action: detach) }
                 }
@@ -526,13 +535,23 @@ struct HostWorkspace: View {
             let code = event.keyCode
             let modifiers = event.modifierFlags
             let handled = MainActor.assumeIsolated {
-                guard NSApp.keyWindow?.identifier?.rawValue == "EdithMainWindow" else {
+                let keyWindow = NSApp.keyWindow
+                let main = keyWindow?.identifier?.rawValue == "EdithMainWindow"
+                guard main || sectionWindows?.contains(keyWindow) == true else {
                     return false
                 }
                 if let remote = presenter as? HostRemoteContentPresenter,
                     remote.consumeTerminalTabKey(
                         characters: characters, modifiers: modifiers, window: NSApp.keyWindow)
                 {
+                    return true
+                }
+                if main,
+                    modifiers.intersection([.command, .option, .control, .shift]) == .command,
+                    characters?.lowercased() == "w"
+                {
+                    _ = (presenter as? HostRemoteContentPresenter)?.consumeTerminalTabKey(
+                        characters: "w", modifiers: [.command, .shift], window: keyWindow)
                     return true
                 }
                 guard
@@ -544,16 +563,16 @@ struct HostWorkspace: View {
                         command, window: NSApp.keyWindow,
                         fallback: {
                             if let next = WindowZoom.adjusted(zoom, for: command) {
-                                zoom = next; UIScale.apply(next)
+                                commitZoom(next)
                             }
                         })
                 {
                     return true
                 }
                 if let next = WindowZoom.adjusted(zoom, for: command) {
-                    zoom = next; UIScale.apply(next); return true
+                    commitZoom(next); return true
                 }
-                guard
+                guard main,
                     let index = WindowKeyCommand.resolvedIndex(
                         for: command, count: pages.count,
                         current: pages.firstIndex(of: destination) ?? 0)
@@ -578,6 +597,14 @@ struct HostWorkspace: View {
                 }
             }
             return event
+        }
+    }
+    private func commitZoom(_ next: Double) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            zoom = next
+            UIScale.apply(next)
         }
     }
     private func removeKeys() {
