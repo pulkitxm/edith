@@ -155,9 +155,10 @@ public enum LimitsCollector {
             leaseProviders: providers, force: force,
             refreshSession: refreshSession, now: now, announce: announce,
             fetchAccounts: {
-                guard let directory, !accounts.isEmpty else { return [] }
+                let subscribed = accounts.filter(\.hasSubscriptionLimits)
+                guard let directory, !subscribed.isEmpty else { return [] }
                 return try await collector.refresh(
-                    accounts: accounts, directory: directory, now: now, fetch: fetchAccount)
+                    accounts: subscribed, directory: directory, now: now, fetch: fetchAccount)
             }, fetch: fetch)
     }
 
