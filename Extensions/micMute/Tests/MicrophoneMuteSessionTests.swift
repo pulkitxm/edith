@@ -15,7 +15,7 @@ import Testing
         #expect(session.saved.isEmpty)
     }
 
-    @Test func microphonesAlreadyMutedKeepTheirOriginalState() {
+    @Test func unmuteForcesEveryMuteControlOn() {
         let first = MicrophoneControl(device: 1, element: 0, kind: .mute)
         let second = MicrophoneControl(device: 2, element: 0, kind: .mute)
         let fixture = MicrophoneFixture(values: [first: 1, second: 0])
@@ -23,7 +23,7 @@ import Testing
         #expect(session.setMuted(true))
         #expect(fixture.values == [first: 1, second: 1])
         #expect(session.setMuted(false))
-        #expect(fixture.values == [first: 1, second: 0])
+        #expect(fixture.values == [first: 0, second: 0])
     }
 
     @Test func newlyConnectedChannelsAreIncludedWithoutLosingExistingValues() {
@@ -39,34 +39,34 @@ import Testing
     }
 
     @Test func failedWritesAreReportedAndDoNotAcquireRestorationState() {
-        let control = MicrophoneControl(device: 1, element: 0, kind: .mute)
-        let fixture = MicrophoneFixture(values: [control: 0])
+        let control = MicrophoneControl(device: 1, element: 1, kind: .volume)
+        let fixture = MicrophoneFixture(values: [control: 0.5])
         fixture.rejectWrites = true
         let session = MicrophoneMuteSession(access: fixture.access)
         #expect(!session.setMuted(true))
         #expect(session.saved.isEmpty)
-        #expect(fixture.values[control] == 0)
+        #expect(fixture.values[control] == 0.5)
     }
 
     @Test func failedRestorationCanBeRetriedAndSuccessfulShutdownIsIdempotent() {
-        let control = MicrophoneControl(device: 1, element: 0, kind: .mute)
-        let fixture = MicrophoneFixture(values: [control: 0])
+        let control = MicrophoneControl(device: 1, element: 1, kind: .volume)
+        let fixture = MicrophoneFixture(values: [control: 0.5])
         let session = MicrophoneMuteSession(access: fixture.access)
         #expect(session.setMuted(true))
         fixture.rejectWrites = true
         #expect(!session.setMuted(false))
-        #expect(session.saved[control] == 0)
+        #expect(session.saved[control] == 0.5)
         fixture.rejectWrites = false
         #expect(session.setMuted(false))
         let writes = fixture.writes
         #expect(session.setMuted(false))
         #expect(fixture.writes == writes)
-        #expect(fixture.values[control] == 0)
+        #expect(fixture.values[control] == 0.5)
     }
 
-    @Test func unreadableControlsAreLeftUnchanged() {
-        let control = MicrophoneControl(device: 1, element: 0, kind: .mute)
-        let fixture = MicrophoneFixture(values: [control: 0])
+    @Test func unreadableVolumeControlsAreLeftUnchanged() {
+        let control = MicrophoneControl(device: 1, element: 1, kind: .volume)
+        let fixture = MicrophoneFixture(values: [control: 0.5])
         fixture.rejectReads = true
         let session = MicrophoneMuteSession(access: fixture.access)
         #expect(!session.setMuted(true))

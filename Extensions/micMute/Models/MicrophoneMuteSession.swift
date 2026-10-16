@@ -24,20 +24,23 @@ final class MicrophoneMuteSession {
     @discardableResult
     func setMuted(_ muted: Bool) -> Bool {
         var success = true
-        if muted {
-            for control in access.controls() {
+        for control in access.controls() {
+            if control.kind == .mute {
+                if !access.write(control, muted ? 1 : 0) { success = false }
+            } else if muted {
                 guard let original = saved[control] ?? access.read(control) else {
                     success = false
                     continue
                 }
-                if access.write(control, control.mutedValue) {
+                if access.write(control, 0) {
                     saved[control] = original
                 } else {
                     success = false
                 }
             }
-        } else {
-            for (control, value) in saved {
+        }
+        if !muted {
+            for (control, value) in saved where control.kind == .volume {
                 if access.write(control, value) {
                     saved[control] = nil
                 } else {
