@@ -159,6 +159,17 @@ final class KeepAwakeRuntime: NSObject {
         return task
     }
 
+    @objc(prepareDisableWithCompletion:)
+    func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        let values = defaults
+        let drain = beginCommandDrain()
+        Task { [self] in
+            await drain.value
+            values?.set(false, forKey: AppStorageKeys.General.preventSleep)
+            withExtendedLifetime(self) { completion(nil) }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         let stop = beginResourceStop()

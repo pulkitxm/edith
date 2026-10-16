@@ -15,7 +15,7 @@ import Testing
             applySystemState: {
                 effects.append($0); return .applied
             }, startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { true })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         defer { worker.shutdown() }
         let status = try await LidAwakeCLIExecution.run(
             .init(arguments: ["status", "--json"]), worker: worker)
@@ -50,7 +50,7 @@ import Testing
             applySystemState: { _ in
                 Issue.record("No privileged effect expected"); return .applied
             }, startServices: false)
-        let worker = LidAwakeWorker(defaults: defaults, engine: engine, confirm: { false })
+        let worker = LidAwakeWorker(defaults: defaults, engine: engine)
         let surface = LidAwakeSurface(worker: worker, privacy: { [:] })
         let bridge = Bridge(surface: surface)
         let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
