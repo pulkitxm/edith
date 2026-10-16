@@ -139,7 +139,10 @@ private struct HerdrLaunchKindRow: View {
             .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(11)))
             .disabled(
-                HerdrLaunchSettings.defaultHerdrSlug(for: kind).map { command == $0 } ?? false)
+                remote == nil
+                    ? HerdrLaunchSettings.usesHerdrAgentStart(for: kind)
+                    : HerdrLaunchSettings.defaultHerdrSlug(for: kind).map { command == $0 } ?? false
+            )
         }
     }
 

@@ -151,7 +151,7 @@ import UserNotifications
                 permitted(notification.identifier, settings: currentSettings)
             else { continue }
             pending[notification.identifier] = Pending(
-                notification: notification, expiresAt: now.addingTimeInterval(120))
+                notification: notification, expiresAt: now.addingTimeInterval(86_400))
         }
         persist()
         await flush(generation: currentGeneration, now: now)

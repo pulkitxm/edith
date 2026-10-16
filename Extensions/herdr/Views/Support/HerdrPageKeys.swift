@@ -55,6 +55,28 @@ extension HerdrStore {
         return false
     }
 
+    func performSpaceKey(
+        characters: String?, keyCode: UInt16, modifiers: NSEvent.ModifierFlags,
+        in window: NSWindow?, spaceID: String
+    ) -> Bool {
+        guard hostsPage(window), let model = uiSpaces[spaceID],
+            let command = HerdrSpaceKeyCommand.resolve(
+                characters: characters, keyCode: keyCode, modifiers: modifiers)
+        else { return false }
+        switch command {
+        case .newTerminal: _ = model.addTerminal()
+        case .splitRight: model.split(.right)
+        case .splitDown: model.split(.bottom)
+        case .closeTab:
+            if !model.closeSelectedTab() { window?.performClose(nil) }
+        case .closePane: _ = model.closeFocusedPane()
+        case let .selectTab(number): _ = model.selectTab(number: number)
+        case .nextTab: _ = model.cycleTab(backwards: false)
+        case .previousTab: _ = model.cycleTab(backwards: true)
+        }
+        return true
+    }
+
     func performSceneKey(
         characters: String?, modifiers: NSEvent.ModifierFlags, repeats: Bool,
         in window: NSWindow?, surface: HerdrAgentDetailSurface

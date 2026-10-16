@@ -77,6 +77,7 @@ struct HerdrUIState: Codable {
     let activitySettings: AgentActivitySettings
     let attention: HerdrAttentionSettings
     let discovery: Bool
+    var jevConfigured: Bool?
 
     func validate() throws {
         guard owner == "herdr", sequence > 0, hosts.count <= 1025,
@@ -594,7 +595,8 @@ final class HerdrUIDefaults: UserDefaults {
             preferences: store.uiPreferences, activity: worker.activity.activity,
             activitySettings: worker.activity.settings,
             attention: HerdrAttentionSettings(defaults: store.uiDefaults),
-            discovery: worker.activity.discoversTerminals)
+            discovery: worker.activity.discoversTerminals,
+            jevConfigured: worker.searchDecider() != nil)
         try value.validate()
         let data = try JSONEncoder().encode(value)
         guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }

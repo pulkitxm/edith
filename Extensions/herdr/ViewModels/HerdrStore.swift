@@ -818,6 +818,9 @@ final class HerdrStore {
     func refresh() async {
         guard !workSuspended else { return }
         if uiClient != nil {
+            guard !refreshing else { return }
+            refreshing = true
+            defer { refreshing = false }
             try? await performUI("herdr.ui.refresh")
             return
         }
@@ -1024,7 +1027,7 @@ final class HerdrStore {
         }
         try await agentFocuser(agent.session, agent.pane, machine)
         let terminal = HerdrMachineTerminal.agent(for: host, session: agent.session)
-        if HerdrAgentWindow.raise(terminal.id) { return }
+        if raiseAgentWindow(terminal.id) { return }
         open(terminal)
         revealWorkspaceWindow()
     }
@@ -1072,7 +1075,7 @@ final class HerdrStore {
 
     func open(_ agent: HerdrAgent, beside side: InsertSide) {
         usage.record(agent)
-        if session(agent.id) == nil, HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+        if session(agent.id) == nil, raiseSpace(containingAgent: agent.id) { return }
         guard let current = currentTab, !current.layout.contains(agent.id) else {
             open(agent)
             return
@@ -2509,7 +2512,9 @@ final class HerdrStore {
         let origin = terminalOrigin(for: owner)
         switch key {
         case .toggle:
-            terminalPanels.toggle(owner, host: origin.host, cwd: origin.cwd)
+            withAnimation(layoutAnimation) {
+                terminalPanels.toggle(owner, host: origin.host, cwd: origin.cwd)
+            }
         case .new:
             openTerminal(in: owner, from: origin)
         }
@@ -2636,6 +2641,7 @@ final class HerdrStore {
         adoptingUI = true
         defer { adoptingUI = false }
         uiBaseline = state.layout
+        uiJevConfigured = state.jevConfigured ?? false
         uiOpenedAgents = state.openedAgents
         hosts = state.hosts
         adoptSpaces(state)
@@ -2711,6 +2717,36 @@ final class HerdrStore {
                 } catch { self.uiError = error.localizedDescription; return }
             }
         }
+    }
+
+    @discardableResult
+    func raiseSpace(containingAgent id: String) -> Bool {
+        if HerdrSpaceWindow.raise(containingAgent: id) { return true }
+        guard uiClient != nil else { return false }
+        for (spaceID, model) in uiSpaces where model.tabs.contains(where: { $0.agentID == id }) {
+            guard
+                uiPresentations.contains(where: {
+                    $0.location == "herdr.space" && $0.target == spaceID && $0.presented
+                })
+            else { continue }
+            _ = model.selectAgent(id)
+            requestPresentation(
+                kind: "space", id: spaceID, agents: model.tabs.compactMap(\.agentID))
+            return true
+        }
+        return false
+    }
+
+    @discardableResult
+    func raiseAgentWindow(_ id: String) -> Bool {
+        if HerdrAgentWindow.raise(id) { return true }
+        guard uiClient != nil,
+            uiPresentations.contains(where: {
+                $0.location == "herdr.agent" && $0.target == id && $0.presented
+            })
+        else { return false }
+        requestPresentation(kind: "agent", id: id)
+        return true
     }
 
     func requestPresentation(kind: String, id: String, agents: [String]? = nil) {
@@ -2840,8 +2876,18 @@ final class HerdrStore {
         return try await HerdrLaunchOperations.listWorkspaces(on: machine(for: host))
     }
 
+    private(set) var uiJevConfigured = false
+
     func searchModel() -> HerdrSearchModel {
         guard uiClient != nil else { return HerdrSearchModel(usage: usage) }
+        var ranker: HerdrSessionRanker?
+        if uiJevConfigured {
+            ranker = { [self] (query: String, candidates: [AgentSearchCandidate]) async throws -> [String]? in
+                let data = try await self.requestUI(
+                    "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
+                return try JSONDecoder().decode([String]?.self, from: data)
+            }
+        }
         return HerdrSearchModel(
             searcher: { request in
                 let data = try await self.requestUI(
@@ -2852,11 +2898,7 @@ final class HerdrStore {
                     ])
                 return try JSONDecoder().decode(AgentSearchReply.self, from: data)
             }, decider: { nil }, usage: usage,
-            ranker: { query, candidates in
-                let data = try await self.requestUI(
-                    "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
-                return try JSONDecoder().decode([String]?.self, from: data)
-            })
+            ranker: ranker)
     }
 
 }

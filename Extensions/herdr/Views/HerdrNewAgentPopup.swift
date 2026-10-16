@@ -73,12 +73,12 @@ struct HerdrNewAgentPopup: View {
                 .disabled(model.launching)
         }
         .frame(width: PresentationMetrics.width(440), height: PresentationMetrics.height(380))
-        .transientPresentation(dismissible: !model.launching, dismissOnEscape: false)
-        .onExitCommand {
-            guard !model.launching else { return }
-            if !model.back() { dismiss() }
-            fieldFocused = true
-        }
+        .transientPresentation(
+            dismissible: !model.launching,
+            onEscape: {
+                if !model.back() { dismiss() }
+                fieldFocused = true
+            })
         .onAppear { fieldFocused = true }
         .onChange(of: model.step) { _, step in
             selectionIndex = 0

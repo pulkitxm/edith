@@ -349,6 +349,10 @@ final class HerdrTerminalPanels {
 
     func show(_ owner: String, host: HerdrPanelHost, cwd: String?) {
         if uiAction != nil {
+            if let panel = panels[owner], !panel.terminalIDs.isEmpty {
+                panels[owner]?.open = true
+                focusedOwner = owner
+            }
             dispatchUI(
                 "show",
                 [
@@ -366,7 +370,12 @@ final class HerdrTerminalPanels {
     }
 
     func hide(_ owner: String) {
-        if uiAction != nil { dispatchUI("hide", ["owner": owner]); return }
+        if uiAction != nil {
+            panels[owner]?.open = false
+            if focusedOwner == owner { focusedOwner = nil }
+            dispatchUI("hide", ["owner": owner])
+            return
+        }
         panels[owner]?.open = false
         if focusedOwner == owner { focusedOwner = nil }
     }
