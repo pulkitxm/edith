@@ -1,0 +1,471 @@
+name: Extensions
+"on":
+  pull_request:
+    paths:
+      - Extensions/**
+      - Packages/ExtensionMarketplace/**
+      - Packages/EdithHost/**
+      - Packages/ExtensionSupport/**
+      - Packages/EdithDocsWorker/**
+      - docs/cli/**
+      - scripts/generate-cli-docs-bundle.mjs
+      - Packages/Edith/Sources/EdithKit/**
+      - Packages/Edith/Sources/EdithCore/**
+      - Packages/Edith/Sources/EdithShared/**
+      - Packages/Edith/Sources/EdithCameraSupport/**
+      - Packages/Edith/Sources/EdithLidAwakeSupport/**
+      - Packages/Edith/Package.swift
+      - scripts/link-shared-framework.py
+      - scripts/*extension*
+      - scripts/release-asset-*
+      - scripts/release-lookup.*
+      - scripts/hosted-public-release/**
+      - scripts/build-minimal-host.mjs
+      - scripts/build-contained-host-runtime.mjs
+      - scripts/build-camera-carrier.mjs
+      - scripts/build-camera-microphone.py
+      - scripts/build-ghostty.sh
+      - scripts/patches/ghostty-external-io.patch
+      - apps/music-player/**
+      - .github/actions/cache-host/**
+      - .github/workflows/extensions.yml
+      - scripts/package-shipping-host.py
+      - scripts/verify_shipping_host.py
+      - scripts/host_build_metadata.py
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified packages and the signed catalog from this ref
+        type: boolean
+        required: true
+        default: false
+      production_cohort:
+        description: Observe two verified public hosts and coordinate the Keep Awake catalog update
+        type: string
+        required: false
+        default: ""
+      validation_sha:
+        description: Validate all 39 extensions at this exact source SHA without publishing
+        type: string
+        required: false
+        default: ""
+permissions:
+  contents: read
+concurrency:
+  group: >-
+    extensions-${{
+      github.event_name == 'pull_request' && github.ref
+      || github.event_name == 'workflow_dispatch' && inputs.publish == false
+        && inputs.validation_sha != '' && inputs.validation_sha == github.sha
+        && inputs.production_cohort == '' && format('validation-{0}', inputs.validation_sha)
+      || 'publish'
+    }}
+  cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
+env:
+  EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
+jobs:
+  frozen-host:
+    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true')) && (inputs.production_cohort == '' || (github.repository_id == '1289153439' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && fromJSON(inputs.production_cohort).source == github.sha))"
+    needs:
+      - plan
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --check
+      - run: bun install --frozen-lockfile
+      - name: Cache the worker host
+        uses: ./.github/actions/cache-host
+      - name: Validate the full host before all-extension validation
+        if: "needs.plan.outputs.mode == 'validation'"
+        run: make ci-host host
+      - name: Build the frozen shipping host
+        if: "needs.plan.outputs.mode != 'validation'"
+        run: make host
+      - run: |
+          swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness &
+          lifecycle_harness=$!
+          swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
+          wait "$lifecycle_harness"
+          python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --carrier-products "$(swift build --package-path Packages/EdithHost --build-system native --configuration release --show-bin-path)" --output local/extension-tools
+      - name: Import the release signing certificate
+        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        env:
+          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
+          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
+        run: |
+          test -n "$MACOS_CERT_P12"
+          keychain="$RUNNER_TEMP/extensions.keychain-db"
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/cert.p12"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
+          fi
+          test -n "$identity"
+          echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Freeze the production host once for all changed extensions
+        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        run: "python3 scripts/package-shipping-host.py local/minimal-host/Edith.app local/extension-release-host/Edith.app --identity \"$EXTENSION_SIGN_IDENTITY\" --release"
+      - name: Archive the frozen host without changing executable permissions
+        run: |
+          mkdir -p local/extension-host-artifact
+          if [ -d local/extension-release-host ]; then
+            tar -czf local/extension-host-artifact/host.tar.gz local/minimal-host local/extension-tools local/extension-release-host
+          else
+            tar -czf local/extension-host-artifact/host.tar.gz local/minimal-host local/extension-tools
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: frozen-extension-host
+          path: local/extension-host-artifact/host.tar.gz
+          retention-days: 7
+      - name: Remove the temporary signing keychain
+        if: always()
+        run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
+  tests:
+    if: "needs['frozen-host'].result == 'success'"
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --check
+      - run: bun install --frozen-lockfile
+      - name: Restore the frozen host and lifecycle tools
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: frozen-extension-host
+          path: local/extension-host-artifact
+      - run: tar -xzf local/extension-host-artifact/host.tar.gz
+      - name: Verify lifecycle tools and their frozen index
+        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
+      - run: |
+          mkdir -p Packages/ExtensionMarketplace/.build/debug
+          cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
+      - name: Verify bounded peer failure diagnostics
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-diagnostics
+      - name: Verify authenticated peer transport and lifecycle
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-transport
+      - name: Exercise original Keep Awake controls and native lifecycle
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
+          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+          EXTENSION_PUBLISH: "${{ inputs.publish == true && 'true' || 'false' }}"
+        run: make ci-extension-keep-awake-native
+      - name: Verify Keep Awake peer rejection contracts
+        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
+        run: make ci-extension-keep-awake-peer-contracts
+      - name: Verify native cache integrity and private SDK composition
+        if: "needs.plan.outputs.mode == 'validation'"
+        timeout-minutes: 20
+        env:
+          EXTENSION_SUPPORT_NATIVE_TESTS: "1"
+          EXTENSION_SWIFT_JOBS: "2"
+        run: |
+          source scripts/ci-setup-zig.sh
+          bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
+      - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+        if: "needs.plan.outputs.mode == 'validation'"
+        run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+      - name: Validate the shipping extension and marketplace
+        if: "needs.plan.outputs.mode != 'validation'"
+        run: make ci-marketplace-runtime ci-extension-keep-awake ci-comments
+      - run: bun scripts/test-extension-catalog-retention.mjs
+      - run: bun scripts/test-extension-marketplace.mjs
+    needs:
+      - frozen-host
+      - plan
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: "${{ steps.plan.outputs.matrix }}"
+      changed: "${{ steps.plan.outputs.changed }}"
+      draft: "${{ steps.plan.outputs.draft }}"
+      mode: "${{ steps.plan.outputs.mode }}"
+      source_sha: "${{ steps.plan.outputs.source_sha }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Admit exact-source all-extension validation
+        if: "inputs.validation_sha != ''"
+        env:
+          EXTENSION_VALIDATION_SHA: "${{ inputs.validation_sha }}"
+          EXTENSION_PUBLISH: "${{ inputs.publish }}"
+        run: bun scripts/extension-release-plan.mjs --check-validation-source "$EXTENSION_VALIDATION_SHA"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - run: node --test scripts/verify-extension-catalog.test.mjs
+      - run: python3 -B scripts/test-package-extension-lifecycle-tools.py
+      - name: Check portable publication and selective planning
+        run: bun test scripts/extension-publication-guard.test.js scripts/extension-release-plan.test.js scripts/extensions-workflow.test.js scripts/extension-all-validation.test.js
+      - run: bun scripts/extension-host-abi.mjs --check
+      - name: Require production publication from main
+        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        run: 'test "$GITHUB_REF" = refs/heads/main || { echo "Extension publication requires main" >&2; exit 1; }'
+      - name: Plan against the exact PR base or last trusted catalog
+        id: plan
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          PR_BASE_SHA: "${{ github.event.pull_request.base.sha }}"
+          EXTENSION_VALIDATION_SHA: "${{ inputs.validation_sha }}"
+          EXTENSION_PUBLISH: "${{ inputs.publish }}"
+        run: |
+          mkdir -p dist/extensions
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            [[ "$PR_BASE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "Invalid pull request base commit" >&2; exit 1; }
+            git fetch --no-tags origin "$PR_BASE_SHA"
+            bun scripts/extension-release-plan.mjs --pull-request-base "$PR_BASE_SHA" > dist/extensions/plan.json
+            draft=false
+          elif [ -n "$EXTENSION_VALIDATION_SHA" ]; then
+            bun scripts/extension-release-plan.mjs --validate-all "$EXTENSION_VALIDATION_SHA" > dist/extensions/plan.json
+            draft=false
+          else
+            node scripts/extension-publish.mjs --read-catalog dist/extensions/previous.json
+            bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
+            draft="$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/previous-state.json").text()).draft)')"
+          fi
+          {
+            echo "matrix=$(bun -e 'const plan=JSON.parse(await Bun.file("dist/extensions/plan.json").text()); console.log(JSON.stringify({include:plan.include}))')"
+            echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')"
+            echo "draft=$draft"
+            echo "mode=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).mode ?? "selective")')"
+            echo "source_sha=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).sourceSHA ?? "")')"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: extension-plan
+          path: "dist/extensions/previous.json\ndist/extensions/previous-state.json\ndist/extensions/plan.json\n"
+          retention-days: 7
+  build:
+    name: "build (${{ matrix.id }})"
+    needs:
+      - plan
+      - frozen-host
+    if: "!cancelled() && needs.plan.result == 'success' && needs['frozen-host'].result == 'success' && needs.plan.outputs.changed == 'true'"
+    env:
+      HAS_NOTARY: "${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}"
+    strategy:
+      fail-fast: false
+      matrix: "${{ fromJSON(needs.plan.outputs.matrix) }}"
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --check
+      - name: Restore the frozen host and lifecycle tools
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: frozen-extension-host
+          path: local/extension-host-artifact
+      - run: tar -xzf local/extension-host-artifact/host.tar.gz
+      - name: Verify lifecycle tools and their frozen index
+        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
+      - name: Require a native worker package
+        env:
+          EXTENSION_ID: "${{ matrix.id }}"
+        run: |
+          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extension workers can ship")'
+      - name: Identify optional native prerequisites
+        id: native
+        env:
+          EXTENSION_ID: "${{ matrix.id }}"
+        run: |
+          ghostty="$(bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); console.log(entry?.nativeProduct==="GhosttyTerminal")')"
+          echo "ghostty=$ghostty" >> "$GITHUB_OUTPUT"
+      - name: Identify the optional terminal toolchain
+        if: "steps.native.outputs.ghostty == 'true'"
+        id: ghostty-toolchain
+        run: |
+          source scripts/ci-setup-zig.sh
+          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
+      - name: Cache the optional terminal library
+        if: "steps.native.outputs.ghostty == 'true'"
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Extensions/terminal/Native/vendor
+          key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}"
+      - name: Build the optional terminal library
+        if: "steps.native.outputs.ghostty == 'true'"
+        run: |
+          make ghostty-extension
+          node scripts/extension-ghostty-native.mjs --check
+          bun test scripts/extension-ghostty-native.test.js
+      - name: Identify the support build toolchain
+        id: support-toolchain
+        run: |
+          fingerprint="$( { xcodebuild -version; swift --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - name: "Reuse this extension's unchanged support libraries"
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            local/extension-support/${{ matrix.id }}_*/build.json
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/lib*.a
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/Modules
+            local/extension-support/${{ matrix.id }}_*/.build/arm64-apple-macosx/release/*.bundle
+            local/extension-support/${{ matrix.id }}_*/.build/out/Products/Release
+          key: "extension-support-v3-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}"
+      - name: "Test this extension's optional native packages"
+        env:
+          EXTENSION_ID: "${{ matrix.id }}"
+          EXTENSION_PACKAGE_SUITES: "${{ (!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))) && 'skip' || 'run' }}"
+        run: "bun scripts/test-extension-package.mjs \"$EXTENSION_ID\""
+      - name: Exercise this worker against the frozen host
+        run: "bun scripts/test-extension-workers.mjs \"${{ matrix.id }}\""
+        env:
+          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
+          EXTENSION_SWIFT_JOBS: "3"
+      - name: Import the release signing certificate
+        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        env:
+          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
+          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
+        run: |
+          test -n "$MACOS_CERT_P12"
+          keychain="$RUNNER_TEMP/extensions.keychain-db"
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/cert.p12"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
+          fi
+          test -n "$identity"
+          echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Build only this extension
+        env:
+          EXTENSION_ID: "${{ matrix.id }}"
+          EXTENSION_VERSION: "${{ matrix.version }}"
+          DEVELOPMENT: "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}"
+          EXTENSION_UI_CARRIER_TOOLS: local/extension-tools
+          EXTENSION_SWIFT_JOBS: "3"
+          EXTENSION_CONTAINING_HOST_APP: "${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true)) && 'local/minimal-host/Edith.app' || 'local/extension-release-host/Edith.app' }}"
+        run: |
+          if [ "$DEVELOPMENT" = true ]; then
+            bun scripts/build-extension-package.mjs "$EXTENSION_ID" --development
+          else
+            bun scripts/build-extension-package.mjs "$EXTENSION_ID"
+          fi
+      - name: Notarize the downloaded package
+        if: "${{ !inputs.validation_sha && env.HAS_NOTARY == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}"
+        env:
+          EXTENSION_ID: "${{ matrix.id }}"
+          NOTARY_KEY: "${{ secrets.NOTARY_KEY }}"
+          NOTARY_KEY_ID: "${{ secrets.NOTARY_KEY_ID }}"
+          NOTARY_ISSUER_ID: "${{ secrets.NOTARY_ISSUER_ID }}"
+        run: |
+          test -n "$NOTARY_KEY"
+          test -n "$NOTARY_KEY_ID"
+          test -n "$NOTARY_ISSUER_ID"
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          trap 'rm -f "$RUNNER_TEMP/notary-key.p8"' EXIT
+          xcrun notarytool submit "dist/extensions/$EXTENSION_ID.zip" --wait --key "$RUNNER_TEMP/notary-key.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: "extension-${{ matrix.id }}"
+          path: dist/extensions/*.*
+          retention-days: 7
+      - name: Remove the temporary signing keychain
+        if: always()
+        run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
+  publish:
+    timeout-minutes: ${{ inputs.production_cohort != '' && 180 || 360 }}
+    permissions:
+      contents: read
+      actions: read
+    needs:
+      - plan
+      - build
+      - tests
+    if: "!cancelled() && !inputs.validation_sha && needs.plan.outputs.mode != 'validation' && github.repository == 'pulkitxm/edith' && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.tests.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
+    runs-on: macos-26
+    env:
+      GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"
+      GITHUB_TOKEN: "${{ github.token }}"
+      EXTENSION_CATALOG_PRIVATE_KEY: "${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --check
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: extension-*
+          path: dist/extensions
+          merge-multiple: true
+      - name: Install the release client
+        run: bash scripts/install-release-client.sh
+      - name: Inspect release capabilities
+        run: |
+          pukbot capabilities --json
+          pukbot tag create --help
+          pukbot release create --help
+          pukbot release edit --help
+          pukbot release upload-asset --help
+          gh release upload --help
+      - name: Install verified release dependencies
+        run: bun install --frozen-lockfile
+      - name: Verify closed public update coordination contracts
+        if: inputs.production_cohort != ''
+        run: |
+          set -euo pipefail
+          bun test scripts/hosted-public-release/production-inputs.test.mjs scripts/hosted-public-release/production-observer.test.mjs scripts/hosted-public-release/production-summary.test.mjs scripts/hosted-public-release/production-catalog-channel.test.mjs scripts/hosted-public-release/production-publication-coordinator.test.mjs scripts/hosted-public-release/production-publication-workflow.test.mjs scripts/hosted-public-release/production-bootstrap.test.mjs scripts/hosted-public-release/production-host-readiness.test.mjs scripts/hosted-public-release/production-completed-host.test.mjs scripts/hosted-public-release/production-publication-budget.test.mjs scripts/hosted-public-release/production-pending-cohort.test.mjs
+          python3 -I -B scripts/test-production-host-cohort.py
+      - name: Preserve immutable native evidence before publication
+        run: bun scripts/extension-native-evidence.mjs
+      - name: Publish immutable extension releases and the signed catalog
+        env:
+          PUBLIC_HOST_UPDATE_REQUEST: ${{ inputs.production_cohort }}
+          PUBLIC_RELEASE_VERIFICATION: "1"
+        run: |
+          set -euo pipefail
+          if [ -n "$PUBLIC_HOST_UPDATE_REQUEST" ]; then
+            bun scripts/hosted-public-release/production-publication-coordinator.mjs
+          else
+            bun scripts/extension-publish.mjs
+          fi
+      - name: Emit only bounded sanitized public observations
+        if: always() && inputs.production_cohort != ''
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
+        run: bun scripts/hosted-public-release/production-summary.mjs
+      - name: Retain bounded sanitized public update observations
+        if: always() && inputs.production_cohort != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hosted-public-host-update-verification
+          path: local/public-host-cohort/summary.json
+          retention-days: 7
+          if-no-files-found: warn
