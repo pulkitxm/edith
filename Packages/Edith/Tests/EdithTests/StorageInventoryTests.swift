@@ -43,6 +43,27 @@ struct StorageInventoryTests {
         #expect(category("app", inventory, measurement).logical == 7000)
     }
 
+    @Test func usageListsEveryByteOnceLargestFirst() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let inventory = fixture.inventory()
+        let measurement = try StorageAccounting.scan(scopes: inventory.scopes)
+        let usage = inventory.usage(in: measurement)
+        #expect(!usage.contains { $0.id == "feature-data" })
+        #expect(!usage.contains { $0.id == "latex" })
+        #expect(
+            usage.reduce(Int64(0)) { $0 + $1.bytes.allocated } == measurement.total.allocated)
+        #expect(
+            usage.map(\.bytes.allocated) == usage.map(\.bytes.allocated).sorted(by: >))
+        #expect(
+            usage.first { $0.id == "music" }?.item.roots.map(\.lastPathComponent) == [
+                "music", "thumbnails", "music-library-index.json",
+            ])
+        #expect(
+            usage.first { $0.id == "store" }?.item.roots.map(\.lastPathComponent).contains(
+                "Tasks") == true)
+    }
+
     @Test func databaseBackupsCountUnderTheAppDatabase() throws {
         let fixture = try StorageFixture()
         defer { fixture.clean() }

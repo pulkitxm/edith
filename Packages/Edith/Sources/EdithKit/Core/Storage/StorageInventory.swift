@@ -56,12 +56,30 @@ public struct StorageCategory: Identifiable, Sendable {
     }
 }
 
+public struct StorageItem: Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let roots: [URL]
+    public let scopeIDs: [String]
+
+    public func bytes(in measurement: StorageMeasurement) -> StorageBytes {
+        measurement.sum(scopeIDs)
+    }
+}
+
+public struct StorageUsage: Identifiable, Sendable {
+    public let item: StorageItem
+    public let bytes: StorageBytes
+    public var id: String { item.id }
+}
+
 public struct StorageInventory: Sendable {
     public static let databaseFileName = "edith.sqlite"
 
     public let scopes: [StorageScope]
     public let areas: [StorageArea]
     public let categories: [StorageCategory]
+    public let items: [StorageItem]
     public let appVersion: String?
 
     public init(
@@ -125,24 +143,44 @@ public struct StorageInventory: Sendable {
         self.scopes = scopes
         self.areas = areas
         self.appVersion = appVersion
-        categories = [
-            .init(id: "app", title: "Edith app bundle", scopeIDs: ["app"]),
+        let categories: [StorageCategory] = [
+            .init(id: "app", title: "Edith app", scopeIDs: ["app"]),
             .init(id: "feature-data", title: "Feature data", scopeIDs: areas.flatMap(\.scopeIDs)),
             .init(
                 id: "selected-music-directory",
-                title: "Selected music folder, including any other files",
+                title: "Music folder outside Edith",
                 scopeIDs: scopes.contains { $0.id == selectedID } ? [selectedID] : []),
             .init(
-                id: "store", title: "App database and background tasks",
+                id: "store", title: "Database and background tasks",
                 scopeIDs: storeIDs + ["tasks"]),
             .init(id: "cache", title: "Caches", scopeIDs: ["caches", "runtime"]),
             .init(
-                id: "logs-preferences", title: "Logs and preferences",
+                id: "logs-preferences", title: "Logs and settings",
                 scopeIDs: ["logs"] + preferenceIDs),
             .init(
-                id: "other", title: "Other app data, including unassigned files",
+                id: "other", title: "Other app data",
                 scopeIDs: ["support"]),
         ]
+        self.categories = categories
+        let scopeRoots = Dictionary(uniqueKeysWithValues: scopes.map { ($0.id, $0.root) })
+        items =
+            areas.map {
+                StorageItem(id: $0.id, title: $0.title, roots: $0.roots, scopeIDs: $0.scopeIDs)
+            }
+            + categories.filter { $0.id != "feature-data" && !$0.scopeIDs.isEmpty }.map {
+                StorageItem(
+                    id: $0.id, title: $0.title, roots: $0.scopeIDs.compactMap { scopeRoots[$0] },
+                    scopeIDs: $0.scopeIDs)
+            }
+    }
+
+    public func usage(in measurement: StorageMeasurement) -> [StorageUsage] {
+        items.map { StorageUsage(item: $0, bytes: $0.bytes(in: measurement)) }
+            .filter { $0.bytes.allocated > 0 || !$0.bytes.complete }
+            .sorted {
+                $0.bytes.allocated != $1.bytes.allocated
+                    ? $0.bytes.allocated > $1.bytes.allocated : $0.item.title < $1.item.title
+            }
     }
 
     private static func contains(_ root: String, _ path: String) -> Bool {
