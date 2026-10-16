@@ -20,9 +20,8 @@ struct SEOAuditUIRequest: Codable {
     var url: URL? = nil
     var offset: Int? = nil
 }
-struct SEOAuditUIState: Codable {
-    let projects: [SEOAuditProject]
-    let drafts: [UUID: SEOAuditDraft]
+struct SEOAuditUIPoll: Codable {
+    let summaries: [SEOAuditProjectSummary]
     let activities: [UUID: SEOAuditActivity]
 }
 struct SEOAuditUIJob: Codable {
@@ -92,7 +91,7 @@ struct SEOAuditUIResult: Codable {
     var retirementError: String? { cleanup.lastError }
     func drain() async { await cleanup.wait() }
 
-    func state() async throws -> SEOAuditUIState { try await call("state") }
+    func poll() async throws -> SEOAuditUIPoll { try await call("poll") }
     func job(_ launch: SEOAuditUIJob) -> SEOAuditJob {
         let task = Task<SEOAuditJobResult, Error> {
             var terminalObserved = false
@@ -286,16 +285,9 @@ struct SEOAuditUIResult: Codable {
         case "list": return try encode(await service.list())
         case "project": return try encode(await service.project(id()))
         case "draft": return try encode(await service.draft(id()))
-        case "state":
-            let summaries = try await service.list()
-            var projects: [SEOAuditProject] = []
-            var drafts: [UUID: SEOAuditDraft] = [:]
-            for summary in summaries {
-                projects.append(try await service.project(summary.id))
-                drafts[summary.id] = try await service.draft(summary.id)
-            }
+        case "poll":
             return try encode(
-                SEOAuditUIState(projects: projects, drafts: drafts, activities: service.activities))
+                SEOAuditUIPoll(summaries: try await service.list(), activities: service.activities))
         case "create":
             guard let project = request.project else { throw ExtensionPeerError.invalidRequest }
             return try encode(await service.create(project))
@@ -342,7 +334,10 @@ struct SEOAuditUIResult: Codable {
             return try encode(await jobs.result(taskID, running: service.job(taskID) != nil))
         case "releaseJob": return try encode(await jobs.release(id()))
         case "stop": return try encode(await service.stop(id()))
-        case "cancel": return try encode(await jobs.cancel(id()))
+        case "cancel":
+            let taskID = try id()
+            if await jobs.cancel(taskID) { return try encode(true) }
+            return try encode(service.cancel(taskID))
         case "run":
             guard (0...10_000).contains(request.offset ?? 0) else {
                 throw ExtensionPeerError.invalidRequest

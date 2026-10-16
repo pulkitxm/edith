@@ -106,7 +106,8 @@ final class SEOAuditService {
     @ObservationIgnored private var jobs: [UUID: SEOAuditJob] = [:]
     @ObservationIgnored private var listeners: [UUID: (SEOAuditEvent) -> Void] = [:]
     @ObservationIgnored private var recovery: Task<Void, Never>?
-    @ObservationIgnored private let gate = SEOAuditGate()
+    @ObservationIgnored private let auditGate = SEOAuditGate()
+    @ObservationIgnored private let lighthouseGate = SEOAuditGate()
     @ObservationIgnored private let remote: SEOAuditUIBridge?
     @ObservationIgnored private var remoteObservation: Task<Void, Never>?
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -128,17 +129,28 @@ final class SEOAuditService {
         listeners[id] = listener
         if let remote, remoteObservation == nil {
             remoteObservation = Task { [weak self] in
-                var previous: Set<UUID> = []
+                var seen: [UUID: Date] = [:]
+                var previousActive: Set<UUID> = []
                 while !Task.isCancelled {
                     do {
-                        let state = try await remote.state()
+                        let poll = try await remote.poll()
                         guard let self, !isStopped, !Task.isCancelled else { return }
-                        activities = state.activities
-                        let current = Set(state.projects.map(\.id))
-                        for id in previous.subtracting(current) { publish(.deleted(id)) }
-                        for project in state.projects { publish(.project(project)) }
-                        for (id, draft) in state.drafts { publish(.draft(id, draft)) }
-                        previous = current
+                        activities = poll.activities
+                        let stamps = poll.summaries.reduce(into: [UUID: Date]()) {
+                            $0[$1.id] = $1.updatedAt
+                        }
+                        let active = Set(poll.activities.keys)
+                        var refresh = active.filter { stamps[$0] != nil && stamps[$0] != seen[$0] }
+                        refresh.formUnion(
+                            previousActive.subtracting(active).filter { stamps[$0] != nil })
+                        seen = stamps
+                        previousActive = active
+                        for id in refresh {
+                            let project: SEOAuditProject = try await remote.call(
+                                "project", id: id)
+                            guard !isStopped, !Task.isCancelled else { return }
+                            publish(.project(project))
+                        }
                         try await Task.sleep(for: .seconds(1))
                     } catch {
                         do { try await Task.sleep(for: .seconds(1)) } catch { return }
@@ -406,7 +418,7 @@ final class SEOAuditService {
 
     private func launch(_ request: SEOAuditTaskRequest, scoresOnly: Bool) -> SEOAuditLaunch {
         let workflow = workflow
-        let gate = gate
+        let gate = scoresOnly ? lighthouseGate : auditGate
         let total = request.urls.count
         let url = request.urls.first?.absoluteString ?? ""
         let owner = self
@@ -414,7 +426,8 @@ final class SEOAuditService {
         let job = submit(
             projectID: request.projectID, kind: scoresOnly ? .lighthouse : .audit,
             stage: scoresOnly
-                ? .lighthouse(url: url) : .auditing(current: 0, total: total, url: "Queued"),
+                ? .lighthouse(url: url)
+                : .auditing(current: 0, total: total, url: "Queued in background"),
             runID: request.runID, state: .queued
         ) { [owner] in
             try await gate.acquire()

@@ -36,6 +36,17 @@ import Testing
         await service.shutdown(); await model.drain()
     }
 
+    @Test func lighthouseToggleFollowsAvailabilityOnceResolved() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = service(root)
+        let model = SEOAuditModel(service: service)
+        #expect(!model.lighthouseEnabled && !model.lighthouseResolved)
+        await model.refreshProjects()
+        #expect(model.lighthouseResolved && !model.lighthouseAvailable && !model.lighthouseEnabled)
+        model.shutdown(); await service.shutdown(); await model.drain()
+    }
+
     @Test func disablingCancelsPendingFiltersAndReleasesLoadedHistory() async throws {
         let root = root()
         defer { try? FileManager.default.removeItem(at: root) }

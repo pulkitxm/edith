@@ -23,7 +23,7 @@ final class SEOAuditModel {
     var pageSelectionQuery = ""
     var severity: SEOAuditSeverity? { didSet { if severity != oldValue { schedulePageFilter() } } }
     var socialPreviewPlatform = SEOAuditSocialPlatform.facebook
-    var lighthouseEnabled = true {
+    var lighthouseEnabled = false {
         didSet {
             guard !isApplyingDraft, selectedProject != nil, lighthouseEnabled != oldValue else {
                 return
@@ -43,6 +43,9 @@ final class SEOAuditModel {
     @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private var stopped = false
     private(set) var lighthouseAvailable = false
+    private(set) var lighthouseResolved = false
+    @ObservationIgnored private var draftApplied = false
+    @ObservationIgnored private var draftSerial = 0
     @ObservationIgnored private var auditTask: Task<Void, Never>?
     @ObservationIgnored private var projectRequestID = UUID()
     @ObservationIgnored private var progressTask: Task<Void, Never>?
@@ -70,10 +73,16 @@ final class SEOAuditModel {
             if let id = selectedRunID, !project.runs.contains(where: { $0.id == id }) {
                 selectedRunID = project.latestRun?.id
             }
-            stage = service.activity(for: project.id)?.stage ?? .idle
+            if let remoteStage = service.activity(for: project.id)?.stage {
+                stage = remoteStage
+            } else if auditTask == nil, progressTask == nil, !isMutatingProject {
+                stage = .idle
+            }
             scheduleIndexRebuild()
         case .draft(let id, let draft):
-            guard let project = selectedProject, project.id == id else { return }
+            guard let project = selectedProject, project.id == id, draftTask == nil else {
+                return
+            }
             applyDraft(draft, fallback: project)
         case .deleted(let id):
             projects.removeAll { $0.id == id }
@@ -510,7 +519,8 @@ final class SEOAuditModel {
 
     private func run(project: SEOAuditProject, runID: UUID, urls: [URL]) {
         let request = SEOAuditTaskRequest(
-            projectID: project.id, runID: runID, urls: urls, lighthouse: lighthouseEnabled)
+            projectID: project.id, runID: runID, urls: urls,
+            lighthouse: lighthouseEnabled && lighthouseAvailable)
         stage = .auditing(current: 0, total: urls.count, url: "Queued in background")
         auditTask?.cancel()
         auditTask = launch { [weak self] in
@@ -646,7 +656,9 @@ final class SEOAuditModel {
         if let draft, !draft.discoveredPageURLs.isEmpty {
             discoveredPageURLs = draft.discoveredPageURLs
             selectedPageURLs = Set(draft.selectedPageURLs)
-            lighthouseEnabled = draft.includeLighthouse
+            lighthouseEnabled =
+                draft.includeLighthouse && (lighthouseAvailable || !lighthouseResolved)
+            draftApplied = true
         } else {
             discoveredPageURLs = SEOAuditSelection.knownPageURLs(in: fallback)
             selectedPageURLs = Set(discoveredPageURLs)
@@ -659,7 +671,10 @@ final class SEOAuditModel {
         let selected = discovered.filter { selectedPageURLs.contains($0) }
         let lighthouse = lighthouseEnabled
         draftTask?.cancel()
-        draftTask = launch { [service] in
+        draftSerial += 1
+        let serial = draftSerial
+        draftTask = launch { [service, weak self] in
+            defer { if self?.draftSerial == serial { self?.draftTask = nil } }
             guard var draft = try? await service.draft(id) else { return }
             draft.discoveredPageURLs = discovered
             draft.selectedPageURLs = selected
@@ -690,6 +705,14 @@ final class SEOAuditModel {
             guard projectsLoad.isCurrent(request) else { return }
             projects = value
             projectsLoad.complete(request)
+            if !lighthouseResolved {
+                lighthouseResolved = true
+                if !draftApplied {
+                    isApplyingDraft = true
+                    lighthouseEnabled = lighthouseAvailable
+                    isApplyingDraft = false
+                }
+            }
         } catch {
             projectsLoad.fail(request, error: error)
         }

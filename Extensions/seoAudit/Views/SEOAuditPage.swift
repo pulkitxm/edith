@@ -221,10 +221,12 @@ private struct SEOAuditNewProjectSheet: View {
             }
             HStack(spacing: UIScale.pt(10)) {
                 capability("Sitemap discovery", "point.3.connected.trianglepath.dotted", true)
-                capability(
-                    model.lighthouseAvailable
-                        ? "Lighthouse detected" : "Lighthouse not installed",
-                    "gauge.with.needle", model.lighthouseAvailable)
+                if model.lighthouseResolved {
+                    capability(
+                        model.lighthouseAvailable
+                            ? "Lighthouse detected" : "Lighthouse not installed",
+                        "gauge.with.needle", model.lighthouseAvailable)
+                }
             }
             HStack {
                 Button("Cancel") {

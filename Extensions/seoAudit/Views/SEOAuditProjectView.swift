@@ -169,7 +169,7 @@ struct SEOAuditProjectView: View {
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                 }
                 Spacer()
-                if !model.lighthouseAvailable {
+                if model.lighthouseResolved, !model.lighthouseAvailable {
                     Label("Lighthouse is not on PATH", systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: UIScale.pt(10), weight: .medium))
                         .foregroundStyle(DashSkin.warn)

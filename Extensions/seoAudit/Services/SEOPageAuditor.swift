@@ -210,7 +210,7 @@ enum SEOIssueAnalyzer {
         }
         if url.scheme?.lowercased() != "https", url.host != "localhost", url.host != "127.0.0.1" {
             issues.append(
-                issue("https", .error, "Page is not using HTTPS", "Serve public pages over HTTPS."))
+                issue("https", .error, "Page is not using HTTPS", "Serve pages over HTTPS."))
         }
         return issues
     }

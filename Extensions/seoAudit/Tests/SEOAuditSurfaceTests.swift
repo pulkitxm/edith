@@ -15,43 +15,43 @@ import Testing
             #expect(snapshot.sources.count == 2)
             #expect(fixture.service.jobCount == 0)
         }
-        fixture.tile.sourceIDs = [fixture.project.id.uuidString.lowercased()]
+        fixture.tile.sourceIDs = [fixture.project.id.uuidString]
         fixture.tile.itemLimit = 1
         fixture.tile.hiddenFields = ["pages", "metadata"]
         let selected = try await fixture.snapshot()
         #expect(
             selected.rows.count == 1
-                && selected.rows[0].sourceID == fixture.project.id.uuidString.lowercased())
+                && selected.rows[0].sourceID == fixture.project.id.uuidString)
         #expect(selected.rows[0].detail.isEmpty)
         #expect(!selected.metrics.contains { $0.id == "pages" })
-        fixture.tile.sourceIDs = [UUID().uuidString.lowercased()]
+        fixture.tile.sourceIDs = [UUID().uuidString]
         #expect(try await fixture.snapshot().rows.isEmpty)
         await fixture.service.shutdown()
     }
 
-    @Test func currentProjectActionsRespectSourceFiltersDeletionAndPrivacy() async throws {
+    @Test func rowsMatchTheOriginalProjectionAndAcceptUppercaseSourceIdentifiers() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let action = "open:" + fixture.project.id.uuidString.lowercased()
-        _ = try await fixture.action(action)
-        #expect(fixture.opened == [fixture.project.id])
-        for forged in [
-            "open:/tmp/private", "audit:https://example.invalid", "open:" + UUID().uuidString,
-        ] {
-            await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(forged) }
+        let all = try await fixture.snapshot()
+        #expect(all.metrics.map(\.title) == ["Projects", "Audited pages", "Issues"])
+        #expect(all.rows.allSatisfy { $0.icon == "globe" && $0.actions.isEmpty })
+        #expect(all.actions.isEmpty)
+        #expect(all.rows.allSatisfy { $0.value.hasSuffix("%") || $0.value == "Not run" })
+        fixture.tile.sourceIDs = [fixture.project.id.uuidString.uppercased()]
+        let selected = try await fixture.snapshot()
+        #expect(selected.rows.count == 1)
+        fixture.tile.sourceIDs = [UUID().uuidString]
+        let none = try await fixture.snapshot()
+        #expect(none.message == "No site audit projects in this selection.")
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await fixture.action("open:" + fixture.project.id.uuidString)
         }
-        fixture.tile.sourceIDs = [UUID().uuidString.lowercased()]
-        await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(action) }
         fixture.tile.sourceIDs = nil
         fixture.privacy = ["active": "1", "blurSiteAudit": "1", "blurShelf": "0"]
         let hidden = try await fixture.snapshot()
         #expect(hidden.rows.isEmpty && hidden.metrics.isEmpty && hidden.sources.isEmpty)
-        await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(action) }
         fixture.privacy = ["active": "1", "blurSiteAudit": "0"]
         #expect(try await fixture.snapshot().rows.count == 2)
-        try await fixture.service.delete(fixture.project.id)
-        await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(action) }
-        #expect(fixture.opened == [fixture.project.id])
         await fixture.service.shutdown()
     }
 
@@ -60,11 +60,9 @@ import Testing
         let project: SEOAuditProject
         let service: SEOAuditService
         var tile = SurfaceTile(.ability("seoAudit"))
-        var opened: [UUID?] = []
         var privacy: [String: String] = [:]
         lazy var surface = SEOAuditSurface(
-            service: service, open: { [weak self] id in self?.opened.append(id) },
-            privacy: { [weak self] in self?.privacy ?? [:] })
+            service: service, privacy: { [weak self] in self?.privacy ?? [:] })
         init() throws {
             let repository = SEOAuditRepository(root: root)
             let page = SEOAuditPageResult(
