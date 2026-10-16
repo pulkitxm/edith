@@ -129,7 +129,7 @@ import SwiftUI
             loaded.sessions.didRequestNavigation = {
                 [
                     weak manager, weak navigation, weak ownedMachines, weak ownedHerdr,
-                    weak ownedTerminal, weak notch
+                    weak ownedTerminal, weak notch, weak self
                 ]
                 request in
                 guard let manager, let navigation, let ownedMachines, let ownedHerdr,
@@ -155,6 +155,9 @@ import SwiftUI
                     try await ownedHerdr.open(request)
                 } else if request.extensionID == "terminal" {
                     try await ownedTerminal.open(request)
+                } else if request.extensionID == "studio", request.location == "settings" {
+                    guard let windows = self?.sectionWindows, windows.open("studio") != nil
+                    else { throw HostWorkerError.rejected }
                 } else {
                     try await navigation.navigate(
                         extensionID: request.extensionID, version: request.version,
@@ -217,6 +220,7 @@ import SwiftUI
                 HostRemoteSession.killAllForQuit()
                 services.killForQuit()
             }
+            delegate.preventsQuit = { await loaded.sessions.preventsQuit() }
             delegate.shutdown = {
                 await interactions.cancelPending()
                 let stops: [Task<Void, Never>] = [
