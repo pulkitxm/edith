@@ -19,7 +19,7 @@ struct HomebrewSurfaceTests {
         let snapshot = HomebrewSurface.snapshot(packages: packages, tile: tile)
         #expect(snapshot.metrics.map(\.value) == ["1", "1"])
         #expect(snapshot.rows.map(\.sourceID) == ["cask"])
-        #expect(snapshot.rows.first?.value == "1 to 2")
+        #expect(snapshot.rows.first?.detail == "1 to 2")
         #expect(snapshot.sources.map(\.id) == ["formula", "cask"])
         #expect(!snapshot.rows.flatMap(\.actions).contains { $0.id.contains("install") })
         _ = try SurfaceSnapshot.decode(snapshot.encoded(), providerID: "homebrew")
