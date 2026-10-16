@@ -223,7 +223,7 @@ jobs:
           if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
             || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
             || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-            command -v zig >/dev/null 2>&1 || brew install zig
+            source scripts/ci-setup-zig.sh
             make ghostty
           fi
       - name: Save validated libghostty
@@ -292,7 +292,7 @@ jobs:
           if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
             || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
             || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-            command -v zig >/dev/null 2>&1 || brew install zig
+            source scripts/ci-setup-zig.sh
             make ghostty
           fi
       - name: Save validated libghostty
@@ -489,7 +489,7 @@ jobs:
             if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
               || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
               || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-              command -v zig >/dev/null 2>&1 || brew install zig
+              source scripts/ci-setup-zig.sh
               make ghostty
             fi
           fi
