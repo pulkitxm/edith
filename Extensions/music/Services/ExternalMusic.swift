@@ -229,14 +229,19 @@ final class ExternalMusic {
         guard !effects.isInert else { return }
         if force { presentationSample = .distantPast; lastError = nil }
         if let task = presentationTask { await task.value; return }
-        guard let app = current?.app, Date().timeIntervalSince(presentationSample) >= 2 else {
-            return
-        }
+        guard Date().timeIntervalSince(presentationSample) >= 2,
+            current != nil || lastError == nil
+        else { return }
+        let apps = current.map { [$0.app] } ?? ExternalApp.allCases.filter(effects.isRunning)
+        guard !apps.isEmpty else { return }
         presentationSample = .now
         let token = generation
         let task = Task<Void, Never> { [weak self] in
             guard let self else { return }
-            await self.refreshPlayback(app: app)
+            for app in apps {
+                await self.refreshPlayback(app: app)
+                if self.current?.isPlaying == true || self.lastError != nil { break }
+            }
         }
         presentationTask = task
         await withTaskCancellationHandler(

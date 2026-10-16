@@ -44,6 +44,21 @@ enum HostLegacyMigration {
         "windowSweaters": "windowSweatersEnabled",
     ]
 
+    static let musicCompletedKey = "legacyMusicPlayerStateMigrated"
+    static let helperDomain = "com.pulkit.edith.helper.v2"
+    static let musicPlayerKeys = [
+        "musicVolume", "musicLooping", "musicShuffling", "musicLastTrack", "musicLastPosition",
+        "musicWasPlaying",
+    ]
+
+    static func migrateMusicPlayerState(defaults: UserDefaults, legacy: [String: Any]) {
+        guard !defaults.bool(forKey: musicCompletedKey) else { return }
+        defaults.set(true, forKey: musicCompletedKey)
+        for key in musicPlayerKeys where defaults.object(forKey: key) == nil {
+            if let value = legacy[key] { defaults.set(value, forKey: key) }
+        }
+    }
+
     @discardableResult
     static func migrate(
         defaults: UserDefaults, extensionIDs: Set<String>, downloadedIDs: Set<String>

@@ -265,28 +265,35 @@ struct EmbeddedMusicNotchScene: View {
     }
     @ViewBuilder private func glance(leading: Bool) -> some View {
         if let track = model.nowPlaying {
-            Button {
-                if leading { model.openNowPlayingLocation() } else { model.nowPlayingPlayPause() }
-            } label: {
-                HStack(spacing: 5) {
-                    if leading, let artwork = model.nowPlayingArtwork {
-                        Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                            .frame(width: 20, height: 20)
-                            .clipShape(RoundedRectangle(cornerRadius: 4)).presenterCover(
-                                model.hidden)
-                    } else {
-                        EmbeddedPlaybackWave(
-                            playing: track.isPlaying, color: .white.opacity(0.85), barCount: 4
-                        ).frame(width: 20)
-                    }
-                }.foregroundStyle(.white.opacity(0.85))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
-            }.buttonStyle(.edith(.borderless)).help(track.title)
-                .accessibilityLabel(track.title + ", " + (track.isPlaying ? "Playing" : "Paused"))
-                .disabled(!route.request.tile.showActions || model.hidden)
+            if leading {
+                glanceLabel(track, leading: true)
+                    .help("Now playing").accessibilityLabel("Now playing, ")
+            } else {
+                Button {
+                    model.nowPlayingPlayPause()
+                } label: {
+                    glanceLabel(track, leading: false)
+                }.buttonStyle(.edith(.borderless)).help("Now playing")
+                    .accessibilityLabel("Now playing, ")
+                    .disabled(!route.request.tile.showActions || model.hidden)
+            }
         } else {
             Color.clear
         }
+    }
+    private func glanceLabel(_ track: EmbeddedNotchNowPlaying, leading: Bool) -> some View {
+        HStack(spacing: 5) {
+            if leading, let artwork = model.nowPlayingArtwork {
+                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: 20, height: 20)
+                    .clipShape(RoundedRectangle(cornerRadius: 4)).presenterCover(model.hidden)
+            } else {
+                EmbeddedPlaybackWave(
+                    playing: track.isPlaying, color: .white.opacity(0.85), barCount: 4
+                ).frame(width: 20)
+            }
+        }.foregroundStyle(.white.opacity(0.85))
+            .frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
     }
     private var emptyCard: some View {
         VStack(spacing: 5) {

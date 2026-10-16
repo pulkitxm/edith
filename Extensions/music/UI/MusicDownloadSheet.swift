@@ -87,7 +87,9 @@ struct EmbeddedDownloadSheet: View {
         .pageTask {
             downloader.checkAvailability(); await downloader.refresh()
         }
-        .pageRefresh(interval: { .seconds(1) }) { await downloader.refresh() }
+        .pageRefresh(interval: { downloader.isRunning ? .milliseconds(250) : .seconds(1) }) {
+            await downloader.refresh()
+        }
         .alert(
             "Download request failed",
             isPresented: Binding(
