@@ -97,6 +97,7 @@ import Foundation
             panel.allowsMultipleSelection = false; panel.canCreateDirectories = true
             panel.directoryURL = MusicStorage.musicDir
             self.panel = panel
+            panel.level = .modalPanel; NSApp.activate(ignoringOtherApps: true)
             defer { self.panel = nil }
             let response = await withTaskCancellationHandler {
                 await panel.begin()
