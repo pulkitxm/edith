@@ -91,14 +91,14 @@ enum DocsFixture {
     @Test func everyBundledCommandResolvesToADocumentedSection() throws {
         let library = DocsFixture.library
         let leaves = library.commands.map(\.path)
+        #expect(leaves.count > 400)
         #expect(
-            Set(leaves)
-                == Set([
-                    "ed extensions", "ed extensions ls", "ed extensions info",
-                    "ed extensions install",
-                    "ed extensions update", "ed extensions enable", "ed extensions disable",
-                    "ed extensions remove", "ed invoke",
-                ]))
+            Set(leaves).isSuperset(of: [
+                "ed extensions", "ed extensions ls", "ed extensions info",
+                "ed extensions install", "ed extensions update", "ed extensions enable",
+                "ed extensions disable", "ed extensions remove", "ed invoke", "ed docs ask",
+                "ed studio run", "ed database query", "ed machines docker ps",
+            ]))
         for leaf in leaves {
             let location = try #require(library.location(forCommand: leaf), "\(leaf) has no page")
             let page = try #require(library.page(location.path), "\(leaf) points at no page")
