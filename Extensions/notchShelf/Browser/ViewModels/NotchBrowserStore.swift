@@ -673,7 +673,10 @@ final class NotchBrowserStore {
     func policy(for action: WKNavigationAction, in webView: WKWebView) -> WKNavigationActionPolicy {
         guard permitsNativeNavigation, tab(for: webView) != nil else { return .cancel }
         guard let url = action.request.url else { return .cancel }
-        guard Self.permittedURL(url, remote: remote != nil) else { return .cancel }
+        guard Self.permittedURL(url, remote: remote != nil) else {
+            NSWorkspace.shared.open(url)
+            return .cancel
+        }
         if action.shouldPerformDownload { return .download }
         let wantsNewTab =
             action.navigationType == .linkActivated

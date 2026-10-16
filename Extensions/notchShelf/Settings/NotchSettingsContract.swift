@@ -48,6 +48,7 @@ enum NotchSettingsSchema {
         AppStorageKeys.Notch.alertPower: "1",
         AppStorageKeys.Notch.alertBattery: "1",
         AppStorageKeys.Notch.alertBluetooth: "0",
+        AppStorageKeys.Notch.audioMixerEnabled: "0",
     ]
 
     static func accepts(_ key: String, value: String) -> Bool {

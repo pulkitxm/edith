@@ -2,6 +2,7 @@ import AVFoundation
 import AppKit
 import CoreImage
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 
 struct NotchCameraDevice: Codable, Equatable, Sendable, Identifiable {
@@ -19,7 +20,7 @@ struct NotchCameraState: Codable, Sendable {
 
 struct NotchCameraRequest: Codable, Sendable {
     enum Operation: String, Codable, Sendable {
-        case read, start, select, permission, privacy, stop
+        case read, start, select, permission, privacy, overview, stop
     }
     let identity: NotchPanelIdentity
     let displayID: UInt32
@@ -61,6 +62,10 @@ struct NotchCameraRequest: Codable, Sendable {
             guard !stopped, generation == token else { throw CancellationError() }
             if authorized { try await start(deviceID: nil) }
         case .privacy: try hardware.privacy()
+        case .overview:
+            SharedDefaults.store.set("permissions", forKey: AppStorageKeys.General.settingsTab)
+            SharedDefaults.store.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
+            ExtensionPresentation.showWindow()
         case .stop: stopCapture()
         case .start, .select:
             try await start(deviceID: request.deviceID)

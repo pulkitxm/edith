@@ -16,6 +16,7 @@ final class ExtensionRuntime: NSObject {
     private var worker: ClipboardWorker?
     private var presentation: ClipboardPresentation?
     private var uiConfigured = false
+    private var uiLocation: String?
     private var surface: ClipboardSurface?
     private var settingsObserver: NSObjectProtocol?
     private var backup: ClipboardBackupProvider?
@@ -171,7 +172,7 @@ final class ExtensionRuntime: NSObject {
             defer { uiDrains[id] = nil }
             await owner.stopAndWait()
         }
-        presentation = nil
+        presentation = nil; uiLocation = nil
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -212,6 +213,7 @@ final class ExtensionRuntime: NSObject {
                 })
             }
             uiConfigured = true
+            uiLocation = input["location"] as? String
         case "stopUI":
             retireUI()
             return ["ok": true] as NSDictionary
@@ -294,6 +296,13 @@ final class ExtensionRuntime: NSObject {
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let presentation, !presentation.stopped else {
                 return ["ok": false] as NSDictionary
+            }
+            if uiLocation == "notch" {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        ClipboardNotchList(
+                            history: presentation.history, available: presentation.available)
+                    })
             }
             return NSHostingController(
                 rootView: ExtensionPageHost {

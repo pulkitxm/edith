@@ -149,7 +149,7 @@ struct NotchRemoteCameraTab: View {
                         Button("Allow Camera") { model.perform(.permission) }.buttonStyle(
                             .edith(.primary)
                         ).controlSize(.small)
-                        Button("All Permissions") { model.perform(.privacy) }.buttonStyle(
+                        Button("All Permissions") { model.perform(.overview) }.buttonStyle(
                             .edith(.borderless)
                         )
                         .font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))

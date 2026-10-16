@@ -227,7 +227,10 @@ final class NotchShelfController {
     var visibleTabs: [NotchTab] {
         SurfaceNotchTab.visible(
             layout: surfaceLayout, activeIDs: activeIDs,
-            browserEnabled: browser != nil || browserEngine != nil)
+            browserEnabled: browser != nil || browserEngine != nil
+        ).filter {
+            $0 != .audio || context.defaults.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled)
+        }
     }
 
     func synchronize() {
@@ -391,6 +394,18 @@ final class NotchShelfController {
             return
         }
         guard NotchAlertLogic.shouldPreempt(current: currentAlert, incoming: alert) else { return }
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
+    }
+
+    func presentFailure(_ alert: NotchAlert) {
+        if currentAlert?.id == alert.id, currentAlert?.subtitle == alert.subtitle { return }
+        guard !alertsEnabled else {
+            postAlert(alert)
+            return
+        }
         alertPinned = false
         currentAlert = alert
         syncFrames()
