@@ -363,6 +363,18 @@ final class NotchShelfController {
         scheduleAlertHide(after: alert.autoHide)
     }
 
+    func presentFailure(_ alert: NotchAlert) {
+        if currentAlert?.id == alert.id, currentAlert?.subtitle == alert.subtitle { return }
+        guard !alertsEnabled else {
+            postAlert(alert)
+            return
+        }
+        alertPinned = false
+        currentAlert = alert
+        syncFrames()
+        scheduleAlertHide(after: alert.autoHide)
+    }
+
     private func flushPendingAlert() {
         guard !isExpanded, currentAlert == nil else { return }
         let (next, rest) = NotchAlertLogic.dequeue(pendingAlerts, now: Date())
