@@ -13,14 +13,14 @@ import Testing
             $0.notchExpandPermissions = false
             $0.notchPrioritizePermissions = false
         }
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         #expect(fixture.controller.leadingGlance == nil)
         #expect(fixture.controller.trailingGlance?.source == .clock)
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .files }
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         #expect(fixture.controller.leadingGlance?.value == "0")
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .nextMeeting }
-        #expect(fixture.controller.glanceProviderIDs == ["calendar"])
+        #expect(fixture.controller.glanceProviderIDs == ["calendar", "herdr"])
     }
 
     @Test func liveSnapshotIsClearedImmediatelyOnDisableOrPrivacyChange() throws {
@@ -147,8 +147,8 @@ import Testing
         #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         let snapshot = SurfaceSnapshot(
             providerID: "herdr",
-            metrics: [.init("permissions", "Permissions", "1")],
-            rows: [.init("synthetic-request", title: "Synthetic tool", field: "approvals")])
+            rows: [.init("synthetic-request", title: "Synthetic tool", field: "approvals")],
+            facts: ["permissions": 1])
         fixture.controller.recordSurfaceSnapshot(snapshot)
         #expect(fixture.controller.isExpanded)
         #expect(fixture.controller.activeTab == .agents)
@@ -157,10 +157,36 @@ import Testing
         #expect(!fixture.controller.isExpanded)
         fixture.controller.layoutEditing = true
         fixture.controller.recordSurfaceSnapshot(
-            .init(
-                providerID: "herdr",
-                metrics: [.init("permissions", "Permissions", "2")]))
+            .init(providerID: "herdr", facts: ["permissions": 2]))
         #expect(!fixture.controller.isExpanded)
+    }
+
+    @Test func pendingPermissionsInsertTheAgentsTabAndExpandAfterEditing() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.controller.layouts.update(.notch) {
+            $0.hiddenTabs = ["agents"]
+            $0.notchExpandPermissions = true
+            $0.notchPrioritizePermissions = true
+        }
+        #expect(!fixture.controller.visibleTabs.contains(.agents))
+        fixture.controller.layoutEditing = true
+        fixture.controller.recordSurfaceSnapshot(
+            .init(providerID: "herdr", facts: ["permissions": 3]))
+        #expect(fixture.controller.pendingPermissions == 0)
+        try fixture.state.publish([
+            "surface.activeIDs": "[\"notchShelf\",\"herdr\"]",
+            "surface.activeVersions": "{\"notchShelf\":\"1\",\"herdr\":\"1\"}",
+        ])
+        fixture.controller.synchronize()
+        fixture.controller.recordSurfaceSnapshot(
+            .init(providerID: "herdr", facts: ["permissions": 3]))
+        #expect(fixture.controller.pendingPermissions == 3)
+        #expect(fixture.controller.visibleTabs.contains(.agents))
+        #expect(!fixture.controller.isExpanded)
+        fixture.controller.layoutEditing = false
+        #expect(fixture.controller.isExpanded)
+        #expect(fixture.controller.activeTab == .agents)
     }
 
     @Test func savedMusicPreferenceClearsGlancesAndRejectsLateProviderData() async throws {
@@ -185,7 +211,7 @@ import Testing
         let request = NotchPreferenceRequest(key: AppStorageKeys.Notch.shelfShowMusic, value: "0")
         _ = try await fixture.controller.execute(
             "notch.settings.write", payload: JSONEncoder().encode(request))
-        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.glanceProviderIDs == ["herdr"])
         #expect(fixture.controller.leadingGlance == nil)
         #expect(fixture.controller.surfaceSnapshots["music"] == nil)
         fixture.controller.recordSurfaceSnapshot(snapshot)

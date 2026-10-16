@@ -44,6 +44,11 @@ final class NotchShelfController {
         didSet {
             homeContentHeight = nil
             updatePanelFrames()
+            if !layoutEditing, surfaceLayout.notchExpandPermissions, pendingPermissions > 0 {
+                expand(
+                    on: expandedDisplay ?? builtinDisplayID ?? CGMainDisplayID(),
+                    preferredTab: .agents)
+            }
         }
     }
     private var homeContentHeight: CGFloat?
@@ -56,6 +61,7 @@ final class NotchShelfController {
     private(set) var activeIDs: Set<String> = []
     private(set) var surfaceSnapshots: [String: SurfaceSnapshot] = [:]
     private(set) var glanceNow = Date()
+    private var knownApprovalIDs: Set<String> = []
     private var glanceTask: Task<Void, Never>?
     private var glanceClockTask: Task<Void, Never>?
     private var lastGlanceWidth: CGFloat = 0
@@ -225,9 +231,17 @@ final class NotchShelfController {
         return layout
     }
     var visibleTabs: [NotchTab] {
-        SurfaceNotchTab.visible(
+        var tabs = SurfaceNotchTab.visible(
             layout: surfaceLayout, activeIDs: activeIDs,
             browserEnabled: browser != nil || browserEngine != nil)
+        if !tabs.isEmpty,
+            (pendingPermissions > 0 && surfaceLayout.notchPrioritizePermissions)
+                || activeTab == .agents,
+            !tabs.contains(.agents)
+        {
+            tabs.insert(.agents, at: min(1, tabs.count))
+        }
+        return tabs
     }
 
     func synchronize() {
@@ -265,25 +279,17 @@ final class NotchShelfController {
             snapshot.providerID != "music" || musicGlancesEnabled,
             !privacy.hides(Self.glanceWidget(snapshot.providerID))
         else { return }
-        let previous = surfaceSnapshots[snapshot.providerID]
+        let previousPending = pendingPermissions
         surfaceSnapshots[snapshot.providerID] = snapshot
-        let pending = Int(snapshot.metrics.first { $0.id == "permissions" }?.value ?? "") ?? 0
-        let previousPending =
-            Int(previous?.metrics.first { $0.id == "permissions" }?.value ?? "") ?? 0
+        guard snapshot.providerID == "herdr" else { return }
         let requestIDs = Set(snapshot.rows.filter { $0.field == "approvals" }.map(\.id))
-        let previousIDs = Set(previous?.rows.filter { $0.field == "approvals" }.map(\.id) ?? [])
-        if snapshot.providerID == "herdr", surfaceLayout.notchExpandPermissions,
-            pending > 0, pending > previousPending || !requestIDs.subtracting(previousIDs).isEmpty,
-            !layoutEditing, visibleTabs.contains(.agents)
+        let newRequests = requestIDs.subtracting(knownApprovalIDs)
+        knownApprovalIDs = requestIDs
+        if surfaceLayout.notchExpandPermissions, !layoutEditing,
+            !newRequests.isEmpty || pendingPermissions > previousPending
         {
             expand(
                 on: expandedDisplay ?? builtinDisplayID ?? CGMainDisplayID(), preferredTab: .agents)
-        }
-        if snapshot.providerID == "herdr", surfaceLayout.notchPrioritizePermissions, !layoutEditing,
-            let count = snapshot.metrics.first(where: { $0.id == "permissions" })?.value,
-            let pending = Int(count), pending > 0, visibleTabs.contains(.agents)
-        {
-            if let display = expandedDisplay { expand(on: display, preferredTab: .agents) }
         }
     }
 
@@ -337,6 +343,7 @@ final class NotchShelfController {
         tile.itemLimit = 1
         tile.hiddenFields = []
         if widget == .agents {
+            tile.itemLimit = 20
             tile.sourceIDs = surfaceLayout.notchAgentSources
             tile.includeSubagents = surfaceLayout.notchIncludeSubagents
         }
@@ -780,7 +787,7 @@ final class NotchShelfController {
         guard let screenSize else { return requested }
         return CGSize(
             width: min(requested.width, screenSize.width - 48),
-            height: min(requested.height, screenSize.height - (activeTab == .browser ? 12 : 48)))
+            height: min(requested.height, screenSize.height - 48))
     }
 
     private func applyExactFrame(_ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID) {
@@ -975,6 +982,10 @@ final class NotchShelfController {
         gateDisplay = id
         if let preferredTab {
             activeTab = preferredTab
+        } else if expandedDisplay == nil, surfaceLayout.notchPrioritizePermissions,
+            pendingPermissions > 0
+        {
+            activeTab = .agents
         }
         guard expandedDisplay != id else { syncFrames(); return }
         hoverDisplay = nil

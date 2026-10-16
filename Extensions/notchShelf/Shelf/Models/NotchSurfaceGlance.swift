@@ -177,9 +177,7 @@ extension NotchShelfController {
                 default: nil
                 }
             })
-        if surfaceLayout.notchExpandPermissions || surfaceLayout.notchPrioritizePermissions {
-            providers.insert("herdr")
-        }
+        providers.insert("herdr")
         if !musicGlancesEnabled { providers.remove("music") }
         return providers
     }
@@ -196,6 +194,7 @@ extension NotchShelfController {
     }
 
     var nowPlaying: Bool { glanceContext.hasMusic }
+    var pendingPermissions: Int { Int(glanceFacts("herdr")?["permissions"] ?? 0) }
 
     var glanceContext: NotchGlanceContext {
         var context = NotchGlanceContext()
