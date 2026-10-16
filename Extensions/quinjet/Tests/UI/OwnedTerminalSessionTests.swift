@@ -227,6 +227,35 @@ import Testing
                 + Data("\u{1b}[0m".utf8))
     }
 
+    @Test func reattachingAfterLongUnreadOutputResumesFromRetainedTail() async throws {
+        let script =
+            "import os, time; data = b'y' * (1024 * 1024) + b'TAIL';\nwhile data:\n data = data[os.write(1, data):]\ntime.sleep(30)\n"
+        let session = try OwnedTerminalSession(
+            launch: .init(
+                executable: "/usr/bin/python3", arguments: ["-c", script],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp", allowsLocalFileLinks: true,
+                resetTerminalAfterInterrupt: false))
+        defer { session.stop() }
+        let first = try client(session)
+        var cursor: UInt64 = 0
+        for _ in 0..<8 { cursor = try await first.read(after: cursor).nextOffset }
+        first.stop()
+        try await Task.sleep(for: .seconds(2.5))
+        let second = try client(session)
+        defer { second.stop() }
+        var bytes = Data()
+        cursor = 0
+        let deadline = ContinuousClock.now + .seconds(20)
+        while ContinuousClock.now < deadline {
+            let output = try await second.read(after: cursor)
+            bytes.append(output.bytes)
+            cursor = output.nextOffset
+            if bytes.suffix(4) == Data("TAIL".utf8) { break }
+        }
+        #expect(bytes.suffix(4) == Data("TAIL".utf8))
+    }
+
     @Test func largeNativePasteWaitsForRealPTYInputBackpressure() async throws {
         let script =
             "import os, tty, time; tty.setraw(0); os.write(1, b'ready'); time.sleep(0.2); data = b'';\nwhile len(data) < 65536:\n data += os.read(0, 65536-len(data))\nwhile data:\n data = data[os.write(1, data):]\n"
@@ -312,7 +341,7 @@ import Testing
         let invalid = try OwnedTerminalClient(descriptor: descriptor) { _, _ in
             try JSONEncoder().encode(
                 OwnedTerminalPTY.Output(
-                    bytes: Data([65]), nextOffset: 2, exitCode: nil, canonical: false, echo: true))
+                    bytes: Data([65]), nextOffset: 0, exitCode: nil, canonical: false, echo: true))
         }
         await #expect(throws: ExtensionPeerError.self) { try await invalid.read(after: 0) }
         invalid.stop()

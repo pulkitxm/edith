@@ -26,7 +26,7 @@ struct QuinjetPage: View {
                 }
             }
         }
-        .presenterCover(model.hidesReview, dark: scheme == .dark)
+        .presenterCover(model.hidesReview)
         .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
@@ -413,6 +413,7 @@ private struct QuinjetTerminalWorkspace: View {
                 worktrees: model.recentWorktrees(for: tab),
                 selectedPath: tab.worktree?.path,
                 select: { worktree in
+                    tab.showsWorktrees = false
                     QuinjetWorkOwnership.start {
                         _ = try? await model.performSessionOperation(
                             QuinjetSessionRequest(
