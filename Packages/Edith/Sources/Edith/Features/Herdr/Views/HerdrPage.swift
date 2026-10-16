@@ -747,7 +747,7 @@ struct HerdrPage: View {
                 HStack(spacing: UIScale.pt(6)) {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                         .foregroundStyle(
-                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                            agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.kind)
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     Spacer(minLength: 0)
@@ -1000,7 +1000,7 @@ struct HerdrPage: View {
             HStack(alignment: .top, spacing: UIScale.pt(8)) {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                     .foregroundStyle(
-                        agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark)
+                        agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)
                     )
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -1175,7 +1175,7 @@ enum HerdrStatusColor {
     }
 
     static func tone(_ agent: HerdrAgent, dark: Bool) -> Color {
-        agent.isTerminal ? DashSkin.gold : color(agent.status, dark: dark)
+        agent.isTerminal ? DashSkin.accent(dark) : color(agent.status, dark: dark)
     }
 
     static func fill(_ agent: HerdrAgent, dark: Bool, selected: Bool) -> Color {

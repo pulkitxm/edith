@@ -32,7 +32,8 @@ final class StatusItemPanel {
                 .font(.system(size: NSFont.systemFontSize))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .frame(width: 310))
+                .frame(width: 310)
+                .themedControls())
         view.frame.size = view.fittingSize
         readings.isEnabled = false
         readings.view = view
