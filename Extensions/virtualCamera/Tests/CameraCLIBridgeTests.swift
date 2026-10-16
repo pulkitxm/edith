@@ -68,6 +68,30 @@ import Testing
             }
         }
     }
+    @Test func livePreviewFramesAndReleaseNeverPersistOrKeepTheCameraLeased() async throws {
+        try await fixture { worker, defaults in
+            let stored = worker.engine.snapshot().state
+            var edited = stored
+            edited.composition.framing.zoom = 2
+            let reply = try await worker.ui.execute(
+                "camera.ui.preview", payload: JSONEncoder().encode(edited))
+            #expect(reply == Data("{}".utf8))
+            #expect(worker.engine.snapshot().state == stored)
+            #expect(VirtualCameraStore.load(defaults) == stored)
+            let frame = try JSONDecoder().decode(
+                CameraUIFrame.self,
+                from: await worker.ui.execute(
+                    "camera.ui.frame", payload: JSONSerialization.data(withJSONObject: ["after": -1])
+                ))
+            #expect(frame.preview == nil)
+            await #expect(throws: ExtensionPeerError.self) {
+                _ = try await worker.ui.execute(
+                    "camera.ui.frame", payload: Data("{\"other\":1}".utf8))
+            }
+            let release = try await worker.ui.execute("camera.ui.release", payload: Data("{}".utf8))
+            #expect(release == Data("{}".utf8))
+        }
+    }
     private func fixture(_ body: (CameraAppWorker, UserDefaults) async throws -> Void) async throws
     {
         let suite = "synthetic.camera.cli." + UUID().uuidString

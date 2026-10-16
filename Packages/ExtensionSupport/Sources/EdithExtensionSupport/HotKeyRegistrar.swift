@@ -96,4 +96,5 @@ public enum HotKeyCatalog {
     public static let micMute = "micMute"
     public static let presenter = "presenter"
     public static let keystrokeHighlight = "keystrokeHighlight"
+    public static let virtualCamera = "virtualCamera"
 }

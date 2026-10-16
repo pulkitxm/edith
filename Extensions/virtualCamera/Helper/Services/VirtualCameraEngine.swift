@@ -214,6 +214,13 @@ final class VirtualCameraEngine {
         }
     }
 
+    func previewComposition(_ composition: VirtualCameraComposition) {
+        guard !isStopped, !draining else { return }
+        var shadow = effectiveState()
+        shadow.composition = composition
+        pipeline.update(state: shadow.sanitized())
+    }
+
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
         guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         guard request.changesState else { return snapshot() }

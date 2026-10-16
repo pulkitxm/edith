@@ -760,11 +760,11 @@
       "sources": [
         {
           "path": "Extensions/virtualCamera/Runtime.swift",
-          "sha256": "b782562942070b8caa682b0484ddb27e80c520148559637ac8c2b86785f2cc3c"
+          "sha256": "f35e6e4df4f3ea6a5d086dd6125b9cf36e3e319fb4043aa602131d07171f743f"
         },
         {
           "path": "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-          "sha256": "9e0eedeca249edeefd1f22cc1e3017dcd8c5ea4de47bed662ea24d45a582025e"
+          "sha256": "99f6cbce0e10c0222ccfa8d8ab6f4ccf316065e9d56b6a16555b7593069e7d06"
         }
       ]
     },
