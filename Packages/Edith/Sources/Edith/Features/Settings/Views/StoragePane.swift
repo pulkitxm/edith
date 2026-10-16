@@ -174,7 +174,7 @@ struct StorageRow: View {
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                             .frame(width: UIScale.pt(10))
-                        Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                        StorageItemIcon(item: usage.item, color: color)
                         Text(usage.item.title).font(.edithText(.callout)).lineLimit(1)
                         Spacer(minLength: UIScale.pt(8))
                         Text(StorageFormat.share(usage.bytes.allocated, of: total))
@@ -202,11 +202,59 @@ struct StorageRow: View {
             .padding(.vertical, UIScale.pt(6))
             if expanded {
                 StorageRowDetails(usage: usage, contents: contents)
-                    .padding(.leading, UIScale.pt(38))
+                    .padding(.leading, UIScale.pt(54))
                     .padding(.bottom, UIScale.pt(10))
                     .transition(.opacity)
             }
         }
+    }
+}
+
+struct StorageItemIcon: View {
+    static let symbols: [String: String] = [
+        "machines": "server.rack",
+        "database": "cylinder.fill",
+        "clipboard": "doc.on.clipboard",
+        "usage": "chart.bar.fill",
+        "attention": "hourglass",
+        "music": "music.note",
+        "studio": "wand.and.stars",
+        "videoProjects": "film",
+        "virtualCamera": "web.camera",
+        "seoAudit": "doc.text.magnifyingglass",
+        "codeStats": "chart.line.uptrend.xyaxis",
+        "latex": "doc.richtext",
+        "plugins": "square.stack.3d.up",
+        "shelf": "tray.full",
+        "tools": "terminal",
+        "snapshots": "clock.arrow.circlepath",
+        "notchBrowser": "globe",
+        "selected-music-directory": "music.note.list",
+        "store": "cylinder.split.1x2",
+        "cache": "archivebox",
+        "logs-preferences": "gearshape",
+        "other": "folder",
+    ]
+
+    let item: StorageItem
+    let color: Color
+
+    var body: some View {
+        Group {
+            if item.id == "app", let bundle = item.roots.first {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: bundle.path))
+                    .resizable().interpolation(.high)
+            } else {
+                Image(systemName: Self.symbols[item.id] ?? "folder")
+                    .font(.edithText(.callout).weight(.medium))
+                    .foregroundStyle(color)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        color.opacity(0.16), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+            }
+        }
+        .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+        .accessibilityHidden(true)
     }
 }
 
@@ -225,9 +273,10 @@ struct StorageRowDetails: View {
                         .font(.edithText(.caption).weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(contents) { entry in
                         HStack(spacing: UIScale.pt(8)) {
-                            Image(systemName: entry.isDirectory ? "folder" : "doc")
-                                .font(.edithText(.caption)).foregroundStyle(.secondary)
-                                .frame(width: UIScale.pt(14))
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
+                                .resizable().interpolation(.high)
+                                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+                                .accessibilityHidden(true)
                             Text(entry.url.lastPathComponent)
                                 .font(.edithText(.callout)).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: UIScale.pt(8))
@@ -279,7 +328,7 @@ struct StorageRowDetails: View {
 
 struct StorageBar: View {
     static let palette: [Color] = [.blue, .green, .orange, .purple, .pink]
-    static let otherColor = Color.gray.opacity(0.5)
+    static let otherColor = Color.gray
 
     static func color(at index: Int) -> Color {
         index < palette.count ? palette[index] : otherColor

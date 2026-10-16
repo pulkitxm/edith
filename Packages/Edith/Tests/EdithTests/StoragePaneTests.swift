@@ -118,6 +118,15 @@ struct StoragePaneTests {
         }
     }
 
+    @Test func everyStorageItemHasItsOwnIcon() throws {
+        let fixture = try StorageFixture()
+        defer { fixture.clean() }
+        let outside = try fixture.file("Tracks/song.m4a", count: 10).deletingLastPathComponent()
+        let ids = fixture.inventory(selectedMusic: outside).items.map(\.id).filter { $0 != "app" }
+        #expect(ids.allSatisfy { StorageItemIcon.symbols[$0] != nil })
+        #expect(Set(StorageItemIcon.symbols.keys) == Set(ids))
+    }
+
     @Test func togglingCollapsesAndRefreshReloadsOpenContents() async throws {
         let fixture = try StorageFixture()
         defer { fixture.clean() }
