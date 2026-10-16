@@ -6,6 +6,7 @@ import SwiftUI
 struct CalendarUISceneRoute: Equatable {
     enum Location: String {
         case main
+        case settings
         case home
         case notch
     }
@@ -15,7 +16,7 @@ struct CalendarUISceneRoute: Equatable {
 
     var target: SurfaceTarget? {
         switch location {
-        case .main: nil
+        case .main, .settings: nil
         case .home: .home
         case .notch: .notch
         }
@@ -31,7 +32,7 @@ struct CalendarUISceneRoute: Equatable {
             let raw = context["location"] as? String, let location = Location(rawValue: raw)
         else { return nil }
         self.location = location
-        if location == .main {
+        if location == .main || location == .settings {
             guard context["tile"] == nil, context["target"] == nil else { return nil }
             tile = nil
         } else {
@@ -61,11 +62,11 @@ final class CalendarUIPresentation {
         self.init(
             facade: CalendarUIFacade(
                 client: client,
-                navigation: route.location == .main
+                navigation: route.location == .main || route.location == .settings
                     ? nil
                     : CalendarNavigationRequest(
                         presentationID: client.presentationID, location: route.location.rawValue),
-                memory: .shared),
+                memory: .shared, resetsPagination: route.location == .main),
             route: route)
     }
 
@@ -86,6 +87,10 @@ final class CalendarUIPresentation {
         case .main:
             return CalendarPresentationController(
                 facade: facade, rootView: ExtensionPageHost { CalendarPage(store: facade) })
+        case .settings:
+            return CalendarPresentationController(
+                facade: facade, rootView: ExtensionPageHost { CalendarSettingsScene(store: facade) }
+            )
         case .home:
             guard let tile = route.tile else { return nil }
             return CalendarPresentationController(

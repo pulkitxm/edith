@@ -215,6 +215,10 @@ public final class CalendarStore: FeatureModule {
         }
     }
 
+    public func resetPagination() {
+        pagination = CalendarEventPagination()
+    }
+
     public func loadMore() {
         guard !stopped, pagination.loadMore() else { return }
         appendPage()

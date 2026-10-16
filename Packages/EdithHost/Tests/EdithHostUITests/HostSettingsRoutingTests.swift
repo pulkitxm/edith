@@ -69,6 +69,15 @@ import Testing
         }
     }
 
+    @Test func calendarOwnsASettingsSceneOnlyWhileItsEngineIsActive() throws {
+        let active = try #require(
+            request("calendar", installed: package("calendar"), state: .active, version: "1.0.0"))
+        #expect(active.section == "calendar" && active.location == "settings")
+        #expect(
+            request("calendar", installed: package("calendar"), state: .disabled, version: nil)
+                == nil)
+    }
+
     @Test(arguments: [
         "herdr", "machines", "database", "docs", "unknown",
     ])

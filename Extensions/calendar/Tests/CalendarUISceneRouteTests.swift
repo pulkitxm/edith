@@ -27,6 +27,16 @@ import Testing
         }
     }
 
+    @Test func settingsRouteNeedsNoTileOrTarget() throws {
+        let settings: NSDictionary = ["section": "calendar", "location": "settings"]
+        let route = try #require(CalendarUISceneRoute(context: settings))
+        #expect(route.location == .settings && route.target == nil && route.tile == nil)
+        let tiled: NSDictionary = [
+            "section": "calendar", "location": "settings", "target": "home",
+        ]
+        #expect(CalendarUISceneRoute(context: tiled) == nil)
+    }
+
     @Test func malformedOrHiddenTilesCannotBecomeNativeScenes() throws {
         var tile = SurfaceTile(.calendar)
         tile.hidden = true

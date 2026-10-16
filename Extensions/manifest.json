@@ -483,6 +483,7 @@
         "Extensions/calendar/Views/CalendarUIPresentation.swift",
         "Extensions/calendar/Views/CalendarPage.swift",
         "Extensions/calendar/Views/CalendarNotchScene.swift",
+        "Extensions/calendar/Views/CalendarSettingsScene.swift",
         "Extensions/calendar/Views/HomeMeetingsCard.swift",
         "Extensions/calendar/CLI/CalendarCommands.swift",
         "Extensions/calendar/CLI/CalendarCLICatalog.swift",

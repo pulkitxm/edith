@@ -16,6 +16,7 @@ final class CalendarUIFacade {
     private let invalidate: () -> Void
     private let navigation: CalendarNavigationRequest?
     private let memory: CalendarUISnapshotMemory?
+    private let resetsPagination: Bool
     private var stopped = false
     private let commandTasks = CalendarUITaskOwner()
     private var generation: UInt64 = 0
@@ -24,18 +25,19 @@ final class CalendarUIFacade {
 
     convenience init(
         client: ExtensionEngineClient, navigation: CalendarNavigationRequest? = nil,
-        memory: CalendarUISnapshotMemory? = nil
+        memory: CalendarUISnapshotMemory? = nil, resetsPagination: Bool = false
     ) {
         self.init(
             invoke: { try await client.invoke($0, payload: $1) }, invalidate: client.invalidate,
-            navigation: navigation, memory: memory)
+            navigation: navigation, memory: memory, resetsPagination: resetsPagination)
     }
 
     init(
         invoke: @escaping (String, Data) async throws -> Data,
         invalidate: @escaping () -> Void = {}, navigation: CalendarNavigationRequest? = nil,
-        memory: CalendarUISnapshotMemory? = nil
+        memory: CalendarUISnapshotMemory? = nil, resetsPagination: Bool = false
     ) {
+        self.resetsPagination = resetsPagination
         self.invoke = invoke
         self.invalidate = invalidate
         self.navigation = navigation
@@ -48,6 +50,7 @@ final class CalendarUIFacade {
     }
 
     private func observeWork() async {
+        if resetsPagination { _ = try? await invoke("calendar.ui.reset", Data("{}".utf8)) }
         await read("calendar.ui.metadata")
         await refreshAndWait()
         while !stopped && !Task.isCancelled {
