@@ -250,12 +250,12 @@ private struct DockerContainerRow: View {
             if density.showsPorts {
                 portsView.frame(width: UIScale.pt(160), alignment: .leading)
             }
-            Text(container.cpuPercent.map { String(format: "%.1f%%", $0) } ?? ",")
+            Text(container.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "\u{2014}")
                 .font(DashSkin.mono(11))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(54), alignment: .trailing)
             if density.showsMemory {
-                Text(container.memUsedBytes.map { ByteFormatter.string($0) } ?? ",")
+                Text(container.memUsedBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
                     .font(DashSkin.mono(11))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(width: UIScale.pt(70), alignment: .trailing)
