@@ -100,6 +100,7 @@ final class NotchShelfController {
     private var spaceObserver: NSObjectProtocol?
     private var shelfOperationObserver: NSObjectProtocol?
     private var surfaceSettingsObserver: NSObjectProtocol?
+    private var hostAlertObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -168,6 +169,18 @@ final class NotchShelfController {
             self.synchronize()
             self.homeContentHeight = nil
             self.updatePanelFrames()
+        }
+        if let namespace = ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"] {
+            hostAlertObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(namespace + ".notchAlert"), object: nil, queue: .main
+            ) { [weak self] note in
+                let info = note.userInfo ?? [:]
+                MainActor.assumeIsolated {
+                    guard let self, !self.stopped, let alert = NotchAlert.hostAlert(from: info)
+                    else { return }
+                    self.postAlert(alert)
+                }
+            }
         }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -498,6 +511,10 @@ final class NotchShelfController {
         shelfOperationObserver = nil
         if let surfaceSettingsObserver { NotchWorkerIPC.stopObserving(surfaceSettingsObserver) }
         surfaceSettingsObserver = nil
+        if let hostAlertObserver {
+            DistributedNotificationCenter.default().removeObserver(hostAlertObserver)
+        }
+        hostAlertObserver = nil
         collapseWorkItem?.cancel(); collapseWorkItem = nil
         panelSettleWorkItem?.cancel(); panelSettleWorkItem = nil
         gateWorkItem?.cancel(); gateWorkItem = nil

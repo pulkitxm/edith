@@ -34,6 +34,33 @@ struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
     }
 }
 
+extension NotchAlert {
+    static func updateReady(version: String) -> NotchAlert {
+        NotchAlert(
+            id: "update.ready", icon: "arrow.down.circle.fill", tint: "#7bb08a",
+            title: "Edith \(version) is ready", subtitle: "Quit and reopen to finish",
+            priority: .high, autoHide: 8, settingsTab: "updates")
+    }
+
+    static let permissionHint = NotchAlert(
+        id: "permissions.hint", icon: "hand.raised.fill",
+        title: "Grant access in one place",
+        subtitle: "Settings > Permissions lists every one", priority: .high,
+        autoHide: 6, settingsTab: "permissions")
+
+    static func hostAlert(from info: [AnyHashable: Any]) -> NotchAlert? {
+        switch info["kind"] as? String {
+        case "permissionHint": return permissionHint
+        case "updateReady":
+            guard let version = info["version"] as? String, !version.isEmpty,
+                version.count <= 64
+            else { return nil }
+            return updateReady(version: version)
+        default: return nil
+        }
+    }
+}
+
 struct PendingNotchAlert: Equatable, Sendable {
     let alert: NotchAlert
     let at: Date
