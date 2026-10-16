@@ -78,16 +78,16 @@ public actor CodeStatsEngine {
         var excluded = Set<String>()
         var forks = Set<String>()
         if let github {
+            var accounts: [CodeStatsProfile] = []
             do {
-                profiles = try await github.profiles().filter {
-                    settings.includes(account: $0.login)
-                }
+                accounts = try await github.profiles()
+                profiles = accounts.filter { settings.includes(account: $0.login) }
             } catch {
                 issue = Self.issue(error)
             }
             enter(.listing)
             if issue == nil, !Task.isCancelled {
-                let listings = await BoundedTaskRunner.map(profiles, limit: syncLimit) {
+                let listings = await BoundedTaskRunner.map(accounts, limit: syncLimit) {
                     _, profile in
                     do {
                         let repositories = try await github.repositories(for: profile)
@@ -100,7 +100,12 @@ public actor CodeStatsEngine {
                 var owners: [String: String] = [:]
                 var tokens: [String: String] = [:]
                 var listed: [CodeStatsRemoteRepository] = []
+                var unticked = Set<String>()
                 for (login, repositories, token, error) in listings {
+                    guard settings.includes(account: login) else {
+                        unticked.formUnion(repositories.map { $0.fullName.lowercased() })
+                        continue
+                    }
                     if let error, issue == nil { issue = Self.issue(error) }
                     tokens[login] = token
                     for repository in repositories {
@@ -116,7 +121,8 @@ public actor CodeStatsEngine {
                 excluded = Set(
                     listed.lazy.filter { !settings.includes($0) }.map {
                         $0.fullName.lowercased()
-                    })
+                    }
+                ).union(unticked.subtracting(owners.keys))
                 credentials = Dictionary(
                     uniqueKeysWithValues: owners.compactMap { key, login in
                         tokens[login].map { (key, $0) }

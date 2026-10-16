@@ -94,16 +94,15 @@ private struct FakeGitHub: CodeStatsGitHubClient {
             ])
         let engine = CodeStatsEngine(
             github: github, git: fixture.tool, store: store, progressInterval: 0)
-        let result = await engine.run(
-            settings: CodeStatsSettings(
-                folder: mirror.path, identity: CodeStatsGitFixture.me,
-                excludedAccounts: ["Worker"]))
+        let settings = CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me)
+        #expect(await engine.run(settings: settings).repositories == 2)
+        var unticked = settings
+        unticked.excludedAccounts = ["Worker"]
+        let result = await engine.run(settings: unticked)
         #expect(result.outcome == .completed)
         #expect(result.profiles.map(\.login) == ["octocat"])
         #expect(result.synced == 1)
-        #expect(
-            !FileManager.default.fileExists(
-                atPath: mirror.appendingPathComponent("worker/work.git/HEAD").path))
+        #expect(result.repositories == 1)
     }
 
     @Test func aTokenIsHandedToGitOnlyWithTheGitHubCredentialHelper() {
