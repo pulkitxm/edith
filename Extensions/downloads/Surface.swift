@@ -27,42 +27,49 @@ final class DownloadsSurface {
         let records = state.records.filter {
             tile.sourceIDs?.contains(($0.kind ?? .audio).rawValue) ?? true
         }
-        let status = DownloadQueueSnapshot(records: records)
-        let rows = records.prefix(100).map { item in
+        let ordered = records.sorted {
+            func priority(_ value: DownloadRecord) -> Int {
+                if value.canRetry { return 3 }
+                if !value.isFinished { return 2 }
+                return 1
+            }
+            return priority($0) == priority($1)
+                ? $0.createdAt > $1.createdAt : priority($0) > priority($1)
+        }
+        let running = records.filter { !$0.isFinished && $0.status != .queued }.count
+        let rows = ordered.prefix(100).map { item in
             var actions: [SurfaceAction] = []
             if item.canRetry {
                 actions.append(.init(Self.action("retry", item.id), "Retry", "arrow.clockwise"))
             }
             if !item.isFinished {
-                actions.append(.init(Self.action("cancel", item.id), "Cancel", "stop.fill"))
+                actions.append(.init(Self.action("cancel", item.id), "Cancel", "xmark"))
             }
             if case .done = item.status {
-                actions.append(.init(Self.action("reveal", item.id), "Show in Finder", "folder"))
-            }
-            if item.isFinished {
-                actions.append(
-                    .init(Self.action("remove", item.id), "Remove from history", "trash"))
+                actions.append(.init(Self.action("reveal", item.id), "Show file", "folder"))
             }
             return SurfaceDataRow(
                 item.id.uuidString, sourceID: (item.kind ?? .audio).rawValue,
                 title: Self.title(item),
-                detail: tile.shows("url") ? String((item.url.host ?? "").prefix(256)) : "",
-                value: String(item.state.prefix(80)),
-                icon: item.kind == .audio ? "music.note" : "arrow.down.circle",
+                detail: tile.shows("url") ? String(item.detail.prefix(256)) : "",
+                value: String(item.state.capitalized.prefix(80)),
+                icon: "arrow.down.circle",
                 progress: Self.progress(item.status), field: "queue", actions: actions)
         }
         return SurfaceSnapshot(
             providerID: "downloads",
             metrics: [
-                .init("queued", "Queued", String(status.queued)),
-                .init("running", "Running", String(status.resolving + status.downloading)),
-                .init("finished", "Finished", String(status.done)),
-                .init("failed", "Retry available", String(status.failed + status.interrupted)),
+                .init("running", "Downloading", String(running)),
+                .init("queued", "Queued", String(records.filter { $0.status == .queued }.count)),
+                .init("failed", "Needs retry", String(records.filter(\.canRetry).count)),
+                .init(
+                    "finished", "Completed",
+                    String(
+                        records.filter { if case .done = $0.status { true } else { false } }.count)),
             ], rows: rows,
-            sources: DownloadKind.allCases.map { .init($0.rawValue, $0.title) },
+            sources: DownloadKind.allCases.map { .init($0.rawValue, $0.rawValue.capitalized) },
             message: state.problem
-                ?? (state.executable == nil
-                    ? "Install download tools in Downloads settings to start queued jobs." : nil),
+                ?? (records.isEmpty ? "No downloads in this selection." : nil),
             updatedAt: state.readAt)
     }
     private func perform(_ action: String) async throws {

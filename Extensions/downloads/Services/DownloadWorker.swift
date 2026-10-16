@@ -256,7 +256,7 @@ public actor DownloadWorker {
     private func finishDrain() async {
         let observation = observationTask
         let running = Array(flights.keys)
-        for id in running { interrupt(id, reason: "Downloads stopped.") }
+        for id in running { interrupt(id, reason: "The background agent stopped.") }
         let retired = Array(retiredFlights.values)
         let tasks = flights.values.map(\.task)
         let progressTasks = flights.values.compactMap(\.progress)
@@ -297,7 +297,8 @@ public actor DownloadWorker {
             $0.uuidString < $1.uuidString
         }
         let retained = active + snapshotRecords.map(\.id).filter { !active.contains($0) }
-        snapshotLogs = DownloadSchedulerActivity.boundedLogs(snapshotLogs, retained: retained)
+        let retainedKeys = Set(retained.map(\.uuidString))
+        snapshotLogs = snapshotLogs.filter { retainedKeys.contains($0.key) }
         return DownloadWorkerSnapshot(
             records: snapshotRecords, logs: snapshotLogs, enabled: isEnabled(),
             running: !flights.isEmpty, generation: generation, revision: revision,
@@ -448,7 +449,7 @@ public actor DownloadWorker {
                     for index in records.indices {
                         switch records[index].status {
                         case .resolving, .downloading:
-                            records[index].status = .interrupted("Downloads restarted.")
+                            records[index].status = .interrupted("The background agent restarted.")
                         default: break
                         }
                     }

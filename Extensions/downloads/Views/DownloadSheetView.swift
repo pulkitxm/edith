@@ -171,7 +171,7 @@ struct DownloadSheet: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
-            Button("Open Downloads settings") { settingsPresented = true }
+            Button("Open extension settings") { settingsPresented = true }
                 .edithSheet(isPresented: $settingsPresented) {
                     DownloadsSettings(downloader: downloader)
                 }

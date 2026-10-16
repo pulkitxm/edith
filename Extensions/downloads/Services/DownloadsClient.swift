@@ -103,7 +103,7 @@ public struct DownloadsClient: Sendable {
                     do {
                         while !Task.isCancelled {
                             continuation.yield(try await read())
-                            try await Task.sleep(for: .seconds(1))
+                            try await Task.sleep(for: .milliseconds(250))
                         }
                     } catch {}
                     continuation.finish()
