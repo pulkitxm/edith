@@ -84,6 +84,10 @@ final class CalendarUIEngine {
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
             return Data("{}".utf8)
+        case "calendar.ui.reset":
+            try validateObject(payload, keys: [])
+            store.resetPagination()
+            return Data("{}".utf8)
         case "calendar.ui.metadata", "calendar.ui.list", "calendar.ui.loadMore":
             try validateObject(payload, keys: [])
             presentation.refresh()
@@ -108,7 +112,12 @@ final class CalendarUIEngine {
                 try Task.checkCancellation()
                 guard !stopped else { throw ExtensionPeerError.unavailable }
                 store.refreshAuthStatus()
-                if authorized() { _ = await store.refreshAndWait() }
+                if authorized() {
+                    _ = await store.refreshAndWait()
+                } else if let settings = Self.privacySettingsURL {
+                    _ = open(settings)
+                }
+                scheduleAuthorizationRefreshes()
             case .open:
                 guard open(CalendarEventActions.calendarApplicationURL) else {
                     throw ExtensionPeerError.rejected("Calendar could not open.")
@@ -120,9 +129,9 @@ final class CalendarUIEngine {
                 let url =
                     request.action == .join
                     ? MeetingLink.url(for: event) : CalendarEventActions.locationURL(for: event)
-                guard let url, url.scheme == "https" || url.scheme == "http",
-                    url.host != nil, open(url)
-                else { throw ExtensionPeerError.rejected("The event action could not open.") }
+                guard let url, url.scheme?.lowercased() != "file", open(url) else {
+                    throw ExtensionPeerError.rejected("The event action could not open.")
+                }
             }
         default:
             throw ExtensionPeerError.invalidRequest
@@ -149,11 +158,30 @@ final class CalendarUIEngine {
     func shutdown() {
         stopped = true
         permissionTask?.cancel()
+        followUps.forEach { $0.cancel() }
+        followUps = []
     }
 
     func stopAndWait() async {
         shutdown()
         if let permissionTask { _ = await permissionTask.result }
+    }
+
+    static let privacySettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+
+    private var followUps: [Task<Void, Never>] = []
+
+    private func scheduleAuthorizationRefreshes() {
+        followUps.forEach { $0.cancel() }
+        followUps = [0.5, 1.5].map { delay in
+            Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+                guard let self, !self.stopped else { return }
+                self.store.refreshAuthStatus()
+                if self.authorized() { _ = await self.store.refreshAndWait() }
+            }
+        }
     }
 
     private func requestPermission() async throws {

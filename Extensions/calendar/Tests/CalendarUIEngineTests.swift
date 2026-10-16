@@ -54,10 +54,21 @@ import Testing
         _ = try await fixture.engine.execute(
             "calendar.ui.action", payload: Data("{\"action\":\"permission\"}".utf8))
         #expect(fixture.grants == 1)
+        #expect(fixture.opened.last == CalendarUIEngine.privacySettingsURL)
         fixture.engine.shutdown()
         await #expect(throws: (any Error).self) {
             try await fixture.engine.execute("calendar.ui.list", payload: Data("{}".utf8))
         }
+    }
+
+    @Test func resetReturnsPaginationToItsInitialWindow() async throws {
+        let fixture = Fixture()
+        defer { fixture.stop() }
+        _ = try await fixture.engine.execute("calendar.ui.list", payload: Data("{}".utf8))
+        _ = try await fixture.engine.execute("calendar.ui.loadMore", payload: Data("{}".utf8))
+        #expect(fixture.engine.snapshot().days == 28)
+        _ = try await fixture.engine.execute("calendar.ui.reset", payload: Data("{}".utf8))
+        #expect(fixture.engine.snapshot().days == CalendarEventQuery.initialDays)
     }
 
     @Test func paginationIsBoundedAndRecordsKeepTheirOriginalDetails() async throws {
