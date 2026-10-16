@@ -24,6 +24,12 @@ import Testing
         #expect(result.rows.count == 1)
         #expect(result.rows.first?.title == first.displayName)
         #expect(result.sources.count == 2)
+        #expect(
+            result.metrics.map(\.title) == [
+                "Connections", "Saved queries", "Active operations", "Failed operations",
+            ])
+        #expect(result.rows.first?.actions.first?.title == "Open Databases")
+        #expect(result.rows.first?.actions.first?.icon == "arrow.up.right")
         let action = try #require(result.rows.first?.actions.first)
         await sender.replace([second])
         await #expect(throws: ExtensionPeerError.self) {
@@ -71,12 +77,17 @@ private actor DatabaseSurfaceSender: DatabaseBrokerCommandSending {
     func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
     {
         calls += 1
-        guard case .connectionList = request else {
+        let metadata = DatabaseResultMetadata(completeness: .init(state: .complete))
+        switch request {
+        case .connectionList:
+            return .connectionList(
+                .success(.init(connections: connections), metadata: metadata))
+        case .savedQueryList:
+            return .savedQueryList(.success(.init(queries: []), metadata: metadata))
+        case .operationList:
+            return .operationList(.success(.init(operations: []), metadata: metadata))
+        default:
             throw DatabaseBrokerCommandClientError.invalidRequest
         }
-        return .connectionList(
-            .success(
-                .init(connections: connections),
-                metadata: .init(completeness: .init(state: .complete))))
     }
 }
