@@ -44,8 +44,9 @@ struct ExtensionEngineTests {
         cancelled.cancel()
         await #expect(throws: CancellationError.self) { try await cancelled.value }
         #expect(bridge.cancelled.count == 2)
-        let tasks = (0..<8).map { _ in Task { try await client.invoke("sample.hold") } }
-        try await wait { bridge.callbacks.count == 8 }
+        let limit = ExtensionEngineWire.maximumConcurrentRequests
+        let tasks = (0..<limit).map { _ in Task { try await client.invoke("sample.hold") } }
+        try await wait { bridge.callbacks.count == limit }
         await #expect(throws: ExtensionEngineError.unavailable) {
             try await client.invoke("sample.hold")
         }
@@ -54,10 +55,43 @@ struct ExtensionEngineTests {
             await #expect(throws: ExtensionEngineError.unavailable) { try await task.value }
         }
         #expect(bridge.callbacks.isEmpty)
-        #expect(bridge.cancelled.count == 10)
+        #expect(bridge.cancelled.count == 2 + limit)
         await #expect(throws: ExtensionEngineError.unavailable) {
             try await client.invoke("sample.read")
         }
+    }
+
+    @Test(arguments: [1, 8, 12]) func snapshotReadsAreNotRejectedOrDelayedBySlowRequests(
+        slowCount: Int
+    ) async throws {
+        let bridge = Bridge()
+        bridge.mode = "holdSlow"
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        defer { client.invalidate() }
+        let slow = (0..<slowCount).map { _ in Task { try await client.invoke("sample.slow") } }
+        try await wait { bridge.callbacks.count == slowCount }
+        var timings: [Double] = []
+        for _ in 0..<15 {
+            let start = ContinuousClock.now
+            #expect(try await client.invoke("sample.snapshot") == Data("{}".utf8))
+            let elapsed = ContinuousClock.now - start
+            timings.append(
+                Double(elapsed.components.seconds) * 1_000
+                    + Double(elapsed.components.attoseconds) / 1e15)
+        }
+        print("LATENCY engine client slow=\(slowCount) median ms", timings.sorted()[7])
+        #expect(timings.sorted()[7] < 50)
+        let burst = await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<12 {
+                group.addTask { @MainActor in
+                    (try? await client.invoke("sample.snapshot")) != nil
+                }
+            }
+            return await group.reduce(0) { $0 + ($1 ? 1 : 0) }
+        }
+        #expect(burst == 12)
+        client.invalidate()
+        for task in slow { _ = try? await task.value }
     }
 
     @Test func invalidationAndCancellationClaimEachHeldRequestOnlyOnce() async throws {
@@ -184,7 +218,9 @@ struct ExtensionEngineTests {
                     ExtensionEngineRequest.self, from: data)
             else { completion(Data()); return }
             lastPresentation = request.presentationID
-            if mode == "hold" { callbacks[request.token] = completion; return }
+            if mode == "hold" || (mode == "holdSlow" && request.operation == "sample.slow") {
+                callbacks[request.token] = completion; return
+            }
             let reply = ExtensionEngineReply(
                 token: mode == "mismatch" ? UUID() : request.token, ok: mode != "reject",
                 payload: mode == "nonJSON" ? Data("malformed".utf8) : request.payload)

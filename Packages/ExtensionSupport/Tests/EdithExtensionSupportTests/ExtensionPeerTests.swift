@@ -225,7 +225,8 @@ import Testing
         }
         try server.start()
         defer { server.shutdown() }
-        let calls = (0..<8).map { _ in Task { try await endpoint.invoke("wait") } }
+        let limit = ExtensionPeerEndpoint.maximumConcurrentCommands
+        let calls = (0..<limit).map { _ in Task { try await endpoint.invoke("wait") } }
         var iterator = started.stream.makeAsyncIterator()
         for _ in calls { _ = await iterator.next() }
         await #expect(throws: ExtensionPeerError.self) { try await endpoint.invoke("echo") }
@@ -445,7 +446,8 @@ import Testing
         let registry = ExtensionCommandRegistry()
         var completions = 0
         var started = 0
-        for _ in 0..<9 {
+        let limit = ExtensionPeerEndpoint.maximumConcurrentCommands
+        for _ in 0..<(limit + 1) {
             registry.invoke(
                 ["token": UUID().uuidString, "command": "wait", "payload": Data()] as NSDictionary,
                 completion: { data, message in
@@ -460,12 +462,12 @@ import Testing
             }
         }
         #expect(completions == 1)
-        while started < 8 { await Task.yield() }
+        while started < limit { await Task.yield() }
         registry.shutdown()
-        #expect(completions == 9)
+        #expect(completions == limit + 1)
         await Task.yield()
         registry.shutdown()
-        #expect(completions == 9)
+        #expect(completions == limit + 1)
     }
 
     @MainActor @Test func invalidBundleRequestsNeverExecute() {

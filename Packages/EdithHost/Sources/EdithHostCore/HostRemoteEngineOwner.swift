@@ -7,6 +7,7 @@ final class HostRemoteEngineOwner {
     let process: HostRemoteKernelIdentity
     private let marketplace: HostMarketplace
     private let configuration: HostRemoteConfiguration
+    private let endpoint: ExtensionPeerEndpoint
     private var pending = Set<UUID>()
 
     init(marketplace: HostMarketplace, configuration: HostRemoteConfiguration) throws {
@@ -15,6 +16,7 @@ final class HostRemoteEngineOwner {
         else { throw HostWorkerError.rejected }
         self.marketplace = marketplace
         self.configuration = configuration
+        endpoint = try Self.endpoint(marketplace: marketplace, configuration: configuration)
         process = try HostRemoteKernelIdentity.read(pid)
         try validate()
     }
@@ -32,6 +34,7 @@ final class HostRemoteEngineOwner {
         else { throw HostWorkerError.rejected }
         self.marketplace = marketplace
         self.configuration = configuration
+        endpoint = try Self.endpoint(marketplace: marketplace, configuration: configuration)
         process = try HostRemoteKernelIdentity.read(birth.pid)
         guard ExtensionProcessIdentity.read(birth.pid) == birth, process.isRunning else {
             throw HostWorkerError.rejected
@@ -39,40 +42,49 @@ final class HostRemoteEngineOwner {
     }
     #endif
 
+    private static func endpoint(
+        marketplace: HostMarketplace, configuration: HostRemoteConfiguration
+    ) throws -> ExtensionPeerEndpoint {
+        try ExtensionPeerEndpoint(
+            namespace: marketplace.identity.identifier, owner: configuration.package.id,
+            directory: marketplace.identity.root.appendingPathComponent("ExtensionState/Commands"))
+    }
+
     func validate() throws {
-        try validateIdentity()
+        try validateIdentity(strict: true)
         let id = configuration.package.id
         guard !marketplace.pendingRemovalIDs.contains(id),
             marketplace.sessions.activeIDs.contains(id)
         else { throw HostWorkerError.rejected }
     }
 
-    private func validateIdentity() throws {
+    private func validateIdentity(strict: Bool = false) throws {
         let id = configuration.package.id
         guard !configuration.uiOnly,
             marketplace.installed[id] == configuration.package,
             marketplace.sessions.versions[id] == configuration.package.version,
             marketplace.sessions.processIdentifiers[id] == process.pid,
-            process.isRunning
+            strict ? process.isRunning : process.isAlive
         else { throw HostWorkerError.rejected }
     }
 
     func invoke(_ request: ExtensionEngineRequest) async throws -> Data {
         try request.validate()
-        guard pending.count < 8, !pending.contains(request.token) else {
+        guard pending.count < ExtensionEngineWire.maximumConcurrentRequests,
+            !pending.contains(request.token)
+        else {
             throw HostWorkerError.rejected
         }
         pending.insert(request.token)
         defer { pending.remove(request.token) }
-        if HostRemoteInvocationAdmission.current?.authorizes(request.token) == true {
-            try validateIdentity()
-        } else {
-            try validate()
+        try validateIdentity()
+        if HostRemoteInvocationAdmission.current?.authorizes(request.token) != true {
+            let id = configuration.package.id
+            guard !marketplace.pendingRemovalIDs.contains(id),
+                marketplace.sessions.activeIDs.contains(id)
+            else { throw HostWorkerError.rejected }
         }
         try Task.checkCancellation()
-        let endpoint = try ExtensionPeerEndpoint(
-            namespace: marketplace.identity.identifier, owner: configuration.package.id,
-            directory: marketplace.identity.root.appendingPathComponent("ExtensionState/Commands"))
         let result = try await endpoint.invoke(
             request.operation, payload: request.payload, timeout: request.timeout,
             token: request.token)

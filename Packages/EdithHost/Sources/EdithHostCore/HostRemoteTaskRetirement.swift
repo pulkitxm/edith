@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 @MainActor
@@ -40,7 +41,8 @@ final class HostRemoteInvocationRetirement {
     func contains(_ token: UUID) -> Bool { work[token] != nil }
 
     func accepts(_ token: UUID) -> Bool {
-        !closed && work.count < 8 && work[token] == nil
+        !closed && work.count < ExtensionEngineWire.maximumConcurrentRequests
+            && work[token] == nil
     }
 
     func retain(_ task: Task<Void, Never>, token: UUID) {

@@ -50,6 +50,7 @@ public struct ExtensionEngineReply: Codable, Sendable {
 public enum ExtensionEngineWire {
     public static let maximumPayloadBytes = 8 * 1024 * 1024
     public static let maximumMessageBytes = 12 * 1024 * 1024
+    public static let maximumConcurrentRequests = ExtensionPeerEndpoint.maximumConcurrentCommands
 
     public static func encode<T: Encodable>(_ value: T) throws -> Data {
         let data = try JSONEncoder().encode(value)

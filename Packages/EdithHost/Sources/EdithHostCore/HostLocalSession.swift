@@ -30,6 +30,7 @@ final class HostLocalSession {
 
     private static var loaded: [String: Loaded] = [:]
     private static var superseded: [Loaded] = []
+    private static var hostIdentity: HostRemoteProcessIdentity?
     let configuration: HostRemoteConfiguration
     let engine: HostRemoteEngineOwner?
     let peer: HostRemoteProcessIdentity?
@@ -62,7 +63,13 @@ final class HostLocalSession {
         self.configuration = configuration
         self.engine = engine
         hostIdentifier = marketplace.identity.identifier
-        peer = try? HostRemoteProcessIdentity.read(getpid())
+        peer = Self.currentHostIdentity()
+    }
+
+    private static func currentHostIdentity() -> HostRemoteProcessIdentity? {
+        if let hostIdentity { return hostIdentity }
+        hostIdentity = try? HostRemoteProcessIdentity.read(getpid())
+        return hostIdentity
     }
 
     private static func load(

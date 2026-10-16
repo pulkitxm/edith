@@ -23,6 +23,8 @@ public struct ExtensionPeerEndpoint: Sendable {
     public let directory: URL
     var registrationURL: URL { directory.appendingPathComponent(name + ".json") }
     public static let maximumPayloadBytes = 8 * 1_024 * 1_024
+    public static let maximumConcurrentCommands = 32
+    static let maximumConnections = 64
     static let maximumMessageBytes = 12 * 1_024 * 1_024
 
     public init(namespace: String, owner: String, directory: URL) throws {
@@ -553,6 +555,7 @@ private final class ExtensionPeerConnection: @unchecked Sendable {
     private var descriptorClosed = false
     private let work = ExtensionPeerWork()
     private let queue = DispatchQueue(label: "edith.extension.peer.read", qos: .utility)
+    private let writeQueue = DispatchQueue(label: "edith.extension.peer.write", qos: .utility)
 
     private init(_ descriptor: Int32, source: ExtensionPeerProcess) {
         self.descriptor = descriptor
@@ -639,7 +642,7 @@ private final class ExtensionPeerConnection: @unchecked Sendable {
     }
 
     func send(_ frame: Data, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
-        work.schedule(on: .global(qos: .utility)) { [self] in
+        work.schedule(on: writeQueue) { [self] in
             do {
                 try authenticate()
                 try frame.withUnsafeBytes { bytes in
@@ -758,7 +761,8 @@ public final class ExtensionPeerServer {
                     pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                         Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
                     }
-                }) == 0, chmod(path, 0o600) == 0, Darwin.listen(descriptor, 8) == 0
+                }) == 0, chmod(path, 0o600) == 0,
+            Darwin.listen(descriptor, Int32(ExtensionPeerEndpoint.maximumConnections)) == 0
         else { throw ExtensionPeerError.unavailable }
         let generation = UUID()
         let previousRetirement = retirement
@@ -846,7 +850,9 @@ public final class ExtensionPeerServer {
         for _ in 0..<32 {
             let client = Darwin.accept(descriptor, nil, nil)
             if client < 0 { return }
-            guard ownedConnections.count < 8, executing.count < 8 else {
+            guard ownedConnections.count < ExtensionPeerEndpoint.maximumConnections,
+                executing.count < ExtensionPeerEndpoint.maximumConcurrentCommands
+            else {
                 Darwin.close(client); continue
             }
             do {
