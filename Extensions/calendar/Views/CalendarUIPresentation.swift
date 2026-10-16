@@ -64,7 +64,8 @@ final class CalendarUIPresentation {
                 navigation: route.location == .main
                     ? nil
                     : CalendarNavigationRequest(
-                        presentationID: client.presentationID, location: route.location.rawValue)),
+                        presentationID: client.presentationID, location: route.location.rawValue),
+                memory: .shared),
             route: route)
     }
 

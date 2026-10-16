@@ -15,25 +15,32 @@ final class CalendarUIFacade {
     private let invoke: (String, Data) async throws -> Data
     private let invalidate: () -> Void
     private let navigation: CalendarNavigationRequest?
+    private let memory: CalendarUISnapshotMemory?
     private var stopped = false
     private let commandTasks = CalendarUITaskOwner()
     private var generation: UInt64 = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var actions: [UUID: Task<Void, Never>] = [:]
 
-    convenience init(client: ExtensionEngineClient, navigation: CalendarNavigationRequest? = nil) {
+    convenience init(
+        client: ExtensionEngineClient, navigation: CalendarNavigationRequest? = nil,
+        memory: CalendarUISnapshotMemory? = nil
+    ) {
         self.init(
             invoke: { try await client.invoke($0, payload: $1) }, invalidate: client.invalidate,
-            navigation: navigation)
+            navigation: navigation, memory: memory)
     }
 
     init(
         invoke: @escaping (String, Data) async throws -> Data,
-        invalidate: @escaping () -> Void = {}, navigation: CalendarNavigationRequest? = nil
+        invalidate: @escaping () -> Void = {}, navigation: CalendarNavigationRequest? = nil,
+        memory: CalendarUISnapshotMemory? = nil
     ) {
         self.invoke = invoke
         self.invalidate = invalidate
         self.navigation = navigation
+        self.memory = memory
+        if let snapshot = memory?.latest { adopt(snapshot) }
     }
 
     func observe() async {
@@ -80,7 +87,9 @@ final class CalendarUIFacade {
         do {
             try request.validate()
             await read("calendar.ui.action", payload: try JSONEncoder().encode(request))
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            if !CalendarCancellation.isSilent(error) { self.error = error.localizedDescription }
+        }
     }
 
     func openPage() {
@@ -105,7 +114,9 @@ final class CalendarUIFacade {
             _ = try await invoke("calendar.ui.navigate", JSONEncoder().encode(navigation))
             try Task.checkCancellation()
         } catch {
-            if !stopped, !Task.isCancelled { self.error = error.localizedDescription }
+            if !stopped, !Task.isCancelled, !CalendarCancellation.isSilent(error) {
+                self.error = error.localizedDescription
+            }
         }
     }
 
@@ -160,23 +171,37 @@ final class CalendarUIFacade {
                         && $0.end.timeIntervalSince1970.isFinite
                 })
             else { throw ExtensionPeerError.invalidRequest }
-            blurEvents = snapshot.blurEvents
-            authorized = snapshot.authorized
-            days = snapshot.days
-            events = CalendarDayEvents.sorted(snapshot.events)
-            let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.start) }
-            groupedDays = groups.keys.sorted().map { (day: $0, events: groups[$0] ?? []) }
-            if operation != "calendar.ui.metadata" || loaded || !events.isEmpty
-                || !snapshot.authorized
-            {
-                error = nil
-                loaded = true
-            }
+            let settled = operation != "calendar.ui.metadata" || snapshot.ready || loaded
+            adopt(snapshot, settled: settled)
+            if settled { memory?.remember(snapshot) }
         } catch {
-            guard !stopped, request == generation, !Task.isCancelled else { return }
+            guard !stopped, request == generation, !Task.isCancelled,
+                !CalendarCancellation.isSilent(error)
+            else { return }
             self.error = error.localizedDescription
         }
     }
+
+    private func adopt(_ snapshot: CalendarUISnapshot, settled: Bool = true) {
+        blurEvents = snapshot.blurEvents
+        authorized = snapshot.authorized
+        days = snapshot.days
+        events = CalendarDayEvents.sorted(snapshot.events)
+        let groups = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.start) }
+        groupedDays = groups.keys.sorted().map { (day: $0, events: groups[$0] ?? []) }
+        if settled || !snapshot.authorized {
+            error = nil
+            loaded = true
+        }
+    }
+}
+
+@MainActor
+final class CalendarUISnapshotMemory {
+    static let shared = CalendarUISnapshotMemory()
+    private(set) var latest: CalendarUISnapshot?
+
+    func remember(_ snapshot: CalendarUISnapshot) { latest = snapshot }
 }
 
 @MainActor

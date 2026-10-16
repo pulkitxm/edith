@@ -17,7 +17,7 @@ public actor CalendarAgendaSnapshotStore {
 
     public init(events: [CalendarEventPayload]) {
         file = nil
-        memory = events
+        memory = events.isEmpty ? nil : events
     }
 
     public func load() -> [CalendarEventPayload]? {

@@ -57,7 +57,8 @@ import Testing
         let facade = CalendarUIFacade(invoke: { operation, _ in
             if operation == "calendar.ui.list" { return await gate.wait() }
             return try JSONEncoder().encode(
-                CalendarUISnapshot(authorized: true, blurEvents: false, days: 14, events: []))
+                CalendarUISnapshot(
+                    authorized: true, blurEvents: false, days: 14, events: [], ready: false))
         })
         defer { facade.shutdown() }
         let observing = Task { await facade.observe() }
