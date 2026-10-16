@@ -61,7 +61,6 @@ public struct PageScaffold<Header: View, Content: View>: View {
     var width: PageContentWidth = .fluid
     var pinnedHeader = false
     var scrollIdentity = ""
-    @State private var scrollPositions = PageScrollPositions()
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
@@ -83,12 +82,14 @@ public struct PageScaffold<Header: View, Content: View>: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !pinnedHeader { header() }
-                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    LazyVStack(
+                        alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)
+                    ) {
                         content()
                     }
                     .pageContent(compact, width: width)
                 }
-                .background { PageScrollPosition(positions: scrollPositions, key: scrollIdentity) }
+                .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
             }
         }
         .pageSurface()

@@ -350,6 +350,7 @@ enum ExportCardDelivery {
             let data = try render(deck.content(for: card))
             let message = try await delivery(data, deck.filename(for: card), save)
             try Task.checkCancellation()
+            guard !message.isEmpty else { return nil }
             return ExportCardDeliveryResult(
                 status: ExportCardStatus(message: message), copied: !save)
         }

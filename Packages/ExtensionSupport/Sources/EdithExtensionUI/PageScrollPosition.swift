@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 final class PageScrollPositions {
+    static let shared = PageScrollPositions()
     private var positions: [String: CGPoint] = [:]
 
     subscript(_ key: String) -> CGPoint {
