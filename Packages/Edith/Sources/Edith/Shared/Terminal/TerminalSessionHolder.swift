@@ -19,6 +19,7 @@ final class TerminalSessionHolder {
 
     @ObservationIgnored private var swiftTermView: EdithTerminalView?
     @ObservationIgnored private var oscHandlers: [Int: @MainActor (String) -> Void] = [:]
+    @ObservationIgnored var onExit: (@MainActor (Int32?) -> Void)?
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -78,6 +79,7 @@ final class TerminalSessionHolder {
                         code == nil || code == 0
                         ? "Session ended." : "Session ended with status \(code ?? 0)."
                     self.started = false
+                    self.onExit?(code)
                 }
             },
             onTitle: { [weak self] title in
@@ -207,6 +209,7 @@ final class TerminalSessionHolder {
             exitCode == nil || exitCode == 0
             ? "Session ended." : "Session ended with status \(exitCode ?? 0)."
         closeCompletion?(true)
+        onExit?(exitCode)
     }
 
     private func takeUserCloseCompletion(

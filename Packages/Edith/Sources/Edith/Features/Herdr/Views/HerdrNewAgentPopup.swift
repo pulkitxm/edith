@@ -33,11 +33,28 @@ struct HerdrNewAgentPopup: View {
         ) { ["space", model.selectedHost?.id ?? "local", $0.label] }
     }
 
+    private var accountMachine: Machine? {
+        let host =
+            model.selectedHost
+            ?? model.space.flatMap { space in
+                store.hosts.first { $0.id == space.agents.first?.machineID }
+            }
+        return host.flatMap { store.machine(for: $0) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
             field
+            if model.selectedKind == "Claude Code" || model.space != nil {
+                ClaudeAccountLaunchPicker(
+                    accounts: store.claudeAccounts, machine: accountMachine,
+                    selection: $model.selectedAccountID
+                )
+                .disabled(model.launching)
+                .padding(UIScale.pt(12))
+            }
             Divider()
             if let errorMessage = model.errorMessage {
                 Text(errorMessage)
@@ -397,7 +414,8 @@ struct HerdrNewAgentPopup: View {
             do {
                 try await store.launchNewAgent(
                     kind: kind, host: host, existingSpace: space, newSpaceLabel: newLabel,
-                    openBeside: model.layoutChoice == .sideBySide)
+                    openBeside: model.layoutChoice == .sideBySide,
+                    accountID: kind == "Claude Code" ? model.selectedAccountID : nil)
                 model.launching = false
                 dismiss()
             } catch {

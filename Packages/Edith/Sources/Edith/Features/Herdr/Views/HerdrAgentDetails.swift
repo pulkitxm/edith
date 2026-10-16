@@ -66,7 +66,10 @@ struct HerdrAgentDetails: View {
     private var agent: HerdrAgent { tab.agent }
     private var command: String { HerdrAttachCommand.line(for: agent) }
 
-    var body: some View { sidebar.herdrAgentContextMenu(agent, store: store) }
+    var body: some View {
+        sidebar.herdrAgentContextMenu(agent, store: store)
+            .pageTask { await store.claudeAccounts.read() }
+    }
 
     private var sidebar: some View {
         VStack(spacing: 0) {
@@ -81,6 +84,13 @@ struct HerdrAgentDetails: View {
                     kindRow
                     if !agent.isTerminal { metaRow("Status", agent.status.title) }
                     if !agent.isTerminal { messageSection }
+                    if let id = store.accountSessions[agent.id] {
+                        metaRow(
+                            "Claude account",
+                            store.claudeAccounts.state.accounts.first {
+                                $0.id.uuidString == id
+                            }?.name ?? "Removed account", blur: hideAgents)
+                    }
                     metaRow("Machine", agent.machineName)
                     if !agent.session.isEmpty {
                         metaRow("Session", agent.session, blur: hideAgents)
