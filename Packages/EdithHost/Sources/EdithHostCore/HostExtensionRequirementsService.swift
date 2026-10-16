@@ -277,21 +277,11 @@ public struct HostRequirementSetupPreview: Sendable {
                 ))
         }
         if id == "plugins" {
-            for tool in ["node", "npx"] {
-                try Task.checkCancellation()
-                var observation = try await environment.tool(tool)
-                if tool == "node", case let .available(version) = observation,
-                    !HostRequirementToolProbe.nodeSupported(version)
-                {
-                    observation = .unsupported(
-                        "Plugins installation requires Node.js 22.20 or later. Found " + version
-                            + ". Browsing remains available.")
-                }
-                checks.append(
-                    check(
-                        "tool." + tool, observation: observation, required: true,
-                        recovery: "ed tools ls"))
-            }
+            try Task.checkCancellation()
+            checks.append(
+                check(
+                    "tool.npx", observation: try await environment.tool("npx"), required: true,
+                    recovery: "ed tools ls"))
         }
         if id == "herdr" {
             checks.append(try await herdrCheck())

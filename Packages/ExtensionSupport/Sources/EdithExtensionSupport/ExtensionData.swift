@@ -13,7 +13,7 @@ public enum ExtensionData {
         "notchShelf": "", "latex": "", "calendar": "", "appMaintenance": "", "music": "",
         "seoAudit": "", "machines": "machines", "codeStats": "code-stats",
         "virtualCamera": "virtual-camera", "companion": "machines", "database": "database",
-        "timeLapse": "", "downloads": "data", "homebrew": "",
+        "timeLapse": "", "downloads": "data", "homebrew": "", "plugins": "",
     ]
 
     public static let productionLeaves: [String: [String]] = [
@@ -35,7 +35,7 @@ public enum ExtensionData {
             "machines/companion-config.json", "machines/companion-deployment.json",
             "machines/companion-outbox",
         ],
-        "database": ["database"], "timeLapse": ["video-projects/TimeLapses"],
+        "plugins": ["plugins/cache"], "database": ["database"], "timeLapse": ["video-projects/TimeLapses"],
         "downloads": [
             "data/downloads.json", "data/downloads.json.lock", "data/downloads.json.scheduler.lock",
             "data/downloads.json.activity.json", "data/downloads.json.activity.json.lock",
