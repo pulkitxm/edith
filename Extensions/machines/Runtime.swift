@@ -160,6 +160,9 @@ final class ExtensionRuntime: NSObject {
 
     private func retireUI() {
         guard let facade = uiClient else { return }
+        MachinePrivacy.shared.shutdown()
+        TextEditingCommands.shutdown()
+        MachineWindowCommands.shared.shutdown()
         facade.cancelPendingWork()
         let id = UUID()
         uiRetirements[id] = Task { [self, facade] in
@@ -198,6 +201,9 @@ final class ExtensionRuntime: NSObject {
             facade.failure = { [weak model] message in model?.operationError = message }
             uiClient = facade
             facade.start()
+            MachinePrivacy.shared.start()
+            TextEditingCommands.install()
+            MachineWindowCommands.shared.install()
             return ["ok": true] as NSDictionary
         case "terminalUI":
             guard let facade = uiClient, let data = input["payload"] as? Data,
@@ -216,6 +222,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "stopUI":
             WorkspaceModel.shared.stopPaneActions()
+            MachineProcessModels.reset()
             retireUI()
             FinderUndoBridge.shutdown()
             PaneViewStore.shared.shutdown()
@@ -290,7 +297,16 @@ final class ExtensionRuntime: NSObject {
                         guard model.knows(id) else { return }
                         model.selection = id
 
-                    }, stopped: { [weak self] in self?.running != true })
+                    }, stopped: { [weak self] in self?.running != true },
+                    health: { [weak self] in
+                        guard let health = self?.health else { return nil }
+                        if let latest = health.latest,
+                            Date().timeIntervalSince(latest.checkedAt) < 60
+                        {
+                            return latest
+                        }
+                        return await health.refresh()
+                    })
                 let files = MachineFilesEngine(session: { id in
                     guard MachinesModel.shared.knows(id) else {
                         throw MachineUIError.invalidRequest
