@@ -3659,6 +3659,37 @@ describe("retained history coverage", () => {
     expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
   });
 
+  test("project attribution does not change a retained baseline", () => {
+    const retained = retainedWithDerivedCostRoundTrip();
+    const attribution = {
+      method: "name",
+      scope: "folder",
+      from: { repositoryID: "folder:/fixture" },
+    };
+    retained.daily[0].projects[0].attribution = attribution;
+    const result = merge(retained, retained);
+    expect(result.totals.tokens).toBe(100);
+    expect(result.historyRetention).toEqual(retained.historyRetention);
+    expect(result.daily[0].projects[0].attribution).toEqual(attribution);
+    expect(jqExit(VALIDATE, JSON.stringify(result))).toBe(0);
+    retained.historyRetention.blocks[0].baseline.bySource.cli[0].inputTokens += 1;
+    const changed = Bun.spawnSync([
+      "jq",
+      "-n",
+      "--argjson",
+      "previous",
+      JSON.stringify([retained]),
+      "--argjson",
+      "fresh",
+      JSON.stringify([retained]),
+      HISTORY,
+    ]);
+    expect(changed.exitCode).not.toBe(0);
+    expect(changed.stderr.toString()).toContain(
+      "usage retained history baseline changed",
+    );
+  });
+
   test("old and fresh retained baselines merge across derived costs and collection order", () => {
     const previous = retainedWithDerivedCostRoundTrip();
     const fresh = structuredClone(previous);
