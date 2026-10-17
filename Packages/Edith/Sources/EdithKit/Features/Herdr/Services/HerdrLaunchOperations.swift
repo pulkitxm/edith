@@ -5,6 +5,17 @@ public struct HerdrAgentLaunch: Sendable {
     public let local: [String]
     public let remote: @Sendable (RemoteMachinePlatform) -> String
     public let timeout: TimeInterval
+    public let waitsForAvailableShell: Bool
+
+    public init(
+        local: [String], remote: @escaping @Sendable (RemoteMachinePlatform) -> String,
+        timeout: TimeInterval, waitsForAvailableShell: Bool = false
+    ) {
+        self.local = local
+        self.remote = remote
+        self.timeout = timeout
+        self.waitsForAvailableShell = waitsForAvailableShell
+    }
 }
 
 public enum HerdrLaunchOperations {
@@ -132,6 +143,7 @@ public enum HerdrLaunchOperations {
 
     private static let defaultTimeout: TimeInterval = 15
     private static let agentStartTimeoutMS = 30_000
+    private static let shellReadyTimeout: Duration = .seconds(15)
 
     public static func startupMessage(for error: Error) -> String {
         if case HerdrCommandError.commandFailed(let response) = error,
@@ -211,6 +223,15 @@ public enum HerdrLaunchOperations {
         let launch = agentLaunch(
             kind: kind, name: name, pane: pane, options: options, catalog: catalog, session: session
         )
+        if launch.waitsForAvailableShell {
+            _ = await HerdrPaneOperations.waitForAvailableShell(
+                timeout: shellReadyTimeout,
+                read: {
+                    try await HerdrCommand.run(
+                        HerdrPaneProcessCommand.arguments(session: session, pane: pane),
+                        timeout: defaultTimeout, on: machine)
+                })
+        }
         _ = try await HerdrCommand.run(
             local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
     }
@@ -238,7 +259,7 @@ public enum HerdrLaunchOperations {
                             HerdrAgentStartCommand.arguments(
                                 name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
                                 agentArguments: agentArguments), session: session), platform: $0)
-                }, timeout: TimeInterval(timeoutMS / 1_000) + 5)
+                }, timeout: TimeInterval(timeoutMS / 1_000) + 5, waitsForAvailableShell: true)
         }
         let command = HerdrLaunchSettings.launchCommand(for: kind, in: defaults)
         return HerdrAgentLaunch(

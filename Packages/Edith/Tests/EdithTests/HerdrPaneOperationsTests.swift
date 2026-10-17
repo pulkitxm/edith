@@ -3,6 +3,18 @@ import Testing
 
 @testable import EdithKit
 
+private actor ShellReads {
+    private var outputs: [String]
+    private(set) var count = 0
+
+    init(outputs: [String]) { self.outputs = outputs }
+
+    func next() -> String {
+        count += 1
+        return outputs.isEmpty ? "" : outputs.removeFirst()
+    }
+}
+
 private actor HerdrCloseRecorder {
     private(set) var events: [String] = []
     private var states: [HerdrPaneState]
@@ -52,6 +64,49 @@ private actor HerdrCloseRecorder {
         #expect(
             HerdrListParser.processTitle("/opt/homebrew/bin/python3 -m http.server")
                 == "python3 -m http.server")
+    }
+
+    @Test func aShellWithStartupChildrenIsStillInitializing() {
+        let json = """
+            {"result":{"process_info":{"foreground_process_group_id":21022,"foreground_processes":[{"name":"zsh","pid":21022,"argv0":"-zsh"},{"name":"node","pid":21304},{"name":"tail","pid":21079}],"shell_pid":21022}}}
+            """
+        #expect(HerdrListParser.shellAvailability(from: json) == .initializing)
+        #expect(HerdrListParser.shellAvailability(from: Self.idleShell) == .available)
+        #expect(HerdrListParser.shellAvailability(from: Self.runningAgent) == .occupied)
+        #expect(HerdrListParser.shellAvailability(from: "{}") == .initializing)
+        let powershell = """
+            {"result":{"process_info":{"foreground_process_group_id":4,"foreground_processes":[{"name":"pwsh.exe","pid":4}],"shell_pid":4}}}
+            """
+        #expect(HerdrListParser.shellAvailability(from: powershell) == .available)
+    }
+
+    @Test func agentStartWaitsUntilStartupChildrenLeaveTheShell() async {
+        let initializing = """
+            {"result":{"process_info":{"foreground_process_group_id":21022,"foreground_processes":[{"name":"zsh","pid":21022},{"name":"node","pid":21304}],"shell_pid":21022}}}
+            """
+        let reads = ShellReads(outputs: [initializing, initializing, Self.idleShell])
+        let ready = await HerdrPaneOperations.waitForAvailableShell(
+            timeout: .seconds(2), interval: .milliseconds(1), read: { await reads.next() })
+        #expect(ready)
+        #expect(await reads.count == 3)
+    }
+
+    @Test func aForegroundProgramDoesNotDelayAgentStart() async {
+        let reads = ShellReads(outputs: [Self.runningAgent, Self.idleShell])
+        let ready = await HerdrPaneOperations.waitForAvailableShell(
+            timeout: .seconds(2), interval: .milliseconds(1), read: { await reads.next() })
+        #expect(!ready)
+        #expect(await reads.count == 1)
+    }
+
+    @Test func aShellThatKeepsInitializingStopsWaiting() async {
+        let initializing = """
+            {"result":{"process_info":{"foreground_process_group_id":21022,"foreground_processes":[{"name":"zsh","pid":21022},{"name":"tail","pid":21079}],"shell_pid":21022}}}
+            """
+        let ready = await HerdrPaneOperations.waitForAvailableShell(
+            timeout: .milliseconds(40), interval: .milliseconds(5),
+            read: { initializing })
+        #expect(!ready)
     }
 
     @Test func processInfoWithoutProcessesIsUnknown() {

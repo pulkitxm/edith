@@ -156,6 +156,41 @@ public enum HerdrListParser {
             running: group != nil && shell != nil && group != shell)
     }
 
+    public static func shellAvailability(from text: String) -> HerdrShellAvailability {
+        guard let json = firstJSON(in: text) as? [String: Any],
+            let payload = unwrap(json) as? [String: Any],
+            let info = payload["process_info"] as? [String: Any],
+            let processes = info["foreground_processes"] as? [[String: Any]],
+            !processes.isEmpty,
+            let shell = integer(in: info, keys: ["shell_pid"]),
+            let group = integer(in: info, keys: ["foreground_process_group_id"])
+        else { return .initializing }
+        if group != shell { return .occupied }
+        let identities = processes.compactMap { integer(in: $0, keys: ["pid"]) }
+        if identities.count != processes.count || identities.contains(where: { $0 != shell }) {
+            return .initializing
+        }
+        guard
+            let leader = processes.first(where: { integer(in: $0, keys: ["pid"]) == shell }),
+            let raw = string(in: leader, keys: ["name"]) ?? string(in: leader, keys: ["argv0"]),
+            isShellProcessName(raw)
+        else { return .occupied }
+        return .available
+    }
+
+    static func isShellProcessName(_ name: String) -> Bool {
+        var program = (name as NSString).lastPathComponent
+        if program.hasPrefix("-") { program.removeFirst() }
+        if program.lowercased().hasSuffix(".exe") { program.removeLast(4) }
+        switch program.lowercased() {
+        case "sh", "bash", "dash", "zsh", "fish", "ksh", "mksh", "csh", "tcsh", "elvish", "xonsh",
+            "nu", "pwsh", "powershell", "cmd":
+            return true
+        default:
+            return false
+        }
+    }
+
     public static func scrollInfo(from text: String, pane: String? = nil) -> HerdrScrollInfo? {
         guard let json = firstJSON(in: text),
             let payload = unwrap(json) as? [String: Any]
