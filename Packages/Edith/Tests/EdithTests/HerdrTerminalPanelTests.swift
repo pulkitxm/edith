@@ -631,6 +631,68 @@ private actor HerdrPanelHerdr {
         #expect(HerdrTerminalPanelSizing.height(900, maximum: 500) == 500)
     }
 
+    @Test func theTerminalOverlaySitsOnTheAgentColumn() {
+        let bounds = HerdrTerminalPanelBounds(
+            width: 1200, height: 800, contentLeading: 261, contentWidth: 670)
+        let frame = HerdrTerminalPanelSizing.frame(
+            bounds: bounds, width: .content, height: 260, maximized: false)
+        #expect(frame == HerdrTerminalPanelFrame(x: 261, y: 540, width: 670, height: 260))
+        #expect(bounds.contentLeading == 261)
+        #expect(bounds.contentWidth == 670)
+    }
+
+    @Test func draggingTheTopEdgeFillsTheHeightAndLeavesTheColumnAlone() {
+        let bounds = HerdrTerminalPanelBounds(
+            width: 1200, height: 800, contentLeading: 261, contentWidth: 670)
+        let start = HerdrTerminalPanelSizing.frame(
+            bounds: bounds, width: .content, height: 260, maximized: false)
+        let moved = HerdrTerminalPanelSizing.moved(
+            start: start, bounds: bounds, edge: .top, translation: -600)
+        let described = HerdrTerminalPanelSizing.describe(frame: moved, bounds: bounds)
+        #expect(moved == HerdrTerminalPanelFrame(x: 261, y: 0, width: 670, height: 800))
+        #expect(described.maximized)
+        #expect(described.width == .content)
+        #expect(bounds.contentWidth == 670)
+    }
+
+    @Test func draggingOneSidePastTheWindowFillsTheWidth() {
+        let bounds = HerdrTerminalPanelBounds(
+            width: 1000, height: 800, contentLeading: 200, contentWidth: 600)
+        let start = HerdrTerminalPanelSizing.frame(
+            bounds: bounds, width: .content, height: 260, maximized: false)
+        let moved = HerdrTerminalPanelSizing.moved(
+            start: start, bounds: bounds, edge: .trailing, translation: 500)
+        let described = HerdrTerminalPanelSizing.describe(frame: moved, bounds: bounds)
+        #expect(moved.x == 0)
+        #expect(moved.width == 1000)
+        #expect(moved.height == 260)
+        #expect(described.width == .full)
+        #expect(!described.maximized)
+        #expect(bounds.contentLeading == 200)
+        #expect(bounds.contentWidth == 600)
+    }
+
+    @Test func aCustomOverlayStaysInsideTheWindowAndIsRemembered() {
+        let defaults = Self.scratchDefaults()
+        let panels = HerdrTerminalPanels(
+            defaults: defaults, operations: HerdrPanelHerdr().operations)
+        panels.widthMode = .custom(leading: 40, width: 480)
+        let restored = HerdrTerminalPanels(defaults: defaults)
+        #expect(restored.widthMode == .custom(leading: 40, width: 480))
+        let bounds = HerdrTerminalPanelBounds(
+            width: 900, height: 700, contentLeading: 180, contentWidth: 500)
+        let frame = HerdrTerminalPanelSizing.frame(
+            bounds: bounds, width: restored.widthMode, height: restored.height, maximized: false)
+        #expect(frame.x == 40)
+        #expect(frame.width == 480)
+        #expect(frame.x + frame.width <= bounds.width)
+        panels.widthMode = .full
+        #expect(HerdrTerminalPanels(defaults: defaults).widthMode == .full)
+        let full = HerdrTerminalPanelSizing.frame(
+            bounds: bounds, width: .full, height: 260, maximized: true)
+        #expect(full == HerdrTerminalPanelFrame(x: 0, y: 0, width: 900, height: 700))
+    }
+
     private func makeStore(_ herdr: HerdrPanelHerdr) -> HerdrStore {
         let defaults = Self.scratchDefaults()
         return HerdrStore(
