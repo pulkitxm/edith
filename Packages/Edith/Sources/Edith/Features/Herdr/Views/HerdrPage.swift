@@ -196,12 +196,16 @@ struct HerdrPage: View {
     private var messageMenu: some View {
         let agents = store.filteredAgents
         return Menu {
-            ForEach(HerdrBroadcastGroup.allCases) { group in
-                let count = group.recipients(from: agents).count
-                Button("\(group.title) (\(count))") {
-                    store.messaging.compose(group, from: agents)
+            HerdrBroadcastMenuItems(agents: agents, store: store)
+            if let tab = store.currentTab, tab.isSplit {
+                let tabAgents = tab.agentIDs.compactMap { store.session($0)?.agent }
+                if !HerdrBroadcastGroup.all.recipients(from: tabAgents).isEmpty {
+                    Divider()
+                    Menu("This Tab") {
+                        HerdrBroadcastMenuItems(
+                            agents: tabAgents, store: store, scopeTitle: "This Tab")
+                    }
                 }
-                .disabled(count == 0)
             }
         } label: {
             Image(systemName: "paperplane")
@@ -213,7 +217,7 @@ struct HerdrPage: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Message")
-        .help("Send a message to every working or stopped agent in the list")
+        .help("Send a message to agents in the list or in the open side-by-side tab")
     }
 
     private var terminalCloseRequested: Binding<Bool> {
@@ -625,6 +629,14 @@ struct HerdrPage: View {
     private func tabContextMenu(id: String, closable: Bool) -> some View {
         if let tab = store.tab(id) {
             if tab.isSplit {
+                let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
+                if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
+                    Menu("Send Message") {
+                        HerdrBroadcastMenuItems(
+                            agents: agents, store: store, scopeTitle: "This Tab")
+                    }
+                    Divider()
+                }
                 Button("Separate Into Tabs") { animate { store.separate(id) } }
             }
             let others = store.tabs.filter { $0.id != id }
@@ -903,6 +915,23 @@ struct HerdrPage: View {
         }
     }
 
+    private func spaceMessageMenu(_ space: HerdrAgentSpace, accessibleTitle: String) -> some View {
+        Menu {
+            HerdrBroadcastMenuItems(
+                agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
+        } label: {
+            Image(systemName: "paperplane")
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Message agents in \(accessibleTitle)")
+        .accessibilityLabel("Message agents in \(accessibleTitle)")
+    }
+
     private func spaceHeader(_ space: HerdrAgentSpace, count: Int? = nil) -> some View {
         let collapsed = store.spaceIsCollapsed(space.id)
         let shownCount = count ?? space.agents.count
@@ -946,6 +975,10 @@ struct HerdrPage: View {
             .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
             .herdrDraggable(.space(space.id), simultaneous: true)
 
+            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+                spaceMessageMenu(space, accessibleTitle: accessibleTitle)
+            }
+
             Button {
                 newAgentSpace = space
             } label: {
@@ -973,6 +1006,15 @@ struct HerdrPage: View {
             .buttonStyle(.edith(.borderless))
             .help("Open \(accessibleTitle) in a new window")
             .accessibilityLabel("Open \(accessibleTitle) in a new window")
+        }
+        .contextMenu {
+            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+                Menu("Send Message") {
+                    HerdrBroadcastMenuItems(
+                        agents: space.agents, store: store, scopeTitle: space.title,
+                        redactScope: true)
+                }
+            }
         }
         .padding(.leading, UIScale.pt(14))
         .padding(.trailing, UIScale.pt(6))
@@ -1038,13 +1080,14 @@ struct HerdrPage: View {
                         .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
-                if let waiting = store.messaging.armedHook(for: agent.id) {
+                let waiting = store.messaging.armedHooks(for: agent.id)
+                if !waiting.isEmpty {
                     Image(systemName: "paperplane.circle.fill")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))
-                        .help(waiting.schedule.sendsPhrase(now: Date()))
-                        .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
+                        .help(waitingHelp(waiting))
+                        .accessibilityLabel(waitingHelp(waiting))
                 }
             }
             .padding(.leading, UIScale.pt(12))
@@ -1075,6 +1118,11 @@ struct HerdrPage: View {
         .herdrDraggable(.agent(agent), simultaneous: true)
         .herdrAgentContextMenu(agent, store: store)
         .herdrDropFrame(HerdrDropGeometry.agentPrefix + agent.id)
+    }
+
+    private func waitingHelp(_ hooks: [HerdrAgentHook]) -> String {
+        if hooks.count == 1 { return hooks[0].schedule.sendsPhrase(now: Date()) }
+        return "\(hooks.count) messages waiting"
     }
 
     private func rowValue(_ highlight: HerdrRailHighlight) -> String {

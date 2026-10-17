@@ -197,27 +197,15 @@ struct HerdrAgentDetails: View {
     }
 
     private var messageSection: some View {
-        let armed = store.messaging.armedHook(for: agent.id)
+        let armed = store.messaging.armedHooks(for: agent.id)
         let last = store.messaging.lastHook(for: agent.id)
         return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text("Message")
                 .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            if let armed {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Label(
-                        armed.phase == .sending
-                            ? "Sending now" : armed.schedule.sendsPhrase(now: Date()),
-                        systemImage: "paperplane.circle.fill"
-                    )
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.accent(dark))
-                    Text(armed.message)
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(DashSkin.ink(dark))
-                        .lineLimit(4)
-                        .textSelection(.enabled)
-                        .presenterTextBlur(hideAgents, fontSize: 12)
+            if !armed.isEmpty {
+                ForEach(armed) { hook in
+                    waitingRow(hook)
                 }
             } else if let last {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
@@ -250,18 +238,39 @@ struct HerdrAgentDetails: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Write a message to send now, when it finishes, or at a time")
-                if let armed {
-                    Button {
-                        Task { await store.messaging.remove(armed.id) }
-                    } label: {
-                        Label("Cancel", systemImage: "xmark.circle")
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                    .disabled(armed.phase == .sending)
-                    .help("Cancel the waiting message")
-                }
             }
         }
+    }
+
+    private func waitingRow(_ hook: HerdrAgentHook) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
+                Label(waitingTitle(hook), systemImage: "paperplane.circle.fill")
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(DashSkin.accent(dark))
+                Spacer(minLength: 0)
+                Button {
+                    Task { await store.messaging.remove(hook.id) }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                }
+                .buttonStyle(.edith(.borderless))
+                .disabled(hook.phase == .sending)
+                .help("Cancel this message")
+                .accessibilityLabel("Cancel this waiting message")
+            }
+            Text(hook.message)
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.ink(dark))
+                .lineLimit(4)
+                .textSelection(.enabled)
+                .presenterTextBlur(hideAgents, fontSize: 12)
+        }
+    }
+
+    private func waitingTitle(_ hook: HerdrAgentHook) -> String {
+        hook.phase == .sending ? "Sending now" : hook.schedule.sendsPhrase(now: Date())
     }
 
     private func lastSummary(_ hook: HerdrAgentHook) -> String {

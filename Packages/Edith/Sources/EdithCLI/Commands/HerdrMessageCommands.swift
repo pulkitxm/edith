@@ -3,7 +3,7 @@ import EdithKit
 import Foundation
 
 enum HerdrMessageCLI {
-    static let groups = ["working", "stopped"]
+    static let groups = ["all", "working", "stopped"]
 
     static func schedule(whenFinished: Bool, delay: String?, at: String?) throws
         -> HerdrHookSchedule?
@@ -46,8 +46,12 @@ enum HerdrMessageCLI {
         hosts.flatMap(\.agents).filter { agent in
             guard !agent.isTerminal else { return false }
             if let session, agent.session != session { return false }
-            return group == "working"
-                ? agent.status == .working : agent.status == .idle || agent.status == .done
+            switch group {
+            case "all": return true
+            case "working": return agent.status == .working
+            case "stopped": return agent.status == .idle || agent.status == .done
+            default: return false
+            }
         }
     }
 
@@ -70,6 +74,23 @@ enum HerdrMessageCLI {
                 results.filter { !$0.1.delivered }.map { "\($0.0.pane): \($0.1.summary)" }),
             "results": .array(results.map(resultJSON)),
             "submitted": .int(results.filter { $0.1.delivered }.count),
+        ])
+    }
+
+    static func armedHook(
+        _ snapshot: HerdrHooksSnapshot, agentID: String, message: String
+    ) -> HerdrAgentHook? {
+        snapshot.hooks.last {
+            $0.agentID == agentID && !$0.phase.settled && $0.message == message
+        }
+    }
+
+    static func armedJSON(_ hooks: [HerdrAgentHook], failures: [String]) -> JSONValue {
+        .object([
+            "executed": .bool(true),
+            "failures": .strings(failures),
+            "hooks": .array(hooks.map(hookJSON)),
+            "armed": .int(hooks.count),
         ])
     }
 
@@ -98,7 +119,7 @@ enum HerdrMessageCLI {
 struct HerdrSendCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "send",
-        abstract: "Type a message into one agent, or into every working or stopped agent.",
+        abstract: "Type a message now, or schedule one for each chosen agent.",
         discussion: """
             Types a message into a live agent and presses Return, through `herdr agent
             prompt`.
@@ -107,9 +128,10 @@ struct HerdrSendCommand: AsyncParsableCommand {
 
             ed herdr send shed what should I do next?
             ed herdr send shed what should I do next? --json
+            ed herdr send all ship it --when-finished
             """, )
 
-    @Argument(help: "A pane id such as w3:p1N, or working, or stopped.")
+    @Argument(help: "A pane id such as w3:p1N, or all, working, or stopped.")
     var target: String
 
     @Argument(help: "The message to type into the agent.")
@@ -123,7 +145,7 @@ struct HerdrSendCommand: AsyncParsableCommand {
 
     @Flag(
         name: .customLong("when-finished"),
-        help: "Send it the next time the agent finishes a turn instead of now.")
+        help: "Send it the next time each agent finishes a turn instead of now.")
     var whenFinished = false
 
     @Option(name: .customLong("in"), help: "Send after a delay, such as 15m, 1h, or 1h30m.")
@@ -144,11 +166,11 @@ struct HerdrSendCommand: AsyncParsableCommand {
                 whenFinished: whenFinished, delay: delay, at: at)
             let group = target.lowercased()
             if HerdrMessageCLI.groups.contains(group) {
-                guard schedule == nil else {
-                    throw CLIFailure.usage(
-                        "a group sends now", hint: "pass a pane id to schedule one agent")
+                if let schedule {
+                    try await arm(text, group: group, schedule: schedule)
+                } else {
+                    try await broadcast(text, group: group)
                 }
-                try await broadcast(text, group: group)
                 return
             }
             let hosts = try await HerdrCLI.collect(machine)
@@ -195,6 +217,51 @@ struct HerdrSendCommand: AsyncParsableCommand {
     }
 
     private func arm(
+        _ text: String, group: String, schedule: HerdrHookSchedule
+    ) async throws {
+        let hosts = try await HerdrCLI.collect(machine)
+        let agents = HerdrMessageCLI.recipients(group: group, session: session, hosts: hosts)
+        guard !agents.isEmpty else {
+            guard !json else {
+                CLIOut.json(HerdrMessageCLI.armedJSON([], failures: []))
+                return
+            }
+            CLIOut.note("no \(group) agents")
+            return
+        }
+        var hooks: [HerdrAgentHook] = []
+        var failures: [String] = []
+        for agent in agents {
+            do {
+                let snapshot = try await HerdrHookClient().arm(
+                    text, for: agent, schedule: schedule)
+                if let hook = HerdrMessageCLI.armedHook(
+                    snapshot, agentID: agent.id, message: text)
+                {
+                    hooks.append(hook)
+                } else {
+                    failures.append(
+                        "\(agent.pane): the background agent did not keep the message")
+                }
+            } catch {
+                let failure = HerdrMessageCLI.agentFailure(error)
+                failures.append("\(agent.pane): \(failure)")
+            }
+        }
+        if json {
+            CLIOut.json(HerdrMessageCLI.armedJSON(hooks, failures: failures))
+        } else {
+            for hook in hooks {
+                let when = hook.schedule.sendsPhrase(now: Date())
+                CLIOut.out("\(hook.title): \(when) (\(hook.id.uuidString))")
+            }
+        }
+        if !failures.isEmpty {
+            throw CLIFailure(failures.joined(separator: "\n"))
+        }
+    }
+
+    private func arm(
         _ text: String, for agent: HerdrAgent, schedule: HerdrHookSchedule
     ) async throws {
         let snapshot: HerdrHooksSnapshot
@@ -203,7 +270,8 @@ struct HerdrSendCommand: AsyncParsableCommand {
         } catch {
             throw HerdrMessageCLI.agentFailure(error)
         }
-        guard let hook = snapshot.armed(for: agent.id) else {
+        guard let hook = HerdrMessageCLI.armedHook(snapshot, agentID: agent.id, message: text)
+        else {
             throw CLIFailure("the background agent did not keep the message")
         }
         guard !json else {

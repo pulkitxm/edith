@@ -1753,13 +1753,14 @@ private extension HerdrMessageOperation {
         switch self {
         case .send:
             userInterface(
-                "Herdr board", "send a message to one agent or every working or stopped agent",
+                "Herdr board",
+                "send or schedule a message for one agent, a tab, or a space",
                 ["w3:p1N", "run the tests again"])
         case .hooks:
-            userInterface("Herdr session tab", "see the message waiting for an agent to finish")
+            userInterface("Herdr session tab", "see the messages waiting on each agent")
         case .removeHook:
             userInterface(
-                "Herdr session tab", "cancel the message waiting for an agent", ["1F0C2A9B"])
+                "Herdr session tab", "cancel one message waiting for an agent", ["1F0C2A9B"])
         }
     }
 }

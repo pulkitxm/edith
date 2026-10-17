@@ -34,9 +34,12 @@ import Testing
         store.apply([.local(herdrPresent: true, agents: agents)])
         var finished = Self.hook(agents[2], "Open a PR for the docs.")
         finished.settle(.sent, "Submitted", at: Date().addingTimeInterval(-240))
+        var later = Self.hook(agents[0], "Then open the release notes.")
+        later.schedule = .at(Date().addingTimeInterval(3600))
         messaging.adopt(
             HerdrHooksSnapshot(hooks: [
                 Self.hook(agents[0], "Now run the full test suite and fix anything that fails."),
+                later,
                 finished,
             ]))
         store.open(agents[0])
@@ -52,10 +55,11 @@ import Testing
             .write(to: output.appendingPathComponent("herdr-message-sent.png"), options: .atomic)
 
         messaging.compose(.stopped, from: store.filteredAgents)
+        messaging.draft?.delivery = .whenFinished
         let draft = try #require(messaging.draft)
         try render(
             HerdrMessageSheet(messaging: messaging, draft: draft),
-            size: NSSize(width: 460, height: 300)
+            size: NSSize(width: 460, height: 480)
         )
         .write(to: output.appendingPathComponent("herdr-message-stopped.png"), options: .atomic)
 

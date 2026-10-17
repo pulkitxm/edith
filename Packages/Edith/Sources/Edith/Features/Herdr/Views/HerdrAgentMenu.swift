@@ -62,6 +62,24 @@ final class HerdrAgentActions {
     }
 }
 
+struct HerdrBroadcastMenuItems: View {
+    let agents: [HerdrAgent]
+    let store: HerdrStore
+    var scopeTitle: String?
+    var redactScope = false
+
+    var body: some View {
+        ForEach(HerdrBroadcastGroup.allCases) { group in
+            let count = group.recipients(from: agents).count
+            Button("\(group.title) (\(count))") {
+                store.messaging.compose(
+                    group, from: agents, scopeTitle: scopeTitle, redactScope: redactScope)
+            }
+            .disabled(count == 0)
+        }
+    }
+}
+
 struct HerdrAgentMenu: View {
     let agent: HerdrAgent
     let store: HerdrStore
@@ -122,16 +140,40 @@ struct HerdrAgentMenu: View {
                 store.messaging.compose(to: agent, presenterID: detached ? agent.id : nil)
                 if !detached { store.revealWorkspaceWindow() }
             }
-            if let hook = store.messaging.armedHook(for: agent.id) {
-                Button("Cancel Waiting Message") {
-                    Task { await store.messaging.remove(hook.id) }
-                }
-                .help(hook.schedule.sendsPhrase(now: Date()))
-            }
+            cancelWaiting
             Divider()
             Button("Delete Agent…", role: .destructive) { actions.agentToDelete = agent }
                 .disabled(actions.deleting.contains(agent.id))
         }
+    }
+
+    @ViewBuilder
+    private var cancelWaiting: some View {
+        let waiting = store.messaging.armedHooks(for: agent.id)
+        if waiting.count == 1, let hook = waiting.first {
+            Button("Cancel Waiting Message") {
+                Task { await store.messaging.remove(hook.id) }
+            }
+            .disabled(hook.phase == .sending)
+            .help(hook.schedule.sendsPhrase(now: Date()))
+        } else if waiting.count > 1 {
+            Menu("Cancel Waiting Message") {
+                ForEach(waiting) { hook in
+                    Button(cancelTitle(hook)) {
+                        Task { await store.messaging.remove(hook.id) }
+                    }
+                    .disabled(hook.phase == .sending)
+                }
+            }
+        }
+    }
+
+    private func cancelTitle(_ hook: HerdrAgentHook) -> String {
+        let phrase = hook.schedule.sendsPhrase(now: Date())
+        let message =
+            hook.message.count > 28
+            ? "\(hook.message.prefix(28))…" : hook.message
+        return "\(phrase): \(message)"
     }
 
     private func openBeside(_ tab: HerdrTab, _ side: InsertSide) {
