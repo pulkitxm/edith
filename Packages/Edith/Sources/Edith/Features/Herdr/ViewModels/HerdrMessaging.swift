@@ -59,7 +59,8 @@ struct HerdrMessageDraft: Identifiable, Equatable {
         var detail: String {
             switch self {
             case .now: "Herdr types it in and presses Return."
-            case .whenFinished: "Edith sends it once, the next time this agent finishes a turn."
+            case .whenFinished:
+                "Edith sends it once, the next time the agent finishes a turn."
             case .after: "Edith sends it after the delay you pick."
             case .at: "Edith sends it at the time you pick."
             }
@@ -117,7 +118,11 @@ final class HerdrMessaging {
     }
 
     func armedHook(for agentID: String) -> HerdrAgentHook? {
-        hooks.armed(for: agentID)
+        armedHooks(for: agentID).first
+    }
+
+    func armedHooks(for agentID: String) -> [HerdrAgentHook] {
+        hooks.armedHooks(for: agentID)
     }
 
     func lastHook(for agentID: String) -> HerdrAgentHook? {
@@ -155,15 +160,32 @@ final class HerdrMessaging {
     func arm(
         _ text: String, for agent: HerdrAgent, schedule: HerdrHookSchedule
     ) async -> Bool {
-        guard let text = HerdrAgentPrompt.normalized(text) else { return false }
-        do {
-            adopt(try await armer(text, agent, schedule))
-            errorMessage = nil
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+        await arm(text, for: [agent], schedule: schedule).count == 1
+    }
+
+    @discardableResult
+    func arm(
+        _ text: String, for agents: [HerdrAgent], schedule: HerdrHookSchedule
+    ) async -> [String] {
+        guard let text = HerdrAgentPrompt.normalized(text), !agents.isEmpty else { return [] }
+        var armed: [String] = []
+        var failures: [(String, String)] = []
+        for agent in agents {
+            do {
+                adopt(try await armer(text, agent, schedule))
+                armed.append(agent.id)
+            } catch {
+                failures.append((agent.title, error.localizedDescription))
+            }
         }
+        if failures.isEmpty {
+            errorMessage = nil
+        } else if agents.count == 1 {
+            errorMessage = failures[0].1
+        } else {
+            errorMessage = failures.map { "\($0.0): \($0.1)" }.joined(separator: " ")
+        }
+        return armed
     }
 
     func remove(_ id: UUID) async {

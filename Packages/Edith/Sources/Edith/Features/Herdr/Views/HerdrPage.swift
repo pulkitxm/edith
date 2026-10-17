@@ -1080,13 +1080,14 @@ struct HerdrPage: View {
                         .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
-                if let waiting = store.messaging.armedHook(for: agent.id) {
+                let waiting = store.messaging.armedHooks(for: agent.id)
+                if !waiting.isEmpty {
                     Image(systemName: "paperplane.circle.fill")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))
-                        .help(waiting.schedule.sendsPhrase(now: Date()))
-                        .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
+                        .help(waitingHelp(waiting))
+                        .accessibilityLabel(waitingHelp(waiting))
                 }
             }
             .padding(.leading, UIScale.pt(12))
@@ -1117,6 +1118,11 @@ struct HerdrPage: View {
         .herdrDraggable(.agent(agent), simultaneous: true)
         .herdrAgentContextMenu(agent, store: store)
         .herdrDropFrame(HerdrDropGeometry.agentPrefix + agent.id)
+    }
+
+    private func waitingHelp(_ hooks: [HerdrAgentHook]) -> String {
+        if hooks.count == 1 { return hooks[0].schedule.sendsPhrase(now: Date()) }
+        return "\(hooks.count) messages waiting"
     }
 
     private func rowValue(_ highlight: HerdrRailHighlight) -> String {

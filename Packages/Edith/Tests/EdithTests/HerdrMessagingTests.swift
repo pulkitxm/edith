@@ -16,28 +16,36 @@ private func agent(
         cwd: "/tmp", category: category, stateSequence: 1)
 }
 
-private func hook(_ agent: HerdrAgent, _ message: String) -> HerdrAgentHook {
+private func hook(
+    _ agent: HerdrAgent, _ message: String, schedule: HerdrHookSchedule = .whenFinished
+) -> HerdrAgentHook {
     HerdrAgentHook(
         agent: agent, message: message,
         observation: HerdrAgentObservation(
             kind: agent.kind, status: agent.status, sequence: agent.stateSequence,
             identity: HerdrAgentIdentity(terminalID: "term_1", processGroupID: 123)),
-        schedule: .whenFinished)
+        schedule: schedule)
 }
 
 private final class Recorder: @unchecked Sendable {
     private let lock = NSLock()
     private var sentValue: [(String, [String])] = []
     private var armedValue: [(String, String)] = []
+    private var hooks: [HerdrAgentHook] = []
 
     func send(_ text: String, _ agents: [HerdrAgent]) -> [String: HerdrPromptOutcome] {
         lock.withLock { sentValue.append((text, agents.map(\.pane))) }
         return Dictionary(uniqueKeysWithValues: agents.map { ($0.id, .submitted) })
     }
 
-    func arm(_ text: String, _ agent: HerdrAgent) -> HerdrHooksSnapshot {
-        lock.withLock { armedValue.append((text, agent.pane)) }
-        return HerdrHooksSnapshot(hooks: [hook(agent, text)])
+    func arm(
+        _ text: String, _ agent: HerdrAgent, _ schedule: HerdrHookSchedule
+    ) -> HerdrHooksSnapshot {
+        lock.withLock {
+            armedValue.append((text, agent.pane))
+            hooks.append(hook(agent, text, schedule: schedule))
+            return HerdrHooksSnapshot(hooks: hooks)
+        }
     }
 
     var sent: [(String, [String])] { lock.withLock { sentValue } }
@@ -55,9 +63,9 @@ struct HerdrMessagingTests {
     private func messaging(_ recorder: Recorder, armFails: Bool = false) -> HerdrMessaging {
         HerdrMessaging(
             broadcaster: { recorder.send($0, $1) },
-            arm: { text, agent, _ in
+            arm: { text, agent, schedule in
                 if armFails { throw AgentError(.unavailable, "The agent is still starting.") }
-                return recorder.arm(text, agent)
+                return recorder.arm(text, agent, schedule)
             },
             remove: { _ in HerdrHooksSnapshot() })
     }
@@ -145,6 +153,19 @@ struct HerdrMessagingTests {
         #expect(messaging.armedHook(for: fleet[1].id) == nil)
     }
 
+    @Test func schedulingAGroupKeepsOneHookPerAgent() async {
+        let recorder = Recorder()
+        let messaging = messaging(recorder)
+        let when = Date(timeIntervalSince1970: 1_800_003_600)
+        let armed = await messaging.arm(
+            "ship it", for: [fleet[0], fleet[1]], schedule: .at(when))
+        #expect(armed == [fleet[0].id, fleet[1].id])
+        #expect(recorder.armed.map(\.1) == ["w1:p1", "w1:p2"])
+        #expect(messaging.armedHooks(for: fleet[0].id).map(\.message) == ["ship it"])
+        #expect(messaging.armedHooks(for: fleet[1].id).map(\.schedule) == [.at(when)])
+        #expect(messaging.armedHooks(for: fleet[0].id) != messaging.armedHooks(for: fleet[1].id))
+    }
+
     @Test func armingReportsTheBackgroundAgentError() async {
         let messaging = messaging(Recorder(), armFails: true)
         #expect(!(await messaging.arm("run the tests", for: fleet[1], schedule: .whenFinished)))
@@ -157,10 +178,13 @@ struct HerdrMessagingTests {
         var newer = hook(fleet[1], "newer")
         newer.settle(.skipped, "Skipped", at: Date(timeIntervalSince1970: 200))
         let waiting = hook(fleet[1], "next")
-        let snapshot = HerdrHooksSnapshot(hooks: [sent, waiting, newer])
+        let other = hook(fleet[0], "other")
+        let queued = hook(fleet[1], "after that")
+        let snapshot = HerdrHooksSnapshot(hooks: [sent, waiting, newer, other, queued])
         #expect(snapshot.armed(for: fleet[1].id) == waiting)
+        #expect(snapshot.armedHooks(for: fleet[1].id).map(\.message) == ["next", "after that"])
         #expect(snapshot.latestSettled(for: fleet[1].id) == newer)
-        #expect(snapshot.armed(for: fleet[0].id) == nil)
+        #expect(snapshot.armedHooks(for: fleet[0].id).map(\.message) == ["other"])
     }
 
     @Test func storeOffersOnlyFilteredAgentsForMessages() {
