@@ -224,12 +224,6 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
             device.whiteBalanceMode = .continuousAutoWhiteBalance
         }
-        let spaces = device.activeFormat.supportedColorSpaces
-        if spaces.contains(.P3_D65) {
-            device.activeColorSpace = .P3_D65
-        } else if spaces.contains(.sRGB) {
-            device.activeColorSpace = .sRGB
-        }
     }
 
     public func captureOutput(

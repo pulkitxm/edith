@@ -52,7 +52,7 @@ enum VirtualCameraImageTarget {
 @MainActor
 final class VirtualCameraPageModel: ObservableObject {
     static let shared = VirtualCameraPageModel()
-    static let previewSize = CGSize(width: 1280, height: 720)
+    static let previewSize = CGSize(width: 1920, height: 1080)
     static let saveDelay: TimeInterval = 0.15
 
     @Published private(set) var state: VirtualCameraState
