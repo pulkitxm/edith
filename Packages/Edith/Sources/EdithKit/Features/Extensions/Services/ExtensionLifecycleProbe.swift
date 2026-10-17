@@ -230,6 +230,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "focusDim": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "hinge": Policy(
+            requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "windowSweaters": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "presenter": Policy(

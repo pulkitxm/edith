@@ -168,6 +168,15 @@ extension VirtualCameraPageModel {
             set: { value in self.updateComposition { $0[keyPath: keyPath] = value } })
     }
 
+    func pictureBinding(_ keyPath: WritableKeyPath<VirtualCameraFraming, Double>) -> Binding<Double>
+    {
+        Binding(
+            get: { 1 - self.composition.framing[keyPath: keyPath] },
+            set: { value in
+                self.updateComposition { $0.framing[keyPath: keyPath] = 1 - value }
+            })
+    }
+
     func stateBinding<Value>(_ keyPath: WritableKeyPath<VirtualCameraState, Value>) -> Binding<
         Value
     > {
@@ -212,10 +221,10 @@ struct VirtualCameraFramePanel: View {
                 dark: dark
             ) {
                 VirtualCameraSliderRow(
-                    title: "Left to right", value: model.binding(\.framing.centerX), range: 0...1,
+                    title: "Left to right", value: model.pictureBinding(\.centerX), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)
                 VirtualCameraSliderRow(
-                    title: "Top to bottom", value: model.binding(\.framing.centerY), range: 0...1,
+                    title: "Top to bottom", value: model.pictureBinding(\.centerY), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)
                 VirtualCameraSliderRow(
                     title: "Tilt", value: model.binding(\.framing.tilt),

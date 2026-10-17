@@ -700,7 +700,7 @@ struct ExtensionSettingsSheet: View {
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
-        case "focusDim", "colorPicker", "keystrokeHighlight": 430
+        case "focusDim", "hinge", "colorPicker", "keystrokeHighlight": 430
         case "system": 500
         case "presenter": 580
         default: 620
@@ -1106,6 +1106,7 @@ struct ExtensionDetailRows: View {
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
+            case .hinge: HingeRows()
             case .windowSweaters: WindowSweatersRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()

@@ -64,6 +64,7 @@ public enum HotKeyCatalog {
     public static let clipboard = "clipboard"
     public static let notchShelf = "notchShelf"
     public static let focusDim = "focusDim"
+    public static let hinge = "hinge"
     public static let colorPicker = "colorPicker"
     public static let micMute = "micMute"
     public static let presenter = "presenter"
@@ -107,6 +108,11 @@ public enum HotKeyCatalog {
             modsKey: "focusDimHotKeyMods", labelKey: "focusDimHotKeyLabel",
             defaultCode: kVK_ANSI_F, defaultMods: cmdKey | optionKey, defaultLabel: "⌥⌘F",
             abilityID: "focusDim"),
+        HotKeyBinding(
+            id: hinge, title: "Hinge", carbonID: 12, codeKey: HingeSettings.hotKeyCode,
+            modsKey: HingeSettings.hotKeyMods, labelKey: HingeSettings.hotKeyLabel,
+            defaultCode: kVK_ANSI_H, defaultMods: controlKey | optionKey, defaultLabel: "⌃⌥H",
+            abilityID: "hinge"),
         HotKeyBinding(
             id: presenter, title: "Presenter mode", carbonID: 7, codeKey: "presenterHotKeyCode",
             modsKey: "presenterHotKeyMods", labelKey: "presenterHotKeyLabel",

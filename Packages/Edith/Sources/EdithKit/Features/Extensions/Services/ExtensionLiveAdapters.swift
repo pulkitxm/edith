@@ -72,7 +72,7 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
         "keystrokeHighlight",
-        "focusDim", "windowSweaters", "presenter", "studio", "latex", "timeLapse", "music",
+        "focusDim", "hinge", "windowSweaters", "presenter", "studio", "latex", "timeLapse", "music",
         "downloads",
         "notchShelf",
         "audioMixer", "calendar", "virtualCamera",
@@ -143,6 +143,7 @@ public enum ExtensionLiveAdapters {
         case "clipboard": await clipboardReadiness()
         case "keystrokeHighlight": keystrokeHighlightReadiness(defaults: defaults)
         case "focusDim": await focusDimReadiness(defaults: defaults)
+        case "hinge": hingeReadiness(defaults: defaults)
         case "presenter": presenterReadiness(defaults: defaults)
         case "windowSweaters": windowSweatersReadiness(defaults: defaults)
         case "colorPicker": await colorPickerReadiness(defaults: defaults)
@@ -566,6 +567,25 @@ public enum ExtensionLiveAdapters {
             readyDetail: "Focus Dim can manage \(screenCount) display(s).",
             setupDetail: "A stored dim intensity, animation duration, or display mode is invalid.",
             emptyDetail: "No active display is available for Focus Dim."
+        ).readiness
+    }
+
+    static func hingeReadiness(defaults: UserDefaults) -> ExtensionAdapterReadiness {
+        let strength = defaults.object(forKey: HingeSettings.effectStrength) as? Double
+        let angle = defaults.object(forKey: HingeSettings.openAngle) as? Double
+        let fill = defaults.string(forKey: HingeSettings.sideFill)
+        let configured =
+            (strength == nil || HingeSettings.strengthRange.contains(strength!))
+            && (angle == nil || (angle!.isFinite && (25...180).contains(angle!)))
+            && (fill == nil || HingeSideFill(rawValue: fill!) != nil)
+        let sensor = defaults.bool(forKey: HingeSettings.sensorAvailable)
+        return ExtensionAdapterFacts(
+            configured: configured, contentCount: sensor ? 1 : 0,
+            readyDetail: sensor
+                ? "Hinge can read the lid angle."
+                : "Hinge is ready. It waits for a lid angle sensor.",
+            setupDetail: "A stored open angle, strength, or side fill is invalid.",
+            emptyDetail: "No lid angle sensor is available yet."
         ).readiness
     }
 

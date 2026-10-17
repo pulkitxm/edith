@@ -355,6 +355,7 @@ public actor SurfaceExtensionClient {
         switch widget {
         case .ability("keepAwake"): setting = AppStorageKeys.General.preventSleep
         case .ability("focusDim"): setting = "focusDimActive"
+        case .ability("hinge"): setting = HingeState.activeKey
         case .ability("keystrokeHighlight"): setting = AppStorageKeys.KeystrokeHighlight.active
         case .ability("windowSweaters"): setting = AppStorageKeys.WindowSweaters.active
         case .ability("presenter"): setting = AppStorageKeys.Presenter.mode

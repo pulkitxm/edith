@@ -114,6 +114,80 @@ import Testing
         #expect(pixel(20, 300).near(.white))
     }
 
+    struct Bounds {
+        var minX = Int.max
+        var maxX = Int.min
+        var minY = Int.max
+        var maxY = Int.min
+
+        var isEmpty: Bool { minX > maxX }
+    }
+
+    func markBounds(
+        _ pixel: (Int, Int) -> RGB, width: Int = 320, height: Int = 180
+    ) -> Bounds {
+        var bounds = Bounds()
+        for y in 0..<height {
+            for x in 0..<width where pixel(x, y).near(.red, tolerance: 30) {
+                bounds.minX = min(bounds.minX, x)
+                bounds.maxX = max(bounds.maxX, x)
+                bounds.minY = min(bounds.minY, y)
+                bounds.maxY = max(bounds.maxY, y)
+            }
+        }
+        return bounds
+    }
+
+    func rendered(
+        _ framing: VirtualCameraFraming, mirrorOutput: Bool = false
+    ) throws -> (Int, Int) -> RGB {
+        var image = compose(
+            VirtualCameraComposition(framing: framing), image: Self.markedFrame())
+        if mirrorOutput {
+            image = VirtualCameraRenderer.oriented(
+                image, framing: VirtualCameraFraming(flipHorizontal: true))
+        }
+        return try pixels(image)
+    }
+
+    static func markedFrame() -> CIImage {
+        let canvas = CGRect(x: 0, y: 0, width: 1600, height: 900)
+        let mark = solid(1, 0, 0, CGRect(x: 500, y: 330, width: 180, height: 140))
+        return mark.composited(over: solid(0, 0, 0.15, canvas))
+    }
+
+    @Test(arguments: [
+        (false, false, false, false),
+        (true, false, false, false),
+        (false, true, false, false),
+        (true, true, false, false),
+        (false, false, true, false),
+        (false, false, false, true),
+        (true, true, true, true),
+    ])
+    func draggingMovesThePictureWithThePointer(
+        flipHorizontal: Bool, flipVertical: Bool, mirrorOutput: Bool, mirrorPreview: Bool
+    ) throws {
+        let source = CGSize(width: 1600, height: 900)
+        let view = CGSize(width: 320, height: 180)
+        let start = VirtualCameraFraming(
+            zoom: 2, flipHorizontal: flipHorizontal, flipVertical: flipVertical)
+        let axes = VirtualCameraDragAxes(mirrorOutput: mirrorOutput, mirrorPreview: mirrorPreview)
+        let right = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 36, height: 0), viewSize: view, source: source, output: view,
+            axes: axes)
+        let down = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 0, height: 24), viewSize: view, source: source, output: view,
+            axes: axes)
+        let before = markBounds(try rendered(start, mirrorOutput: mirrorOutput))
+        let afterRight = markBounds(try rendered(right, mirrorOutput: mirrorOutput))
+        let afterDown = markBounds(try rendered(down, mirrorOutput: mirrorOutput))
+        let preview = mirrorPreview ? -1 : 1
+        #expect(!before.isEmpty)
+        #expect(preview * (afterRight.minX - before.minX) > 20)
+        #expect(afterDown.minY - before.minY > 12)
+    }
+
     @Test func zoomCropsIntoTheChosenCenter() throws {
         let topLeft = try pixels(
             compose(

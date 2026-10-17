@@ -101,6 +101,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case clipboard
     case keystrokeHighlight
     case focusDim
+    case hinge
     case windowSweaters
     case presenter
     case colorPicker

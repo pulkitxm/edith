@@ -7,11 +7,11 @@ struct HerdrTerminalPanelView: View {
     var store: HerdrStore
     let owner: String
     let launchEnabled: Bool
-    let maximumHeight: CGFloat
+    let bounds: HerdrTerminalPanelBounds
     var hideAgents = false
     @Environment(\.colorScheme) private var scheme
-    @State private var dragBaseHeight: Double?
-    @State private var liveHeight: Double?
+    @State private var dragStart: HerdrTerminalPanelFrame?
+    @State private var liveFrame: HerdrTerminalPanelFrame?
 
     private var dark: Bool { scheme == .dark }
     private var panels: HerdrTerminalPanels { store.terminalPanels }
@@ -19,28 +19,56 @@ struct HerdrTerminalPanelView: View {
     var body: some View {
         if panels.isOpen(owner) {
             VStack(spacing: 0) {
-                HerdrResizeHandle(
-                    axis: .vertical, label: "Resize the terminals",
-                    onChanged: resize, onEnded: finishResize, onReset: resetHeight)
+                Color.clear
+                    .frame(height: max(0, scaled(shown.y)))
+                    .allowsHitTesting(false)
                 HStack(spacing: 0) {
-                    content
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .presenterCover(hideAgents, dark: dark)
-                    Rectangle()
-                        .fill(DashSkin.lineStrong(dark))
-                        .frame(width: UIScale.pt(1))
-                    HerdrTerminalList(store: store, owner: owner, hideAgents: hideAgents)
-                        .frame(width: UIScale.pt(HerdrTerminalPanelSizing.listWidth))
+                    Color.clear
+                        .frame(width: max(0, scaled(shown.x)))
+                        .allowsHitTesting(false)
+                    chrome
+                    Spacer(minLength: 0)
+                        .allowsHitTesting(false)
                 }
+                Spacer(minLength: 0)
+                    .allowsHitTesting(false)
             }
-            .frame(height: displayHeight)
-            .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
-            .shadow(color: .black.opacity(dark ? 0.45 : 0.18), radius: UIScale.pt(14), y: -2)
-            .task(id: owner) {
-                while !Task.isCancelled {
-                    await panels.refresh(owner)
-                    try? await Task.sleep(for: HerdrTerminalPanelSizing.refreshInterval)
-                }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .zIndex(1)
+        }
+    }
+
+    private var chrome: some View {
+        VStack(spacing: 0) {
+            HerdrResizeHandle(
+                axis: .vertical, label: "Resize the terminals",
+                onChanged: { resize(.top, $0) }, onEnded: finishResize, onReset: resetHeight)
+            HStack(spacing: 0) {
+                HerdrResizeHandle(
+                    label: "Resize the left edge of the terminals",
+                    onChanged: { resize(.leading, $0) }, onEnded: finishResize,
+                    onReset: resetWidth)
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .presenterCover(hideAgents, dark: dark)
+                Rectangle()
+                    .fill(DashSkin.lineStrong(dark))
+                    .frame(width: UIScale.pt(1))
+                HerdrTerminalList(store: store, owner: owner, hideAgents: hideAgents)
+                    .frame(width: UIScale.pt(HerdrTerminalPanelSizing.listWidth))
+                HerdrResizeHandle(
+                    label: "Resize the right edge of the terminals",
+                    onChanged: { resize(.trailing, $0) }, onEnded: finishResize,
+                    onReset: resetWidth)
+            }
+        }
+        .frame(width: max(1, scaled(shown.width)), height: max(1, scaled(shown.height)))
+        .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
+        .shadow(color: .black.opacity(dark ? 0.5 : 0.2), radius: UIScale.pt(16), y: 0)
+        .task(id: owner) {
+            while !Task.isCancelled {
+                await panels.refresh(owner)
+                try? await Task.sleep(for: HerdrTerminalPanelSizing.refreshInterval)
             }
         }
     }
@@ -66,34 +94,46 @@ struct HerdrTerminalPanelView: View {
         }
     }
 
-    private var maximum: Double {
-        Double(maximumHeight) / UIScale.current
+    private var shown: HerdrTerminalPanelFrame {
+        liveFrame
+            ?? HerdrTerminalPanelSizing.frame(
+                bounds: bounds, width: panels.widthMode, height: panels.height,
+                maximized: panels.maximized)
     }
 
-    private var displayHeight: Double {
-        let height = panels.maximized ? maximum : liveHeight ?? panels.height
-        return UIScale.pt(HerdrTerminalPanelSizing.height(height, maximum: maximum))
+    private func scaled(_ value: Double) -> Double {
+        UIScale.pt(value)
     }
 
-    private func resize(_ translation: CGFloat) {
-        let base = dragBaseHeight ?? displayHeight
-        dragBaseHeight = base
-        panels.maximized = false
-        liveHeight = HerdrTerminalPanelSizing.height(
-            (base - translation) / UIScale.current, maximum: maximum)
+    private func resize(_ edge: HerdrTerminalPanelSizing.Edge, _ translation: CGFloat) {
+        let start = dragStart ?? shown
+        dragStart = start
+        liveFrame = HerdrTerminalPanelSizing.moved(
+            start: start, bounds: bounds, edge: edge, translation: translation / UIScale.current)
     }
 
     private func finishResize() {
-        if let liveHeight { panels.height = liveHeight }
-        liveHeight = nil
-        dragBaseHeight = nil
+        if let liveFrame {
+            let described = HerdrTerminalPanelSizing.describe(frame: liveFrame, bounds: bounds)
+            panels.widthMode = described.width
+            panels.maximized = described.maximized
+            if !described.maximized { panels.height = described.height }
+        }
+        liveFrame = nil
+        dragStart = nil
     }
 
     private func resetHeight() {
-        liveHeight = nil
-        dragBaseHeight = nil
+        liveFrame = nil
+        dragStart = nil
         panels.maximized = false
         panels.height = HerdrTerminalPanelSizing.heightDefault
+    }
+
+    private func resetWidth() {
+        liveFrame = nil
+        dragStart = nil
+        panels.widthMode = .content
     }
 }
 
