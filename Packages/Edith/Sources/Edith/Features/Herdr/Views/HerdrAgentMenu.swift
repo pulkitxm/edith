@@ -62,6 +62,24 @@ final class HerdrAgentActions {
     }
 }
 
+struct HerdrBroadcastMenuItems: View {
+    let agents: [HerdrAgent]
+    let store: HerdrStore
+    var scopeTitle: String?
+    var redactScope = false
+
+    var body: some View {
+        ForEach(HerdrBroadcastGroup.allCases) { group in
+            let count = group.recipients(from: agents).count
+            Button("\(group.title) (\(count))") {
+                store.messaging.compose(
+                    group, from: agents, scopeTitle: scopeTitle, redactScope: redactScope)
+            }
+            .disabled(count == 0)
+        }
+    }
+}
+
 struct HerdrAgentMenu: View {
     let agent: HerdrAgent
     let store: HerdrStore

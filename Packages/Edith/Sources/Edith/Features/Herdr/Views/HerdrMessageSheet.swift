@@ -71,10 +71,18 @@ struct HerdrMessageSheet: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else if let group = initial.group {
                 let count = initial.recipients.count
-                Text("\(count) \(count == 1 ? "agent" : "agents"). \(group.detail)")
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    if let scopeTitle = initial.scopeTitle {
+                        Text(scopeTitle)
+                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                            .foregroundStyle(DashSkin.ink(dark))
+                            .presenterTextBlur(hideAgents && initial.redactScope, fontSize: 11.5)
+                    }
+                    Text("\(count) \(count == 1 ? "agent" : "agents"). \(group.detail)")
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

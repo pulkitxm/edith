@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import Edith
+@testable import EdithCLI
 @testable import EdithKit
 
 private func agent(
@@ -62,9 +63,41 @@ struct HerdrMessagingTests {
     }
 
     @Test func groupsPickWorkingOrStoppedAgentsAndNeverTerminals() {
+        #expect(
+            HerdrBroadcastGroup.all.recipients(from: fleet).map(\.pane)
+                == ["w1:p1", "w1:p2", "w1:p3", "w1:p4", "w1:p5"])
         #expect(HerdrBroadcastGroup.working.recipients(from: fleet).map(\.pane) == ["w1:p1"])
         #expect(
             HerdrBroadcastGroup.stopped.recipients(from: fleet).map(\.pane) == ["w1:p2", "w1:p3"])
+    }
+
+    @Test func composingAScopedGroupNamesTheSet() {
+        let messaging = messaging(Recorder())
+        messaging.compose(.all, from: fleet, scopeTitle: "This Tab")
+        #expect(messaging.draft?.title == "Message All Agents")
+        #expect(messaging.draft?.scopeTitle == "This Tab")
+        #expect(messaging.draft?.redactScope == false)
+        #expect(
+            messaging.draft?.recipients.map(\.pane) == ["w1:p1", "w1:p2", "w1:p3", "w1:p4", "w1:p5"]
+        )
+        messaging.draft = nil
+        messaging.compose(.working, from: fleet, scopeTitle: "repo", redactScope: true)
+        #expect(messaging.draft?.title == "Message Working Agents")
+        #expect(messaging.draft?.scopeTitle == "repo")
+        #expect(messaging.draft?.redactScope == true)
+        #expect(messaging.draft?.recipients.map(\.pane) == ["w1:p1"])
+    }
+
+    @Test func commandLineAllIncludesBlockedAndUnknownAndSkipsTerminals() {
+        let hosts = [
+            HerdrHostSnapshot(
+                id: HerdrHostSnapshot.localID, name: "This Mac", isLocal: true, sshTarget: nil,
+                herdrPresent: true, reachable: true, agents: fleet)
+        ]
+        #expect(
+            HerdrMessageCLI.recipients(group: "all", session: nil, hosts: hosts).map(\.pane)
+                == ["w1:p1", "w1:p2", "w1:p3", "w1:p4", "w1:p5"])
+        #expect(HerdrMessageCLI.groups == ["all", "working", "stopped"])
     }
 
     @Test func composingAGroupFreezesItsRecipients() {

@@ -3,7 +3,7 @@ import EdithKit
 import Foundation
 
 enum HerdrMessageCLI {
-    static let groups = ["working", "stopped"]
+    static let groups = ["all", "working", "stopped"]
 
     static func schedule(whenFinished: Bool, delay: String?, at: String?) throws
         -> HerdrHookSchedule?
@@ -46,8 +46,12 @@ enum HerdrMessageCLI {
         hosts.flatMap(\.agents).filter { agent in
             guard !agent.isTerminal else { return false }
             if let session, agent.session != session { return false }
-            return group == "working"
-                ? agent.status == .working : agent.status == .idle || agent.status == .done
+            switch group {
+            case "all": return true
+            case "working": return agent.status == .working
+            case "stopped": return agent.status == .idle || agent.status == .done
+            default: return false
+            }
         }
     }
 
@@ -98,7 +102,7 @@ enum HerdrMessageCLI {
 struct HerdrSendCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "send",
-        abstract: "Type a message into one agent, or into every working or stopped agent.",
+        abstract: "Type a message into one agent, or into all, working, or stopped agents.",
         discussion: """
             Types a message into a live agent and presses Return, through `herdr agent
             prompt`.
@@ -109,7 +113,7 @@ struct HerdrSendCommand: AsyncParsableCommand {
             ed herdr send shed what should I do next? --json
             """, )
 
-    @Argument(help: "A pane id such as w3:p1N, or working, or stopped.")
+    @Argument(help: "A pane id such as w3:p1N, or all, working, or stopped.")
     var target: String
 
     @Argument(help: "The message to type into the agent.")

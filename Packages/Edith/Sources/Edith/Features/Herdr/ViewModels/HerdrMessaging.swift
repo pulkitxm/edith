@@ -3,6 +3,7 @@ import Foundation
 import Observation
 
 enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
+    case all
     case working
     case stopped
 
@@ -10,6 +11,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .all: "All Agents"
         case .working: "Working Agents"
         case .stopped: "Stopped Agents"
         }
@@ -17,6 +19,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
+        case .all: "Every agent in this set."
         case .working: "Agents in the middle of a turn. They read it when they can."
         case .stopped: "Idle and finished agents waiting at their prompt."
         }
@@ -24,6 +27,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     func contains(_ status: HerdrAgentStatus) -> Bool {
         switch self {
+        case .all: true
         case .working: status == .working
         case .stopped: status == .idle || status == .done
         }
@@ -65,6 +69,8 @@ struct HerdrMessageDraft: Identifiable, Equatable {
     let id = UUID()
     var recipients: [HerdrAgent]
     var group: HerdrBroadcastGroup?
+    var scopeTitle: String?
+    var redactScope = false
     var delivery: Delivery
     var presenterID: String?
 
@@ -128,12 +134,16 @@ final class HerdrMessaging {
             recipients: [agent], group: nil, delivery: delivery, presenterID: presenterID)
     }
 
-    func compose(_ group: HerdrBroadcastGroup, from agents: [HerdrAgent]) {
+    func compose(
+        _ group: HerdrBroadcastGroup, from agents: [HerdrAgent], scopeTitle: String? = nil,
+        redactScope: Bool = false
+    ) {
         let recipients = group.recipients(from: agents)
         guard !recipients.isEmpty else { return }
         errorMessage = nil
         draft = HerdrMessageDraft(
-            recipients: recipients, group: group, delivery: .now, presenterID: nil)
+            recipients: recipients, group: group, scopeTitle: scopeTitle, redactScope: redactScope,
+            delivery: .now, presenterID: nil)
     }
 
     func send(_ text: String, to agents: [HerdrAgent]) async -> [String: HerdrPromptOutcome] {
