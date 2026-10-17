@@ -69,16 +69,24 @@ public enum VirtualCameraLooks {
         case .bright:
             return
                 image
-                .applyingFilter("CIExposureAdjust", parameters: ["inputEV": 0.3])
+                .applyingFilter("CIExposureAdjust", parameters: ["inputEV": 0.45])
                 .applyingFilter(
                     "CIHighlightShadowAdjust",
-                    parameters: ["inputShadowAmount": 0.5, "inputHighlightAmount": 0.9])
+                    parameters: [
+                        "inputShadowAmount": 0.7, "inputHighlightAmount": 0.78,
+                    ])
+                .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.12])
         case .studio:
             return
                 image
-                .applyingFilter("CIExposureAdjust", parameters: ["inputEV": 0.15])
-                .applyingFilter("CIHighlightShadowAdjust", parameters: ["inputShadowAmount": 0.35])
-                .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.25])
+                .applyingFilter("CIExposureAdjust", parameters: ["inputEV": 0.28])
+                .applyingFilter(
+                    "CIHighlightShadowAdjust",
+                    parameters: [
+                        "inputShadowAmount": 0.62, "inputHighlightAmount": 0.8,
+                    ])
+                .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.32])
+                .applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.08])
         case .warm:
             return temperature(image, warmth: 0.55, tint: 0.05)
                 .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.1])

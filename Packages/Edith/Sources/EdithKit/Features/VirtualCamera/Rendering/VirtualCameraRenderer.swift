@@ -68,8 +68,14 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
     }
 
     public static func makeContext() -> CIContext {
+        let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let working =
+            CGColorSpace(name: CGColorSpace.extendedLinearSRGB) ?? srgb
         let options: [CIContextOption: Any] = [
             .cacheIntermediates: false,
+            .highQualityDownsample: true,
+            .workingColorSpace: working,
+            .outputColorSpace: srgb,
             .name: "Edith Virtual Camera",
         ]
         if let device = MTLCreateSystemDefaultDevice() {
@@ -110,14 +116,38 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
             return CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: output))
         }
         let scale = output.width / crop.size.width
+        if abs(crop.angle) < 0.01, scale < 0.98 {
+            let cropRect = CGRect(
+                x: crop.center.x - crop.size.width / 2,
+                y: (source.height - crop.center.y) - crop.size.height / 2,
+                width: crop.size.width, height: crop.size.height)
+            let scaled = image.clampedToExtent().cropped(to: cropRect).applyingFilter(
+                "CILanczosScaleTransform",
+                parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1])
+            return
+                scaled
+                .transformed(
+                    by: CGAffineTransform(
+                        translationX: -scaled.extent.origin.x, y: -scaled.extent.origin.y)
+                )
+                .cropped(to: CGRect(origin: .zero, size: output))
+        }
         let transform = CGAffineTransform(
             translationX: -crop.center.x, y: -(source.height - crop.center.y)
         )
         .concatenating(CGAffineTransform(rotationAngle: -CGFloat(crop.angle) * .pi / 180))
         .concatenating(CGAffineTransform(scaleX: scale, y: scale))
         .concatenating(CGAffineTransform(translationX: output.width / 2, y: output.height / 2))
-        return image.clampedToExtent().transformed(by: transform)
+        let framed = image.clampedToExtent().transformed(by: transform)
             .cropped(to: CGRect(origin: .zero, size: output))
+        guard scale > 1.02 else { return framed }
+        return
+            framed
+            .applyingFilter(
+                "CISharpenLuminance",
+                parameters: [kCIInputSharpnessKey: 0.4, kCIInputRadiusKey: 1.2]
+            )
+            .cropped(to: framed.extent)
     }
 
     public static func backgroundReplaced(
@@ -156,7 +186,7 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
 
     public static func blurred(_ image: CIImage, amount: Double) -> CIImage {
         let extent = image.extent
-        let downscale: CGFloat = 0.25
+        let downscale: CGFloat = 0.5
         let sigma = (4 + amount * 36) * Double(extent.height) / 1080 * Double(downscale)
         return
             image
@@ -339,10 +369,16 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         }
     }
 
+    public static func tag(_ buffer: CVPixelBuffer) {
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        CVBufferSetAttachment(buffer, kCVImageBufferCGColorSpaceKey, space, .shouldPropagate)
+    }
+
     public func render(_ image: CIImage, into buffer: CVPixelBuffer) {
         let bounds = CGRect(
             x: 0, y: 0, width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer)
         )
+        Self.tag(buffer)
         context.render(
             image.cropped(to: bounds), to: buffer, bounds: bounds, colorSpace: colorSpace)
     }

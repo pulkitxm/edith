@@ -42,7 +42,8 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         super.init()
         output.alwaysDiscardsLateVideoFrames = true
         output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
         ]
         output.setSampleBufferDelegate(self, queue: frameQueue)
         disconnectObserver = NotificationCenter.default.addObserver(
@@ -197,6 +198,7 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             if device.activeFormat != format { device.activeFormat = format }
+            tune(device)
             let supportsRate = format.videoSupportedFrameRateRanges.contains {
                 $0.minFrameRate <= frameRate && frameRate <= $0.maxFrameRate
             }
@@ -209,6 +211,24 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         } catch {
             fail(error.localizedDescription)
             return false
+        }
+    }
+
+    private func tune(_ device: AVCaptureDevice) {
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
+        }
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        }
+        let spaces = device.activeFormat.supportedColorSpaces
+        if spaces.contains(.P3_D65) {
+            device.activeColorSpace = .P3_D65
+        } else if spaces.contains(.sRGB) {
+            device.activeColorSpace = .sRGB
         }
     }
 
