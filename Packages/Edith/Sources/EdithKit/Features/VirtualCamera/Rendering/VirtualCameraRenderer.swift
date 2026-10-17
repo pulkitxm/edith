@@ -68,14 +68,9 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
     }
 
     public static func makeContext() -> CIContext {
-        let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        let working =
-            CGColorSpace(name: CGColorSpace.extendedLinearSRGB) ?? srgb
         let options: [CIContextOption: Any] = [
             .cacheIntermediates: false,
             .highQualityDownsample: true,
-            .workingColorSpace: working,
-            .outputColorSpace: srgb,
             .name: "Edith Virtual Camera",
         ]
         if let device = MTLCreateSystemDefaultDevice() {
@@ -116,12 +111,12 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
             return CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: output))
         }
         let scale = output.width / crop.size.width
-        if abs(crop.angle) < 0.01, scale < 0.98 {
+        if abs(crop.angle) < 0.01, abs(scale - 1) > 0.02 {
             let cropRect = CGRect(
                 x: crop.center.x - crop.size.width / 2,
                 y: (source.height - crop.center.y) - crop.size.height / 2,
                 width: crop.size.width, height: crop.size.height)
-            let scaled = image.clampedToExtent().cropped(to: cropRect).applyingFilter(
+            let scaled = image.cropped(to: cropRect).applyingFilter(
                 "CILanczosScaleTransform",
                 parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1])
             return
@@ -138,16 +133,8 @@ public final class VirtualCameraRenderer: @unchecked Sendable {
         .concatenating(CGAffineTransform(rotationAngle: -CGFloat(crop.angle) * .pi / 180))
         .concatenating(CGAffineTransform(scaleX: scale, y: scale))
         .concatenating(CGAffineTransform(translationX: output.width / 2, y: output.height / 2))
-        let framed = image.clampedToExtent().transformed(by: transform)
+        return image.clampedToExtent().transformed(by: transform)
             .cropped(to: CGRect(origin: .zero, size: output))
-        guard scale > 1.02 else { return framed }
-        return
-            framed
-            .applyingFilter(
-                "CISharpenLuminance",
-                parameters: [kCIInputSharpnessKey: 0.4, kCIInputRadiusKey: 1.2]
-            )
-            .cropped(to: framed.extent)
     }
 
     public static func backgroundReplaced(
