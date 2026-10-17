@@ -248,7 +248,7 @@ struct RateLimitsDialsView: View {
             HStack {
                 Text(label).font(.edithText(.caption))
                 Spacer(minLength: 0)
-                Text("\(Int(window.percent))% used").font(.edithText(.caption)).monospacedDigit()
+                Text("\(window.shownPercent)% used").font(.edithText(.caption)).monospacedDigit()
             }
             GeometryReader { proxy in
                 Capsule().fill(DashSkin.line(dark))
@@ -263,7 +263,7 @@ struct RateLimitsDialsView: View {
             if presentation?.tile.showDetails != false {
                 HStack {
                     if presentation?.tile.shows("remaining") != false {
-                        Text("\(max(0, 100 - Int(window.percent)))% remaining")
+                        Text("\(max(0, 100 - window.shownPercent))% remaining")
                     }
                     Spacer(minLength: 0)
                     if let reset = window.resetsAt, presentation?.tile.shows("resets") != false {

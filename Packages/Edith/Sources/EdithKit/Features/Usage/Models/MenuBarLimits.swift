@@ -197,7 +197,7 @@ public enum MenuBarLimits {
                 if masked {
                     value = .masked
                 } else if let window {
-                    value = .percent(Int(window.percent.rounded()))
+                    value = .percent(window.shownPercent)
                 } else {
                     value = .missing
                 }

@@ -21,23 +21,26 @@ import Testing
         #expect(limits.week?.resetsAt == limits.session?.resetsAt)
     }
 
-    @Test func includedSpendIsTheCursorPlanMeter() throws {
+    @Test func includedSpendDoesNotReplaceTheModelPools() throws {
         let data = Data(
             """
             {
               "billingCycleEnd": "1794904589000",
               "planUsage": {
-                "includedSpend": 1446,
-                "totalSpend": 1446,
+                "includedSpend": 7900,
+                "totalSpend": 7900,
                 "limit": 40000,
-                "autoPercentUsed": 0.058,
-                "apiPercentUsed": 5.088
+                "autoPercentUsed": 0.355,
+                "apiPercentUsed": 27.336,
+                "totalPercentUsed": 2.43
               }
             }
             """.utf8)
         let limits = try CursorLimitsReader.limits(json: data)
-        #expect(abs((limits.session?.percent ?? -1) - 3.615) < 0.001)
-        #expect(limits.week?.percent == 5.088)
+        #expect(limits.session?.percent == 0.355)
+        #expect(limits.week?.percent == 27.336)
+        #expect(limits.session?.shownPercent == 1)
+        #expect(limits.week?.shownPercent == 27)
         #expect(limits.session?.resetsAt == limits.week?.resetsAt)
     }
 
