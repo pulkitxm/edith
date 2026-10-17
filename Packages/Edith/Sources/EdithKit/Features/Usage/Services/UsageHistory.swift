@@ -566,6 +566,7 @@ public enum UsageHistory {
     private static func orderedHistory(_ value: Any, field: String = "") -> Any {
         if let object = value as? [String: Any] {
             return object.reduce(into: [String: Any]()) { result, entry in
+                guard entry.key != "attribution" else { return }
                 result[entry.key] = orderedHistory(entry.value, field: entry.key)
             }
         }

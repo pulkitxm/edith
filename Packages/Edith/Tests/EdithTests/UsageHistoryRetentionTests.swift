@@ -276,6 +276,29 @@ import Testing
         #expect(UsageHistory.merge(local: changed, cloud: previous) == nil)
     }
 
+    @Test func projectAttributionDoesNotChangeARetainedBaseline() throws {
+        let retained = try retainedCostFixture()
+        var document = try object(retained)
+        var days = try #require(document["daily"] as? [[String: Any]])
+        var projects = try #require(days[0]["projects"] as? [[String: Any]])
+        projects[0]["attribution"] = [
+            "method": "name", "scope": "folder",
+            "from": ["repositoryID": "fixture"],
+        ]
+        days[0]["projects"] = projects
+        document["daily"] = days
+        let annotated = try JSONSerialization.data(withJSONObject: document, options: [.sortedKeys])
+        let merged = try #require(UsageHistory.mergeRefresh(fresh: annotated, previous: annotated))
+        #expect(UsageHistory.isValidDocument(merged))
+        #expect(UsageHistory.retainedHistoryBlockCount(in: merged) == 1)
+        #expect(tokens(try object(merged)) == tokens(try object(retained)))
+        let mergedDays = try #require(try object(merged)["daily"] as? [[String: Any]])
+        let published = try #require(mergedDays.first?["projects"] as? [[String: Any]])
+        #expect(published[0]["attribution"] != nil)
+        let again = try #require(UsageHistory.mergeRefresh(fresh: merged, previous: merged))
+        #expect(tokens(try object(again)) == tokens(try object(merged)))
+    }
+
     private func retainedCostFixture() throws -> Data {
         var historical = day("2026-08-02", ["cli": [row("one", 60), row("two", 40)]])
         var projects = historical["projects"] as! [[String: Any]]
