@@ -221,15 +221,15 @@ public enum LimitsCollector {
             try await ClaudeLimitsReader.fetch()
         },
         fallback: () -> LimitsProviderSnapshot = { ClaudeStatusLine.snapshot() },
-        persist: (LimitsProviderSnapshot) throws -> Void = { snapshot in
-            try persistHistory(
+        persist: (LimitsProviderSnapshot) -> Void = { snapshot in
+            persistHistory(
                 provider: .claude, session: snapshot.session, week: snapshot.week,
                 fable: snapshot.fable)
         }
     ) async -> (LimitsProviderSnapshot, Date?) {
         do {
             let snapshot = try await fetch()
-            try persist(snapshot)
+            persist(snapshot)
             return (snapshot, nil)
         } catch {
             let saved = fallback()
@@ -273,7 +273,7 @@ public enum LimitsCollector {
         }
         do {
             let limits = try await CursorLimitsReader.fetch(token: material.accessToken)
-            try persistHistory(
+            persistHistory(
                 provider: .cursor, session: limits.session, week: limits.week, fable: nil)
             return (
                 LimitsProviderSnapshot(
@@ -285,7 +285,7 @@ public enum LimitsCollector {
             do {
                 let latest = try await refreshCursor(material)
                 let limits = try await CursorLimitsReader.fetch(token: latest.accessToken)
-                try persistHistory(
+                persistHistory(
                     provider: .cursor, session: limits.session, week: limits.week, fable: nil)
                 return (
                     LimitsProviderSnapshot(
@@ -328,8 +328,6 @@ public enum LimitsCollector {
             message = CursorLimitsReader.Failure.unavailable.localizedDescription
         case CursorLimitsReader.Failure.malformed:
             message = CursorLimitsReader.Failure.malformed.localizedDescription
-        case LimitsHistoryPersistenceError.failed:
-            message = error.localizedDescription
         default:
             message = "Offline"
         }
@@ -343,7 +341,7 @@ public enum LimitsCollector {
     private static func fetchCodex() async -> LimitsProviderSnapshot {
         do {
             let limits = try await readCodexLimits()
-            try persistHistory(
+            persistHistory(
                 provider: .codex, session: limits.session, week: limits.week, fable: nil)
             return LimitsProviderSnapshot(
                 provider: .codex, session: limits.session, week: limits.week)
@@ -379,7 +377,7 @@ public enum LimitsCollector {
         do {
             let limits = try await GrokLimitsReader.fetch(
                 token: material.accessToken, tier: GrokCredentialStore.tierDisplay())
-            try persistHistory(
+            persistHistory(
                 provider: .grok, session: nil, week: limits.week, grok: limits.grok)
             return (
                 LimitsProviderSnapshot(
@@ -393,7 +391,7 @@ public enum LimitsCollector {
                 let latest = try await refreshGrok(material)
                 let limits = try await GrokLimitsReader.fetch(
                     token: latest.accessToken, tier: GrokCredentialStore.tierDisplay())
-                try persistHistory(
+                persistHistory(
                     provider: .grok, session: nil, week: limits.week, grok: limits.grok)
                 return (
                     LimitsProviderSnapshot(
@@ -439,8 +437,6 @@ public enum LimitsCollector {
             message = GrokLimitsReader.Failure.unavailable.localizedDescription
         case GrokLimitsReader.Failure.malformed:
             message = GrokLimitsReader.Failure.malformed.localizedDescription
-        case LimitsHistoryPersistenceError.failed:
-            message = error.localizedDescription
         default:
             message = "Offline"
         }
@@ -451,17 +447,23 @@ public enum LimitsCollector {
         )
     }
 
-    private static func persistHistory(
+    static func persistHistory(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, grok: GrokAllowance? = nil
-    ) throws {
-        var history = LimitsHistory()
-        guard
-            history.append(
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil,
+        attempts: Int = 5, historyURL: URL = LimitsHistory.url,
+        pause: () -> Void = { Thread.sleep(forTimeInterval: 0.2) }
+    ) {
+        var history = LimitsHistory(url: historyURL)
+        let tries = max(attempts, 1)
+        for attempt in 0..<tries {
+            if history.append(
                 provider: provider, session: session, week: week, fable: fable, grok: grok)
-        else {
-            throw LimitsHistoryPersistenceError.failed
+            {
+                return
+            }
+            if attempt + 1 < tries { pause() }
         }
+        logger.error("The limits history could not be saved.")
     }
 
     private enum CodexLimitsError: LocalizedError {
@@ -479,12 +481,6 @@ public enum LimitsCollector {
     private static func codexExecutable() -> URL? {
         CLIToolEnvironment.executable(named: "codex")
     }
-}
-
-private enum LimitsHistoryPersistenceError: LocalizedError {
-    case failed
-
-    var errorDescription: String? { "The limits history could not be saved." }
 }
 
 public enum UsageLimitProviders {

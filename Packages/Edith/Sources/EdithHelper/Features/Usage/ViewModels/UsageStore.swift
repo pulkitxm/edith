@@ -293,6 +293,7 @@ final class UsageStore: FeatureModule {
         }
         claudeAccounts = snapshot.claudeAccounts
         await reloadLimitsFromHistory()
+        applyFetchedLimits(snapshot)
         limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
         refreshingLimits = false
         limitsRequestTask?.cancel()
@@ -303,6 +304,38 @@ final class UsageStore: FeatureModule {
         guard !terminating else { return }
         let latest = await LimitsHistory.loadLatestProviders()
         seedFromHistory(latest)
+        updateStatusItem()
+    }
+
+    private func applyFetchedLimits(_ snapshot: LimitsTopicSnapshot) {
+        var applied = false
+        for provider in snapshot.providers {
+            switch provider.provider {
+            case .claude:
+                guard !claudeUsesAccounts,
+                    provider.session != nil || provider.week != nil || provider.fable != nil
+                else { continue }
+                claudeUnavailable = false
+                session = Self.fresh(provider.session)
+                week = Self.fresh(provider.week)
+                fableWeek = Self.fresh(provider.fable)
+            case .codex:
+                guard provider.session != nil || provider.week != nil else { continue }
+                codexSession = Self.fresh(provider.session)
+                codexWeek = Self.fresh(provider.week)
+            case .cursor:
+                guard provider.session != nil || provider.week != nil else { continue }
+                cursorSession = Self.fresh(provider.session)
+                cursorWeek = Self.fresh(provider.week)
+            case .grok:
+                guard provider.week != nil || provider.grok != nil else { continue }
+                grokWeek = Self.fresh(provider.week)
+                grokAllowance = grokWeek == nil ? nil : provider.grok
+            }
+            applied = true
+        }
+        guard applied else { return }
+        limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, snapshot.refreshedAt)
         updateStatusItem()
     }
 
