@@ -52,7 +52,7 @@ public enum ConfigCatalog {
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music", "studio", "latex", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
-        "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
+        "notch", "focusdim", "hinge", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -64,6 +64,7 @@ public enum ConfigCatalog {
         + finder + system + homebrew + cleaner
         + music + studio + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
         + focusDim
+        + hinge
         + presenter
         + windowSweaters + colorPicker + emoji + bifrost
         + micMute
@@ -964,6 +965,42 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let hinge: [SettingDefinition] = [
+        SettingDefinition(
+            HingeState.activeKey, .bool, group: "hinge",
+            summary: "Hinge fold on right now.", fallback: .bool(false)),
+        SettingDefinition(
+            HingeState.enabledKey, .bool, group: "hinge",
+            summary: "Hinge extension: fold the desktop as the MacBook lid closes.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            HingeSettings.openAngle, .number, group: "hinge",
+            summary: "Lid angle, in degrees, that counts as fully open.",
+            fallback: .double(100)),
+        SettingDefinition(
+            HingeSettings.effectStrength, .number, group: "hinge",
+            summary: "Fold strength from 0.25 to 1.", fallback: .double(1)),
+        SettingDefinition(
+            HingeSettings.sideFill, .string, group: "hinge",
+            summary: "What fills the sides of the fold.",
+            allowed: HingeSideFill.allCases.map(\.rawValue), fallback: .string("blur")),
+        SettingDefinition(
+            HingeSettings.cropsTop, .bool, group: "hinge",
+            summary: "Crop the top of the desktop as it folds.", fallback: .bool(true)),
+        SettingDefinition(
+            HingeSettings.blursByDistance, .bool, group: "hinge",
+            summary: "Blur the fold more as it moves away.", fallback: .bool(true)),
+        SettingDefinition(
+            HingeSettings.hotKeyCode, .int, group: "hinge",
+            summary: "Virtual key code of the Hinge shortcut."),
+        SettingDefinition(
+            HingeSettings.hotKeyMods, .int, group: "hinge",
+            summary: "Carbon modifier mask of the Hinge shortcut."),
+        SettingDefinition(
+            HingeSettings.hotKeyLabel, .string, group: "hinge",
+            summary: "Printable label for the Hinge shortcut."),
     ]
 
     private static let windowSweaters: [SettingDefinition] = [

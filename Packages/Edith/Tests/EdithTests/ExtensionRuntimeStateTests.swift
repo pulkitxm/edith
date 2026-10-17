@@ -425,6 +425,7 @@ import Testing
                 "KeystrokeHighlightRows.swift"
             ),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
+            ("hinge", "HingeRows", "enabled", "HingeRows.swift"),
             (
                 "windowSweaters", "WindowSweatersRows", "enabled",
                 "WindowSweatersRows.swift"

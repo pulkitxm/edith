@@ -77,7 +77,8 @@ import Testing
         #expect(
             ExtensionShortcutVisibility.visible(
                 bifrost: true, clipboard: true, emoji: true, micMute: true,
-                focusDim: true, presenter: true, colorPicker: true, keystrokeHighlight: true,
+                focusDim: true, hinge: true, presenter: true, colorPicker: true,
+                keystrokeHighlight: true,
                 virtualCamera: true)
                 == ExtensionShortcut.allCases)
         #expect(

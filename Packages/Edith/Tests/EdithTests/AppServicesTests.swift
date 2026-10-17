@@ -43,6 +43,7 @@ private actor AppServicesCallProbe {
         #expect(services.clipboard == nil)
         #expect(services.emoji == nil)
         #expect(services.focusDim == nil)
+        #expect(services.hinge == nil)
         #expect(services.presenter == nil)
         #expect(services.micMute == nil)
         #expect(services.lidAwake == nil)

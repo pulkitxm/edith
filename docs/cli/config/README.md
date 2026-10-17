@@ -1,7 +1,7 @@
 # `ed config`
 
 Every preference the Edith UI writes is a key in the same defaults the app
-reads, and `ed config` is that surface from the command line: 331 settings in 38
+reads, and `ed config` is that surface from the command line: 341 settings in 39
 groups, each with a type, a default, a scope and a one-line summary. Reach for
 it when you want to know what a switch in Settings is actually called, flip one
 without opening the window, or move a whole setup to another Mac.
@@ -352,6 +352,21 @@ not here cannot be set, and `import` skips it.
 | `focusDimHotKeyCode` | int | none | shared | Virtual key code of the focus dim shortcut. |
 | `focusDimHotKeyMods` | int | none | shared | Carbon modifier mask of the focus dim shortcut. |
 | `focusDimHotKeyLabel` | string | none | shared | Printable label for the focus dim shortcut. |
+
+### `hinge`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `hingeActive` | bool | `false` | shared | Hinge fold on right now. |
+| `hingeEnabled` | bool | `false` | shared | Hinge extension: fold the desktop as the MacBook lid closes. |
+| `hingeOpenAngle` | number | `100` | shared | Lid angle, in degrees, that counts as fully open. |
+| `hingeEffectStrength` | number | `1` | shared | Fold strength from 0.25 to 1. |
+| `hingeSideFill` | string: `blur`, `black` | `blur` | shared | What fills the sides of the fold. |
+| `hingeCropsTop` | bool | `true` | shared | Crop the top of the desktop as it folds. |
+| `hingeBlursByDistance` | bool | `true` | shared | Blur the fold more as it moves away. |
+| `hingeHotKeyCode` | int | none | shared | Virtual key code of the Hinge shortcut. |
+| `hingeHotKeyMods` | int | none | shared | Carbon modifier mask of the Hinge shortcut. |
+| `hingeHotKeyLabel` | string | none | shared | Printable label for the Hinge shortcut. |
 
 ### `presenter`
 

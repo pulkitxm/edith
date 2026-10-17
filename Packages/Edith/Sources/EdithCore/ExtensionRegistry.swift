@@ -233,6 +233,13 @@ public enum ExtensionRegistry {
             symbolName: "circle.lefthalf.filled", suite: .desk, host: .bar, featured: false,
             defaultsKey: "focusDimEnabled", requiredCapabilities: [.windowDimming]),
         ExtensionRegistryEntry(
+            id: "hinge", title: "Hinge",
+            subtitle: "Folds the desktop as the MacBook lid closes.",
+            symbolName: "laptopcomputer.and.arrow.down", suite: .desk, host: .bar,
+            featured: false,
+            defaultsKey: "hingeEnabled", requiredCapabilities: [.lidFold],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "windowSweaters", title: "Window Sweaters",
             subtitle: "Knitted borders around your windows, in each app's own colours.",
             symbolName: "square.dashed", suite: .desk, host: .bar, featured: false,

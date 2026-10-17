@@ -36,6 +36,14 @@ import Testing
         }
     }
 
+    @Test func hingeHotKeyDefaults() {
+        withCleanKeys("hingeHotKey") {
+            #expect(HingeHotKey.code == kVK_ANSI_H)
+            #expect(HingeHotKey.mods == controlKey | optionKey)
+            #expect(HingeHotKey.label == "⌃⌥H")
+        }
+    }
+
     @Test func focusDimHotKeyDefaults() {
         withCleanKeys("focusDimHotKey") {
             #expect(FocusDimHotKey.code == kVK_ANSI_F)

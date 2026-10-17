@@ -29,6 +29,7 @@ struct ExtensionUIAuditTests {
     @Test func colorPicker() throws { try render("colorPicker") }
     @Test func keystrokeHighlight() throws { try render("keystrokeHighlight") }
     @Test func focusDim() throws { try render("focusDim") }
+    @Test func hinge() throws { try render("hinge") }
     @Test func windowSweaters() throws { try render("windowSweaters") }
     @Test func presenter() throws { try render("presenter") }
     @Test func studio() throws { try render("studio") }

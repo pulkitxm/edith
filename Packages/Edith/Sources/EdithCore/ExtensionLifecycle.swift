@@ -1106,6 +1106,38 @@ public enum ExtensionLifecycleCatalog {
                     "ed config ls --group focusdim --json")
             ]),
         descriptor(
+            "hinge", "Fold the live desktop as the MacBook lid closes.",
+            workflows: [
+                instruction(
+                    "fold", "Follow the lid",
+                    "Turn the fold on, then close the lid to bend the desktop."),
+                instruction(
+                    "calibrate", "Set the open position",
+                    "Save the lid angle you sit at. Hinge starts from 100 degrees."),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Screen Recording",
+                    "Screen Recording supplies the live desktop. The Mac also needs a lid angle sensor.",
+                    "ed permissions request screenRecording")
+            ],
+            examples: ["ed extensions enable hinge", "ed config ls --group hinge --json"],
+            docs: [
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "permission", "Refresh Screen Recording",
+                    "Refresh the mirrored grant after changing System Settings.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "config", "Inspect the fold",
+                    "Confirm the effect, open angle and strength.",
+                    "ed config ls --group hinge --json")
+            ]),
+        descriptor(
             "windowSweaters",
             "Knit a border around every window, coloured to match the app it belongs to.",
             workflows: [

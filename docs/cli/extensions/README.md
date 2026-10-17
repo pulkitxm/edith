@@ -75,6 +75,7 @@ walks, and its order is the order `ls` prints. Thirty-three entries, in this ord
 | `colorPicker` | Color Picker | Desk | System loupe on a hotkey, sampled color to your clipboard |
 | `keystrokeHighlight` | Keystroke Highlight | Desk | Show each key press on screen for polished demos |
 | `focusDim` | Focus Dim | Desk | Dims everything behind your active app |
+| `hinge` | Hinge | Desk | Folds the desktop as the MacBook lid closes |
 | `windowSweaters` | Window Sweaters | Desk | Knitted borders around your windows, in each app's own colours |
 | `presenter` | Presenter | Desk | Blurs sensitive numbers while sharing your screen |
 | `videoEditor` | Video editor | Media | Import clips, add zooms and text, then export your video |
@@ -114,6 +115,7 @@ twelve the welcome tour shows before you ask it for all of them.
 | `colorPicker` | `colorPickerEnabled` | no | `screenRecording` | none | none | none |
 | `keystrokeHighlight` | `keystrokeHighlightEnabled` | yes | `inputMonitoring` | none | none | none |
 | `focusDim` | `focusDimEnabled` | no | `screenRecording` | none | none | none |
+| `hinge` | `hingeEnabled` | no | `screenRecording` | none | none | none |
 | `windowSweaters` | `windowSweatersEnabled` | no | none | `accessibility` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
 | `videoEditor` | `tabVideoEditorEnabled` | yes | none | none | none | none |
@@ -153,6 +155,7 @@ the current platform, and which missing implementations merely degrade it:
 | `colorPicker` | `screenColorSampling` | `globalShortcuts` |
 | `keystrokeHighlight` | `keystrokeObservation` | none |
 | `focusDim` | `windowDimming` | none |
+| `hinge` | `lidFold` | `globalShortcuts` |
 | `windowSweaters` | `windowDecoration` | none |
 | `presenter` | `screenShareDetection` | none |
 | `videoEditor` | `localVideoEditing` | none |

@@ -40,6 +40,7 @@ struct ExtensionPreview: View {
         case "keystrokeHighlight": keystrokeHighlightPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
+        case "hinge": hingePreview(phase: phase)
         case "windowSweaters": windowSweatersPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
@@ -488,6 +489,23 @@ struct ExtensionPreview: View {
             }
             .frame(width: UIScale.pt(84), height: UIScale.pt(50))
             .offset(x: 12, y: 8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func hingePreview(phase: Double) -> some View {
+        let fold = (1 - cos(loopProgress(phase, duration: 3.2) * .pi * 2)) / 2
+        return ZStack {
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                .fill(DashSkin.paper2(dark))
+                .frame(width: UIScale.pt(86), height: UIScale.pt(52))
+                .scaleEffect(x: 1 - fold * 0.18, y: 1 - fold * 0.42, anchor: .bottom)
+                .offset(y: fold * 6)
+            RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)
+                .fill(DashSkin.accent(dark).opacity(0.85))
+                .frame(width: UIScale.pt(70), height: UIScale.pt(36))
+                .scaleEffect(x: 1 - fold * 0.22, y: 1 - fold * 0.5, anchor: .bottom)
+                .offset(y: 4 + fold * 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

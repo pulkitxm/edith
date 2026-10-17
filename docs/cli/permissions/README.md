@@ -37,7 +37,7 @@ full list as the hint.
 | `accessibility` | Privacy & Security > Accessibility | Clean keys, clipboard instant paste, and typing an emoji into the frontmost app | optional for `system`, `clipboard`, `emoji` |
 | `inputMonitoring` | Privacy & Security > Input Monitoring | Block key presses while Clean keys is locking the keyboard | optional for `system` |
 | `fullDisk` | Privacy & Security > Full Disk Access | Reach local service credentials and usage data | nothing declares it |
-| `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, and sample colours from the screen | required by `focusDim`, `presenter`, `colorPicker` |
+| `screenRecording` | Privacy & Security > Screen Recording | Detect shared content, sample colours, and fold the live desktop | required by `focusDim`, `hinge`, `presenter`, `colorPicker` |
 | `applicationAudio` | Privacy & Security > Screen & System Audio Recording, granted on first use | Notch Shelf per-app volume mixing | optional for `notchShelf` |
 | `camera` | Privacy & Security > Camera | The Virtual Camera feed and preview, and the Notch Shelf camera preview | required by `virtualCamera`, optional for `notchShelf` |
 | `bluetooth` | Privacy & Security > Bluetooth, granted on first use | Notch Shelf device connection alerts | optional for `notchShelf` |
