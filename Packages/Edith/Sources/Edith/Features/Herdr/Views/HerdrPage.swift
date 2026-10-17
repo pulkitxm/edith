@@ -89,11 +89,6 @@ struct HerdrPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .herdrDropFrame(HerdrDropGeometry.canvasKey)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        HerdrTerminalPanelView(
-                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
-                            maximumHeight: proxy.size.height, hideAgents: hideAgents)
-                    }
                     if !onBoard, store.detailOpen, !compact, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents,
@@ -101,6 +96,11 @@ struct HerdrPage: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topLeading) {
+                    HerdrTerminalPanelView(
+                        store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
+                        bounds: terminalBounds(in: proxy.size), hideAgents: hideAgents)
+                }
             }
         }
         .overlay { HerdrDragOverlay(drag: drag, store: store, hideAgents: hideAgents) }
@@ -230,6 +230,24 @@ struct HerdrPage: View {
 
     private var railDisplayWidth: Double {
         UIScale.pt(HerdrPaneSizing.rail(liveRailWidth ?? store.railWidth))
+    }
+
+    private func terminalBounds(in size: CGSize) -> HerdrTerminalPanelBounds {
+        let unit = max(UIScale.current, 0.001)
+        let handle = UIScale.pt(9)
+        var leading = 0.0
+        var trailing = 0.0
+        if store.railOpen, !compact {
+            leading = min(railDisplayWidth, size.width * 0.28) + handle
+        }
+        if !onBoard, store.detailOpen, !compact {
+            let detail = min(
+                size.width * 0.3, UIScale.pt(HerdrPaneSizing.detail(store.detailWidth)))
+            trailing = detail + handle
+        }
+        return HerdrTerminalPanelBounds(
+            width: size.width / unit, height: size.height / unit, contentLeading: leading / unit,
+            contentWidth: max(0, size.width - leading - trailing) / unit)
     }
 
     private func resizeRail(_ translation: CGFloat) {
