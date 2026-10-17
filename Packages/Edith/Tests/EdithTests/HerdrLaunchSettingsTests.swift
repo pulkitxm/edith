@@ -83,6 +83,7 @@ import Testing
                     "--settings", #"{"fastMode":true}"#,
                 ])
         #expect(launch.remote(.linux).hasSuffix(#"--settings '{"fastMode":true}'"#))
+        #expect(launch.waitsForAvailableShell)
     }
 
     @Test func everyStartedAgentGetsItsOwnHerdrName() {
@@ -108,6 +109,7 @@ import Testing
                     "--session", "default", "pane", "run", "w5:p1",
                     #"cx --yolo -m gpt-6-sol -c 'service_tier="fast"'"#,
                 ])
+        #expect(!launch.waitsForAvailableShell)
     }
 
     @Test func kindsWithoutOptionsLaunchUnchanged() {
