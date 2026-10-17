@@ -41,8 +41,10 @@ public final class GhosttyTerminalView: NSView {
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
     var localEventMonitor: Any?
+    public var dragSelectsOverCapturedMouse = false
     var suppressNextLeftMouseUp = false
     var focusMouseDown: NSEvent?
+    var heldCapturedClick: NSEvent?
     var programOwnsMouseGesture = false
     var selectionMouseActive = false
     var selectionCopyPending = false
@@ -169,6 +171,7 @@ public final class GhosttyTerminalView: NSView {
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = nil
         focusMouseDown = nil
+        heldCapturedClick = nil
         programOwnsMouseGesture = false
         selectionMouseActive = false
         selectionCopyPending = false

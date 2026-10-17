@@ -65,8 +65,11 @@ retaining their process and view for the next presentation.
 
 Session attachments and Command-J use the same terminal bridge mouse preference,
 which defaults to clicks and drags. Wheel input goes through the bridge scroll
-protocol. Plain clicks and drags reach terminal programs, including Quinjet. Hold
-Shift to select text when a program captures the mouse; Ghostty copies completed
-selections and supports Command-C, Command-V, link activation, and context menus
-through the same native view in every surface. The optional Scroll only setting
-filters pointer input in both kinds of bridge attachment.
+protocol. Plain clicks and drags reach terminal programs, including Quinjet.
+An agent session selects and copies on a drag, and a click without a drag still
+reaches the agent. Hold Shift to select text in any other surface when a
+program captures the mouse. Shift keeps selecting even if that program asks to
+capture Shift too. Ghostty copies completed selections and supports Command-C,
+Command-V, link activation, and context menus through the same native view in
+every surface. The optional Scroll only setting filters pointer input in both
+kinds of bridge attachment.

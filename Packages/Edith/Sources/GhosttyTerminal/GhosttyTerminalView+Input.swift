@@ -114,6 +114,7 @@ extension GhosttyTerminalView {
         else { return event }
         suppressNextLeftMouseUp = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         let focused = window.firstResponder === self
         guard !focused else { return event }
         let activatesTerminalLink =
@@ -450,9 +451,25 @@ extension GhosttyTerminalView {
         return target
     }
 
+    public enum CapturedPointerDelivery: Equatable {
+        case program
+        case selection
+        case heldClick
+    }
+
+    public static func capturedPointerDelivery(
+        shift: Bool, commandClick: Bool, clickCount: Int, dragSelects: Bool
+    ) -> CapturedPointerDelivery {
+        if shift || commandClick { return .selection }
+        if dragSelects, clickCount > 1 { return .selection }
+        if dragSelects { return .heldClick }
+        return .program
+    }
+
     public override func mouseDown(with event: NSEvent) {
         suppressNextLeftMouseUp = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         resumeSelectionMouseReporting()
         programOwnsMouseGesture = false
         selectionMouseActive = true
@@ -463,12 +480,24 @@ extension GhosttyTerminalView {
             active: commandClick, at: local,
             candidate: commandClick ? commandClickTarget(for: event) : nil)
         if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface) {
-            if event.modifierFlags.contains(.shift) || commandClick {
+            switch Self.capturedPointerDelivery(
+                shift: event.modifierFlags.contains(.shift), commandClick: commandClick,
+                clickCount: event.clickCount, dragSelects: dragSelectsOverCapturedMouse)
+            {
+            case .selection:
                 selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
-            } else {
+            case .program:
                 programOwnsMouseGesture = true
+            case .heldClick:
+                heldCapturedClick = event
+                selectionMouseActive = false
+                return
             }
         }
+        sendLeftPress(event)
+    }
+
+    private func sendLeftPress(_ event: NSEvent) {
         if event.clickCount == 1 {
             button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
         } else if let surface {
@@ -482,6 +511,17 @@ extension GhosttyTerminalView {
         if suppressNextLeftMouseUp {
             suppressNextLeftMouseUp = false
             focusMouseDown = nil
+            heldCapturedClick = nil
+            return
+        }
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            programOwnsMouseGesture = true
+            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+            button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+            selectionMouseActive = false
+            programOwnsMouseGesture = false
+            resumeSelectionMouseReporting()
             return
         }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
@@ -535,6 +575,13 @@ extension GhosttyTerminalView {
     public override func mouseDragged(with event: NSEvent) {
         if let focusMouseDown { mouseDown(with: focusMouseDown) }
         guard !suppressNextLeftMouseUp else { return }
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
+            selectionMouseActive = true
+            programOwnsMouseGesture = false
+            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+        }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
     }
@@ -552,6 +599,7 @@ extension GhosttyTerminalView {
         }
         programOwnsMouseGesture = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         selectionMouseActive = false
         selectionCopyPending = false
         resumeSelectionMouseReporting()

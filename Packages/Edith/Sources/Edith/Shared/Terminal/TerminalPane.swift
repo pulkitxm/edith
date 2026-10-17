@@ -11,6 +11,7 @@ struct TerminalPane: View {
     var active = true
     var wantsFocus = true
     var fontSize: Double?
+    var dragSelectsOverCapturedMouse = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
@@ -27,16 +28,18 @@ struct TerminalPane: View {
                 GhosttyPane(
                     holder: holder, launch: launch,
                     theme: GhosttyTheme(palette: palette, fontSize: resolvedFontSize),
-                    active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
-                    onFocus: onFocus
+                    active: active, wantsFocus: wantsFocus,
+                    dragSelectsOverCapturedMouse: dragSelectsOverCapturedMouse,
+                    onDropFiles: onDropFiles, onFocus: onFocus
                 )
                 .id(holder.generation)
             }
         } else {
             SwiftTermPane(
                 holder: holder, palette: palette, active: active, wantsFocus: wantsFocus,
-                scale: UIScale.current, fontSize: resolvedFontSize, onDropFiles: onDropFiles,
-                onFocus: onFocus
+                scale: UIScale.current, fontSize: resolvedFontSize,
+                dragSelectsOverCapturedMouse: dragSelectsOverCapturedMouse,
+                onDropFiles: onDropFiles, onFocus: onFocus
             )
             .id(holder.generation)
         }
@@ -50,6 +53,7 @@ struct SwiftTermPane: NSViewRepresentable {
     var wantsFocus = true
     var scale = 1.0
     var fontSize = HerdrTerminalSettings.fontSizeDefault
+    var dragSelectsOverCapturedMouse = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
 
     var onFocus: (() -> Void)?
@@ -58,6 +62,7 @@ struct SwiftTermPane: NSViewRepresentable {
         holder.applyTheme(palette, scale: scale, fontSize: fontSize)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
         let view = holder.terminalView
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
         view.registerForDraggedTypes(TerminalDropPayload.pasteboardTypes)
@@ -67,6 +72,7 @@ struct SwiftTermPane: NSViewRepresentable {
     func updateNSView(_ view: EdithTerminalView, context: Context) {
         holder.applyTheme(palette, scale: scale, fontSize: fontSize)
         holder.updatePresentation(active: active, wantsFocus: wantsFocus)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
     }

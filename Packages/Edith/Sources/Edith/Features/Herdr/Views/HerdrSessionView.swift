@@ -291,6 +291,7 @@ struct HerdrSessionView: View {
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
                 wantsFocus: wantsFocus && terminalFocus == .agent,
+                dragSelectsOverCapturedMouse: !agent.isTerminal,
                 onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
                 onFocus: {
                     splitTerminalFocus = .agent
