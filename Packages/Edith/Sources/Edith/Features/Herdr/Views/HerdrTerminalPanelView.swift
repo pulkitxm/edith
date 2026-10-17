@@ -334,7 +334,7 @@ struct HerdrTerminalSettingsView: View {
                 Text(
                     mouse == .scroll
                         ? "The wheel scrolls. Clicks and pointer moves never reach the shell."
-                        : "Clicks and drags reach terminal apps. Hold Shift to select and copy text."
+                        : "Clicks reach terminal apps. In an agent, dragging selects and copies text. In a shell, hold Shift to select while an app is using the mouse."
                 )
                 .settingsCaption()
             }

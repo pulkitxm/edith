@@ -59,7 +59,7 @@ public struct GhosttyTheme: Equatable, Sendable {
             "window-decoration = false",
             "window-padding-x = 6",
             "window-padding-y = 4",
-            "mouse-shift-capture = false",
+            "mouse-shift-capture = never",
             "link-url = true",
             "link-osc8 = true",
             "link-previews = true",

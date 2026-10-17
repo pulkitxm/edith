@@ -41,7 +41,7 @@ import Testing
         #expect(text.contains("palette = 1=#ff0000"))
         #expect(text.contains("palette = 2=#00ff00"))
         #expect(text.contains("font-size = 13"))
-        #expect(text.contains("mouse-shift-capture = false"))
+        #expect(text.contains("mouse-shift-capture = never"))
         #expect(text.contains("link-url = true"))
         #expect(text.contains("link-osc8 = true"))
         #expect(text.contains("link-previews = true"))

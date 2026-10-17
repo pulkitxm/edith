@@ -14,11 +14,56 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
     }
 
     var onFocus: (() -> Void)?
+    var dragSelectsOverCapturedMouse = false
+    private var heldCapturedClick: NSEvent?
 
     override func mouseDown(with event: NSEvent) {
+        heldCapturedClick = nil
+        let commandClick = event.clickCount == 1 && event.modifierFlags.contains(.command)
+        if GhosttyTerminalView.capturedPointerDelivery(
+            shift: event.modifierFlags.contains(.shift), commandClick: commandClick,
+            clickCount: event.clickCount,
+            dragSelects: dragSelectsOverCapturedMouse && terminal.mouseMode != .off
+                && !terminal.mouseShiftCapture
+        ) == .heldClick {
+            heldCapturedClick = event
+            window?.makeFirstResponder(self)
+            if window?.firstResponder === self { onFocus?() }
+            return
+        }
         window?.makeFirstResponder(self)
-        super.mouseDown(with: event)
+        let press = event.clickCount > 1 ? selecting(event) : event
+        super.mouseDown(with: press)
         if window?.firstResponder === self { onFocus?() }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            super.mouseDown(with: selecting(down))
+            super.mouseDragged(with: selecting(event))
+            return
+        }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            super.mouseDown(with: down)
+            super.mouseUp(with: event)
+            return
+        }
+        super.mouseUp(with: event)
+    }
+
+    private func selecting(_ event: NSEvent) -> NSEvent {
+        guard dragSelectsOverCapturedMouse, !terminal.mouseShiftCapture else { return event }
+        return NSEvent.mouseEvent(
+            with: event.type, location: event.locationInWindow,
+            modifierFlags: event.modifierFlags.union(.shift), timestamp: event.timestamp,
+            windowNumber: event.windowNumber, context: nil, eventNumber: event.eventNumber,
+            clickCount: event.clickCount, pressure: event.pressure) ?? event
     }
 
     var focusRequested = false

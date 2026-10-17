@@ -23,6 +23,7 @@ struct GhosttyPane: NSViewRepresentable {
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
@@ -40,6 +41,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
         let view = holder.retainedGhosttyView(launch: launch, theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
         view.setRenderingActive(active)
@@ -48,6 +50,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onDropFiles = onDropFiles
         view.onFocus = onFocus
         view.setRenderingActive(active)
