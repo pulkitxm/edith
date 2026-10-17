@@ -90,6 +90,28 @@ private final class LimitsAnnouncementRecorder: @unchecked Sendable {
         #expect(announcements.count == 2)
     }
 
+    @Test func historySaveRetriesUntilTheFileAcceptsTheRow() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "edith-limits-save-\(UUID().uuidString)")
+        let historyURL = root.appendingPathComponent("limits-history.jsonl")
+        let blocked = root.appendingPathComponent("blocked.jsonl")
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: blocked)
+        try FileManager.default.createSymbolicLink(at: historyURL, withDestinationURL: blocked)
+        var pauses = 0
+        LimitsCollector.persistHistory(
+            provider: .cursor, session: LimitWindow(percent: 3.6, resetsAt: nil),
+            week: LimitWindow(percent: 5, resetsAt: nil), attempts: 2, historyURL: historyURL
+        ) {
+            pauses += 1
+            try? FileManager.default.removeItem(at: historyURL)
+        }
+        #expect(pauses == 1)
+        #expect(LimitsHistory.latest(provider: .cursor, url: historyURL)?.session?.percent == 3.6)
+        #expect(try Data(contentsOf: blocked) == Data("keep".utf8))
+    }
+
     @Test func disablingABackedOffProviderRemovesItsError() async {
         let session = LimitsRefreshSession()
         _ = await LimitsCollector.collect(

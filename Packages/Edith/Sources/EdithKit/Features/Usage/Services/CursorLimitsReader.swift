@@ -206,7 +206,7 @@ enum CursorLimitsReader {
         }
         guard let plan = object["planUsage"] as? [String: Any] else { throw Failure.unavailable }
         let resetsAt = date(object["billingCycleEnd"])
-        let models = percent(plan["autoPercentUsed"])
+        let models = includedPercent(plan) ?? percent(plan["autoPercentUsed"])
         let other = percent(plan["apiPercentUsed"])
         guard models != nil || other != nil else { throw Failure.unavailable }
         return ProviderLimits(
@@ -225,6 +225,13 @@ enum CursorLimitsReader {
             case refreshToken = "refresh_token"
             case shouldLogout
         }
+    }
+
+    private static func includedPercent(_ plan: [String: Any]) -> Double? {
+        guard let limit = number(plan["limit"]), limit > 0 else { return nil }
+        let spent = number(plan["includedSpend"]) ?? number(plan["totalSpend"])
+        guard let spent, spent.isFinite, spent >= 0 else { return nil }
+        return min(spent / limit * 100, 100)
     }
 
     private static func percent(_ value: Any?) -> Double? {
