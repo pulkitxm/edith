@@ -17,6 +17,7 @@ final class AppServices {
     private(set) var emoji: EmojiStore?
     private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
     private(set) var focusDim: FocusDimEngine?
+    private(set) var hinge: HingeEngine?
     private(set) var windowSweaters: SweaterEngine?
     private(set) var presenter: PresenterDetector?
     private(set) var micMute: MicMuteEngine?
@@ -379,6 +380,14 @@ final class AppServices {
             FocusDimState.setActive(false)
         }
 
+        let hingeOn = HingeState.isEnabled()
+        if hingeOn, hinge == nil { hinge = HingeEngine() }
+        if !hingeOn, let engine = hinge {
+            engine.shutdown()
+            hinge = nil
+            HingeState.setActive(false)
+        }
+
         let sweatersOn = SweaterState.isEnabled()
         if sweatersOn, windowSweaters == nil { windowSweaters = SweaterEngine() }
         if !sweatersOn, let engine = windowSweaters {
@@ -486,6 +495,7 @@ final class AppServices {
         lidAwake?.refreshFromSystem()
         lidAwake?.syncSettings()
         focusDim?.applySettings()
+        hinge?.applySettings()
         windowSweaters?.applySettings()
         presenter?.applySettings()
     }

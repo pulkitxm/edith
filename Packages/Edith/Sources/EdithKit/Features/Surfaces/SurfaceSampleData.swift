@@ -366,7 +366,8 @@ public enum SurfaceSampleData {
                     .init("desk", title: "Desk view", value: "Selected", icon: "web.camera"),
                     .init("presentation", title: "Presentation", icon: "rectangle.on.rectangle"),
                 ], message: "Open Camera to preview, frame, or start the camera.")
-        case .ability("keepAwake"), .ability("focusDim"), .ability("keystrokeHighlight"),
+        case .ability("keepAwake"), .ability("focusDim"), .ability("hinge"),
+            .ability("keystrokeHighlight"),
             .ability("windowSweaters"), .ability("presenter"), .ability("lidAwake"),
             .ability("micMute"):
             return .init(

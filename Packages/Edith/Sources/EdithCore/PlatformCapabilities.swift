@@ -19,6 +19,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case globalShortcuts
     case inputSuppression
     case keystrokeObservation
+    case lidFold
     case localMusicPlayback
     case localMediaEditing
     case localTerminal
@@ -108,6 +109,7 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .globalPaste: .permissionRequired,
                     .inputSuppression: .permissionRequired,
                     .keystrokeObservation: .permissionRequired,
+                    .lidFold: .permissionRequired,
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
