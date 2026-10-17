@@ -601,10 +601,12 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func pan(by translation: CGSize, in viewSize: CGSize) {
         let previous = state
+        let axes = VirtualCameraDragAxes(
+            mirrorOutput: state.mirrorOutput, mirrorPreview: state.mirrorPreview)
         updateComposition {
             $0.framing = VirtualCameraGeometry.panned(
                 $0.framing, by: translation, viewSize: viewSize, source: sourceSize,
-                output: outputSize)
+                output: outputSize, axes: axes)
         }
         if state != previous, snapshot?.live == true {
             VirtualCameraStore.announceChange(from: "window", state: state)
