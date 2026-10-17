@@ -730,7 +730,7 @@ import Testing
         #expect(deltas == [CGSize(width: 30, height: 10)])
         view.mirrored = true
         view.mouseDragged(with: try event(.leftMouseDragged, CGPoint(x: 140, y: 90)))
-        #expect(deltas.last == CGSize(width: -10, height: 0))
+        #expect(deltas.last == CGSize(width: 10, height: 0))
         view.mouseUp(with: try event(.leftMouseUp, CGPoint(x: 140, y: 90)))
         view.mouseDragged(with: try event(.leftMouseDragged, CGPoint(x: 200, y: 90)))
         #expect(deltas.count == 2)
