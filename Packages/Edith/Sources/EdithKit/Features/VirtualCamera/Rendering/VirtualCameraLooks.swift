@@ -74,7 +74,8 @@ public enum VirtualCameraLooks {
                     "CIHighlightShadowAdjust",
                     parameters: [
                         "inputShadowAmount": 0.7, "inputHighlightAmount": 0.78,
-                    ])
+                    ]
+                )
                 .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.12])
         case .studio:
             return
@@ -84,7 +85,8 @@ public enum VirtualCameraLooks {
                     "CIHighlightShadowAdjust",
                     parameters: [
                         "inputShadowAmount": 0.62, "inputHighlightAmount": 0.8,
-                    ])
+                    ]
+                )
                 .applyingFilter("CIVibrance", parameters: ["inputAmount": 0.32])
                 .applyingFilter("CIColorControls", parameters: [kCIInputContrastKey: 1.08])
         case .warm:
