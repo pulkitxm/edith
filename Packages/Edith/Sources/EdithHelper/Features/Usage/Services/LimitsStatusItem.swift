@@ -580,7 +580,8 @@ struct LimitsMenuPanel: View {
                         ForEach(slots, id: \.self) { slot in
                             let window = limits.window(for: slot)
                             StatusProgressRow(
-                                title: slot.title(for: provider), percent: window?.percent,
+                                title: slot.title(for: provider),
+                                percent: window.map { Double($0.shownPercent) },
                                 resetsAt: window?.resetsAt)
                         }
                     }

@@ -10,6 +10,13 @@ public struct LimitWindow: Equatable, Codable, Sendable {
         self.resetsAt = resetsAt
         self.period = period
     }
+
+    public var shownPercent: Int {
+        let bounded = min(max(percent, 0), 100)
+        let whole = Int(bounded.rounded())
+        if whole == 0, bounded > 0 { return 1 }
+        return min(whole, 100)
+    }
 }
 
 public struct GrokProductShare: Codable, Equatable, Sendable {

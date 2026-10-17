@@ -61,6 +61,12 @@ import Testing
         let groups = MenuBarLimits.groups(
             providers: [claude], selection: { _ in [.session, .week, .fable] }, masked: false)
         #expect(groups[0].segments.map(\.value) == [.percent(92), .missing, .percent(46)])
+        let cursor = ProviderLimits(
+            provider: .cursor, session: LimitWindow(percent: 0.355, resetsAt: now),
+            week: LimitWindow(percent: 26.6, resetsAt: now))
+        let cursorGroups = MenuBarLimits.groups(
+            providers: [cursor], selection: { _ in [.session, .week] }, masked: false)
+        #expect(cursorGroups[0].segments.map(\.value) == [.percent(1), .percent(27)])
         #expect(groups[0].segments[0].window?.resetsAt == now)
         #expect(groups[0].segments[0].slot.kind == .session)
         #expect(groups[0].segments[2].slot.kind == .weekly)
