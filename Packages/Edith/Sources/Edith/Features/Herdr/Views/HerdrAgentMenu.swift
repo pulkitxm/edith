@@ -170,7 +170,8 @@ struct HerdrAgentMenu: View {
 
     private func cancelTitle(_ hook: HerdrAgentHook) -> String {
         let phrase = hook.schedule.sendsPhrase(now: Date())
-        let message = hook.message.count > 28
+        let message =
+            hook.message.count > 28
             ? "\(hook.message.prefix(28))…" : hook.message
         return "\(phrase): \(message)"
     }
