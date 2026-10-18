@@ -203,8 +203,8 @@ struct SocialBrowserContent: View {
         VStack(spacing: 0) {
             navigation
             if page.isLoading {
-                ProgressView(value: page.progress).progressViewStyle(.linear)
-                    .frame(height: UIScale.pt(2)).accessibilityLabel("Website loading")
+                LoadingProgress(value: page.progress)
+                    .accessibilityLabel("Website loading")
             }
             if let error = page.error {
                 HStack {
