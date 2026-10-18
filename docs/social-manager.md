@@ -27,14 +27,25 @@ also lets you rename a profile or remove it and clear all its connected sessions
 ## Tabs and side-by-side layouts
 
 Opening an account creates a workspace tab, or focuses its existing pane. Use
-**Side by side** in the workspace header to choose another account, then open it
-to the right or below the focused account. Accounts can belong to different
+**Side by side** at the right of the tab bar to choose another account or merge
+an existing tab. Accounts can belong to different
 platforms and different profiles. The account cards also have an **Open side by side** button when a
 workspace tab is open.
 
-The layout uses the same split engine and divider interaction as Agent Sessions.
-Drag a divider to resize panes. Use **Layout** for columns, rows, a grid, equal
-sizes or **Separate into tabs**. Each pane shows its profile, account and platform, with
+The tabs, drag coordinator, live drop previews, snap-layout chooser, layout picker
+and divider interaction are shared with Agent Sessions. Drag an account from the
+account rail, a tab or a pane header to an edge to split, or to a pane's center
+to swap places. A new account dropped in the center keeps the displaced account
+in its own tab. Drag to the outside edge to span the whole side. Drag over the
+**Layouts** pill to choose a template and a slot. Hold over another tab to switch
+to it while dragging, or drop onto its center to combine the tabs. Drop between
+tabs to reorder or detach a pane into its own tab. Escape cancels a drag.
+
+Drag a divider to resize panes. Use **Layout** for arrangement thumbnails,
+rotation, horizontal or vertical flips, equal sizes, maximize, saved custom
+layouts or **Separate**. **Gather All Tabs** combines every open tab. The
+**Animate Changes** toggle controls the same layout motion as Agent Sessions.
+Each pane shows its profile, account and platform, with
 controls to focus, maximize, restore or close it. Closing a tab releases its
 browser views and keeps the login session. Navigating to Profiles or another
 Edith page retains the open workspace while the window remains open.
@@ -46,8 +57,12 @@ flow into a different browser profile.
 
 Right-click profiles, accounts, workspace tabs or pane headers for their controls.
 Profiles can open all connected accounts in tabs or side by side. Drag profiles,
-accounts or workspace tabs to reorder them. Drag an account card or pane header
-onto another pane header to place it beside that pane. Use **Position beside**
+account-rail rows or workspace tabs to reorder them. Switch profiles using the
+rail's profile menu to bring another profile's accounts into the workspace.
+The sidebar button shows the account rail, or its compact-window sheet.
+Drag a pane or single-account tab outside the workspace to open a separate
+window. Closing that window or choosing **Return to workspace** brings the same
+browser session back. Use **Position beside**
 for an exact right or bottom placement, or **Move to tab** to combine workspaces.
 Tab menus include closing other tabs, closing tabs to the right and reopening a
 closed workspace. Pane menus include website zoom and new website tabs.
@@ -57,7 +72,9 @@ Keyboard controls work while a website or its text field has focus:
 | Shortcut | Action |
 | --- | --- |
 | Control+Tab / Control+Shift+Tab | Next / previous workspace tab, including Profiles |
-| Command+Option+Right / Left | Next / previous workspace tab |
+| Command+Option+Arrow | Focus the pane in that direction, matching Agent Sessions |
+| Option+Backtick / Option+Shift+Backtick | Focus next / previous pane, matching Agent Sessions |
+| Command+Shift+Return | Maximize / restore the focused pane |
 | Command+Control+Right / Left | Focus next / previous pane |
 | Command+1 through Command+9 | Select a workspace tab |
 | Command+T or Command+0 | Show the profile library |

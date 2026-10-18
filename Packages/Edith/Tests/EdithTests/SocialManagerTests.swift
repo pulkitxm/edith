@@ -282,12 +282,14 @@ struct SocialManagerFixture {
     let folder: URL
     let file: SocialAccountFile
     let model: SocialManagerModel
+    let defaults: UserDefaults
 
     init(website: URL = URL(string: "about:blank")!, persistent: Bool = false) throws {
         _ = TestWindowHost.application
         folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             "social-manager-\(UUID().uuidString)")
         file = SocialAccountFile(url: folder.appendingPathComponent("accounts.json"))
+        defaults = try #require(UserDefaults(suiteName: folder.lastPathComponent))
         var catalog = SocialAccountCatalog()
         catalog.profiles = [
             SocialProfile(name: "Studio", badge: "ST"), SocialProfile(name: "Personal", badge: "P"),
@@ -300,7 +302,7 @@ struct SocialManagerFixture {
         }
         try file.save(catalog)
         model = SocialManagerModel(
-            file: file,
+            file: file, defaults: defaults,
             sessionFactory: { account, _, dataStore in
                 SocialBrowserSession(
                     accountID: account.id, website: website,
@@ -313,6 +315,7 @@ struct SocialManagerFixture {
 
     func remove() {
         model.shutdown()
+        defaults.removePersistentDomain(forName: folder.lastPathComponent)
         try? FileManager.default.removeItem(at: folder)
     }
 }

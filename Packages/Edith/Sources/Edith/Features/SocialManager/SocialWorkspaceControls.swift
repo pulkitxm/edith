@@ -185,6 +185,18 @@ extension SocialManagerModel {
         case .previousTab: cycleTab(backwards: true)
         case .nextPane: cyclePane(backwards: false)
         case .previousPane: cyclePane(backwards: true)
+        case .layout(let key):
+            guard !showingAccounts, let tab = currentTab else { return false }
+            switch key {
+            case .cycle(let backwards): cyclePane(backwards: backwards)
+            case .zoom: if tab.layout.paneCount > 1 { toggleZoom(tab.focused) }
+            case .focus(let side):
+                if let neighbor = tab.layout.neighbor(of: tab.focused, toward: side) {
+                    focus(neighbor)
+                    updateTab { $0.zoomed = nil }
+                    activateFocusedBrowser()
+                }
+            }
         case .showLibrary: showingAccounts = true
         case .reopenTab: reopenClosedTab()
         case .selectTab(let index):

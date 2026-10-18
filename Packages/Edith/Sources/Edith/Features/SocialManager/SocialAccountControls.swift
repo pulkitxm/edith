@@ -69,9 +69,19 @@ struct SocialTabActions: View {
         Button("Move tab right") { model.shiftTab(tab.id, by: 1) }
             .disabled(model.tabs.last?.id == tab.id)
         if tab.layout.paneCount > 1 {
+            Menu("Merge Into") {
+                ForEach(model.tabs.filter { $0.id != tab.id }) { other in
+                    Button(model.title(other)) {
+                        model.merge(tab.id.uuidString, into: other.id.uuidString)
+                    }
+                }
+            }.disabled(model.tabs.count < 2)
             Button("Separate into tabs") {
                 model.select(tab); model.separate()
             }
+        }
+        if tab.layout.paneCount == 1 {
+            Button("Open in new window") { SocialWorkspaceWindow.open(tab.focused, from: model) }
         }
         Divider()
         Button("Close tab") { model.closeTab(tab.id) }

@@ -33,6 +33,7 @@ struct SocialBrowserCanvas: View {
                         .offset(x: frame.minX, y: frame.minY)
                         .opacity(visible ? 1 : 0).allowsHitTesting(visible)
                         .accessibilityHidden(!visible).zIndex(visible ? 1 : 0)
+                        .animation(model.layoutAnimation, value: frame)
                     }
                 }
                 if let tab = model.currentTab, tab.layout.paneCount > 1, tab.zoomed == nil {
@@ -173,6 +174,7 @@ private struct SocialBrowserPane: View {
                 }
             }
         }
+        Button("Open in new window") { SocialWorkspaceWindow.open(key, from: model) }
         if let page = session.selectedPage {
             Menu("Website zoom") {
                 Button("Zoom in") { page.webView.pageZoom = min(3, page.webView.pageZoom + 0.1) }

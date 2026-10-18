@@ -138,7 +138,6 @@ extension SocialManagerModel: PaneWorkspaceInteractions {
                 if !tab.layout.contains(id) { removePane(id) }
                 SocialWorkspaceWindow.reattach(id, to: self)
             }
-            if let displaced { removePane(displaced) }
             var updated = tab
             updated.layout = layout
             updated.focused = ids.first ?? tab.focused
@@ -174,19 +173,15 @@ extension SocialManagerModel: PaneWorkspaceInteractions {
         case let .tabBar(index): insertTab(item, at: index)
         case .newTab: insertTab(item, at: tabs.count)
         case let .sidebarAgent(id, after):
-            guard case let .pane(source) = normalized, let target = account(id) else { return }
-            guard let sourceID = UUID(uuidString: source) else { return }
-            reorderAccount(sourceID, before: target)
-            if after {
-                var next = catalog
-                guard
-                    let sourceIndex = next.accounts.firstIndex(where: { $0.id.uuidString == source }
-                    ), let targetIndex = next.accounts.firstIndex(where: { $0.id.uuidString == id })
-                else { return }
-                let account = next.accounts.remove(at: sourceIndex)
-                next.accounts.insert(account, at: min(targetIndex, next.accounts.count))
-                do { try persist(next) } catch { message = error.localizedDescription }
-            }
+            guard case let .pane(source) = normalized else { return }
+            var next = catalog
+            guard let sourceIndex = next.accounts.firstIndex(where: { $0.id.uuidString == source })
+            else { return }
+            let moved = next.accounts.remove(at: sourceIndex)
+            guard let targetIndex = next.accounts.firstIndex(where: { $0.id.uuidString == id })
+            else { return }
+            next.accounts.insert(moved, at: targetIndex + (after ? 1 : 0))
+            do { try persist(next) } catch { message = error.localizedDescription }
         case .window, .sidebarSpace: break
         }
     }

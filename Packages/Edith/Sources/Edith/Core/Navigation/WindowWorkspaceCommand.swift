@@ -4,6 +4,7 @@ enum WindowWorkspaceCommand: Equatable {
     case nextTab, previousTab, nextPane, previousPane, closeTab, showLibrary, reopenTab, reload,
         focusAddress
     case selectTab(Int)
+    case layout(HerdrLayoutKey)
 
     static func resolve(characters: String?, keyCode: UInt16, modifiers: NSEvent.ModifierFlags)
         -> Self?
@@ -16,9 +17,8 @@ enum WindowWorkspaceCommand: Equatable {
             if keyCode == 124 { return .nextPane }
             if keyCode == 123 { return .previousPane }
         }
-        if flags == [.command, .option] {
-            if keyCode == 124 { return .nextTab }
-            if keyCode == 123 { return .previousTab }
+        if let layout = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers) {
+            return .layout(layout)
         }
         if flags == [.command, .shift], characters?.lowercased() == "t" { return .reopenTab }
         guard flags == .command, let key = characters?.lowercased() else { return nil }

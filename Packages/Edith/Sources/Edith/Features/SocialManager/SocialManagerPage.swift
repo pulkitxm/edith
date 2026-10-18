@@ -91,6 +91,10 @@ struct SocialManagerPage: View {
         .coordinateSpace(name: HerdrDragCoordinator.space)
         .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
+        .onChange(of: UIScale.current) {
+            drag.unit = UIScale.current; drag.gap = UIScale.pt(6)
+        }
+        .onChange(of: compact) { compactRailPresented = false }
         .pageTask { model.start() }
         .onAppear {
             drag.store = model
@@ -296,7 +300,8 @@ struct SocialManagerPage: View {
                             }.padding(UIScale.pt(20))
                         }
                         LazyVGrid(
-                            columns: PageMetrics.cardColumns(compact, minimum: 250, spacing: 12),
+                            columns: PageMetrics.cardColumns(
+                                compact, minimum: 250, spacing: 12, alignment: .topLeading),
                             spacing: UIScale.pt(12)
                         ) {
                             ForEach(model.catalog.profiles) { profile in profileCard(profile) }
@@ -308,7 +313,7 @@ struct SocialManagerPage: View {
                     )
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                }
+                }.padding(.top, UIScale.pt(PageMetrics.top))
             }
         }
     }
@@ -341,7 +346,9 @@ struct SocialManagerPage: View {
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
             }
-            .padding(UIScale.pt(18)).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(UIScale.pt(18)).frame(
+                maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading
+            )
             .background(DashSkin.paper2(dark))
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
             .overlay(
@@ -350,6 +357,7 @@ struct SocialManagerPage: View {
         }
         .buttonStyle(.edith(.borderless))
         .contextMenu { profileActions(profile) }
+        .herdrDropFrame("profileCard:" + profile.id.uuidString)
         .draggable("social-profile:\(profile.id)")
         .dropDestination(for: String.self) { values, _ in
             guard let value = values.first, value.hasPrefix("social-profile:"),
@@ -414,7 +422,8 @@ struct SocialManagerPage: View {
                 .padding(UIScale.pt(20))
             } else {
                 LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 250, spacing: 12),
+                    columns: PageMetrics.cardColumns(
+                        compact, minimum: 250, spacing: 12, alignment: .topLeading),
                     spacing: UIScale.pt(12)
                 ) {
                     ForEach(accounts) { account in
@@ -463,7 +472,9 @@ struct SocialManagerPage: View {
                 }
             }
         }
-        .padding(UIScale.pt(18)).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UIScale.pt(18)).frame(
+            maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading
+        )
         .background(DashSkin.paper2(dark)).clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))
         .contextMenu { SocialAccountActions(model: model, account: account) }
