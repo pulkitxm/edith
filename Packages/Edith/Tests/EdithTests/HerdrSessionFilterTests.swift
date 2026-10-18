@@ -81,10 +81,10 @@ import Testing
     }
 
     @Test func highlightStaysInsideTheMenu() {
-        #expect(HerdrSessionFilters.highlight(0, movingBy: -1, count: 3) == 0)
-        #expect(HerdrSessionFilters.highlight(1, movingBy: 1, count: 3) == 2)
-        #expect(HerdrSessionFilters.highlight(2, movingBy: 4, count: 3) == 2)
-        #expect(HerdrSessionFilters.highlight(4, movingBy: 1, count: 0) == 0)
+        #expect(WorkspaceFilterNavigation.highlight(0, movingBy: -1, count: 3) == 0)
+        #expect(WorkspaceFilterNavigation.highlight(1, movingBy: 1, count: 3) == 2)
+        #expect(WorkspaceFilterNavigation.highlight(2, movingBy: 4, count: 3) == 2)
+        #expect(WorkspaceFilterNavigation.highlight(4, movingBy: 1, count: 0) == 0)
     }
 
     private func sample(query: String) -> [HerdrSessionFilterRow] {

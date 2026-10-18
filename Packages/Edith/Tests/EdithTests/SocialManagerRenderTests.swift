@@ -8,6 +8,48 @@ import WebKit
 
 @MainActor @Suite(.serialized)
 struct SocialManagerRenderTests {
+    @Test func crossProfileViewsRenderUsernamesAndDynamicFilters() async throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        for (index, account) in model.catalog.accounts.enumerated() {
+            try model.saveAccount(
+                id: account.id, profileID: account.profileID, platformID: account.platformID,
+                name: account.name, badge: account.badge,
+                username: [
+                    "studio.photos", "personal.photos", "north.community", "south.community",
+                    "studio.updates", "personal.updates",
+                ][index])
+        }
+        model.profileID = model.catalog.profiles[0].id
+        let previousScale = UIScale.current
+        defer { UIScale.apply(previousScale) }
+        for view in [SocialLibraryView.accounts, .list] {
+            model.browse(view)
+            for scheme in [ColorScheme.light, .dark] {
+                UIScale.apply(1)
+                try await capture(
+                    model, width: 1440, scheme: scheme,
+                    name: "all-\(view.rawValue.lowercased())-\(scheme)")
+                UIScale.apply(1.4)
+                try await capture(
+                    model, width: 620, scheme: scheme,
+                    name: "compact-\(view.rawValue.lowercased())-\(scheme)")
+            }
+        }
+        UIScale.apply(1)
+        model.platformFilterID = model.availablePlatforms.first?.id
+        try await capture(model, width: 1440, scheme: .dark, name: "instagram-filter")
+        model.openAccounts(
+            model.filteredAccounts, layout: try #require(model.templates(for: 2).first))
+        for account in model.catalog.accounts where model.sessions[account.id] != nil {
+            model.sessions[account.id]?.selectedPage?.webView.loadHTMLString(
+                Self.mockWebsite(account.handle ?? account.name),
+                baseURL: URL(string: "https://social.example.test"))
+        }
+        try await capture(model, width: 1440, scheme: .dark, name: "filtered-instagram-workspace")
+    }
+
     @Test func syntheticAccountsAndMixedPlatformPanesRenderAcrossWindowLayouts() async throws {
         let fixture = try SocialManagerFixture()
         defer { fixture.remove() }

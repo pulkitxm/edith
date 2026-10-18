@@ -48,7 +48,6 @@ import Testing
             "Edith/Features/Machines/Views/FinderContentViews.swift": 7,
             "Edith/Features/Pages/Views/MusicPageView.swift": 1,
             "Edith/Features/Settings/Views/GeneralPane.swift": 1,
-            "Edith/Features/SocialManager/SocialManagerPage.swift": 1,
             "Edith/Features/VideoEditor/VideoBeatPanel.swift": 1,
             "Edith/Shared/Views/WorkspaceTabControls.swift": 1,
             "EdithKit/Features/Surfaces/SurfaceCanvas.swift": 2,

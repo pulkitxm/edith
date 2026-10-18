@@ -176,8 +176,4 @@ enum HerdrSessionFilters {
         }
     }
 
-    static func highlight(_ current: Int, movingBy delta: Int, count: Int) -> Int {
-        guard count > 0 else { return 0 }
-        return min(count - 1, max(0, current + delta))
-    }
 }

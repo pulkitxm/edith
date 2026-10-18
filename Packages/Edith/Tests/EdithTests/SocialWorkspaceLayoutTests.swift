@@ -73,6 +73,94 @@ struct SocialWorkspaceLayoutTests {
         #expect(model.currentTab?.zoomed == accounts[0].id.uuidString)
         #expect(model.perform(.layout(.cycle(backwards: false))))
         #expect(model.currentTab?.focused == accounts[1].id.uuidString)
-        #expect(model.currentTab?.zoomed == nil)
+        #expect(model.currentTab?.zoomed == accounts[1].id.uuidString)
+    }
+
+    @Test func commandWClosesOnlyTheFocusedPaneAndReopenRestoresItsSplitPosition() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let accounts = Array(model.catalog.accounts.prefix(3))
+        model.open(accounts[0])
+        model.open(accounts[1], beside: true, side: .bottom)
+        model.open(accounts[2], beside: true, side: .right)
+        let original = try #require(model.currentTab)
+        let survivor = try #require(model.sessions[accounts[1].id])
+        model.focus(accounts[0].id.uuidString)
+        #expect(model.perform(.closeTab))
+        #expect(model.tabs.count == 1)
+        #expect(model.currentTab?.id == original.id)
+        #expect(model.currentTab?.layout.paneCount == 2)
+        #expect(!model.paneIsOpen(accounts[0].id.uuidString))
+        #expect(model.sessions[accounts[1].id] === survivor)
+        #expect(model.perform(.reopenTab))
+        #expect(model.currentTab?.id == original.id)
+        #expect(model.currentTab?.layout.geometryMatches(original.layout) == true)
+        #expect(model.currentTab?.focused == accounts[0].id.uuidString)
+        #expect(model.sessions[accounts[1].id] === survivor)
+        #expect(try fixture.file.load() == model.catalog)
+    }
+
+    @Test func closingWebsiteTabsDoesNotClosePanesAndLibraryCloseDoesNotCloseTheWindow() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let accounts = Array(model.catalog.accounts.prefix(2))
+        model.open(accounts[0])
+        model.open(accounts[1], beside: true)
+        let session = try #require(model.sessions[accounts[1].id])
+        let first = try #require(session.selectedPage)
+        let popup = session.makePage()
+        #expect(model.perform(.closeTab))
+        #expect(session.pages.map(\.id) == [first.id])
+        #expect(!session.pages.contains { $0.id == popup.id })
+        #expect(model.currentTab?.layout.paneCount == 2)
+        #expect(model.perform(.closeTab))
+        #expect(model.currentTab?.layout.panes == [accounts[0].id.uuidString])
+        #expect(model.perform(.showLibrary))
+        let tabs = model.tabs
+        #expect(model.perform(.closeTab))
+        #expect(model.tabs == tabs)
+    }
+
+    @Test func numberShortcutsAndWrappingMatchAgentSessionsIncludingLibraryAndLastTab() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        for account in model.catalog.accounts { model.open(account) }
+        let last = model.selectedTabID
+        #expect(model.perform(.selectTab(0)))
+        #expect(model.showingAccounts)
+        #expect(model.perform(.selectTab(1)))
+        #expect(model.selectedTabID == model.tabs.first?.id && !model.showingAccounts)
+        #expect(model.perform(.previousTab))
+        #expect(model.showingAccounts)
+        #expect(model.perform(.previousTab))
+        #expect(model.selectedTabID == last && !model.showingAccounts)
+        #expect(model.perform(.selectTab(8)))
+        #expect(model.selectedTabID == last)
+        #expect(model.perform(.nextTab))
+        #expect(model.showingAccounts)
+    }
+
+    @Test func savingAnExistingProfileKeepsLibraryScopeAndActiveBrowserSelection() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let profile = model.catalog.profiles[0]
+        model.profileID = nil
+        try model.saveProfile(id: profile.id, name: "Updated", badge: "U")
+        #expect(model.profileID == nil && model.showingAccounts)
+        model.profileID = model.catalog.profiles[1].id
+        let scope = model.profileID
+        let account = model.catalog.accounts[1]
+        model.open(account)
+        let tab = model.selectedTabID
+        let browser = try #require(model.sessions[account.id])
+        try model.saveProfile(id: profile.id, name: "Renamed", badge: "R")
+        #expect(model.profileID == scope && !model.showingAccounts)
+        #expect(model.selectedTabID == tab)
+        #expect(model.sessions[account.id] === browser)
+        #expect(model.catalog.accounts == (try fixture.file.load()).accounts)
     }
 }
