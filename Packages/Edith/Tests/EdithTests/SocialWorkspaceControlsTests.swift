@@ -146,4 +146,60 @@ struct SocialWorkspaceControlsTests {
             !FileManager.default.fileExists(
                 atPath: model.avatarFiles.directory.appendingPathComponent(filename).path))
     }
+
+    @Test func profilePicturesPersistAndRemainIndependentFromTheProfilesEmailPicture() async throws
+    {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let profile = model.catalog.profiles[0]
+        let source = fixture.folder.appendingPathComponent("mock-profile.png")
+        let image = NSImage(size: NSSize(width: 320, height: 320), flipped: false) { rect in
+            NSColor.systemOrange.setFill()
+            rect.fill()
+            return true
+        }
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: source)
+        model.profileID = nil
+        try model.importAvatar(profile, from: source)
+        #expect(model.profileID == nil)
+        let firstName = try #require(model.catalog.profiles[0].avatarFilename)
+        model.openEmail(profile)
+        let email = try #require(model.account(profile.id.uuidString))
+        try model.importAvatar(email, from: source)
+        let emailName = try #require(model.account(profile.id.uuidString)?.avatarFilename)
+        #expect(firstName != emailName)
+        #expect(model.profileAvatars[profile.id] !== model.avatars[email.id])
+        let restored = SocialManagerModel(file: fixture.file)
+        restored.start()
+        defer { restored.shutdown() }
+        #expect(restored.profileAvatars[profile.id] != nil)
+        #expect(restored.avatars[email.id] != nil)
+        let renamed = try restored.saveProfile(
+            id: profile.id, name: "Updated Studio", badge: "US", email: "updated@example.test")
+        #expect(renamed.avatarFilename == firstName)
+        restored.removeAvatar(renamed)
+        #expect(restored.profileAvatars[profile.id] == nil)
+        #expect(restored.avatars[email.id] != nil)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: restored.avatarFiles.directory.appendingPathComponent(firstName).path))
+        try restored.importAvatar(renamed, from: source)
+        let replaced = try #require(restored.catalog.profiles.first { $0.id == profile.id })
+        let replacementName = try #require(replaced.avatarFilename)
+        #expect(replacementName != firstName)
+        await restored.removeProfile(replaced)
+        #expect(restored.profileAvatars[profile.id] == nil)
+        #expect(restored.avatars[email.id] == nil)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: restored.avatarFiles.directory.appendingPathComponent(replacementName).path)
+        )
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: restored.avatarFiles.directory.appendingPathComponent(emailName).path))
+        #expect(try fixture.file.load() == restored.catalog)
+    }
 }

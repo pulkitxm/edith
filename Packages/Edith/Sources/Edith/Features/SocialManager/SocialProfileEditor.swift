@@ -9,6 +9,8 @@ struct SocialProfileEditor: View {
     @State private var badge: String
     @State private var email: String
     @State private var error: String?
+    @State private var pictureURL: URL?
+    @State private var removingPicture = false
 
     init(model: SocialManagerModel, profile: SocialProfile? = nil) {
         self.model = model
@@ -21,6 +23,10 @@ struct SocialProfileEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             Text(profile == nil ? "Add profile" : "Edit profile").font(.edithText(.title2))
+            SocialPicturePicker(
+                savedImage: profile.flatMap { model.profileAvatars[$0.id] },
+                pictureURL: $pictureURL, removingPicture: $removingPicture
+            ) { error = $0.localizedDescription }
             Form {
                 TextField("Profile name", text: $name, prompt: Text("Personal, Studio, Client…"))
                 TextField("Badge", text: $badge, prompt: Text("Optional emoji or initials"))
@@ -38,7 +44,8 @@ struct SocialProfileEditor: View {
                 Button(profile == nil ? "Create profile" : "Save") {
                     do {
                         try model.saveProfile(
-                            id: profile?.id, name: name, badge: badge, email: email)
+                            id: profile?.id, name: name, badge: badge, email: email,
+                            pictureURL: pictureURL, removePicture: removingPicture)
                         if profile == nil { model.showingAccounts = true }
                         dismiss()
                     } catch { self.error = error.localizedDescription }

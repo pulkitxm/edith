@@ -75,9 +75,11 @@ Gmail session, separate from its social accounts and other profiles. Sign in to
 the matching Google account on the website; entering a profile email is a label
 and does not sign in automatically.
 
-Choose an account picture in the account editor or its right-click menu. Pictures
-appear on account cards and pane headers. Replace or remove them using the same
-controls. Edith saves a local PNG thumbnail up to 256 pixels in
+Choose a profile or account picture in its editor or right-click menu. Profile
+pictures appear on the profile cards and above their connected accounts. Account
+pictures appear on account cards and pane headers. Replace or remove them using
+the same controls. Profile and account pictures are independent, including the
+profile's Gmail account. Edith saves a local PNG thumbnail up to 256 pixels in
 `social-manager/avatars/`; the original file is not modified. Renaming or moving
 an account between profiles keeps its picture and session. Removing an account
 or profile also removes its saved pictures.

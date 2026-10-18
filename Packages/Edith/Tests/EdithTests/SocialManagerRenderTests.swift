@@ -29,6 +29,9 @@ struct SocialManagerRenderTests {
             let bitmap = try #require(NSBitmapImageRep(data: tiff))
             try #require(bitmap.representation(using: .png, properties: [:])).write(to: source)
             try model.importAvatar(account, from: source)
+            if model.catalog.profiles.indices.contains(index) {
+                try model.importAvatar(model.catalog.profiles[index], from: source)
+            }
         }
         model.profileID = nil
         let previousScale = UIScale.current
@@ -36,6 +39,11 @@ struct SocialManagerRenderTests {
         for scheme in [ColorScheme.light, .dark] {
             try await capture(model, width: 1180, scheme: scheme, name: "profiles-\(scheme)")
         }
+        UIScale.apply(1.4)
+        for scheme in [ColorScheme.light, .dark] {
+            try await capture(model, width: 620, scheme: scheme, name: "profiles-compact-\(scheme)")
+        }
+        UIScale.apply(1)
         model.profileID = model.catalog.profiles[0].id
         for scale in [1.0, 1.4] {
             UIScale.apply(scale)

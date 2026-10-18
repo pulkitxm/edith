@@ -54,12 +54,17 @@ public struct SocialProfile: Codable, Identifiable, Equatable, Sendable {
     public var name: String
     public var badge: String
     public var email: String?
+    public var avatarFilename: String?
 
-    public init(id: UUID = UUID(), name: String, badge: String = "", email: String? = nil) {
+    public init(
+        id: UUID = UUID(), name: String, badge: String = "", email: String? = nil,
+        avatarFilename: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.badge = badge
         self.email = email
+        self.avatarFilename = avatarFilename
     }
 
     public var initials: String {

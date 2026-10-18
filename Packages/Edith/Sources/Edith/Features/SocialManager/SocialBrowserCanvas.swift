@@ -75,7 +75,9 @@ private struct SocialBrowserPane: View {
                     model.activateFocusedBrowser()
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
-                        SocialAccountAvatar(model: model, account: account, size: 24)
+                        SocialAvatar(
+                            image: model.avatars[account.id], initials: account.initials,
+                            name: account.name, size: 24)
                         Text(model.accountTitle(account)).font(
                             .edithText(.subheadline).weight(.semibold)
                         )

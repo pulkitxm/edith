@@ -269,9 +269,9 @@ struct SocialManagerPage: View {
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 HStack {
-                    Text(profile.initials).font(.edithText(.title3))
-                        .frame(width: UIScale.pt(42), height: UIScale.pt(42))
-                        .background(DashSkin.accent(dark).opacity(0.15)).clipShape(Circle())
+                    SocialAvatar(
+                        image: model.profileAvatars[profile.id], initials: profile.initials,
+                        name: profile.name)
                     Spacer()
                     Text("\(accounts.count) \(accounts.count == 1 ? "account" : "accounts")")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -317,12 +317,27 @@ struct SocialManagerPage: View {
         SocialEmailMenu(model: model, profile: profile)
         Divider()
         Button("Edit profile…") { editingProfile = profile }
+        SocialPictureActions(name: profile.name, hasPicture: profile.avatarFilename != nil) { url in
+            do { try model.importAvatar(profile, from: url) } catch {
+                model.message = error.localizedDescription
+            }
+        } remove: {
+            model.removeAvatar(profile)
+        }
         Button("Remove profile…", role: .destructive) { removingProfile = profile }
     }
 
     private func accounts(for profile: SocialProfile) -> some View {
         let accounts = model.accounts(in: profile)
         return VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            HStack {
+                SocialAvatar(
+                    image: model.profileAvatars[profile.id], initials: profile.initials,
+                    name: profile.name, size: 52)
+                if let email = profile.email {
+                    Text(email).font(.edithText(.subheadline)).foregroundStyle(.secondary)
+                }
+            }
             PageSectionHeader(profile.name, subtitle: "Connected accounts") {
                 SocialEmailMenu(model: model, profile: profile)
                 Menu {
@@ -361,7 +376,9 @@ struct SocialManagerPage: View {
     private func accountCard(_ account: SocialAccount, platform: SocialPlatform) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(alignment: .top) {
-                SocialAccountAvatar(model: model, account: account)
+                SocialAvatar(
+                    image: model.avatars[account.id], initials: account.initials, name: account.name
+                )
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(platform.name).font(.edithText(.headline)).lineLimit(2)
                     Text(account.name).font(.edithText(.caption)).foregroundStyle(.secondary)

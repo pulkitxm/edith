@@ -22,6 +22,7 @@ final class SocialManagerModel {
     private(set) var tabs: [SocialWorkspaceTab] = []
     private(set) var sessions: [UUID: SocialBrowserSession] = [:]
     private(set) var avatars: [UUID: NSImage] = [:]
+    private(set) var profileAvatars: [UUID: NSImage] = [:]
     @ObservationIgnored let avatarFiles: SocialAvatarFiles
     var selectedTabID: UUID?
     var profileID: UUID?
@@ -72,15 +73,21 @@ final class SocialManagerModel {
     }
 
     @discardableResult
-    func saveProfile(id: UUID? = nil, name: String, badge: String, email: String? = nil) throws
+    func saveProfile(
+        id: UUID? = nil, name: String, badge: String, email: String? = nil,
+        pictureURL: URL? = nil, removePicture: Bool = false
+    ) throws
         -> SocialProfile
     {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw SocialAccountError.emptyName }
         let address = email?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = catalog.profiles.first(where: { $0.id == id })?.avatarFilename
+        let imported = try pictureURL.map { try avatarFiles.importImage($0) }
         let profile = SocialProfile(
             id: id ?? UUID(), name: name, badge: String(badge.prefix(2)),
-            email: address?.isEmpty == false ? address : nil)
+            email: address?.isEmpty == false ? address : nil,
+            avatarFilename: imported ?? (removePicture ? nil : previous))
         var next = catalog
         if let index = next.profiles.firstIndex(where: { $0.id == id }) {
             next.profiles[index] = profile
@@ -90,7 +97,16 @@ final class SocialManagerModel {
         if let index = next.accounts.firstIndex(where: { $0.id == profile.id }) {
             next.accounts[index].name = profile.email ?? "Gmail"
         }
-        try persist(next)
+        do { try persist(next) } catch {
+            if let imported { try? avatarFiles.remove(imported) }
+            throw error
+        }
+        if let imported, let data = try? avatarFiles.read(imported) {
+            profileAvatars[profile.id] = NSImage(data: data)
+        } else if removePicture {
+            profileAvatars.removeValue(forKey: profile.id)
+        }
+        if previous != profile.avatarFilename, let previous { try? avatarFiles.remove(previous) }
         profileID = profile.id
         return profile
     }
@@ -100,6 +116,11 @@ final class SocialManagerModel {
         let request = load.begin()
         do {
             catalog = try file.load()
+            for profile in catalog.profiles {
+                if let name = profile.avatarFilename, let data = try? avatarFiles.read(name) {
+                    profileAvatars[profile.id] = NSImage(data: data)
+                }
+            }
             for account in catalog.accounts {
                 if let name = account.avatarFilename, let data = try? avatarFiles.read(name) {
                     avatars[account.id] = NSImage(data: data)
@@ -317,6 +338,30 @@ final class SocialManagerModel {
             name: current.name, badge: current.badge, pictureURL: url)
     }
 
+    func importAvatar(_ profile: SocialProfile, from url: URL) throws {
+        guard !busy, let current = catalog.profiles.first(where: { $0.id == profile.id }) else {
+            return
+        }
+        let selection = profileID
+        defer { profileID = selection }
+        try saveProfile(
+            id: current.id, name: current.name, badge: current.badge, email: current.email,
+            pictureURL: url)
+    }
+
+    func removeAvatar(_ profile: SocialProfile) {
+        guard !busy, let current = catalog.profiles.first(where: { $0.id == profile.id }) else {
+            return
+        }
+        let selection = profileID
+        defer { profileID = selection }
+        do {
+            try saveProfile(
+                id: current.id, name: current.name, badge: current.badge, email: current.email,
+                removePicture: true)
+        } catch { message = error.localizedDescription }
+    }
+
     func removeAvatar(_ account: SocialAccount) {
         guard !busy, let current = self.account(account.id.uuidString) else { return }
         do {
@@ -357,6 +402,8 @@ final class SocialManagerModel {
             next.accounts.removeAll { $0.profileID == profile.id }
             next.profiles.removeAll { $0.id == profile.id }
             try persist(next)
+            profileAvatars.removeValue(forKey: profile.id)
+            if let name = profile.avatarFilename { try? avatarFiles.remove(name) }
             for account in removedAccounts {
                 avatars.removeValue(forKey: account.id)
                 if let name = account.avatarFilename { try? avatarFiles.remove(name) }

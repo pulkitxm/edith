@@ -1,28 +1,6 @@
 import AppKit
 import EdithKit
 import SwiftUI
-import UniformTypeIdentifiers
-
-struct SocialAccountAvatar: View {
-    let model: SocialManagerModel
-    let account: SocialAccount
-    var size: CGFloat = 42
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Group {
-            if let image = model.avatars[account.id] {
-                Image(nsImage: image).resizable().scaledToFill()
-            } else {
-                Text(account.initials).font(.edithText(.caption).weight(.semibold))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DashSkin.accent(scheme == .dark).opacity(0.15))
-            }
-        }
-        .frame(width: UIScale.pt(size), height: UIScale.pt(size)).clipShape(Circle())
-        .accessibilityLabel("Picture for \(account.name)")
-    }
-}
 
 struct SocialEmailMenu: View {
     let model: SocialManagerModel
@@ -68,22 +46,12 @@ struct SocialAccountActions: View {
         }
         Divider()
         Button("Edit account…") { model.editingAccount = account }
-        Button(account.avatarFilename == nil ? "Choose picture…" : "Replace picture…") {
-            let panel = NSOpenPanel()
-            panel.allowedContentTypes = [.image]
-            panel.allowsMultipleSelection = false
-            panel.canChooseDirectories = false
-            panel.message = "Choose a picture for \(account.name)"
-            guard let window = NSApp.keyWindow else { return }
-            panel.beginSheetModal(for: window) { response in
-                guard response == .OK, let url = panel.url else { return }
-                do { try model.importAvatar(account, from: url) } catch {
-                    model.message = error.localizedDescription
-                }
+        SocialPictureActions(name: account.name, hasPicture: account.avatarFilename != nil) { url in
+            do { try model.importAvatar(account, from: url) } catch {
+                model.message = error.localizedDescription
             }
-        }
-        if account.avatarFilename != nil {
-            Button("Remove picture") { model.removeAvatar(account) }
+        } remove: {
+            model.removeAvatar(account)
         }
         Divider()
         Button("Clear login session…", role: .destructive) { model.clearingAccount = account }

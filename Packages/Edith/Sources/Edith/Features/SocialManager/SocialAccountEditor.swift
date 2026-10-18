@@ -1,6 +1,5 @@
 import EdithKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct SocialAccountEditor: View {
     let model: SocialManagerModel
@@ -11,9 +10,7 @@ struct SocialAccountEditor: View {
     @State private var name: String
     @State private var badge: String
     @State private var error: String?
-    @State private var choosingPicture = false
     @State private var pictureURL: URL?
-    @State private var picture: NSImage?
     @State private var removingPicture = false
 
     init(model: SocialManagerModel, profile: SocialProfile, account: SocialAccount? = nil) {
@@ -30,22 +27,10 @@ struct SocialAccountEditor: View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             Text(account == nil ? "Add social account" : "Edit account").font(.edithText(.title2))
             Text(profile.name).font(.edithText(.headline)).foregroundStyle(.secondary)
-            HStack {
-                if let image = picture
-                    ?? (removingPicture ? nil : account.flatMap { model.avatars[$0.id] })
-                {
-                    Image(nsImage: image).resizable().scaledToFill()
-                        .frame(width: UIScale.pt(52), height: UIScale.pt(52)).clipShape(Circle())
-                } else {
-                    Image(systemName: "person.crop.circle").font(.edithText(.largeTitle))
-                }
-                Button("Choose picture…") { choosingPicture = true }
-                if picture != nil || (!removingPicture && account?.avatarFilename != nil) {
-                    Button("Remove picture") {
-                        pictureURL = nil; picture = nil; removingPicture = true
-                    }
-                }
-            }
+            SocialPicturePicker(
+                savedImage: account.flatMap { model.avatars[$0.id] },
+                pictureURL: $pictureURL, removingPicture: $removingPicture
+            ) { error = $0.localizedDescription }
             Form {
                 Picker("Platform", selection: $platformID) {
                     ForEach(model.catalog.platforms) { Text($0.name).tag($0.id) }
@@ -85,15 +70,6 @@ struct SocialAccountEditor: View {
         }
         .font(.edithText(.body))
         .padding(UIScale.pt(24)).frame(width: UIScale.pt(420))
-        .fileImporter(isPresented: $choosingPicture, allowedContentTypes: [.image]) { result in
-            do {
-                let url = try result.get()
-                let data = try SocialAvatarFiles.thumbnail(url)
-                picture = NSImage(data: data)
-                pictureURL = url
-                removingPicture = false
-            } catch { self.error = error.localizedDescription }
-        }
     }
 }
 
