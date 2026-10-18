@@ -115,6 +115,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["ffmpeg", "qpdf"]),
         MatrixRow(
+            id: "socialManager", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "latex", helper: false, machine: false,
             toolRule: .all, adapter: true, requiredTools: [],
             optionalTools: ["tectonic", "latexmk", "gh", "quinjet", "pukbot"]),

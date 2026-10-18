@@ -72,7 +72,7 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
         "keystrokeHighlight",
-        "focusDim", "hinge", "windowSweaters", "presenter", "studio", "latex", "socialManager",
+        "focusDim", "hinge", "windowSweaters", "presenter", "studio", "socialManager", "latex",
         "timeLapse", "music",
         "downloads",
         "notchShelf",

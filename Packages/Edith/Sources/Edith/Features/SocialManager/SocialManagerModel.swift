@@ -221,18 +221,15 @@ final class SocialManagerModel {
         busy = true
         defer { busy = false }
         closeAccount(account.id.uuidString)
-        await Task.yield()
-        do {
-            try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<Void, Error>) in
-                WKWebsiteDataStore.remove(forIdentifier: account.id) { error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume()
-                    }
-                }
+        let dataStore = WKWebsiteDataStore(forIdentifier: account.id)
+        await withCheckedContinuation { continuation in
+            dataStore.removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
+            ) {
+                continuation.resume()
             }
+        }
+        do {
             if removingAccount {
                 var next = catalog
                 next.accounts.removeAll { $0.id == account.id }

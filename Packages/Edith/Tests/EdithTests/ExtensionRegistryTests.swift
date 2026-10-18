@@ -215,7 +215,8 @@ import Testing
         #expect(
             featuredIdentifiers == [
                 "usage", "herdr", "quinjet", "appMaintenance", "system", "keepAwake", "bifrost",
-                "clipboard", "keystrokeHighlight", "studio", "notchShelf", "virtualCamera",
+                "clipboard", "keystrokeHighlight", "studio", "socialManager", "notchShelf",
+                "virtualCamera",
                 "database", "attention", "blitztree", "downloads",
             ])
     }
@@ -366,6 +367,7 @@ import Testing
             "windowSweaters": [],
             "presenter": [.screenRecording],
             "studio": [],
+            "socialManager": [],
             "timeLapse": [.screenRecording],
             "music": [],
             "downloads": [],
@@ -404,6 +406,7 @@ import Testing
             "windowSweaters": [.accessibility],
             "presenter": [],
             "studio": [],
+            "socialManager": [],
             "timeLapse": [],
             "music": [],
             "downloads": [],

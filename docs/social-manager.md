@@ -51,7 +51,7 @@ Edith's iCloud settings backup. The extension's enablement preference is backed
 up. Development builds use their own app identity and account list.
 
 From an account card's menu, **Clear login session** closes that account and
-removes its browser store. **Remove account** also removes its saved name and
+clears its cookies and website storage. **Remove account** also removes its saved name and
 badge. Both actions leave other accounts alone. Removing an account in Edith
 does not delete the account on the website.
 

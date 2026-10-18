@@ -1094,18 +1094,7 @@ struct ExtensionDetailRows: View {
             case .lidAwake: LidAwakeRows()
             case .studio: StudioRows()
             case .latex: LaTeXRows()
-            case .socialManager:
-                Section("Social accounts") {
-                    Text(
-                        "Add Instagram, Facebook, X or any HTTPS website. Each named account has a persistent, separate browser session on this Mac."
-                    )
-                    .settingsCaption()
-                    Text(
-                        "Open accounts as tabs, or use Side by side to combine accounts from any platform in resizable panes."
-                    )
-                    .settingsCaption()
-                    Button("Open Social Manager") { SectionWindow.focusOrSelect(.socialManager) }
-                }
+            case .socialManager: SocialManagerRows()
             case .timeLapse: TimeLapseRows()
             case .music:
                 MusicRows()
