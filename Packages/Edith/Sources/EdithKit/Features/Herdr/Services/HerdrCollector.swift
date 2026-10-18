@@ -168,17 +168,54 @@ public enum HerdrCollector {
             error: agents.isEmpty ? jsonOrProcessError(result) : nil)
     }
 
-    private struct CommandResult {
+    struct CommandResult: Sendable {
         var status: Int32
         var stdout: String
         var stderr: String
         var ok: Bool { status == 0 }
+
+        var serverNotRunning: Bool {
+            [stdout, stderr].contains { text in
+                let object = HerdrListParser.firstJSON(in: text) as? [String: Any]
+                let error = object?["error"] as? [String: Any]
+                return error?["code"] as? String == "server_not_running"
+            }
+        }
+    }
+
+    static func recoverLocalSession(
+        _ session: String,
+        request: @escaping @Sendable () async -> CommandResult,
+        start: @escaping @Sendable (String) async throws -> Void = {
+            try await HerdrLocalServer.shared.start(session: $0)
+        },
+        retryCount: Int = 40,
+        retryDelay: Duration = .milliseconds(100)
+    ) async -> CommandResult {
+        var result = await request()
+        guard result.serverNotRunning, !Task.isCancelled else { return result }
+        do {
+            try Task.checkCancellation()
+            try await start(session)
+            for _ in 0..<retryCount {
+                try await Task.sleep(for: retryDelay)
+                result = await request()
+                if !result.serverNotRunning { return result }
+            }
+        } catch {
+            return CommandResult(status: 1, stdout: "", stderr: error.localizedDescription)
+        }
+        return result
     }
 
     private static func run(_ runner: Runner, herdr arguments: [String]) async -> CommandResult {
         switch runner {
         case .local:
-            return await runLocal(remoteHerdrCommand(arguments: arguments, platform: .darwin))
+            let command = remoteHerdrCommand(arguments: arguments, platform: .darwin)
+            guard arguments.count > 1, arguments[0] == "--session" else {
+                return await runLocal(command)
+            }
+            return await recoverLocalSession(arguments[1], request: { await runLocal(command) })
         case let .ssh(connection):
             do {
                 let platform = await connection.remotePlatform ?? .linux
@@ -235,5 +272,23 @@ public enum HerdrCollector {
     private static func isPowerShellProgress(_ value: String) -> Bool {
         value.hasPrefix("#< CLIXML") && value.contains("Preparing modules for first use.")
             && !value.contains("<S S=\"Error\">")
+    }
+}
+
+private actor HerdrLocalServer {
+    static let shared = HerdrLocalServer()
+    private var processes: [String: CLIChildProcess] = [:]
+
+    func start(session: String) throws {
+        try Task.checkCancellation()
+        if processes[session]?.isRunning == true { return }
+        guard let executable = HerdrCollector.executable() else {
+            throw HerdrCommandError.herdrUnavailable
+        }
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: ["--session", session, "server"],
+            environment: CLIToolEnvironment.sanitized(), terminatesProcessGroup: true)
+        processes[session] = try CLIChildProcess(
+            request: request, input: -1, output: -1, error: -1, onExit: {})
     }
 }

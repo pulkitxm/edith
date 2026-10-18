@@ -159,6 +159,9 @@ final class HerdrStore {
     var inventoryReady: Bool { inventoryReceived && !settling && !refreshing }
 
     var inventoryFailureMessage: String? {
+        if hosts.contains(where: { $0.herdrPresent && $0.reachable && $0.error == nil }) {
+            return nil
+        }
         var failures: [String] = []
         for host in hosts where host.herdrPresent || !host.reachable {
             if let error = host.error { failures.append("\(host.name): \(error)") }
