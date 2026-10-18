@@ -26,10 +26,13 @@ import Testing
     func confirmationBeforeTheTimeoutResponsePreventsAStaleWarning(status: HerdrAgentStatus)
         async throws
     {
-        let store = makeStore()
+        let (response, continuation) = AsyncStream<Void>.makeStream()
+        let store = makeStore(response: response)
         defer { store.closeAll() }
         let id = try await launch(in: store)
         store.apply([.local(herdrPresent: true, agents: [agent(status: status)])])
+        continuation.yield(())
+        continuation.finish()
 
         await store.agentStartupTasks[id]?.value
 
@@ -84,13 +87,18 @@ import Testing
         #expect(store.agentStartupMessages[id] == "Startup detail")
     }
 
-    private func makeStore(code: String = "timeout") -> HerdrStore {
+    private func makeStore(code: String = "timeout", response: AsyncStream<Void>? = nil)
+        -> HerdrStore
+    {
         HerdrStore(
             liveWatcher: { _ in },
             newAgentPaneCreator: { _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             },
             agentStarter: { _, _, _ in
+                if let response {
+                    for await _ in response { break }
+                }
                 throw HerdrCommandError.commandFailed(
                     "{\"error\":{\"code\":\"\(code)\",\"message\":\"Startup detail\"}}")
             }, machinesProvider: { [] })
