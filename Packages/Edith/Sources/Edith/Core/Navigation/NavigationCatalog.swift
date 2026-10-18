@@ -172,6 +172,10 @@ enum NavigationCatalog {
             id: "latex", title: "LaTeX", symbolName: "doc.richtext",
             band: .suite(.media), abilityIDs: ["latex"], parentID: "media"),
         SidebarPage(
+            id: "socialManager", title: "Social Manager", symbolName: "person.crop.rectangle.stack",
+            band: .suite(.media), abilityIDs: ["socialManager"], parentID: "media",
+            detachable: false),
+        SidebarPage(
             id: "timeLapse", title: "Screen Recorder", symbolName: "record.circle",
             band: .suite(.media), abilityIDs: ["timeLapse"], parentID: "media"),
         SidebarPage(
@@ -292,7 +296,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case appMaintenance, blitztree
     case system, runningApps
     case desk
-    case media, studio, latex, timeLapse, downloads, music, calendar, virtualCamera
+    case media, studio, latex, socialManager, timeLapse, downloads, music, calendar, virtualCamera
     case data, database, attention, seoAudit, codeStats
     case extensions, settings, about
 

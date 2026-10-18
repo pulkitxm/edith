@@ -24,6 +24,7 @@ Feature code supplies data, actions, and domain-specific content to these APIs.
 | Database | `PageWorkspace`, shared readiness and connection-list request ownership, resource-owned connected sessions |
 | SEO Audit | Shared page composition, `PageLoading`, component skeletons using the shared motion clock |
 | Music | Shared page composition and controls, visibility-owned metadata requests, service-owned playback |
+| Social Manager | `PageWorkspace`, window-owned isolated browser sessions, shared tab strip and Agent Sessions split geometry, local account catalog loading |
 | Calendar | Shared page composition, window visibility-owned refresh, service-owned calendar data |
 | Downloads | Shared workspace and controls, page-owned estimates, service-owned transfers |
 | App Maintenance and Homebrew | Shared composition, `ContentLoad` inventory and discovery ownership, shared initial recipes and retained refresh feedback |

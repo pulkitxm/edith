@@ -33,6 +33,7 @@ import Testing
         "tabMusicEnabled",
         "tabStudioEnabled",
         "tabLaTeXEnabled",
+        "tabSocialManagerEnabled",
         "tabTimeLapseEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
@@ -58,7 +59,8 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "hinge", "windowSweaters", "presenter",
-                "studio", "latex", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
+                "studio", "socialManager", "latex", "timeLapse", "music", "downloads", "notchShelf",
+                "audioMixer",
                 "calendar", "virtualCamera",
                 "database", "attention", "seoAudit", "codeStats",
             ])

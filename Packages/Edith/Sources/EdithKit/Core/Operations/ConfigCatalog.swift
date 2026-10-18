@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database", "codestats",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music", "studio", "latex", "calendar", "virtualCamera",
+        "music", "studio", "latex", "social-manager", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
         "notch", "focusdim", "hinge", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
@@ -62,7 +62,8 @@ public enum ConfigCatalog {
         + menuBar + alerts + budget + dashboard + database + codeStats + machines + herdr + quinjet
         + companion
         + finder + system + homebrew + cleaner
-        + music + studio + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
+        + music + socialManager + studio + calendar + virtualCamera + clipboard + keystrokeHighlight
+        + notch
         + focusDim
         + hinge
         + presenter
@@ -728,6 +729,14 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Music.backup, .bool, group: "music",
             summary: "Include the music folder in the iCloud backup."),
+    ]
+
+    private static let socialManager: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.socialManagerEnabled, .bool, group: "social-manager",
+            summary:
+                "Social Manager extension: isolated website accounts with tabs and side-by-side browsing.",
+            fallback: .bool(false))
     ]
 
     private static let codeStats: [SettingDefinition] = [
