@@ -48,7 +48,7 @@ struct VirtualCameraInspector: View {
                         get: { model.state.audio.enabled },
                         set: { model.performAudio(.enable($0)) })
                 )
-                .labelsHidden().toggleStyle(.switch).disabled(model.audioPending)
+                .labelsHidden().toggleStyle(.skeuoSwitch).disabled(model.audioPending)
             }
             if let failure = model.snapshot?.audioStatus?.failure
                 ?? model.snapshot?.audioStatus?.sourceFailure
@@ -116,7 +116,7 @@ struct VirtualCameraToggleRow: View {
             Spacer(minLength: UIScale.pt(8))
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .controlSize(.mini)
         }
     }
@@ -271,7 +271,7 @@ struct VirtualCameraFramePanel: View {
                     isOn: model.stateBinding(\.sharpZoom), dark: dark)
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.skeuoSwitch)
         .controlSize(.small)
     }
 }
@@ -500,9 +500,9 @@ struct VirtualCameraOverlayPanel: View {
                     dark: dark)
                 if model.composition.overlays.nameTag.enabled {
                     TextField("Name", text: model.binding(\.overlays.nameTag.title))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                     TextField("Title or pronouns", text: model.binding(\.overlays.nameTag.subtitle))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                     EdithSegmentedPicker(
                         "Style", selection: model.binding(\.overlays.nameTag.style),
                         options: VirtualCameraNameTagStyle.allCases, label: { $0.title })
@@ -574,7 +574,7 @@ struct VirtualCameraOverlayPanel: View {
                 }
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.skeuoSwitch)
         .controlSize(.small)
     }
 }
@@ -687,7 +687,7 @@ struct VirtualCameraOutputPanel: View {
                     .buttonStyle(.edith(.secondary))
                     .disabled(model.state.privacy == .stopped)
                 TextField("Card message", text: model.stateBinding(\.privacyMessage))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 HStack {
                     ForEach([VirtualCameraPrivacy.card, .blank, .freeze], id: \.self) { mode in
                         Button(mode.title) { model.pause(mode) }
@@ -718,7 +718,7 @@ struct VirtualCameraOutputPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.skeuoSwitch)
         .controlSize(.small)
     }
 }

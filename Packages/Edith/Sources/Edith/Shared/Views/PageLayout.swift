@@ -106,14 +106,13 @@ struct PageWorkspace<Header: View, Content: View>: View {
 }
 
 private struct PageSurface: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.windowVisible) private var visible
     @Environment(\.loadingAnimationsEnabled) private var animationsEnabled
 
     func body(content: Content) -> some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(DashSkin.paper(scheme == .dark))
+            .background { SkeuoPageBackground() }
             .environment(\.loadingAnimationsEnabled, visible && animationsEnabled)
     }
 }

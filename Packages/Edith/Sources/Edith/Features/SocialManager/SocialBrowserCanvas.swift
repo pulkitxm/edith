@@ -253,7 +253,7 @@ struct SocialBrowserContent: View {
             }
             .accessibilityLabel("Platform home")
             TextField("Website address", text: $address)
-                .font(.edithText(.caption)).textFieldStyle(.roundedBorder)
+                .font(.edithText(.caption)).textFieldStyle(.skeuoField)
                 .focused($addressFocused)
                 .onSubmit {
                     do {

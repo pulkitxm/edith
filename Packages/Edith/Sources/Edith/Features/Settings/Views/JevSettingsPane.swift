@@ -104,7 +104,7 @@ struct JevSettingsPane: View {
                     model.status?.hasSavedKey == true ? "Replace the key" : "TypeSafe API key",
                     text: $model.draft
                 )
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .onSubmit { Task { await model.save() } }
                 .accessibilityLabel("TypeSafe API key")
                 Button(model.phase == .saving ? "Saving..." : "Save") {

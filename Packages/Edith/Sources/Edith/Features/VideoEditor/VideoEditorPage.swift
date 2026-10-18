@@ -605,7 +605,7 @@ struct VideoEditorPage: View {
         return
             HStack(spacing: UIScale.pt(12)) {
                 TextField("Type a title or callout", text: $model.captionText)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .frame(maxWidth: UIScale.pt(320))
                     .onSubmit(model.addCaption)
                 HStack(spacing: UIScale.pt(5)) {

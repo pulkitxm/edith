@@ -227,7 +227,7 @@ struct VideoBeatPanel: View {
                 Spacer()
                 Text("Minimum spacing (s)")
                 TextField("Minimum spacing", value: $spacing, format: .number)
-                    .frame(width: UIScale.pt(65)).textFieldStyle(.roundedBorder)
+                    .frame(width: UIScale.pt(65)).textFieldStyle(.skeuoField)
             }
             .font(.edithText(.caption))
         }
@@ -305,7 +305,7 @@ struct VideoBeatPanel: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
             TextField(title, value: value, format: .number)
-                .textFieldStyle(.roundedBorder).monospacedDigit()
+                .textFieldStyle(.skeuoField).monospacedDigit()
         }
     }
 
@@ -347,7 +347,7 @@ struct VideoBeatPanel: View {
                 Button("Redo", action: model.redo).disabled(!model.canRedo)
             }
             HStack {
-                TextField("Marker label", text: $markerLabel).textFieldStyle(.roundedBorder)
+                TextField("Marker label", text: $markerLabel).textFieldStyle(.skeuoField)
                     .frame(width: UIScale.pt(140))
                 Button("Add at playhead") {
                     edit { project in
@@ -435,9 +435,9 @@ private struct VideoBeatMarkerRow: View {
         HStack(spacing: 10) {
             Image(systemName: marker.kind == .transient ? "waveform" : "bookmark")
                 .foregroundStyle(marker.kind == .transient ? .orange : .secondary)
-            TextField("Label", text: $label).textFieldStyle(.roundedBorder)
+            TextField("Label", text: $label).textFieldStyle(.skeuoField)
             TextField("Output frame", value: $frame, format: .number.grouping(.never))
-                .frame(width: UIScale.pt(80)).textFieldStyle(.roundedBorder)
+                .frame(width: UIScale.pt(80)).textFieldStyle(.skeuoField)
                 .help("Output frame at the marker's saved frame rate")
             Button(marker.timecode, action: seek)
                 .font(.edithText(.caption).monospacedDigit()).buttonStyle(.link)

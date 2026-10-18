@@ -196,7 +196,7 @@ private struct BackupClassToggle: View {
     var body: some View {
         Toggle("", isOn: $enabled)
             .labelsHidden()
-            .toggleStyle(.switch)
+            .toggleStyle(.skeuoSwitch)
             .controlSize(.small)
             .tint(DashSkin.accent(dark))
             .frame(width: UIScale.pt(52), alignment: .trailing)

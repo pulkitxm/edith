@@ -10,6 +10,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var themeName = "accent"
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
@@ -40,10 +41,10 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
                         .padding(.horizontal, UIScale.pt(5))
                         .frame(height: UIScale.pt(28))
                         .foregroundStyle(selection == option ? themeColor(themeName) : .primary)
+                        .skeuoEngraved(scheme == .dark)
                         .background {
                             if selection == option {
-                                RoundedRectangle(cornerRadius: UIScale.pt(6))
-                                    .fill(themeColor(themeName).opacity(0.16))
+                                SkeuoKey(.raised, cornerRadius: 6)
                             }
                         }
                         .contentShape(Rectangle())
@@ -56,12 +57,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
             }
         }
         .padding(UIScale.pt(3))
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(9))
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75)
-                .allowsHitTesting(false)
-        }
+        .background { SkeuoKey(.recessed, cornerRadius: 9) }
         .opacity(enabled ? 1 : 0.45)
         .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: selection)
         .accessibilityElement(children: .contain)

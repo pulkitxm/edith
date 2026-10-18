@@ -40,7 +40,7 @@ struct StudioImageInspector: View {
                                 get: { selected.title },
                                 set: { value in editor.updateSelected { $0.name = value } })
                         )
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                     }
                 }
                 if !editor.document.layers.isEmpty {
@@ -277,7 +277,7 @@ struct StudioImageTextStyleEditor: View {
     var body: some View {
         StudioInspectorGroup("Selected text") {
             TextField("Text", text: bind(\.text), axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .lineLimit(1...5)
             StudioFontField(family: bind(\.font))
             HStack {

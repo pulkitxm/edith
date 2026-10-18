@@ -1272,7 +1272,7 @@ struct MainWindowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Toggle("", isOn: isOn)
                     .labelsHidden()
-                    .toggleStyle(.switch)
+                    .toggleStyle(.skeuoSwitch)
                     .controlSize(.small)
                     .allowsHitTesting(false)
             }

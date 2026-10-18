@@ -71,7 +71,7 @@ struct VirtualCameraAudioPanel: View {
         VirtualCameraPanelSection(title: "Snippets & sound effects", dark: dark) {
             HStack {
                 TextField("Snippet name (optional)", text: $snippetName)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 Button(status?.recordingName == nil ? "Record mic" : "Save") {
                     model.performAudio(
                         status?.recordingName == nil

@@ -54,7 +54,7 @@ struct ClaudeAccountSettings: View {
                 if draft != nil {
                     Text("Account name").font(.edithText(.caption))
                     TextField("Account name", text: binding(\.name))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .accessibilityLabel("Account name")
                     Text("Authentication").font(.edithText(.caption))
                     Picker("Authentication", selection: authenticationBinding) {

@@ -218,7 +218,7 @@ struct CodeStatsSettingsSteps: View {
                 labels: model.identity.labels, dark: dark, remove: model.removeIdentity)
             HStack {
                 TextField("Email or name fragment", text: $newIdentity)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .frame(maxWidth: UIScale.pt(280))
                     .onSubmit(addIdentity)
                 Button("Add", action: addIdentity)

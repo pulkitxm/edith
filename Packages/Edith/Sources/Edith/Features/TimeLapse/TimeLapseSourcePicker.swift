@@ -124,7 +124,7 @@ struct ScreenCaptureSourcePicker: View {
                 options: ["windows", "displays"],
                 label: { $0 == "windows" ? "Windows" : "Displays" })
             if selection.mode == "windows" {
-                TextField("Search apps or windows", text: $search).textFieldStyle(.roundedBorder)
+                TextField("Search apps or windows", text: $search).textFieldStyle(.skeuoField)
             }
             ScrollView {
                 PageLoading(
@@ -179,7 +179,7 @@ struct ScreenCaptureSourcePicker: View {
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
                         isOn: $selection.systemAudio
                     ).labelsHidden()
-                        .toggleStyle(.switch)
+                        .toggleStyle(.skeuoSwitch)
                 }.font(.edithText(.callout))
                 if selection.mode == "windows" {
                     Text("Audio follows the selected apps, including their other windows.")

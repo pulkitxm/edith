@@ -81,7 +81,7 @@ struct LaTeXAddProject: View {
     private func field(_ title: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text(title).font(.edithText(.headline))
-            TextField(placeholder, text: text).textFieldStyle(.roundedBorder)
+            TextField(placeholder, text: text).textFieldStyle(.skeuoField)
                 .font(.edithText(.body)).accessibilityLabel(title)
         }
     }

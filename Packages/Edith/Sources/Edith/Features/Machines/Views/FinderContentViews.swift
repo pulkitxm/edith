@@ -150,7 +150,7 @@ private struct FinderIconCell: View {
     private var label: some View {
         if model.renaming == entry.path {
             TextField("", text: $model.renameText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .font(.system(size: UIScale.pt(11)))
                 .frame(width: UIScale.pt(model.iconSize + 30))
                 .focused($renameFocused)
@@ -317,7 +317,7 @@ private struct FinderListRow: View {
     private var nameLabel: some View {
         if model.renaming == entry.path {
             TextField("", text: $model.renameText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .font(.system(size: UIScale.pt(12)))
                 .focused($renameFocused)
                 .task { renameFocused = true }

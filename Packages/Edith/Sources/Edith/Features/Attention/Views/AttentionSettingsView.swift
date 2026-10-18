@@ -20,7 +20,7 @@ struct AttentionSettingsView: View {
                             "Master switch for all collection. Turning it off stops application, browser, agent and music tracking without deleting history."
                     )
                 }
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
             }
 
             PageCard {
@@ -130,7 +130,7 @@ struct AttentionSettingsView: View {
                 }
                 HStack {
                     TextField("Bundle identifier", text: $ignoredDraft)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                     Button("Add") {
                         let value = ignoredDraft.trimmingCharacters(in: .whitespaces)
                         guard !value.isEmpty, !model.settings.ignoredBundleIDs.contains(value)
@@ -253,7 +253,7 @@ private struct AttentionRulesEditor: View {
                     .buttonStyle(.edith(.secondary))
             }
             TextField("Search rules", text: $search)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             ForEach(indices, id: \.self) { index in
                 Divider()
                 AttentionRuleEditor(
@@ -337,7 +337,7 @@ private struct AttentionRuleEditor: View {
                         }.filter { !$0.isEmpty }
                     })
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
         }
     }
 }

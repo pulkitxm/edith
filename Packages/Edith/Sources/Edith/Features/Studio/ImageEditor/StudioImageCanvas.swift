@@ -85,7 +85,7 @@ struct StudioImageCanvas: View {
                                 }
                             })
                     )
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(300))
                 } else {
@@ -95,7 +95,7 @@ struct StudioImageCanvas: View {
                             get: { selected.title },
                             set: { value in editor.updateSelected { $0.name = value } })
                     )
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(240))
                 }

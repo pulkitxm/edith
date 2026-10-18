@@ -58,6 +58,22 @@ public enum SkeuoSkin {
         shifted(tint, toward: .black, by: 0.14)
     }
 
+    public static func plateTop(_ d: Bool) -> Color {
+        d ? shifted(DashSkin.paper2(d), toward: .white, by: 0.035) : DashSkin.paper2(d)
+    }
+
+    public static func plateBottom(_ d: Bool) -> Color {
+        d ? DashSkin.paper2(d) : shifted(DashSkin.paper2(d), toward: .black, by: 0.025)
+    }
+
+    public static func pageBottom(_ d: Bool) -> Color {
+        shifted(DashSkin.paper(d), toward: .black, by: d ? 0.12 : 0.035)
+    }
+
+    public static func embossing(onTint: Bool, dark: Bool) -> (color: Color, y: CGFloat) {
+        onTint ? (Color.black.opacity(0.28), -1) : engraving(dark)
+    }
+
     public static func engraving(_ d: Bool) -> (color: Color, y: CGFloat) {
         d ? (Color.black.opacity(0.65), -1) : (Color.white.opacity(0.85), 1)
     }
@@ -337,5 +353,174 @@ extension View {
     public func skeuoEngraved(_ dark: Bool) -> some View {
         let engraving = SkeuoSkin.engraving(dark)
         return shadow(color: engraving.color, radius: 0, y: UIScale.pt(engraving.y))
+    }
+}
+
+public struct SkeuoPlate: ViewModifier {
+    public let cornerRadius: CGFloat
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = "accent"
+
+    public init(cornerRadius: CGFloat = 12) {
+        self.cornerRadius = cornerRadius
+    }
+
+    public func body(content: Content) -> some View {
+        let dark = scheme == .dark
+        let increased = contrast == .increased
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(cornerRadius), style: .continuous)
+        content
+            .background {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [SkeuoSkin.plateTop(dark), SkeuoSkin.plateBottom(dark)],
+                            startPoint: .top, endPoint: .bottom)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(dark ? 0.4 : 0.07), radius: UIScale.pt(1),
+                        y: UIScale.pt(1)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(dark ? 0.28 : 0.05), radius: UIScale.pt(10),
+                        y: UIScale.pt(4))
+            }
+            .overlay {
+                shape
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [SkeuoSkin.highlight(dark), .clear],
+                            startPoint: .top, endPoint: .center),
+                        lineWidth: UIScale.pt(1)
+                    )
+                    .overlay(
+                        shape.strokeBorder(
+                            SkeuoSkin.keyEdge(
+                                dark, theme: AppTheme(storedName: themeName), increased: increased),
+                            lineWidth: UIScale.pt(increased ? 1 : 0.5))
+                    )
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
+public struct SkeuoPageBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
+    public init() {}
+
+    public var body: some View {
+        let dark = scheme == .dark
+        LinearGradient(
+            colors: [DashSkin.paper(dark), SkeuoSkin.pageBottom(dark)],
+            startPoint: .top, endPoint: .bottom)
+    }
+}
+
+public struct SkeuoSwitchStyle: ToggleStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        SkeuoSwitch(configuration: configuration)
+    }
+}
+
+extension ToggleStyle where Self == SkeuoSwitchStyle {
+    public static var skeuoSwitch: SkeuoSwitchStyle { SkeuoSwitchStyle() }
+}
+
+private struct SkeuoSwitch: View {
+    let configuration: ToggleStyleConfiguration
+
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = "accent"
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
+
+    private var height: CGFloat {
+        switch controlSize {
+        case .mini: 14
+        case .small: 18
+        default: 22
+        }
+    }
+
+    var body: some View {
+        let on = configuration.isOn
+        let tint = themeColor(themeName)
+        let track = Capsule(style: .continuous)
+        let width = height * 1.75
+        let knob = height - 4
+        HStack(spacing: UIScale.pt(8)) {
+            configuration.label
+            Button {
+                configuration.isOn.toggle()
+            } label: {
+                ZStack(alignment: on ? .trailing : .leading) {
+                    SkeuoKey(.recessed, cornerRadius: height / 2, tint: on ? tint : nil)
+                    Circle()
+                        .fill(Color.clear)
+                        .background { SkeuoKey(.raised, cornerRadius: knob / 2) }
+                        .frame(width: UIScale.pt(knob), height: UIScale.pt(knob))
+                        .padding(UIScale.pt(2))
+                }
+                .frame(width: UIScale.pt(width), height: UIScale.pt(height))
+                .overlay {
+                    if focused, enabled {
+                        track.strokeBorder(tint.opacity(0.9), lineWidth: 2)
+                    }
+                }
+                .contentShape(track)
+            }
+            .buttonStyle(.plain)
+            .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: on)
+        }
+        .opacity(enabled ? 1 : 0.45)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityAction { configuration.isOn.toggle() }
+    }
+}
+
+public struct SkeuoFieldStyle: TextFieldStyle {
+    public init() {}
+
+    public func _body(configuration: TextField<Self._Label>) -> some View {
+        SkeuoField { configuration }
+    }
+}
+
+extension TextFieldStyle where Self == SkeuoFieldStyle {
+    public static var skeuoField: SkeuoFieldStyle { SkeuoFieldStyle() }
+}
+
+private struct SkeuoField<Field: View>: View {
+    @ViewBuilder let field: () -> Field
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = "accent"
+    @Environment(\.isEnabled) private var enabled
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)
+        field()
+            .textFieldStyle(.plain)
+            .focused($focused)
+            .padding(.horizontal, UIScale.pt(7))
+            .padding(.vertical, UIScale.pt(4))
+            .background { SkeuoKey(.recessed, cornerRadius: 6) }
+            .overlay {
+                if focused {
+                    shape.strokeBorder(themeColor(themeName).opacity(0.85), lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+            }
+            .opacity(enabled ? 1 : 0.5)
     }
 }

@@ -57,7 +57,7 @@ struct VideoSettingsInspector: View {
                         model.setVideoSettings(next)
                     }), format: .number.grouping(.never)
             )
-            .multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+            .multilineTextAlignment(.trailing).textFieldStyle(.skeuoField)
         }
     }
 
@@ -109,7 +109,7 @@ struct VideoVisualInspector: View {
                                 set: {
                                     model.setStillDuration($0, clipID: clip.id)
                                 }), format: .number
-                        ).textFieldStyle(.roundedBorder)
+                        ).textFieldStyle(.skeuoField)
                     }
                 }
             }
@@ -234,7 +234,7 @@ struct VideoVisualInspector: View {
                     set: { value in
                         update { $0[keyPath: key] = value }
                     }), format: .number
-            ).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+            ).textFieldStyle(.skeuoField).multilineTextAlignment(.trailing)
         }
     }
 
@@ -254,7 +254,7 @@ struct VideoVisualInspector: View {
                             $0.keyframes.sort { $0.time < $1.time }
                         }
                     }), format: .number
-            ).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+            ).textFieldStyle(.skeuoField).multilineTextAlignment(.trailing)
         }
     }
 }

@@ -69,7 +69,7 @@ struct VideoBackgroundInspector: View {
                 value: Binding(
                     get: { (background ?? VideoBackground())[keyPath: key] },
                     set: { value in change { $0[keyPath: key] = value } }), format: .number
-            ).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+            ).textFieldStyle(.skeuoField).multilineTextAlignment(.trailing)
         }
     }
 
@@ -84,7 +84,7 @@ struct VideoBackgroundInspector: View {
                     get: { background?.sourceCrop?[keyPath: key] ?? 0 },
                     set: { value in change { $0.sourceCrop?[keyPath: key] = value } }),
                 format: .number
-            ).textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+            ).textFieldStyle(.skeuoField).multilineTextAlignment(.trailing)
         }
     }
 }

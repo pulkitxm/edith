@@ -491,7 +491,7 @@ struct OnboardingView: View {
                         : "Back up my settings to iCloud",
                     isOn: $icloudBackup
                 )
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .controlSize(.small)
                 .font(.system(size: UIScale.pt(12.5), weight: .medium))
                 .foregroundStyle(DashSkin.ink(dark))

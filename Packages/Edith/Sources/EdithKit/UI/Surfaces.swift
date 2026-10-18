@@ -1,25 +1,5 @@
 import SwiftUI
 
-private struct EdithSurface: ViewModifier {
-    let cornerRadius: CGFloat
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: UIScale.pt(cornerRadius), style: .continuous)
-        let dark = scheme == .dark
-        content
-            .background { shape.fill(DashSkin.paper2(dark)) }
-            .overlay {
-                shape.strokeBorder(
-                    contrast == .increased ? DashSkin.lineStrong(dark) : DashSkin.line(dark),
-                    lineWidth: contrast == .increased ? 1 : 0.5
-                )
-                .allowsHitTesting(false)
-            }
-    }
-}
-
 public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -58,6 +38,6 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
 
 extension View {
     public func edithSurface(cornerRadius: CGFloat = 12) -> some View {
-        modifier(EdithSurface(cornerRadius: cornerRadius))
+        modifier(SkeuoPlate(cornerRadius: cornerRadius))
     }
 }

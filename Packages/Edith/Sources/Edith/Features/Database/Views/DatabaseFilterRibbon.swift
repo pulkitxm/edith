@@ -443,7 +443,7 @@ struct DatabaseFilterRibbon: View {
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Spacer(minLength: 0)
                     Toggle("Enabled", isOn: clauseEnabledBinding(id))
-                        .toggleStyle(.switch)
+                        .toggleStyle(.skeuoSwitch)
                         .controlSize(.small)
                 }
                 filterEditorControl("Field") {
@@ -463,7 +463,7 @@ struct DatabaseFilterRibbon: View {
                     .pickerStyle(.menu)
                     if supportsRelatedFields {
                         TextField("organization.slug", text: clauseFieldBinding(id))
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.skeuoField)
                             .accessibilityLabel("Field path")
                         Text("Use table.field, foreignKeyColumn.field, or constraint.field.")
                             .font(.system(size: UIScale.pt(10)))
@@ -493,7 +493,7 @@ struct DatabaseFilterRibbon: View {
                             TextField(
                                 valuePlaceholder(clause.operation), text: clauseValueBinding(id)
                             )
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.skeuoField)
                             .font(.system(size: UIScale.pt(11), design: .monospaced))
                             .onSubmit {
                                 editorID = nil

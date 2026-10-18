@@ -211,7 +211,7 @@ struct StudioPDFPasswordPrompt: View {
             SecureField(
                 "Password", text: Binding(get: { editor.password }, set: { editor.password = $0 })
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             .frame(width: UIScale.pt(240))
             .onSubmit { editor.load() }
             if let status = editor.status {
@@ -334,7 +334,7 @@ struct StudioPDFInspector: View {
                     text: Binding(get: { editor.pendingText }, set: { editor.pendingText = $0 }),
                     axis: .vertical
                 )
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .lineLimit(1...4)
             }
         }
@@ -398,7 +398,7 @@ struct StudioPDFInspector: View {
             TextField(
                 "Text", text: Binding(get: { editor.pendingText }, set: { editor.pendingText = $0 })
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             Button("Use today's date") {
                 editor.pendingText = Date().formatted(date: .long, time: .omitted)
                 editor.tool = .text
@@ -414,7 +414,7 @@ struct StudioPDFInspector: View {
                 text: Binding(get: { editor.redactTerms }, set: { editor.redactTerms = $0 }),
                 axis: .vertical
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             .lineLimit(1...4)
             Toggle(
                 "Email addresses",
@@ -458,7 +458,7 @@ struct StudioPDFInspector: View {
                     text: Binding(
                         get: { editor.dropdownOptions }, set: { editor.dropdownOptions = $0 })
                 )
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             }
         }
     }
@@ -509,7 +509,7 @@ struct StudioPDFInspector: View {
                         get: { selected.contents ?? "" }, set: { editor.updateSelectedText($0) }),
                     axis: .vertical
                 )
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .lineLimit(1...5)
             }
             HStack {

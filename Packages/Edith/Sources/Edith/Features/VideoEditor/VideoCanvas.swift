@@ -94,7 +94,7 @@ private struct VideoCanvasSelectionControls: View {
         HStack(spacing: UIScale.pt(8)) {
             if annotation.type == "text" {
                 TextField("Selected text", text: $text)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .frame(maxWidth: UIScale.pt(300))
                     .onSubmit { apply() }
                     .onChange(of: annotation.text) { text = annotation.text }

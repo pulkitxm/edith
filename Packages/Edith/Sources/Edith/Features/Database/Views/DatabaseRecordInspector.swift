@@ -274,7 +274,7 @@ struct DatabaseRecordInspector: View {
             .frame(minHeight: UIScale.pt(100), maxHeight: UIScale.pt(160))
             .accessibilityLabel("\(field.id) JSON").disabled(!field.isEditable)
         } else {
-            TextField("Value", text: fieldText(field.id)).textFieldStyle(.roundedBorder)
+            TextField("Value", text: fieldText(field.id)).textFieldStyle(.skeuoField)
                 .font(.system(size: UIScale.pt(10.5), design: .monospaced)).disabled(
                     !field.isEditable)
         }

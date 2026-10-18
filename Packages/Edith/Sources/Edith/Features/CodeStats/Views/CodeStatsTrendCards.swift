@@ -45,7 +45,7 @@ struct CodeStatsTrendCard: View {
                 .labelsHidden()
                 .fixedSize()
                 Toggle("Cumulative", isOn: $cumulative)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.skeuoSwitch)
                     .controlSize(.small)
                 Spacer()
                 if let brushed {
@@ -204,7 +204,7 @@ struct CodeStatsRepositoryCards: View {
                 note: "Top 10, click to filter, right-click a row below to exclude"
             ) {
                 Toggle("Log scale", isOn: $logScale)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.skeuoSwitch)
                     .controlSize(.small)
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(

@@ -13,11 +13,11 @@ struct BifrostQuicklinkEditor: View {
         ) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 TextField("Name", text: item.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 TextField("https://example.com/search?q={query}", text: item.target)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 TextField("Keyword, for example gh", text: item.keyword)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
             }
         }
         .onAppear { items = BifrostLibraryStore.quicklinks() }
@@ -36,13 +36,13 @@ struct BifrostSnippetEditor: View {
         ) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 TextField("Name", text: item.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 TextEditor(text: item.content)
                     .font(.system(size: UIScale.pt(12), design: .monospaced))
                     .frame(height: UIScale.pt(60))
                     .border(Color.secondary.opacity(0.3))
                 TextField("Keyword", text: item.keyword)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
             }
         }
         .onAppear { items = BifrostLibraryStore.snippets() }
@@ -61,11 +61,11 @@ struct BifrostShellCommandEditor: View {
         ) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 TextField("Name", text: item.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 TextField("echo hello", text: item.script)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 TextField("Keyword", text: item.keyword)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 Toggle("Show the output when it finishes", isOn: item.showsOutput)
             }
         }

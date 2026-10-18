@@ -137,7 +137,7 @@ struct StudioCompareView: View {
                 symbol: "rectangle.split.2x1", back: model.goHome
             ) {
                 Toggle("Visual difference", isOn: $compare.showsVisual)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.skeuoSwitch)
                     .controlSize(.small)
                 Button("Save report") {
                     model.open(

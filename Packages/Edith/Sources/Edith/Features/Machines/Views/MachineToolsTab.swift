@@ -251,7 +251,7 @@ struct MachineToolsTab: View {
                                 set: { toggleForward(forward, on: $0) })
                         )
                         .labelsHidden()
-                        .toggleStyle(.switch)
+                        .toggleStyle(.skeuoSwitch)
                         .controlSize(.mini)
                         .disabled(!session.state.isConnected)
                         Button {
@@ -269,7 +269,7 @@ struct MachineToolsTab: View {
                     : AnyLayout(HStackLayout(spacing: UIScale.pt(8)))
                 layout {
                     TextField("Local port", text: $newForwardLocal)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     if !compact {
                         Image(systemName: "arrow.right")
@@ -277,10 +277,10 @@ struct MachineToolsTab: View {
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     TextField("Remote host", text: $newForwardHost)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(130))
                     TextField("Remote port", text: $newForwardRemote)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     Button("Add") { addForward() }
                         .disabled(Int(newForwardLocal) == nil || Int(newForwardRemote) == nil)
@@ -318,10 +318,10 @@ struct MachineToolsTab: View {
                 }
                 HStack(spacing: UIScale.pt(8)) {
                     TextField("Name", text: $snippetTitle)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .frame(width: UIScale.pt(140))
                     TextField("Command", text: $snippetCommand)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                     Button("Save") { saveSnippet() }
                         .disabled(
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty

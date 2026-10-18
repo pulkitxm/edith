@@ -223,7 +223,7 @@ struct TerminalTabsView: View {
             Image(systemName: "dot.radiowaves.left.and.right")
                 .foregroundStyle(DashSkin.warn)
             TextField("Send to every tab", text: $command)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .onSubmit(sendBroadcast)
             Button("Send", action: sendBroadcast)
             if let broadcastError {

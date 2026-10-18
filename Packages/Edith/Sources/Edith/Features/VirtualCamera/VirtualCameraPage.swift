@@ -468,7 +468,7 @@ struct VirtualCameraNamePrompt: View {
             Text(title)
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
             TextField("Name", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .frame(width: UIScale.pt(240))
                 .onSubmit(action)
             HStack {

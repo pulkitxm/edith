@@ -209,7 +209,7 @@ struct SurfaceEditorPane: View {
             Divider().padding(.vertical, UIScale.pt(8))
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
-                    TextField("Layout name", text: $profileName).textFieldStyle(.roundedBorder)
+                    TextField("Layout name", text: $profileName).textFieldStyle(.skeuoField)
                     Button("Save current") {
                         if store.saveProfile(profileName, target: target) {
                             profileName = ""
@@ -348,7 +348,7 @@ struct SurfaceEditorPane: View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
             TextField(title, value: value, format: .number.precision(.fractionLength(0...1)))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
         }
     }
 
@@ -790,7 +790,7 @@ struct SurfaceEditorPane: View {
                 Toggle("Single column", isOn: $previewCompact)
             }
         }
-        .toggleStyle(.switch).font(.edithText(.caption))
+        .toggleStyle(.skeuoSwitch).font(.edithText(.caption))
     }
 
     private var notchTabs: some View {
@@ -879,7 +879,7 @@ struct SurfaceEditorPane: View {
                             }
                         }))
                 TextField("Display title", text: setting(tile.id, \.title, fallback: ""))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     if target == .notch && layout.notchHorizontal {
                         overrideField(

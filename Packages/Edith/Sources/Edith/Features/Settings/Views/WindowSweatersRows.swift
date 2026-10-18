@@ -162,7 +162,7 @@ struct WindowSweatersRows: View {
                     TextField(
                         "Terminal, Preview", text: $excludedApps.configured(Keys.excludedApps)
                     )
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Never knit")

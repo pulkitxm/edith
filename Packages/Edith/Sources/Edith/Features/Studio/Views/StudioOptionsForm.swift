@@ -57,7 +57,7 @@ struct StudioOptionField: View {
             StudioChoiceField(choices: choices, selection: text)
         case .toggle:
             Toggle(option.label, isOn: bool)
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .controlSize(.small)
                 .font(.system(size: UIScale.pt(12)))
         case let .integer(range, unit):
@@ -76,7 +76,7 @@ struct StudioOptionField: View {
                 })
         case let .text(placeholder):
             TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
         case let .longText(placeholder):
             ZStack(alignment: .topLeading) {
                 TextEditor(text: text)
@@ -99,7 +99,7 @@ struct StudioOptionField: View {
             }
         case .password:
             SecureField("Password", text: text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
         case .color:
             StudioColorField(hex: text)
         case .pages:
@@ -199,7 +199,7 @@ struct StudioIntegerField: View {
                     set: { value = Double(min(max($0, range.lowerBound), range.upperBound)) }),
                 format: .number
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             .frame(width: UIScale.pt(80))
             Stepper(
                 "", value: Binding(get: { Int(value.rounded()) }, set: { value = Double($0) }),
@@ -258,7 +258,7 @@ struct StudioColorField: View {
             )
             .labelsHidden()
             TextField("#000000", text: $hex)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .font(DashSkin.mono(11.5))
                 .frame(width: UIScale.pt(96))
         }
@@ -273,7 +273,7 @@ struct StudioPagesField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             TextField("all", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             if let pageCount {
                 let problem = StudioPagesValidation.problem(text, pageCount: pageCount)
                 Text(
@@ -311,7 +311,7 @@ struct StudioTimeField: View {
 
     var body: some View {
         TextField("0:00", text: $draft)
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             .frame(width: UIScale.pt(110))
             .onAppear { draft = StudioTime.format(value) }
             .onSubmit { commit() }
@@ -334,10 +334,10 @@ struct StudioSpanField: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             HStack(spacing: UIScale.pt(6)) {
                 TextField("Start", text: $start)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                 Text("to").foregroundStyle(.secondary)
                 TextField("End", text: $end)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
             }
             if let duration {
                 Text(

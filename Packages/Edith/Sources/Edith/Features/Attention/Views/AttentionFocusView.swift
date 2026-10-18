@@ -44,7 +44,7 @@ struct AttentionFocusView: View {
                 } else {
                     HStack(spacing: UIScale.pt(10)) {
                         TextField("What are you focusing on?", text: $focusName)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.skeuoField)
                         EdithSegmentedPicker(
                             "Duration", selection: $focusMinutes, options: [25, 45, 60, 90],
                             label: { "\($0)m" }

@@ -360,7 +360,7 @@ private struct SuiteHeader: View {
                 .fixedSize()
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .controlSize(.small)
                 .tint(DashSkin.accent(dark))
                 .accessibilityLabel("\(suite.title) suite enabled")
@@ -420,7 +420,7 @@ private struct ExtensionMarketplaceCard: View {
                 Spacer(minLength: 0)
                 Toggle("", isOn: enabledBinding)
                     .labelsHidden()
-                    .toggleStyle(.switch)
+                    .toggleStyle(.skeuoSwitch)
                     .controlSize(.small)
                     .tint(DashSkin.accent(dark))
                     .disabled(switchDisabled)
@@ -486,7 +486,7 @@ struct ExtensionSettingsHeader: View {
                 Text("\(title) enabled")
             }
             .labelsHidden()
-            .toggleStyle(.switch)
+            .toggleStyle(.skeuoSwitch)
             .disabled(disabled)
             .accessibilityLabel("\(title) enabled")
         }

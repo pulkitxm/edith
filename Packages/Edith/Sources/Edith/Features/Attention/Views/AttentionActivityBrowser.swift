@@ -106,7 +106,7 @@ struct AttentionEntitiesPanel: View {
 
     private var searchField: some View {
         TextField("Search apps, sites and titles", text: $search)
-            .textFieldStyle(.roundedBorder).frame(width: UIScale.pt(240))
+            .textFieldStyle(.skeuoField).frame(width: UIScale.pt(240))
             .accessibilityLabel("Search activities")
     }
 
@@ -263,7 +263,7 @@ struct AttentionActivityInspector: View {
                 Text("\(entity.details.count)").font(DashSkin.mono(10)).foregroundStyle(.secondary)
             }
             TextField("Find a title or URL", text: $search)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             if details.isEmpty {
                 Text(
                     entity.details.isEmpty

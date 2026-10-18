@@ -176,7 +176,7 @@ struct StudioWorkflowEditor: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Text("Workflow").font(.system(size: UIScale.pt(17), weight: .semibold))
             TextField("Name", text: Binding(get: { draft.name }, set: { draft.name = $0 }))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     ForEach(Array(draft.steps.enumerated()), id: \.element.id) { index, step in

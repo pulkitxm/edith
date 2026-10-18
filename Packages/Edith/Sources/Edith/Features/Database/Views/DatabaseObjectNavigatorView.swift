@@ -50,7 +50,7 @@ struct DatabaseObjectNavigatorView: View {
                 .accessibilityLabel("Reload database objects")
             }
             TextField("Search \(navigatorTitle.lowercased())", text: searchBinding)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
                 .font(.system(size: UIScale.pt(11)))
         }
         .padding(.horizontal, UIScale.pt(12))

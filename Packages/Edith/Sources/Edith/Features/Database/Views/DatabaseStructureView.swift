@@ -24,7 +24,7 @@ struct DatabaseStructureView: View {
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 Spacer()
                 TextField("Find a field or type", text: $search)
-                    .textFieldStyle(.roundedBorder).frame(maxWidth: UIScale.pt(230))
+                    .textFieldStyle(.skeuoField).frame(maxWidth: UIScale.pt(230))
                     .accessibilityLabel("Find a field or type")
             }.padding(UIScale.pt(12)).background(palette.panel)
             Divider()

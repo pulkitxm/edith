@@ -144,7 +144,7 @@ private struct SuiteAbilityRow: View {
             }
             Toggle("", isOn: enabledBinding)
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .controlSize(.small)
                 .tint(DashSkin.accent(dark))
                 .disabled(

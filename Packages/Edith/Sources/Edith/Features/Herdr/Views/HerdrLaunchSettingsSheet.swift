@@ -102,7 +102,7 @@ private struct HerdrLaunchKindRow: View {
                         HerdrLaunchSettings.setCommand(newValue, for: kind)
                     })
             )
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.skeuoField)
             Button("Reset") {
                 HerdrLaunchSettings.resetToDefault(for: kind)
                 command = HerdrLaunchSettings.command(for: kind)

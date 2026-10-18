@@ -218,7 +218,7 @@ private struct CodeStatsFacetPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             TextField("Search " + kind.rawValue.lowercased(), text: $query)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     ForEach(matchingFacets) { facet in

@@ -227,7 +227,7 @@ struct AddMachineSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             eyebrow("SSH CLIPBOARD")
             Toggle("Sync clipboard with this machine", isOn: $sshClipboardEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(.skeuoSwitch)
                 .disabled(authKind != .agent)
             Text(sshClipboardHelp)
                 .font(.system(size: UIScale.pt(11)))
@@ -318,7 +318,7 @@ struct AddMachineSheet: View {
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
         }
     }
 
@@ -328,7 +328,7 @@ struct AddMachineSheet: View {
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             SecureField("", text: text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.skeuoField)
         }
     }
 

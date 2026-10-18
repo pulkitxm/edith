@@ -204,7 +204,7 @@ struct NotchBrowserDialogView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 if case .prompt = dialog.kind {
                     TextField("", text: $text)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.skeuoField)
                         .onSubmit { dialog.resolve(true, text) }
                 }
                 HStack(spacing: 8) {

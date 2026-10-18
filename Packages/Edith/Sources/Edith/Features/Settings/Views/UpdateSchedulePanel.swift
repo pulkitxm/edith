@@ -152,7 +152,7 @@ struct UpdateSchedulePanel: View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(8)) {
                 TextField("", text: $customSeconds)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.skeuoField)
                     .frame(width: UIScale.pt(110))
                     .focused($customFocused)
                     .onSubmit(commitCustomSeconds)
