@@ -3,7 +3,7 @@
 Social Manager organizes social accounts by profile, such as Personal, Studio or
 a client. Each profile contains only the accounts you add to it: Instagram,
 YouTube, X, LinkedIn, Facebook or a custom website. It opens the actual websites
-inside Edith. Each connected account gets an independent persistent WebKit browser store.
+inside Edith. Accounts use independent persistent WebKit browser stores by default.
 Cookies, local storage and other website data belong to that account, so several
 accounts on the same website can remain signed in at once.
 
@@ -23,6 +23,45 @@ Use **Manage profile > Add custom website** for another platform. Enter its name
 and HTTPS URL to add it to that profile and open its account. Platforms are
 URL-based and do not require a social-network API integration. **Manage profile**
 also lets you rename a profile or remove it and clear all its connected sessions.
+
+## Views, filters and usernames
+
+Use **Profiles**, **Accounts** or **List** at the top right to switch between the
+profile library, account cards and a compact account list. Saving an existing
+profile or account keeps the current view and workspace selection.
+
+The sidebar lists accounts across every profile by default. Its filters and the
+account library share profile, platform, search, open-status and sorting controls.
+Profile browsing does not restrict the sidebar. Platform choices come from the
+accounts you have added, including custom websites and Gmail. Search matches
+account labels, usernames, profile names and platforms. **Reset filters** clears
+the current restrictions. Sorting changes the view without rewriting account order.
+
+Set **Username** in an account's editor to show its `@username` in the sidebar,
+cards, list and workspace tabs. The profile and platform remain visible so the
+same username on different services is distinguishable. Accounts without a
+username continue to display their account label.
+
+Choose Instagram in the platform filter to see its accounts across all profiles.
+**Open all** opens every matching account in separate tabs or a selected shared
+Agent Sessions layout. The same action works for any platform, profile or search.
+Already open accounts reuse their browsers. Other open accounts remain available.
+
+**Account URL** in the account editor controls that account's home page. For
+example, use `https://studio.youtube.com` for YouTube Studio. Editing the URL
+preserves the account identity and browser store and updates its home page.
+
+## Shared Google sign-in
+
+New Google-service accounts offer **Use this profile's Google session**, enabled
+by default. This lets Gmail and YouTube, including YouTube Studio, share the
+Google cookies for that profile. Other profiles have separate Google sessions.
+Google may still ask for additional verification on a particular service.
+
+Existing accounts keep their current independent sessions until you explicitly
+enable sharing in the account editor. Linking does not merge or delete the old
+cookies. Turn sharing off to return to the saved independent session. Existing
+account records, identifiers, pictures and login stores are retained on update.
 
 ## Tabs and side-by-side layouts
 
@@ -65,7 +104,10 @@ window. Closing that window or choosing **Return to workspace** brings the same
 browser session back. Use **Position beside**
 for an exact right or bottom placement, or **Move to tab** to combine workspaces.
 Tab menus include closing other tabs, closing tabs to the right and reopening a
-closed workspace. Pane menus include website zoom and new website tabs.
+closed workspace. Pane menus include website zoom and new website tabs. Pane
+closing, tab selection, pane focus, maximize and layout restoration share the
+same navigation implementation as Agent Sessions. Reopening a closed pane puts
+it back in its previous split position when its workspace is still open.
 
 Keyboard controls work while a website or its text field has focus:
 
@@ -76,10 +118,11 @@ Keyboard controls work while a website or its text field has focus:
 | Option+Backtick / Option+Shift+Backtick | Focus next / previous pane, matching Agent Sessions |
 | Command+Shift+Return | Maximize / restore the focused pane |
 | Command+Control+Right / Left | Focus next / previous pane |
-| Command+1 through Command+9 | Select a workspace tab |
+| Command+1 / Command+2 through Command+8 / Command+9 | Library / numbered tab including the library / last tab |
+| Command+Shift+Right bracket / Left bracket | Next / previous workspace tab |
 | Command+T or Command+0 | Show the profile library |
 | Command+Shift+T | Reopen the last closed workspace |
-| Command+W | Close the focused website popup tab, or the workspace tab |
+| Command+W | Close the focused website popup tab, otherwise the active pane in a split or the single-account tab |
 | Command+L | Edit the focused pane's website address |
 | Command+R | Reload the focused website |
 
@@ -88,7 +131,8 @@ Keyboard controls work while a website or its text field has focus:
 Set **Profile email** in the profile editor. The **Email** menu is available on
 the profile and while operating any of its account panes. Open Gmail in a tab,
 on the right or below the current account. Each profile has its own persistent
-Gmail session, separate from its social accounts and other profiles. Sign in to
+Gmail session, shared only with accounts explicitly using that profile's Google
+session. Sign in to
 the matching Google account on the website; entering a profile email is a label
 and does not sign in automatically.
 
@@ -103,9 +147,11 @@ or profile also removes its saved pictures.
 
 ## Account data
 
-Profiles, email labels, connected account names, badges, picture filenames and platform URLs are stored locally in
+Profiles, email labels, connected account names, usernames, badges, picture filenames,
+account URLs, session-sharing choices and platform URLs are stored locally in
 `social-manager/accounts.json` under Edith's data folder. WebKit manages browser
-data in a persistent store keyed by the account's UUID. Renaming an account keeps
+data in a persistent store keyed by the account's UUID, or its profile's UUID
+when using the shared Google session. Renaming an account keeps
 that identifier and its session. Edith does not collect or save a separate copy
 of website passwords. Websites decide when sessions expire or require sign-in.
 
@@ -114,8 +160,10 @@ Edith's iCloud settings backup. The extension's enablement preference is backed
 up. Development builds use their own app identity and account list.
 
 From an account card's menu, **Clear login session** closes that account and
-clears its cookies and website storage. **Remove account** also removes its saved name and
-badge. Both actions leave other accounts alone. Removing an account in Edith
+clears its cookies and website storage. Clearing a shared Google session signs
+out every linked account in that profile. **Remove account** removes its saved
+details and keeps a shared session that another account still uses. Separate
+sessions and other profiles are unaffected. Removing an account in Edith
 does not delete the account on the website.
 
 ## Command line

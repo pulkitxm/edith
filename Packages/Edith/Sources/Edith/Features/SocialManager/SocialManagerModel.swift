@@ -17,6 +17,12 @@ struct SocialWorkspaceTab: Identifiable, Equatable {
     }
 }
 
+struct SocialClosedWorkspace {
+    let tab: SocialWorkspaceTab
+    let index: Int
+    var pane: String?
+}
+
 @MainActor @Observable
 final class SocialManagerModel {
     private(set) var catalog = SocialAccountCatalog()
@@ -28,6 +34,12 @@ final class SocialManagerModel {
     var selectedTabID: UUID?
     var profileID: UUID?
     var showingAccounts = true
+    var libraryView = SocialLibraryView.profiles
+    var platformFilterID: UUID?
+    var accountProfileFilterID: UUID?
+    var accountStatus = SocialAccountStatus.all
+    var accountSort = SocialAccountSort.manual
+    var accountSearch = ""
     var message: String?
     var editingAccount: SocialAccount?
     var clearingAccount: SocialAccount?
@@ -38,7 +50,7 @@ final class SocialManagerModel {
     }
     private(set) var savedArrangements: [HerdrSavedArrangement] = []
     @ObservationIgnored private let defaults: UserDefaults
-    private(set) var recentlyClosed: [SocialWorkspaceTab] = []
+    private(set) var recentlyClosed: [SocialClosedWorkspace] = []
     private(set) var busy = false
     let load = ContentLoad()
     @ObservationIgnored private let file: SocialAccountFile
@@ -54,8 +66,8 @@ final class SocialManagerModel {
             SocialBrowserSession = {
                 account, platform, dataStore in
                 SocialBrowserSession(
-                    accountID: account.id, website: platform.website,
-                    dataStore: dataStore ?? WKWebsiteDataStore(forIdentifier: account.id))
+                    accountID: account.id, website: account.website ?? platform.website,
+                    dataStore: dataStore ?? WKWebsiteDataStore(forIdentifier: account.dataStoreID))
             }
     ) {
         self.file = file
@@ -82,7 +94,8 @@ final class SocialManagerModel {
     }
 
     func accountTitle(_ account: SocialAccount) -> String {
-        [profile(for: account)?.name, account.name].compactMap { $0 }.joined(separator: " / ")
+        [profile(for: account)?.name, account.handle ?? account.name].compactMap { $0 }.joined(
+            separator: " / ")
     }
 
     @discardableResult
@@ -120,7 +133,7 @@ final class SocialManagerModel {
             profileAvatars.removeValue(forKey: profile.id)
         }
         if previous != profile.avatarFilename, let previous { try? avatarFiles.remove(previous) }
-        profileID = profile.id
+        if id == nil { profileID = profile.id }
         return profile
     }
 
@@ -161,19 +174,41 @@ final class SocialManagerModel {
 
     func saveAccount(
         id: UUID? = nil, profileID: UUID, platformID: UUID, name: String, badge: String,
-        pictureURL: URL? = nil, removePicture: Bool = false
+        pictureURL: URL? = nil, removePicture: Bool = false,
+        website: String? = nil, shareProfileSession: Bool? = nil, username: String? = nil
     ) throws
         -> SocialAccount
     {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw SocialAccountError.emptyName }
-        let previous = catalog.accounts.first(where: { $0.id == id })?.avatarFilename
-        let imported = try pictureURL.map { try avatarFiles.importImage($0) }
+        let current = catalog.accounts.first(where: { $0.id == id })
+        let previous = current?.avatarFilename
+        let accountWebsite: URL?
+        if let website {
+            accountWebsite = try SocialPlatform.websiteURL(website)
+        } else {
+            accountWebsite = current?.website
+        }
+        let sharedSession = shareProfileSession ?? (current?.browserSessionID != nil)
+        var savedUsername = current?.username
+        if let username {
+            let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = String(trimmed.drop(while: { $0 == "@" }))
+            savedUsername = normalized.isEmpty ? nil : normalized
+        }
+        let imported: String?
+        if let pictureURL {
+            imported = try avatarFiles.importImage(pictureURL)
+        } else {
+            imported = nil
+        }
         var next = catalog
         let account = SocialAccount(
             id: id ?? UUID(), profileID: profileID, platformID: platformID, name: name,
             badge: String(badge.trimmingCharacters(in: .whitespacesAndNewlines).prefix(2)),
-            avatarFilename: imported ?? (removePicture ? nil : previous))
+            avatarFilename: imported ?? (removePicture ? nil : previous), website: accountWebsite,
+            browserSessionID: sharedSession ? profileID : nil,
+            username: savedUsername)
         if let index = next.accounts.firstIndex(where: { $0.id == id }) {
             next.accounts[index] = account
         } else {
@@ -189,6 +224,17 @@ final class SocialManagerModel {
             avatars.removeValue(forKey: account.id)
         }
         if previous != account.avatarFilename, let previous { try? avatarFiles.remove(previous) }
+        if let current, current.dataStoreID != account.dataStoreID,
+            let session = sessions.removeValue(forKey: account.id)
+        {
+            session.shutdown()
+            if paneIsOpen(account.id.uuidString) { _ = ensureBrowser(account) }
+        } else if let current,
+            current.website != account.website || current.platformID != account.platformID,
+            let platform = platform(for: account)
+        {
+            sessions[account.id]?.updateWebsite(account.website ?? platform.website)
+        }
         return account
     }
 
@@ -213,7 +259,7 @@ final class SocialManagerModel {
     }
 
     func open(_ account: SocialAccount, beside: Bool = false, side: InsertSide = .right) {
-        guard !busy, catalog.accounts.contains(where: { $0.id == account.id }),
+        guard !busy, let account = self.account(account.id.uuidString),
             ensureBrowser(account)
         else { return }
         SocialWorkspaceWindow.reattach(account.id.uuidString, to: self)
@@ -251,8 +297,8 @@ final class SocialManagerModel {
     func ensureBrowser(_ account: SocialAccount) -> Bool {
         guard let platform = platform(for: account) else { return false }
         if sessions[account.id] == nil {
-            let session = sessionFactory(account, platform, dataStores[account.id])
-            dataStores[account.id] = session.dataStore
+            let session = sessionFactory(account, platform, dataStores[account.dataStoreID])
+            dataStores[account.dataStoreID] = session.dataStore
             session.onFocus = { [weak self] in self?.focus(account.id.uuidString) }
             sessions[account.id] = session
         }
@@ -330,25 +376,26 @@ final class SocialManagerModel {
 
     func closeAccount(_ key: String, remember: Bool = true) {
         SocialWorkspaceWindow.reattach(key, to: self)
-        if remember, let account = account(key) {
-            rememberClosed(SocialWorkspaceTab(account: account))
+        if remember, let index = tabs.firstIndex(where: { $0.layout.contains(key) }) {
+            rememberClosed(SocialClosedWorkspace(tab: tabs[index], index: index, pane: key))
         }
         removePane(key)
         if let id = UUID(uuidString: key) { sessions.removeValue(forKey: id)?.shutdown() }
     }
 
     func closeTab(_ id: UUID) {
-        guard let tab = tabs.first(where: { $0.id == id }) else { return }
-        rememberClosed(tab)
+        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = tabs[index]
+        rememberClosed(SocialClosedWorkspace(tab: tab, index: index))
         for key in tab.layout.panes { closeAccount(key, remember: false) }
     }
 
-    private func rememberClosed(_ tab: SocialWorkspaceTab) {
+    private func rememberClosed(_ tab: SocialClosedWorkspace) {
         recentlyClosed.append(tab)
         if recentlyClosed.count > 20 { recentlyClosed.removeFirst() }
     }
 
-    func takeClosedTab() -> SocialWorkspaceTab? { recentlyClosed.popLast() }
+    func takeClosedTab() -> SocialClosedWorkspace? { recentlyClosed.popLast() }
 
     func modifyTabs(_ change: (inout [SocialWorkspaceTab]) -> Void) { change(&tabs) }
 
@@ -369,8 +416,6 @@ final class SocialManagerModel {
         guard !busy, let current = catalog.profiles.first(where: { $0.id == profile.id }) else {
             return
         }
-        let selection = profileID
-        defer { profileID = selection }
         try saveProfile(
             id: current.id, name: current.name, badge: current.badge, email: current.email,
             pictureURL: url)
@@ -380,8 +425,6 @@ final class SocialManagerModel {
         guard !busy, let current = catalog.profiles.first(where: { $0.id == profile.id }) else {
             return
         }
-        let selection = profileID
-        defer { profileID = selection }
         do {
             try saveProfile(
                 id: current.id, name: current.name, badge: current.badge, email: current.email,
@@ -402,7 +445,7 @@ final class SocialManagerModel {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        await clearWebsiteData(account)
+        await clearWebsiteData(account, removingAccount: removingAccount)
         do {
             if removingAccount {
                 var next = catalog
@@ -440,11 +483,19 @@ final class SocialManagerModel {
         } catch { message = error.localizedDescription }
     }
 
-    private func clearWebsiteData(_ account: SocialAccount) async {
+    private func clearWebsiteData(_ account: SocialAccount, removingAccount: Bool = false) async {
+        let linked = catalog.accounts.filter {
+            $0.dataStoreID == account.dataStoreID && $0.id != account.id
+        }
+        if removingAccount, !linked.isEmpty {
+            closeAccount(account.id.uuidString, remember: false)
+            return
+        }
         let dataStore =
-            dataStores.removeValue(forKey: account.id)
-            ?? WKWebsiteDataStore(forIdentifier: account.id)
+            dataStores.removeValue(forKey: account.dataStoreID)
+            ?? WKWebsiteDataStore(forIdentifier: account.dataStoreID)
         closeAccount(account.id.uuidString, remember: false)
+        for other in linked { closeAccount(other.id.uuidString, remember: false) }
         await withCheckedContinuation { continuation in
             dataStore.removeData(
                 ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast

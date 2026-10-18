@@ -949,10 +949,19 @@ final class HerdrStore {
     }
 
     func focusNeighbor(toward side: InsertSide) {
-        guard let tab = currentTab, tab.zoomed == nil,
-            let next = tab.layout.neighbor(of: tab.focused, toward: side)
-        else { return }
-        focus(next)
+        performWorkspaceLayout(.focus(side))
+    }
+
+    func workspaceFocus(_ pane: String, zoomed: String?) {
+        guard let tab = currentTab else { return }
+        terminalPanels.releaseFocus()
+        updateTab(tab.id) {
+            $0.focused = pane; $0.zoomed = zoomed
+        }
+        if let agent = session(pane)?.agent {
+            usage.record(agent)
+            revealSpace(containing: agent)
+        }
     }
 
     func toggleAgentDetails() {
@@ -968,11 +977,7 @@ final class HerdrStore {
             let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
         else { return false }
         withAnimation(layoutAnimation) {
-            switch key {
-            case let .focus(side): focusNeighbor(toward: side)
-            case let .cycle(backwards): cycleFocus(backwards: backwards)
-            case .zoom: toggleZoom(tab.focused)
-            }
+            performWorkspaceLayout(key)
         }
         return true
     }
@@ -990,19 +995,7 @@ final class HerdrStore {
     }
 
     func cycleFocus(backwards: Bool) {
-        guard let tab = currentTab, tab.isSplit,
-            let index = tab.agentIDs.firstIndex(of: tab.focused)
-        else { return }
-        let count = tab.agentIDs.count
-        let next = tab.agentIDs[(index + (backwards ? count - 1 : 1)) % count]
-        updateTab(tab.id) { tab in
-            tab.focused = next
-            if tab.zoomed != nil { tab.zoomed = next }
-        }
-        if let agent = session(next)?.agent {
-            usage.record(agent)
-            revealSpace(containing: agent)
-        }
+        performWorkspaceLayout(.cycle(backwards: backwards))
     }
 
     func toggleZoom(_ agentID: String) {
@@ -1124,74 +1117,7 @@ final class HerdrStore {
     }
 
     static func adding(_ ids: [String], to layout: HerdrLayout) -> HerdrLayout {
-        if let current = HerdrArrangement.matching(layout),
-            let order = current.slotOrder(of: layout),
-            let flowed = current.layout(order + ids)
-        {
-            return flowed
-        }
-        return ids.reduce(layout) { result, id in result.inserting(.pane(id), atEdge: .right) }
-    }
-
-    private static func restoring(
-        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
-    )
-        -> HerdrLayout
-    {
-        guard snapshot.contains(agentID), !current.contains(agentID) else {
-            return current.contains(agentID) ? current : adding([agentID], to: current)
-        }
-        var survivors: [String] = []
-        for pane in current.panes where snapshot.contains(pane) {
-            survivors.append(pane)
-        }
-        guard !survivors.isEmpty else { return adding([agentID], to: current) }
-        var missing: [String] = []
-        for pane in snapshot.panes where pane != agentID && !current.contains(pane) {
-            missing.append(pane)
-        }
-        var extras: [String] = []
-        for pane in current.panes where !snapshot.contains(pane) {
-            extras.append(pane)
-        }
-        if missing.isEmpty, extras.isEmpty { return snapshot }
-        if extras.isEmpty {
-            var layout = snapshot
-            for pane in missing {
-                layout = layout.removing(pane) ?? .pane(agentID)
-            }
-            return layout.contains(agentID) ? layout : adding([agentID], to: current)
-        }
-        return insertingRestored(agentID, into: current, from: snapshot)
-    }
-
-    private static func insertingRestored(
-        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
-    ) -> HerdrLayout {
-        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
-        let frames = snapshot.frames(in: unit)
-        guard let origin = frames[agentID] else { return adding([agentID], to: current) }
-        var best: (distance: CGFloat, side: InsertSide, neighbor: String)?
-        for side in [InsertSide.left, .right, .top, .bottom] {
-            guard let neighbor = snapshot.neighbor(of: agentID, toward: side),
-                current.contains(neighbor),
-                let frame = frames[neighbor]
-            else { continue }
-            let distance =
-                side.axis == .horizontal
-                ? abs(frame.midX - origin.midX) : abs(frame.midY - origin.midY)
-            let previous = best?.distance ?? .greatestFiniteMagnitude
-            if distance < previous { best = (distance, side, neighbor) }
-        }
-        guard let best else { return adding([agentID], to: current) }
-        let towardAgent: InsertSide
-        switch best.side {
-        case .left: towardAgent = .right
-        case .right: towardAgent = .left
-        case .top: towardAgent = .bottom
-        case .bottom: towardAgent = .top
-        }
-        return current.inserting(.pane(agentID), near: best.neighbor, side: towardAgent)
+        WorkspaceLayoutRestoration.adding(ids, to: layout)
     }
 
     private func detachFromLayout(_ agentID: String) {
@@ -1800,23 +1726,13 @@ final class HerdrStore {
 
     @discardableResult
     func cycleTab(backwards: Bool) -> Bool {
-        let ids = orderedTabIDs
-        guard ids.count > 1, let index = ids.firstIndex(of: selectedTab) else { return false }
-        let next = backwards ? (index - 1 + ids.count) % ids.count : (index + 1) % ids.count
-        selectedTab = ids[next]
-        return true
+        cycleWorkspaceTab(backwards: backwards)
     }
 
     @discardableResult
     func closeFocusedTab() -> Bool {
         if terminalPanels.closeFocused(in: selectedTab) { return true }
-        guard selectedTab != Self.boardID else { return false }
-        if let tab = currentTab, tab.isSplit {
-            close(tab.focused)
-        } else {
-            closeTab(selectedTab)
-        }
-        return true
+        return closeFocusedWorkspaceItem()
     }
 
     @discardableResult
@@ -1847,7 +1763,8 @@ final class HerdrStore {
         }
         if let host = tab(record.tabID) ?? tabHoldingPlacement(record) {
             updateTab(host.id) { tab in
-                tab.layout = Self.restoring(record.agent.id, into: tab.layout, from: record.layout)
+                tab.layout = WorkspaceLayoutRestoration.restoring(
+                    record.agent.id, into: tab.layout, from: record.layout)
                 tab.focused = record.agent.id
                 tab.zoomed = nil
             }
@@ -1927,15 +1844,7 @@ final class HerdrStore {
     }
 
     func selectTab(number: Int) {
-        let ids = orderedTabIDs
-        guard !ids.isEmpty else { return }
-        guard number != 9 else {
-            selectedTab = ids[ids.count - 1]
-            return
-        }
-        let index = number - 1
-        guard index >= 0, index < ids.count else { return }
-        selectedTab = ids[index]
+        selectWorkspaceTab(number: number)
     }
 
     func connection(for machine: Machine) async throws -> SSHConnection {

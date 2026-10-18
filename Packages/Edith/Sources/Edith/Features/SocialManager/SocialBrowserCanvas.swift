@@ -146,7 +146,11 @@ private struct SocialBrowserPane: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(
                 focused ? DashSkin.accent(dark) : DashSkin.line(dark)
-            ).allowsHitTesting(false))
+            ).allowsHitTesting(false)
+        )
+        .onHover { inside in
+            if inside, !model.showingAccounts, model.selectedTabID == tab.id { model.focus(key) }
+        }
     }
 
     @ViewBuilder private var paneActions: some View {

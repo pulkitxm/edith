@@ -20,6 +20,16 @@ enum WindowWorkspaceCommand: Equatable {
         if let layout = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers) {
             return .layout(layout)
         }
+        if let command = WorkspaceKeyCommand.resolve(
+            characters: characters, keyCode: keyCode, modifiers: modifiers)
+        {
+            switch command {
+            case .nextPaneTab, .nextTerminalTab: return .nextTab
+            case .previousPaneTab, .previousTerminalTab: return .previousTab
+            case .nextPane: return .nextPane
+            case .previousPane: return .previousPane
+            }
+        }
         if flags == [.command, .shift], characters?.lowercased() == "t" { return .reopenTab }
         guard flags == .command, let key = characters?.lowercased() else { return nil }
         switch key {

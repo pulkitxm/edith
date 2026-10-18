@@ -38,6 +38,11 @@ public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
         id: UUID(uuidString: "A0000000-0000-0000-0000-000000000006")!,
         name: "Gmail", website: URL(string: "https://mail.google.com")!, symbol: "envelope")
 
+    public var isGoogleService: Bool {
+        guard let host = website.host?.lowercased() else { return false }
+        return ["google.com", "youtube.com"].contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
     public static func websiteURL(_ text: String) throws -> URL {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = trimmed.contains("://") ? trimmed : "https://" + trimmed
@@ -80,10 +85,14 @@ public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
     public var name: String
     public var badge: String
     public var avatarFilename: String?
+    public var website: URL?
+    public var browserSessionID: UUID?
+    public var username: String?
 
     public init(
         id: UUID = UUID(), profileID: UUID, platformID: UUID, name: String, badge: String = "",
-        avatarFilename: String? = nil
+        avatarFilename: String? = nil, website: URL? = nil, browserSessionID: UUID? = nil,
+        username: String? = nil
     ) {
         self.id = id
         self.profileID = profileID
@@ -91,7 +100,13 @@ public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
         self.name = name
         self.badge = badge
         self.avatarFilename = avatarFilename
+        self.website = website
+        self.browserSessionID = browserSessionID
+        self.username = username
     }
+
+    public var dataStoreID: UUID { browserSessionID ?? id }
+    public var handle: String? { username.flatMap { $0.isEmpty ? nil : "@" + $0 } }
 
     public var initials: String {
         if !badge.isEmpty { return String(badge.prefix(2)) }
@@ -130,10 +145,17 @@ public struct SocialAccountCatalog: Codable, Equatable, Sendable {
                 !account.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && platforms.contains { $0.id == account.platformID }
                     && profiles.contains { $0.id == account.profileID }
+                    && (account.browserSessionID == nil
+                        || account.browserSessionID == account.profileID)
             })
         else { throw SocialAccountError.invalidCatalog }
         for platform in platforms {
             _ = try SocialPlatform.websiteURL(platform.website.absoluteString)
+        }
+        for account in accounts {
+            if let website = account.website {
+                _ = try SocialPlatform.websiteURL(website.absoluteString)
+            }
         }
         return self
     }

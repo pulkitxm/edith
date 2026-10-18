@@ -12,6 +12,9 @@ struct SocialAccountEditor: View {
     @State private var error: String?
     @State private var pictureURL: URL?
     @State private var removingPicture = false
+    @State private var website: String
+    @State private var shareProfileSession: Bool
+    @State private var username: String
 
     init(model: SocialManagerModel, profile: SocialProfile, account: SocialAccount? = nil) {
         self.model = model
@@ -21,6 +24,15 @@ struct SocialAccountEditor: View {
             initialValue: account?.platformID ?? model.catalog.platforms.first?.id ?? UUID())
         _name = State(initialValue: account?.name ?? model.catalog.platforms.first?.name ?? "")
         _badge = State(initialValue: account?.badge ?? "")
+        _username = State(initialValue: account?.username ?? "")
+        let platform = model.catalog.platforms.first {
+            $0.id == (account?.platformID ?? model.catalog.platforms.first?.id)
+        }
+        _website = State(
+            initialValue: (account?.website ?? platform?.website)?.absoluteString ?? "")
+        _shareProfileSession = State(
+            initialValue: account.map { $0.browserSessionID != nil }
+                ?? (platform?.isGoogleService == true))
     }
 
     var body: some View {
@@ -40,12 +52,23 @@ struct SocialAccountEditor: View {
                             name =
                                 model.catalog.platforms.first(where: { $0.id == new })?.name ?? ""
                         }
+                        if let platform = model.catalog.platforms.first(where: { $0.id == new }) {
+                            website = platform.website.absoluteString
+                            shareProfileSession = platform.isGoogleService
+                        }
                     }
                 TextField("Account label", text: $name, prompt: Text("Username or channel name"))
+                TextField("Username", text: $username, prompt: Text("@username"))
                 TextField("Badge", text: $badge, prompt: Text("Optional emoji or initials"))
+                TextField("Account URL", text: $website, prompt: Text("https://studio.youtube.com"))
+                if account?.id != profile.id {
+                    Toggle("Use this profile's Google session", isOn: $shareProfileSession)
+                }
             }
             Text(
-                "Sign in directly on the website. Each account keeps its own cookies and website storage, including across app restarts. Passwords are entered only on the website."
+                shareProfileSession
+                    ? "Shares cookies with this profile's Gmail and linked accounts. Your separate session stays saved if you switch back. Other profiles keep their own logins."
+                    : "This account keeps its own cookies and website storage. Its login and account URL are saved across app restarts."
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary).fixedSize(
                 horizontal: false, vertical: true)
@@ -58,7 +81,8 @@ struct SocialAccountEditor: View {
                         let saved = try model.saveAccount(
                             id: account?.id, profileID: profile.id, platformID: platformID,
                             name: name, badge: badge, pictureURL: pictureURL,
-                            removePicture: removingPicture)
+                            removePicture: removingPicture, website: website,
+                            shareProfileSession: shareProfileSession, username: username)
                         if account == nil { model.open(saved) }
                         dismiss()
                     } catch { self.error = error.localizedDescription }
