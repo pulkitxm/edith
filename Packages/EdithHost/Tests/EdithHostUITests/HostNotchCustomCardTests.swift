@@ -113,7 +113,7 @@ import Testing
                 #expect(!window.isVisible && !window.isKeyWindow && !window.isMainWindow)
                 #expect(host.fittingSize.height.isFinite && host.fittingSize.height > 40)
                 let action = widget == .focus ? "Start focus" : "Allow once"
-                let button = try #require(customCardControls(host, label: action).first)
+                let button = try #require(await awaitedCardControl(host, label: action))
                 #expect((button as AnyObject).accessibilityPerformPress?() == true)
                 await fixture.wait {
                     fixture.model.providers.first?.snapshot.actions.first?.id
@@ -133,7 +133,7 @@ import Testing
                         host.layoutSubtreeIfNeeded()
                         try await Task.sleep(for: .milliseconds(10))
                     }
-                    let finish = try #require(customCardControls(host, label: "Finish").first)
+                    let finish = try #require(await awaitedCardControl(host, label: "Finish"))
                     #expect((finish as AnyObject).accessibilityPerformPress?() == true)
                     for _ in 0..<100 {
                         if await fixture.gate.actions().count == 2 { break }
@@ -386,6 +386,15 @@ private actor CustomCardGate {
         }
         #expect(condition())
     }
+}
+
+@MainActor private func awaitedCardControl(_ host: NSView, label: String) async -> NSObject? {
+    for _ in 0..<200 {
+        if let control = customCardControls(host, label: label).first { return control }
+        host.layoutSubtreeIfNeeded()
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return nil
 }
 
 @MainActor private func customCardControls(_ node: NSObject, label: String, depth: Int = 0)

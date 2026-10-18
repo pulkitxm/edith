@@ -73,13 +73,13 @@ struct HostNotchCompactCardTests {
             }
             #expect(!panel.isVisible && !panel.isKeyWindow)
             #expect(host.fittingSize.height.isFinite && host.fittingSize.height > 30)
-            let open = try #require(compactControls(host, label: "Open Desk tools").first)
+            let open = try #require(await awaitedCompactControl(host, label: "Open Desk tools"))
             #expect(compactControls(host, label: "Open Desk tools").count == 1)
             #expect((open as AnyObject).accessibilityPerformPress?() == true)
             await fixture.wait { fixture.navigation.count == 1 }
             #expect(fixture.navigation.first?.0 == fixture.origin)
             #expect(fixture.navigation.first?.0.tile.widget.destination == "desk")
-            let action = try #require(compactControls(host, label: "Change").first)
+            let action = try #require(await awaitedCompactControl(host, label: "Change"))
             #expect((action as AnyObject).accessibilityPerformPress?() == true)
             for _ in 0..<100 {
                 if await fixture.gate.performed().count == 1 { break }
@@ -353,6 +353,15 @@ private func compactFixtureSnapshot(providerID: String, value: String) throws ->
                 actions: [.init("change", "Change", "checkmark")])
         ], actions: providerID == "terminal" ? [.init("new", "New terminal", "plus")] : []
     ).encoded()
+}
+
+@MainActor private func awaitedCompactControl(_ host: NSView, label: String) async -> NSObject? {
+    for _ in 0..<200 {
+        if let control = compactControls(host, label: label).first { return control }
+        host.layoutSubtreeIfNeeded()
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return nil
 }
 
 @MainActor

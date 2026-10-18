@@ -478,7 +478,7 @@ private struct SkeuoSwitch: View {
                 }
                 .contentShape(track)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.edith(.borderless))
             .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: on)
         }
         .opacity(enabled ? 1 : 0.45)
