@@ -108,7 +108,8 @@ private struct SidebarNavRow: View {
             } label: {
                 HStack(spacing: UIScale.pt(11)) {
                     AppGlyph(item, size: UIScale.pt(15), weight: .medium)
-                        .foregroundStyle(selected ? .primary : .secondary)
+                        .foregroundStyle(
+                            selected ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
                         .frame(width: UIScale.pt(22))
                     Text(item.title)
                         .font(
@@ -134,7 +135,7 @@ private struct SidebarNavRow: View {
                     }
                 }
             }
-            .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+            .buttonStyle(.skeuoRow(selected: selected, tint: theme))
             .padding(.leading, indented ? UIScale.pt(18) : 0)
             .accessibilityValue(
                 disclosureExpanded.map { $0 ? "Expanded" : "Collapsed" } ?? ""
@@ -156,10 +157,9 @@ private struct SidebarNavRow: View {
                             width: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth),
                             height: UIScale.pt(SidebarDisclosureGeometry.controlSlotWidth)
                         )
-                        .background(
-                            Color.primary.opacity(rowHovered && !selected ? 0.055 : 0),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                        )
+                        .background {
+                            SkeuoKey(rowHovered && !selected ? .recessed : .flat, cornerRadius: 6)
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
@@ -290,7 +290,7 @@ private struct SidebarSectionRow: View {
             .font(.system(size: UIScale.pt(12.5), weight: .medium))
             .foregroundStyle(selected ? .primary : .secondary)
         }
-        .buttonStyle(EdithButtonStyle(.row, selected: selected, tint: theme))
+        .buttonStyle(.skeuoRow(selected: selected, tint: theme))
         .padding(.leading, indented ? UIScale.pt(18) : 0)
         .accessibilityHint(child.summary)
         .help("\(child.title) (⌘-click to open in its own window)")
@@ -783,7 +783,7 @@ struct MainWindowView: View {
                     sidebarList
                     if footerVisible {
                         VStack(spacing: 0) {
-                            Divider()
+                            SkeuoGroove()
                             sidebarFooter
                         }
                         .transition(sidebarUtilityTransition)
@@ -829,8 +829,12 @@ struct MainWindowView: View {
         case let .page(page):
             if page.band == .app, page.id == MainDestination.appItems.first?.rawValue {
                 Text("App")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                    .font(.system(size: UIScale.pt(10), weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondary)
+                    .skeuoEngraved(scheme == .dark)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.horizontal, UIScale.pt(8))
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(4))
@@ -1089,7 +1093,7 @@ struct MainWindowView: View {
             .foregroundStyle(DashSkin.sage)
             .padding(.horizontal, UIScale.pt(9))
             .frame(height: UIScale.pt(28))
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+            .background { SkeuoKey(.raised, cornerRadius: 9) }
         }
         .buttonStyle(.edith(.borderless))
         .help("Show update options")
@@ -1306,10 +1310,10 @@ struct MainWindowView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(8))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-            .background(
-                active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-            )
+            .background {
+                SkeuoKey(active ? .pressed : .raised, cornerRadius: 9, tint: active ? theme : nil)
+            }
+            .accessibilityAddTraits(active ? .isSelected : AccessibilityTraits())
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
@@ -1317,9 +1321,8 @@ struct MainWindowView: View {
     }
 
     private var sidebarEdge: some View {
-        Rectangle()
-            .fill(Color(nsColor: .separatorColor))
-            .frame(width: UIScale.pt(1))
+        SkeuoGroove(.vertical)
+            .frame(width: UIScale.pt(2))
             .overlay {
                 Color.clear
                     .frame(width: UIScale.pt(9))
