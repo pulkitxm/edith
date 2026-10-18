@@ -178,6 +178,7 @@ public final class HostRemoteSessionManager {
         -> HostLocalSceneHandle
     {
         try Task.checkCancellation()
+        try await marketplace.sessions.startIfIdle(request.extensionID)
         let configuration = try selectedConfiguration(for: request)
         let id = request.extensionID
         let engine =
@@ -209,6 +210,7 @@ public final class HostRemoteSessionManager {
         -> HostRemoteSceneHandle
     {
         try Task.checkCancellation()
+        try await marketplace.sessions.startIfIdle(request.extensionID)
         let configuration = try selectedConfiguration(for: request)
         let id = request.extensionID
         let engine =

@@ -93,6 +93,42 @@ import Testing
         #expect(fixture.sessions.processIdentifiers.isEmpty)
     }
 
+    @Test func onDemandExtensionsWaitForFirstUse() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ambient = fixture.package("1.0.0")
+        let onDemand = fixture.package("1.0.0", id: "studio")
+        try await fixture.sessions.enable(ambient)
+        try await fixture.sessions.enable(onDemand)
+        await fixture.sessions.shutdown()
+        await fixture.sessions.restore(packages: [ambient.id: ambient, onDemand.id: onDemand])
+        #expect(fixture.sessions.states[ambient.id] == .active)
+        #expect(fixture.sessions.states[onDemand.id] == .idle)
+        #expect(fixture.sessions.processIdentifiers[onDemand.id] == nil)
+        #expect(fixture.sessions.enabledIDs == [ambient.id, onDemand.id])
+        try await fixture.sessions.startIfIdle(onDemand.id)
+        #expect(fixture.sessions.states[onDemand.id] == .active)
+        #expect(fixture.sessions.processIdentifiers[onDemand.id] != nil)
+        await fixture.sessions.shutdown()
+    }
+
+    @Test func disablingAnIdleExtensionStartsNoWorker() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let onDemand = fixture.package("1.0.0", id: "studio")
+        try await fixture.sessions.enable(onDemand)
+        await fixture.sessions.shutdown()
+        let started = fixture.records.workers.count
+        await fixture.sessions.restore(packages: [onDemand.id: onDemand])
+        try await fixture.sessions.disable(id: onDemand.id)
+        #expect(fixture.records.workers.count == started)
+        #expect(fixture.sessions.states[onDemand.id] == .disabled)
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+        await fixture.sessions.restore(packages: [onDemand.id: onDemand])
+        #expect(fixture.sessions.states[onDemand.id] == .disabled)
+        #expect(fixture.records.workers.count == started)
+    }
+
     @Test func updatingRestartsOnlyTheAffectedWorker() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

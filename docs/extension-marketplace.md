@@ -8,6 +8,12 @@ Onboarding lives inside the app. Choose Agentic, Creative, Developer, Essentials
 
 The Extensions page supports search, categories, individual downloads and enable controls. Downloading, enabling and removing are separate actions. Undownloaded extension pages stay out of navigation. Downloaded extensions retain their original pages and controls. Home and Notch layouts belong to the app; extension cards follow installed and active provider availability. Disabling a provider makes its live cards inactive while retaining the saved layout.
 
+## When extensions run
+
+Enabled extensions that own hotkeys, monitors, menu bar items or scheduled jobs start when Edith launches. Extensions that only serve their own pages, cards and commands, such as Studio, Terminal, Database and LaTeX, stay idle until one of those is first used, then start and keep running. `HostExtensionActivationPolicy` lists the idle-until-used extensions.
+
+⌘Q closes Edith's windows and keeps it running with every started extension. Quit Edith Completely (⌥⌘Q), `ed app quit --completely`, logging out and the Dock's Quit stop all extensions. Opening Edith again shows the main window.
+
 ## App and extension updates
 
 Sparkle updates the app bundle. Extension updates use the signed marketplace catalog and independent package releases. Updating the app preserves downloaded packages and extension user data. Selection checks the package ABI, architecture and minimum macOS version before loading code. An incompatible package stays inactive until a compatible replacement is available. The `minimumSystemVersion` field is a canonical `major.minor.patch` string in the definition, catalog record and sealed payload manifest, and all three must agree. Admission compares the full running system version numerically. AudioMixer requires `14.4.0`, so macOS 14.0 through 14.3 cannot install or start it.

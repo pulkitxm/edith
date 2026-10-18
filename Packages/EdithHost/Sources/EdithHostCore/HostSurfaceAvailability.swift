@@ -29,7 +29,9 @@ public struct HostSurfaceAvailability: Sendable {
     }
 
     public var activeIDs: Set<String> {
-        installedIDs.intersection(knownIDs).filter { states[$0] == .active }
+        installedIDs.intersection(knownIDs).filter {
+            states[$0] == .active || states[$0] == .idle
+        }
     }
 
     public func status(_ widget: SurfaceWidget) -> HostSurfaceAvailabilityState {

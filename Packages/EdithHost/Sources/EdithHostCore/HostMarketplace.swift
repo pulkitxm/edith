@@ -264,13 +264,17 @@ public final class HostMarketplace {
             }
             if let package = plan.first(where: { $0.id == id }) {
                 do {
-                    if sessions.automaticallyEnabledIDs.contains(id), sessions.states[id] != .active
+                    if sessions.states[id] == .idle {
+                        sessions.park(package)
+                    } else if sessions.automaticallyEnabledIDs.contains(id),
+                        sessions.states[id] != .active
                     {
                         try await sessions.enable(package)
                     } else {
                         try await sessions.applyUpdate(package)
                     }
                     if !sessions.enabledIDs.contains(id) || sessions.versions[id] == package.version
+                        || sessions.states[id] == .idle
                     {
                         try store.select(package)
                     }

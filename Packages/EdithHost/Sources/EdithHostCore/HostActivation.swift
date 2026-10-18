@@ -3,6 +3,7 @@ import Foundation
 public enum HostActivationState: String, Codable, Sendable {
     case notInstalled
     case disabled
+    case idle
     case starting
     case active
     case stopping

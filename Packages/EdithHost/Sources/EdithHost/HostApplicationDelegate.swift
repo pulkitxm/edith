@@ -113,7 +113,9 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if deferringQuit { quitCancelled = true }
-        return true
+        guard !hasVisibleWindows else { return true }
+        showMainWindow()
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

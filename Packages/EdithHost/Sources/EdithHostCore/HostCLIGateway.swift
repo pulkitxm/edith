@@ -52,6 +52,7 @@ import Foundation
     }
 
     private func invoke(_ request: HostCLIRequest, id: String) async throws -> Data {
+        try? await marketplace.sessions.startIfIdle(id)
         guard let package = marketplace.installed[id],
             marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.versions[id] == package.version,

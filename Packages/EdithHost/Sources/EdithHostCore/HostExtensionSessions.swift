@@ -132,9 +132,29 @@ public final class HostExtensionSessions {
                 try await stop(id: id, remember: false, reason: .shutdown)
                 if enabledIDs.contains(id) { try await enable(package) }
             } catch { failures.insert(id) }
-        } else {
+        } else if HostExtensionActivationPolicy.startsAtLaunch(id) {
             do { try await enable(package) } catch { failures.insert(id) }
+        } else {
+            park(package)
         }
+    }
+
+    public var idleIDs: Set<String> {
+        Set(states.keys.filter { states[$0] == .idle })
+    }
+
+    public func park(_ package: ExtensionPackage) {
+        guard workers[package.id] == nil, states[package.id] != .starting,
+            states[package.id] != .stopping
+        else { return }
+        packages[package.id] = package
+        states[package.id] = .idle
+    }
+
+    public func startIfIdle(_ id: String) async throws {
+        while states[id] == .starting { try await Task.sleep(for: .milliseconds(50)) }
+        guard states[id] == .idle, let package = packages[id] else { return }
+        try await enable(package)
     }
 
     public func enable(_ package: ExtensionPackage) async throws {
@@ -292,6 +312,15 @@ public final class HostExtensionSessions {
             throw HostWorkerError.rejected
         }
         cancelRetry(id)
+        if states[id] == .idle, workers[id] == nil, !pendingRecoveryIDs.contains(id) {
+            try await willDisable(id)
+            if remember { save(enabledIDs.subtracting([id])) }
+            pendingDisableIDs.remove(id)
+            packages[id] = nil
+            states[id] = .disabled
+            clearFailure(id)
+            return
+        }
         if remember, enabledIDs.contains(id) || workers[id] != nil { pendingDisableIDs.insert(id) }
         states[id] = .stopping
         ambientPolicyCoordinator.release(owner: id)

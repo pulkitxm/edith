@@ -239,7 +239,7 @@ struct MarketplacePage: View {
                 if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
                     Button("Retry disable") { Task { await suites.select(entry, enabled: false) } }
                     Button("Enable instead") { Task { await suites.select(entry, enabled: true) } }
-                } else if marketplace.sessions.states[entry.id] == .active {
+                } else if [.active, .idle].contains(marketplace.sessions.states[entry.id]) {
                     if HostNavigationCatalog.route(extensionID: entry.id) != nil {
                         Button("Open") { open(entry) }
                         if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
