@@ -258,7 +258,8 @@ final class HerdrStore {
     private let remoteAccountAgentStarter:
         @Sendable (ClaudeAccount, String, [String], String, String, Machine) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
-    @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var unconfirmedAgentKinds: [String: String] = [:]
+    @ObservationIgnored private(set) var agentStartupTasks: [String: Task<Void, Never>] = [:]
     private let agentFocuser: @Sendable (String, String, Machine?) async throws -> Void
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let workspacePresenter: @MainActor () -> Void
@@ -682,6 +683,7 @@ final class HerdrStore {
         inventoryReceived = true
         reconcileAccountSessions(snapshots.flatMap(\.agents))
         if hosts != snapshots { hosts = snapshots }
+        reconcileAgentStartupMessages()
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),
                 sessions[index].agent != updated
@@ -1557,6 +1559,7 @@ final class HerdrStore {
         }
         agentStartupTasks.removeValue(forKey: id)?.cancel()
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
         sessions.remove(at: index)
         detachFromLayout(id)
@@ -1976,9 +1979,24 @@ final class HerdrStore {
 
     func dismissAgentStartupMessage(_ id: String) {
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
     }
 
     nonisolated static let accountSessionsKey = "herdr.claudeAccountSessions"
+    private func reconcileAgentStartupMessages() {
+        guard !unconfirmedAgentKinds.isEmpty else { return }
+        for host in hosts where host.reachable && host.error == nil {
+            for agent in host.agents where unconfirmedAgentKinds[agent.id] == agent.kind {
+                switch agent.status {
+                case .idle, .working, .done:
+                    dismissAgentStartupMessage(agent.id)
+                case .blocked, .unknown:
+                    break
+                }
+            }
+        }
+    }
+
     nonisolated static func restoredAccountSessions(_ stored: [String: String]) -> [String: String]
     {
         Dictionary(
@@ -2072,6 +2090,10 @@ final class HerdrStore {
                     account == nil
                     ? HerdrLaunchOperations.startupMessage(for: error)
                     : "The selected account could not start. Check this terminal before trying again."
+                if account == nil, HerdrLaunchOperations.canConfirmStartup(after: error) {
+                    self?.unconfirmedAgentKinds[id] = kind
+                    self?.reconcileAgentStartupMessages()
+                }
             }
             self?.agentStartupTasks[id] = nil
         }

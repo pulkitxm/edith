@@ -145,6 +145,15 @@ public enum HerdrLaunchOperations {
     private static let agentStartTimeoutMS = 30_000
     private static let shellReadyTimeout: Duration = .seconds(15)
 
+    public static func canConfirmStartup(after error: Error) -> Bool {
+        guard case HerdrCommandError.commandFailed(let response) = error,
+            let object = HerdrListParser.firstJSON(in: response) as? [String: Any],
+            let detail = object["error"] as? [String: Any],
+            let code = detail["code"] as? String
+        else { return false }
+        return code == "timeout" || code == "agent_not_ready"
+    }
+
     public static func startupMessage(for error: Error) -> String {
         if case HerdrCommandError.commandFailed(let response) = error,
             let object = HerdrListParser.firstJSON(in: response) as? [String: Any],
