@@ -24,7 +24,7 @@ struct SocialBrowserCanvas: View {
                             tab.zoomed == key
                             ? tab.layout.content(in: rect, gap: gap) : frames[key] ?? rect
                         let visible =
-                            tab.id == model.selectedTabID
+                            !model.showingAccounts && tab.id == model.selectedTabID
                             && (tab.zoomed == nil || tab.zoomed == key)
                         SocialBrowserPane(
                             model: model, account: account, session: session, tab: tab
@@ -118,16 +118,8 @@ private struct SocialBrowserPane: View {
             .padding(UIScale.pt(8))
             .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
             .contextMenu { paneActions }
-            .draggable("social-account:\(account.id)")
-            .dropDestination(for: String.self) { values, location in
-                guard let value = values.first, value.hasPrefix("social-account:"),
-                    let id = UUID(uuidString: String(value.dropFirst(15))),
-                    let moved = model.account(id.uuidString)
-                else { return false }
-                model.moveToTab(
-                    moved, tabID: tab.id, near: key, side: location.y > 22 ? .bottom : .right)
-                return true
-            }
+            .herdrDropFrame("paneHeader:" + key)
+            .herdrDraggable(.pane(key), simultaneous: true)
             if session.pages.count > 1 {
                 ScrollView(.horizontal) {
                     HStack {
@@ -197,7 +189,7 @@ private struct SocialBrowserPane: View {
     }
 }
 
-private struct SocialBrowserContent: View {
+struct SocialBrowserContent: View {
     let model: SocialManagerModel
     let account: SocialAccount
     let page: SocialBrowserPage

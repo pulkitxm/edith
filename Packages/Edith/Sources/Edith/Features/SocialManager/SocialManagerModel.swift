@@ -2,6 +2,7 @@ import AppKit
 import EdithKit
 import Foundation
 import Observation
+import SwiftUI
 import WebKit
 
 struct SocialWorkspaceTab: Identifiable, Equatable {
@@ -32,6 +33,11 @@ final class SocialManagerModel {
     var clearingAccount: SocialAccount?
     var removingAccount: SocialAccount?
     var addressFocusRequest = UUID()
+    var animatesLayout = false {
+        didSet { defaults.set(animatesLayout, forKey: "socialManager.animatesLayout") }
+    }
+    private(set) var savedArrangements: [HerdrSavedArrangement] = []
+    @ObservationIgnored private let defaults: UserDefaults
     private(set) var recentlyClosed: [SocialWorkspaceTab] = []
     private(set) var busy = false
     let load = ContentLoad()
@@ -42,6 +48,7 @@ final class SocialManagerModel {
 
     init(
         file: SocialAccountFile = SocialAccountFile(),
+        defaults: UserDefaults = SharedDefaults.store,
         sessionFactory:
             @escaping @MainActor (SocialAccount, SocialPlatform, WKWebsiteDataStore?) ->
             SocialBrowserSession = {
@@ -52,6 +59,12 @@ final class SocialManagerModel {
             }
     ) {
         self.file = file
+        self.defaults = defaults
+        animatesLayout = defaults.bool(forKey: "socialManager.animatesLayout")
+        savedArrangements =
+            defaults.data(forKey: "socialManager.savedArrangements").flatMap {
+                try? JSONDecoder().decode([HerdrSavedArrangement].self, from: $0)
+            } ?? []
         avatarFiles = SocialAvatarFiles(
             directory: file.url.deletingLastPathComponent().appendingPathComponent("avatars"))
         self.sessionFactory = sessionFactory
@@ -201,8 +214,9 @@ final class SocialManagerModel {
 
     func open(_ account: SocialAccount, beside: Bool = false, side: InsertSide = .right) {
         guard !busy, catalog.accounts.contains(where: { $0.id == account.id }),
-            let platform = platform(for: account)
+            ensureBrowser(account)
         else { return }
+        SocialWorkspaceWindow.reattach(account.id.uuidString, to: self)
         let key = account.id.uuidString
         let target = selectedTabID
         if let existing = tabs.first(where: { $0.layout.contains(key) }) {
@@ -218,12 +232,6 @@ final class SocialManagerModel {
             removePane(key)
             selectedTabID = target
         }
-        if sessions[account.id] == nil {
-            let session = sessionFactory(account, platform, dataStores[account.id])
-            dataStores[account.id] = session.dataStore
-            session.onFocus = { [weak self] in self?.focus(key) }
-            sessions[account.id] = session
-        }
         if beside, currentTab != nil {
             updateTab {
                 $0.layout = $0.layout.inserting(.pane(key), near: $0.focused, side: side)
@@ -237,6 +245,18 @@ final class SocialManagerModel {
         }
         showingAccounts = false
         activateFocusedBrowser()
+    }
+
+    @discardableResult
+    func ensureBrowser(_ account: SocialAccount) -> Bool {
+        guard let platform = platform(for: account) else { return false }
+        if sessions[account.id] == nil {
+            let session = sessionFactory(account, platform, dataStores[account.id])
+            dataStores[account.id] = session.dataStore
+            session.onFocus = { [weak self] in self?.focus(account.id.uuidString) }
+            sessions[account.id] = session
+        }
+        return true
     }
 
     func select(_ tab: SocialWorkspaceTab) {
@@ -309,6 +329,7 @@ final class SocialManagerModel {
     }
 
     func closeAccount(_ key: String, remember: Bool = true) {
+        SocialWorkspaceWindow.reattach(key, to: self)
         if remember, let account = account(key) {
             rememberClosed(SocialWorkspaceTab(account: account))
         }
@@ -330,6 +351,12 @@ final class SocialManagerModel {
     func takeClosedTab() -> SocialWorkspaceTab? { recentlyClosed.popLast() }
 
     func modifyTabs(_ change: (inout [SocialWorkspaceTab]) -> Void) { change(&tabs) }
+
+    func modifyArrangements(_ change: (inout [HerdrSavedArrangement]) -> Void) {
+        change(&savedArrangements)
+        defaults.set(
+            try? JSONEncoder().encode(savedArrangements), forKey: "socialManager.savedArrangements")
+    }
 
     func importAvatar(_ account: SocialAccount, from url: URL) throws {
         guard !busy, let current = self.account(account.id.uuidString) else { return }
@@ -426,6 +453,7 @@ final class SocialManagerModel {
     }
 
     func shutdown() {
+        SocialWorkspaceWindow.closeAll(for: self)
         for session in sessions.values { session.shutdown() }
         sessions = [:]
         dataStores = [:]

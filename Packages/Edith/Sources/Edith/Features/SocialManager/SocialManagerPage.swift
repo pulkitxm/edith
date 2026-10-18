@@ -13,9 +13,16 @@ struct SocialManagerPage: View {
     @State private var addingProfile = false
     @State private var editingProfile: SocialProfile?
     @State private var removingProfile: SocialProfile?
+    @State private var drag: HerdrDragCoordinator
+    @State private var railOpen = true
+    @State private var compactRailPresented = false
+    @State private var layoutPopoverOpen = false
     private let providedModel: SocialManagerModel?
 
-    init(model: SocialManagerModel? = nil) { providedModel = model }
+    init(model: SocialManagerModel? = nil, drag: HerdrDragCoordinator? = nil) {
+        providedModel = model
+        _drag = State(initialValue: drag ?? HerdrDragCoordinator())
+    }
 
     private var model: SocialManagerModel {
         providedModel ?? owner?.socialManager ?? fallback.socialManager
@@ -28,9 +35,6 @@ struct SocialManagerPage: View {
             PageHeader("Social Manager") {
                 if let account = model.focusedAccount, let profile = model.profile(for: account) {
                     SocialEmailMenu(model: model, profile: profile)
-                }
-                if !model.showingAccounts, let tab = model.currentTab {
-                    layoutMenu(tab)
                 }
                 Button {
                     if model.selectedProfile == nil {
@@ -64,14 +68,35 @@ struct SocialManagerPage: View {
             }
             Divider()
         } content: {
-            if model.showingAccounts || model.currentTab == nil {
-                library
-            } else {
-                SocialBrowserCanvas(model: model)
+            HStack(spacing: 0) {
+                if railOpen, !compact, !model.showingAccounts {
+                    accountRail.frame(width: UIScale.pt(240))
+                    Divider()
+                }
+                ZStack {
+                    library.opacity(model.showingAccounts ? 1 : 0)
+                        .allowsHitTesting(model.showingAccounts).accessibilityHidden(
+                            !model.showingAccounts)
+                    SocialBrowserCanvas(model: model)
+                        .opacity(model.showingAccounts ? 0 : 1)
+                        .allowsHitTesting(!model.showingAccounts).accessibilityHidden(
+                            model.showingAccounts)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .herdrDropFrame(HerdrDropGeometry.canvasKey)
             }
         }
+        .overlay { HerdrDragOverlay(drag: drag, store: model, hideAgents: false) }
+        .herdrDropFrame(HerdrDropGeometry.pageKey)
+        .coordinateSpace(name: HerdrDragCoordinator.space)
+        .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
+        .environment(drag)
         .pageTask { model.start() }
         .onAppear {
+            drag.store = model
+            drag.unit = UIScale.current
+            drag.gap = UIScale.pt(6)
+            drag.onPaneTearOff = { SocialWorkspaceWindow.open($0, from: model) }
             router?.registerWorkspaceCommands(owner: commandOwner) { [weak model] command in
                 guard !addingAccount, !addingPlatform, !addingProfile,
                     editingProfile == nil, removingProfile == nil,
@@ -81,7 +106,12 @@ struct SocialManagerPage: View {
                 return model?.perform(command) ?? false
             }
         }
-        .onDisappear { router?.unregisterWorkspaceCommands(owner: commandOwner) }
+        .onDisappear {
+            drag.cancel(); router?.unregisterWorkspaceCommands(owner: commandOwner)
+        }
+        .edithSheet(isPresented: $compactRailPresented) {
+            accountRail.frame(minWidth: UIScale.pt(280), minHeight: UIScale.pt(350))
+        }
         .edithSheet(isPresented: $addingAccount, dismissible: false) {
             if let profile = model.selectedProfile {
                 SocialAccountEditor(model: model, profile: profile)
@@ -150,64 +180,88 @@ struct SocialManagerPage: View {
     }
 
     private var tabs: some View {
-        PageTabStrip(
-            selection: model.showingAccounts
-                ? "accounts" : model.selectedTabID?.uuidString ?? "accounts"
-        ) {
-            HStack(spacing: UIScale.pt(6)) {
-                tabChip("Profiles", symbol: "person.2", selected: model.showingAccounts) {
-                    model.showingAccounts = true
-                    model.profileID = nil
-                }.id("accounts")
-                    .contextMenu {
-                        Button("Add profile") { addingProfile = true }
-                        Button("Reopen closed tab") { model.reopenClosedTab() }
-                            .disabled(model.recentlyClosed.isEmpty)
-                    }
-                ForEach(model.tabs) { tab in
-                    HStack(spacing: UIScale.pt(4)) {
-                        tabChip(
-                            model.title(tab),
-                            symbol: tab.layout.paneCount > 1 ? "rectangle.split.2x1" : "globe",
-                            selected: !model.showingAccounts && model.selectedTabID == tab.id
-                        ) { model.select(tab) }
-                        Button {
-                            model.closeTab(tab.id)
-                        } label: {
-                            Image(systemName: "xmark")
+        HStack(spacing: UIScale.pt(8)) {
+            Button {
+                if compact { compactRailPresented.toggle() } else { railOpen.toggle() }
+            } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .accessibilityLabel("Show accounts").help("Show or hide the account list")
+            .padding(.leading, PageMetrics.gutter(compact))
+            PageTabStrip(
+                selection: model.showingAccounts
+                    ? "accounts" : model.selectedTabID?.uuidString ?? "accounts"
+            ) {
+                HStack(spacing: UIScale.pt(6)) {
+                    WorkspaceTabChip(
+                        id: "accounts", selected: model.showingAccounts,
+                        select: {
+                            model.showingAccounts = true
+                            model.profileID = nil
                         }
-                        .buttonStyle(.edith(.borderless))
-                        .accessibilityLabel("Close \(model.title(tab))")
-                        .help("Close tab. Login sessions are kept.")
-                    }
-                    .id(tab.id.uuidString)
-                    .contextMenu { SocialTabActions(model: model, tab: tab) }
-                    .draggable("social-tab:\(tab.id)")
-                    .dropDestination(for: String.self) { values, _ in
-                        guard let value = values.first, value.hasPrefix("social-tab:"),
-                            let id = UUID(uuidString: String(value.dropFirst(11)))
-                        else { return false }
-                        model.reorderTab(id, before: tab.id)
-                        return true
+                    ) {
+                        Label("Profiles", systemImage: "person.2").font(.edithText(.subheadline))
+                    }.id("accounts")
+                        .contextMenu {
+                            Button("Add profile") { addingProfile = true }
+                            Button("Reopen closed tab") { model.reopenClosedTab() }
+                                .disabled(model.recentlyClosed.isEmpty)
+                        }
+                    ForEach(model.tabs) { tab in
+                        WorkspaceTabChip(
+                            id: tab.id.uuidString,
+                            selected: !model.showingAccounts && model.selectedTabID == tab.id,
+                            select: { model.select(tab) }
+                        ) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                WorkspacePaneMarks(
+                                    panes: tab.layout.panes.compactMap(model.paneIdentity),
+                                    dark: dark, size: 11)
+                                Text(
+                                    tab.layout.panes.first.flatMap(model.account).map(
+                                        model.accountTitle) ?? "Account"
+                                )
+                                .font(.edithText(.subheadline)).lineLimit(1)
+                                if tab.layout.paneCount > 1 {
+                                    Text("+\(tab.layout.paneCount - 1)")
+                                        .font(DashSkin.mono(9.5, weight: .semibold))
+                                        .padding(.horizontal, UIScale.pt(5)).padding(
+                                            .vertical, UIScale.pt(1)
+                                        )
+                                        .background(
+                                            DashSkin.paper(dark).opacity(0.8), in: Capsule())
+                                }
+                                Button {
+                                    model.closeTab(tab.id)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                                        .foregroundStyle(DashSkin.inkFaint(dark))
+                                }
+                                .buttonStyle(.edith(.borderless))
+                                .accessibilityLabel("Close \(model.title(tab))")
+                                .help("Close tab. Login sessions are kept.")
+                            }
+                        }
+                        .id(tab.id.uuidString)
+                        .contextMenu { SocialTabActions(model: model, tab: tab) }
+                        .herdrDraggable(.tab(tab.id.uuidString))
                     }
                 }
+                .padding(.vertical, UIScale.pt(8))
             }
-            .padding(.vertical, UIScale.pt(8)).pageGutter(compact)
+            if !model.showingAccounts, let tab = model.currentTab {
+                WorkspaceLayoutButton(
+                    split: tab.layout.paneCount > 1, presented: $layoutPopoverOpen
+                ) {
+                    if let current = model.currentTab {
+                        SocialWorkspaceLayout(model: model, tab: current)
+                    }
+                }.disabled(model.busy).padding(.trailing, PageMetrics.gutter(compact))
+            }
         }
-    }
-
-    private func tabChip(
-        _ title: String, symbol: String, selected: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.edithText(.subheadline)).lineLimit(1)
-                .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(7))
-                .background(selected ? DashSkin.accent(dark).opacity(0.15) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
-        }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .herdrDropFrame(HerdrDropGeometry.tabBarKey)
+        .background(DashSkin.paper2(dark).opacity(0.4))
     }
 
     private var library: some View {
@@ -413,52 +467,57 @@ struct SocialManagerPage: View {
         .background(DashSkin.paper2(dark)).clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))
         .contextMenu { SocialAccountActions(model: model, account: account) }
-        .draggable("social-account:\(account.id)")
-        .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first, value.hasPrefix("social-account:"),
-                let id = UUID(uuidString: String(value.dropFirst(15)))
-            else { return false }
-            model.reorderAccount(id, before: account)
-            return true
-        }
+        .herdrDraggable(.pane(account.id.uuidString), simultaneous: true)
         .disabled(model.busy)
     }
 
-    private func layoutMenu(_ tab: SocialWorkspaceTab) -> some View {
-        Menu {
-            ForEach(model.catalog.profiles) { profile in
-                let accounts = model.catalog.accounts.filter {
-                    $0.profileID == profile.id && !tab.layout.contains($0.id.uuidString)
-                }
-                if !accounts.isEmpty {
-                    Menu(profile.name) {
-                        ForEach(accounts) { account in
-                            Menu(
-                                "\(model.platform(for: account)?.name ?? "Website"): \(account.name)"
-                            ) {
-                                Button("Open to the right") { model.open(account, beside: true) }
-                                Button("Open below") {
-                                    model.open(account, beside: true, side: .bottom)
-                                }
-                            }
-                        }
+    private var accountRail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                Menu {
+                    ForEach(model.catalog.profiles) { profile in
+                        Button(profile.name) { model.profileID = profile.id }
                     }
+                } label: {
+                    Label(model.selectedProfile?.name ?? "Choose profile", systemImage: "person.2")
                 }
-            }
-            Divider()
-            Button("Columns", systemImage: "rectangle.split.2x1") { model.arrange(.horizontal) }
-                .disabled(tab.layout.paneCount < 2)
-            Button("Rows", systemImage: "rectangle.split.1x2") { model.arrange(.vertical) }
-                .disabled(tab.layout.paneCount < 2)
-            Button("Grid", systemImage: "square.grid.2x2") { model.grid() }
-                .disabled(tab.layout.paneCount < 3)
-            Button("Equalize panes") { model.equalize() }.disabled(tab.layout.paneCount < 2)
-            Button("Separate into tabs") { model.separate() }.disabled(tab.layout.paneCount < 2)
-        } label: {
-            Label(
-                tab.layout.paneCount > 1 ? "Layout" : "Side by side",
-                systemImage: "rectangle.split.2x1")
+                .padding(.vertical, UIScale.pt(8))
+                if let profile = model.selectedProfile {
+                    ForEach(model.accounts(in: profile)) { account in
+                        HStack(spacing: UIScale.pt(8)) {
+                            SocialAvatar(
+                                image: model.avatars[account.id], initials: account.initials,
+                                name: account.name, size: 28)
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                Text(account.name).font(.edithText(.subheadline)).lineLimit(1)
+                                Text(model.platform(for: account)?.name ?? "Website").font(
+                                    .edithText(.caption)
+                                ).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(UIScale.pt(8)).contentShape(Rectangle())
+                        .background(
+                            DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
+                        .onTapGesture {
+                            model.open(account); compactRailPresented = false
+                        }
+                        .contextMenu { SocialAccountActions(model: model, account: account) }
+                        .herdrDropFrame(HerdrDropGeometry.agentPrefix + account.id.uuidString)
+                        .herdrDraggable(.pane(account.id.uuidString))
+                        .help(
+                            "Drag into a pane edge to split, its center to swap, or onto a tab to combine"
+                        )
+                    }
+                    SocialEmailMenu(model: model, profile: profile)
+                }
+                Button("Manage profiles") {
+                    model.showingAccounts = true; compactRailPresented = false
+                }
+            }.padding(UIScale.pt(10))
         }
-        .disabled(model.busy)
+        .herdrDropFrame(HerdrDropGeometry.sidebarKey)
+        .background(DashSkin.paper(dark))
     }
 }
