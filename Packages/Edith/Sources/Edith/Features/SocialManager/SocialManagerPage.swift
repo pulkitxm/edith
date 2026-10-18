@@ -401,7 +401,7 @@ struct SocialManagerPage: View {
     }
 
     private func accounts(for profile: SocialProfile) -> some View {
-        let accounts = model.filteredAccounts.filter { $0.profileID == profile.id }
+        let accounts = model.filteredAccounts(in: profile)
         return VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack {
                 SocialAvatar(
@@ -421,9 +421,13 @@ struct SocialManagerPage: View {
                 }
                 Button("Add account", systemImage: "plus") { addingAccount = true }
             }.disabled(model.busy)
-            SocialAccountFilters(model: model)
+            SocialAccountFilters(model: model, includesProfile: false)
             SocialOpenAccountsMenu(model: model, accounts: accounts)
-            if accounts.isEmpty {
+            if accounts.isEmpty, !model.accounts(in: profile).isEmpty {
+                Text("No accounts match these filters.").font(.edithText(.body)).foregroundStyle(
+                    .secondary)
+                Button("Reset filters") { model.resetAccountFilters() }
+            } else if accounts.isEmpty {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     Text("Add accounts to \(profile.name)").font(.edithText(.headline))
                     Text(
@@ -508,38 +512,10 @@ struct SocialManagerPage: View {
                 Text("\(model.filteredAccounts.count) accounts").font(.edithText(.caption))
                     .foregroundStyle(.secondary)
                 ForEach(model.filteredAccounts) { account in
-                    HStack(spacing: UIScale.pt(8)) {
-                        SocialAvatar(
-                            image: model.avatars[account.id], initials: account.initials,
-                            name: account.name, size: 28)
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(account.handle ?? account.name).font(.edithText(.subheadline))
-                                .lineLimit(1)
-                            Text(
-                                [
-                                    model.profile(for: account)?.name,
-                                    model.platform(for: account)?.name,
-                                ].compactMap { $0 }.joined(separator: " · ")
-                            ).font(
-                                .edithText(.caption)
-                            ).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        if model.paneIsOpen(account.id.uuidString) {
-                            Image(systemName: "circle.fill").font(.system(size: UIScale.pt(6)))
-                                .foregroundStyle(DashSkin.accent(dark)).accessibilityLabel("Open")
-                        }
+                    SocialAccountListRow(model: model, account: account, compactRow: true) {
+                        compactRailPresented = false
                     }
-                    .padding(UIScale.pt(8)).contentShape(Rectangle())
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .onTapGesture {
-                        model.open(account); compactRailPresented = false
-                    }
-                    .contextMenu { SocialAccountActions(model: model, account: account) }
                     .herdrDropFrame(HerdrDropGeometry.agentPrefix + account.id.uuidString)
-                    .herdrDraggable(.pane(account.id.uuidString))
                     .help(
                         "Drag into a pane edge to split, its center to swap, or onto a tab to combine"
                     )
@@ -548,7 +524,7 @@ struct SocialManagerPage: View {
                     SocialEmailMenu(model: model, profile: profile)
                 }
                 Button("Manage profiles") {
-                    model.showingAccounts = true; compactRailPresented = false
+                    model.browse(.profiles); compactRailPresented = false
                 }
             }.padding(UIScale.pt(10))
         }

@@ -28,9 +28,17 @@ extension SocialManagerModel {
     }
 
     var filteredAccounts: [SocialAccount] {
+        filterAccounts(profileID: accountProfileFilterID)
+    }
+
+    func filteredAccounts(in profile: SocialProfile) -> [SocialAccount] {
+        filterAccounts(profileID: profile.id)
+    }
+
+    private func filterAccounts(profileID: UUID?) -> [SocialAccount] {
         let query = accountSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches = catalog.accounts.filter { account in
-            (accountProfileFilterID == nil || account.profileID == accountProfileFilterID)
+            (profileID == nil || account.profileID == profileID)
                 && (platformFilterID == nil || account.platformID == platformFilterID)
                 && (accountStatus == .all
                     || (paneIsOpen(account.id.uuidString) == (accountStatus == .open)))
@@ -104,17 +112,19 @@ struct SocialLibraryViewPicker: View {
 struct SocialAccountFilters: View {
     @Bindable var model: SocialManagerModel
     var vertical = false
+    var includesProfile = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             if vertical {
-                profilePicker
+                if includesProfile { profilePicker }
                 platformPicker
                 statusPicker
                 sortPicker
             } else {
                 HStack(spacing: UIScale.pt(10)) {
-                    profilePicker; platformPicker
+                    if includesProfile { profilePicker }
+                    platformPicker
                 }
                 HStack(spacing: UIScale.pt(10)) {
                     statusPicker; sortPicker
@@ -184,27 +194,40 @@ struct SocialOpenAccountsMenu: View {
 struct SocialAccountListRow: View {
     let model: SocialManagerModel
     let account: SocialAccount
+    var compactRow = false
+    var onOpen: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         HStack(spacing: UIScale.pt(12)) {
-            SocialAvatar(
-                image: model.avatars[account.id], initials: account.initials, name: account.name,
-                size: 36)
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(model.accountTitle(account)).font(.edithText(.subheadline).weight(.semibold))
-                    .lineLimit(1)
-                Text(model.platform(for: account)?.name ?? "Website").font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
             Button {
                 model.open(account)
+                onOpen?()
             } label: {
-                Image(systemName: "arrow.up.right")
+                HStack(spacing: UIScale.pt(8)) {
+                    SocialAvatar(
+                        image: model.avatars[account.id], initials: account.initials,
+                        name: account.name, size: compactRow ? 28 : 36)
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        Text(account.handle ?? account.name).font(
+                            .edithText(.subheadline).weight(.semibold)
+                        ).lineLimit(1)
+                        Text(
+                            [model.profile(for: account)?.name, model.platform(for: account)?.name]
+                                .compactMap { $0 }.joined(separator: " · ")
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }.contentShape(Rectangle())
             }
+            .buttonStyle(.edith(.borderless))
             .accessibilityLabel("Open \(model.accountTitle(account))")
+            if model.paneIsOpen(account.id.uuidString) {
+                Image(systemName: "circle.fill").font(.system(size: UIScale.pt(6)))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark)).accessibilityLabel("Open")
+            }
             Menu {
                 SocialAccountActions(model: model, account: account)
             } label: {
@@ -213,9 +236,11 @@ struct SocialAccountListRow: View {
             .menuStyle(.borderlessButton).fixedSize()
             .accessibilityLabel("Manage \(model.accountTitle(account))")
         }
-        .padding(UIScale.pt(compact ? 10 : 14))
+        .padding(UIScale.pt(compactRow ? 8 : compact ? 10 : 14))
         .background(
-            DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+            model.focusedAccount?.id == account.id
+                ? DashSkin.accent(scheme == .dark).opacity(0.12) : DashSkin.paper2(scheme == .dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
         )
         .contextMenu { SocialAccountActions(model: model, account: account) }
         .herdrDraggable(.pane(account.id.uuidString), simultaneous: true)

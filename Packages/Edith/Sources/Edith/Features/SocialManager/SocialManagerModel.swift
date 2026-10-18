@@ -227,8 +227,14 @@ final class SocialManagerModel {
         if let current, current.dataStoreID != account.dataStoreID,
             let session = sessions.removeValue(forKey: account.id)
         {
+            SocialWorkspaceWindow.reattach(account.id.uuidString, to: self)
             session.shutdown()
-            if paneIsOpen(account.id.uuidString) { _ = ensureBrowser(account) }
+            if paneIsOpen(account.id.uuidString) {
+                _ = ensureBrowser(account)
+            } else {
+                open(account)
+            }
+            activateFocusedBrowser()
         } else if let current,
             current.website != account.website || current.platformID != account.platformID,
             let platform = platform(for: account)
