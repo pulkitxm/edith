@@ -81,7 +81,7 @@ import Testing
         let frame = try #require(
             body.range(of: ".frame(", range: horizontalPadding.upperBound..<body.endIndex))
         let background = try #require(
-            body.range(of: ".background(", range: frame.upperBound..<body.endIndex))
+            body.range(of: ".background", range: frame.upperBound..<body.endIndex))
         let contentShape = try #require(
             body.range(
                 of: ".contentShape(Rectangle())",
