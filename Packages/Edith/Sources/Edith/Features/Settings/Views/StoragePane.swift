@@ -221,6 +221,7 @@ struct StorageItemIcon: View {
         "videoProjects": "film",
         "virtualCamera": "web.camera",
         "seoAudit": "doc.text.magnifyingglass",
+        "socialManager": "person.2.crop.square.stack",
         "codeStats": "chart.line.uptrend.xyaxis",
         "latex": "doc.richtext",
         "plugins": "square.stack.3d.up",
