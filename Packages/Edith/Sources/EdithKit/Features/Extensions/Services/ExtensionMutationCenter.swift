@@ -91,6 +91,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case lidAwake
     case studio
     case latex
+    case socialManager
     case timeLapse
     case music
     case downloads

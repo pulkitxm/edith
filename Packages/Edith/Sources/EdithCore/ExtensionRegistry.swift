@@ -257,6 +257,12 @@ public enum ExtensionRegistry {
             defaultsKey: "tabStudioEnabled", requiredCapabilities: [.localMediaEditing],
             optionalToolIDs: ["ffmpeg", "qpdf"]),
         ExtensionRegistryEntry(
+            id: "socialManager", title: "Social Manager",
+            subtitle:
+                "Manage profiles with independent Instagram, YouTube, X, LinkedIn and custom website accounts in tabs and side-by-side layouts.",
+            symbolName: "person.crop.rectangle.stack", suite: .media, host: .window, featured: true,
+            defaultsKey: "tabSocialManagerEnabled", requiredCapabilities: [.webBrowsing]),
+        ExtensionRegistryEntry(
             id: "latex", title: "LaTeX",
             subtitle: "Compile local documents or edit GitHub sources with pull request review.",
             symbolName: "doc.richtext", suite: .media, host: .window, featured: false,

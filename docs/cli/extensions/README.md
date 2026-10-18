@@ -78,6 +78,7 @@ walks, and its order is the order `ls` prints. Thirty-three entries, in this ord
 | `hinge` | Hinge | Desk | Folds the desktop as the MacBook lid closes |
 | `windowSweaters` | Window Sweaters | Desk | Knitted borders around your windows, in each app's own colours |
 | `presenter` | Presenter | Desk | Blurs sensitive numbers while sharing your screen |
+| `socialManager` | Social Manager | Media | Profiles with separate website accounts, tabs and resizable side-by-side panes |
 | `videoEditor` | Video editor | Media | Import clips, add zooms and text, then export your video |
 | `music` | Music | Media | Plays your local music folder, with media keys and a player bar |
 | `downloads` | Downloads | Media | Queue audio and video downloads that survive quitting the app |
@@ -118,6 +119,7 @@ twelve the welcome tour shows before you ask it for all of them.
 | `hinge` | `hingeEnabled` | no | `screenRecording` | none | none | none |
 | `windowSweaters` | `windowSweatersEnabled` | no | none | `accessibility` | none | none |
 | `presenter` | `presenterEnabled` | no | `screenRecording` | none | none | none |
+| `socialManager` | `tabSocialManagerEnabled` | yes | none | none | none | none |
 | `videoEditor` | `tabVideoEditorEnabled` | yes | none | none | none | none |
 | `music` | `tabMusicEnabled` | no | none | none | none | none |
 | `downloads` | `downloadsEnabled` | no | none | none | `yt-dlp` | none |
@@ -158,6 +160,7 @@ the current platform, and which missing implementations merely degrade it:
 | `hinge` | `lidFold` | `globalShortcuts` |
 | `windowSweaters` | `windowDecoration` | none |
 | `presenter` | `screenShareDetection` | none |
+| `socialManager` | `webBrowsing` | none |
 | `videoEditor` | `localVideoEditing` | none |
 | `music` | `localMusicPlayback` | `mediaControls` |
 | `downloads` | `mediaDownloads` | none |

@@ -1569,6 +1569,7 @@ final class HerdrStore {
     }
 
     func normalized(_ item: HerdrDragItem) -> HerdrDragItem {
+        if case let .pane(id) = item, let agent = session(id)?.agent { return .agent(agent) }
         guard case let .tab(id) = item, let tab = tab(id), !tab.isSplit,
             let agent = session(tab.focused)?.agent
         else { return item }
@@ -1635,7 +1636,7 @@ final class HerdrStore {
         case let .tabBar(index):
             let moving: String?
             switch item {
-            case .space:
+            case .space, .pane:
                 return false
             case let .tab(id):
                 moving = id
@@ -1650,7 +1651,7 @@ final class HerdrStore {
         case let .intoTab(id):
             guard let destination = tab(id) else { return false }
             switch item {
-            case .space: return false
+            case .space, .pane: return false
             case let .tab(source): return source != id
             case let .agent(agent): return !destination.layout.contains(agent.id)
             }
@@ -1672,7 +1673,7 @@ final class HerdrStore {
             insertTab(item, at: index)
         case let .intoTab(id):
             switch item {
-            case .space: break
+            case .space, .pane: break
             case let .tab(source): merge(source, into: id)
             case let .agent(agent): add(agent, into: id)
             }
@@ -1703,7 +1704,7 @@ final class HerdrStore {
 
     private func draggedNode(_ item: HerdrDragItem) -> (node: HerdrLayout, focus: String)? {
         switch item {
-        case .space:
+        case .space, .pane:
             return nil
         case let .agent(agent):
             return (.pane(agent.id), agent.id)
@@ -1719,7 +1720,7 @@ final class HerdrStore {
         else { return }
         var displaced: String?
         switch item {
-        case .space:
+        case .space, .pane:
             return
         case let .agent(agent):
             if session(agent.id) == nil {
@@ -1753,7 +1754,7 @@ final class HerdrStore {
 
     private func insertTab(_ item: HerdrDragItem, at index: Int) {
         switch item {
-        case .space:
+        case .space, .pane:
             return
         case let .tab(id):
             moveTab(id, to: index)

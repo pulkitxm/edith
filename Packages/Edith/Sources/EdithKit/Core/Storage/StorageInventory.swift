@@ -27,6 +27,7 @@ public enum StorageAreaCatalog {
             relativePaths: ["SEOAudit", "Cache/SEOAudit", "seo"]),
         .init(id: "codeStats", title: "Code Stats", relativePaths: ["code-stats"]),
         .init(id: "latex", title: "LaTeX", relativePaths: ["latex"]),
+        .init(id: "socialManager", title: "Social Manager", relativePaths: ["social-manager"]),
         .init(id: "plugins", title: "Plugins", relativePaths: ["plugins"]),
         .init(id: "shelf", title: "Shelf", relativePaths: ["Shelf"]),
         .init(id: "tools", title: "Command line tools", relativePaths: ["bin"]),

@@ -1094,6 +1094,7 @@ struct ExtensionDetailRows: View {
             case .lidAwake: LidAwakeRows()
             case .studio: StudioRows()
             case .latex: LaTeXRows()
+            case .socialManager: SocialManagerRows()
             case .timeLapse: TimeLapseRows()
             case .music:
                 MusicRows()
