@@ -178,7 +178,7 @@ ci-studio-batch:
 
 ci-browser:
 	plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoadsInWebContent raw Resources/HelperInfo.plist | grep -qx true
-	cd $(PKG) && ./test.sh --filter '^EdithTests\.(NotchBrowser|Browser|Chrome|LocalStorageSeed)'
+	cd $(PKG) && ./test.sh --filter '^EdithTests\.(NotchBrowser|Browser|Chrome|LocalStorageSeed|Social)'
 
 ci-swift-check: ci-swift-lint ci-swift-build ci-swift-test
 

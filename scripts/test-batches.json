@@ -20,7 +20,7 @@
     { "name": "companion", "filter": "^EdithTests\\.Companion" },
     {
       "name": "browser",
-      "filter": "^EdithTests\\.(Notch|Browser|Chrome|LocalStorage)"
+      "filter": "^EdithTests\\.(Notch|Browser|Chrome|LocalStorage|Social)"
     },
     {
       "name": "media",
