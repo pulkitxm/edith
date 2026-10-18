@@ -190,6 +190,7 @@ extension SocialManagerModel {
     func perform(_ command: WindowWorkspaceCommand) -> Bool {
         guard load.hasContent, !busy else { return false }
         switch command {
+        case .showFilters: return false
         case .nextTab: cycleTab(backwards: false)
         case .previousTab: cycleTab(backwards: true)
         case .nextPane: cyclePane(backwards: false)

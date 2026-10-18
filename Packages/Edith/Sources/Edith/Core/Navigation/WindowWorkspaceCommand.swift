@@ -2,7 +2,7 @@ import AppKit
 
 enum WindowWorkspaceCommand: Equatable {
     case nextTab, previousTab, nextPane, previousPane, closeTab, showLibrary, reopenTab, reload,
-        focusAddress
+        focusAddress, showFilters
     case selectTab(Int)
     case layout(HerdrLayoutKey)
 
@@ -31,6 +31,7 @@ enum WindowWorkspaceCommand: Equatable {
             }
         }
         if flags == [.command, .shift], characters?.lowercased() == "t" { return .reopenTab }
+        if flags == [.command, .shift], characters?.lowercased() == "f" { return .showFilters }
         guard flags == .command, let key = characters?.lowercased() else { return nil }
         switch key {
         case "w": return .closeTab

@@ -18,6 +18,8 @@ struct SocialManagerPage: View {
     @State private var railOpen = true
     @State private var compactRailPresented = false
     @State private var layoutPopoverOpen = false
+    @State private var filterMenu = false
+    @State private var filterDismissedAt: Date?
     private let providedModel: SocialManagerModel?
 
     init(model: SocialManagerModel? = nil, drag: HerdrDragCoordinator? = nil) {
@@ -112,6 +114,10 @@ struct SocialManagerPage: View {
                     model?.editingAccount == nil, model?.clearingAccount == nil,
                     model?.removingAccount == nil
                 else { return false }
+                if command == .showFilters {
+                    filterMenu.toggle()
+                    return true
+                }
                 return model?.perform(command) ?? false
             }
         }
@@ -199,6 +205,16 @@ struct SocialManagerPage: View {
             }
             .accessibilityLabel("Show accounts").help("Show or hide the account list")
             .padding(.leading, PageMetrics.gutter(compact))
+            SocialAccountFilterButton(
+                model: model, presented: $filterMenu,
+                onPress: {
+                    if let filterDismissedAt, Date().timeIntervalSince(filterDismissedAt) < 0.35 {
+                        self.filterDismissedAt = nil
+                    } else {
+                        filterMenu = true
+                    }
+                },
+                onDismissed: { filterDismissedAt = Date() })
             PageTabStrip(
                 selection: model.showingAccounts
                     ? "accounts" : model.selectedTabID?.uuidString ?? "accounts"
@@ -421,7 +437,7 @@ struct SocialManagerPage: View {
                 }
                 Button("Add account", systemImage: "plus") { addingAccount = true }
             }.disabled(model.busy)
-            SocialAccountFilters(model: model, includesProfile: false)
+            SocialAccountSearch(model: model)
             SocialOpenAccountsMenu(model: model, accounts: accounts)
             if accounts.isEmpty, !model.accounts(in: profile).isEmpty {
                 Text("No accounts match these filters.").font(.edithText(.body)).foregroundStyle(
@@ -507,7 +523,7 @@ struct SocialManagerPage: View {
     private var accountRail: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                SocialAccountFilters(model: model, vertical: true)
+                SocialAccountSearch(model: model)
                 SocialOpenAccountsMenu(model: model, accounts: model.filteredAccounts)
                 Text("\(model.filteredAccounts.count) accounts").font(.edithText(.caption))
                     .foregroundStyle(.secondary)
@@ -539,15 +555,7 @@ struct SocialManagerPage: View {
             ) {
                 SocialOpenAccountsMenu(model: model, accounts: model.filteredAccounts)
             }
-            SocialAccountFilters(model: model)
-            ScrollView(.horizontal) {
-                HStack(spacing: UIScale.pt(6)) {
-                    platformButton(nil, title: "All platforms")
-                    ForEach(model.availablePlatforms) { platform in
-                        platformButton(platform.id, title: platform.name)
-                    }
-                }
-            }.scrollIndicators(.hidden)
+            SocialAccountSearch(model: model)
             if model.filteredAccounts.isEmpty {
                 Text("No accounts match these filters.").font(.edithText(.body)).foregroundStyle(
                     .secondary)
@@ -576,17 +584,4 @@ struct SocialManagerPage: View {
         }
     }
 
-    private func platformButton(_ id: UUID?, title: String) -> some View {
-        Button {
-            model.platformFilterID = id
-        } label: {
-            Text(title).font(.edithText(.subheadline))
-                .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(6))
-                .background(
-                    model.platformFilterID == id
-                        ? DashSkin.accent(dark).opacity(0.16) : DashSkin.paper2(dark), in: Capsule()
-                )
-        }.buttonStyle(.edith(.borderless))
-            .accessibilityAddTraits(model.platformFilterID == id ? .isSelected : [])
-    }
 }

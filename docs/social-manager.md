@@ -30,11 +30,15 @@ Use **Profiles**, **Accounts** or **List** at the top right to switch between th
 profile library, account cards and a compact account list. Saving an existing
 profile or account keeps the current view and workspace selection.
 
-The sidebar lists accounts across every profile by default. Its filters and the
-account library share profile, platform, search, open-status and sorting controls.
+The sidebar lists accounts across every profile by default. Use the filter button
+beside the sidebar toggle, or Command+Shift+F, to open the same searchable filter
+popover as Agent Sessions. Choose a profile, platform, open status or sort order.
+Selected choices have checkmarks and the button shows an active-filter count.
+Use the arrow keys and Return to choose filters, and Escape to close the popover.
+The sidebar and account library share these choices and their account search.
 Profile browsing does not restrict the sidebar. Platform choices come from the
-accounts you have added, including custom websites and Gmail. Search matches
-account labels, usernames, profile names and platforms. **Reset filters** clears
+accounts you have added, including custom websites and Gmail. Account search matches
+account labels, usernames, profile names and platforms. **Clear filters** clears
 the current restrictions. Sorting changes the view without rewriting account order.
 
 Set **Username** in an account's editor to show its `@username` in the sidebar,

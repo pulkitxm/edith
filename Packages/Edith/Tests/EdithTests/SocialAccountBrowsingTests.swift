@@ -8,6 +8,47 @@ import WebKit
 
 @MainActor @Suite(.serialized)
 struct SocialAccountBrowsingTests {
+    @Test func searchableFilterMenuCombinesChoicesAndClearsWithoutReplacingOpenSessions() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let account = model.catalog.accounts[0]
+        model.open(account)
+        let browser = try #require(model.sessions[account.id])
+        let original = try Data(contentsOf: fixture.file.url)
+        let platform = try #require(model.platform(for: account))
+        let platformRow = try #require(model.accountFilterRows(matching: "  INSTAGRAM ").first)
+        #expect(platformRow.action == .platform(platform.id))
+        model.activateAccountFilter(platformRow)
+        let profileRow = try #require(
+            model.accountFilterRows(matching: "Profile").first {
+                $0.action == .profile(account.profileID)
+            })
+        model.activateAccountFilter(profileRow)
+        let statusRow = try #require(model.accountFilterRows(matching: "Open accounts").first)
+        model.activateAccountFilter(statusRow)
+        let sortRow = try #require(model.accountFilterRows(matching: "Username").first)
+        model.activateAccountFilter(sortRow)
+        #expect(model.filteredAccounts == [account])
+        #expect(model.accountFilterCount == 4)
+        #expect(model.accountFilterSummary.contains(platform.name))
+        #expect(model.accountFilterRows(matching: "no matching choice").isEmpty)
+        #expect(model.accountFilterRows(matching: "Instagram").first?.selected == true)
+        model.accountSearch = account.name
+        #expect(model.accountFilterCount == 5)
+        let clear = try #require(model.accountFilterRows(matching: "Clear").first)
+        model.activateAccountFilter(clear)
+        #expect(model.accountFilterCount == 0)
+        #expect(model.accountFilterSummary == "All accounts")
+        #expect(model.filteredAccounts == model.catalog.accounts)
+        #expect(model.accountSort == .manual)
+        #expect(model.sessions[account.id] === browser)
+        #expect(try Data(contentsOf: fixture.file.url) == original)
+        #expect(
+            WindowWorkspaceCommand.resolve(
+                characters: "F", keyCode: 3, modifiers: [.command, .shift]) == .showFilters)
+    }
+
     @Test func filtersCombineProfilesPlatformsAndSearchWithoutWritingTheCatalog() throws {
         let fixture = try SocialManagerFixture()
         defer { fixture.remove() }

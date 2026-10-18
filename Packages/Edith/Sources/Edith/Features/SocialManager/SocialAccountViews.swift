@@ -109,63 +109,34 @@ struct SocialLibraryViewPicker: View {
     }
 }
 
-struct SocialAccountFilters: View {
+struct SocialAccountSearch: View {
     @Bindable var model: SocialManagerModel
-    var vertical = false
-    var includesProfile = true
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            if vertical {
-                if includesProfile { profilePicker }
-                platformPicker
-                statusPicker
-                sortPicker
-            } else {
-                HStack(spacing: UIScale.pt(10)) {
-                    if includesProfile { profilePicker }
-                    platformPicker
-                }
-                HStack(spacing: UIScale.pt(10)) {
-                    statusPicker; sortPicker
-                }
-            }
-            TextField("Search accounts, profiles or platforms", text: $model.accountSearch)
-                .textFieldStyle(.roundedBorder).font(.edithText(.subheadline))
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+            TextField("Search accounts", text: $model.accountSearch)
+                .textFieldStyle(.plain).font(.edithText(.subheadline))
+                .disableAutocorrection(true)
                 .accessibilityLabel("Search social accounts")
-            if model.accountProfileFilterID != nil || model.platformFilterID != nil
-                || !model.accountSearch.isEmpty || model.accountStatus != .all
-            {
-                Button("Reset filters") { model.resetAccountFilters() }
-                    .font(.edithText(.caption))
+            if !model.accountSearch.isEmpty {
+                Button {
+                    model.accountSearch = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.edith(.borderless))
+                .accessibilityLabel("Clear account search")
             }
         }
-    }
-
-    private var profilePicker: some View {
-        Picker("Profile", selection: $model.accountProfileFilterID) {
-            Text("All profiles").tag(Optional<UUID>.none)
-            ForEach(model.catalog.profiles) { Text($0.name).tag(Optional($0.id)) }
-        }.font(.edithText(.subheadline))
-    }
-
-    private var platformPicker: some View {
-        Picker("Platform", selection: $model.platformFilterID) {
-            Text("All platforms").tag(Optional<UUID>.none)
-            ForEach(model.availablePlatforms) { Text($0.name).tag(Optional($0.id)) }
-        }.font(.edithText(.subheadline))
-    }
-
-    private var statusPicker: some View {
-        Picker("Status", selection: $model.accountStatus) {
-            ForEach(SocialAccountStatus.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.font(.edithText(.subheadline))
-    }
-
-    private var sortPicker: some View {
-        Picker("Sort", selection: $model.accountSort) {
-            ForEach(SocialAccountSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.font(.edithText(.subheadline))
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.vertical, UIScale.pt(6))
+        .widgetBar(
+            cornerRadius: 8, fill: DashSkin.paper2(scheme == .dark),
+            stroke: DashSkin.line(scheme == .dark))
     }
 }
 
