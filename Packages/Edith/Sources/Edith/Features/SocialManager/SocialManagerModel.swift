@@ -27,17 +27,19 @@ final class SocialManagerModel {
     private(set) var busy = false
     let load = ContentLoad()
     @ObservationIgnored private let file: SocialAccountFile
+    @ObservationIgnored private var dataStores: [UUID: WKWebsiteDataStore] = [:]
     @ObservationIgnored private let sessionFactory:
-        @MainActor (SocialAccount, SocialPlatform) -> SocialBrowserSession
+        @MainActor (SocialAccount, SocialPlatform, WKWebsiteDataStore?) -> SocialBrowserSession
 
     init(
         file: SocialAccountFile = SocialAccountFile(),
         sessionFactory:
-            @escaping @MainActor (SocialAccount, SocialPlatform) -> SocialBrowserSession = {
-                account, platform in
+            @escaping @MainActor (SocialAccount, SocialPlatform, WKWebsiteDataStore?) ->
+            SocialBrowserSession = {
+                account, platform, dataStore in
                 SocialBrowserSession(
                     accountID: account.id, website: platform.website,
-                    dataStore: WKWebsiteDataStore(forIdentifier: account.id))
+                    dataStore: dataStore ?? WKWebsiteDataStore(forIdentifier: account.id))
             }
     ) {
         self.file = file
@@ -159,7 +161,8 @@ final class SocialManagerModel {
             selectedTabID = target
         }
         if sessions[account.id] == nil {
-            let session = sessionFactory(account, platform)
+            let session = sessionFactory(account, platform, dataStores[account.id])
+            dataStores[account.id] = session.dataStore
             session.onFocus = { [weak self] in self?.focus(key) }
             sessions[account.id] = session
         }
@@ -289,8 +292,10 @@ final class SocialManagerModel {
     }
 
     private func clearWebsiteData(_ account: SocialAccount) async {
+        let dataStore =
+            dataStores.removeValue(forKey: account.id)
+            ?? WKWebsiteDataStore(forIdentifier: account.id)
         closeAccount(account.id.uuidString)
-        let dataStore = WKWebsiteDataStore(forIdentifier: account.id)
         await withCheckedContinuation { continuation in
             dataStore.removeData(
                 ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
@@ -301,6 +306,7 @@ final class SocialManagerModel {
     func shutdown() {
         for session in sessions.values { session.shutdown() }
         sessions = [:]
+        dataStores = [:]
         tabs = []
     }
 }

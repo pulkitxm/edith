@@ -11,7 +11,7 @@ final class SocialBrowserSession {
     var selectedPageID: UUID?
     var selectedPage: SocialBrowserPage? { pages.first { $0.id == selectedPageID } }
     @ObservationIgnored var onFocus: (() -> Void)?
-    @ObservationIgnored private let dataStore: WKWebsiteDataStore
+    @ObservationIgnored let dataStore: WKWebsiteDataStore
 
     init(accountID: UUID, website: URL, dataStore: WKWebsiteDataStore) {
         self.accountID = accountID

@@ -86,6 +86,12 @@ struct SocialManagerTests {
             #expect(
                 try await secondPage.webView.evaluateJavaScript("document.cookie") as? String
                     == "session=mock-client")
+            let savedFirstCookies = await firstPage.webView.configuration.websiteDataStore
+                .httpCookieStore.allCookies()
+            let savedSecondCookies = await secondPage.webView.configuration.websiteDataStore
+                .httpCookieStore.allCookies()
+            #expect(savedFirstCookies.map(\.value) == ["mock-studio"])
+            #expect(savedSecondCookies.map(\.value) == ["mock-client"])
             let popup = try #require(first?.makePage())
             popup.webView.load(URLRequest(url: origin))
             try await loaded(popup)
@@ -117,16 +123,18 @@ struct SocialManagerTests {
         restored?.shutdown()
         restored = nil
         await Task.yield()
-        await clearStore(firstID)
         var unaffected: SocialBrowserSession? = SocialBrowserSession(
             accountID: secondID, website: origin,
             dataStore: WKWebsiteDataStore(forIdentifier: secondID))
         do {
             let page = try #require(unaffected?.selectedPage)
             try await loaded(page)
-            #expect(
+            let cookie = try await page.webView.evaluateJavaScript("document.cookie") as? String
+            #expect(cookie == "session=mock-client")
+            await clearStore(firstID)
+            let cookieAfterClearingOtherAccount =
                 try await page.webView.evaluateJavaScript("document.cookie") as? String
-                    == "session=mock-client")
+            #expect(cookieAfterClearingOtherAccount == "session=mock-client")
             #expect(
                 try await page.webView.evaluateJavaScript("localStorage.getItem('account')")
                     as? String == "mock-client")
@@ -155,9 +163,12 @@ struct SocialManagerTests {
                 "document.cookie='session=mock-\(account.name.lowercased()); path=/; max-age=86400'"
             )
         }
+        model.closeAccount(second.id.uuidString)
         await model.clearSession(first, removingAccount: false)
         #expect(model.message == "Session cleared. Open the account to sign in again.")
         #expect(model.catalog.accounts.contains(first))
+        model.open(second)
+        try await loaded(try #require(model.sessions[second.id]?.selectedPage))
         model.open(first)
         do {
             let page = try #require(model.sessions[first.id]?.selectedPage)
@@ -290,11 +301,12 @@ struct SocialManagerFixture {
         try file.save(catalog)
         model = SocialManagerModel(
             file: file,
-            sessionFactory: { account, _ in
+            sessionFactory: { account, _, dataStore in
                 SocialBrowserSession(
                     accountID: account.id, website: website,
-                    dataStore: persistent
-                        ? WKWebsiteDataStore(forIdentifier: account.id) : .nonPersistent())
+                    dataStore: dataStore
+                        ?? (persistent
+                            ? WKWebsiteDataStore(forIdentifier: account.id) : .nonPersistent()))
             })
         model.start()
     }
