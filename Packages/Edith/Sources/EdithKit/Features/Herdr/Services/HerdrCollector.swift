@@ -277,7 +277,7 @@ public enum HerdrCollector {
 
 private actor HerdrLocalServer {
     static let shared = HerdrLocalServer()
-    private var processes: [String: Process] = [:]
+    private var processes: [String: CLIChildProcess] = [:]
 
     func start(session: String) throws {
         try Task.checkCancellation()
@@ -285,14 +285,10 @@ private actor HerdrLocalServer {
         guard let executable = HerdrCollector.executable() else {
             throw HerdrCommandError.herdrUnavailable
         }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["--session", session, "server"]
-        process.environment = CLIToolEnvironment.sanitized()
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        processes[session] = process
+        let request = CLICommandRequest(
+            executableURL: executable, arguments: ["--session", session, "server"],
+            environment: CLIToolEnvironment.sanitized(), terminatesProcessGroup: true)
+        processes[session] = try CLIChildProcess(
+            request: request, input: -1, output: -1, error: -1, onExit: {})
     }
 }
