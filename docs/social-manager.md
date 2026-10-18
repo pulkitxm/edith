@@ -11,7 +11,7 @@ accounts on the same website can remain signed in at once.
 
 1. Enable **Social Manager** in Extensions, under Media.
 2. Open **Media > Social Manager**, choose **Add profile** and enter its name and
-   optional emoji or initials badge.
+   optional emoji or initials badge and profile email address.
 3. Select the profile, choose **Add account**, select a platform and enter an
    account label, then choose **Add and open**.
 4. Sign in directly on the website, including any two-factor authentication.
@@ -44,9 +44,47 @@ account's store. Uploads use the native file picker and downloads use a save
 dialog. Links remain inside the isolated browser instead of moving the login
 flow into a different browser profile.
 
+Right-click profiles, accounts, workspace tabs or pane headers for their controls.
+Profiles can open all connected accounts in tabs or side by side. Drag profiles,
+accounts or workspace tabs to reorder them. Drag an account card or pane header
+onto another pane header to place it beside that pane. Use **Position beside**
+for an exact right or bottom placement, or **Move to tab** to combine workspaces.
+Tab menus include closing other tabs, closing tabs to the right and reopening a
+closed workspace. Pane menus include website zoom and new website tabs.
+
+Keyboard controls work while a website or its text field has focus:
+
+| Shortcut | Action |
+| --- | --- |
+| Control+Tab / Control+Shift+Tab | Next / previous workspace tab, including Profiles |
+| Command+Option+Right / Left | Next / previous workspace tab |
+| Command+Control+Right / Left | Focus next / previous pane |
+| Command+1 through Command+9 | Select a workspace tab |
+| Command+T or Command+0 | Show the profile library |
+| Command+Shift+T | Reopen the last closed workspace |
+| Command+W | Close the focused website popup tab, or the workspace tab |
+| Command+L | Edit the focused pane's website address |
+| Command+R | Reload the focused website |
+
+## Profile email and account pictures
+
+Set **Profile email** in the profile editor. The **Email** menu is available on
+the profile and while operating any of its account panes. Open Gmail in a tab,
+on the right or below the current account. Each profile has its own persistent
+Gmail session, separate from its social accounts and other profiles. Sign in to
+the matching Google account on the website; entering a profile email is a label
+and does not sign in automatically.
+
+Choose an account picture in the account editor or its right-click menu. Pictures
+appear on account cards and pane headers. Replace or remove them using the same
+controls. Edith saves a local PNG thumbnail up to 256 pixels in
+`social-manager/avatars/`; the original file is not modified. Renaming or moving
+an account between profiles keeps its picture and session. Removing an account
+or profile also removes its saved pictures.
+
 ## Account data
 
-Profiles, connected account names, badges and platform URLs are stored locally in
+Profiles, email labels, connected account names, badges, picture filenames and platform URLs are stored locally in
 `social-manager/accounts.json` under Edith's data folder. WebKit manages browser
 data in a persistent store keyed by the account's UUID. Renaming an account keeps
 that identifier and its session. Edith does not collect or save a separate copy

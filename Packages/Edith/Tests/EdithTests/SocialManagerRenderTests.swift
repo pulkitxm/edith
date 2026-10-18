@@ -12,6 +12,25 @@ struct SocialManagerRenderTests {
         let fixture = try SocialManagerFixture()
         defer { fixture.remove() }
         let model = fixture.model
+        let studio = try model.saveProfile(
+            id: model.catalog.profiles[0].id, name: "Studio", badge: "ST",
+            email: "studio@example.test")
+        for (index, account) in model.catalog.accounts.enumerated() {
+            let source = fixture.folder.appendingPathComponent("mock-picture-\(index).png")
+            let image = NSImage(size: NSSize(width: 120, height: 120), flipped: false) { rect in
+                [NSColor.systemTeal, .systemOrange, .systemIndigo][index % 3].setFill()
+                rect.fill()
+                NSColor.white.withAlphaComponent(0.9).setFill()
+                NSBezierPath(ovalIn: CGRect(x: 42, y: 62, width: 36, height: 36)).fill()
+                NSBezierPath(ovalIn: CGRect(x: 24, y: 4, width: 72, height: 52)).fill()
+                return true
+            }
+            let tiff = try #require(image.tiffRepresentation)
+            let bitmap = try #require(NSBitmapImageRep(data: tiff))
+            try #require(bitmap.representation(using: .png, properties: [:])).write(to: source)
+            try model.importAvatar(account, from: source)
+        }
+        model.profileID = nil
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for scheme in [ColorScheme.light, .dark] {
@@ -45,6 +64,13 @@ struct SocialManagerRenderTests {
         try await capture(model, width: 620, scheme: .light, name: "compact-panes")
         model.toggleZoom(model.catalog.accounts[0].id.uuidString)
         try await capture(model, width: 1180, scheme: .dark, name: "maximized-account")
+        let social = model.catalog.accounts[0]
+        model.openInNewTab(social)
+        model.openEmail(studio, beside: true)
+        let email = try #require(model.sessions[studio.id]?.selectedPage)
+        email.webView.loadHTMLString(
+            Self.mockInbox, baseURL: URL(string: "https://mail.example.test"))
+        try await capture(model, width: 1440, scheme: .light, name: "account-and-email")
     }
 
     private func capture(
@@ -125,4 +151,16 @@ struct SocialManagerRenderTests {
         <div class="post"><div class="art">A little room to create.</div><p><b>\(name)</b><br>A fresh collection of ideas for the week. Saved in this account's own workspace.</p><p><button>View post</button></p></div></main></body></html>
         """
     }
+
+    private static let mockInbox = """
+        <html><head><title>Mock social</title><style>
+        body{margin:0;background:#f6f8fc;color:#202124;font:14px -apple-system}
+        header{padding:24px;background:white;border-bottom:1px solid #dde3eb}
+        main{padding:24px}h1{font-size:22px}article{padding:18px;background:white;border-bottom:1px solid #eef1f5}
+        small{color:#637083}b{display:block;margin-bottom:8px}
+        </style></head><body><header><b>Mail preview</b><small>studio@example.test</small></header>
+        <main><h1>Inbox</h1><article><b>Your sign-in code</b>Use 123456 to finish signing in to your demo account.</article>
+        <article><b>Campaign review</b>The mock launch assets are ready for review.</article>
+        <article><b>Weekly digest</b>Three new ideas for your next post.</article></main></body></html>
+        """
 }

@@ -34,6 +34,10 @@ public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
         ),
     ]
 
+    public static let gmail = SocialPlatform(
+        id: UUID(uuidString: "A0000000-0000-0000-0000-000000000006")!,
+        name: "Gmail", website: URL(string: "https://mail.google.com")!, symbol: "envelope")
+
     public static func websiteURL(_ text: String) throws -> URL {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = trimmed.contains("://") ? trimmed : "https://" + trimmed
@@ -49,11 +53,13 @@ public struct SocialProfile: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var name: String
     public var badge: String
+    public var email: String?
 
-    public init(id: UUID = UUID(), name: String, badge: String = "") {
+    public init(id: UUID = UUID(), name: String, badge: String = "", email: String? = nil) {
         self.id = id
         self.name = name
         self.badge = badge
+        self.email = email
     }
 
     public var initials: String {
@@ -68,15 +74,18 @@ public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
     public let platformID: UUID
     public var name: String
     public var badge: String
+    public var avatarFilename: String?
 
     public init(
-        id: UUID = UUID(), profileID: UUID, platformID: UUID, name: String, badge: String = ""
+        id: UUID = UUID(), profileID: UUID, platformID: UUID, name: String, badge: String = "",
+        avatarFilename: String? = nil
     ) {
         self.id = id
         self.profileID = profileID
         self.platformID = platformID
         self.name = name
         self.badge = badge
+        self.avatarFilename = avatarFilename
     }
 
     public var initials: String {

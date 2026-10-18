@@ -6,14 +6,13 @@ struct SocialManagerPage: View {
     @StateObject private var fallback = WindowSessionOwner()
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.windowRouter) private var router
+    @State private var commandOwner = UUID()
     @State private var addingAccount = false
     @State private var addingPlatform = false
     @State private var addingProfile = false
     @State private var editingProfile: SocialProfile?
     @State private var removingProfile: SocialProfile?
-    @State private var editingAccount: SocialAccount?
-    @State private var clearingAccount: SocialAccount?
-    @State private var removingAccount: SocialAccount?
     private let providedModel: SocialManagerModel?
 
     init(model: SocialManagerModel? = nil) { providedModel = model }
@@ -24,8 +23,12 @@ struct SocialManagerPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
+        @Bindable var model = model
         PageWorkspace {
             PageHeader("Social Manager") {
+                if let account = model.focusedAccount, let profile = model.profile(for: account) {
+                    SocialEmailMenu(model: model, profile: profile)
+                }
                 if !model.showingAccounts, let tab = model.currentTab {
                     layoutMenu(tab)
                 }
@@ -68,6 +71,17 @@ struct SocialManagerPage: View {
             }
         }
         .pageTask { model.start() }
+        .onAppear {
+            router?.registerWorkspaceCommands(owner: commandOwner) { [weak model] command in
+                guard !addingAccount, !addingPlatform, !addingProfile,
+                    editingProfile == nil, removingProfile == nil,
+                    model?.editingAccount == nil, model?.clearingAccount == nil,
+                    model?.removingAccount == nil
+                else { return false }
+                return model?.perform(command) ?? false
+            }
+        }
+        .onDisappear { router?.unregisterWorkspaceCommands(owner: commandOwner) }
         .edithSheet(isPresented: $addingAccount, dismissible: false) {
             if let profile = model.selectedProfile {
                 SocialAccountEditor(model: model, profile: profile)
@@ -84,7 +98,7 @@ struct SocialManagerPage: View {
                 SocialPlatformEditor(model: model, profile: profile)
             }
         }
-        .edithSheet(item: $editingAccount, dismissible: false) { account in
+        .edithSheet(item: $model.editingAccount, dismissible: false) { account in
             if let profile = model.profile(for: account) {
                 SocialAccountEditor(model: model, profile: profile, account: account)
             }
@@ -106,8 +120,9 @@ struct SocialManagerPage: View {
         .confirmationDialog(
             "Clear this account's session?",
             isPresented: Binding(
-                get: { clearingAccount != nil }, set: { if !$0 { clearingAccount = nil } }),
-            titleVisibility: .visible, presenting: clearingAccount
+                get: { model.clearingAccount != nil },
+                set: { if !$0 { model.clearingAccount = nil } }),
+            titleVisibility: .visible, presenting: model.clearingAccount
         ) { account in
             Button("Clear session", role: .destructive) {
                 Task { await model.clearSession(account, removingAccount: false) }
@@ -120,8 +135,9 @@ struct SocialManagerPage: View {
         .confirmationDialog(
             "Remove this account?",
             isPresented: Binding(
-                get: { removingAccount != nil }, set: { if !$0 { removingAccount = nil } }),
-            titleVisibility: .visible, presenting: removingAccount
+                get: { model.removingAccount != nil },
+                set: { if !$0 { model.removingAccount = nil } }),
+            titleVisibility: .visible, presenting: model.removingAccount
         ) { account in
             Button("Remove account", role: .destructive) {
                 Task { await model.clearSession(account, removingAccount: true) }
@@ -143,6 +159,11 @@ struct SocialManagerPage: View {
                     model.showingAccounts = true
                     model.profileID = nil
                 }.id("accounts")
+                    .contextMenu {
+                        Button("Add profile") { addingProfile = true }
+                        Button("Reopen closed tab") { model.reopenClosedTab() }
+                            .disabled(model.recentlyClosed.isEmpty)
+                    }
                 ForEach(model.tabs) { tab in
                     HStack(spacing: UIScale.pt(4)) {
                         tabChip(
@@ -160,6 +181,15 @@ struct SocialManagerPage: View {
                         .help("Close tab. Login sessions are kept.")
                     }
                     .id(tab.id.uuidString)
+                    .contextMenu { SocialTabActions(model: model, tab: tab) }
+                    .draggable("social-tab:\(tab.id)")
+                    .dropDestination(for: String.self) { values, _ in
+                        guard let value = values.first, value.hasPrefix("social-tab:"),
+                            let id = UUID(uuidString: String(value.dropFirst(11)))
+                        else { return false }
+                        model.reorderTab(id, before: tab.id)
+                        return true
+                    }
                 }
             }
             .padding(.vertical, UIScale.pt(8)).pageGutter(compact)
@@ -247,6 +277,9 @@ struct SocialManagerPage: View {
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Text(profile.name).font(.edithText(.headline)).foregroundStyle(.primary)
+                if let email = profile.email {
+                    Text(email).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                }
                 Text(
                     platforms.isEmpty
                         ? "Add your social accounts"
@@ -262,16 +295,39 @@ struct SocialManagerPage: View {
                     DashSkin.line(dark)))
         }
         .buttonStyle(.edith(.borderless))
+        .contextMenu { profileActions(profile) }
+        .draggable("social-profile:\(profile.id)")
+        .dropDestination(for: String.self) { values, _ in
+            guard let value = values.first, value.hasPrefix("social-profile:"),
+                let id = UUID(uuidString: String(value.dropFirst(15)))
+            else { return false }
+            model.reorderProfile(id, before: profile.id)
+            return true
+        }
+    }
+
+    @ViewBuilder private func profileActions(_ profile: SocialProfile) -> some View {
+        Button("Open profile") {
+            model.profileID = profile.id; model.showingAccounts = true
+        }
+        Button("Open all in tabs") { model.openAll(profile, sideBySide: false) }
+            .disabled(model.accounts(in: profile).isEmpty)
+        Button("Open all side by side") { model.openAll(profile, sideBySide: true) }
+            .disabled(model.accounts(in: profile).isEmpty)
+        SocialEmailMenu(model: model, profile: profile)
+        Divider()
+        Button("Edit profile…") { editingProfile = profile }
+        Button("Remove profile…", role: .destructive) { removingProfile = profile }
     }
 
     private func accounts(for profile: SocialProfile) -> some View {
         let accounts = model.accounts(in: profile)
         return VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             PageSectionHeader(profile.name, subtitle: "Connected accounts") {
+                SocialEmailMenu(model: model, profile: profile)
                 Menu {
-                    Button("Edit profile") { editingProfile = profile }
+                    profileActions(profile)
                     Button("Add custom website") { addingPlatform = true }
-                    Button("Remove profile…", role: .destructive) { removingProfile = profile }
                 } label: {
                     Label("Manage profile", systemImage: "ellipsis")
                 }
@@ -305,18 +361,14 @@ struct SocialManagerPage: View {
     private func accountCard(_ account: SocialAccount, platform: SocialPlatform) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(alignment: .top) {
-                Text(account.initials).font(.edithText(.title3))
-                    .frame(width: UIScale.pt(42), height: UIScale.pt(42))
-                    .background(DashSkin.accent(dark).opacity(0.15)).clipShape(Circle())
+                SocialAccountAvatar(model: model, account: account)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(platform.name).font(.edithText(.headline)).lineLimit(2)
                     Text(account.name).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 Menu {
-                    Button("Edit name and badge") { editingAccount = account }
-                    Button("Clear login session…", role: .destructive) { clearingAccount = account }
-                    Button("Remove account…", role: .destructive) { removingAccount = account }
+                    SocialAccountActions(model: model, account: account)
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -343,6 +395,15 @@ struct SocialManagerPage: View {
         .padding(UIScale.pt(18)).frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark)).clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))
+        .contextMenu { SocialAccountActions(model: model, account: account) }
+        .draggable("social-account:\(account.id)")
+        .dropDestination(for: String.self) { values, _ in
+            guard let value = values.first, value.hasPrefix("social-account:"),
+                let id = UUID(uuidString: String(value.dropFirst(15)))
+            else { return false }
+            model.reorderAccount(id, before: account)
+            return true
+        }
         .disabled(model.busy)
     }
 

@@ -151,6 +151,25 @@ final class WindowRouter {
     @ObservationIgnored private weak var attachedWindow: NSWindow?
     @ObservationIgnored private static var registry: [ObjectIdentifier: WindowRouter] = [:]
     @ObservationIgnored private static weak var mainRouter: WindowRouter?
+    @ObservationIgnored private var workspaceOwner: UUID?
+    @ObservationIgnored private var workspaceHandler: ((WindowWorkspaceCommand) -> Bool)?
+
+    func registerWorkspaceCommands(owner: UUID, handler: @escaping (WindowWorkspaceCommand) -> Bool)
+    {
+        workspaceOwner = owner
+        workspaceHandler = handler
+    }
+
+    func unregisterWorkspaceCommands(owner: UUID) {
+        guard workspaceOwner == owner else { return }
+        workspaceOwner = nil
+        workspaceHandler = nil
+    }
+
+    func performWorkspaceCommand(_ command: WindowWorkspaceCommand) -> Bool {
+        guard attachedWindow?.attachedSheet == nil else { return false }
+        return workspaceHandler?(command) ?? false
+    }
 
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
@@ -197,6 +216,8 @@ final class WindowRouter {
     }
 
     func detach() {
+        workspaceOwner = nil
+        workspaceHandler = nil
         if let attachedWindow {
             let key = ObjectIdentifier(attachedWindow)
             if Self.registry[key] === self { Self.registry.removeValue(forKey: key) }

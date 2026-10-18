@@ -72,9 +72,10 @@ private struct SocialBrowserPane: View {
             HStack(spacing: UIScale.pt(6)) {
                 Button {
                     model.focus(key)
+                    model.activateFocusedBrowser()
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
-                        Text(account.initials).font(.edithText(.caption).weight(.semibold))
+                        SocialAccountAvatar(model: model, account: account, size: 24)
                         Text(model.accountTitle(account)).font(
                             .edithText(.subheadline).weight(.semibold)
                         )
@@ -86,6 +87,13 @@ private struct SocialBrowserPane: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless)).help("Focus \(account.name)")
+                Menu {
+                    paneActions
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .accessibilityLabel("Manage \(account.name) pane")
                 if tab.layout.paneCount > 1 {
                     Button {
                         model.toggleZoom(key)
@@ -107,6 +115,17 @@ private struct SocialBrowserPane: View {
             }
             .padding(UIScale.pt(8))
             .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
+            .contextMenu { paneActions }
+            .draggable("social-account:\(account.id)")
+            .dropDestination(for: String.self) { values, location in
+                guard let value = values.first, value.hasPrefix("social-account:"),
+                    let id = UUID(uuidString: String(value.dropFirst(15))),
+                    let moved = model.account(id.uuidString)
+                else { return false }
+                model.moveToTab(
+                    moved, tabID: tab.id, near: key, side: location.y > 22 ? .bottom : .right)
+                return true
+            }
             if session.pages.count > 1 {
                 ScrollView(.horizontal) {
                     HStack {
@@ -124,7 +143,8 @@ private struct SocialBrowserPane: View {
                 }
             }
             if let page = session.selectedPage {
-                SocialBrowserContent(page: page, website: session.website)
+                SocialBrowserContent(
+                    model: model, account: account, page: page, website: session.website)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(7)))
@@ -133,18 +153,59 @@ private struct SocialBrowserPane: View {
                 focused ? DashSkin.accent(dark) : DashSkin.line(dark)
             ).allowsHitTesting(false))
     }
+
+    @ViewBuilder private var paneActions: some View {
+        Button("Focus pane") {
+            model.select(tab); model.focus(key)
+            model.activateFocusedBrowser()
+        }
+        if tab.layout.paneCount > 1 {
+            Button(tab.zoomed == key ? "Restore panes" : "Maximize pane") {
+                model.select(tab); model.toggleZoom(key)
+            }
+            Button("Move to its own tab") { model.openInNewTab(account) }
+            Menu("Position beside") {
+                ForEach(tab.layout.panes.filter { $0 != key }, id: \.self) { other in
+                    if let target = model.account(other) {
+                        Menu(model.accountTitle(target)) {
+                            Button("On the right") {
+                                model.moveToTab(account, tabID: tab.id, near: other)
+                            }
+                            Button("Below") {
+                                model.moveToTab(account, tabID: tab.id, near: other, side: .bottom)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let page = session.selectedPage {
+            Menu("Website zoom") {
+                Button("Zoom in") { page.webView.pageZoom = min(3, page.webView.pageZoom + 0.1) }
+                Button("Zoom out") { page.webView.pageZoom = max(0.5, page.webView.pageZoom - 0.1) }
+                Button("Actual size") { page.webView.pageZoom = 1 }
+            }
+            Button("New website tab") {
+                session.makePage().webView.load(URLRequest(url: session.website))
+            }
+        }
+        SocialAccountActions(model: model, account: account)
+        Divider()
+        Button("Close pane") { model.closeAccount(key) }
+    }
 }
 
 private struct SocialBrowserContent: View {
+    let model: SocialManagerModel
+    let account: SocialAccount
     let page: SocialBrowserPage
     let website: URL
+    @State private var address = ""
+    @FocusState private var addressFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                navigation(showAddress: true)
-                navigation(showAddress: false)
-            }
+            navigation
             if page.isLoading {
                 ProgressView(value: page.progress).progressViewStyle(.linear)
                     .frame(height: UIScale.pt(2)).accessibilityLabel("Website loading")
@@ -159,9 +220,18 @@ private struct SocialBrowserContent: View {
             }
             SocialWebView(webView: page.webView).id(page.id)
         }
+        .onAppear { address = (page.url ?? website).absoluteString }
+        .onChange(of: page.url) { _, url in
+            if !addressFocused { address = (url ?? website).absoluteString }
+        }
+        .onChange(of: model.addressFocusRequest) {
+            guard model.focusedAccount?.id == account.id else { return }
+            address = (page.url ?? website).absoluteString
+            addressFocused = true
+        }
     }
 
-    private func navigation(showAddress: Bool) -> some View {
+    private var navigation: some View {
         HStack(spacing: UIScale.pt(8)) {
             Button {
                 page.webView.goBack()
@@ -186,15 +256,18 @@ private struct SocialBrowserContent: View {
                 Image(systemName: "house")
             }
             .accessibilityLabel("Platform home")
-            if showAddress {
-                Label(
-                    page.url?.host ?? website.host ?? "Website",
-                    systemImage: page.url?.scheme == "https" ? "lock" : "globe"
-                )
-                .font(.edithText(.caption)).lineLimit(1).textSelection(.enabled)
+            TextField("Website address", text: $address)
+                .font(.edithText(.caption)).textFieldStyle(.roundedBorder)
+                .focused($addressFocused)
+                .onSubmit {
+                    do {
+                        let url = try SocialPlatform.websiteURL(address)
+                        page.webView.load(URLRequest(url: url))
+                        addressFocused = false
+                        page.webView.window?.makeFirstResponder(page.webView)
+                    } catch { page.error = error.localizedDescription }
+                }
                 .help(page.url?.absoluteString ?? website.absoluteString)
-            }
-            Spacer(minLength: 0)
         }
         .padding(UIScale.pt(8))
     }
