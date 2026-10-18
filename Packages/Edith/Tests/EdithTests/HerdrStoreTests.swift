@@ -440,6 +440,21 @@ private actor HerdrWatchHarness {
         #expect(store.inventoryFailureMessage == nil)
     }
 
+    @Test func readyLocalServerRemainsUsableWhenRemoteMachinesAreOffline() {
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        store.apply([
+            .local(herdrPresent: true),
+            HerdrHostSnapshot(
+                id: "unreachable", name: "Build machine", isLocal: false,
+                sshTarget: "fixture.invalid", herdrPresent: false, reachable: false,
+                error: "Connection timed out"),
+        ])
+
+        #expect(store.inventoryReady)
+        #expect(store.inventoryFailureMessage == nil)
+        #expect(store.hosts.last?.error == "Connection timed out")
+    }
+
     @Test func stoppedAndReplacedWatchersCannotPublish() async {
         let harness = HerdrWatchHarness()
         let store = HerdrStore { callback in await harness.watch(callback) }
