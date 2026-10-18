@@ -1,0 +1,54 @@
+export const definition = {
+  schema: 1,
+  owner: "notchShelf",
+  activation: {
+    kind: "native-accessibility",
+    control: "Require ⌥ to trigger",
+    operation: "notch.settings.write",
+    mutation: {
+      kind: "state-transition",
+      payloadKeys: ["key", "value"],
+    },
+    sources: [
+      {
+        path: "Extensions/notchShelf/Shelf/Views/NotchSettingsPage.swift",
+        sha256:
+          "d1c33a16ce42c2d037ad6d4f53ec9a4e57e5a26729164ce6d65c0dcaa1d81268",
+      },
+      {
+        path: "Extensions/notchShelf/Settings/NotchSettingsModel.swift",
+        sha256:
+          "794cef02b5fc1c896a74a9ff70415be06a167a0e311237e5a7287678ad51b08f",
+      },
+      {
+        path: "Extensions/notchShelf/Runtime.swift",
+        sha256:
+          "61caad151a1b6cdae0312479e86d570f04f0eea33c6bc5526334b6bff2c48d3f",
+      },
+      {
+        path: "Extensions/notchShelf/Settings/NotchFixturePreferences.swift",
+        sha256:
+          "8517585c1879e94ac6f75e8dc8561be2cb314261ef1e1a0a76f667c1069e1290",
+      },
+      {
+        path: "Extensions/notchShelf/Settings/NotchSettingsContract.swift",
+        sha256:
+          "514a003560475f2644b74146618839d342f71510d635e64ff533f70e94dd0ebc",
+      },
+    ],
+  },
+  operations: [
+    "notch.settings.read",
+    "notch.settings.write",
+    "notchShelf.cli.catalog",
+  ],
+  observation: {
+    kind: "checked-engine-readback",
+    name: "notch option preference",
+  },
+  persistence: {
+    applicable: true,
+    name: "notch option preference",
+  },
+  limits: ["synthetic-platform-adapter"],
+};

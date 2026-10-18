@@ -51,7 +51,8 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP |
 | [`ed jev`](./jev/README.md) | The TypeSafe Jev key, its status, and raw typed decisions |
 | [`ed docs`](./docs/README.md) | This reference in the app and on the command line, and asking which command handles a request |
-| [`ed extensions`](./extensions/README.md) | Enabling features, checking readiness, planning setup, verifying live adapters, and recovering failures |
+| [`ed extensions`](./extensions/README.md) | Installing, updating, enabling and removing extensions, checking readiness, planning setup, and recovering failures |
+| [`ed invoke`](./invoke/README.md) | Sending JSON to an enabled extension worker |
 | [Keystroke Highlight](./keystroke-highlight/README.md) | Showing key presses on screen for demos and recordings |
 | [`ed lid-awake`](./lid-awake/README.md) | Closed-lid sessions, battery auto-pause and live state |
 | [`ed permissions`](./permissions/README.md) | Inspecting and requesting Edith's macOS permissions |

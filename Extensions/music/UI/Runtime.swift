@@ -1,0 +1,309 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import Foundation
+import SwiftUI
+
+@MainActor final class MusicEmbeddedRuntime {
+    private(set) var configured = false
+    private var presentations: [UUID: MusicEmbeddedPresentation] = [:]
+    private var closing: [UUID: MusicEmbeddedPresentation] = [:]
+    private var closingTasks: [UUID: Task<Void, Never>] = [:]
+    private var retired: [UUID: MusicEmbeddedPresentation] = [:]
+    private var retirement: [ObjectIdentifier: () -> Void] = [:]
+    private var hasRemoteWork = false
+    private var stopping = false
+    static let presentationLimit = 16
+
+    func configure(_ input: NSDictionary, onRetired: (() -> Void)? = nil) -> NSDictionary {
+        guard !stopping else { return ["ok": false] as NSDictionary }
+        guard let configuration = ExtensionUIConfiguration(context: input),
+            configuration.extensionID == "music",
+            let version = Bundle(for: MusicEmbeddedRuntime.self).object(
+                forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            !version.isEmpty,
+            let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+            let scene = MusicEmbeddedPresentation(
+                context: input, client: configuration.engineClient,
+                uiOnly: configuration.uiOnly, version: version)
+        else { return ["ok": false] }
+        return install(scene, id: id, onRetired: onRetired) ? ["ok": true] : ["ok": false]
+    }
+
+    var presentationCount: Int { presentations.count + closing.count }
+
+    func install(
+        _ scene: MusicEmbeddedPresentation, id: UUID, onRetired: (() -> Void)? = nil
+    ) -> Bool {
+        guard !stopping else { retire(scene); return false }
+        for key in Array(presentations.keys) where presentations[key]?.isRetained == false {
+            if let scene = presentations.removeValue(forKey: key) { retire(scene) }
+        }
+        guard closing[id] == nil,
+            presentationCount < Self.presentationLimit || presentations[id] != nil
+        else {
+            retire(scene); return false
+        }
+        if let previous = presentations.removeValue(forKey: id) { retire(previous) }
+        retirement[ObjectIdentifier(scene)] = onRetired
+        presentations[id] = scene
+        hasRemoteWork = hasRemoteWork || scene.usesRemoteClient
+        scene.attach()
+        configured = true
+        return true
+    }
+
+    func view(_ input: NSDictionary) -> NSViewController? {
+        guard configured, let value = input["presentationID"] as? String,
+            let id = UUID(uuidString: value), let scene = presentations[id], scene.matches(input)
+        else { return nil }
+        return scene.controller()
+    }
+
+    func release(_ input: NSDictionary) -> Bool {
+        guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+            let scene = presentations.removeValue(forKey: id)
+        else { return false }
+        retire(scene); configured = !presentations.isEmpty
+        return true
+    }
+
+    func prepareToClose(_ id: UUID) async -> String? {
+        guard let scene = presentations[id] else { return nil }
+        do {
+            try await scene.prepareToClose()
+            try Task.checkCancellation()
+            guard presentations[id] === scene else { throw ExtensionPeerError.unavailable }
+        } catch { return error.localizedDescription }
+        presentations[id] = nil
+        scene.beginShutdown()
+        if scene.isMain { EmbeddedMusicVideoSession.stopAll() }
+        if presentations.isEmpty {
+            EmbeddedMusicVideoSession.stopAll(); EmbeddedMusicBrowserSession.stopAll()
+        }
+        await retire(scene, id: id, drainAuxiliary: true).value
+        configured = !presentations.isEmpty
+        return nil
+    }
+
+    func suspendCommands() {
+        if hasRemoteWork { EmbeddedMusicRemote.shared.suspendCommands() }
+        for scene in presentations.values { scene.suspendCommands() }
+        for scene in closing.values { scene.suspendCommands() }
+        for scene in retired.values { scene.suspendCommands() }
+    }
+
+    func suspendCommandsAndWait() async {
+        suspendCommands()
+        let scenes = Array(presentations.values) + Array(closing.values) + Array(retired.values)
+        let tasks = Array(closingTasks.values)
+        for scene in scenes { await scene.suspendCommandsAndWait() }
+        for task in tasks { await task.value }
+        if hasRemoteWork { await EmbeddedMusicRemote.shared.suspendCommandsAndWait() }
+    }
+
+    func stop() {
+        let scenes = Array(presentations.values)
+        presentations.removeAll(); configured = false
+        for scene in scenes { retire(scene) }
+        for scene in closing.values { scene.beginShutdown() }
+    }
+
+    func stopAndWait() async {
+        stopping = true
+        suspendCommands()
+        let remote = hasRemoteWork ? EmbeddedMusicRemote.shared : nil
+        stop()
+        let tasks = Array(closingTasks.values)
+        for task in tasks { await task.value }
+        await remote?.stopAndWait()
+        hasRemoteWork = false
+    }
+
+    @discardableResult
+    private func retire(
+        _ scene: MusicEmbeddedPresentation, id: UUID = UUID(), drainAuxiliary: Bool = false
+    ) -> Task<Void, Never> {
+        if let pending = closingTasks[id] { return pending }
+        if drainAuxiliary { scene.beginShutdown(); closing[id] = scene } else { scene.shutdown() }
+        retired[id] = scene
+        let onRetired = retirement.removeValue(forKey: ObjectIdentifier(scene))
+        let task = Task { [weak self] in
+            defer { self?.closing[id] = nil; self?.closingTasks[id] = nil; self?.retired[id] = nil }
+            if drainAuxiliary {
+                await EmbeddedMusicVideoSession.drainAll()
+                await EmbeddedMusicBrowserSession.drainAll()
+            }
+            await scene.stopAndWait()
+            onRetired?()
+        }
+        closingTasks[id] = task
+        return task
+    }
+
+}
+
+@MainActor final class MusicEmbeddedPresentation {
+    private let client: ExtensionEngineClient?
+    private let uiOnly: Bool
+    private let location: String
+    private let section: String
+    private let tile: Data?
+    private let target: String?
+    private let notch: EmbeddedMusicNotchRoute?
+    private let notchModel: EmbeddedMusicNotchModel?
+    let settingsModel: EmbeddedMusicSettingsModel?
+    private var pending = true
+    private weak var presentedController: NSViewController?
+    private var closed = false
+    private var detached = false
+    private var keysHeld = false
+    var isMain: Bool { location == "main" }
+    var usesRemoteClient: Bool { client != nil }
+    var isRetained: Bool { !closed && (pending || presentedController != nil) }
+
+    init?(
+        context: NSDictionary, client: ExtensionEngineClient?, uiOnly: Bool, version: String? = nil
+    ) {
+        guard let location = context["location"] as? String,
+            let section = context["section"] as? String
+        else { return nil }
+        let tile = context["tile"] as? Data
+        let target = context["target"] as? String
+        let notch = EmbeddedMusicNotchRoute(context: context)
+        if uiOnly {
+            guard location == "settings", section == "music", context["tile"] == nil,
+                context["target"] == nil,
+                client == nil
+            else { return nil }
+        } else if location == "notch" {
+            guard client != nil, notch != nil else { return nil }
+        } else if location == "home" {
+            guard client != nil, section == "music", target == "home", let tile,
+                tile.count <= 65_536,
+                let value = try? JSONDecoder().decode(SurfaceTile.self, from: tile),
+                value.widget == .music,
+                (try? SurfaceSnapshotRequest(target: .home, tile: value).encoded(
+                    providerID: "music")) != nil
+            else { return nil }
+        } else {
+            guard client != nil, context["tile"] == nil, context["target"] == nil,
+                EmbeddedMusicSceneRoute(context) != nil
+            else { return nil }
+        }
+        self.location = location; self.section = section; self.tile = tile; self.target = target
+        self.uiOnly = uiOnly; self.client = client; self.notch = notch
+        if location == "settings", let client {
+            settingsModel = EmbeddedMusicSettingsModel(expectedVersion: version) {
+                operation, payload in
+                try await client.invoke(operation, payload: payload)
+            }
+        } else {
+            settingsModel = nil
+        }
+        if let notch, let client {
+            notchModel = EmbeddedMusicNotchModel(
+                request: notch.request, expectedVersion: version,
+                presentationID: client.presentationID, detailed: notch.section == .card,
+                invoke: { operation, payload in
+                    try await client.invoke(operation, payload: payload)
+                })
+        } else {
+            notchModel = nil
+        }
+    }
+
+    private var holdsKeys: Bool {
+        client != nil && ["main", "music.footer", "music.sidebar"].contains(location)
+    }
+
+    func attach() {
+        if let client { EmbeddedMusicRemote.shared.configure(client) }
+        if holdsKeys, !keysHeld { keysHeld = true; EmbeddedMusicKeyMonitor.acquire() }
+    }
+
+    func matches(_ context: NSDictionary) -> Bool {
+        !closed && (context["tile"] == nil || context["tile"] is Data)
+            && (context["target"] == nil || context["target"] is String)
+            && context["location"] as? String == location
+            && context["section"] as? String == section
+            && context["tile"] as? Data == tile && context["target"] as? String == target
+    }
+
+    func controller() -> NSViewController? {
+        guard !closed else { return nil }
+        if let presentedController { return presentedController }
+        let controller: NSViewController?
+        if uiOnly {
+            controller = NSHostingController(
+                rootView: ExtensionPageHost { EmbeddedMusicDisabledSettings() })
+        } else if let settingsModel {
+            controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    EmbeddedMusicSceneLoad {
+                        EmbeddedMusicSettings(model: settingsModel) {
+                            EmbeddedMusicRemote.shared.send(.openMusic)
+                        }
+                    }
+                })
+        } else if let notch, let notchModel {
+            controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    EmbeddedMusicNotchScene(route: notch, model: notchModel)
+                })
+        } else if location == "home", let tile,
+            let value = try? JSONDecoder().decode(SurfaceTile.self, from: tile)
+        {
+            controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    EmbeddedMusicSceneLoad { EmbeddedMusicHomeScene(tile: value) }
+                })
+        } else {
+            controller = EmbeddedMusicAuxiliaryScenes.controller([
+                "location": location, "section": section,
+            ])
+        }
+        if let controller { presentedController = controller; pending = false }
+        return controller
+    }
+
+    func prepareToClose() async throws {
+        try await settingsModel?.prepareToClose()
+    }
+
+    func suspendCommands() { settingsModel?.suspendCommands() }
+
+    func suspendCommandsAndWait() async { await settingsModel?.suspendCommandsAndWait() }
+
+    func stopAndWait() async {
+        beginShutdown()
+        await settingsModel?.stopAndWait()
+        shutdown()
+    }
+
+    func beginShutdown() {
+        closed = true; pending = false; notchModel?.shutdown(); settingsModel?.stop()
+    }
+
+    func shutdown() {
+        beginShutdown()
+        guard !detached else { return }
+        detached = true
+        if keysHeld { keysHeld = false; EmbeddedMusicKeyMonitor.release() }
+        if let client { EmbeddedMusicRemote.shared.detach(client) }
+    }
+}
+
+private struct EmbeddedMusicDisabledSettings: View {
+    var body: some View {
+        PageWorkspace {
+            PageHeader("Music settings")
+        } content: {
+            PageNotice(
+                "Enable the Music extension to configure its library, accounts and playback.",
+                tone: .information
+            )
+            .padding(UIScale.pt(24))
+        }
+    }
+}

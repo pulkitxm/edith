@@ -1,0 +1,767 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+@testable import DatabaseCore
+@testable import DatabaseEngine
+import SwiftUI
+import Testing
+
+@testable import DatabaseExtension
+
+@MainActor
+@Suite(.serialized)
+struct DatabaseWorkbenchRenderTests {
+    init() {
+        _ = TestWindowHost.application
+    }
+
+    @Test func structureAndQueryHistoryPreserveTheTabDraftAndBrowseResults() async throws {
+        let fixture = try await Self.fixture()
+        let connection = try #require(fixture.connections.selectedConnection)
+        let tab = try #require(fixture.tabs.selected)
+        let fields = tab.data.fields
+        let records = tab.data.records
+        let revision = tab.data.recordsRevision
+        tab.selectMode(.structure, connection: connection)
+        #expect(tab.data.objectFields == fields)
+        #expect(tab.data.recordsRevision == revision)
+        #expect(tab.data.records == records)
+        tab.selectMode(.query, connection: connection)
+        await Self.waitUntil { tab.data.state == .loaded }
+        tab.data.queryText = "SELECT customer FROM public.orders"
+        let queryRevision = tab.data.recordsRevision
+        tab.selectMode(.structure, connection: connection)
+        tab.selectMode(.query, connection: connection)
+        #expect(tab.data.queryText == "SELECT customer FROM public.orders")
+        #expect(tab.data.recordsRevision == queryRevision)
+        tab.history.record("SELECT id FROM public.orders", operation: .search)
+        let entry = try #require(tab.history.entries.first)
+        tab.restoreQuery(entry, connection: connection)
+        #expect(tab.data.queryText == entry.text)
+        #expect(tab.data.recordsRevision == queryRevision)
+        #expect(tab.data.objectFields == fields)
+    }
+
+    @Test func compactQueryControlsRemainVisibleAtIncreasedZoom() async throws {
+        let previous = UIScale.current
+        UIScale.apply(1.6)
+        defer { UIScale.apply(previous) }
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let oldAttributes = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, oldAttributes) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+        let fixture = try await Self.fixture()
+        let tab = try #require(fixture.tabs.selected)
+        tab.mode = .query
+        tab.data.queryText = "SELECT customer FROM public.orders"
+        tab.history.record(tab.data.queryText, operation: .search)
+        let host = NSHostingView(
+            rootView: DatabaseWorkbenchView(
+                connections: fixture.connections, explorer: fixture.explorer,
+                tabs: fixture.tabs, mutations: fixture.mutations
+            )
+            .environment(\.compactLayout, true)
+            .environment(\.automaticViewActionsEnabled, false))
+        host.sizingOptions = []
+        host.frame = NSRect(x: 0, y: 0, width: 680, height: 900)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        var seen = Set<ObjectIdentifier>()
+        func elements(_ root: NSObject) -> [NSObject] {
+            guard seen.insert(ObjectIdentifier(root)).inserted else { return [] }
+            let children = (root as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+            return [root] + children.flatMap(elements)
+        }
+        let accessibility = elements(host)
+        let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
+        #expect(abs(host.bounds.height - 900) < 2)
+        for title in ["Run", "History", "More database actions"] {
+            let control = try #require(
+                accessibility.first {
+                    nativeAccessibilityMatches($0, label: title)
+                        && (($0 as AnyObject).accessibilityRole?() == .button
+                            || ($0 as AnyObject).accessibilityRole?() == .popUpButton
+                            || ($0 as AnyObject).accessibilityRole?() == .menuButton)
+                }, "\(title)")
+            let frame = try #require((control as AnyObject).accessibilityFrame?(), "\(title)")
+            #expect(frame.width > 0 && frame.height > 0, "\(title)")
+            #expect(viewport.insetBy(dx: -1, dy: -1).contains(frame), "\(title)")
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    @Test func finishedWorkbenchModesRenderWithSyntheticData() async throws {
+        let fixture = try await Self.fixture()
+        let tab = try #require(fixture.tabs.selected)
+        tab.data.queryText =
+            "SELECT id, customer, status\nFROM public.orders\nWHERE status = 'active'\nORDER BY created_at DESC;"
+        tab.history.record(tab.data.queryText, operation: .search)
+        for mode in DatabaseWorkbenchMode.allCases {
+            tab.mode = mode
+            for scheme in [ColorScheme.light, .dark] {
+                let directory = ProcessInfo.processInfo.environment[
+                    "EDITH_DATABASE_WORKBENCH_EVIDENCE_DIR"]
+                let captureURL = directory.map {
+                    URL(fileURLWithPath: $0).appendingPathComponent(
+                        "\(mode.rawValue)-\(scheme == .dark ? "dark" : "light").png")
+                }
+                let image = try #require(
+                    renderWorkbench(
+                        DatabaseWorkbenchView(
+                            connections: fixture.connections, explorer: fixture.explorer,
+                            tabs: fixture.tabs, mutations: fixture.mutations),
+                        width: 1180, height: 760, scheme: scheme, captureURL: captureURL))
+                #expect(image.pixelsWide >= 1180)
+                #expect(image.representation(using: .png, properties: [:])?.count ?? 0 > 18_000)
+            }
+        }
+    }
+
+    @Test func populatedWorkbenchRendersAcrossLayoutsAndAppearances() async throws {
+        let fixture = try await Self.fixture()
+
+        for width in [CGFloat(1_180), CGFloat(620)] {
+            for scheme in [ColorScheme.light, .dark] {
+                let image = try #require(
+                    renderWorkbench(
+                        DatabaseWorkbenchView(
+                            connections: fixture.connections,
+                            explorer: fixture.explorer,
+                            tabs: fixture.tabs,
+                            mutations: fixture.mutations),
+                        width: width,
+                        height: 760,
+                        scheme: scheme))
+                #expect(image.pixelsWide >= Int(width))
+                #expect(image.pixelsHigh >= 760)
+                #expect(image.representation(using: .png, properties: [:])?.count ?? 0 > 18_000)
+            }
+        }
+    }
+
+    @Test func switchingLargeResultTabsRetainsNativeTablesAndScroll() async throws {
+        let fixture = try await Self.fixture(recordCount: 10_000)
+        let connection = try #require(fixture.connections.selectedConnection)
+        let firstTab = try #require(fixture.tabs.selected)
+        let host = NSHostingView(
+            rootView: DatabaseWorkbenchView(
+                connections: fixture.connections, explorer: fixture.explorer,
+                tabs: fixture.tabs, mutations: fixture.mutations
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = NSRect(x: 0, y: 0, width: 1180, height: 760)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.02))
+            host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+        }
+        func tables(_ view: NSView) -> [NSTableView] {
+            if let table = view as? NSTableView, table.accessibilityLabel() == "Database records" {
+                return [table]
+            }
+            return view.subviews.flatMap { tables($0) }
+        }
+        settle()
+        let first = try #require(tables(host).first)
+        let scroll = try #require(first.enclosingScrollView)
+        scroll.contentView.scroll(to: CGPoint(x: 120, y: 600))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        settle()
+        let offset = scroll.contentView.bounds.origin
+        #expect(offset.y == 600)
+        let cell = try #require(first.view(atColumn: 1, row: 25, makeIfNecessary: false))
+        let secondObject = DatabaseObjectIdentifier(
+            kind: .table, path: ["public", "archived_orders"])
+        fixture.tabs.open(secondObject, connection: connection)
+        fixture.explorer.select(secondObject)
+        await Self.waitUntil { fixture.tabs.data.state == .loaded }
+        settle()
+        let secondTab = try #require(fixture.tabs.selected)
+        let second = try #require(tables(host).first { $0 !== first })
+        let identities = Set(tables(host).map(ObjectIdentifier.init))
+        #expect(identities.count == 2)
+        var durations: [Double] = []
+        for index in 0..<20 {
+            let tab = index.isMultiple(of: 2) ? firstTab : secondTab
+            let started = ContinuousClock.now
+            fixture.tabs.select(tab.id)
+            fixture.explorer.select(tab.object)
+            settle()
+            durations.append(Double(started.duration(to: .now).components.attoseconds) / 1e15)
+            #expect(Set(tables(host).map(ObjectIdentifier.init)) == identities)
+            #expect(first.enclosingScrollView?.contentView.bounds.origin == offset)
+            #expect(first.view(atColumn: 1, row: 25, makeIfNecessary: false) === cell)
+            #expect(tab.data.records.count == 10_000)
+            #expect(tab.data.state == .loaded)
+        }
+        for table in [first, second] {
+            #expect(table.numberOfRows == 10_000)
+            #expect(table.subviews.filter { $0 is NSTableRowView }.count < 100)
+        }
+        let sorted = durations.sorted()
+        print(
+            "tab switching with 10,000 rows per tab: median \(sorted[10]) ms, p95 \(sorted[18]) ms, including a 20 ms UI settle"
+        )
+        fixture.tabs.close(secondTab.id)
+        settle()
+        #expect(tables(host).count == 1)
+        #expect(tables(host).first === first)
+    }
+
+    @Test(
+        .enabled(if: ProcessInfo.processInfo.environment["EDITH_DATABASE_RELATION_FILTERS"] == "1"))
+    func relatedFiltersAndTableTabsRenderWithLiveSyntheticData() async throws {
+        let definition = try Self.connection()
+        let report = Self.capabilityReport()
+        let connections = DatabaseConnectionWorkspaceModel(
+            sender: DatabaseWorkbenchScriptedSender(responses: [
+                Self.connectionListResponse(definition),
+                Self.connectionResponse(definition, report: report),
+            ]), prepareConnection: { _ in }, announcement: { _ in })
+        await connections.loadConnections()
+        await connections.connectSelected()
+        let connection = try #require(connections.selectedConnection)
+        let member = DatabaseObjectIdentifier(kind: .table, path: ["relation_filters", "member"])
+        let organization = DatabaseObjectIdentifier(
+            kind: .table, path: ["relation_filters", "organization"])
+        let enrollment = DatabaseObjectIdentifier(
+            kind: .table, path: ["relation_filters", "enrollment"])
+        let explorer = DatabaseObjectExplorerModel(
+            sender: DatabaseWorkbenchScriptedSender(responses: [
+                Self.schemaResponse(name: "relation_filters"),
+                Self.browseResponse(
+                    DatabasePage(
+                        records: [member, organization, enrollment].map { object in
+                            DatabaseRecord(fields: [
+                                DatabaseObjectField(
+                                    name: "name", value: .string(object.path.last!)),
+                                DatabaseObjectField(name: "kind", value: .string("table")),
+                                DatabaseObjectField(
+                                    name: "estimatedRows",
+                                    value: .signedInteger(object == member ? 5 : 3)),
+                                DatabaseObjectField(name: "columnCount", value: .signedInteger(3)),
+                            ])
+                        }, metadata: Self.pageMetadata(count: 3))),
+            ]))
+        explorer.load(connection)
+        await Self.waitUntil { explorer.selectedObject != nil }
+        explorer.select(member)
+        let sender = try await DatabaseWorkbenchLiveFixtureSender.make(definition)
+        let tabs = DatabaseTableTabsModel(makeData: {
+            DatabaseDataWorkspaceModel(sender: sender, announcement: { _ in })
+        })
+        tabs.open(member, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let memberTab = try #require(tabs.selected)
+        tabs.data.addFilterClause(
+            field: "organization.slug", operation: .equal, valueText: "sample-studio")
+        tabs.data.setSort(field: "id", direction: .descending, additive: false)
+        tabs.data.browse(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.records.count == 2)
+        tabs.open(organization, connection: connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        #expect(tabs.data.filterClauses.isEmpty)
+        tabs.open(member, connection: connection)
+        #expect(tabs.selected === memberTab)
+        #expect(tabs.data.records.count == 2)
+        let view = DatabaseWorkbenchView(
+            connections: connections, explorer: explorer, tabs: tabs,
+            mutations: DatabaseWorkspaceModel())
+        for mode in [DatabaseWorkbenchMode.browse, .query] {
+            if mode == .query { tabs.data.prepareQuery(member, connection: connection) }
+            tabs.selected?.mode = mode
+            let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"]
+            let captureURL = directory.map {
+                URL(fileURLWithPath: $0).appendingPathComponent("\(mode.rawValue)-window.png")
+            }
+            let image = try #require(
+                renderWorkbench(
+                    view, width: 1_180, height: 640, scheme: .dark, captureURL: captureURL))
+            if let directory {
+                try FileManager.default.createDirectory(
+                    atPath: directory, withIntermediateDirectories: true)
+                let bytes = try #require(image.representation(using: .png, properties: [:]))
+                try bytes.write(
+                    to: URL(fileURLWithPath: directory).appendingPathComponent(
+                        "\(mode.rawValue).png"))
+            }
+        }
+        #expect(tabs.data.queryText.contains("sample-studio"))
+        #expect(tabs.data.queryText.contains("DESC"))
+        tabs.open(enrollment, connection: connection)
+        explorer.select(enrollment)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        tabs.data.beginInsert(connection)
+        tabs.data.updateEditorField("name", text: "Taylor Demo")
+        tabs.data.updateEditorField("role", text: "editor")
+        tabs.data.updateEditorField("active", text: "false")
+        tabs.data.updateEditorField("settings", text: "{\"notifications\":true}")
+        #expect(
+            tabs.data.editorFields.first(where: { $0.id == "active" })?.choiceValues == [
+                "true", "false",
+            ])
+        #expect(tabs.data.editorFields.first(where: { $0.id == "id" })?.isGenerated == true)
+        #expect(
+            tabs.data.editorFields.first(where: { $0.id == "role" })?.enumValues == [
+                "viewer", "editor", "admin",
+            ])
+        let directory = ProcessInfo.processInfo.environment["EDITH_DATABASE_EVIDENCE_DIR"]
+        let captureURL = directory.map {
+            URL(fileURLWithPath: $0).appendingPathComponent("new-row.png")
+        }
+        #expect(
+            renderWorkbench(view, width: 1_180, height: 640, scheme: .dark, captureURL: captureURL)
+                != nil)
+        let insert = try #require(tabs.data.editorMutationRequest(connection))
+        try await sender.apply(insert)
+        tabs.data.finishMutation(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let inserted = try #require(
+            tabs.data.records.first(where: { record in
+                record.fields.contains { $0.name == "name" && $0.value == .string("Taylor Demo") }
+            }))
+        let insertedIdentity = try #require(inserted.identity)
+        let insertedIndex = try #require(tabs.data.records.firstIndex(of: inserted))
+        tabs.data.selectRecord(at: insertedIndex)
+        tabs.data.beginEditingSelectedRow(connection)
+        tabs.data.updateEditorField("role", text: "admin")
+        let update = try #require(tabs.data.editorMutationRequest(connection))
+        try await sender.apply(update)
+        tabs.data.finishMutation(connection)
+        await Self.waitUntil { tabs.data.state == .loaded }
+        let savedURL = directory.map {
+            URL(fileURLWithPath: $0).appendingPathComponent("saved-row.png")
+        }
+        #expect(
+            renderWorkbench(view, width: 1_180, height: 640, scheme: .dark, captureURL: savedURL)
+                != nil)
+        try await sender.apply(
+            DatabaseRowMutationRequests.postgreSQLDelete(
+                target: DatabaseTargetIdentifier(
+                    connectionID: definition.id, object: enrollment,
+                    record: insertedIdentity)))
+        await sender.disconnect()
+    }
+
+    private static func fixture(recordCount: Int = 12) async throws
+        -> DatabaseWorkbenchRenderFixture
+    {
+        let definition = try connection()
+        let report = capabilityReport()
+        let connectionSender = DatabaseWorkbenchScriptedSender(responses: [
+            connectionListResponse(definition),
+            connectionResponse(definition, report: report),
+        ])
+        let connections = DatabaseConnectionWorkspaceModel(
+            sender: connectionSender,
+            currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in },
+            announcement: { _ in })
+        await connections.loadConnections()
+        await connections.connectSelected()
+        let connection = try #require(connections.selectedConnection)
+
+        let explorerSender = DatabaseWorkbenchScriptedSender(responses: [
+            schemaResponse(),
+            objectResponse(),
+        ])
+        let explorer = DatabaseObjectExplorerModel(sender: explorerSender)
+        explorer.load(connection)
+        await waitUntil { explorer.selectedObject != nil }
+        let object = try #require(explorer.selectedObject)
+
+        let dataSender = DatabaseWorkbenchScriptedSender(responses: [
+            dataResponse(count: recordCount), dataResponse(count: recordCount),
+        ])
+        let data = DatabaseDataWorkspaceModel(sender: dataSender, announcement: { _ in })
+        data.prepare(for: connection)
+        data.open(object, connection: connection)
+        await waitUntil { data.state == .loaded }
+        data.addFilterClause(field: "status", operation: .equal, valueText: "active")
+        data.addFilterClause(field: "customer", operation: .contains, valueText: "a")
+        data.setSort(field: "created_at", direction: .descending, additive: false)
+        data.setSort(field: "id", direction: .ascending, additive: true)
+        data.selectRecord(at: 1)
+
+        let tabs = DatabaseTableTabsModel(
+            data: data,
+            makeData: {
+                DatabaseDataWorkspaceModel(sender: dataSender, announcement: { _ in })
+            })
+        tabs.prepare(for: connection)
+        tabs.open(object, connection: connection)
+        return DatabaseWorkbenchRenderFixture(
+            connections: connections,
+            explorer: explorer,
+            tabs: tabs,
+            mutations: DatabaseWorkspaceModel())
+    }
+
+    private static func connection() throws -> DatabaseConnectionDefinition {
+        DatabaseConnectionDefinition(
+            id: DatabaseConnectionID(
+                rawValue: UUID(uuidString: "7B91F479-A32B-40E0-94D5-037644F5DB10")!),
+            displayName: "Orders warehouse",
+            productHint: .postgresql,
+            location: .network([
+                DatabaseNetworkEndpoint(host: "warehouse.internal", port: try DatabasePort(5_432))
+            ]),
+            username: "operator",
+            namespaces: DatabaseNamespaceDefaults(schema: "public", database: "commerce"),
+            deploymentMode: .standalone,
+            authentication: DatabaseAuthentication(kind: .usernameAndPassword),
+            tls: DatabaseTLSConfiguration(mode: .required, verification: .full),
+            limits: DatabaseConnectionLimits(
+                connectionTimeout: try DatabaseTimeout(milliseconds: 5_000),
+                operationTimeout: try DatabaseTimeout(milliseconds: 30_000),
+                poolSize: try DatabasePoolSize(4)),
+            readOnlyPolicy: .disabled,
+            productionPolicy: .requireMutationPreview,
+            environment: DatabaseEnvironmentMetadata(
+                kind: .development,
+                label: "development",
+                protection: .standard),
+            group: "commerce",
+            tags: ["orders", "primary"],
+            color: "indigo",
+            isFavorite: true,
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            updatedAt: Date(timeIntervalSince1970: 2_000),
+            lastUsedAt: Date(timeIntervalSince1970: 3_000))
+    }
+
+    private static func capabilityReport() -> DatabaseCapabilityReport {
+        let capabilities: [DatabaseCapabilityID] = [.browse, .insert, .update, .delete]
+        return DatabaseCapabilityReport(
+            productIdentity: DatabaseProductIdentity(
+                product: .postgresql,
+                version: DatabaseVersion(string: "17.4"),
+                topology: DatabaseTopology(kind: .standalone)),
+            capabilities: capabilities.map {
+                DatabaseCapabilityStatus(
+                    id: $0,
+                    requirement: .sharedRequired,
+                    availability: .available)
+            },
+            pagingModes: [.keyset],
+            cancellationModes: [.protocolCancellation],
+            discoveredAt: Date(timeIntervalSince1970: 8_000),
+            expiresAt: Date(timeIntervalSince1970: 8_300))
+    }
+
+    private static func connectionListResponse(
+        _ connection: DatabaseConnectionDefinition
+    ) -> DatabaseBrokerCommandResponse {
+        .connectionList(
+            .success(
+                DatabaseConnectionListResult(connections: [connection]),
+                metadata: completeMetadata))
+    }
+
+    private static func connectionResponse(
+        _ connection: DatabaseConnectionDefinition,
+        report: DatabaseCapabilityReport
+    ) -> DatabaseBrokerCommandResponse {
+        .connect(
+            .success(
+                DatabaseConnectResult(
+                    connection: connection.identity,
+                    productIdentity: report.productIdentity,
+                    capabilities: report,
+                    connectedAt: Date(timeIntervalSince1970: 8_000)),
+                metadata: completeMetadata))
+    }
+
+    private static func schemaResponse(name: String = "public") -> DatabaseBrokerCommandResponse {
+        let page = DatabasePage(
+            records: [
+                DatabaseRecord(fields: [
+                    DatabaseObjectField(name: "name", value: .string(name)),
+                    DatabaseObjectField(name: "canUse", value: .boolean(true)),
+                ])
+            ],
+            fields: [],
+            metadata: pageMetadata(count: 1))
+        return browseResponse(page)
+    }
+
+    private static func objectResponse() -> DatabaseBrokerCommandResponse {
+        let page = DatabasePage(
+            records: [
+                DatabaseRecord(fields: [
+                    DatabaseObjectField(name: "name", value: .string("orders")),
+                    DatabaseObjectField(name: "kind", value: .string("table")),
+                    DatabaseObjectField(name: "estimatedRows", value: .signedInteger(12_480)),
+                    DatabaseObjectField(name: "columnCount", value: .signedInteger(7)),
+                ]),
+                DatabaseRecord(fields: [
+                    DatabaseObjectField(name: "name", value: .string("customers")),
+                    DatabaseObjectField(name: "kind", value: .string("table")),
+                    DatabaseObjectField(name: "estimatedRows", value: .signedInteger(3_842)),
+                    DatabaseObjectField(name: "columnCount", value: .signedInteger(6)),
+                ]),
+                DatabaseRecord(fields: [
+                    DatabaseObjectField(name: "name", value: .string("daily_revenue")),
+                    DatabaseObjectField(name: "kind", value: .string("view")),
+                    DatabaseObjectField(name: "columnCount", value: .signedInteger(5)),
+                ]),
+            ],
+            fields: [],
+            metadata: pageMetadata(count: 3))
+        return browseResponse(page)
+    }
+
+    private static func dataResponse(count: Int = 12) -> DatabaseBrokerCommandResponse {
+        let names = [
+            "Ada Lovelace", "Grace Hopper", "Margaret Hamilton", "Barbara Liskov",
+            "Radia Perlman", "Annie Easley", "Mary Jackson", "Karen Spärck Jones",
+            "Frances Allen", "Evelyn Boyd Granville", "Jean Sammet", "Adele Goldberg",
+        ]
+        let records = (0..<count).map { index in
+            let name = names[index % names.count]
+            let identifier = Int64(1_024 + index)
+            let day = String(format: "%02d", 18 + index % names.count)
+            return DatabaseRecord(
+                identity: DatabaseRecordIdentity(
+                    kind: .primaryKey,
+                    components: [
+                        DatabaseIdentityComponent(name: "id", value: .signedInteger(identifier))
+                    ]),
+                fields: [
+                    DatabaseObjectField(name: "id", value: .signedInteger(identifier)),
+                    DatabaseObjectField(name: "customer", value: .string(name)),
+                    DatabaseObjectField(
+                        name: "email",
+                        value: .string(
+                            name.lowercased().replacingOccurrences(of: " ", with: ".")
+                                + "@example.com")),
+                    DatabaseObjectField(
+                        name: "status",
+                        value: .string(index.isMultiple(of: 4) ? "review" : "active")),
+                    DatabaseObjectField(
+                        name: "total",
+                        value: .string("$\(128 + index * 37).00")),
+                    DatabaseObjectField(
+                        name: "created_at",
+                        value: .timestamp(
+                            DatabaseTimestampValue(text: "2026-08-\(day)T09:42:00Z"))),
+                ])
+        }
+        let fields = [
+            field("id", type: "bigint", nullable: false),
+            field("customer", type: "text", nullable: false),
+            field("email", type: "text", nullable: false),
+            field("status", type: "text", nullable: false),
+            field("total", type: "numeric", nullable: false),
+            field("created_at", type: "timestamp", nullable: false),
+        ]
+        return browseResponse(
+            DatabasePage(
+                records: records,
+                fields: fields,
+                metadata: DatabasePageMetadata(
+                    completeness: DatabaseResultCompleteness(state: .sampled),
+                    count: DatabaseCountMetadata(value: 12_480, accuracy: .estimated))))
+    }
+
+    private static func field(
+        _ name: String,
+        type: String,
+        nullable: Bool
+    ) -> DatabaseFieldDescriptor {
+        DatabaseFieldDescriptor(
+            path: DatabaseFieldPath(name),
+            displayName: name,
+            typeName: type,
+            isNullable: nullable,
+            isSortable: true,
+            isFilterable: true)
+    }
+
+    private static func browseResponse(
+        _ page: DatabaseCore.DatabasePage<DatabaseRecord>
+    ) -> DatabaseBrokerCommandResponse {
+        .browse(
+            .success(
+                DatabaseBrowseResult(page: page),
+                metadata: DatabaseResultMetadata(completeness: page.metadata.completeness)))
+    }
+
+    private static func pageMetadata(count: UInt64) -> DatabasePageMetadata {
+        DatabasePageMetadata(
+            completeness: DatabaseResultCompleteness(state: .complete),
+            count: DatabaseCountMetadata(value: count, accuracy: .exact))
+    }
+
+    private static let completeMetadata = DatabaseResultMetadata(
+        completeness: DatabaseResultCompleteness(state: .complete))
+
+    private static func waitUntil(_ condition: () -> Bool) async {
+        for _ in 0..<10_000 {
+            if condition() { return }
+            await Task.yield()
+        }
+        Issue.record("The workbench fixture did not reach the expected state.")
+    }
+}
+
+@MainActor
+private struct DatabaseWorkbenchRenderFixture {
+    let connections: DatabaseConnectionWorkspaceModel
+    let explorer: DatabaseObjectExplorerModel
+    let tabs: DatabaseTableTabsModel
+    let mutations: DatabaseWorkspaceModel
+}
+
+private actor DatabaseWorkbenchScriptedSender: DatabaseBrokerCommandSending {
+    private var responses: [DatabaseBrokerCommandResponse]
+
+    init(responses: [DatabaseBrokerCommandResponse]) {
+        self.responses = responses
+    }
+
+    func send(
+        _ request: DatabaseBrokerCommandRequest
+    ) async throws -> DatabaseBrokerCommandResponse {
+        guard !responses.isEmpty else {
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        return responses.removeFirst()
+    }
+}
+
+@MainActor
+private func renderWorkbench(
+    _ view: some View,
+    width: CGFloat,
+    height: CGFloat,
+    scheme: ColorScheme,
+    captureURL: URL? = nil
+) -> NSBitmapImageRep? {
+    let host = NSHostingView(
+        rootView:
+            view
+            .tint(themeColor(AppTheme.accent.rawValue))
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.compactLayout, width < 680)
+            .preferredColorScheme(scheme))
+    host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+    let window = TestWindowHost.window(contentRect: host.frame)
+    defer { window.orderOut(nil) }
+    window.appearance = NSAppearance(
+        named: scheme == .dark ? .darkAqua : .aqua)
+    window.backgroundColor = .windowBackgroundColor
+    window.contentView = host
+    window.orderBack(nil)
+    window.layoutIfNeeded()
+    host.layoutSubtreeIfNeeded()
+    host.displayIfNeeded()
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+    func redraw(_ view: NSView) {
+        for child in view.subviews { redraw(child) }
+        view.needsDisplay = true
+        view.displayIfNeeded()
+    }
+    redraw(host)
+    if let captureURL {
+        window.setFrameOrigin(NSPoint(x: 100, y: 100))
+        window.orderFrontRegardless()
+        window.display()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.5))
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), captureURL.path]
+        do {
+            try FileManager.default.createDirectory(
+                at: captureURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try capture.run()
+            capture.waitUntilExit()
+            if capture.terminationStatus == 0, let bytes = try? Data(contentsOf: captureURL) {
+                return NSBitmapImageRep(data: bytes)
+            }
+        } catch {
+            Issue.record("Unable to capture the synthetic database window: \(error)")
+        }
+        return nil
+    }
+    guard let image = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+    host.cacheDisplay(in: host.bounds, to: image)
+    return image
+}
+
+private actor DatabaseWorkbenchLiveFixtureSender: DatabaseBrokerCommandSending {
+    let session: PostgreSQLDatabaseAdapterSession
+
+    init(session: PostgreSQLDatabaseAdapterSession) {
+        self.session = session
+    }
+
+    static func make(_ definition: DatabaseConnectionDefinition) async throws
+        -> DatabaseWorkbenchLiveFixtureSender
+    {
+        let values = ProcessInfo.processInfo.environment
+        let database = try #require(values["EDITH_DATABASE_POSTGRESQL_DATABASE"])
+        let client = try await PostgresNIODatabaseClient.connect(
+            PostgreSQLDatabaseConnectionPlan(
+                host: try #require(values["EDITH_DATABASE_POSTGRESQL_HOST"]),
+                port: try #require(Int(values["EDITH_DATABASE_POSTGRESQL_PORT"] ?? "")),
+                username: try #require(values["EDITH_DATABASE_POSTGRESQL_USERNAME"]),
+                password: values["EDITH_DATABASE_POSTGRESQL_PASSWORD"],
+                database: database,
+                tls: .disabled, tlsServerName: nil,
+                connectTimeoutMilliseconds: 5_000, statementTimeoutMilliseconds: 15_000,
+                readOnly: false))
+        let identity = try await client.discoverIdentity()
+        return DatabaseWorkbenchLiveFixtureSender(
+            session: PostgreSQLDatabaseAdapterSession(
+                connection: definition, productIdentity: identity, client: client))
+    }
+
+    func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
+    {
+        guard case .browse(let request) = request else {
+            throw DatabaseBrokerCommandClientError.invalidRequest
+        }
+        let page = try await session.readPage(
+            DatabaseAdapterPageRequest(
+                target: request.target, page: request.page, continuation: nil),
+            context: DatabaseAdapterOperationContext(
+                operation: DatabaseOperationContext(),
+                cancellation: DatabaseAdapterCancellationSignal()))
+        return .browse(
+            .success(
+                DatabaseBrowseResult(
+                    page: DatabasePage(
+                        records: page.records, fields: page.fields, metadata: page.metadata)),
+                metadata: DatabaseResultMetadata(completeness: .init(state: .complete))))
+    }
+
+    func apply(_ request: DatabaseDestructiveRequest) async throws {
+        let context = DatabaseAdapterOperationContext(
+            operation: DatabaseOperationContext(), cancellation: DatabaseAdapterCancellationSignal()
+        )
+        let plan = try await session.normalizeMutation(request, context: context)
+        let result = try await session.executeMutation(plan, context: context)
+        #expect(result.effect == .applied)
+        #expect(result.affectedRecords.value == 1)
+    }
+
+    func disconnect() async { await session.disconnect() }
+}

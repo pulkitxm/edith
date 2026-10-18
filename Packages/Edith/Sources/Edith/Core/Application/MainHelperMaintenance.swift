@@ -94,3 +94,29 @@ enum HelperTerminationWaiter {
         }
     }
 }
+
+@MainActor
+func restartHelperForExtensionChanges() async -> Bool {
+    let helperURL = Bundle.main.bundleURL.appendingPathComponent(
+        "Contents/Library/LoginItems/Edith.app")
+    if let process = NSRunningApplication.runningApplications(
+        withBundleIdentifier: helperBundleIdentifier
+    ).first {
+        guard process.terminate() else { return false }
+        do {
+            guard
+                try await HelperTerminationWaiter.wait(
+                    timeout: .seconds(15),
+                    isTerminated: {
+                        process.isTerminated
+                    })
+            else { return false }
+        } catch { return false }
+    }
+    do { try MarketplaceServices.store.completePendingRemovals() } catch { return false }
+    do {
+        _ = try await NSWorkspace.shared.openApplication(
+            at: helperURL, configuration: AppLaunchConfiguration.make())
+        return true
+    } catch { return false }
+}

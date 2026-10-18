@@ -1,5 +1,26 @@
 import { expect, test } from "bun:test";
-import { findLiterals, scanFiles } from "./check-duplicate-keys.mjs";
+import {
+  findLiterals,
+  isShippingSource,
+  scanFiles,
+} from "./check-duplicate-keys.mjs";
+
+test("checks independent shipping modules without unbuilt monolithic source copies", () => {
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHostCore/HostIdentity.swift",
+    "Packages/ExtensionSupport/Sources/EdithExtensionSupport/Defaults.swift",
+    "Extensions/usage/Services/UsageMachinesPeer.swift",
+    "Extensions/studio/NativeRuntime/Sources/VideoProject.swift",
+  ])
+    expect(isShippingSource(path)).toBe(true);
+  for (const path of [
+    "Packages/Edith/Sources/Edith/Features/Dashboard/DashboardModel.swift",
+    "Extensions/usage/Tests/DefaultsTests.swift",
+    "Extensions/studio/NativeRuntime/vendor/Source.swift",
+    "Packages/ExtensionSupport/Vendor/Source.swift",
+  ])
+    expect(isShippingSource(path)).toBe(false);
+});
 
 test("finds forKey literals with their line numbers", () => {
   const text = [
@@ -15,6 +36,14 @@ test("finds forKey literals with their line numbers", () => {
 
 test("short literals are ignored", () => {
   expect(findLiterals('d.bool(forKey: "ab")')).toEqual([]);
+});
+
+test("dictionary removals do not create preference key findings", () => {
+  expect(
+    findLiterals(
+      'selection.removeValue(\n forKey: "card")\ndefaults.string(forKey: "card")',
+    ),
+  ).toEqual([{ literal: "card", line: 3 }]);
 });
 
 test("a literal used in only one file is not a finding", () => {

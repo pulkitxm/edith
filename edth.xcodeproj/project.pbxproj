@@ -23,6 +23,8 @@
 		EEFDB4D0000A2A9F5B4E685E /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 79153EBC5647B887B9985B8D /* AppIcon.icns */; };
 		F52F2ACA3C74115D1EADA87B /* EdithShared in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithShared */; };
 		B7E4A1C09D2F4B6E8A1C3D50 /* EdithShared in Frameworks */ = {isa = PBXBuildFile; productRef = 92CD22FFF15A7E58164A819B /* EdithShared */; };
+        39E6A240BF644377A7C2A010 = {isa = PBXBuildFile; productRef = 39E6A240BF644377A7C2A012; };
+        39E6A240BF644377A7C2A011 = {isa = PBXBuildFile; productRef = 39E6A240BF644377A7C2A012; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +80,7 @@
 			files = (
 				E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */,
 				F52F2ACA3C74115D1EADA87B /* EdithShared in Frameworks */,
+                39E6A240BF644377A7C2A010,
 				E95772B4B9A14C8DA28B3F10,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -104,6 +107,7 @@
 				83AFC3A4B6374B8F8E3AEE16 /* Sparkle in Frameworks */,
 				B2B16D5A6E0D43DBA670160A /* SwiftTerm in Frameworks */,
 				B7E4A1C09D2F4B6E8A1C3D50 /* EdithShared in Frameworks */,
+                39E6A240BF644377A7C2A011,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -201,6 +205,7 @@
 				50E40C33BF204D7FBD48418B /* Sparkle */,
 				CCC83B99D6204A92B3072609 /* SwiftTerm */,
 				92CD22FFF15A7E58164A819B /* EdithShared */,
+                39E6A240BF644377A7C2A012,
 			);
 			productName = EdithMain;
 			productReference = C42196203122A2922205077A /* EdithMain.app */;
@@ -225,6 +230,7 @@
 			packageProductDependencies = (
 				E95772B4B9A14C8DA28B3F11,
 				92CD22FFF15A7E58164A819B /* EdithShared */,
+                39E6A240BF644377A7C2A012,
 			);
 			productName = EdithHelper;
 			productReference = 10C5E37D0A600FE4AA48E586 /* EdithHelper.app */;
@@ -251,6 +257,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */,
+                39E6A240BF644377A7C2A013,
 				81DDD922D2E24BF7A251EF30 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				B45B44C9789D4C3FBE31C951 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
@@ -677,6 +684,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Edith;
 		};
+        39E6A240BF644377A7C2A013 = {
+            isa = XCLocalSwiftPackageReference;
+            relativePath = Packages/ExtensionMarketplace;
+        };
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -735,6 +746,11 @@
 			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;
 			productName = Highlighter;
 		};
+        39E6A240BF644377A7C2A012 = {
+            isa = XCSwiftPackageProductDependency;
+            package = 39E6A240BF644377A7C2A013;
+            productName = ExtensionMarketplace;
+        };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E2CD9CE73028F1FD00967D47 /* Project object */;

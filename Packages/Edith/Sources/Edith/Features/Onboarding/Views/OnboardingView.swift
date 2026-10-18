@@ -690,6 +690,7 @@ struct OnboardingView: View {
 
     private func completeOrProvisionOnboarding() {
         OnboardingFlow.finish(selectedIDs: selectedIDs, icloudBackup: icloudBackup)
+        Task { await MarketplaceModel.shared.updateEnabledExtensionsOnLaunch() }
         IPC.post(IPC.Name.settingsChanged)
         if selectedTools.isEmpty {
             move(to: .connect, direction: 1)

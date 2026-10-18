@@ -1,0 +1,43 @@
+name: Hosted original native owner tests
+"on":
+  workflow_call:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+      owner:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  original-tests:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && (inputs.owner == 'attention' || inputs.owner == 'terminal' || inputs.owner == 'timeLapse' || inputs.owner == 'studio' || inputs.owner == 'machines' || inputs.owner == 'virtualCamera' || inputs.owner == 'feature-models' || inputs.owner == 'database-mutation' || inputs.owner == 'database-executor')
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+      NATIVE_TEST_OWNER: "${{ inputs.owner }}"
+      EDITH_HOSTED_NATIVE_OWNER_TESTS: "1"
+      EDITH_HOSTED_RELEASE: "false"
+      EDITH_HOSTED_REBUILD: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.sha }}"
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Prepare the original optional terminal toolchain
+        if: inputs.owner == 'terminal' || inputs.owner == 'machines'
+        run: source scripts/ci-setup-zig.sh
+      - name: Run every original owner test target with bounded diagnostic cleanup
+        timeout-minutes: 42
+        run: python3 scripts/hosted-native-owner-tests.py
+      - name: Retain original outcome and bounded owned process diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hosted-original-native-${{ inputs.owner }}
+          retention-days: 3
+          path: local/hosted-native-owner-tests/

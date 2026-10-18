@@ -18,16 +18,6 @@ Some casks need administrator authentication or interactive input. Edith reports
 
 ## Command line
 
-The command line uses the same validation, parsing, process limits, and package models:
+Enable Homebrew and open its page to load the installed inventory. The active worker exposes the same cached inventory as a typed Home surface snapshot through `ed invoke homebrew surface.snapshot --json -`. Supply a complete `SurfaceSnapshotRequest` with target `home` and an `extension:homebrew` tile; the request follows the shared surface contract.
 
-```bash
-ed brew status --json
-ed brew ls --kind formula --outdated --json
-ed brew search firefox --kind cask --json
-ed brew install ripgrep --kind formula
-ed brew upgrade ripgrep --kind formula
-ed brew uninstall ripgrep --kind formula
-ed brew uninstall ripgrep --kind formula --yes
-```
-
-Uninstall is a preview unless `--yes` is present. Reporting and mutation commands support stable JSON output. See the complete [`ed brew` reference](./cli/brew/README.md) for fields, defaults, and aliases.
+Package searches and mutations remain in the Homebrew and App Maintenance pages, with their confirmation and cancellation controls. The optional local `brew` tool remains available directly in Terminal. See the [public invocation reference](./cli/invoke/README.md) for the gateway's worker availability and JSON limits.

@@ -1,0 +1,57 @@
+import EdithExtensionSupport
+import Foundation
+
+@MainActor final class PluginsSurface {
+    private let model: SkillsModel
+    private let hidden: @MainActor () -> Bool
+
+    init(
+        model: SkillsModel,
+        hidden: @escaping @MainActor () -> Bool = {
+            let values = ExtensionSharedState.current?.values(for: "presenter") ?? [:]
+            return values["active"] == "1" && values["blurShelf"] != "0"
+        }
+    ) { self.model = model; self.hidden = hidden }
+
+    static func request(_ command: String, payload: Data) throws -> SurfaceSnapshotRequest {
+        let request: SurfaceSnapshotRequest
+        switch command {
+        case "surface.snapshot":
+            request = try SurfaceSnapshotRequest.decode(payload, providerID: "plugins")
+        case "surface.perform":
+            let action = try SurfaceActionRequest.decode(payload, providerID: "plugins")
+            guard action.actionID == "refreshAgents", action.value == nil,
+                action.snapshot.tile.showActions
+            else { throw ExtensionPeerError.invalidRequest }
+            request = action.snapshot
+        default: throw ExtensionPeerError.invalidRequest
+        }
+        return request
+    }
+
+    func execute(_ command: String, payload: Data) async throws -> Data {
+        let request = try Self.request(command, payload: payload)
+        guard !model.isStopped else { throw ExtensionPeerError.unavailable }
+        if hidden() { return try snapshot(request.tile).encoded() }
+        if command == "surface.perform" || !model.agentsLoaded { await model.discoverAgents() }
+        try Task.checkCancellation()
+        guard !model.isStopped else { throw ExtensionPeerError.unavailable }
+        return try snapshot(request.tile).encoded()
+    }
+
+    func snapshot(_ tile: SurfaceTile) -> SurfaceSnapshot {
+        if hidden() { return .init(providerID: "plugins", message: "Hidden while presenting") }
+        return .init(
+            providerID: "plugins",
+            metrics: [
+                .init("agents", "Detected agents", "\(model.agents.count)"),
+                .init("skills", "Available skills", "\(model.skills.count)"),
+            ],
+            rows: model.agents.prefix(tile.itemLimit).map { agent in
+                .init(agent.id, title: agent.name, icon: "terminal")
+            },
+            actions: tile.showActions
+                ? [.init("refreshAgents", "Refresh agents", "arrow.clockwise")] : [],
+            updatedAt: Date())
+    }
+}

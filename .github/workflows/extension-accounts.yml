@@ -1,0 +1,79 @@
+name: Extension accounts
+"on":
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Extensions/herdr/**
+      - Extensions/usage/**
+      - Packages/ExtensionSupport/**
+      - scripts/build-extension-support.*
+      - scripts/account-focused-targets.test.py
+      - scripts/test-account-sdk-local.py
+      - scripts/test-account-sdk-local.test.py
+      - scripts/test-usage-accounts-local.py
+      - scripts/test-usage-accounts-local.test.py
+      - scripts/test-herdr-accounts-local.py
+      - scripts/test-herdr-accounts-local.test.py
+      - Makefile
+      - .github/workflows/extension-accounts.yml
+permissions:
+  contents: read
+concurrency:
+  group: "extension-accounts-${{ github.ref }}"
+  cancel-in-progress: true
+jobs:
+  accounts:
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - ci-extension-accounts
+          - ci-extension-herdr-accounts
+          - ci-extension-usage-accounts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Verify source identity
+        env:
+          EXPECTED_SOURCE_SHA: "${{ github.event.pull_request.head.sha || github.sha }}"
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+      - name: Verify local Herdr route contracts
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        env:
+          TMPDIR: "${{ runner.temp }}"
+        run: make ci-extension-herdr-account-contracts
+      - name: Install the pinned terminal toolchain
+        id: ghostty-toolchain
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        run: |
+          source scripts/ci-setup-zig.sh
+          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
+      - name: Reuse verified terminal native resources
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Extensions/terminal/Native/vendor
+          key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}"
+      - name: Verify focused fixture isolation
+        run: python3 -B scripts/account-focused-targets.test.py
+      - name: Verify local SDK isolation contracts
+        if: "matrix.target == 'ci-extension-accounts'"
+        run: python3 -B scripts/test-account-sdk-local.test.py
+      - name: Verify local Usage route contracts
+        if: "matrix.target == 'ci-extension-usage-accounts'"
+        env:
+          TMPDIR: "${{ runner.temp }}"
+        run: make ci-extension-usage-account-contracts
+      - name: Run account contracts with synthetic data
+        env:
+          ACCOUNT_TEST_TARGET: "${{ matrix.target }}"
+          EXTENSION_SWIFT_JOBS: "1"
+        run: make "$ACCOUNT_TEST_TARGET"
+      - name: Verify terminal cache integrity after the contracts
+        if: "matrix.target == 'ci-extension-herdr-accounts'"
+        run: node scripts/extension-ghostty-native.mjs --check
