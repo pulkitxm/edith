@@ -1,0 +1,101 @@
+import Foundation
+
+public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var website: URL
+    public var symbol: String
+
+    public init(id: UUID = UUID(), name: String, website: URL, symbol: String = "globe") {
+        self.id = id
+        self.name = name
+        self.website = website
+        self.symbol = symbol
+    }
+
+    public static let presets: [SocialPlatform] = [
+        SocialPlatform(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-000000000001")!,
+            name: "Instagram", website: URL(string: "https://www.instagram.com")!, symbol: "camera"),
+        SocialPlatform(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-000000000002")!,
+            name: "Facebook", website: URL(string: "https://www.facebook.com")!, symbol: "person.2"),
+        SocialPlatform(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-000000000003")!,
+            name: "X / Twitter", website: URL(string: "https://x.com")!,
+            symbol: "bubble.left.and.bubble.right"),
+    ]
+
+    public static func websiteURL(_ text: String) throws -> URL {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = trimmed.contains("://") ? trimmed : "https://" + trimmed
+        guard let url = URL(string: address), url.scheme?.lowercased() == "https",
+            let host = url.host, !host.isEmpty, host.contains("."),
+            url.user == nil, url.password == nil
+        else { throw SocialAccountError.invalidWebsite }
+        return url
+    }
+}
+
+public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let platformID: UUID
+    public var name: String
+    public var badge: String
+
+    public init(id: UUID = UUID(), platformID: UUID, name: String, badge: String = "") {
+        self.id = id
+        self.platformID = platformID
+        self.name = name
+        self.badge = badge
+    }
+
+    public var initials: String {
+        if !badge.isEmpty { return String(badge.prefix(2)) }
+        return String(name.split(separator: " ").prefix(2).compactMap(\.first)).uppercased()
+    }
+}
+
+public struct SocialAccountCatalog: Codable, Equatable, Sendable {
+    public var platforms: [SocialPlatform]
+    public var accounts: [SocialAccount]
+
+    public init(
+        platforms: [SocialPlatform] = SocialPlatform.presets, accounts: [SocialAccount] = []
+    ) {
+        self.platforms = platforms
+        self.accounts = accounts
+    }
+
+    public func validated() throws -> Self {
+        guard Set(platforms.map(\.id)).count == platforms.count,
+            Set(accounts.map(\.id)).count == accounts.count,
+            platforms.allSatisfy({
+                !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }),
+            accounts.allSatisfy({ account in
+                !account.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && platforms.contains { $0.id == account.platformID }
+            })
+        else { throw SocialAccountError.invalidCatalog }
+        for platform in platforms {
+            _ = try SocialPlatform.websiteURL(platform.website.absoluteString)
+        }
+        return self
+    }
+}
+
+public enum SocialAccountError: LocalizedError {
+    case invalidWebsite
+    case invalidCatalog
+    case emptyName
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidWebsite: "Enter an HTTPS website address, such as instagram.com."
+        case .invalidCatalog:
+            "The social account list is invalid. Restore the account list before continuing."
+        case .emptyName: "Enter a name for this account or platform."
+        }
+    }
+}
