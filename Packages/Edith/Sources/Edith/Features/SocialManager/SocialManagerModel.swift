@@ -21,7 +21,7 @@ final class SocialManagerModel {
     private(set) var tabs: [SocialWorkspaceTab] = []
     private(set) var sessions: [UUID: SocialBrowserSession] = [:]
     var selectedTabID: UUID?
-    var platformID: UUID?
+    var profileID: UUID?
     var showingAccounts = true
     var message: String?
     private(set) var busy = false
@@ -45,7 +45,35 @@ final class SocialManagerModel {
     }
 
     var currentTab: SocialWorkspaceTab? { tabs.first { $0.id == selectedTabID } }
-    var selectedPlatform: SocialPlatform? { catalog.platforms.first { $0.id == platformID } }
+    var selectedProfile: SocialProfile? { catalog.profiles.first { $0.id == profileID } }
+
+    func accounts(in profile: SocialProfile) -> [SocialAccount] {
+        catalog.accounts(in: profile)
+    }
+
+    func profile(for account: SocialAccount) -> SocialProfile? {
+        catalog.profiles.first { $0.id == account.profileID }
+    }
+
+    func accountTitle(_ account: SocialAccount) -> String {
+        [profile(for: account)?.name, account.name].compactMap { $0 }.joined(separator: " / ")
+    }
+
+    @discardableResult
+    func saveProfile(id: UUID? = nil, name: String, badge: String) throws -> SocialProfile {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw SocialAccountError.emptyName }
+        let profile = SocialProfile(id: id ?? UUID(), name: name, badge: String(badge.prefix(2)))
+        var next = catalog
+        if let index = next.profiles.firstIndex(where: { $0.id == id }) {
+            next.profiles[index] = profile
+        } else {
+            next.profiles.append(profile)
+        }
+        try persist(next)
+        profileID = profile.id
+        return profile
+    }
 
     func start() {
         guard !load.hasContent else { return }
@@ -65,17 +93,23 @@ final class SocialManagerModel {
     }
 
     func title(_ tab: SocialWorkspaceTab) -> String {
-        tab.layout.panes.compactMap { account($0)?.name }.joined(separator: " + ")
+        var titles: [String] = []
+        for key in tab.layout.panes {
+            if let account = account(key) { titles.append(accountTitle(account)) }
+        }
+        return titles.joined(separator: " + ")
     }
 
-    func saveAccount(id: UUID? = nil, platformID: UUID, name: String, badge: String) throws
+    func saveAccount(
+        id: UUID? = nil, profileID: UUID, platformID: UUID, name: String, badge: String
+    ) throws
         -> SocialAccount
     {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw SocialAccountError.emptyName }
         var next = catalog
         let account = SocialAccount(
-            id: id ?? UUID(), platformID: platformID, name: name,
+            id: id ?? UUID(), profileID: profileID, platformID: platformID, name: name,
             badge: String(badge.trimmingCharacters(in: .whitespacesAndNewlines).prefix(2)))
         if let index = next.accounts.firstIndex(where: { $0.id == id }) {
             next.accounts[index] = account
@@ -86,14 +120,17 @@ final class SocialManagerModel {
         return account
     }
 
-    func addPlatform(name: String, website: String) throws {
+    func addWebsite(profileID: UUID, name: String, website: String) throws -> SocialAccount {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw SocialAccountError.emptyName }
         let platform = SocialPlatform(name: name, website: try SocialPlatform.websiteURL(website))
+        let account = SocialAccount(
+            profileID: profileID, platformID: platform.id, name: platform.name)
         var next = catalog
         next.platforms.append(platform)
+        next.accounts.append(account)
         try persist(next)
-        platformID = platform.id
+        return account
     }
 
     private func persist(_ next: SocialAccountCatalog) throws {
@@ -104,7 +141,9 @@ final class SocialManagerModel {
     }
 
     func open(_ account: SocialAccount, beside: Bool = false, side: InsertSide = .right) {
-        guard !busy, let platform = platform(for: account) else { return }
+        guard !busy, catalog.accounts.contains(where: { $0.id == account.id }),
+            let platform = platform(for: account)
+        else { return }
         let key = account.id.uuidString
         let target = selectedTabID
         if let existing = tabs.first(where: { $0.layout.contains(key) }) {
@@ -220,15 +259,7 @@ final class SocialManagerModel {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        closeAccount(account.id.uuidString)
-        let dataStore = WKWebsiteDataStore(forIdentifier: account.id)
-        await withCheckedContinuation { continuation in
-            dataStore.removeData(
-                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
-            ) {
-                continuation.resume()
-            }
-        }
+        await clearWebsiteData(account)
         do {
             if removingAccount {
                 var next = catalog
@@ -240,6 +271,31 @@ final class SocialManagerModel {
                 ? "Account and its browser data removed."
                 : "Session cleared. Open the account to sign in again."
         } catch { message = error.localizedDescription }
+    }
+
+    func removeProfile(_ profile: SocialProfile) async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        for account in accounts(in: profile) { await clearWebsiteData(account) }
+        do {
+            var next = catalog
+            next.accounts.removeAll { $0.profileID == profile.id }
+            next.profiles.removeAll { $0.id == profile.id }
+            try persist(next)
+            if profileID == profile.id { profileID = nil }
+            message = "Profile and its connected accounts removed."
+        } catch { message = error.localizedDescription }
+    }
+
+    private func clearWebsiteData(_ account: SocialAccount) async {
+        closeAccount(account.id.uuidString)
+        let dataStore = WKWebsiteDataStore(forIdentifier: account.id)
+        await withCheckedContinuation { continuation in
+            dataStore.removeData(
+                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast
+            ) { continuation.resume() }
+        }
     }
 
     func shutdown() {

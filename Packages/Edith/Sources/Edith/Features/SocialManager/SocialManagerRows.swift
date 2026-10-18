@@ -6,9 +6,9 @@ struct SocialManagerRows: View {
         var enabled = false
 
     var body: some View {
-        Section("Social accounts") {
+        Section("Social profiles") {
             Text(
-                "Add Instagram, Facebook, X or any HTTPS website. Each named account has a persistent, separate browser session on this Mac."
+                "Create a profile for each person, brand or client, then add its Instagram, YouTube, X, LinkedIn, Facebook or custom website accounts. Each connected account has a separate persistent login."
             )
             .settingsCaption()
             Text(

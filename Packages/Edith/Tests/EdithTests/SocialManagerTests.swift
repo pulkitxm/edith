@@ -168,8 +168,18 @@ struct SocialManagerTests {
                 try await other.webView.evaluateJavaScript("document.cookie") as? String
                     == "session=mock-personal")
         }
-        await model.clearSession(first, removingAccount: true)
+        let removedProfile = try #require(model.profile(for: first))
+        await model.removeProfile(removedProfile)
         #expect(!model.catalog.accounts.contains(first))
+        #expect(model.catalog.accounts.allSatisfy { $0.profileID != removedProfile.id })
+        #expect(model.catalog.profiles.count == 1)
+        #expect(model.catalog.accounts.count == 3)
+        do {
+            let other = try #require(model.sessions[second.id]?.selectedPage)
+            #expect(
+                try await other.webView.evaluateJavaScript("document.cookie") as? String
+                    == "session=mock-personal")
+        }
         #expect(try fixture.file.load() == model.catalog)
         await model.clearSession(second, removingAccount: true)
         #expect(!model.catalog.accounts.contains(second))
@@ -183,15 +193,53 @@ struct SocialManagerTests {
         model.open(account)
         let browser = try #require(model.sessions[account.id])
         let updated = try model.saveAccount(
-            id: account.id, platformID: account.platformID, name: "Renamed studio", badge: "ST")
+            id: account.id, profileID: account.profileID, platformID: account.platformID,
+            name: "Renamed studio", badge: "ST")
         #expect(updated.id == account.id)
         #expect(model.sessions[account.id] === browser)
-        #expect(model.currentTab.map(model.title) == "Renamed studio")
+        #expect(model.currentTab.map(model.title) == "Studio / Renamed studio")
         #expect(throws: SocialAccountError.self) {
-            try model.saveAccount(platformID: account.platformID, name: "  ", badge: "")
+            try model.saveAccount(
+                profileID: account.profileID, platformID: account.platformID, name: "  ", badge: "")
         }
         #expect(try fixture.file.load() == model.catalog)
         model.shutdown()
+    }
+
+    @Test func profilesShowOnlyTheirAddedPlatformsAndRenamingKeepsSessions() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        let studio = model.catalog.profiles[0]
+        let personal = model.catalog.profiles[1]
+        #expect(model.accounts(in: studio).count == 3)
+        #expect(model.accounts(in: personal).count == 3)
+        #expect(
+            Set(model.accounts(in: studio).map(\.id)).isDisjoint(
+                with: model.accounts(in: personal).map(\.id)))
+        let youtube = try #require(model.catalog.platforms.first { $0.name == "YouTube" })
+        let account = try model.saveAccount(
+            profileID: studio.id, platformID: youtube.id, name: "Studio channel", badge: "")
+        #expect(model.accounts(in: studio).contains(account))
+        #expect(!model.accounts(in: personal).contains(account))
+        model.open(account)
+        let browser = try #require(model.sessions[account.id])
+        try model.saveProfile(id: studio.id, name: "New Studio", badge: "NS")
+        #expect(model.currentTab.map(model.title) == "New Studio / Studio channel")
+        #expect(model.sessions[account.id] === browser)
+        #expect(try fixture.file.load() == model.catalog)
+        #expect(throws: SocialAccountError.self) {
+            try model.saveAccount(
+                profileID: UUID(), platformID: youtube.id, name: "Orphan", badge: "")
+        }
+        let empty = try model.saveProfile(name: "New client", badge: "")
+        #expect(model.accounts(in: empty).isEmpty)
+        let custom = try model.addWebsite(
+            profileID: empty.id, name: "Community", website: "community.example.test")
+        #expect(model.accounts(in: empty) == [custom])
+        #expect(
+            model.platform(for: custom)?.website.absoluteString == "https://community.example.test")
+        #expect(!model.accounts(in: personal).contains(custom))
     }
 
     private func loaded(_ page: SocialBrowserPage) async throws {
@@ -230,9 +278,14 @@ struct SocialManagerFixture {
             "social-manager-\(UUID().uuidString)")
         file = SocialAccountFile(url: folder.appendingPathComponent("accounts.json"))
         var catalog = SocialAccountCatalog()
+        catalog.profiles = [
+            SocialProfile(name: "Studio", badge: "ST"), SocialProfile(name: "Personal", badge: "P"),
+        ]
         let names = ["Studio", "Personal", "Client North", "Client South", "Community", "Updates"]
         catalog.accounts = names.enumerated().map { index, name in
-            SocialAccount(platformID: catalog.platforms[index / 2].id, name: name)
+            SocialAccount(
+                profileID: catalog.profiles[index % 2].id,
+                platformID: catalog.platforms[index / 2].id, name: name)
         }
         try file.save(catalog)
         model = SocialManagerModel(

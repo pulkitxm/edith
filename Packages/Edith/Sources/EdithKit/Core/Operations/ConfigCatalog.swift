@@ -735,7 +735,7 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Tabs.socialManagerEnabled, .bool, group: "social-manager",
             summary:
-                "Social Manager extension: isolated website accounts with tabs and side-by-side browsing.",
+                "Social Manager extension: profiles with isolated website accounts, tabs and side-by-side browsing.",
             fallback: .bool(false))
     ]
 

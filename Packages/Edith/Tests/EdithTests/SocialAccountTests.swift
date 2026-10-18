@@ -23,8 +23,10 @@ struct SocialAccountTests {
         let file = SocialAccountFile(url: folder.appendingPathComponent("accounts.json"))
         var catalog = try file.load()
         let platform = try #require(catalog.platforms.first)
+        catalog.profiles = [SocialProfile(name: "Studio")]
         catalog.accounts = (1...6).map {
-            SocialAccount(platformID: platform.id, name: "Profile \($0)")
+            SocialAccount(
+                profileID: catalog.profiles[0].id, platformID: platform.id, name: "Account \($0)")
         }
         try file.save(catalog)
         let restored = try file.load()
@@ -46,7 +48,7 @@ struct SocialAccountTests {
         try Data("invalid".utf8).write(to: file.url)
         #expect(throws: (any Error).self) { try file.load() }
         var catalog = SocialAccountCatalog()
-        catalog.accounts = [SocialAccount(platformID: UUID(), name: "Orphan")]
+        catalog.accounts = [SocialAccount(profileID: UUID(), platformID: UUID(), name: "Orphan")]
         #expect(throws: SocialAccountError.self) { try file.save(catalog) }
         #expect(try String(contentsOf: file.url, encoding: .utf8) == "invalid")
     }

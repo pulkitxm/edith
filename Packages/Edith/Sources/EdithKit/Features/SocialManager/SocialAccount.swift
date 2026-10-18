@@ -24,6 +24,14 @@ public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000003")!,
             name: "X / Twitter", website: URL(string: "https://x.com")!,
             symbol: "bubble.left.and.bubble.right"),
+        SocialPlatform(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-000000000004")!,
+            name: "YouTube", website: URL(string: "https://www.youtube.com")!,
+            symbol: "play.rectangle"),
+        SocialPlatform(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-000000000005")!,
+            name: "LinkedIn", website: URL(string: "https://www.linkedin.com")!, symbol: "briefcase"
+        ),
     ]
 
     public static func websiteURL(_ text: String) throws -> URL {
@@ -37,14 +45,35 @@ public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+public struct SocialProfile: Codable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var badge: String
+
+    public init(id: UUID = UUID(), name: String, badge: String = "") {
+        self.id = id
+        self.name = name
+        self.badge = badge
+    }
+
+    public var initials: String {
+        if !badge.isEmpty { return String(badge.prefix(2)) }
+        return String(name.split(separator: " ").prefix(2).compactMap(\.first)).uppercased()
+    }
+}
+
 public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
+    public let profileID: UUID
     public let platformID: UUID
     public var name: String
     public var badge: String
 
-    public init(id: UUID = UUID(), platformID: UUID, name: String, badge: String = "") {
+    public init(
+        id: UUID = UUID(), profileID: UUID, platformID: UUID, name: String, badge: String = ""
+    ) {
         self.id = id
+        self.profileID = profileID
         self.platformID = platformID
         self.name = name
         self.badge = badge
@@ -57,25 +86,36 @@ public struct SocialAccount: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct SocialAccountCatalog: Codable, Equatable, Sendable {
+    public var profiles: [SocialProfile]
     public var platforms: [SocialPlatform]
     public var accounts: [SocialAccount]
 
     public init(
-        platforms: [SocialPlatform] = SocialPlatform.presets, accounts: [SocialAccount] = []
+        profiles: [SocialProfile] = [], platforms: [SocialPlatform] = SocialPlatform.presets,
+        accounts: [SocialAccount] = []
     ) {
+        self.profiles = profiles
         self.platforms = platforms
         self.accounts = accounts
     }
 
+    public func accounts(in profile: SocialProfile) -> [SocialAccount] {
+        accounts.filter { $0.profileID == profile.id }
+    }
+
     public func validated() throws -> Self {
         guard Set(platforms.map(\.id)).count == platforms.count,
+            Set(profiles.map(\.id)).count == profiles.count,
             Set(accounts.map(\.id)).count == accounts.count,
+            profiles.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            ),
             platforms.allSatisfy({
                 !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }),
             accounts.allSatisfy({ account in
                 !account.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && platforms.contains { $0.id == account.platformID }
+                    && profiles.contains { $0.id == account.profileID }
             })
         else { throw SocialAccountError.invalidCatalog }
         for platform in platforms {
@@ -95,7 +135,7 @@ public enum SocialAccountError: LocalizedError {
         case .invalidWebsite: "Enter an HTTPS website address, such as instagram.com."
         case .invalidCatalog:
             "The social account list is invalid. Restore the account list before continuing."
-        case .emptyName: "Enter a name for this account or platform."
+        case .emptyName: "Enter a name for this profile, account or platform."
         }
     }
 }

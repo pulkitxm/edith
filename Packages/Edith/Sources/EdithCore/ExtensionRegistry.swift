@@ -259,7 +259,7 @@ public enum ExtensionRegistry {
         ExtensionRegistryEntry(
             id: "socialManager", title: "Social Manager",
             subtitle:
-                "Independent website logins for Instagram, Facebook, X and custom platforms, with tabs and side-by-side accounts.",
+                "Manage profiles with independent Instagram, YouTube, X, LinkedIn and custom website accounts in tabs and side-by-side layouts.",
             symbolName: "person.crop.rectangle.stack", suite: .media, host: .window, featured: true,
             defaultsKey: "tabSocialManagerEnabled", requiredCapabilities: [.webBrowsing]),
         ExtensionRegistryEntry(

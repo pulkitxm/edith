@@ -12,9 +12,12 @@ struct SocialManagerRenderTests {
         let fixture = try SocialManagerFixture()
         defer { fixture.remove() }
         let model = fixture.model
-        model.platformID = model.catalog.platforms[0].id
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
+        for scheme in [ColorScheme.light, .dark] {
+            try await capture(model, width: 1180, scheme: scheme, name: "profiles-\(scheme)")
+        }
+        model.profileID = model.catalog.profiles[0].id
         for scale in [1.0, 1.4] {
             UIScale.apply(scale)
             for width in [CGFloat(1180), CGFloat(620)] {

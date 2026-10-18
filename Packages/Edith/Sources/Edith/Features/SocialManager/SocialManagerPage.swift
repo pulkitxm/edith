@@ -8,6 +8,9 @@ struct SocialManagerPage: View {
     @Environment(\.colorScheme) private var scheme
     @State private var addingAccount = false
     @State private var addingPlatform = false
+    @State private var addingProfile = false
+    @State private var editingProfile: SocialProfile?
+    @State private var removingProfile: SocialProfile?
     @State private var editingAccount: SocialAccount?
     @State private var clearingAccount: SocialAccount?
     @State private var removingAccount: SocialAccount?
@@ -27,13 +30,19 @@ struct SocialManagerPage: View {
                     layoutMenu(tab)
                 }
                 Button {
-                    addingAccount = true
+                    if model.selectedProfile == nil {
+                        addingProfile = true
+                    } else {
+                        addingAccount = true
+                    }
                 } label: {
-                    Label("Add account", systemImage: "plus")
+                    Label(
+                        model.selectedProfile == nil ? "Add profile" : "Add account",
+                        systemImage: "plus")
                 }
                 .disabled(!model.load.hasContent || model.busy)
             } accessory: {
-                Text("Separate accounts. One workspace.")
+                Text("Your profiles. Every platform. One workspace.")
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
             tabs
@@ -60,13 +69,39 @@ struct SocialManagerPage: View {
         }
         .pageTask { model.start() }
         .edithSheet(isPresented: $addingAccount, dismissible: false) {
-            SocialAccountEditor(model: model, platformID: model.platformID)
+            if let profile = model.selectedProfile {
+                SocialAccountEditor(model: model, profile: profile)
+            }
+        }
+        .edithSheet(isPresented: $addingProfile, dismissible: false) {
+            SocialProfileEditor(model: model)
+        }
+        .edithSheet(item: $editingProfile, dismissible: false) { profile in
+            SocialProfileEditor(model: model, profile: profile)
         }
         .edithSheet(isPresented: $addingPlatform, dismissible: false) {
-            SocialPlatformEditor(model: model)
+            if let profile = model.selectedProfile {
+                SocialPlatformEditor(model: model, profile: profile)
+            }
         }
         .edithSheet(item: $editingAccount, dismissible: false) { account in
-            SocialAccountEditor(model: model, account: account, platformID: account.platformID)
+            if let profile = model.profile(for: account) {
+                SocialAccountEditor(model: model, profile: profile, account: account)
+            }
+        }
+        .confirmationDialog(
+            "Remove this profile?",
+            isPresented: Binding(
+                get: { removingProfile != nil }, set: { if !$0 { removingProfile = nil } }),
+            titleVisibility: .visible, presenting: removingProfile
+        ) { profile in
+            Button("Remove profile", role: .destructive) {
+                Task { await model.removeProfile(profile) }
+            }
+        } message: { profile in
+            Text(
+                "Remove \(profile.name) and its connected accounts from Edith, including their local login sessions. Your accounts on the websites and other profiles are kept."
+            )
         }
         .confirmationDialog(
             "Clear this account's session?",
@@ -104,8 +139,9 @@ struct SocialManagerPage: View {
                 ? "accounts" : model.selectedTabID?.uuidString ?? "accounts"
         ) {
             HStack(spacing: UIScale.pt(6)) {
-                tabChip("Accounts", symbol: "square.grid.2x2", selected: model.showingAccounts) {
+                tabChip("Profiles", symbol: "person.2", selected: model.showingAccounts) {
                     model.showingAccounts = true
+                    model.profileID = nil
                 }.id("accounts")
                 ForEach(model.tabs) { tab in
                     HStack(spacing: UIScale.pt(4)) {
@@ -149,27 +185,38 @@ struct SocialManagerPage: View {
             EmptyView()
         } content: {
             PageLoading(
-                state: model.load.state, title: "Social accounts",
-                message: model.load.errorMessage ?? "Loading your platforms and accounts.",
+                state: model.load.state, title: "Social profiles",
+                message: model.load.errorMessage ?? "Loading your profiles and connected accounts.",
                 layout: .cards, retry: { model.start() }
             ) {
                 VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                    PageSectionHeader("Platforms") {
-                        Button("Add website", systemImage: "plus") { addingPlatform = true }
-                    }
-                    LazyVGrid(
-                        columns: PageMetrics.cardColumns(compact, minimum: 210, spacing: 12),
-                        spacing: UIScale.pt(12)
-                    ) {
-                        ForEach(model.catalog.platforms) { platform in platformCard(platform) }
-                    }
-                    if let platform = model.selectedPlatform {
-                        accounts(for: platform)
+                    if let profile = model.selectedProfile {
+                        Button("All profiles", systemImage: "chevron.left") {
+                            model.profileID = nil
+                        }
+                        accounts(for: profile)
                     } else {
-                        Text(
-                            "Choose a platform to see its accounts, or add a website with its URL."
+                        PageSectionHeader(
+                            "Profiles",
+                            subtitle:
+                                "Keep the social accounts for each person, brand or client together."
                         )
-                        .font(.edithText(.body)).foregroundStyle(.secondary)
+                        if model.catalog.profiles.isEmpty {
+                            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                                Text("Create your first profile").font(.edithText(.headline))
+                                Text(
+                                    "Add Personal, Studio or a client, then choose the Instagram, YouTube, X, LinkedIn and other accounts that belong to it."
+                                )
+                                .font(.edithText(.body)).foregroundStyle(.secondary)
+                                Button("Add profile", systemImage: "plus") { addingProfile = true }
+                            }.padding(UIScale.pt(20))
+                        }
+                        LazyVGrid(
+                            columns: PageMetrics.cardColumns(compact, minimum: 250, spacing: 12),
+                            spacing: UIScale.pt(12)
+                        ) {
+                            ForEach(model.catalog.profiles) { profile in profileCard(profile) }
+                        }
                     }
                     Label(
                         "Sign in on each website once. Cookies and website storage stay in that account's own persistent browser session on this Mac.",
@@ -182,47 +229,59 @@ struct SocialManagerPage: View {
         }
     }
 
-    private func platformCard(_ platform: SocialPlatform) -> some View {
-        let count = model.catalog.accounts.filter { $0.platformID == platform.id }.count
-        let selected = model.platformID == platform.id
+    private func profileCard(_ profile: SocialProfile) -> some View {
+        let accounts = model.accounts(in: profile)
+        let platforms = model.catalog.platforms.filter { platform in
+            accounts.contains { $0.platformID == platform.id }
+        }
         return Button {
-            model.platformID = platform.id
+            model.profileID = profile.id
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 HStack {
-                    Image(systemName: platform.symbol).font(.edithText(.title2)).foregroundStyle(
-                        .tint)
+                    Text(profile.initials).font(.edithText(.title3))
+                        .frame(width: UIScale.pt(42), height: UIScale.pt(42))
+                        .background(DashSkin.accent(dark).opacity(0.15)).clipShape(Circle())
                     Spacer()
-                    Text("\(count) \(count == 1 ? "account" : "accounts")")
+                    Text("\(accounts.count) \(accounts.count == 1 ? "account" : "accounts")")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
-                Text(platform.name).font(.edithText(.headline)).foregroundStyle(.primary)
-                Text(platform.website.host ?? platform.website.absoluteString)
-                    .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                Text(profile.name).font(.edithText(.headline)).foregroundStyle(.primary)
+                Text(
+                    platforms.isEmpty
+                        ? "Add your social accounts"
+                        : platforms.map(\.name).joined(separator: " · ")
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
             }
             .padding(UIScale.pt(18)).frame(maxWidth: .infinity, alignment: .leading)
             .background(DashSkin.paper2(dark))
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
             .overlay(
                 RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                    selected ? DashSkin.accent(dark) : DashSkin.line(dark)))
+                    DashSkin.line(dark)))
         }
         .buttonStyle(.edith(.borderless))
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func accounts(for platform: SocialPlatform) -> some View {
-        let accounts = model.catalog.accounts.filter { $0.platformID == platform.id }
+    private func accounts(for profile: SocialProfile) -> some View {
+        let accounts = model.accounts(in: profile)
         return VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            PageSectionHeader("\(platform.name) accounts") {
+            PageSectionHeader(profile.name, subtitle: "Connected accounts") {
+                Menu {
+                    Button("Edit profile") { editingProfile = profile }
+                    Button("Add custom website") { addingPlatform = true }
+                    Button("Remove profile…", role: .destructive) { removingProfile = profile }
+                } label: {
+                    Label("Manage profile", systemImage: "ellipsis")
+                }
                 Button("Add account", systemImage: "plus") { addingAccount = true }
-                    .disabled(model.busy)
-            }
+            }.disabled(model.busy)
             if accounts.isEmpty {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    Text("Your first \(platform.name) account").font(.edithText(.headline))
+                    Text("Add accounts to \(profile.name)").font(.edithText(.headline))
                     Text(
-                        "Give it a name, then sign in on the website. Add more accounts for separate logins."
+                        "Choose Instagram, YouTube, X, LinkedIn or another website, then sign in. Only the accounts you add appear in this profile."
                     )
                     .font(.edithText(.body)).foregroundStyle(.secondary)
                     Button("Add account") { addingAccount = true }.disabled(model.busy)
@@ -233,7 +292,11 @@ struct SocialManagerPage: View {
                     columns: PageMetrics.cardColumns(compact, minimum: 250, spacing: 12),
                     spacing: UIScale.pt(12)
                 ) {
-                    ForEach(accounts) { account in accountCard(account, platform: platform) }
+                    ForEach(accounts) { account in
+                        if let platform = model.platform(for: account) {
+                            accountCard(account, platform: platform)
+                        }
+                    }
                 }
             }
         }
@@ -246,8 +309,8 @@ struct SocialManagerPage: View {
                     .frame(width: UIScale.pt(42), height: UIScale.pt(42))
                     .background(DashSkin.accent(dark).opacity(0.15)).clipShape(Circle())
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Text(account.name).font(.edithText(.headline)).lineLimit(2)
-                    Text(platform.name).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    Text(platform.name).font(.edithText(.headline)).lineLimit(2)
+                    Text(account.name).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 Menu {
@@ -285,14 +348,16 @@ struct SocialManagerPage: View {
 
     private func layoutMenu(_ tab: SocialWorkspaceTab) -> some View {
         Menu {
-            ForEach(model.catalog.platforms) { platform in
+            ForEach(model.catalog.profiles) { profile in
                 let accounts = model.catalog.accounts.filter {
-                    $0.platformID == platform.id && !tab.layout.contains($0.id.uuidString)
+                    $0.profileID == profile.id && !tab.layout.contains($0.id.uuidString)
                 }
                 if !accounts.isEmpty {
-                    Menu(platform.name) {
+                    Menu(profile.name) {
                         ForEach(accounts) { account in
-                            Menu(account.name) {
+                            Menu(
+                                "\(model.platform(for: account)?.name ?? "Website"): \(account.name)"
+                            ) {
                                 Button("Open to the right") { model.open(account, beside: true) }
                                 Button("Open below") {
                                     model.open(account, beside: true, side: .bottom)

@@ -75,8 +75,10 @@ private struct SocialBrowserPane: View {
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
                         Text(account.initials).font(.edithText(.caption).weight(.semibold))
-                        Text(account.name).font(.edithText(.subheadline).weight(.semibold))
-                            .lineLimit(1)
+                        Text(model.accountTitle(account)).font(
+                            .edithText(.subheadline).weight(.semibold)
+                        )
+                        .lineLimit(1)
                         Text(model.platform(for: account)?.name ?? "").font(.edithText(.caption))
                             .foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 0)

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SocialAccountEditor: View {
     let model: SocialManagerModel
+    let profile: SocialProfile
     let account: SocialAccount?
     @Environment(\.dismiss) private var dismiss
     @State private var platformID: UUID
@@ -10,22 +11,31 @@ struct SocialAccountEditor: View {
     @State private var badge: String
     @State private var error: String?
 
-    init(model: SocialManagerModel, account: SocialAccount? = nil, platformID: UUID? = nil) {
+    init(model: SocialManagerModel, profile: SocialProfile, account: SocialAccount? = nil) {
         self.model = model
+        self.profile = profile
         self.account = account
-        _platformID = State(initialValue: platformID ?? model.catalog.platforms.first?.id ?? UUID())
-        _name = State(initialValue: account?.name ?? "")
+        _platformID = State(
+            initialValue: account?.platformID ?? model.catalog.platforms.first?.id ?? UUID())
+        _name = State(initialValue: account?.name ?? model.catalog.platforms.first?.name ?? "")
         _badge = State(initialValue: account?.badge ?? "")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             Text(account == nil ? "Add social account" : "Edit account").font(.edithText(.title2))
+            Text(profile.name).font(.edithText(.headline)).foregroundStyle(.secondary)
             Form {
                 Picker("Platform", selection: $platformID) {
                     ForEach(model.catalog.platforms) { Text($0.name).tag($0.id) }
                 }.disabled(account != nil)
-                TextField("Account name", text: $name, prompt: Text("Personal, Studio, Client…"))
+                    .onChange(of: platformID) { old, new in
+                        if name == model.catalog.platforms.first(where: { $0.id == old })?.name {
+                            name =
+                                model.catalog.platforms.first(where: { $0.id == new })?.name ?? ""
+                        }
+                    }
+                TextField("Account label", text: $name, prompt: Text("Username or channel name"))
                 TextField("Badge", text: $badge, prompt: Text("Optional emoji or initials"))
             }
             Text(
@@ -40,7 +50,8 @@ struct SocialAccountEditor: View {
                 Button(account == nil ? "Add and open" : "Save") {
                     do {
                         let saved = try model.saveAccount(
-                            id: account?.id, platformID: platformID, name: name, badge: badge)
+                            id: account?.id, profileID: profile.id, platformID: platformID,
+                            name: name, badge: badge)
                         if account == nil { model.open(saved) }
                         dismiss()
                     } catch { self.error = error.localizedDescription }
@@ -57,6 +68,7 @@ struct SocialAccountEditor: View {
 
 struct SocialPlatformEditor: View {
     let model: SocialManagerModel
+    let profile: SocialProfile
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var website = ""
@@ -65,6 +77,7 @@ struct SocialPlatformEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             Text("Add a website").font(.edithText(.title2))
+            Text(profile.name).font(.edithText(.headline)).foregroundStyle(.secondary)
             Form {
                 TextField("Platform name", text: $name, prompt: Text("LinkedIn"))
                 TextField("Website URL", text: $website, prompt: Text("https://www.linkedin.com"))
@@ -75,15 +88,18 @@ struct SocialPlatformEditor: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Add website") {
+                Button("Add and open") {
                     do {
-                        try model.addPlatform(name: name, website: website)
+                        let account = try model.addWebsite(
+                            profileID: profile.id, name: name, website: website)
+                        model.open(account)
                         dismiss()
                     } catch { self.error = error.localizedDescription }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(
-                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || website.isEmpty)
+                    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || website.isEmpty
+                        || model.busy)
             }
         }
         .font(.edithText(.body))

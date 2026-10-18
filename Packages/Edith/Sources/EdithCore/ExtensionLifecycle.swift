@@ -200,11 +200,12 @@ public enum ExtensionLifecycleCatalog {
     public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
             "socialManager",
-            "Manage separate website accounts in tabs and side-by-side browser panes.",
+            "Manage profiles and their separate website accounts in tabs and side-by-side browser panes.",
             workflows: [
                 instruction(
-                    "account", "Add an account",
-                    "Choose a platform, name the account and sign in directly on its website."),
+                    "account", "Add a profile and its accounts",
+                    "Create a profile, add the platforms it uses, then sign in directly on each account's website."
+                ),
                 instruction(
                     "layout", "Work side by side",
                     "Use Side by side to combine accounts from any platform, then resize, maximize or separate panes."

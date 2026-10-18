@@ -133,7 +133,9 @@ public enum ExtensionLiveAdapters {
         case "lidAwake": lidAwakeReadiness()
         case "latex": .ready("Add a local source or GitHub repository in the LaTeX window.")
         case "socialManager":
-            .ready("Add named accounts and sign in on each website in its own browser session.")
+            .ready(
+                "Create a profile, add its website accounts and sign in to each independent browser session."
+            )
         case "studio": .ready("Drop files into Studio in the Edith window to edit or convert them.")
         case "timeLapse":
             .ready(
