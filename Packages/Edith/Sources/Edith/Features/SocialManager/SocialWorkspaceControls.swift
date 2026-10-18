@@ -60,25 +60,11 @@ extension SocialManagerModel {
     }
 
     func cycleTab(backwards: Bool) {
-        guard !tabs.isEmpty else { return }
-        if showingAccounts {
-            if let tab = backwards ? tabs.last : tabs.first { select(tab) }
-            return
-        }
-        guard let index = tabs.firstIndex(where: { $0.id == selectedTabID }) else { return }
-        let next = index + (backwards ? -1 : 1)
-        if tabs.indices.contains(next) { select(tabs[next]) } else { showingAccounts = true }
+        cycleWorkspaceTab(backwards: backwards)
     }
 
     func cyclePane(backwards: Bool) {
-        guard !showingAccounts, let tab = currentTab,
-            let index = tab.layout.panes.firstIndex(of: tab.focused)
-        else { return }
-        let ids = tab.layout.panes
-        let next = (index + (backwards ? ids.count - 1 : 1)) % ids.count
-        focus(ids[next])
-        updateTab { $0.zoomed = nil }
-        activateFocusedBrowser()
+        performWorkspaceLayout(.cycle(backwards: backwards))
     }
 
     func reorderTab(_ id: UUID, before target: UUID) {
@@ -131,14 +117,37 @@ extension SocialManagerModel {
 
     func reopenClosedTab() {
         guard !busy else { return }
-        while let saved = takeClosedTab() {
-            let accounts = saved.layout.panes.compactMap(account)
+        while let record = takeClosedTab() {
+            let saved = record.tab
+            let ids = record.pane.map { [$0] } ?? saved.layout.panes
+            let accounts = ids.compactMap(account).filter { !paneIsOpen($0.id.uuidString) }
             guard !accounts.isEmpty else { continue }
+            if let pane = record.pane,
+                let host = tabs.first(where: { $0.id == saved.id })
+                    ?? tabs.first(where: { $0.layout.panes.contains { saved.layout.contains($0) } }),
+                ensureBrowser(accounts[0])
+            {
+                select(host)
+                updateTab {
+                    $0.layout = WorkspaceLayoutRestoration.restoring(
+                        pane, into: $0.layout, from: saved.layout)
+                    $0.focused = pane; $0.zoomed = nil
+                }
+                activateFocusedBrowser()
+                return
+            }
             openInNewTab(accounts[0])
             for account in accounts.dropFirst() { open(account, beside: true) }
             if accounts.count == saved.layout.paneCount {
                 updateTab {
                     $0.layout = saved.layout; $0.focused = saved.focused; $0.zoomed = nil
+                }
+            }
+            if let id = selectedTabID {
+                modifyTabs {
+                    guard let index = $0.firstIndex(where: { $0.id == id }) else { return }
+                    let tab = $0.remove(at: index)
+                    $0.insert(tab, at: min(record.index, $0.count))
                 }
             }
             return
@@ -181,34 +190,25 @@ extension SocialManagerModel {
     func perform(_ command: WindowWorkspaceCommand) -> Bool {
         guard load.hasContent, !busy else { return false }
         switch command {
+        case .showFilters: return false
         case .nextTab: cycleTab(backwards: false)
         case .previousTab: cycleTab(backwards: true)
         case .nextPane: cyclePane(backwards: false)
         case .previousPane: cyclePane(backwards: true)
         case .layout(let key):
-            guard !showingAccounts, let tab = currentTab else { return false }
-            switch key {
-            case .cycle(let backwards): cyclePane(backwards: backwards)
-            case .zoom: if tab.layout.paneCount > 1 { toggleZoom(tab.focused) }
-            case .focus(let side):
-                if let neighbor = tab.layout.neighbor(of: tab.focused, toward: side) {
-                    focus(neighbor)
-                    updateTab { $0.zoomed = nil }
-                    activateFocusedBrowser()
-                }
-            }
+            return performWorkspaceLayout(key)
         case .showLibrary: showingAccounts = true
         case .reopenTab: reopenClosedTab()
         case .selectTab(let index):
-            if tabs.indices.contains(index) { select(tabs[index]) }
+            selectWorkspaceTab(number: index + 1)
         case .closeTab:
-            guard !showingAccounts, let tab = currentTab else { return false }
+            guard !showingAccounts else { return true }
             if let account = focusedAccount, let session = sessions[account.id],
                 session.pages.count > 1, let page = session.selectedPage
             {
                 session.closePage(page)
             } else {
-                closeTab(tab.id)
+                return closeFocusedWorkspaceItem()
             }
         case .reload:
             guard let account = focusedAccount else { return false }

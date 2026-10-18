@@ -6,7 +6,7 @@ import WebKit
 @MainActor @Observable
 final class SocialBrowserSession {
     let accountID: UUID
-    let website: URL
+    private(set) var website: URL
     private(set) var pages: [SocialBrowserPage] = []
     var selectedPageID: UUID?
     var selectedPage: SocialBrowserPage? { pages.first { $0.id == selectedPageID } }
@@ -51,6 +51,12 @@ final class SocialBrowserSession {
         page.shutdown()
         pages.removeAll { $0.id == page.id }
         if selectedPageID == page.id { selectedPageID = pages.last?.id }
+    }
+
+    func updateWebsite(_ website: URL) {
+        guard self.website != website else { return }
+        self.website = website
+        selectedPage?.webView.load(URLRequest(url: website))
     }
 
     func shutdown() {

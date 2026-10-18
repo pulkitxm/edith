@@ -308,7 +308,8 @@ struct SocialManagerFixture {
                     accountID: account.id, website: website,
                     dataStore: dataStore
                         ?? (persistent
-                            ? WKWebsiteDataStore(forIdentifier: account.id) : .nonPersistent()))
+                            ? WKWebsiteDataStore(forIdentifier: account.dataStoreID)
+                            : .nonPersistent()))
             })
         model.start()
     }

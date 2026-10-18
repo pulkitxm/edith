@@ -61,9 +61,9 @@ extension SocialManagerModel: PaneWorkspaceInteractions {
     func sidebarTarget(_ item: HerdrDragItem, at point: CGPoint, frames: [String: CGRect])
         -> HerdrDropTarget?
     {
-        guard case .pane = normalized(item), let profile = selectedProfile,
+        guard case .pane = normalized(item),
             let row = HerdrDropResolver.sidebarRow(
-                at: point, ids: accounts(in: profile).map { $0.id.uuidString },
+                at: point, ids: filteredAccounts.map { $0.id.uuidString },
                 prefix: HerdrDropGeometry.agentPrefix, frames: frames)
         else { return nil }
         return .sidebarAgent(row.id, after: point.y >= row.frame.midY)
