@@ -82,7 +82,7 @@ struct HostSettingsPage: View {
                                         .wrappedValue = $0 ? "accent" : lastPaletteTheme
                                 })
                         )
-                        .toggleStyle(.switch)
+                        .toggleStyle(.skeuoSwitch)
                         ForEach(themePalette, id: \.name) { entry in
                             swatch(entry.name, color: entry.color)
                         }

@@ -164,7 +164,7 @@ struct MarketplacePage: View {
                     set: { value in
                         Task { await suites.setEnabled(value, suite: suite) }
                     })
-            ).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(DashSkin.accent(dark))
+            ).labelsHidden().toggleStyle(.skeuoSwitch).controlSize(.small).tint(DashSkin.accent(dark))
                 .disabled(busy).accessibilityLabel("\(suite.title) suite enabled")
         }
     }
@@ -339,7 +339,7 @@ private struct HostMarketplaceCard<Controls: View>: View {
                         permissions: entry.requiredPermissions + entry.optionalPermissions)
                 }
                 Spacer(minLength: 0)
-                Toggle("", isOn: enabled).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                Toggle("", isOn: enabled).labelsHidden().toggleStyle(.skeuoSwitch).controlSize(.small)
                     .tint(DashSkin.accent(dark)).disabled(toggleDisabled)
                     .accessibilityLabel("\(entry.title) enabled")
             }

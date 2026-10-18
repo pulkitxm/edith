@@ -291,8 +291,10 @@ struct HostWorkspace: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     ForEach(pages.filter { $0.parentID == nil }) { page in
                         if page.id == "extensions" {
-                            Text("App").font(.system(size: UIScale.pt(11), weight: .semibold))
-                                .foregroundStyle(.tertiary)
+                            Text("App").textCase(.uppercase)
+                                .font(.system(size: UIScale.pt(10), weight: .bold)).tracking(0.8)
+                                .foregroundStyle(.secondary).skeuoEngraved(scheme == .dark)
+                                .accessibilityAddTraits(.isHeader)
                                 .padding(.horizontal, UIScale.pt(8)).padding(.top, UIScale.pt(14))
                                 .padding(.bottom, UIScale.pt(4))
                         }
@@ -403,7 +405,7 @@ struct HostWorkspace: View {
                     }
                     if expandable { Color.clear.frame(width: UIScale.pt(28)) }
                 }
-            }.buttonStyle(EdithButtonStyle(.row, selected: destination.id == page.id, tint: theme))
+            }.buttonStyle(.skeuoRow(selected: destination.id == page.id, tint: theme))
                 .padding(.leading, page.parentID == nil ? 0 : UIScale.pt(18))
                 .accessibilityValue(expandable ? (expanded(page) ? "Expanded" : "Collapsed") : "")
                 .help(
@@ -482,7 +484,7 @@ struct HostWorkspace: View {
         ).padding(.leading, UIScale.pt(18))
     }
     private var sidebarEdge: some View {
-        Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: UIScale.pt(1)).overlay {
+        SkeuoGroove(.vertical).frame(width: UIScale.pt(2)).overlay {
             Color.clear.frame(width: UIScale.pt(9)).contentShape(Rectangle()).onHover {
                 if $0 { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
             }

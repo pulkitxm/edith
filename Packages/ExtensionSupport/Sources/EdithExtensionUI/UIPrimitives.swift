@@ -127,7 +127,7 @@ private struct EdithButtonBody<Label: View>: View {
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.controlActiveState) private var activeState
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
@@ -139,7 +139,6 @@ private struct EdithButtonBody<Label: View>: View {
     }
     private var fillsWidth: Bool { role == .row || role == .selection }
     private var inactive: Bool { activeState == .inactive }
-    private var emphasized: Bool { selected || pressed || hovering }
     private var resolvedTint: Color { tint ?? themeColor(themeName) }
 
     @ViewBuilder var body: some View {
@@ -156,6 +155,10 @@ private struct EdithButtonBody<Label: View>: View {
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
         } else {
             label
+                .shadow(
+                    color: embossing.color.opacity(enabled ? 1 : 0), radius: 0,
+                    y: UIScale.pt(embossing.y)
+                )
                 .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
                 .padding(.vertical, UIScale.pt(metrics.verticalPadding))
                 .frame(
@@ -165,11 +168,16 @@ private struct EdithButtonBody<Label: View>: View {
                     alignment: fillsWidth ? .leading : .center
                 )
                 .foregroundStyle(foreground)
-                .background(background, in: shape)
-                .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
+                .background {
+                    SkeuoKey(depth, cornerRadius: metrics.cornerRadius, tint: keyTint)
+                }
+                .overlay {
+                    if let border {
+                        shape.strokeBorder(border, lineWidth: 2).allowsHitTesting(false)
+                    }
+                }
                 .contentShape(Rectangle())
                 .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
-                .brightness(pressed && enabled ? -0.08 : 0)
                 .onHover { hovering = enabled && $0 }
                 .animation(
                     Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
@@ -178,6 +186,37 @@ private struct EdithButtonBody<Label: View>: View {
                     Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
                 )
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
+        }
+    }
+
+    private var tinted: Bool { role == .primary || role == .destructive }
+
+    private var embossing: (color: Color, y: CGFloat) {
+        SkeuoSkin.embossing(onTint: tinted, dark: scheme == .dark)
+    }
+
+    private var keyTint: Color? {
+        switch role {
+        case .primary: resolvedTint
+        case .destructive: DashSkin.danger
+        default: nil
+        }
+    }
+
+    private var depth: SkeuoDepth {
+        let live = enabled && pressed
+        switch role {
+        case .primary, .destructive, .secondary:
+            return live ? .pressed : .raised
+        case .row, .selection:
+            if live { return .pressed }
+            if selected { return .raised }
+            return hovering ? .recessed : .flat
+        case .toolbar, .iconOnly:
+            if live || selected { return .pressed }
+            return hovering ? .recessed : .flat
+        case .borderless:
+            return .flat
         }
     }
 
@@ -192,43 +231,10 @@ private struct EdithButtonBody<Label: View>: View {
         }
     }
 
-    private var background: Color {
-        guard !role.usesFeatureAppearance else { return .clear }
-        let boost = contrast == .increased ? 0.05 : 0
-        switch role {
-        case .primary:
-            return resolvedTint.opacity(pressed ? 0.74 : 0.9)
-        case .destructive:
-            return Color.red.opacity(pressed ? 0.72 : 0.88)
-        case .secondary:
-            return Color.primary.opacity((emphasized ? 0.11 : 0.07) + boost)
-        case .row, .selection:
-            if selected { return resolvedTint.opacity(0.2 + boost) }
-            return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
-        case .toolbar, .iconOnly:
-            return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
-        case .borderless:
-            return .clear
-        }
-    }
-
-    private var border: Color {
-        guard !role.usesFeatureAppearance else { return .clear }
-        if focused { return resolvedTint.opacity(0.95) }
+    private var border: Color? {
+        if focused, enabled { return resolvedTint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
-        switch role {
-        case .secondary:
-            return Color.primary.opacity(contrast == .increased ? 0.34 : 0.18)
-        case .primary, .destructive:
-            return Color.white.opacity(contrast == .increased ? 0.7 : 0.2)
-        case .row, .selection, .borderless, .toolbar, .iconOnly:
-            return .clear
-        }
-    }
-
-    private var borderWidth: Double {
-        if focused || (selected && differentiateWithoutColor) { return 2 }
-        return contrast == .increased ? 1 : 0.75
+        return nil
     }
 }
 

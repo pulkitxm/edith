@@ -75,7 +75,7 @@ struct HostExtensionReview: View {
                                 perform { await suites.select(entry, enabled: wanted) }
                             })
                     ) { Text("\(entry.title) enabled") }
-                    .labelsHidden().toggleStyle(.switch).disabled(busy)
+                    .labelsHidden().toggleStyle(.skeuoSwitch).disabled(busy)
                     .accessibilityLabel("\(entry.title) enabled")
                 }
             }.padding(.horizontal, UIScale.pt(28)).padding(.vertical, UIScale.pt(18))

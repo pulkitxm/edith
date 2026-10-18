@@ -109,10 +109,9 @@ struct HostSidebarFooter: View {
                                     ).opacity(0.75)
                                     Spacer(minLength: 0)
                                 }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
-                                    .frame(height: UIScale.pt(28)).background(
-                                        .thinMaterial,
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                    )
+                                    .frame(height: UIScale.pt(28)).background {
+                                        SkeuoKey(.raised, cornerRadius: 9)
+                                    }
                             }.buttonStyle(.edith(.borderless)).help("Show update options")
                         }
                         utilityRow([.system, .keepAwake])
@@ -153,11 +152,10 @@ struct HostSidebarFooter: View {
                                 actions.isOn(.presenter, preventSleep: preventSleep)
                                     ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
                             )
-                            .background(
-                                actions.isOn(.presenter, preventSleep: preventSleep)
-                                    ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                            )
+                            .background {
+                                let on = actions.isOn(.presenter, preventSleep: preventSleep)
+                                SkeuoKey(on ? .pressed : .raised, cornerRadius: 9, tint: on ? theme : nil)
+                            }
                             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
                         }
                         if missingPermissions {
@@ -312,11 +310,11 @@ struct HostSidebarUtilityButton: View {
                     1)
             }.frame(maxWidth: .infinity).padding(.vertical, UIScale.pt(8))
                 .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .background(
-                    background
-                        ? (active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial))
-                        : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                )
+                .background {
+                    if background {
+                        SkeuoKey(active ? .pressed : .raised, cornerRadius: 9, tint: active ? theme : nil)
+                    }
+                }
                 .contentShape(Rectangle())
         }.buttonStyle(.edith(.borderless)).help(utility.help).accessibilityLabel(utility.title)
     }

@@ -156,7 +156,7 @@ struct HostSuiteAbilityRow: View {
                     isOn: Binding(
                         get: { active },
                         set: { value in Task { await suites.select(entry, enabled: value) } })
-                ).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(
+                ).labelsHidden().toggleStyle(.skeuoSwitch).controlSize(.small).tint(
                     DashSkin.accent(dark)
                 )
                 .disabled(pending).accessibilityLabel(entry.title + " enabled")
