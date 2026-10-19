@@ -9,17 +9,20 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
     public let week: LimitWindow?
     public let fable: LimitWindow?
     public let grok: GrokAllowance?
+    public let credits: Double?
     public let error: String?
 
     public init(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, error: String? = nil
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, credits: Double? = nil,
+        error: String? = nil
     ) {
         self.provider = provider
         self.session = session
         self.week = week
         self.fable = fable
         self.grok = grok
+        self.credits = credits
         self.error = error
     }
 
@@ -28,6 +31,7 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
         case .session: session
         case .week: week
         case .fable: fable
+        case .credits: nil
         }
     }
 }
@@ -344,7 +348,8 @@ public enum LimitsCollector {
             persistHistory(
                 provider: .codex, session: limits.session, week: limits.week, fable: nil)
             return LimitsProviderSnapshot(
-                provider: .codex, session: limits.session, week: limits.week)
+                provider: .codex, session: limits.session, week: limits.week,
+                credits: limits.credits)
         } catch {
             return LimitsProviderSnapshot(
                 provider: .codex, session: nil, week: nil,

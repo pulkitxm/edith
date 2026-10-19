@@ -25,6 +25,30 @@ import Testing
         #expect(LimitWindowSlot.week.title(for: .cursor) == "Other models")
     }
 
+    @Test func codexCreditsAreAnOptInMenuBarSegment() {
+        #expect(MenuBarLimits.menuBarSlots(for: .codex) == [.session, .week, .credits])
+        #expect(MenuBarLimits.menuBarSlots(for: .claude) == [.session, .week, .fable])
+        #expect(
+            MenuBarLimits.parseSelection("credits,week", provider: .codex) == [.week, .credits])
+        #expect(MenuBarLimits.parseSelection("credits", provider: .claude).isEmpty)
+        #expect(!LimitAlertTarget.all.contains { $0.slot == .credits })
+        let codex = ProviderLimits(
+            provider: .codex, session: nil, week: LimitWindow(percent: 34, resetsAt: nil),
+            credits: 7071.418)
+        let groups = MenuBarLimits.groups(
+            providers: [codex], selection: { _ in [.week, .credits] }, masked: false)
+        #expect(groups[0].segments.map(\.value) == [.percent(34), .credits(7071.418)])
+        let empty = MenuBarLimits.groups(
+            providers: [ProviderLimits(provider: .codex, session: nil, week: nil)],
+            selection: { _ in [.credits] }, masked: false)
+        #expect(empty[0].segments.map(\.value) == [.missing])
+        let locale = Locale(identifier: "en_US")
+        #expect(LimitWindowSlot.credits.menuBarLabel(for: .codex) == "CR")
+        #expect(MenuBarLimits.compactCredits(7071.418, locale: locale) == "7.1K")
+        #expect(MenuBarLimits.compactCredits(950, locale: locale) == "950")
+        #expect(MenuBarLimits.creditsBalance(7071.918, locale: locale) == "7,071")
+    }
+
     @Test func selectionKeepsCanonicalOrderAndDropsGarbage() {
         let parsed = MenuBarLimits.parseSelection("fable , session,nope", provider: .claude)
         #expect(parsed == [.session, .fable])
@@ -79,6 +103,11 @@ import Testing
         let groups = MenuBarLimits.groups(
             providers: [claude], selection: { _ in [.session, .week] }, masked: true)
         #expect(groups[0].segments.map(\.value) == [.masked, .masked])
+        let codex = ProviderLimits(
+            provider: .codex, session: nil, week: nil, credits: 12)
+        let codexGroups = MenuBarLimits.groups(
+            providers: [codex], selection: { _ in [.credits] }, masked: true)
+        #expect(codexGroups[0].segments.map(\.value) == [.masked])
     }
 
     @Test func styleFallsBackToStacked() {

@@ -137,16 +137,18 @@ public struct ProviderLimits: Sendable {
     public let week: LimitWindow?
     public let fable: LimitWindow?
     public let grok: GrokAllowance?
+    public let credits: Double?
 
     public init(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, grok: GrokAllowance? = nil
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, credits: Double? = nil
     ) {
         self.provider = provider
         self.session = session
         self.week = week
         self.fable = fable
         self.grok = grok
+        self.credits = credits
     }
 
     public var isAvailable: Bool { session != nil || week != nil || fable != nil }
@@ -156,6 +158,7 @@ public struct ProviderLimits: Sendable {
         case .session: return session
         case .week: return week
         case .fable: return fable
+        case .credits: return nil
         }
     }
 }

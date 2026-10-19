@@ -293,7 +293,8 @@ public enum ConfigCatalog {
             fallback: .string("session,week,fable")),
         SettingDefinition(
             AppStorageKeys.MenuBar.codexWindows, .string, group: "menubar",
-            summary: "Codex windows shown in the menu bar, comma-separated (session, week).",
+            summary: "Codex windows shown in the menu bar, comma-separated"
+                + " (session, week, credits).",
             fallback: .string("session,week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.cursorWindows, .string, group: "menubar",

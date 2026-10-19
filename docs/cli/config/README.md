@@ -123,7 +123,7 @@ not here cannot be set, and `import` skips it.
 | --- | --- | --- | --- | --- |
 | `limitsInMenuBar` | bool | `true` | shared | Show limit percentages in the menu bar. |
 | `menuBarClaudeWindows` | string | `session,week,fable` | shared | Claude windows shown in the menu bar, comma-separated (session, week, fable). |
-| `menuBarCodexWindows` | string | `session,week` | shared | Codex windows shown in the menu bar, comma-separated (session, week). |
+| `menuBarCodexWindows` | string | `session,week` | shared | Codex windows shown in the menu bar, comma-separated (session, week, credits). |
 | `menuBarCursorWindows` | string | `session,week` | shared | Cursor pools shown in the menu bar, comma-separated (session, week). session is Cursor models and week is Other models. |
 | `menuBarGrokWindows` | string | `week` | shared | Grok allowance shown in the menu bar. week is the plan pool. |
 | `menuBarLimitsStyle` | string: `stacked`, `tagged`, `slash` | `stacked` | shared | Layout of the menu bar limits readout. |
@@ -530,14 +530,16 @@ permission the extension needs and say which one is missing, where
 
 **Menu bar limit windows are comma-separated selections.**
 `menuBarClaudeWindows` accepts `session`, `week` and `fable`,
-`menuBarCodexWindows` accepts `session` and `week`, `menuBarCursorWindows`
-accepts `session` and `week`, and `menuBarGrokWindows` accepts `week`. For
-Cursor, `session` is the Cursor Models pool and `week` is the Other Models
-pool. For Grok, `week` is the plan allowance. The menu bar always restores
-canonical order, drops unknown names, ignores `fable` for Codex, Cursor and
-Grok, and hides a provider whose stored selection is empty. `ed config set`
-validates these as ordinary strings, so a typo is stored successfully and then
-ignored by the menu bar. Unsetting a key restores all windows for that
+`menuBarCodexWindows` accepts `session`, `week` and `credits`,
+`menuBarCursorWindows` accepts `session` and `week`, and `menuBarGrokWindows`
+accepts `week`. For Codex, `credits` shows the remaining credit balance and is
+off until selected. For Cursor, `session` is the Cursor Models pool and `week`
+is the Other Models pool. For Grok, `week` is the plan allowance. The menu bar
+always restores canonical order, drops unknown names, ignores `fable` for
+Codex, Cursor and Grok, ignores `credits` for every provider but Codex, and
+hides a provider whose stored selection is empty. `ed config set` validates
+these as ordinary strings, so a typo is stored successfully and then ignored
+by the menu bar. Unsetting a key restores the default windows for that
 provider. The defaults are `session,week,fable` for Claude, `session,week` for
 Codex and Cursor, and `week` for Grok.
 
