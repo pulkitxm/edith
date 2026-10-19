@@ -210,7 +210,8 @@ private actor FetchedAccountNames {
     }
 
     @Test func accountErrorsKeepTheirSpecificReason() async throws {
-        let reason = "Complete the subscription sign-in in the limits terminal, then refresh limits."
+        let reason =
+            "Complete the subscription sign-in in the limits terminal, then refresh limits."
         let values = try await ClaudeAccountLimitsCollector().refresh(
             accounts: [account()], directory: directory
         ) { _, _ in throw ClaudeAccountError.rejected(reason) }
