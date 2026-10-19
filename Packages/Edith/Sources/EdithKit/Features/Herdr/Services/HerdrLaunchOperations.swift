@@ -35,29 +35,18 @@ public enum HerdrLaunchOperations {
         try validateAccountTarget(account, on: machine)
         _ = try account.launchCommand(
             command: command, arguments: arguments, environment: environment,
-            configurationPath: account.authentication == .browserLogin ? "/validated/profile" : nil,
-            credentialPath: account.authentication == .browserLogin ? nil : "/validated/credential")
-        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
-        try await connection.connect()
+            configurationPath: account.authentication == .browserLogin ? "/validated/profile" : nil)
         if account.authentication != .browserLogin {
-            let platform = await connection.remotePlatform ?? .linux
-            let credentialPath = try await ClaudeAccountLaunchCredential.stage(
-                account: account, connection: connection, platform: platform)
-            do {
-                let launch = try accountLaunch(
-                    account: account, command: command, arguments: arguments,
-                    environment: environment, credentialPath: credentialPath, pane: pane)
-                try Task.checkCancellation()
-                _ = try await HerdrCommand.run(
-                    local: launch.local, remote: launch.remote, timeout: launch.timeout,
-                    on: machine)
-            } catch {
-                await ClaudeAccountLaunchCredential.discard(
-                    path: credentialPath, connection: connection, platform: platform)
-                throw error
-            }
+            let launch = try accountLaunch(
+                account: account, command: command, arguments: arguments, environment: environment,
+                pane: pane)
+            try Task.checkCancellation()
+            _ = try await HerdrCommand.run(
+                local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
             return
         }
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        try await connection.connect()
         guard let platform = await connection.remotePlatform, platform != .windows else {
             throw ClaudeAccountError.rejected(
                 "Account launches require a POSIX shell on this machine.")
@@ -127,15 +116,15 @@ public enum HerdrLaunchOperations {
 
     public static func accountLaunch(
         account: ClaudeAccount, command: String, arguments: [String], environment: String,
-        configurationPath: String? = nil, credentialPath: String? = nil, pane: String,
+        configurationPath: String? = nil, pane: String,
         session: String = HerdrTerminalSpace.defaultSession
     ) throws -> HerdrAgentLaunch {
         let local = try account.launchCommand(
             command: command, arguments: arguments, environment: environment,
-            configurationPath: configurationPath, credentialPath: credentialPath)
+            configurationPath: configurationPath)
         let windows = try account.launchCommand(
             command: command, arguments: arguments, environment: environment, platform: .windows,
-            configurationPath: configurationPath, credentialPath: credentialPath)
+            configurationPath: configurationPath)
         @Sendable func remoteCommand(_ platform: RemoteMachinePlatform) -> String {
             remoteHerdrCommand(
                 arguments: HerdrSessionCommand.scoped(
