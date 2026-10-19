@@ -92,7 +92,7 @@ import Testing
     {
         HerdrStore(
             liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             },
             agentStarter: { _, _, _ in

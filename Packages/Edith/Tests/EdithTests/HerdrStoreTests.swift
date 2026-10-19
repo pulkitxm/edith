@@ -658,7 +658,7 @@ private actor HerdrWatchHarness {
         }
         let recorder = Recorder()
         let store = HerdrStore(
-            newAgentPaneCreator: { kind, machine, space, label in
+            newAgentPaneCreator: { kind, machine, space, label, _ in
                 await recorder.record(kind, machine, space, label)
                 return HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
             }, agentStarter: { _, _, _ in })
@@ -686,7 +686,7 @@ private actor HerdrWatchHarness {
         }
         let recorder = Recorder()
         let store = HerdrStore(
-            newAgentPaneCreator: { _, machine, _, _ in
+            newAgentPaneCreator: { _, machine, _, _, _ in
                 await recorder.record(machine)
                 return HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             }, agentStarter: { _, _, _ in },
@@ -707,7 +707,7 @@ private actor HerdrWatchHarness {
     @Test func launchNewAgentOpensBesideTheCurrentTabWhenRequested() async throws {
         let existing = agent("Claude Code", pane: "existing")
         let store = HerdrStore(
-            newAgentPaneCreator: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
             }, agentStarter: { _, _, _ in })
         store.hosts = [.local(herdrPresent: true, agents: [existing])]
@@ -779,7 +779,7 @@ private actor HerdrWatchHarness {
         }
         let startup = Startup()
         let store = HerdrStore(
-            newAgentPaneCreator: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             },
             agentStarter: { kind, pane, machine in
@@ -803,7 +803,7 @@ private actor HerdrWatchHarness {
     @Test(arguments: ["agent_not_ready", "timeout", "agent_executable_not_found"])
     func startupFailuresKeepTheCreatedTerminalAccessible(code: String) async throws {
         let store = HerdrStore(
-            newAgentPaneCreator: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             },
             agentStarter: { _, _, _ in
@@ -838,7 +838,7 @@ private actor HerdrWatchHarness {
         }
         let startup = Startup()
         let store = HerdrStore(
-            newAgentPaneCreator: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
             }, agentStarter: { _, _, _ in try await startup.wait() })
         try await store.launchNewAgent(
@@ -859,7 +859,7 @@ private actor HerdrWatchHarness {
 
     @Test func launchNewAgentPropagatesLauncherErrors() async {
         struct LaunchFailure: Error {}
-        let store = HerdrStore(newAgentPaneCreator: { _, _, _, _ in throw LaunchFailure() })
+        let store = HerdrStore(newAgentPaneCreator: { _, _, _, _, _ in throw LaunchFailure() })
         await #expect(throws: LaunchFailure.self) {
             try await store.launchNewAgent(
                 kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,

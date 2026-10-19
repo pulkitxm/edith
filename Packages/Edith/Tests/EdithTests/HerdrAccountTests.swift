@@ -7,12 +7,14 @@ import Testing
 
 private actor HerdrAccountLaunchRecorder {
     var panes = 0
+    var paneEnvironment: [String: String] = [:]
     var script: String?
     var started = false
     var cliStarts = 0
 
-    func createPane() -> HerdrCreatedPane {
+    func createPane(_ environment: [String: String] = [:]) -> HerdrCreatedPane {
         panes += 1
+        paneEnvironment = environment
         return HerdrCreatedPane(
             workspaceID: "fixture", tabID: "fixture:tab", paneID: "fixture:pane")
     }
@@ -67,7 +69,7 @@ private actor HerdrAccountLaunchRecorder {
         let recorder = HerdrAccountLaunchRecorder()
         let store = HerdrStore(
             defaults: try defaults(), claudeAccounts: model,
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await recorder.createPane() },
             agentStarter: { _, _, _ in })
         await #expect(throws: ClaudeAccountError.self) {
             try await store.launchNewAgent(
@@ -89,7 +91,9 @@ private actor HerdrAccountLaunchRecorder {
         let settings = try defaults()
         let store = HerdrStore(
             defaults: settings, claudeAccounts: model,
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, environment in
+                await recorder.createPane(environment)
+            },
             agentStarter: { _, _, _ in await recorder.startCLI() },
             accountAgentStarter: { launcher, _ in
                 await recorder.begin(launcher)
@@ -101,18 +105,12 @@ private actor HerdrAccountLaunchRecorder {
         let script = try #require(await recorder.script)
         #expect(!script.contains("CLAUDE_CONFIG_DIR"))
         #expect(!script.contains("CLAUDE_SECURESTORAGE_CONFIG_DIR"))
+        #expect(script.contains("export ANTHROPIC_API_KEY=\"$EDITH_ACCOUNT_CREDENTIAL\""))
+        #expect(script.contains("unset EDITH_ACCOUNT_CREDENTIAL"))
         #expect(!script.contains("synthetic-second-key"))
         #expect(!script.contains("synthetic-first-token"))
-        let staged = try FileManager.default.contentsOfDirectory(atPath: model.directory.path)
-            .filter { $0.hasPrefix("launch-") }
-        #expect(staged.count == 1)
-        let path = model.directory.appendingPathComponent(try #require(staged.first)).path
         #expect(
-            script.contains("export ANTHROPIC_API_KEY=\"$(cat " + ShellQuote.quote(path) + ")\""))
-        #expect(script.contains("rm -f " + ShellQuote.quote(path)))
-        #expect(try String(contentsOfFile: path, encoding: .utf8) == "synthetic-second-key")
-        let attributes = try FileManager.default.attributesOfItem(atPath: path)
-        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+            await recorder.paneEnvironment == ["EDITH_ACCOUNT_CREDENTIAL": "synthetic-second-key"])
         #expect(
             script.hasPrefix("unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN")
         )
@@ -136,7 +134,7 @@ private actor HerdrAccountLaunchRecorder {
         let recorder = HerdrAccountLaunchRecorder()
         let store = HerdrStore(
             defaults: try defaults(), claudeAccounts: model,
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await recorder.createPane() },
             agentStarter: { _, _, _ in },
             accountAgentStarter: { launcher, _ in
                 await recorder.begin(launcher)
@@ -160,7 +158,7 @@ private actor HerdrAccountLaunchRecorder {
         let recorder = HerdrAccountLaunchRecorder()
         let store = HerdrStore(
             defaults: try defaults(),
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await recorder.createPane() },
             agentStarter: { _, _, _ in })
         await #expect(throws: ClaudeAccountError.self) {
             try await store.launchNewAgent(
@@ -222,7 +220,7 @@ private actor HerdrAccountLaunchRecorder {
         let recorder = HerdrAccountLaunchRecorder()
         let store = HerdrStore(
             defaults: try defaults(), claudeAccounts: model,
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await recorder.createPane() },
             agentStarter: { _, _, _ in }, machinesProvider: { [machine] })
         let host = HerdrHostSnapshot(
             id: machine.id.uuidString, name: "Synthetic target", isLocal: false, herdrPresent: true,
@@ -244,7 +242,7 @@ private actor HerdrAccountLaunchRecorder {
         let recorder = HerdrAccountLaunchRecorder()
         let store = HerdrStore(
             defaults: try defaults(), claudeAccounts: model,
-            newAgentPaneCreator: { _, _, _, _ in await recorder.createPane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await recorder.createPane() },
             agentStarter: { _, _, _ in await recorder.startCLI() })
         try await store.launchNewAgent(
             kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,

@@ -408,30 +408,6 @@ public actor ClaudeAccountStorage {
         }
     }
 
-    public func stageLaunchCredential(account: ClaudeAccount, name: String) throws -> URL {
-        try account.validateLaunch()
-        guard account.authentication != .browserLogin,
-            ClaudeAccountLaunchCredential.isFileName(name)
-        else { throw ClaudeAccountError.invalidRequest }
-        let root = try OwnedAccountFiles.root(directory)
-        defer { close(root) }
-        try OwnedAccountFiles.removeStale(
-            prefix: ClaudeAccountLaunchCredential.prefix,
-            olderThan: TimeInterval(ClaudeAccountLaunchCredential.staleMinutes * 60),
-            directory: root)
-        try OwnedAccountFiles.write(
-            Data(account.credential.utf8), name: name, directory: root, exclusive: true)
-        return directory.appendingPathComponent(name)
-    }
-
-    public func discardLaunchCredential(name: String) {
-        guard ClaudeAccountLaunchCredential.isFileName(name),
-            let root = try? OwnedAccountFiles.root(directory)
-        else { return }
-        defer { close(root) }
-        unlinkat(root, name, 0)
-    }
-
     public func logout(
         id: UUID, eraseScopedSecret: @Sendable (URL) throws -> Void
     ) async throws -> ClaudeAccountsState {
