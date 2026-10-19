@@ -144,7 +144,7 @@ private struct AttentionDeliveryFixture {
         #expect(result.first?.duration == 10)
     }
 
-    @Test func gapIsRefusedUntilEarlierSequenceCommits() throws {
+    @Test func gapIsAcceptedAndSkippedSequenceIsIgnored() throws {
         let fixture = AttentionDeliveryFixture()
         defer { fixture.close() }
         let store = try AgentStore(
@@ -156,13 +156,16 @@ private struct AttentionDeliveryFixture {
         func request(_ sequence: Int64) -> AttentionDeliveryRequest {
             AttentionDeliveryRequest(
                 producerID: producer, sequence: sequence,
-                batch: AttentionBatch(events: [fixture.event(Double(sequence - 1) * 5)]))
+                batch: AttentionBatch(events: [
+                    fixture.event(Double(sequence - 1) * 10, name: "Step \(sequence)")
+                ]))
         }
         try events.deliver(request(1), now: now)
-        #expect(throws: AgentError.self) { try events.deliver(request(3), now: now) }
+        try events.deliver(request(3), now: now)
         try events.deliver(request(2), now: now)
         try events.deliver(request(3), now: now)
-        #expect(try events.events(from: now.addingTimeInterval(-61), to: now).first?.duration == 15)
+        let names = try events.events(from: now.addingTimeInterval(-61), to: now).map(\.appName)
+        #expect(names == ["Step 1", "Step 3"])
     }
 
     @Test func receiptCardinalityRefusesNewProducersUntilRetentionExpires() throws {
@@ -237,6 +240,33 @@ private struct AttentionDeliveryFixture {
         await recovered.flush()
         await recovered.stop()
         #expect(try await AttentionDeliverySpool(file: fixture.file).health().pendingEvents == 0)
+    }
+
+    @Test func spoolThatSkippedPastTheReceiptStillDrainsIntoTheStore() async throws {
+        let fixture = AttentionDeliveryFixture()
+        defer { fixture.close() }
+        let store = try AgentStore(
+            url: fixture.root.appendingPathComponent("store.sqlite"), build: "test")
+        defer { try? store.close() }
+        let events = AttentionEventStore(store: store)
+        let now = fixture.event().startedAt.addingTimeInterval(60)
+        let spool = AttentionDeliverySpool(file: fixture.file)
+        _ = try await spool.append([
+            fixture.event(), fixture.event(10, name: "Lost"), fixture.event(20, name: "Idle"),
+        ])
+        let delivered = try #require(try await spool.first())
+        try events.deliver(delivered, now: now)
+        try await spool.acknowledge(delivered)
+        let lost = try #require(try await spool.first())
+        try await spool.acknowledge(lost)
+        let writer = AttentionHeartbeatWriter(
+            spool: AttentionDeliverySpool(file: fixture.file), prepare: { $0.event },
+            deliver: { try events.deliver($0, now: now) })
+        await writer.flush()
+        await writer.stop()
+        #expect(try await AttentionDeliverySpool(file: fixture.file).health().pendingEvents == 0)
+        let names = try events.events(from: now.addingTimeInterval(-61), to: now).map(\.appName)
+        #expect(names == ["Writing", "Idle"])
     }
 
     @Test func shutdownCancelsNetworkAndPersistsAcceptedSamplesBeforeReturning() async throws {
