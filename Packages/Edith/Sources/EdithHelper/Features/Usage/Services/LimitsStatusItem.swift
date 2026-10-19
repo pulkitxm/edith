@@ -248,7 +248,7 @@ final class LimitsStatusItem {
                 value = "\u{2013}"
                 color = dimColor
             case .credits(let balance):
-                value = MenuBarLimits.compactCredits(balance)
+                value = MenuBarLimits.creditsBalance(balance)
                 color = subColor ?? NSColor.labelColor
             case .percent(let percent):
                 value = "\(percent)"
@@ -318,7 +318,7 @@ final class LimitsStatusItem {
         case .credits(let balance):
             out.append(
                 NSAttributedString(
-                    string: MenuBarLimits.compactCredits(balance),
+                    string: MenuBarLimits.creditsBalance(balance),
                     attributes: [.font: font, .foregroundColor: subColor ?? NSColor.labelColor]))
         case .percent(let percent):
             let tint =

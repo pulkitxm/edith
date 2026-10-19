@@ -42,11 +42,10 @@ import Testing
             providers: [ProviderLimits(provider: .codex, session: nil, week: nil)],
             selection: { _ in [.credits] }, masked: false)
         #expect(empty[0].segments.map(\.value) == [.missing])
-        let locale = Locale(identifier: "en_US")
         #expect(LimitWindowSlot.credits.menuBarLabel(for: .codex) == "CR")
-        #expect(MenuBarLimits.compactCredits(7071.418, locale: locale) == "7.1K")
-        #expect(MenuBarLimits.compactCredits(950, locale: locale) == "950")
-        #expect(MenuBarLimits.creditsBalance(7071.918, locale: locale) == "7,071")
+        #expect(MenuBarLimits.creditsBalance(7071.918) == "7071")
+        #expect(MenuBarLimits.creditsBalance(12_345_678.5) == "12345678")
+        #expect(MenuBarLimits.creditsBalance(0.4) == "0")
     }
 
     @Test func selectionKeepsCanonicalOrderAndDropsGarbage() {

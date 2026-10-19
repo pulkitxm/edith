@@ -155,14 +155,8 @@ public enum MenuBarLimits {
         provider == .codex ? slots(for: provider) + [.credits] : slots(for: provider)
     }
 
-    public static func compactCredits(_ balance: Double, locale: Locale = .current) -> String {
-        balance.formatted(
-            .number.notation(.compactName).precision(.fractionLength(0...1)).locale(locale))
-    }
-
-    public static func creditsBalance(_ balance: Double, locale: Locale = .current) -> String {
-        balance.formatted(
-            .number.precision(.fractionLength(0)).rounded(rule: .down).locale(locale))
+    public static func creditsBalance(_ balance: Double) -> String {
+        String(Int(balance.rounded(.down)))
     }
 
     public static func selectionKey(for provider: LimitProvider) -> String {
