@@ -34,7 +34,7 @@ private enum HerdrClosedRecord: Equatable {
 typealias HerdrNewAgentPaneCreator =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
-        _ newSpaceLabel: String?
+        _ newSpaceLabel: String?, _ environment: [String: String]
     ) async throws -> HerdrCreatedPane
 
 struct HerdrAgentSpace: Identifiable, Equatable {
@@ -288,13 +288,13 @@ final class HerdrStore {
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
         newAgentPaneCreator: @escaping HerdrNewAgentPaneCreator = {
-            kind, machine, existingSpace, newSpaceLabel in
+            kind, machine, existingSpace, newSpaceLabel, environment in
             if let existingSpace {
                 return try await HerdrLaunchOperations.createTab(
-                    workspaceID: existingSpace.id, on: machine)
+                    workspaceID: existingSpace.id, environment: environment, on: machine)
             }
             return try await HerdrLaunchOperations.createWorkspace(
-                label: newSpaceLabel ?? "New space", on: machine)
+                label: newSpaceLabel ?? "New space", environment: environment, on: machine)
         },
         agentStarter: @escaping @Sendable (String, String, Machine?) async throws -> Void = {
             kind, pane, machine in
@@ -1959,7 +1959,7 @@ final class HerdrStore {
             localAccountCommand = nil
         }
         let created = try await newAgentPaneCreator(
-            kind, machine, existingSpace, newSpaceLabel)
+            kind, machine, existingSpace, newSpaceLabel, account?.launchEnvironment ?? [:])
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,

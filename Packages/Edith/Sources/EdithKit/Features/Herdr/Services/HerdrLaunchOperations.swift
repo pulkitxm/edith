@@ -182,12 +182,14 @@ public enum HerdrLaunchOperations {
     }
 
     public static func createWorkspace(
-        label: String, cwd: String? = nil, session: String = HerdrTerminalSpace.defaultSession,
-        on machine: Machine?
+        label: String, cwd: String? = nil, environment: [String: String] = [:],
+        session: String = HerdrTerminalSpace.defaultSession, on machine: Machine?
     ) async throws -> HerdrCreatedPane {
         let output = try await HerdrCommand.run(
             HerdrSessionCommand.scoped(
-                HerdrWorkspaceCreateCommand.arguments(label: label, cwd: cwd), session: session),
+                HerdrWorkspaceCreateCommand.arguments(
+                    label: label, cwd: cwd, environment: environment),
+                session: session),
             timeout: defaultTimeout, on: machine)
         guard let created = HerdrListParser.createdPane(from: output) else {
             throw HerdrCommandError.malformedResponse
@@ -196,13 +198,14 @@ public enum HerdrLaunchOperations {
     }
 
     public static func createTab(
-        workspaceID: String, cwd: String? = nil,
+        workspaceID: String, cwd: String? = nil, environment: [String: String] = [:],
         session: String = HerdrTerminalSpace.defaultSession,
         on machine: Machine?
     ) async throws -> HerdrCreatedPane {
         let output = try await HerdrCommand.run(
             HerdrSessionCommand.scoped(
-                HerdrTabCreateCommand.arguments(workspaceID: workspaceID, cwd: cwd),
+                HerdrTabCreateCommand.arguments(
+                    workspaceID: workspaceID, cwd: cwd, environment: environment),
                 session: session),
             timeout: defaultTimeout, on: machine)
         guard let created = HerdrListParser.createdPane(from: output) else {

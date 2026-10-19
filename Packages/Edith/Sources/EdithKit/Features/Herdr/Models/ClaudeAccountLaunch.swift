@@ -23,30 +23,49 @@ extension ClaudeAccount {
             "ANTHROPIC_PROFILE", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
             "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
         ]
-        switch authentication {
-        case .oauthToken: assignments.append(("CLAUDE_CODE_OAUTH_TOKEN", credential))
-        case .apiKey: assignments.append(("ANTHROPIC_API_KEY", credential))
-        case .browserLogin:
-            if let configurationPath {
-                assignments += [
-                    ("CLAUDE_CONFIG_DIR", configurationPath),
-                    ("CLAUDE_SECURESTORAGE_CONFIG_DIR", configurationPath),
-                ]
-            }
+        if authentication == .browserLogin, let configurationPath {
+            assignments += [
+                ("CLAUDE_CONFIG_DIR", configurationPath),
+                ("CLAUDE_SECURESTORAGE_CONFIG_DIR", configurationPath),
+            ]
         }
+        let handoff = Self.launchCredentialVariable
         var lines: [String]
         if platform == .windows {
             lines = cleared.map { "Remove-Item Env:" + $0 + " -ErrorAction SilentlyContinue" }
             lines += assignments.map { "$env:" + $0.0 + "=" + PowerShell.literal($0.1) }
+            if let variable = credentialVariable {
+                lines += [
+                    "$env:" + variable + "=$env:" + handoff,
+                    "Remove-Item Env:" + handoff + " -ErrorAction SilentlyContinue",
+                ]
+            }
         } else {
             lines = ["unset " + cleared.joined(separator: " ")]
             lines += assignments.map { "export " + $0.0 + "=" + ShellQuote.quote($0.1) }
+            if let variable = credentialVariable {
+                lines += ["export " + variable + "=\"$" + handoff + "\"", "unset " + handoff]
+            }
         }
         lines.append(
             HerdrPaneRunCommand.commandText(command, appending: arguments, platform: platform))
         let launch = lines.joined(separator: "; ")
         guard launch.utf8.count <= 65_536 else { throw ClaudeAccountError.invalidRequest }
         return launch
+    }
+
+    public static let launchCredentialVariable = "EDITH_ACCOUNT_CREDENTIAL"
+
+    public var launchEnvironment: [String: String] {
+        credentialVariable == nil ? [:] : [Self.launchCredentialVariable: credential]
+    }
+
+    private var credentialVariable: String? {
+        switch authentication {
+        case .oauthToken: "CLAUDE_CODE_OAUTH_TOKEN"
+        case .apiKey: "ANTHROPIC_API_KEY"
+        case .browserLogin: nil
+        }
     }
 
 }
