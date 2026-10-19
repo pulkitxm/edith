@@ -77,7 +77,7 @@
     {
       "area": "input",
       "status": "instrumented",
-      "finding": "Type-ahead and global hotkeys are event driven, while terminal responders bypass app-wide text discovery and media shortcuts.",
+      "finding": "Type-ahead and global hotkeys are event driven, while terminal and web view responders bypass app-wide text discovery and media shortcuts.",
       "measurement": "Points of Interest intervals named main.typeAhead and helper.globalHotKey, plus 10,000 focus transitions and 100,000 terminal responder checks.",
       "regressionProperty": "Input spans preserve stable identity, stale focus work cannot reactivate a hidden terminal, and terminal keystrokes remain local.",
       "evidence": [
@@ -95,7 +95,7 @@
         },
         {
           "path": "Packages/Edith/Sources/EdithKit/UI/InputFocus.swift",
-          "contains": "!(responder is DirectKeyboardInputResponder)"
+          "contains": "responder is DirectKeyboardInputResponder || responder is WKWebView"
         },
         {
           "path": "Packages/Edith/Tests/EdithTests/TerminalPresentationTests.swift",
