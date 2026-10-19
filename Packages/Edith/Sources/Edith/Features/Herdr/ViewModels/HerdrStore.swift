@@ -1934,29 +1934,38 @@ final class HerdrStore {
         let accountEnvironment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
         let accountDirectory: URL?
         let localAccountCommand: String?
+        let credentialName: String?
         if let account {
             accountDirectory = machine == nil ? claudeAccounts.directory : nil
             let profile =
                 account.authentication == .browserLogin
                 ? accountDirectory?.appendingPathComponent(account.id.uuidString).path
                     ?? "/validated/profile" : nil
+            credentialName =
+                account.authentication == .browserLogin
+                ? nil : ClaudeAccountLaunchCredential.fileName()
+            let credentialPath = credentialName.map {
+                accountDirectory?.appendingPathComponent($0).path ?? "/validated/credential"
+            }
             let sessionTagging =
                 try accountDirectory.map {
                     try ClaudeAccountSessions.launchArguments(account: account.id, directory: $0)
                 } ?? []
             localAccountCommand = try account.launchCommand(
                 command: accountCommand, arguments: accountArguments + sessionTagging,
-                environment: accountEnvironment, configurationPath: profile)
+                environment: accountEnvironment, configurationPath: profile,
+                credentialPath: credentialPath)
             if let machine {
                 try HerdrLaunchOperations.validateAccountTarget(account, on: machine)
                 _ = try HerdrLaunchOperations.accountLaunch(
                     account: account, command: accountCommand, arguments: accountArguments,
                     environment: accountEnvironment, configurationPath: profile,
-                    pane: "validated-pane")
+                    credentialPath: credentialPath, pane: "validated-pane")
             }
         } else {
             accountDirectory = nil
             localAccountCommand = nil
+            credentialName = nil
         }
         let created = try await newAgentPaneCreator(
             kind, machine, existingSpace, newSpaceLabel)
@@ -1980,12 +1989,22 @@ final class HerdrStore {
         agentStartupTasks[id] = Task { [weak self] in
             do {
                 if let account, let accountDirectory, let localAccountCommand {
-                    if account.authentication == .browserLogin {
-                        try await ClaudeAccountStorage(directory: accountDirectory)
-                            .seedLogin(account: account)
+                    let storage = ClaudeAccountStorage(directory: accountDirectory)
+                    if let credentialName {
+                        _ = try await storage.stageLaunchCredential(
+                            account: account, name: credentialName)
+                    } else {
+                        try await storage.seedLogin(account: account)
                     }
-                    try Task.checkCancellation()
-                    try await startAccount(localAccountCommand, created.paneID)
+                    do {
+                        try Task.checkCancellation()
+                        try await startAccount(localAccountCommand, created.paneID)
+                    } catch {
+                        if let credentialName {
+                            await storage.discardLaunchCredential(name: credentialName)
+                        }
+                        throw error
+                    }
                 } else if let account, let machine {
                     try await startRemoteAccount(
                         account, accountCommand, accountArguments, accountEnvironment,

@@ -147,6 +147,32 @@ enum OwnedAccountFiles {
         else { throw ClaudeAccountError.invalidRequest }
     }
 
+    static func removeStale(prefix: String, olderThan age: TimeInterval, directory: Int32) throws {
+        let copied = dup(directory)
+        guard copied >= 0 else { throw ClaudeAccountError.invalidRequest }
+        guard let stream = fdopendir(copied) else {
+            close(copied)
+            throw ClaudeAccountError.invalidRequest
+        }
+        defer { closedir(stream) }
+        let cutoff = Date().timeIntervalSince1970 - age
+        var stale: [String] = []
+        while let entry = readdir(stream) {
+            let length = Int(entry.pointee.d_namlen) + 1
+            let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                $0.withMemoryRebound(to: CChar.self, capacity: length) { String(cString: $0) }
+            }
+            guard name.hasPrefix(prefix) else { continue }
+            var info = stat()
+            guard fstatat(directory, name, &info, AT_SYMLINK_NOFOLLOW) == 0,
+                info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFREG,
+                TimeInterval(info.st_mtimespec.tv_sec) < cutoff
+            else { continue }
+            stale.append(name)
+        }
+        for name in stale { unlinkat(directory, name, 0) }
+    }
+
     static func removeProfile(_ id: UUID, root: Int32) throws {
         guard let descriptor = try profile(id, root: root, create: false) else { return }
         defer { close(descriptor) }
