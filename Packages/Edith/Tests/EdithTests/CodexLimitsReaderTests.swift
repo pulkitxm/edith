@@ -58,6 +58,26 @@ import Testing
         #expect(limits.week == nil)
     }
 
+    @Test func readsTheCreditBalance() throws {
+        let data = Data(
+            """
+            {"rateLimits":{"primary":{"usedPercent":23,"windowDurationMins":300},
+            "credits":{"hasCredits":true,"unlimited":false,"balance":"7071.4180000000"}}}
+            """.utf8)
+        let limits = try CodexLimitsReader.limits(
+            JSONDecoder().decode(CodexLimitsReader.Result.self, from: data))
+        #expect(limits.credits == 7071.418)
+        let missing = try CodexLimitsReader.limits(
+            JSONDecoder().decode(
+                CodexLimitsReader.Result.self,
+                from: Data(
+                    """
+                    {"rateLimits":{"primary":{"usedPercent":23,"windowDurationMins":300},
+                    "credits":{"hasCredits":false,"unlimited":false,"balance":null}}}
+                    """.utf8)))
+        #expect(missing.credits == nil)
+    }
+
     @Test func providerErrorsRemainVisible() async throws {
         let script =
             handshake

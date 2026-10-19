@@ -88,6 +88,7 @@ final class UsageStore: FeatureModule {
     private(set) var fableWeek: LimitWindow?
     private(set) var codexSession: LimitWindow?
     private(set) var codexWeek: LimitWindow?
+    private(set) var codexCredits: Double?
     private(set) var cursorSession: LimitWindow?
     private(set) var cursorWeek: LimitWindow?
     private(set) var grokWeek: LimitWindow?
@@ -127,7 +128,8 @@ final class UsageStore: FeatureModule {
                 fable: Self.fresh(fableWeek))
         case .codex:
             return ProviderLimits(
-                provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek))
+                provider: provider, session: Self.fresh(codexSession), week: Self.fresh(codexWeek),
+                credits: codexCredits)
         case .cursor:
             return ProviderLimits(
                 provider: provider, session: Self.fresh(cursorSession),
@@ -323,6 +325,7 @@ final class UsageStore: FeatureModule {
                 guard provider.session != nil || provider.week != nil else { continue }
                 codexSession = Self.fresh(provider.session)
                 codexWeek = Self.fresh(provider.week)
+                codexCredits = provider.credits
             case .cursor:
                 guard provider.session != nil || provider.week != nil else { continue }
                 cursorSession = Self.fresh(provider.session)

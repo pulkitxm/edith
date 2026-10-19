@@ -1,7 +1,7 @@
 import Foundation
 
 public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
-    case session, week, fable
+    case session, week, fable, credits
 
     public var kind: LimitWindowKind { self == .session ? .session : .weekly }
 
@@ -16,6 +16,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "F"
+        case (_, .credits): return "CR"
         }
     }
 
@@ -35,6 +36,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "Fable"
+        case (_, .credits): return "Credits"
         }
     }
 
@@ -46,6 +48,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5-hour limit"
         case (_, .week): return "Weekly · all models"
         case (_, .fable): return "Weekly · Fable"
+        case (_, .credits): return "Credits"
         }
     }
 
@@ -68,6 +71,7 @@ public enum MenuBarLimitsStyle: String, CaseIterable, Sendable {
 public struct MenuBarLimitSegment: Equatable, Sendable {
     public enum Value: Equatable, Sendable {
         case percent(Int)
+        case credits(Double)
         case missing
         case masked
     }
@@ -147,6 +151,14 @@ public enum MenuBarLimits {
         }
     }
 
+    public static func menuBarSlots(for provider: LimitProvider) -> [LimitWindowSlot] {
+        provider == .codex ? slots(for: provider) + [.credits] : slots(for: provider)
+    }
+
+    public static func creditsBalance(_ balance: Double) -> String {
+        String(Int(balance.rounded(.down)))
+    }
+
     public static func selectionKey(for provider: LimitProvider) -> String {
         switch provider {
         case .claude: AppStorageKeys.MenuBar.claudeWindows
@@ -159,8 +171,8 @@ public enum MenuBarLimits {
     public static func parseSelection(
         _ raw: String?, provider: LimitProvider
     ) -> [LimitWindowSlot] {
-        let all = slots(for: provider)
-        guard let raw else { return all }
+        let all = menuBarSlots(for: provider)
+        guard let raw else { return slots(for: provider) }
         let chosen = Set(
             raw.split(separator: ",").compactMap {
                 LimitWindowSlot(rawValue: $0.trimmingCharacters(in: .whitespaces))
@@ -196,6 +208,8 @@ public enum MenuBarLimits {
                 let value: MenuBarLimitSegment.Value
                 if masked {
                     value = .masked
+                } else if slot == .credits {
+                    value = limits.credits.map { .credits($0) } ?? .missing
                 } else if let window {
                     value = .percent(window.shownPercent)
                 } else {
