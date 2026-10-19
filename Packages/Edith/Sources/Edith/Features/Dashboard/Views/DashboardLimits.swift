@@ -115,6 +115,12 @@ struct RateLimitsDialsView: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if let credits = credits(for: selected) {
+                    Text(creditsText(credits))
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if let point {
                     Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
                         .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
@@ -218,6 +224,10 @@ struct RateLimitsDialsView: View {
                                 quotaRow("Additional models", window: fable)
                             }
                             if presentation?.tile.showDetails != false {
+                                if let credits = credits(for: provider) {
+                                    Text(creditsText(credits)).font(.edithText(.caption))
+                                        .foregroundStyle(.secondary)
+                                }
                                 if let extra = latest.grok?.extraLine,
                                     presentation?.tile.shows("account") != false
                                 {
@@ -241,6 +251,14 @@ struct RateLimitsDialsView: View {
                 }
             }
         }
+    }
+
+    private func credits(for provider: LimitProvider) -> Double? {
+        latestLimits?.providers.first { $0.provider == provider }?.credits
+    }
+
+    private func creditsText(_ credits: Double) -> String {
+        "\(MenuBarLimits.creditsBalance(credits)) credits remaining"
     }
 
     private func quotaRow(_ label: String, window: LimitWindow) -> some View {
