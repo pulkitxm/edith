@@ -261,6 +261,9 @@ public actor ClaudeAccountLimitsCollector {
         if let failure = error as? ClaudeLimitsReader.Failure {
             return failure.localizedDescription
         }
+        if let failure = error as? ClaudeAccountError {
+            return failure.localizedDescription
+        }
         return "Account limits are unavailable. Check this account's login in Sessions."
     }
 

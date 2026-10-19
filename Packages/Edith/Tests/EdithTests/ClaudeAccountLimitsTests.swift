@@ -209,6 +209,15 @@ private actor FetchedAccountNames {
         #expect(!text.contains("remoteMachineID"))
     }
 
+    @Test func accountErrorsKeepTheirSpecificReason() async throws {
+        let reason =
+            "Complete the subscription sign-in in the limits terminal, then refresh limits."
+        let values = try await ClaudeAccountLimitsCollector().refresh(
+            accounts: [account()], directory: directory
+        ) { _, _ in throw ClaudeAccountError.rejected(reason) }
+        #expect(values.first?.limits.error == reason)
+    }
+
     @Test func apiKeysDoNotFallBackToAnotherAccountLogin() {
         let value = ClaudeAccount(
             name: "Synthetic API", authentication: .apiKey, credential: "synthetic-key")
