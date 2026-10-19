@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import WebKit
 
 @testable import EdithKit
 
@@ -75,5 +76,17 @@ import Testing
         #expect(ScrollForwarding.handlesScrollDirectly(from: direct))
         #expect(ScrollForwarding.handlesScrollDirectly(from: child))
         #expect(!ScrollForwarding.handlesScrollDirectly(from: NSView()))
+    }
+
+    @Test func webViewsScrollAndTakeTypingThemselves() {
+        let web = WKWebView()
+        let child = NSView()
+        web.addSubview(child)
+
+        #expect(ScrollForwarding.handlesScrollDirectly(from: web))
+        #expect(ScrollForwarding.handlesScrollDirectly(from: child))
+        #expect(!InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: web))
+        #expect(
+            InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: NSView()))
     }
 }

@@ -30,6 +30,7 @@ final class SocialBrowserSession {
         configuration.preferences.isFraudulentWebsiteWarningEnabled = true
         configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configuration.preferences.isElementFullscreenEnabled = true
         let safari =
             Bundle(path: "/Applications/Safari.app")?
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "26.0"
@@ -39,6 +40,7 @@ final class SocialBrowserSession {
         page.onPopup = { [weak self] configuration in
             self?.makePage(configuration: configuration).webView
         }
+        page.onOpenInBackground = { [weak self] url in self?.openInBackground(url) }
         page.onClose = { [weak self, weak page] in
             guard let page else { return }
             self?.closePage(page)
@@ -46,6 +48,12 @@ final class SocialBrowserSession {
         pages.append(page)
         selectedPageID = page.id
         return page
+    }
+
+    func openInBackground(_ url: URL) {
+        let selected = selectedPageID
+        makePage().webView.load(URLRequest(url: url))
+        selectedPageID = selected
     }
 
     func closePage(_ page: SocialBrowserPage) {
@@ -81,6 +89,12 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
     private(set) var canGoBack = false
     private(set) var canGoForward = false
     var error: String?
+    var hoveredLink: URL?
+    var showsFind = false
+    var findText = ""
+    private(set) var findMatched: Bool?
+    private(set) var findFocusRequest = UUID()
+    @ObservationIgnored var onOpenInBackground: ((URL) -> Void)?
     @ObservationIgnored var onPopup: ((WKWebViewConfiguration) -> WKWebView?)?
     @ObservationIgnored var onClose: (() -> Void)?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
@@ -154,7 +168,36 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         webView.onMenu = nil
         webView.removeFromSuperview()
         onPopup = nil
+        onOpenInBackground = nil
         onClose = nil
+    }
+
+    func showFind() {
+        showsFind = true
+        findFocusRequest = UUID()
+    }
+
+    func hideFind() {
+        showsFind = false
+        findMatched = nil
+        webView.window?.makeFirstResponder(webView)
+    }
+
+    func find(backwards: Bool = false) {
+        guard !findText.isEmpty else {
+            findMatched = nil
+            return
+        }
+        let configuration = WKFindConfiguration()
+        configuration.backwards = backwards
+        configuration.wraps = true
+        webView.find(findText, configuration: configuration) { [weak self] result in
+            MainActor.assumeIsolated { self?.findMatched = result.matchFound }
+        }
+    }
+
+    func zoom(by step: Double) {
+        webView.pageZoom = min(3, max(0.5, webView.pageZoom + step))
     }
 
     private func extend(_ menu: NSMenu) {
@@ -261,6 +304,14 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         let allowed =
             scheme == "https" || scheme == "http" || url.absoluteString == "about:blank"
             || scheme == "blob"
+        if allowed, navigationAction.navigationType == .linkActivated,
+            navigationAction.modifierFlags.contains(.command) || navigationAction.buttonNumber == 4,
+            let onOpenInBackground
+        {
+            onOpenInBackground(url)
+            decisionHandler(.cancel)
+            return
+        }
         if !allowed, navigationAction.targetFrame?.isMainFrame != false {
             error =
                 "This link opens an external application. Continue using the website in this account."
@@ -345,6 +396,18 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
             self?.panels.removeAll { $0 === alert.window }
             completion(response)
         }
+    }
+
+    @objc(_webView:mouseDidMoveOverElement:withFlags:userInfo:)
+    func webView(
+        _ webView: WKWebView, mouseDidMoveOver element: NSObject?,
+        withFlags flags: NSEvent.ModifierFlags, userInfo: AnyObject?
+    ) {
+        let selector = NSSelectorFromString("absoluteLinkURL")
+        let link =
+            element?.responds(to: selector) == true
+            ? element?.value(forKey: "absoluteLinkURL") as? URL : nil
+        if hoveredLink != link { hoveredLink = link }
     }
 
     @objc(_webView:contextMenuDidCreateDownload:)

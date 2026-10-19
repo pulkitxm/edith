@@ -216,6 +216,17 @@ extension SocialManagerModel {
         case .focusAddress:
             guard focusedAccount != nil else { return false }
             addressFocusRequest = UUID()
+        case .find, .findNext, .findPrevious, .zoomIn, .zoomOut:
+            guard !showingAccounts, let account = focusedAccount,
+                let page = sessions[account.id]?.selectedPage
+            else { return false }
+            switch command {
+            case .find: page.showFind()
+            case .findNext: page.find()
+            case .findPrevious: page.find(backwards: true)
+            case .zoomIn: page.zoom(by: 0.1)
+            default: page.zoom(by: -0.1)
+            }
         }
         return true
     }

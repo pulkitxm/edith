@@ -181,10 +181,11 @@ private struct SocialBrowserPane: View {
         Button("Open in new window") { SocialWorkspaceWindow.open(key, from: model) }
         if let page = session.selectedPage {
             Menu("Website zoom") {
-                Button("Zoom in") { page.webView.pageZoom = min(3, page.webView.pageZoom + 0.1) }
-                Button("Zoom out") { page.webView.pageZoom = max(0.5, page.webView.pageZoom - 0.1) }
+                Button("Zoom in") { page.zoom(by: 0.1) }
+                Button("Zoom out") { page.zoom(by: -0.1) }
                 Button("Actual size") { page.webView.pageZoom = 1 }
             }
+            Button("Find in page") { page.showFind() }
             Button("New website tab") {
                 session.makePage().webView.load(URLRequest(url: session.website))
             }
@@ -198,10 +199,11 @@ private struct SocialBrowserPane: View {
 struct SocialBrowserContent: View {
     let model: SocialManagerModel
     let account: SocialAccount
-    let page: SocialBrowserPage
+    @Bindable var page: SocialBrowserPage
     let website: URL
     @State private var address = ""
     @FocusState private var addressFocused: Bool
+    @FocusState private var findFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -218,12 +220,30 @@ struct SocialBrowserContent: View {
                 }
                 .padding(UIScale.pt(8))
             }
+            if page.showsFind { findBar }
             SocialWebView(webView: page.webView).id(page.id)
+                .onHover { inside in
+                    if !inside { page.hoveredLink = nil }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if let link = page.hoveredLink {
+                        Text(link.absoluteString)
+                            .font(.edithText(.caption)).lineLimit(1).truncationMode(.middle)
+                            .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(3))
+                            .background(
+                                .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(5))
+                            )
+                            .padding(UIScale.pt(6))
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Link address \(link.absoluteString)")
+                    }
+                }
         }
         .onAppear { address = (page.url ?? website).absoluteString }
         .onChange(of: page.url) { _, url in
             if !addressFocused { address = (url ?? website).absoluteString }
         }
+        .onChange(of: page.findFocusRequest) { findFocused = true }
         .onChange(of: model.addressFocusRequest) {
             guard model.focusedAccount?.id == account.id else { return }
             address = (page.url ?? website).absoluteString
@@ -260,16 +280,47 @@ struct SocialBrowserContent: View {
                 .font(.edithText(.caption)).textFieldStyle(.roundedBorder)
                 .focused($addressFocused)
                 .onSubmit {
-                    do {
-                        let url = try SocialPlatform.websiteURL(address)
-                        page.webView.load(URLRequest(url: url))
-                        addressFocused = false
-                        page.webView.window?.makeFirstResponder(page.webView)
-                    } catch { page.error = error.localizedDescription }
+                    let engine =
+                        BrowserSearchEngine(
+                            rawValue: SharedDefaults.store.string(
+                                forKey: AppStorageKeys.Notch.browserSearchEngine) ?? "")
+                        ?? .fallback
+                    guard let url = BrowserAddress.url(for: address, engine: engine) else { return }
+                    page.webView.load(URLRequest(url: url))
+                    addressFocused = false
+                    page.webView.window?.makeFirstResponder(page.webView)
                 }
                 .help(page.url?.absoluteString ?? website.absoluteString)
         }
         .padding(UIScale.pt(8))
+    }
+
+    private var findBar: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            TextField("Find in page", text: $page.findText)
+                .font(.edithText(.caption)).textFieldStyle(.roundedBorder)
+                .focused($findFocused)
+                .onSubmit { page.find() }
+                .onChange(of: page.findText) { page.find() }
+                .onExitCommand { page.hideFind() }
+            if page.findMatched == false {
+                Text("Not found").font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            Button {
+                page.find(backwards: true)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .accessibilityLabel("Previous match")
+            Button {
+                page.find()
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .accessibilityLabel("Next match")
+            Button("Done") { page.hideFind() }
+        }
+        .padding(.horizontal, UIScale.pt(8)).padding(.bottom, UIScale.pt(8))
     }
 }
 
