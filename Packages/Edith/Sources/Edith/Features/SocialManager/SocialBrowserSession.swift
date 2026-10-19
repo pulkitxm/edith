@@ -28,6 +28,7 @@ final class SocialBrowserSession {
         configuration.websiteDataStore = dataStore
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
         configuration.preferences.isFraudulentWebsiteWarningEnabled = true
+        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         let safari =
             Bundle(path: "/Applications/Safari.app")?
@@ -95,7 +96,6 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
-        webView.isInspectable = true
         webView.onMenu = { [weak self] menu in self?.extend(menu) }
         observations = [
             webView.observe(\.title, options: [.new]) { [weak self] _, _ in

@@ -20,7 +20,9 @@ struct SocialBrowserMenuTests {
         defer { session.shutdown() }
         let page = try #require(session.selectedPage)
         try await eventually { !page.isLoading && page.url == origin }
-        #expect(page.webView.isInspectable)
+        #expect(
+            page.webView.configuration.preferences.value(forKey: "developerExtrasEnabled") as? Bool
+                == true)
 
         let menu = Self.menu(["WKMenuItemIdentifierGoBack", "WKMenuItemIdentifierReload"])
         menu.addItem(.separator())
