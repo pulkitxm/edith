@@ -20,6 +20,11 @@ enum HerdrAccountFixture {
         return root
     }
 
+    static func stage(_ account: ClaudeAccount, directory: URL) async throws -> URL {
+        try await ClaudeAccountStorage(directory: directory).stageLaunchCredential(
+            account: account, name: ClaudeAccountLaunchCredential.fileName())
+    }
+
     static func run(
         _ command: String, home: URL, shell: String = "/bin/sh"
     ) async throws -> [String: String] {
@@ -113,11 +118,15 @@ enum HerdrAccountFixture {
             kind: "Claude Code", options: .none, in: defaults)
         var profiles = Set<String>()
         for account in accounts {
+            let staged = try await HerdrAccountFixture.stage(account, directory: directory)
             let launch = try account.launchCommand(
                 command: command, arguments: arguments,
-                environment: HerdrLaunchSettings.sharedEnvironment(in: defaults))
+                environment: HerdrLaunchSettings.sharedEnvironment(in: defaults),
+                credentialPath: staged.path)
+            #expect(!launch.contains(account.credential))
             let environment = try await HerdrAccountFixture.run(
                 launch, home: root, shell: "/bin/zsh")
+            #expect(!FileManager.default.fileExists(atPath: staged.path))
             #expect(environment["FLAG_VALUE"] == "two words")
             #expect(environment["IS_DEMO"] == "1")
             #expect(environment["LITERAL"] == "$(touch forbidden); 'quoted'")
@@ -163,8 +172,14 @@ enum HerdrAccountFixture {
         let directory = root.appendingPathComponent("accounts")
         let storage = ClaudeAccountStorage(directory: directory)
         try await storage.save(.init(accounts: [personal, company, browser]))
-        let first = try personal.launchCommand(command: "/usr/bin/env", arguments: [])
-        let second = try company.launchCommand(command: "/usr/bin/env", arguments: [])
+        let first = try personal.launchCommand(
+            command: "/usr/bin/env", arguments: [],
+            credentialPath: try await HerdrAccountFixture.stage(personal, directory: directory).path
+        )
+        let second = try company.launchCommand(
+            command: "/usr/bin/env", arguments: [],
+            credentialPath: try await HerdrAccountFixture.stage(company, directory: directory).path)
+        #expect(!first.contains("synthetic-'token") && !second.contains(company.credential))
         try await storage.seedLogin(account: browser)
         let third = directory.appendingPathComponent(browser.id.uuidString, isDirectory: true)
         let personalEnvironment = try await HerdrAccountFixture.run(first, home: root)
@@ -207,10 +222,13 @@ enum HerdrAccountFixture {
             ClaudeAccount(name: "Key", authentication: .apiKey, credential: "synthetic-'key"),
         ]
         for account in accounts {
+            let staged = try await HerdrAccountFixture.stage(
+                account, directory: root.appendingPathComponent("accounts"))
             let command = try account.launchCommand(
                 command: "cc",
                 arguments: ["MODEL=synthetic model", "LITERAL_ARG=$(touch forbidden)"],
-                environment: "IS_DEMO=1\nLITERAL_ENV=$(touch forbidden); 'quoted'")
+                environment: "IS_DEMO=1\nLITERAL_ENV=$(touch forbidden); 'quoted'",
+                credentialPath: staged.path)
             let result = try await HerdrAccountFixture.run(command, home: root, shell: shell)
             let selected =
                 account.authentication == .apiKey ? "ANTHROPIC_API_KEY" : "CLAUDE_CODE_OAUTH_TOKEN"
@@ -218,6 +236,7 @@ enum HerdrAccountFixture {
                 account.authentication == .apiKey ? "CLAUDE_CODE_OAUTH_TOKEN" : "ANTHROPIC_API_KEY"
             #expect(result[selected] == account.credential)
             #expect(result[competing] == nil)
+            #expect(!FileManager.default.fileExists(atPath: staged.path))
             #expect(result["ANTHROPIC_AUTH_TOKEN"] == nil)
             #expect(result["CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST"] == nil)
             #expect(result["MODEL"] == "synthetic model")
@@ -238,14 +257,23 @@ enum HerdrAccountFixture {
         let account = ClaudeAccount(
             name: "Windows", authentication: .apiKey, credential: "synthetic'key;$env:HOME")
         let arguments = ["--model", "synthetic model", "literal'argument;$(Get-Item secret)"]
+        let credentialPath = "C:\\Users\\synthetic o'user\\launch-staged"
         let command = try account.launchCommand(
             command: "cc", arguments: arguments,
             environment: "IS_DEMO=1\nLITERAL=synthetic'value;$env:HOME",
-            platform: .windows)
+            platform: .windows, credentialPath: credentialPath)
         #expect(
             command.contains(
                 "Remove-Item Env:CLAUDE_CODE_OAUTH_TOKEN -ErrorAction SilentlyContinue"))
-        #expect(command.contains("$env:ANTHROPIC_API_KEY='synthetic''key;$env:HOME'"))
+        #expect(!command.contains("synthetic'key") && !command.contains("synthetic''key"))
+        #expect(
+            command.contains(
+                "$env:ANTHROPIC_API_KEY=[IO.File]::ReadAllText("
+                    + PowerShell.literal(credentialPath) + ")"))
+        #expect(
+            command.contains(
+                "Remove-Item -LiteralPath " + PowerShell.literal(credentialPath)
+                    + " -Force -ErrorAction SilentlyContinue"))
         #expect(command.contains("$env:LITERAL='synthetic''value;$env:HOME'"))
         #expect(!command.contains("CLAUDE_CONFIG_DIR"))
         #expect(
@@ -254,7 +282,7 @@ enum HerdrAccountFixture {
         let launch = try HerdrLaunchOperations.accountLaunch(
             account: account, command: "cc", arguments: arguments,
             environment: "IS_DEMO=1\nLITERAL=synthetic'value;$env:HOME",
-            pane: "synthetic-selected-pane")
+            credentialPath: credentialPath, pane: "synthetic-selected-pane")
         #expect(
             launch.local.prefix(5) == [
                 "--session", "default", "pane", "run", "synthetic-selected-pane",
@@ -270,16 +298,24 @@ enum HerdrAccountFixture {
 
     @Test func directLaunchRejectsUnboundedOrCompetingInputs() throws {
         let account = ClaudeAccount(name: "Validation", credential: "synthetic-token")
+        let staged = "/synthetic/launch-staged"
+        _ = try account.launchCommand(command: "cc", arguments: [], credentialPath: staged)
+        for path in [nil, "", "bad\0", "/synthetic/\nlaunch", String(repeating: "p", count: 8193)] {
+            #expect(throws: ClaudeAccountError.self) {
+                try account.launchCommand(command: "cc", arguments: [], credentialPath: path)
+            }
+        }
         for command in ["", " \n", "cc\0", String(repeating: "c", count: 16_385)] {
             #expect(throws: ClaudeAccountError.self) {
-                try account.launchCommand(command: command, arguments: [])
+                try account.launchCommand(command: command, arguments: [], credentialPath: staged)
             }
         }
         for arguments in [
             ["bad\0"], [String(repeating: "x", count: 8193)], Array(repeating: "x", count: 257),
         ] {
             #expect(throws: ClaudeAccountError.self) {
-                try account.launchCommand(command: "cc", arguments: arguments)
+                try account.launchCommand(
+                    command: "cc", arguments: arguments, credentialPath: staged)
             }
         }
         for environment in [
@@ -288,23 +324,30 @@ enum HerdrAccountFixture {
             "X=bad\0", "X=" + String(repeating: "x", count: 8191),
         ] {
             #expect(throws: ClaudeAccountError.self) {
-                try account.launchCommand(command: "cc", arguments: [], environment: environment)
+                try account.launchCommand(
+                    command: "cc", arguments: [], environment: environment, credentialPath: staged)
             }
         }
         #expect(throws: ClaudeAccountError.self) {
             try account.launchCommand(
                 command: "cc",
-                arguments: Array(repeating: String(repeating: "x", count: 8192), count: 9))
+                arguments: Array(repeating: String(repeating: "x", count: 8192), count: 9),
+                credentialPath: staged)
         }
         #expect(throws: ClaudeAccountError.self) {
             try HerdrLaunchOperations.accountLaunch(
                 account: account, command: "cc",
                 arguments: Array(repeating: String(repeating: "x", count: 8192), count: 3),
-                environment: "", pane: "synthetic")
+                environment: "", credentialPath: staged, pane: "synthetic")
         }
         let browser = ClaudeAccount(name: "Browser", authentication: .browserLogin)
         #expect(throws: ClaudeAccountError.self) {
             try browser.launchCommand(command: "cc", arguments: [])
+        }
+        #expect(throws: ClaudeAccountError.self) {
+            try browser.launchCommand(
+                command: "cc", arguments: [], configurationPath: "/synthetic/profile",
+                credentialPath: staged)
         }
         for profile in ["", "bad\0", "/synthetic/\nprofile", String(repeating: "p", count: 8193)] {
             #expect(throws: ClaudeAccountError.self) {

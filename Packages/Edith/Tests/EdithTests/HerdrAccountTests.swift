@@ -101,8 +101,18 @@ private actor HerdrAccountLaunchRecorder {
         let script = try #require(await recorder.script)
         #expect(!script.contains("CLAUDE_CONFIG_DIR"))
         #expect(!script.contains("CLAUDE_SECURESTORAGE_CONFIG_DIR"))
-        #expect(script.contains("export ANTHROPIC_API_KEY=synthetic-second-key"))
+        #expect(!script.contains("synthetic-second-key"))
         #expect(!script.contains("synthetic-first-token"))
+        let staged = try FileManager.default.contentsOfDirectory(atPath: model.directory.path)
+            .filter { $0.hasPrefix("launch-") }
+        #expect(staged.count == 1)
+        let path = model.directory.appendingPathComponent(try #require(staged.first)).path
+        #expect(
+            script.contains("export ANTHROPIC_API_KEY=\"$(cat " + ShellQuote.quote(path) + ")\""))
+        #expect(script.contains("rm -f " + ShellQuote.quote(path)))
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == "synthetic-second-key")
+        let attributes = try FileManager.default.attributesOfItem(atPath: path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
         #expect(
             script.hasPrefix("unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN")
         )

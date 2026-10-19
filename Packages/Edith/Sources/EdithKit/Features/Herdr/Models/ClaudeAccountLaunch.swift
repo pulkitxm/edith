@@ -3,18 +3,18 @@ import Foundation
 extension ClaudeAccount {
     public func launchCommand(
         command: String, arguments: [String], environment: String = "",
-        platform: RemoteMachinePlatform = .darwin, configurationPath: String? = nil
+        platform: RemoteMachinePlatform = .darwin, configurationPath: String? = nil,
+        credentialPath: String? = nil
     ) throws -> String {
         try validateLaunch()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             command.utf8.count <= 16_384, !command.utf8.contains(0),
             arguments.count <= 256,
             arguments.allSatisfy({ $0.utf8.count <= 8192 && !$0.utf8.contains(0) }),
-            configurationPath.map({
-                !$0.isEmpty && $0.utf8.count <= 8192 && !$0.utf8.contains(0)
-                    && !$0.contains(where: { $0.isNewline })
-            }) ?? true,
-            authentication != .browserLogin || configurationPath != nil
+            configurationPath.map(Self.isLaunchPath) ?? true,
+            credentialPath.map(Self.isLaunchPath) ?? true,
+            authentication != .browserLogin || configurationPath != nil,
+            (authentication == .browserLogin) == (credentialPath == nil)
         else { throw ClaudeAccountError.invalidRequest }
         var assignments = try HerdrLaunchSettings.environmentAssignments(environment)
         let cleared = [
@@ -23,16 +23,11 @@ extension ClaudeAccount {
             "ANTHROPIC_PROFILE", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
             "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST",
         ]
-        switch authentication {
-        case .oauthToken: assignments.append(("CLAUDE_CODE_OAUTH_TOKEN", credential))
-        case .apiKey: assignments.append(("ANTHROPIC_API_KEY", credential))
-        case .browserLogin:
-            if let configurationPath {
-                assignments += [
-                    ("CLAUDE_CONFIG_DIR", configurationPath),
-                    ("CLAUDE_SECURESTORAGE_CONFIG_DIR", configurationPath),
-                ]
-            }
+        if authentication == .browserLogin, let configurationPath {
+            assignments += [
+                ("CLAUDE_CONFIG_DIR", configurationPath),
+                ("CLAUDE_SECURESTORAGE_CONFIG_DIR", configurationPath),
+            ]
         }
         var lines: [String]
         if platform == .windows {
@@ -42,6 +37,10 @@ extension ClaudeAccount {
             lines = ["unset " + cleared.joined(separator: " ")]
             lines += assignments.map { "export " + $0.0 + "=" + ShellQuote.quote($0.1) }
         }
+        if let credentialPath, let variable = credentialVariable {
+            lines += ClaudeAccountLaunchCredential.shellLines(
+                variable: variable, path: credentialPath, platform: platform)
+        }
         lines.append(
             HerdrPaneRunCommand.commandText(command, appending: arguments, platform: platform))
         let launch = lines.joined(separator: "; ")
@@ -49,4 +48,16 @@ extension ClaudeAccount {
         return launch
     }
 
+    var credentialVariable: String? {
+        switch authentication {
+        case .oauthToken: "CLAUDE_CODE_OAUTH_TOKEN"
+        case .apiKey: "ANTHROPIC_API_KEY"
+        case .browserLogin: nil
+        }
+    }
+
+    private static func isLaunchPath(_ path: String) -> Bool {
+        !path.isEmpty && path.utf8.count <= 8192 && !path.utf8.contains(0)
+            && !path.contains(where: { $0.isNewline })
+    }
 }
