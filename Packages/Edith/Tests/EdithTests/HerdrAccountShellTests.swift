@@ -174,7 +174,8 @@ enum HerdrAccountFixture {
         try await storage.save(.init(accounts: [personal, company, browser]))
         let first = try personal.launchCommand(
             command: "/usr/bin/env", arguments: [],
-            credentialPath: try await HerdrAccountFixture.stage(personal, directory: directory).path)
+            credentialPath: try await HerdrAccountFixture.stage(personal, directory: directory).path
+        )
         let second = try company.launchCommand(
             command: "/usr/bin/env", arguments: [],
             credentialPath: try await HerdrAccountFixture.stage(company, directory: directory).path)
@@ -313,7 +314,8 @@ enum HerdrAccountFixture {
             ["bad\0"], [String(repeating: "x", count: 8193)], Array(repeating: "x", count: 257),
         ] {
             #expect(throws: ClaudeAccountError.self) {
-                try account.launchCommand(command: "cc", arguments: arguments, credentialPath: staged)
+                try account.launchCommand(
+                    command: "cc", arguments: arguments, credentialPath: staged)
             }
         }
         for environment in [

@@ -80,7 +80,8 @@ public enum ClaudeAccountLaunchCredential {
         identifier: String = AppBuildIdentity.application
     ) throws -> String {
         let separator = platform == .windows ? "\\" : "/"
-        let suffix = ((platform == .windows ? [] : [".local", "share"])
+        let suffix =
+            ((platform == .windows ? [] : [".local", "share"])
             + ["edith", identifier, "accounts", accountID.uuidString, name])
             .joined(separator: separator)
         let absolute =

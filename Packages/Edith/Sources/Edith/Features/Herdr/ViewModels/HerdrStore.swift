@@ -1944,8 +1944,11 @@ final class HerdrStore {
             credentialName =
                 account.authentication == .browserLogin
                 ? nil : ClaudeAccountLaunchCredential.fileName()
-            let credentialPath = credentialName.map {
-                accountDirectory?.appendingPathComponent($0).path ?? "/validated/credential"
+            var credentialPath: String?
+            if let credentialName {
+                credentialPath =
+                    accountDirectory?.appendingPathComponent(credentialName).path
+                    ?? "/validated/credential"
             }
             let sessionTagging =
                 try accountDirectory.map {

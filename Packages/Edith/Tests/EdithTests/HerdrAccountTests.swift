@@ -107,7 +107,8 @@ private actor HerdrAccountLaunchRecorder {
             .filter { $0.hasPrefix("launch-") }
         #expect(staged.count == 1)
         let path = model.directory.appendingPathComponent(try #require(staged.first)).path
-        #expect(script.contains("export ANTHROPIC_API_KEY=\"$(cat " + ShellQuote.quote(path) + ")\""))
+        #expect(
+            script.contains("export ANTHROPIC_API_KEY=\"$(cat " + ShellQuote.quote(path) + ")\""))
         #expect(script.contains("rm -f " + ShellQuote.quote(path)))
         #expect(try String(contentsOfFile: path, encoding: .utf8) == "synthetic-second-key")
         let attributes = try FileManager.default.attributesOfItem(atPath: path)

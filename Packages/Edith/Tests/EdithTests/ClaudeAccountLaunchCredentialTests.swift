@@ -35,7 +35,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let directory = root.appendingPathComponent("accounts")
         let storage = ClaudeAccountStorage(directory: directory)
-        let account = ClaudeAccount(name: "Local", credential: "synthetic-'local;$(touch forbidden)")
+        let account = ClaudeAccount(
+            name: "Local", credential: "synthetic-'local;$(touch forbidden)")
         let old = try await HerdrAccountFixture.stage(account, directory: directory)
         let fresh = try await HerdrAccountFixture.stage(account, directory: directory)
         let unrelated = directory.appendingPathComponent("accounts.backup")
@@ -65,7 +66,8 @@ import Testing
             }
         }
         await #expect(throws: ClaudeAccountError.self) {
-            try await storage.stageLaunchCredential(account: account, name: staged.lastPathComponent)
+            try await storage.stageLaunchCredential(
+                account: account, name: staged.lastPathComponent)
         }
         #expect(
             !FileManager.default.fileExists(atPath: root.appendingPathComponent("forbidden").path))
@@ -90,7 +92,8 @@ import Testing
     @Test func posixRemoteStagingCreatesPrivateFileOnFreshHome() throws {
         let root = try HerdrAccountFixture.root()
         defer { try? FileManager.default.removeItem(at: root) }
-        let account = ClaudeAccount(name: "Remote", credential: "synthetic-'remote;$(touch forbidden)")
+        let account = ClaudeAccount(
+            name: "Remote", credential: "synthetic-'remote;$(touch forbidden)")
         let name = ClaudeAccountLaunchCredential.fileName()
         let command = try ClaudeAccountLaunchCredential.posixStageCommand(
             accountID: account.id, name: name, identifier: identifier)
@@ -142,13 +145,15 @@ import Testing
     @Test func stagedPathAcceptsOnlyTheExpectedLocation() throws {
         let id = UUID()
         let name = ClaudeAccountLaunchCredential.fileName()
-        let posix = "/home/synthetic/.local/share/edith/" + identifier + "/accounts/"
+        let posix =
+            "/home/synthetic/.local/share/edith/" + identifier + "/accounts/"
             + id.uuidString + "/" + name
         #expect(
             try ClaudeAccountLaunchCredential.stagedPath(
                 posix, accountID: id, name: name, platform: .linux, identifier: identifier)
                 == posix)
-        let windows = "C:\\Users\\synthetic\\AppData\\Local\\edith\\" + identifier
+        let windows =
+            "C:\\Users\\synthetic\\AppData\\Local\\edith\\" + identifier
             + "\\accounts\\" + id.uuidString + "\\" + name
         #expect(
             try ClaudeAccountLaunchCredential.stagedPath(
