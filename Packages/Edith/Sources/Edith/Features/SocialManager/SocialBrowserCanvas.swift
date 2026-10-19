@@ -279,14 +279,10 @@ private struct SocialWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
         webView.removeFromSuperview()
-        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.translatesAutoresizingMaskIntoConstraints = true
+        webView.autoresizingMask = [.width, .height]
+        webView.frame = container.bounds
         container.addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
         return container
     }
 
