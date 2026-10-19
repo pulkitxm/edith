@@ -1,6 +1,7 @@
 import AppKit
 import EdithKit
 import Observation
+import UniformTypeIdentifiers
 import WebKit
 
 @MainActor @Observable
@@ -27,6 +28,7 @@ final class SocialBrowserSession {
         configuration.websiteDataStore = dataStore
         configuration.defaultWebpagePreferences.preferredContentMode = .desktop
         configuration.preferences.isFraudulentWebsiteWarningEnabled = true
+        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         let safari =
             Bundle(path: "/Applications/Safari.app")?
@@ -94,6 +96,7 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
+        webView.onMenu = { [weak self] menu in self?.extend(menu) }
         observations = [
             webView.observe(\.title, options: [.new]) { [weak self] _, _ in
                 Task { @MainActor in self?.refresh() }
@@ -148,9 +151,80 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.onFocus = nil
+        webView.onMenu = nil
         webView.removeFromSuperview()
         onPopup = nil
         onClose = nil
+    }
+
+    private func extend(_ menu: NSMenu) {
+        WebContextMenu.retitle(menu)
+        guard let scheme = webView.url?.scheme?.lowercased(), scheme == "https" || scheme == "http"
+        else { return }
+        if let reload = index(of: "WKMenuItemIdentifierReload", in: menu) {
+            for (offset, item) in [
+                .separator(), action("Save Page As…", #selector(savePage)),
+                action("Print…", #selector(printPage)),
+            ].enumerated() {
+                menu.insertItem(item, at: reload + 1 + offset)
+            }
+        }
+        let source = action("View Page Source", #selector(viewSource))
+        if let inspect = index(of: "WKMenuItemIdentifierInspectElement", in: menu) {
+            menu.insertItem(source, at: inspect)
+        } else {
+            menu.addItem(.separator())
+            menu.addItem(source)
+        }
+    }
+
+    private func index(of identifier: String, in menu: NSMenu) -> Int? {
+        menu.items.firstIndex { $0.identifier?.rawValue == identifier }
+    }
+
+    private func action(_ title: String, _ selector: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        item.target = self
+        return item
+    }
+
+    @objc private func savePage() {
+        guard !closed, let window = webView.window else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.webArchive]
+        panel.nameFieldStringValue = title.replacingOccurrences(of: "/", with: "-") + ".webarchive"
+        panels.append(panel)
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            self.panels.removeAll { $0 === panel }
+            guard response == .OK, let destination = panel.url else { return }
+            self.webView.createWebArchiveData { result in
+                MainActor.assumeIsolated {
+                    do {
+                        try result.get().write(to: destination, options: .atomic)
+                    } catch { self.failed(error) }
+                }
+            }
+        }
+    }
+
+    @objc private func printPage() {
+        guard !closed, let window = webView.window else { return }
+        let operation = webView.printOperation(with: .shared)
+        operation.view?.frame = webView.bounds
+        operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
+    }
+
+    @objc private func viewSource() {
+        guard let url = webView.url else { return }
+        Task {
+            let source = try? await webView.callAsyncJavaScript(
+                SocialPageSource.script, contentWorld: .defaultClient)
+            guard !closed, let source = source as? String,
+                let tab = onPopup?(WKWebViewConfiguration())
+            else { return }
+            tab.loadHTMLString(SocialPageSource.html(source, url: url), baseURL: nil)
+        }
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
@@ -273,6 +347,11 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
         }
     }
 
+    @objc(_webView:contextMenuDidCreateDownload:)
+    func webView(_ webView: WKWebView, contextMenuDidCreate download: WKDownload) {
+        track(download)
+    }
+
     func webView(
         _ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload
     ) {
@@ -318,6 +397,7 @@ final class SocialBrowserPage: NSObject, Identifiable, WKNavigationDelegate, WKU
 @MainActor
 final class SocialAccountWebView: WKWebView {
     var onFocus: (() -> Void)?
+    var onMenu: ((NSMenu) -> Void)?
 
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
@@ -333,5 +413,43 @@ final class SocialAccountWebView: WKWebView {
     override func rightMouseDown(with event: NSEvent) {
         onFocus?()
         super.rightMouseDown(with: event)
+    }
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        onMenu?(menu)
+    }
+}
+
+enum SocialPageSource {
+    static let script = """
+        try {
+            const response = await fetch(location.href, { cache: "force-cache", credentials: "include" });
+            return await response.text();
+        } catch {
+            return document.documentElement.outerHTML;
+        }
+        """
+
+    static func html(_ source: String, url: URL) -> String {
+        let lines = source.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "<div>\(escape(String($0)))</div>" }.joined()
+        return """
+            <!doctype html><html><head><meta charset="utf-8">
+            <title>view-source:\(escape(url.absoluteString))</title>
+            <style>
+            :root{color-scheme:light dark}
+            body{margin:0;padding:8px 0;font:12px ui-monospace,Menlo,monospace;counter-reset:line}
+            div{white-space:pre-wrap;word-break:break-all;padding-left:5em;text-indent:-4em}
+            div::before{counter-increment:line;content:counter(line);display:inline-block;width:3em;margin-right:1em;text-align:right;color:GrayText;text-indent:0}
+            </style></head><body>\(lines)</body></html>
+            """
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 }
