@@ -1,17 +1,16 @@
-import EdithKit
 import Foundation
 
-enum BrowserAddress {
+public enum BrowserAddress {
     private static let allowedSchemes: Set<String> = ["http", "https", "about", "file", "data"]
 
-    static func url(for input: String, engine: BrowserSearchEngine) -> URL? {
+    public static func url(for input: String, engine: BrowserSearchEngine) -> URL? {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if let direct = directURL(text) { return direct }
         return engine.searchURL(for: text)
     }
 
-    static func directURL(_ text: String) -> URL? {
+    public static func directURL(_ text: String) -> URL? {
         guard !text.contains(" ") else { return nil }
         if let url = URL(string: text), let scheme = url.scheme?.lowercased(),
             allowedSchemes.contains(scheme), !["http", "https"].contains(scheme) || url.host != nil
@@ -23,7 +22,7 @@ enum BrowserAddress {
         return URL(string: "\(scheme)://\(text)")
     }
 
-    static func displayText(for url: URL?) -> String {
+    public static func displayText(for url: URL?) -> String {
         guard let url else { return "" }
         if url.absoluteString == "about:blank" { return "" }
         return url.absoluteString

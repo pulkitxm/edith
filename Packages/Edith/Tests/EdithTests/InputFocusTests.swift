@@ -86,6 +86,7 @@ import WebKit
         #expect(ScrollForwarding.handlesScrollDirectly(from: web))
         #expect(ScrollForwarding.handlesScrollDirectly(from: child))
         #expect(!InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: web))
-        #expect(InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: NSView()))
+        #expect(
+            InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: NSView()))
     }
 }
