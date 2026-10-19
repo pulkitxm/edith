@@ -1,5 +1,6 @@
 import AppKit
 import EdithCore
+import EdithKit
 import WebKit
 
 @MainActor
@@ -83,23 +84,6 @@ final class NotchWebView: WKWebView {
 
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
-        NotchWebMenu.retitle(menu)
-    }
-}
-
-enum NotchWebMenu {
-    static let newTabTitles: [String: String] = [
-        "WKMenuItemIdentifierOpenLinkInNewWindow": "Open Link in New Tab",
-        "WKMenuItemIdentifierOpenImageInNewWindow": "Open Image in New Tab",
-        "WKMenuItemIdentifierOpenFrameInNewWindow": "Open Frame in New Tab",
-        "WKMenuItemIdentifierOpenMediaInNewWindow": "Open Video in New Tab",
-    ]
-
-    static func retitle(_ menu: NSMenu) {
-        for item in menu.items {
-            guard let identifier = item.identifier?.rawValue, let title = newTabTitles[identifier]
-            else { continue }
-            item.title = title
-        }
+        WebContextMenu.retitle(menu)
     }
 }

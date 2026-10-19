@@ -404,7 +404,7 @@ import Testing
         let copy = NSMenuItem(title: "Copy Link", action: nil, keyEquivalent: "")
         copy.identifier = NSUserInterfaceItemIdentifier("WKMenuItemIdentifierCopyLink")
         menu.items = [open, copy]
-        NotchWebMenu.retitle(menu)
+        WebContextMenu.retitle(menu)
         #expect(open.title == "Open Link in New Tab")
         #expect(copy.title == "Copy Link")
     }
