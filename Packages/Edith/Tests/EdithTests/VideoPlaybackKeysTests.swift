@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import WebKit
 @testable import Edith
 
 @MainActor @Suite(.serialized) struct VideoPlaybackKeysTests {
@@ -32,6 +33,11 @@ import Testing
         #expect(!VideoPlaybackKeyView.claims(try press(49, " ")))
         window.makeFirstResponder(nil)
         #expect(VideoPlaybackKeyView.claims(try press(49, " ")))
+        let web = WKWebView(frame: NSRect(x: 150, y: 10, width: 120, height: 120))
+        content.addSubview(web)
+        window.makeFirstResponder(web)
+        #expect(!VideoPlaybackKeyView.claims(try press(49, " ")))
+        window.makeFirstResponder(nil)
         keys.removeFromSuperview()
         #expect(!VideoPlaybackKeyView.claims(try press(49, " ")))
     }
