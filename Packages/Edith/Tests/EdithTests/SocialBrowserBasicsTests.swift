@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 import WebKit
 
@@ -115,6 +116,29 @@ struct SocialBrowserBasicsTests {
         try await eventually { page.url == origin }
         #expect(!NavigationShortcutGate.pageHistory(.back, in: WKWebView()))
         #expect(!NavigationShortcutGate.pageHistory(.forward, in: nil))
+    }
+
+    @Test func nothingInTheHostedPaneCoversTheWebsite() async throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        model.open(model.catalog.accounts[0])
+        let page = try #require(model.sessions[model.catalog.accounts[0].id]?.selectedPage)
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700))
+        window.contentView = NSHostingView(rootView: SocialBrowserCanvas(model: model))
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        page.hoveredLink = URL(string: "https://example.com/mock-post")
+        try await eventually { page.webView.window === window && page.webView.bounds.height > 0 }
+        try await Task.sleep(for: .milliseconds(100))
+
+        let frame = page.webView.convert(page.webView.bounds, to: nil)
+        for point in [
+            NSPoint(x: frame.midX, y: frame.midY), NSPoint(x: frame.minX + 12, y: frame.minY + 8),
+            NSPoint(x: frame.maxX - 12, y: frame.midY),
+        ] {
+            #expect(window.contentView?.hitTest(point)?.isDescendant(of: page.webView) == true)
+        }
     }
 
     @Test func theAddressBarSearchesWordsAndOpensPlainAddresses() {
