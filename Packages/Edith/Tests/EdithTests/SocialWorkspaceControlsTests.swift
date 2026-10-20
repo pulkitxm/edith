@@ -5,6 +5,7 @@ import Testing
 import WebKit
 
 @testable import Edith
+@testable import EdithKit
 
 @MainActor @Suite(.serialized)
 struct SocialWorkspaceControlsTests {
@@ -108,6 +109,23 @@ struct SocialWorkspaceControlsTests {
         #expect(
             WindowWorkspaceCommand.resolve(
                 characters: "\t", keyCode: 48, modifiers: [.control, .option]) == nil)
+    }
+
+    @Test func showingTheLibraryTakesKeyboardFocusAwayFromTheHiddenWebsite() throws {
+        let fixture = try SocialManagerFixture()
+        defer { fixture.remove() }
+        let model = fixture.model
+        model.open(model.catalog.accounts[0])
+        let window = TestWindowHost.window(contentRect: CGRect(x: 0, y: 0, width: 900, height: 600))
+        defer { window.orderOut(nil) }
+        let webView = try #require(
+            model.sessions[model.catalog.accounts[0].id]?.selectedPage?.webView)
+        window.contentView = webView
+        window.makeFirstResponder(webView)
+        #expect(MusicKeyCommand.isReceivingTextInput(window.firstResponder))
+        model.showingAccounts = true
+        #expect(window.firstResponder !== webView)
+        #expect(!MusicKeyCommand.isReceivingTextInput(window.firstResponder))
     }
 
     @Test func picturesAreDownsampledPersistedPreservedOnRenameAndDeletedWithTheirAccount()

@@ -65,7 +65,7 @@ public enum InputFocus {
             && isTypeAheadKey(characters: characters, modifiers: modifiers)
     }
 
-    static func takesKeysDirectly(_ responder: NSResponder?) -> Bool {
+    public static func takesKeysDirectly(_ responder: NSResponder?) -> Bool {
         responder is DirectKeyboardInputResponder || responder is WKWebView
     }
 

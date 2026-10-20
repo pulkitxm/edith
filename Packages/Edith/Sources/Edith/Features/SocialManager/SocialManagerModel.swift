@@ -33,7 +33,9 @@ final class SocialManagerModel {
     @ObservationIgnored let avatarFiles: SocialAvatarFiles
     var selectedTabID: UUID?
     var profileID: UUID?
-    var showingAccounts = true
+    var showingAccounts = true {
+        didSet { if showingAccounts { resignBrowserFocus() } }
+    }
     var libraryView = SocialLibraryView.profiles
     var platformFilterID: UUID?
     var accountProfileFilterID: UUID?
@@ -360,6 +362,13 @@ final class SocialManagerModel {
         tabs.removeAll { $0.id == tab.id }
         for account in accounts { tabs.append(SocialWorkspaceTab(account: account)) }
         selectedTabID = tabs.last?.id
+    }
+
+    func resignBrowserFocus() {
+        for page in sessions.values.flatMap(\.pages)
+        where page.webView.window?.firstResponder === page.webView {
+            page.webView.window?.makeFirstResponder(nil)
+        }
     }
 
     func updateTab(_ change: (inout SocialWorkspaceTab) -> Void) {

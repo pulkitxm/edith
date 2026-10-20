@@ -41,7 +41,7 @@ public enum MusicKeyCommand {
 
     static func isReceivingTextInput(_ responder: NSResponder?) -> Bool {
         guard let responder else { return false }
-        if responder is DirectKeyboardInputResponder { return true }
+        if InputFocus.takesKeysDirectly(responder) { return true }
         if let text = responder as? NSTextView { return text.isFieldEditor || text.isEditable }
         return responder is NSTextField
     }
