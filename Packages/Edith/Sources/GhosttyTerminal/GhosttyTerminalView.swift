@@ -329,8 +329,14 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        guard let surface else { return }
         let scale = window?.backingScaleFactor ?? 2
+        if let layer, layer.contentsScale != scale {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.contentsScale = scale
+            CATransaction.commit()
+        }
+        guard let surface else { return }
         ghostty_surface_set_content_scale(surface, scale, scale)
         applySize()
         applyPresentationState()
