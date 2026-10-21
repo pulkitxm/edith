@@ -593,6 +593,44 @@ import Testing
         layout.frames(in: CGRect(x: 0, y: 0, width: 1, height: 1))
     }
 
+    @Test func splitShowsFilesBesideTheAgentOnceFilesWasChosen() throws {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude, showing: .split)
+        var tab = try #require(store.session(claude.id))
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
+
+        store.setView(.files, for: claude.id)
+        store.setView(.split, for: claude.id)
+        tab = try #require(store.session(claude.id))
+        #expect(tab.view == .split)
+        #expect(tab.split.companion == .files)
+        #expect(tab.showsFiles)
+        #expect(!tab.showsDiff)
+
+        tab.split.select(.diff)
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
+        tab.split.select(.files)
+
+        let reopened = store.makeTab(for: claude)
+        #expect(reopened.view == .split)
+        #expect(reopened.showsFiles)
+    }
+
+    @Test func choosingTheDiffMovesQuinjetBackBesideTheAgent() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude, showing: .files)
+        store.setView(.diff, for: claude.id)
+        store.setView(.split, for: claude.id)
+        let tab = try #require(store.session(claude.id))
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
+    }
+
     private static func scratchDefaults() -> UserDefaults {
         let suite = "HerdrTabLayoutTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

@@ -140,6 +140,7 @@ final class HerdrSpaceTabModel: Identifiable {
         else { return }
         guard tab.view != view else { return }
         tab.view = view
+        tab.split.follow(view)
         contents[entry.key] = .agent(tab)
         HerdrAgentViews.set(view, for: tab.id, defaults)
     }

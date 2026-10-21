@@ -172,6 +172,7 @@ public enum AppStorageKeys {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
+        public static let splitCompanions = "herdrSplitCompanions"
         public static let railOpen = "herdrRailOpen"
         public static let railWidth = "herdrRailWidth"
         public static let detailOpen = "herdrDetailOpen"

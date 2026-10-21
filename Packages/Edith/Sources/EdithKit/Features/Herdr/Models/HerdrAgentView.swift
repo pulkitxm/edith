@@ -37,9 +37,64 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
 
     public var showsAgent: Bool { self == .agent || self == .split }
 
-    public var showsDiff: Bool { self == .diff || self == .split }
+    public var companion: HerdrSplitCompanion? {
+        switch self {
+        case .diff: .diff
+        case .files: .files
+        case .agent, .split: nil
+        }
+    }
 
-    public var showsFiles: Bool { self == .files }
+    public func shows(_ companion: HerdrSplitCompanion, beside split: HerdrSplitCompanion) -> Bool {
+        self.companion == companion || (self == .split && split == companion)
+    }
+}
+
+public enum HerdrSplitCompanion: String, CaseIterable, Codable, Sendable {
+    case diff
+    case files
+
+    public var title: String {
+        switch self {
+        case .diff: "Quinjet"
+        case .files: "Files"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .diff: HerdrAgentView.diff.icon
+        case .files: HerdrAgentView.files.icon
+        }
+    }
+}
+
+public enum HerdrSplitCompanions {
+    public static let key = AppStorageKeys.Herdr.splitCompanions
+
+    public static func companion(
+        for agentID: String, _ store: UserDefaults = SharedDefaults.store
+    ) -> HerdrSplitCompanion {
+        let raw = (store.dictionary(forKey: key) as? [String: String]) ?? [:]
+        return raw[agentID].flatMap(HerdrSplitCompanion.init(rawValue:)) ?? .diff
+    }
+
+    public static func set(
+        _ companion: HerdrSplitCompanion, for agentID: String,
+        _ store: UserDefaults = SharedDefaults.store
+    ) {
+        var raw = (store.dictionary(forKey: key) as? [String: String]) ?? [:]
+        if companion == .diff {
+            raw.removeValue(forKey: agentID)
+        } else {
+            raw[agentID] = companion.rawValue
+        }
+        if raw.isEmpty {
+            store.removeObject(forKey: key)
+        } else {
+            store.set(raw, forKey: key)
+        }
+    }
 }
 
 public enum HerdrSplitFraction {

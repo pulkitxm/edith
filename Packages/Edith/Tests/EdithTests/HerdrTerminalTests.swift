@@ -317,17 +317,31 @@ import Testing
         #expect(HerdrSplitFraction.fraction(for: "b", store) == HerdrSplitFraction.minimum)
     }
 
-    @Test func splitShowsBothPanesAndTheOthersShowOne() {
+    @Test func splitShowsTheAgentBesideItsChosenCompanion() {
         #expect(HerdrAgentView.split.showsAgent)
-        #expect(HerdrAgentView.split.showsDiff)
         #expect(HerdrAgentView.agent.showsAgent)
-        #expect(!HerdrAgentView.agent.showsDiff)
         #expect(!HerdrAgentView.diff.showsAgent)
-        #expect(HerdrAgentView.diff.showsDiff)
-        #expect(HerdrAgentView.files.showsFiles)
         #expect(!HerdrAgentView.files.showsAgent)
-        #expect(!HerdrAgentView.files.showsDiff)
-        #expect(HerdrAgentView.allCases.filter(\.showsFiles) == [.files])
+        #expect(HerdrAgentView.split.shows(.diff, beside: .diff))
+        #expect(!HerdrAgentView.split.shows(.files, beside: .diff))
+        #expect(HerdrAgentView.split.shows(.files, beside: .files))
+        #expect(!HerdrAgentView.split.shows(.diff, beside: .files))
+        #expect(HerdrAgentView.diff.shows(.diff, beside: .files))
+        #expect(!HerdrAgentView.diff.shows(.files, beside: .files))
+        #expect(HerdrAgentView.files.shows(.files, beside: .diff))
+        #expect(!HerdrAgentView.files.shows(.diff, beside: .diff))
+        #expect(!HerdrAgentView.agent.shows(.diff, beside: .diff))
+        #expect(!HerdrAgentView.agent.shows(.files, beside: .files))
+    }
+
+    @Test func theSplitCompanionIsRememberedPerAgent() {
+        let store = UserDefaults(suiteName: "herdr.companion.\(UUID().uuidString)")!
+        #expect(HerdrSplitCompanions.companion(for: "pane", store) == .diff)
+        HerdrSplitCompanions.set(.files, for: "pane", store)
+        #expect(HerdrSplitCompanions.companion(for: "pane", store) == .files)
+        #expect(HerdrSplitCompanions.companion(for: "other", store) == .diff)
+        HerdrSplitCompanions.set(.diff, for: "pane", store)
+        #expect(store.dictionary(forKey: HerdrSplitCompanions.key) == nil)
     }
 
     @Test func theStoredViewSurvivesARoundTrip() {

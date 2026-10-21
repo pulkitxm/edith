@@ -292,7 +292,7 @@ struct HerdrAgentDetails: View {
                     store.setView(option, for: tab.id)
                 }
             }
-            if tab.view.showsDiff, let branch = tab.quinjet.branch {
+            if tab.showsDiff, let branch = tab.quinjet.branch {
                 Text(branch)
                     .font(DashSkin.mono(10))
                     .foregroundStyle(DashSkin.inkFaint(dark))

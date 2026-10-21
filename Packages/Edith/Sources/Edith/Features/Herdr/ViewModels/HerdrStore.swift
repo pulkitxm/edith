@@ -747,7 +747,8 @@ final class HerdrStore {
         return HerdrOpenTab(
             agent: agent, machine: machine(for: agent), view: resolved,
             holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
-            files: HerdrFilesSession())
+            files: HerdrFilesSession(),
+            split: HerdrSplitCompanionState(agentID: agent.id, defaults: defaults))
     }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
@@ -882,6 +883,7 @@ final class HerdrStore {
         var session = makeTab(for: agent)
         if let view, !agent.isTerminal {
             session.view = view
+            session.split.follow(view)
             HerdrAgentViews.set(view, for: agent.id, defaults)
         }
         sessions.append(session)
@@ -923,6 +925,7 @@ final class HerdrStore {
             revealSpace(containing: tab.agent)
             guard tab.view != view else { return }
             tab.view = view
+            tab.split.follow(view)
             detachedTabs[id] = tab
             HerdrAgentViews.set(view, for: id, defaults)
             if view == .split { detailOpen = false }
@@ -936,6 +939,7 @@ final class HerdrStore {
         revealSpace(containing: sessions[index].agent)
         guard sessions[index].view != view else { return }
         sessions[index].view = view
+        sessions[index].split.follow(view)
         HerdrAgentViews.set(view, for: id, defaults)
         if view == .split { detailOpen = false }
     }
@@ -2276,6 +2280,10 @@ struct HerdrOpenTab: Identifiable {
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
     let files: HerdrFilesSession
+    let split: HerdrSplitCompanionState
+
+    @MainActor var showsDiff: Bool { view.shows(.diff, beside: split.companion) }
+    @MainActor var showsFiles: Bool { view.shows(.files, beside: split.companion) }
 }
 
 enum HerdrRailHighlight: Equatable {
