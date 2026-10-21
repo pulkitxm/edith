@@ -48,19 +48,23 @@ struct FinderBody: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
+    @State private var width = 0.0
     @FocusState private var searchFocused: Bool
 
     private var dark: Bool { scheme == .dark }
     private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
+    private var layout: FinderLayout {
+        FinderLayout(width: width, sidebarRequested: model.showSidebar)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             HStack(spacing: 0) {
-                if model.showSidebar {
+                if layout.showsSidebar {
                     FinderSidebar(model: model)
-                        .frame(width: UIScale.pt(178))
+                        .frame(width: UIScale.pt(FinderLayout.sidebarWidth))
                     Divider()
                 }
                 content
@@ -72,6 +76,11 @@ struct FinderBody: View {
             statusBar
         }
         .background(DashSkin.paper(dark))
+        .onGeometryChange(for: Double.self) {
+            $0.size.width
+        } action: {
+            width = $0
+        }
         .task(id: presented) {
             guard connectionsAllowed, presented else {
                 model.stopLoading()
@@ -178,13 +187,15 @@ struct FinderBody: View {
 
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button {
-                model.showSidebar.toggle()
-            } label: {
-                Image(systemName: "sidebar.left")
+            if layout.fitsSidebar {
+                Button {
+                    model.showSidebar.toggle()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .buttonStyle(.edith(.toolbar))
+                .help("Hide or show the sidebar (⌃⌘S)")
             }
-            .buttonStyle(.edith(.toolbar))
-            .help("Hide or show the sidebar (⌃⌘S)")
 
             HStack(spacing: UIScale.pt(2)) {
                 Button {
@@ -221,52 +232,47 @@ struct FinderBody: View {
             }
             .buttonStyle(.edith(.toolbar))
 
-            EdithSegmentedPicker(
-                "", selection: viewModeBinding, options: FileViewMode.allCases,
-                label: { $0.title }
-            )
-            .labelsHidden()
-            .frame(width: UIScale.pt(90))
-            .help("View as icons (⌘1) or list (⌘2)")
+            if !layout.compactToolbar {
+                EdithSegmentedPicker(
+                    "", selection: viewModeBinding, options: FileViewMode.allCases,
+                    label: { $0.title }
+                )
+                .labelsHidden()
+                .frame(width: UIScale.pt(90))
+                .help("View as icons (⌘1) or list (⌘2)")
 
-            Menu {
-                ForEach(FileSortKey.allCases, id: \.self) { key in
-                    Button {
-                        if model.sortKey == key {
-                            model.sortAscending.toggle()
-                        } else {
-                            model.sortKey = key
-                            model.sortAscending = true
-                        }
-                    } label: {
-                        Label(
-                            key.title,
-                            systemImage: model.sortKey == key
-                                ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
-                    }
+                Menu {
+                    sortItems
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
                 }
-                Divider()
-                Toggle("Show Hidden Files", isOn: $model.showHidden)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Sort")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Sort")
 
             Spacer(minLength: UIScale.pt(4))
 
             SearchField(
-                placeholder: "Search this folder", text: $model.searchQuery,
-                focus: $searchFocused
+                placeholder: layout.compactToolbar ? "Search" : "Search this folder",
+                text: $model.searchQuery, focus: $searchFocused
             )
-            .frame(width: UIScale.pt(200))
+            .frame(minWidth: UIScale.pt(70), maxWidth: UIScale.pt(200))
             .focused($searchFocused)
             .onChange(of: model.searchQuery) { _, _ in
                 model.searchQueryChanged()
             }
 
             Menu {
+                if layout.compactToolbar {
+                    Picker("View", selection: viewModeBinding) {
+                        ForEach(FileViewMode.allCases, id: \.self) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    Menu("Sort By") { sortItems }
+                    Divider()
+                }
                 Button("New Folder") { Task { await model.newFolder() } }
                 Button("Upload Files…") { chooseUpload() }
                 if !model.selection.isEmpty {
@@ -299,6 +305,27 @@ struct FinderBody: View {
         .background(DashSkin.panel)
     }
 
+    @ViewBuilder
+    private var sortItems: some View {
+        ForEach(FileSortKey.allCases, id: \.self) { key in
+            Button {
+                if model.sortKey == key {
+                    model.sortAscending.toggle()
+                } else {
+                    model.sortKey = key
+                    model.sortAscending = true
+                }
+            } label: {
+                Label(
+                    key.title,
+                    systemImage: model.sortKey == key
+                        ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
+            }
+        }
+        Divider()
+        Toggle("Show Hidden Files", isOn: $model.showHidden)
+    }
+
     private var viewModeBinding: Binding<FileViewMode> {
         Binding(get: { model.viewMode }, set: { model.viewMode = $0 })
     }
@@ -309,7 +336,7 @@ struct FinderBody: View {
             if model.viewMode == .icon {
                 FinderIconView(model: model)
             } else {
-                FinderListView(model: model)
+                FinderListView(model: model, columns: layout.columns)
             }
             if model.projectingEntries || (model.loading && model.entries.isEmpty) {
                 FinderSkeleton(mode: model.viewMode, iconSize: model.iconSize, dark: dark)
