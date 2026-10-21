@@ -13,7 +13,9 @@ struct AttentionPage: View {
     }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true, scrollIdentity: model.section.rawValue) {
+        PageScaffold(
+            pinnedHeader: true, scrollIdentity: model.section.rawValue, activity: model.activity
+        ) {
             PageHeader(
                 title: { Text("Attention") },
                 trailing: {
@@ -24,6 +26,7 @@ struct AttentionPage: View {
                         AttentionSectionBar(model: model)
                         if model.section.usesPeriod {
                             AttentionPeriodControl(model: model)
+                            AttentionFilterBar(model: model)
                         }
                     }
                 })
@@ -44,7 +47,7 @@ struct AttentionPage: View {
                 title: "No attention activity",
                 message: model.loading.errorMessage
                     ?? "Enable a tracking source to begin collecting activity.",
-                layout: .analytics, refreshing: model.loading.isRefreshing,
+                layout: .analytics, activity: model.activity,
                 retry: { model.reload() }
             ) {
                 Group {
@@ -52,7 +55,12 @@ struct AttentionPage: View {
                         AttentionSetupView(model: model)
                     } else if model.section == .settings {
                         AttentionSettingsView(model: model)
+                    } else if model.hasFilters, !model.hasActivity, model.section != .focus {
+                        AttentionNoMatchView(model: model)
                     } else {
+                        if model.hasFilters {
+                            AttentionFilterScopeNotice(model: model)
+                        }
                         Group {
                             switch model.section {
                             case .overview:
@@ -414,6 +422,50 @@ private struct AttentionSetupView: View {
         case .detailed:
             return
                 "Stores sanitized paths and optional titles. Query strings and fragments are always removed."
+        }
+    }
+}
+
+private struct AttentionFilterScopeNotice: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        let summary = model.summary
+        PageNotice(
+            "Every section shows only matching activity: "
+                + AttentionFormat.duration(summary.activeDuration) + " of "
+                + AttentionFormat.duration(summary.activeDuration + summary.unmatchedDuration)
+                + " active time. Idle time is left out while filtering.",
+            symbol: "line.3.horizontal.decrease.circle",
+            actions: {
+                Button("Clear filters") { model.clearFilters() }
+            })
+    }
+}
+
+private struct AttentionNoMatchView: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        PageCard {
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: UIScale.pt(30), weight: .light))
+                    .foregroundStyle(.secondary)
+                Text("Nothing matches these filters").font(DashSkin.heading(20))
+                Text(
+                    "No activity in \(model.period.title()) matches the current filters. "
+                        + AttentionFormat.duration(model.summary.unmatchedDuration)
+                        + " of other activity is hidden."
+                )
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                Button("Clear filters") { model.clearFilters() }
+                    .buttonStyle(.edith(.primary))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, UIScale.pt(24))
         }
     }
 }
