@@ -324,6 +324,10 @@ import Testing
         #expect(!HerdrAgentView.agent.showsDiff)
         #expect(!HerdrAgentView.diff.showsAgent)
         #expect(HerdrAgentView.diff.showsDiff)
+        #expect(HerdrAgentView.files.showsFiles)
+        #expect(!HerdrAgentView.files.showsAgent)
+        #expect(!HerdrAgentView.files.showsDiff)
+        #expect(HerdrAgentView.allCases.filter(\.showsFiles) == [.files])
     }
 
     @Test func theStoredViewSurvivesARoundTrip() {

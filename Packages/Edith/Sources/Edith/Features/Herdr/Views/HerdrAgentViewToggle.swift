@@ -8,7 +8,7 @@ struct HerdrAgentViewToggle: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private static let options: [HerdrAgentView] = [.diff, .agent]
+    private static let options: [HerdrAgentView] = [.diff, .files, .agent]
 
     private var dark: Bool { scheme == .dark }
 
@@ -49,6 +49,14 @@ struct HerdrAgentViewToggle: View {
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help(option == .diff ? "Show the Quinjet diff" : "Show the agent session")
+        .help(Self.help(option))
+    }
+
+    private static func help(_ option: HerdrAgentView) -> String {
+        switch option {
+        case .diff: "Show the Quinjet diff"
+        case .files: "Browse the agent's files"
+        case .agent, .split: "Show the agent session"
+        }
     }
 }

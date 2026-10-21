@@ -4,12 +4,16 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
     case agent
     case diff
     case split
+    case files
+
+    public static let modes: [HerdrAgentView] = [.agent, .split, .diff, .files]
 
     public var title: String {
         switch self {
         case .agent: "Open agent"
         case .diff: "Open diff"
         case .split: "Open split"
+        case .files: "Open files"
         }
     }
 
@@ -18,6 +22,7 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         case .agent: "Agent"
         case .diff: "Diff"
         case .split: "Split"
+        case .files: "Files"
         }
     }
 
@@ -26,12 +31,15 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         case .agent: "terminal"
         case .diff: "arrow.triangle.branch"
         case .split: "rectangle.split.2x1"
+        case .files: "folder"
         }
     }
 
-    public var showsAgent: Bool { self != .diff }
+    public var showsAgent: Bool { self == .agent || self == .split }
 
-    public var showsDiff: Bool { self != .agent }
+    public var showsDiff: Bool { self == .diff || self == .split }
+
+    public var showsFiles: Bool { self == .files }
 }
 
 public enum HerdrSplitFraction {

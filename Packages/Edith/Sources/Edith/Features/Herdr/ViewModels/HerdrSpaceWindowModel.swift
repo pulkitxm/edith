@@ -63,7 +63,10 @@ enum HerdrSpacePaneContent {
     @MainActor
     func stop() {
         holder.stop()
-        if case let .agent(tab) = self { tab.quinjet.stop() }
+        if case let .agent(tab) = self {
+            tab.quinjet.stop()
+            tab.files.stop()
+        }
     }
 }
 

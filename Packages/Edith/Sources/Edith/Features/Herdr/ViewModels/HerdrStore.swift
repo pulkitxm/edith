@@ -746,7 +746,8 @@ final class HerdrStore {
         if agent.isTerminal { resolved = .agent }
         return HerdrOpenTab(
             agent: agent, machine: machine(for: agent), view: resolved,
-            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
+            files: HerdrFilesSession())
     }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
@@ -764,6 +765,7 @@ final class HerdrStore {
     func reattach(_ id: String) {
         detachedTabs[id]?.holder.stop()
         detachedTabs[id]?.quinjet.stop()
+        detachedTabs[id]?.files.stop()
         detachedTabs.removeValue(forKey: id)
     }
 
@@ -907,8 +909,8 @@ final class HerdrStore {
 
     func views(for id: String) -> [HerdrAgentView] {
         if session(id)?.agent.isTerminal == true { return [] }
-        if hidesSplitView(id) { return [.agent, .diff] }
-        return [.agent, .split, .diff]
+        if hidesSplitView(id) { return HerdrAgentView.modes.filter { $0 != .split } }
+        return HerdrAgentView.modes
     }
 
     private func hidesSplitView(_ id: String) -> Bool {
@@ -1490,6 +1492,7 @@ final class HerdrStore {
         agentStartupMessages.removeValue(forKey: id)
         unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
+        sessions[index].files.stop()
         sessions.remove(at: index)
         detachFromLayout(id)
     }
@@ -2272,6 +2275,7 @@ struct HerdrOpenTab: Identifiable {
     var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
+    let files: HerdrFilesSession
 }
 
 enum HerdrRailHighlight: Equatable {

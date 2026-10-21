@@ -52,6 +52,7 @@ private struct HerdrResizeCursor: NSViewRepresentable {
 private enum HerdrTerminalFocus {
     case agent
     case diff
+    case files
 }
 
 enum HerdrAgentTerminalOverlay: Equatable {
@@ -152,6 +153,7 @@ struct HerdrSessionView: View {
         case .agent: .agent
         case .diff: .diff
         case .split: splitTerminalFocus
+        case .files: .files
         }
     }
 
@@ -169,6 +171,7 @@ struct HerdrSessionView: View {
         }
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
+        .task(id: filesRequest) { prepareFilesIfNeeded() }
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
         }
@@ -209,6 +212,9 @@ struct HerdrSessionView: View {
                 diffPane
                     .opacity(tab.view == .diff ? 1 : 0)
                     .allowsHitTesting(tab.view == .diff)
+                if tab.view.showsFiles, presented {
+                    filesPane
+                }
             }
         }
     }
@@ -283,6 +289,34 @@ struct HerdrSessionView: View {
 
     private var diffRequest: String {
         "\(tab.id)|\(tab.view.rawValue)|\(dark)|\(quinjetThemeName)|\(appThemeName)"
+    }
+
+    private var filesRequest: String {
+        "\(tab.id)|\(tab.view.rawValue)|\(agent.cwd)|\(tab.machine?.id.uuidString ?? "")"
+    }
+
+    private func prepareFilesIfNeeded() {
+        guard tab.view.showsFiles else { return }
+        tab.files.prepare(
+            directory: agent.cwd, isLocal: agent.machineIsLocal, machine: tab.machine)
+    }
+
+    private var filesPane: some View {
+        ZStack {
+            DashSkin.paper(dark)
+            if let finder = tab.files.finder {
+                FinderPane(model: finder)
+                    .id(ObjectIdentifier(finder))
+            } else if let message = tab.files.errorMessage {
+                Text(message)
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(DashSkin.warn)
+                    .multilineTextAlignment(.center)
+                    .padding(UIScale.pt(16))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presenterCover(hideAgents, dark: dark)
     }
 
     private var sessionPane: some View {
