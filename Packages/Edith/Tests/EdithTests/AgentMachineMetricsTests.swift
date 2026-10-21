@@ -285,8 +285,7 @@ import Testing
     }
 }
 
-private final class MachineMetricsTestListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable
-{
+final class MachineMetricsTestListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
     private let listener = NSXPCListener.anonymous()
     private let runtime: AgentRuntime
     private let lock = NSLock()
