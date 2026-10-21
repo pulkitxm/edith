@@ -185,9 +185,11 @@ public actor CodeStatsEngine {
                 let table = CodeStatsFactBuilder.build(
                     commits: entries.flatMap(\.commits),
                     integrated: Set(entries.flatMap(\.integrated)),
+                    replaced: Set(entries.flatMap(\.replaced)),
                     suggestions: CodeStatsIdentitySuggester.suggestions(
                         authors: entries.flatMap(\.authors), identity: identity, logins: accounts,
-                        names: names))
+                        names: names),
+                    calendar: calendar)
                 try store.saveFacts(table)
                 try store.saveReports(
                     CodeStatsRange.presets.map {
@@ -281,6 +283,8 @@ public actor CodeStatsEngine {
         var base: [CodeStatsCommit]
         var shas: [CodeStatsCandidate]
         var integrated: [String]
+        var replaced: [String]
+        var originals: [String]
         var authors: [CodeStatsAuthor]
         var done: CodeStatsRepositoryCache?
     }
@@ -315,20 +319,36 @@ public actor CodeStatsEngine {
             }
             var base: [CodeStatsCommit] = []
             var exclusions: [String] = []
+            var replaced = Set<String>()
+            var originals = Set<String>()
             if let cache, cache.extendable(identity: fingerprint),
                 await git.canExtend(repository, from: cache.tips)
             {
                 base = cache.commits
                 exclusions = cache.tips
+                replaced = Set(cache.replaced)
+                originals = Set(cache.originals)
             }
-            let known = Set(base.map(\.sha))
-            let shas = try await git.candidateCommits(
+            var known = Set(base.map(\.sha))
+            var shas = try await git.candidateCommits(
                 in: repository, attribution: attribution, excluding: exclusions
             ).filter { !known.contains($0.sha) }
-            let integrated = try await git.integratedCommits(in: repository).sorted()
+            let squashes = try await git.squashes(
+                in: repository, candidates: shas, attribution: attribution)
+            known.formUnion(shas.map(\.sha))
+            for squash in squashes {
+                replaced.insert(squash.sha)
+                for original in squash.originals {
+                    originals.insert(original.sha)
+                    if known.insert(original.sha).inserted { shas.append(original) }
+                }
+            }
+            let integrated = try await git.integratedCommits(in: repository)
+                .subtracting(originals).sorted()
             var plan = Plan(
                 repository: repository, attribution: attribution, refs: refs, base: base,
-                shas: shas, integrated: integrated, authors: authors, done: nil)
+                shas: shas, integrated: integrated, replaced: replaced.sorted(),
+                originals: originals.sorted(), authors: authors, done: nil)
             if shas.isEmpty {
                 let entry = Self.entry(plan, commits: base)
                 let store = store
@@ -350,8 +370,8 @@ public actor CodeStatsEngine {
         return Plan(
             repository: CodeStatsRepository(fullName: cache.repository, path: "", isBare: true),
             attribution: CodeStatsAttribution(identity: CodeStatsIdentity(), owned: false),
-            refs: CodeStatsRefState(lines: []), base: [], shas: [], integrated: [], authors: [],
-            done: cache)
+            refs: CodeStatsRefState(lines: []), base: [], shas: [], integrated: [], replaced: [],
+            originals: [], authors: [], done: cache)
     }
 
     private static func entry(_ plan: Plan, commits: [CodeStatsCommit]) -> CodeStatsRepositoryCache
@@ -359,7 +379,8 @@ public actor CodeStatsEngine {
         CodeStatsRepositoryCache(
             repository: plan.repository.fullName, refsFingerprint: plan.refs.fingerprint,
             identityFingerprint: plan.attribution.fingerprint, tips: plan.refs.tips,
-            integrated: plan.integrated, authors: plan.authors, commits: commits)
+            integrated: plan.integrated, replaced: plan.replaced, originals: plan.originals,
+            authors: plan.authors, commits: commits)
     }
 
     private var pendingUnits: [Int: Int] = [:]

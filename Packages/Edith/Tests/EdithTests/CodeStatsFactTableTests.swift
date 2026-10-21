@@ -130,18 +130,21 @@ import Testing
     }
 
     @Test func identicalContentCountsOnceAndTheEarliestWins() {
-        let table = CodeStatsFactBuilder.build(commits: [
-            commit(
-                "copy", repository: "octo/backup", day: "2026-06-05", timestamp: 200,
-                fingerprint: "same", changes: [code("Swift", 95_733)]),
-            commit(
-                "first", repository: "octo/app", day: "2026-06-01", timestamp: 100,
-                fingerprint: "same", changes: [code("Swift", 95_733)]),
-            commit(
-                "fork", repository: "other/app", timestamp: 100, fingerprint: "same",
-                changes: [code("Swift", 95_733)]),
-            commit("first", repository: "zeta/app", timestamp: 100, changes: [code("Swift", 1)]),
-        ])
+        let table = CodeStatsFactBuilder.build(
+            commits: [
+                commit(
+                    "copy", repository: "octo/backup", day: "2026-06-05",
+                    timestamp: 1_780_660_800, fingerprint: "same", changes: [code("Swift", 95_733)]),
+                commit(
+                    "first", repository: "octo/app", day: "2026-06-01", timestamp: 1_780_315_200,
+                    fingerprint: "same", changes: [code("Swift", 95_733)]),
+                commit(
+                    "fork", repository: "other/app", timestamp: 1_780_315_200, fingerprint: "same",
+                    changes: [code("Swift", 95_733)]),
+                commit(
+                    "first", repository: "zeta/app", timestamp: 1_780_315_200,
+                    changes: [code("Swift", 1)]),
+            ], calendar: Self.calendar)
         #expect(table.repositories == ["octo/app"])
         #expect(table.duplicates == CodeStatsTally(commits: 2, lines: 191_466))
         #expect(report(table).totals.commits == 1)
@@ -296,5 +299,25 @@ import Testing
         let elapsed = ProcessInfo.processInfo.systemUptime - started
         #expect(built.totals.commits > 0)
         #expect(elapsed < 1.5, "aggregation took \(elapsed) seconds")
+    }
+}
+
+@Suite struct CodeStatsLocalDayTests {
+    @Test func commitsLandOnTheViewersLocalDayAndHour() {
+        var kolkata = Calendar(identifier: .gregorian)
+        kolkata.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        let commit = CodeStatsCommit(
+            sha: "late", day: "2026-10-20", hour: 20, repository: "octo/app",
+            timestamp: 1_792_528_235,
+            changes: [
+                CodeStatsChange(
+                    language: "Swift", category: .code,
+                    counts: CodeStatsLanguageCounts(added: 4))
+            ])
+        let table = CodeStatsFactBuilder.build(commits: [commit], calendar: kolkata)
+        let row = try? #require(table.rows.first { $0.commits == 1 })
+        #expect(row.map { CodeStatsDay(ordinal: $0.day).string } == "2026-10-21")
+        #expect(row?.hour == 2)
+        #expect(table.largest.first?.day == "2026-10-21")
     }
 }

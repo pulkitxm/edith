@@ -23,8 +23,8 @@ public enum CodeStatsFactBuilder {
     }
 
     public static func build(
-        commits: [CodeStatsCommit], integrated: Set<String> = [],
-        suggestions: [CodeStatsIdentitySuggestion] = []
+        commits: [CodeStatsCommit], integrated: Set<String> = [], replaced: Set<String> = [],
+        suggestions: [CodeStatsIdentitySuggestion] = [], calendar: Calendar = .current
     ) -> CodeStatsFactTable {
         let ordered = commits.sorted {
             ($0.timestamp, $0.repository, $0.sha) < ($1.timestamp, $1.repository, $1.sha)
@@ -43,7 +43,7 @@ public enum CodeStatsFactBuilder {
             firstSeen[commit.repository] = min(
                 firstSeen[commit.repository] ?? commit.timestamp, commit.timestamp)
             guard seenSHAs.insert(commit.sha).inserted else { continue }
-            if integrated.contains(commit.sha) {
+            if integrated.contains(commit.sha) || replaced.contains(commit.sha) {
                 integratedTally.add(commits: 1, lines: commit.totals.authored)
                 continue
             }
@@ -80,16 +80,15 @@ public enum CodeStatsFactBuilder {
                     commits: commits, counts: counts, raw: raw))
         }
         for commit in kept {
-            guard let day = CodeStatsDay(commit.day),
-                let repository = repositoryIndex[commit.repository]
-            else { continue }
+            let (day, hour) = moment(commit, calendar: calendar)
+            guard let day, let repository = repositoryIndex[commit.repository] else { continue }
             var flags = commit.flags
             let totals = commit.totals
             if totals.authored > threshold || commit.files > bulkFileLimit { flags.insert(.bulk) }
             let primary = primaryChange(commit)
             add(
                 Key(
-                    day: day.ordinal, hour: commit.hour, repository: repository,
+                    day: day.ordinal, hour: hour, repository: repository,
                     language: primary.flatMap { languageIndex[$0.language] }
                         ?? CodeStatsFactTable.noLanguage,
                     category: primary?.category ?? .code, flags: flags),
@@ -97,14 +96,14 @@ public enum CodeStatsFactBuilder {
             for change in commit.changes {
                 add(
                     Key(
-                        day: day.ordinal, hour: commit.hour, repository: repository,
+                        day: day.ordinal, hour: hour, repository: repository,
                         language: languageIndex[change.language] ?? CodeStatsFactTable.noLanguage,
                         category: change.category, flags: flags),
                     commits: 0, counts: change.counts, raw: change.raw.authored)
             }
             largest.append(
                 CodeStatsFactCommit(
-                    sha: commit.sha, repository: commit.repository, day: commit.day,
+                    sha: commit.sha, repository: commit.repository, day: day.string,
                     subject: commit.subject, lines: totals.authored,
                     raw: commit.rawTotals.authored, files: commit.files, flags: flags))
         }
@@ -115,6 +114,16 @@ public enum CodeStatsFactBuilder {
             duplicates: duplicateTally, integrated: integratedTally,
             duplicateRepositories: duplicateRepositories(fingerprints, firstSeen: firstSeen),
             suggestions: suggestions)
+    }
+
+    static func moment(
+        _ commit: CodeStatsCommit, calendar: Calendar
+    ) -> (day: CodeStatsDay?, hour: Int) {
+        guard commit.timestamp > 0 else { return (CodeStatsDay(commit.day), commit.hour) }
+        let date = Date(timeIntervalSince1970: TimeInterval(commit.timestamp))
+        return (
+            CodeStatsDay(date: date, calendar: calendar), calendar.component(.hour, from: date)
+        )
     }
 
     public static func bulkThreshold(_ sizes: [Int]) -> Int {

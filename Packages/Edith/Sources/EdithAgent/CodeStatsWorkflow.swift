@@ -127,7 +127,8 @@ public actor CodeStatsWorkflow {
             let calendar = environment.calendar
             let report = await BlockingWork.value { () -> CodeStatsReport? in
                 if query.filter == .default,
-                    let cached = store.loadReports().first(where: { $0.range == query.range })
+                    let cached = store.loadReports().first(where: { $0.range == query.range }),
+                    cached.endDay == CodeStatsDay(date: now, calendar: calendar).string
                 {
                     return cached
                 }
