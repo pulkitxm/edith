@@ -1,29 +1,59 @@
 import Foundation
 
-public struct CodeStatsFact: Equatable, Hashable, Sendable {
-    public var day: Int
-    public var hour: Int
-    public var repository: Int
+public enum CodeStatsExclusion: Int, Codable, Sendable {
+    case duplicate = 1
+    case integrated = 2
+}
+
+public struct CodeStatsFactChange: Equatable, Hashable, Sendable {
     public var language: Int
     public var category: CodeStatsCategory
-    public var flags: CodeStatsCommitFlags
-    public var commits: Int
     public var counts: CodeStatsLanguageCounts
     public var raw: Int
 
     public init(
-        day: Int, hour: Int, repository: Int, language: Int, category: CodeStatsCategory,
-        flags: CodeStatsCommitFlags, commits: Int, counts: CodeStatsLanguageCounts, raw: Int
+        language: Int, category: CodeStatsCategory, counts: CodeStatsLanguageCounts, raw: Int
     ) {
+        self.language = language
+        self.category = category
+        self.counts = counts
+        self.raw = raw
+    }
+}
+
+public struct CodeStatsFact: Equatable, Sendable {
+    public var sha: String
+    public var subject: String
+    public var day: Int
+    public var hour: Int
+    public var repository: Int
+    public var flags: CodeStatsCommitFlags
+    public var files: Int
+    public var lfsFiles: Int
+    public var exclusion: CodeStatsExclusion?
+    public var changes: [CodeStatsFactChange]
+
+    public init(
+        sha: String, subject: String = "", day: Int, hour: Int, repository: Int,
+        flags: CodeStatsCommitFlags = [], files: Int = 0, lfsFiles: Int = 0,
+        exclusion: CodeStatsExclusion? = nil, changes: [CodeStatsFactChange] = []
+    ) {
+        self.sha = sha
+        self.subject = subject
         self.day = day
         self.hour = hour
         self.repository = repository
-        self.language = language
-        self.category = category
         self.flags = flags
-        self.commits = commits
-        self.counts = counts
-        self.raw = raw
+        self.files = files
+        self.lfsFiles = lfsFiles
+        self.exclusion = exclusion
+        self.changes = changes
+    }
+
+    public var raw: Int { changes.reduce(0) { $0 + $1.raw } }
+
+    public var authored: Int {
+        changes.reduce(0) { $0 + ($1.category == .generated ? 0 : $1.counts.authored) }
     }
 }
 
@@ -35,6 +65,7 @@ public struct CodeStatsFactCommit: Codable, Equatable, Sendable {
     public var lines: Int
     public var raw: Int
     public var files: Int
+    public var lfsFiles: Int
     public var flags: CodeStatsCommitFlags
 }
 
@@ -169,29 +200,20 @@ public struct CodeStatsFactTable: Equatable, Sendable {
 
     public var repositories: [String]
     public var languages: [String]
-    public var rows: [CodeStatsFact]
+    public var commits: [CodeStatsFact]
     public var bulkThreshold: Int
-    public var largest: [CodeStatsFactCommit]
-    public var duplicates: CodeStatsTally
-    public var integrated: CodeStatsTally
     public var duplicateRepositories: [CodeStatsDuplicateRepository]
     public var suggestions: [CodeStatsIdentitySuggestion]
 
     public init(
-        repositories: [String] = [], languages: [String] = [], rows: [CodeStatsFact] = [],
-        bulkThreshold: Int = 0, largest: [CodeStatsFactCommit] = [],
-        duplicates: CodeStatsTally = CodeStatsTally(),
-        integrated: CodeStatsTally = CodeStatsTally(),
-        duplicateRepositories: [CodeStatsDuplicateRepository] = [],
+        repositories: [String] = [], languages: [String] = [], commits: [CodeStatsFact] = [],
+        bulkThreshold: Int = 0, duplicateRepositories: [CodeStatsDuplicateRepository] = [],
         suggestions: [CodeStatsIdentitySuggestion] = []
     ) {
         self.repositories = repositories
         self.languages = languages
-        self.rows = rows
+        self.commits = commits
         self.bulkThreshold = bulkThreshold
-        self.largest = largest
-        self.duplicates = duplicates
-        self.integrated = integrated
         self.duplicateRepositories = duplicateRepositories
         self.suggestions = suggestions
     }
@@ -199,18 +221,26 @@ public struct CodeStatsFactTable: Equatable, Sendable {
 
 extension CodeStatsFactTable: Codable {
     private enum CodingKeys: String, CodingKey {
-        case repositories, languages, rows, bulkThreshold, largest, duplicates, integrated
-        case duplicateRepositories, suggestions
+        case repositories, languages, commits, changes, bulkThreshold, duplicateRepositories
+        case suggestions
     }
 
-    private struct Columns: Codable {
+    private struct CommitColumns: Codable {
+        var sha: [String] = []
+        var subject: [String] = []
         var day: [Int] = []
         var hour: [Int] = []
         var repository: [Int] = []
+        var flags: [Int] = []
+        var files: [Int] = []
+        var lfsFiles: [Int] = []
+        var exclusion: [Int] = []
+        var changes: [Int] = []
+    }
+
+    private struct ChangeColumns: Codable {
         var language: [Int] = []
         var category: [Int] = []
-        var flags: [Int] = []
-        var commits: [Int] = []
         var added: [Int] = []
         var updated: [Int] = []
         var deleted: [Int] = []
@@ -224,35 +254,47 @@ extension CodeStatsFactTable: Codable {
         repositories = try container.decode([String].self, forKey: .repositories)
         languages = try container.decode([String].self, forKey: .languages)
         bulkThreshold = try container.decode(Int.self, forKey: .bulkThreshold)
-        largest = try container.decode([CodeStatsFactCommit].self, forKey: .largest)
-        duplicates = try container.decode(CodeStatsTally.self, forKey: .duplicates)
-        integrated = try container.decode(CodeStatsTally.self, forKey: .integrated)
         duplicateRepositories = try container.decode(
             [CodeStatsDuplicateRepository].self, forKey: .duplicateRepositories)
         suggestions = try container.decode(
             [CodeStatsIdentitySuggestion].self, forKey: .suggestions)
-        let columns = try container.decode(Columns.self, forKey: .rows)
-        let count = columns.day.count
-        let lengths = [
-            columns.hour, columns.repository, columns.language, columns.category, columns.flags,
-            columns.commits, columns.added, columns.updated, columns.deleted, columns.raw,
-        ].map(\.count)
-        guard lengths.allSatisfy({ $0 == count }) else {
+        let columns = try container.decode(CommitColumns.self, forKey: .commits)
+        let changes = try container.decode(ChangeColumns.self, forKey: .changes)
+        let count = columns.sha.count
+        let changeCount = changes.language.count
+        guard columns.subject.count == count,
+            [
+                columns.day, columns.hour, columns.repository, columns.flags, columns.files,
+                columns.lfsFiles, columns.exclusion, columns.changes,
+            ].allSatisfy({ $0.count == count }),
+            [changes.category, changes.added, changes.updated, changes.deleted, changes.raw]
+                .allSatisfy({ $0.count == changeCount }),
+            columns.changes.allSatisfy({ $0 >= 0 }),
+            columns.changes.reduce(0, +) == changeCount
+        else {
             throw DecodingError.dataCorruptedError(
-                forKey: .rows, in: container, debugDescription: "Fact columns differ in length")
+                forKey: .commits, in: container, debugDescription: "Fact columns differ in length")
         }
-        rows = (0..<count).map { index in
-            CodeStatsFact(
-                day: columns.day[index], hour: columns.hour[index],
-                repository: columns.repository[index], language: columns.language[index],
-                category: Self.categories.indices.contains(columns.category[index])
-                    ? Self.categories[columns.category[index]] : .code,
+        var offset = 0
+        commits = (0..<count).map { index in
+            let range = offset..<(offset + columns.changes[index])
+            offset = range.upperBound
+            return CodeStatsFact(
+                sha: columns.sha[index], subject: columns.subject[index], day: columns.day[index],
+                hour: columns.hour[index], repository: columns.repository[index],
                 flags: CodeStatsCommitFlags(rawValue: columns.flags[index]),
-                commits: columns.commits[index],
-                counts: CodeStatsLanguageCounts(
-                    added: columns.added[index], updated: columns.updated[index],
-                    deleted: columns.deleted[index]),
-                raw: columns.raw[index])
+                files: columns.files[index], lfsFiles: columns.lfsFiles[index],
+                exclusion: CodeStatsExclusion(rawValue: columns.exclusion[index]),
+                changes: range.map { position in
+                    CodeStatsFactChange(
+                        language: changes.language[position],
+                        category: Self.categories.indices.contains(changes.category[position])
+                            ? Self.categories[changes.category[position]] : .code,
+                        counts: CodeStatsLanguageCounts(
+                            added: changes.added[position], updated: changes.updated[position],
+                            deleted: changes.deleted[position]),
+                        raw: changes.raw[position])
+                })
         }
     }
 
@@ -261,26 +303,32 @@ extension CodeStatsFactTable: Codable {
         try container.encode(repositories, forKey: .repositories)
         try container.encode(languages, forKey: .languages)
         try container.encode(bulkThreshold, forKey: .bulkThreshold)
-        try container.encode(largest, forKey: .largest)
-        try container.encode(duplicates, forKey: .duplicates)
-        try container.encode(integrated, forKey: .integrated)
         try container.encode(duplicateRepositories, forKey: .duplicateRepositories)
         try container.encode(suggestions, forKey: .suggestions)
-        var columns = Columns()
-        for row in rows {
-            columns.day.append(row.day)
-            columns.hour.append(row.hour)
-            columns.repository.append(row.repository)
-            columns.language.append(row.language)
-            columns.category.append(Self.categories.firstIndex(of: row.category) ?? 0)
-            columns.flags.append(row.flags.rawValue)
-            columns.commits.append(row.commits)
-            columns.added.append(row.counts.added)
-            columns.updated.append(row.counts.updated)
-            columns.deleted.append(row.counts.deleted)
-            columns.raw.append(row.raw)
+        var columns = CommitColumns()
+        var changes = ChangeColumns()
+        for commit in commits {
+            columns.sha.append(commit.sha)
+            columns.subject.append(commit.subject)
+            columns.day.append(commit.day)
+            columns.hour.append(commit.hour)
+            columns.repository.append(commit.repository)
+            columns.flags.append(commit.flags.rawValue)
+            columns.files.append(commit.files)
+            columns.lfsFiles.append(commit.lfsFiles)
+            columns.exclusion.append(commit.exclusion?.rawValue ?? 0)
+            columns.changes.append(commit.changes.count)
+            for change in commit.changes {
+                changes.language.append(change.language)
+                changes.category.append(Self.categories.firstIndex(of: change.category) ?? 0)
+                changes.added.append(change.counts.added)
+                changes.updated.append(change.counts.updated)
+                changes.deleted.append(change.counts.deleted)
+                changes.raw.append(change.raw)
+            }
         }
-        try container.encode(columns, forKey: .rows)
+        try container.encode(columns, forKey: .commits)
+        try container.encode(changes, forKey: .changes)
     }
 }
 
@@ -294,6 +342,7 @@ public enum CodeStatsAuditReason: String, Codable, CaseIterable, Sendable {
     case whitespace
     case duplicate
     case squashIntegrated
+    case lfs
     case agentAssisted
     case coAuthored
     case unmatchedIdentity
@@ -308,7 +357,8 @@ public enum CodeStatsAuditReason: String, Codable, CaseIterable, Sendable {
         case .docs: "Docs"
         case .whitespace: "Whitespace-only lines"
         case .duplicate: "Duplicate content"
-        case .squashIntegrated: "Squash-merged branches"
+        case .squashIntegrated: "Squash merges counted once"
+        case .lfs: "Git LFS files"
         case .agentAssisted: "Agent-assisted"
         case .coAuthored: "Co-authored"
         case .unmatchedIdentity: "Unmatched identities"
@@ -321,12 +371,17 @@ public struct CodeStatsAuditEntry: Codable, Equatable, Sendable {
     public var counted: Bool
     public var commits: Int?
     public var lines: Int?
+    public var files: Int?
 
-    public init(reason: CodeStatsAuditReason, counted: Bool, commits: Int?, lines: Int?) {
+    public init(
+        reason: CodeStatsAuditReason, counted: Bool, commits: Int?, lines: Int?,
+        files: Int? = nil
+    ) {
         self.reason = reason
         self.counted = counted
         self.commits = commits
         self.lines = lines
+        self.files = files
     }
 }
 

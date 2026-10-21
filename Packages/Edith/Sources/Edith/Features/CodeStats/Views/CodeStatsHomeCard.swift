@@ -42,7 +42,7 @@ struct CodeStatsHomeCard: View {
                 JumpLink(title: "Open Code Stats", destination: .codeStats, dark: dark)
             }
         }
-        .pageTask(id: "\(model.table?.rows.count ?? -1):\(retry)", cancel: { loading.cancel() }) {
+        .pageTask(id: "\(model.tableRevision):\(retry)", cancel: { loading.cancel() }) {
             await loadSummary()
         }
     }
@@ -50,7 +50,7 @@ struct CodeStatsHomeCard: View {
     private func loadSummary() async {
         let request = loading.begin()
         defer { if Task.isCancelled { loading.cancel(request) } }
-        if model.table == nil { await model.refresh() }
+        if model.table == nil { await model.refresh() } else { await model.loadStatus() }
         guard loading.isCurrent(request) else { return }
         if let error = model.loadingError {
             loading.fail(request, message: error)

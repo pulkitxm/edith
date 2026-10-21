@@ -6,6 +6,7 @@ import Observation
 @Observable
 final class CodeStatsModel {
     static let shared = CodeStatsModel()
+    static let largestShown = 12
 
     private(set) var status: CodeStatsStatus?
     private(set) var report: CodeStatsReport?
@@ -22,7 +23,9 @@ final class CodeStatsModel {
     var errorMessage: String?
     var range = CodeStatsRange.days(90)
     private(set) var table: CodeStatsFactTable?
+    private(set) var tableRevision = 0
     private(set) var audit: CodeStatsAudit?
+    private(set) var largest: [CodeStatsFactCommit] = []
     private(set) var filter = CodeStatsFilter.default
     var isComputing: Bool { computation.isRunning }
     private(set) var facets = CodeStatsFacets()
@@ -176,6 +179,7 @@ final class CodeStatsModel {
                 }.value
                 guard reportLoad.isCurrent(request) else { return }
                 table = facts
+                tableRevision &+= 1
                 facets = options
                 await recompute()
                 guard reportLoad.isCurrent(request) else { return }
@@ -297,18 +301,25 @@ final class CodeStatsModel {
             try Task.checkCancellation()
             let report = CodeStatsReportBuilder.build(
                 table: table, filter: filter, range: range, today: now, calendar: calendar)
+            let days = CodeStatsDay(report.startDay).flatMap { start in
+                CodeStatsDay(report.endDay).map { start...max(start, $0) }
+            }
             return (
                 report, CodeStatsProjection(report: report, calendar: calendar),
-                CodeStatsAuditBuilder.build(table: table, filter: filter).matching(identity),
+                CodeStatsAuditBuilder.build(table: table, filter: filter, days: days)
+                    .matching(identity),
                 CodeStatsExplorer(
                     table: table, filter: filter, startDay: report.startDay,
-                    endDay: report.endDay, calendar: calendar)
+                    endDay: report.endDay, calendar: calendar),
+                CodeStatsReportBuilder.largest(
+                    table, filter: filter, days: days, limit: Self.largestShown)
             )
         }) { result in
             report = result.0
             projection = result.1
             audit = result.2
             explorer = result.3
+            largest = result.4
         }
     }
 

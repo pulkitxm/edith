@@ -166,7 +166,10 @@ private func settledBitmap(
                                     CodeStatsYearOverYearCard(explorer: explorer, dark: true)
                                     CodeStatsRhythmCard(explorer: explorer, dark: true)
                                     CodeStatsNewRepositoriesCard(explorer: explorer, dark: true)
-                                    CodeStatsLargestCommitsCard(commits: table.largest, dark: true)
+                                    CodeStatsLargestCommitsCard(
+                                        commits: CodeStatsReportBuilder.largest(
+                                            table, filter: .default),
+                                        dark: true)
                                 }, width: 1100, height: 5200))
                     }
                 }

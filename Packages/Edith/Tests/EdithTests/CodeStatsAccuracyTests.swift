@@ -182,8 +182,11 @@ import Testing
         let all = try await fixture.tool.commits(in: repo, attribution: attribution)
         let table = CodeStatsFactBuilder.build(
             commits: all + originals, replaced: [squash.sha], calendar: utc)
-        let days = Set(table.rows.filter { $0.commits > 0 }.map { CodeStatsDay(ordinal: $0.day).string })
+        let days = Set(
+            table.commits.filter { $0.exclusion == nil }.map {
+                CodeStatsDay(ordinal: $0.day).string
+            })
         #expect(days == ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05", "2026-06-22"])
-        #expect(table.integrated.commits == 1)
+        #expect(CodeStatsAuditBuilder.build(table: table).entry(.squashIntegrated)?.commits == 1)
     }
 }

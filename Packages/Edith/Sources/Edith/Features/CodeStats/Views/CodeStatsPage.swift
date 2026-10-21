@@ -114,8 +114,8 @@ struct CodeStatsPage: View {
                 CodeStatsAuditCard(audit: audit, model: model, dark: dark)
                 CodeStatsHygieneCard(audit: audit, model: model, dark: dark)
             }
-            if let table = model.table {
-                CodeStatsLargestCommitsCard(commits: table.largest, dark: dark)
+            if model.table != nil {
+                CodeStatsLargestCommitsCard(commits: model.largest, dark: dark)
             }
         }
     }
