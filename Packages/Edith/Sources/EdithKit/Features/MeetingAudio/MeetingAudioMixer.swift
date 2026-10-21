@@ -6,6 +6,7 @@ import Foundation
 public final class MeetingAudioMixer: @unchecked Sendable {
     public let queue = DispatchQueue(label: "com.pulkit.edith.meeting.audio", qos: .userInitiated)
     private var engine: AVAudioEngine?
+    private var deviceOutput: MeetingAudioOutput?
     private var capture: MeetingAudioCapture?
     private var micPlayer: AVAudioPlayerNode?
     private var effects: MeetingVoiceEffects?
@@ -96,8 +97,9 @@ public final class MeetingAudioMixer: @unchecked Sendable {
                 "The microphone and meeting output must be different devices.")
         }
         let engine = AVAudioEngine()
-        try setDevice(output.objectID, unit: engine.outputNode.audioUnit)
         let inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
+        try engine.enableManualRenderingMode(
+            .realtime, format: inputFormat, maximumFrameCount: MeetingAudioOutput.maximumFrameCount)
         let effects = MeetingVoiceEffects()
         let mic = AVAudioMixerNode()
         let microphone = AVAudioPlayerNode()
@@ -159,6 +161,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         speechMixer = speech
         sourcePlayer = source
         mediaAudio = MeetingMediaAudio(player: source, queue: queue)
+        deviceOutput = try MeetingAudioOutput(device: output.objectID, engine: engine)
         let generation = lock.withLock {
             self.generation += 1
             pendingBuffers = 0
@@ -213,6 +216,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         source.volume = state.sourceGain
         do {
             try engine.start()
+            try deviceOutput?.start()
             try capture?.start()
         } catch { stop(); throw error }
         source.play()
@@ -222,17 +226,6 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             $0.running = true
             $0.inputName = input.name
             $0.outputName = output.name
-        }
-    }
-
-    private func setDevice(_ device: AudioDeviceID, unit: AudioUnit?) throws {
-        guard let unit else { throw MeetingAudioLibrary.error("Cannot route the audio device.") }
-        var device = device
-        let result = AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device,
-            UInt32(MemoryLayout<AudioDeviceID>.size))
-        guard result == noErr else {
-            throw MeetingAudioLibrary.error("Cannot select this audio device (\(result)).")
         }
     }
 
@@ -503,6 +496,8 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         outputTap = false
         mediaAudio?.stop()
         mediaAudio = nil
+        deviceOutput?.stop()
+        deviceOutput = nil
         engine?.stop()
         engine = nil
         effects = nil
