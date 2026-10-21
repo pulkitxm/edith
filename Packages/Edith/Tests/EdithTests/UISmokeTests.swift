@@ -571,7 +571,7 @@ private func settledBitmap(
         #expect(
             renders(
                 HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                width: 280, height: 40))
+                width: 352, height: 40))
     }
 
     @Test func herdrTitlebarViewPickerReflectsDetailVisibility() throws {
@@ -582,13 +582,13 @@ private func settledBitmap(
         let visible = try #require(
             renderedBitmap(
                 HerdrTitlebarViewPicker(store: store, agentID: "agent"),
-                width: 280, height: 40)
+                width: 352, height: 40)
         ).representation(using: .png, properties: [:])
         store.detailOpen = false
         let hidden = try #require(
             renderedBitmap(
                 HerdrTitlebarViewPicker(store: store, agentID: "agent"),
-                width: 280, height: 40)
+                width: 352, height: 40)
         ).representation(using: .png, properties: [:])
         #expect(visible != hidden)
     }
@@ -609,7 +609,7 @@ private func settledBitmap(
             let bitmap = try #require(
                 renderedBitmap(
                     HerdrTitlebarViewPicker(store: HerdrStore(), agentID: "agent"),
-                    width: 280, height: 40))
+                    width: 352, height: 40))
             appearances.insert(try #require(bitmap.representation(using: .png, properties: [:])))
         }
         #expect(appearances.count == AppTheme.allCases.count)

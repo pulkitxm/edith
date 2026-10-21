@@ -34,6 +34,7 @@ final class FinderModel {
     var progress: FileOperationProgress?
     var pendingConflict: PendingConflict?
     var scrollTarget: String?
+    private(set) var focusRequests = 0
     static var clipboard: FileClipboard?
 
     struct PendingConflict: Identifiable {
@@ -533,7 +534,17 @@ final class FinderModel {
         beginRename(entry)
     }
 
+    func requestKeyFocus() {
+        focusRequests += 1
+    }
+
+    func clearSelection() {
+        selection = []
+        requestKeyFocus()
+    }
+
     func click(_ entry: RemoteFileEntry, modifiers: EventModifiers) {
+        requestKeyFocus()
         if modifiers.contains(.shift) {
             selection = FileSelectionMath.rangeSelection(
                 in: visibleEntries, from: anchor, to: entry.path)

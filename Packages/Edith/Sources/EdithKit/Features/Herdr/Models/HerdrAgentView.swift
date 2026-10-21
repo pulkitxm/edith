@@ -4,12 +4,16 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
     case agent
     case diff
     case split
+    case files
+
+    public static let modes: [HerdrAgentView] = [.agent, .split, .diff, .files]
 
     public var title: String {
         switch self {
         case .agent: "Open agent"
         case .diff: "Open diff"
         case .split: "Open split"
+        case .files: "Open files"
         }
     }
 
@@ -18,6 +22,7 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         case .agent: "Agent"
         case .diff: "Diff"
         case .split: "Split"
+        case .files: "Files"
         }
     }
 
@@ -26,12 +31,70 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         case .agent: "terminal"
         case .diff: "arrow.triangle.branch"
         case .split: "rectangle.split.2x1"
+        case .files: "folder"
         }
     }
 
-    public var showsAgent: Bool { self != .diff }
+    public var showsAgent: Bool { self == .agent || self == .split }
 
-    public var showsDiff: Bool { self != .agent }
+    public var companion: HerdrSplitCompanion? {
+        switch self {
+        case .diff: .diff
+        case .files: .files
+        case .agent, .split: nil
+        }
+    }
+
+    public func shows(_ companion: HerdrSplitCompanion, beside split: HerdrSplitCompanion) -> Bool {
+        self.companion == companion || (self == .split && split == companion)
+    }
+}
+
+public enum HerdrSplitCompanion: String, CaseIterable, Codable, Sendable {
+    case diff
+    case files
+
+    public var title: String {
+        switch self {
+        case .diff: "Quinjet"
+        case .files: "Files"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .diff: HerdrAgentView.diff.icon
+        case .files: HerdrAgentView.files.icon
+        }
+    }
+}
+
+public enum HerdrSplitCompanions {
+    public static let key = AppStorageKeys.Herdr.splitCompanions
+
+    public static func companion(
+        for agentID: String, _ store: UserDefaults = SharedDefaults.store
+    ) -> HerdrSplitCompanion {
+        let raw = (store.dictionary(forKey: key) as? [String: String]) ?? [:]
+        return raw[agentID].flatMap(HerdrSplitCompanion.init(rawValue:)) ?? .diff
+    }
+
+    public static func set(
+        _ companion: HerdrSplitCompanion, for agentID: String,
+        _ store: UserDefaults = SharedDefaults.store
+    ) {
+        var raw = (store.dictionary(forKey: key) as? [String: String]) ?? [:]
+        if companion == .diff {
+            raw.removeValue(forKey: agentID)
+        } else {
+            raw[agentID] = companion.rawValue
+        }
+        if raw.isEmpty {
+            store.removeObject(forKey: key)
+        } else {
+            store.set(raw, forKey: key)
+        }
+    }
 }
 
 public enum HerdrSplitFraction {

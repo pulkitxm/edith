@@ -8,6 +8,11 @@ enum NavigationDirection: Equatable {
     case forward
 }
 
+@MainActor
+protocol HistoryNavigatingView: AnyObject {
+    func navigateHistory(_ direction: NavigationDirection) -> Bool
+}
+
 enum NavigationTextRole: Equatable {
     case none
     case fieldEditor
@@ -54,6 +59,15 @@ enum NavigationShortcutGate {
         while let candidate = current {
             if let webView = candidate as? WKWebView { return webView }
             current = candidate.superview
+        }
+        return nil
+    }
+
+    static func historyView(from responder: NSResponder?) -> HistoryNavigatingView? {
+        var current = responder
+        while let candidate = current {
+            if let owner = candidate as? HistoryNavigatingView { return owner }
+            current = (candidate as? NSView)?.superview
         }
         return nil
     }
@@ -531,6 +545,11 @@ enum NavigationHistoryInput {
             : event.window?.contentView?.hitTest(event.locationInWindow)
         if NavigationShortcutGate.pageHistory(
             direction, in: NavigationShortcutGate.webView(from: target))
+        {
+            return true
+        }
+        if event.type == .keyDown,
+            NavigationShortcutGate.historyView(from: target)?.navigateHistory(direction) == true
         {
             return true
         }

@@ -6,18 +6,23 @@ import UniformTypeIdentifiers
 struct FinderPane: View {
     let model: FinderModel
     var allowsConnections = true
+    var autoFocus = true
+    var onFocus: (() -> Void)?
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
 
     var body: some View {
-        FinderBody(model: model, allowsConnections: allowsConnections)
-            .onAppear {
-                if connectionsAllowed { FinderUndoBridge.register(model) }
-            }
-            .onDisappear {
-                if connectionsAllowed { FinderUndoBridge.forget(model) }
-            }
+        FinderBody(
+            model: model, allowsConnections: allowsConnections, autoFocus: autoFocus,
+            onFocus: onFocus
+        )
+        .onAppear {
+            if connectionsAllowed { FinderUndoBridge.register(model) }
+        }
+        .onDisappear {
+            if connectionsAllowed { FinderUndoBridge.forget(model) }
+        }
     }
 }
 
@@ -30,6 +35,7 @@ struct FinderWindowView: View {
 
     var body: some View {
         FinderBody(model: model)
+            .machineActivity(model.session)
     }
 }
 
@@ -37,22 +43,28 @@ struct FinderBody: View {
     @Environment(\.machineViewPresented) private var presented
     @Bindable var model: FinderModel
     var allowsConnections = true
+    var autoFocus = true
+    var onFocus: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
+    @State private var width = 0.0
     @FocusState private var searchFocused: Bool
 
     private var dark: Bool { scheme == .dark }
     private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
+    private var layout: FinderLayout {
+        FinderLayout(width: width, sidebarRequested: model.showSidebar)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
             HStack(spacing: 0) {
-                if model.showSidebar {
+                if layout.showsSidebar {
                     FinderSidebar(model: model)
-                        .frame(width: UIScale.pt(178))
+                        .frame(width: UIScale.pt(FinderLayout.sidebarWidth))
                     Divider()
                 }
                 content
@@ -64,6 +76,11 @@ struct FinderBody: View {
             statusBar
         }
         .background(DashSkin.paper(dark))
+        .onGeometryChange(for: Double.self) {
+            $0.size.width
+        } action: {
+            width = $0
+        }
         .task(id: presented) {
             guard connectionsAllowed, presented else {
                 model.stopLoading()
@@ -84,13 +101,26 @@ struct FinderBody: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            FinderKeyCatcher(isEditing: model.renaming != nil) { key in
+            FinderKeyCatcher(
+                isEditing: model.renaming != nil, focusRequests: model.focusRequests,
+                autoFocus: autoFocus, onFocus: onFocus,
+                onHistory: { direction in
+                    switch direction {
+                    case .back:
+                        guard model.canGoBack else { return false }
+                        model.goBack()
+                    case .forward:
+                        guard model.canGoForward else { return false }
+                        model.goForward()
+                    }
+                    return true
+                }
+            ) { key in
                 handle(key)
             }
             .frame(width: 1, height: 1)
             .opacity(0.01)
         }
-        .background(shortcuts)
         .edithSheet(item: $model.infoTarget) { entry in
             FinderInfoSheet(model: model, entry: entry)
         }
@@ -155,57 +185,22 @@ struct FinderBody: View {
         return true
     }
 
-    private var shortcuts: some View {
-        ZStack {
-            Button("") { model.setViewMode(.icon) }.keyboardShortcut("1", modifiers: .command)
-            Button("") { model.setViewMode(.list) }.keyboardShortcut("2", modifiers: .command)
-            Button("") { model.goBack() }.keyboardShortcut("[", modifiers: .command)
-            Button("") { model.goForward() }.keyboardShortcut("]", modifiers: .command)
-            Button("") { model.selectAll() }.keyboardShortcut("a", modifiers: .command)
-            Button("") { model.invertSelection() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-            Button("") { Task { await model.duplicateSelection() } }
-                .keyboardShortcut("d", modifiers: .command)
-            Button("") { Task { await model.undoLastOperation() } }
-                .keyboardShortcut("z", modifiers: .command)
-            Button("") { model.refresh() }.keyboardShortcut("r", modifiers: .command)
-            Button("") { model.toggleHidden() }.keyboardShortcut(
-                ".", modifiers: [.command, .shift])
-            Button("") { Task { await model.newFolder() } }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-            Button("") { model.copySelection(operation: .copy) }
-                .keyboardShortcut("c", modifiers: .command)
-            Button("") { model.copySelection(operation: .move) }
-                .keyboardShortcut("x", modifiers: .command)
-            Button("") { Task { await model.paste() } }.keyboardShortcut("v", modifiers: .command)
-            Button("") { model.copyPaths() }
-                .keyboardShortcut("c", modifiers: [.command, .option])
-            Button("") { model.showInfo() }.keyboardShortcut("i", modifiers: .command)
-            Button("") { Task { await model.trashSelection(permanently: false) } }
-                .keyboardShortcut(.delete, modifiers: .command)
-            Button("") { confirmDelete = !model.selection.isEmpty }
-                .keyboardShortcut(.delete, modifiers: [.command, .option])
-            Button("") { model.showSidebar.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
-            Button("") { model.toggleQuickLook() }.keyboardShortcut("y", modifiers: .command)
-        }
-        .opacity(0)
-        .allowsHitTesting(false)
-    }
-
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button {
-                model.showSidebar.toggle()
-            } label: {
-                Image(systemName: "sidebar.left")
+            if layout.fitsSidebar {
+                Button {
+                    model.showSidebar.toggle()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .buttonStyle(.edith(.toolbar))
+                .help("Hide or show the sidebar (⌃⌘S)")
             }
-            .buttonStyle(.edith(.toolbar))
-            .help("Hide or show the sidebar (⌃⌘S)")
 
             HStack(spacing: UIScale.pt(2)) {
                 Button {
                     model.goBack()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.left")
                 }
@@ -213,6 +208,7 @@ struct FinderBody: View {
                 .help("Back (⌘[)")
                 Button {
                     model.goForward()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.right")
                 }
@@ -220,6 +216,7 @@ struct FinderBody: View {
                 .help("Forward (⌘])")
                 Button {
                     model.goUp()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.up")
                 }
@@ -227,6 +224,7 @@ struct FinderBody: View {
                 .help("Enclosing folder (⌘↑)")
                 Button {
                     model.goHome()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "house")
                 }
@@ -234,52 +232,47 @@ struct FinderBody: View {
             }
             .buttonStyle(.edith(.toolbar))
 
-            EdithSegmentedPicker(
-                "", selection: viewModeBinding, options: FileViewMode.allCases,
-                label: { $0.title }
-            )
-            .labelsHidden()
-            .frame(width: UIScale.pt(90))
-            .help("View as icons (⌘1) or list (⌘2)")
+            if !layout.compactToolbar {
+                EdithSegmentedPicker(
+                    "", selection: viewModeBinding, options: FileViewMode.allCases,
+                    label: { $0.title }
+                )
+                .labelsHidden()
+                .frame(width: UIScale.pt(90))
+                .help("View as icons (⌘1) or list (⌘2)")
 
-            Menu {
-                ForEach(FileSortKey.allCases, id: \.self) { key in
-                    Button {
-                        if model.sortKey == key {
-                            model.sortAscending.toggle()
-                        } else {
-                            model.sortKey = key
-                            model.sortAscending = true
-                        }
-                    } label: {
-                        Label(
-                            key.title,
-                            systemImage: model.sortKey == key
-                                ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
-                    }
+                Menu {
+                    sortItems
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
                 }
-                Divider()
-                Toggle("Show Hidden Files", isOn: $model.showHidden)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Sort")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Sort")
 
             Spacer(minLength: UIScale.pt(4))
 
             SearchField(
-                placeholder: "Search this folder", text: $model.searchQuery,
-                focus: $searchFocused
+                placeholder: layout.compactToolbar ? "Search" : "Search this folder",
+                text: $model.searchQuery, focus: $searchFocused
             )
-            .frame(width: UIScale.pt(200))
+            .frame(minWidth: UIScale.pt(70), maxWidth: UIScale.pt(200))
             .focused($searchFocused)
             .onChange(of: model.searchQuery) { _, _ in
                 model.searchQueryChanged()
             }
 
             Menu {
+                if layout.compactToolbar {
+                    Picker("View", selection: viewModeBinding) {
+                        ForEach(FileViewMode.allCases, id: \.self) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    Menu("Sort By") { sortItems }
+                    Divider()
+                }
                 Button("New Folder") { Task { await model.newFolder() } }
                 Button("Upload Files…") { chooseUpload() }
                 if !model.selection.isEmpty {
@@ -312,6 +305,27 @@ struct FinderBody: View {
         .background(DashSkin.panel)
     }
 
+    @ViewBuilder
+    private var sortItems: some View {
+        ForEach(FileSortKey.allCases, id: \.self) { key in
+            Button {
+                if model.sortKey == key {
+                    model.sortAscending.toggle()
+                } else {
+                    model.sortKey = key
+                    model.sortAscending = true
+                }
+            } label: {
+                Label(
+                    key.title,
+                    systemImage: model.sortKey == key
+                        ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
+            }
+        }
+        Divider()
+        Toggle("Show Hidden Files", isOn: $model.showHidden)
+    }
+
     private var viewModeBinding: Binding<FileViewMode> {
         Binding(get: { model.viewMode }, set: { model.viewMode = $0 })
     }
@@ -322,7 +336,7 @@ struct FinderBody: View {
             if model.viewMode == .icon {
                 FinderIconView(model: model)
             } else {
-                FinderListView(model: model)
+                FinderListView(model: model, columns: layout.columns)
             }
             if model.projectingEntries || (model.loading && model.entries.isEmpty) {
                 FinderSkeleton(mode: model.viewMode, iconSize: model.iconSize, dark: dark)
@@ -352,6 +366,7 @@ struct FinderBody: View {
                 ForEach(FileListing.breadcrumbs(for: model.path), id: \.path) { crumb in
                     Button {
                         model.navigate(to: crumb.path)
+                        model.requestKeyFocus()
                     } label: {
                         HStack(spacing: UIScale.pt(4)) {
                             Image(
