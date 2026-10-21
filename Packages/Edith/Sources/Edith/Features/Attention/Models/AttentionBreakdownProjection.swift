@@ -49,40 +49,21 @@ struct AttentionBreakdownProjection: Sendable {
 
     init() {}
 
-    init(
-        summary: AttentionSummary, dimension key: String, filter: AttentionSpanFilter,
-        sort: AttentionBreakdownSort
-    ) {
+    init(summary: AttentionSummary, dimension key: String, sort: AttentionBreakdownSort) {
         guard
             let dimension = summary.dimensions.first(where: { $0.key == key })
                 ?? summary.dimensions.first
         else { return }
         let entities = Dictionary(
             summary.entities.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let query = filter.search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matching = dimension.rows.compactMap { row -> AttentionBreakdownItem? in
-            let duration: TimeInterval
-            if let category = filter.category {
-                duration = row.categories[category] ?? 0
-            } else if let level = filter.level {
-                duration = row.levels[level.key] ?? 0
-            } else if let sphere = filter.sphere {
-                duration = row.spheres[sphere.rawValue] ?? 0
-            } else {
-                duration = row.categories.values.reduce(0, +)
-            }
-            let label =
-                dimension.key == AttentionTag.page
-                ? (MainDestination(rawValue: row.key)?.title ?? row.key) : row.key
-            guard duration > 0,
-                query.isEmpty
-                    || ([label] + row.entityNames).contains(where: {
-                        $0.lowercased().contains(query)
-                    })
-            else { return nil }
+            let duration = row.categories.values.reduce(0, +)
+            guard duration > 0 else { return nil }
             return AttentionBreakdownItem(
-                key: row.key, label: label, duration: duration,
-                categories: row.categories, names: row.entityNames,
+                key: row.key,
+                label: dimension.key == AttentionTag.page
+                    ? (MainDestination(rawValue: row.key)?.title ?? row.key) : row.key,
+                duration: duration, categories: row.categories, names: row.entityNames,
                 entity: row.entityIDs.compactMap { entities[$0] }.first,
                 interactions: row.interactions)
         }

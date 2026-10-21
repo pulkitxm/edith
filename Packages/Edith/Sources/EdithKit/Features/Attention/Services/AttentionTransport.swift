@@ -115,11 +115,14 @@ public struct AttentionSummaryRequest: Codable, Sendable {
     public let window: AttentionTimeWindow
     public let parts: Set<AttentionSummaryPart>
     public let allTime: Bool
+    public let filter: AttentionSpanFilter
 
     public init(
         from: Date, to: Date, settings: AttentionSettings? = nil,
         comparePeriod: TimeInterval? = nil, window: AttentionTimeWindow = .all,
-        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases), allTime: Bool = false
+        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases),
+        allTime: Bool = false,
+        filter: AttentionSpanFilter = .none
     ) {
         self.from = from
         self.to = to
@@ -128,6 +131,7 @@ public struct AttentionSummaryRequest: Codable, Sendable {
         self.window = window
         self.parts = parts
         self.allTime = allTime
+        self.filter = filter
     }
 
     public func coveringAllTime(since first: Date?, calendar: Calendar = .current)
@@ -136,7 +140,7 @@ public struct AttentionSummaryRequest: Codable, Sendable {
         guard allTime else { return self }
         return AttentionSummaryRequest(
             from: min(calendar.startOfDay(for: first ?? to), to), to: to, settings: settings,
-            window: window, parts: parts, allTime: true)
+            window: window, parts: parts, allTime: true, filter: filter)
     }
 
     public var previousInterval: DateInterval? {
@@ -179,7 +183,8 @@ public struct AttentionPageSnapshot: Codable, Sendable {
         let analyzer = AttentionAnalyzer(calendar: calendar)
         var summary = analyzer.summary(
             events: request.window.apply(all, calendar: calendar), settings: settings,
-            classifications: classifications, from: request.from, to: request.to)
+            classifications: classifications, from: request.from, to: request.to,
+            filter: request.filter)
         if !request.window.allDays {
             summary.days.removeAll {
                 !request.window.allows(weekday: calendar.component(.weekday, from: $0.day))
@@ -192,7 +197,8 @@ public struct AttentionPageSnapshot: Codable, Sendable {
                 analyzer.summary(
                     events: request.window.apply(previous, calendar: calendar),
                     settings: settings, classifications: classifications,
-                    from: interval.start, to: interval.end, detailed: false
+                    from: interval.start, to: interval.end, detailed: false,
+                    filter: request.filter
                 ).totals
         }
         self.summary = summary
