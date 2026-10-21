@@ -186,8 +186,20 @@ struct RateLimitsDialsView: View {
                     if provider == .claude, let accounts = latestLimits?.claudeAccounts,
                         !accounts.isEmpty
                     {
-                        ClaudeAccountLimitsView(accounts: accounts, compact: true)
-                            .presenterCover(.usage)
+                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                ProviderLogoView(provider).frame(
+                                    width: UIScale.pt(14), height: UIScale.pt(14))
+                                Text(provider.label).font(.edithText(.headline))
+                            }
+                            ClaudeAccountLimitsView(accounts: accounts, compact: true)
+                                .presenterCover(.usage)
+                        }
+                        .padding(UIScale.pt(presentation?.tile.dense == true ? 8 : 12))
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .background(
+                            DashSkin.paper(dark),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
                     } else if let latest = latestProviders[provider] {
                         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                             HStack(spacing: UIScale.pt(6)) {
