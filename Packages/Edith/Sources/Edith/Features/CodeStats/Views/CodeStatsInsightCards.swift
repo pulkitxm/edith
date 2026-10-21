@@ -7,7 +7,7 @@ struct CodeStatsAuditCard: View {
     let dark: Bool
 
     var body: some View {
-        PageCard(title: "What counts", note: "Counted versus excluded, with the reason") {
+        PageCard(title: "What counts", note: "Counted versus excluded in this range and filter") {
             HStack(spacing: UIScale.pt(18)) {
                 tally("Counted", audit.counted, emphasis: true)
                 tally("Raw in the mirror", audit.raw, emphasis: false)
@@ -23,7 +23,8 @@ struct CodeStatsAuditCard: View {
             Divider()
             VStack(spacing: UIScale.pt(6)) {
                 ForEach(audit.entries, id: \.reason) { entry in
-                    if (entry.commits ?? 0) > 0 || (entry.lines ?? 0) > 0 {
+                    if (entry.commits ?? 0) > 0 || (entry.lines ?? 0) > 0 || (entry.files ?? 0) > 0
+                    {
                         row(entry)
                     }
                 }
@@ -70,6 +71,7 @@ struct CodeStatsAuditCard: View {
 
     private func detail(_ entry: CodeStatsAuditEntry) -> String {
         [
+            entry.files.map { CodeStatsNumberFormat.grouped($0) + " files" },
             entry.commits.map { CodeStatsNumberFormat.grouped($0) + " commits" },
             entry.lines.map { CodeStatsNumberFormat.compact($0) + " lines" },
         ].compactMap { $0 }.joined(separator: ", ")
@@ -98,7 +100,7 @@ struct CodeStatsLargestCommitsCard: View {
 
     var body: some View {
         PageCard(
-            title: "Biggest commits", note: "Raw size, with how each one is counted"
+            title: "Biggest commits", note: "Raw size in this range and filter, with what counts"
         ) {
             VStack(spacing: UIScale.pt(7)) {
                 ForEach(commits.prefix(Self.shown), id: \.sha) { commit in
@@ -121,9 +123,7 @@ struct CodeStatsLargestCommitsCard: View {
                                 .foregroundStyle(DashSkin.accent(dark))
                                 Text(commit.day)
                                 Text(String(commit.sha.prefix(8))).font(DashSkin.mono(10))
-                                Text(
-                                    "\(CodeStatsNumberFormat.compact(commit.lines)) counted, \(CodeStatsNumberFormat.grouped(commit.files)) files"
-                                )
+                                Text(Self.detail(commit))
                             }
                             .font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
@@ -140,12 +140,25 @@ struct CodeStatsLargestCommitsCard: View {
                     }
                 }
                 if commits.isEmpty {
-                    Text("No commits in the mirror yet.")
+                    Text("No commits match this range and filter.")
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
         }
+    }
+}
+
+extension CodeStatsLargestCommitsCard {
+    static func detail(_ commit: CodeStatsFactCommit) -> String {
+        var parts = [
+            CodeStatsNumberFormat.compact(commit.lines) + " counted",
+            CodeStatsNumberFormat.grouped(commit.files) + " files",
+        ]
+        if commit.lfsFiles > 0 {
+            parts.append(CodeStatsNumberFormat.grouped(commit.lfsFiles) + " in LFS")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

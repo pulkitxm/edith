@@ -20,20 +20,23 @@ struct CodeStatsFacets: Equatable, Sendable {
             repeating: (0, 0), count: table.repositories.count)
         var languageTotals = [(commits: Int, lines: Int)](
             repeating: (0, 0), count: table.languages.count)
-        for row in table.rows {
-            let lines = row.counts.added + row.counts.updated
-            if repositoryTotals.indices.contains(row.repository) {
-                repositoryTotals[row.repository].commits += row.commits
-                repositoryTotals[row.repository].lines += lines
+        for fact in table.commits where fact.exclusion == nil {
+            if repositoryTotals.indices.contains(fact.repository) {
+                repositoryTotals[fact.repository].commits += 1
+                repositoryTotals[fact.repository].lines += fact.authored
             }
-            if languageTotals.indices.contains(row.language) {
-                languageTotals[row.language].commits += row.commits
-                languageTotals[row.language].lines += lines
+            var touched = Set<Int>()
+            for change in fact.changes where languageTotals.indices.contains(change.language) {
+                languageTotals[change.language].lines += change.counts.authored
+                if touched.insert(change.language).inserted {
+                    languageTotals[change.language].commits += 1
+                }
             }
         }
         var ownerTotals: [String: (commits: Int, lines: Int)] = [:]
         var repositories: [CodeStatsFacet] = []
-        for (index, name) in table.repositories.enumerated() {
+        for (index, name) in table.repositories.enumerated()
+        where repositoryTotals[index].commits > 0 {
             let total = repositoryTotals[index]
             repositories.append(
                 CodeStatsFacet(name: name, commits: total.commits, lines: total.lines))
@@ -47,7 +50,7 @@ struct CodeStatsFacets: Equatable, Sendable {
         }
         .sorted { ($0.commits, $1.name) > ($1.commits, $0.name) }
         var languages: [CodeStatsFacet] = []
-        for (index, name) in table.languages.enumerated() {
+        for (index, name) in table.languages.enumerated() where languageTotals[index].commits > 0 {
             let total = languageTotals[index]
             languages.append(CodeStatsFacet(name: name, commits: total.commits, lines: total.lines))
         }

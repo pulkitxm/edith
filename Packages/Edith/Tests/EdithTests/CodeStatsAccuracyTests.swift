@@ -125,3 +125,68 @@ import Testing
         #expect(lockOnly?.day == "2026-06-02")
     }
 }
+
+@Suite struct CodeStatsSquashReplacementTests {
+    private static let me = ("Octocat", "you@example.com")
+    private static let other = ("Hubot", "hubot@example.com")
+
+    @Test func aVerifiedPullRequestSquashGivesBackItsOriginalDatedCommits() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let url = try await fixture.makeRepository("octocat/reel")
+        let repo = CodeStatsRepository(fullName: "octocat/reel", path: url.path, isBare: false)
+        try await fixture.commit(
+            ["base.swift": "let base = 0\n"], in: url, author: Self.me,
+            date: "2026-06-01T10:00:00Z")
+        try await fixture.git(["checkout", "-q", "-b", "planets"], in: url)
+        try await fixture.commit(
+            ["p.swift": "let p = 1\n"], in: url, author: Self.me, date: "2026-06-02T10:00:00Z")
+        try await fixture.commit(
+            ["q.swift": "let q = 2\n"], in: url, author: Self.other,
+            date: "2026-06-03T10:00:00Z")
+        try await fixture.commit(
+            ["p.swift": "let p = 1\nlet r = 3\n"], in: url, author: Self.me,
+            date: "2026-06-04T10:00:00Z")
+        let tip = try await fixture.git(["rev-parse", "HEAD"], in: url)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        try await fixture.git(["checkout", "-q", "main"], in: url)
+        try await fixture.commit(
+            ["main.swift": "let m = 9\n"], in: url, author: Self.me,
+            date: "2026-06-05T10:00:00Z")
+        try await fixture.git(["merge", "-q", "--squash", "planets"], in: url)
+        try await fixture.git(
+            ["commit", "-q", "-m", "feat: planets (#74)"], in: url, author: Self.me,
+            date: "2026-06-21T10:00:00Z")
+        try await fixture.commit(
+            ["late.swift": "let l = 0\n"], in: url, author: Self.me,
+            date: "2026-06-22T10:00:00Z", message: "unrelated (#75)")
+        try await fixture.git(["update-ref", "refs/pull/74/head", tip], in: url)
+        try await fixture.git(["update-ref", "refs/pull/75/head", tip], in: url)
+        try await fixture.git(["branch", "-q", "-D", "planets"], in: url)
+
+        let attribution = CodeStatsAttribution(identity: CodeStatsGitFixture.me, owned: false)
+        let candidates = try await fixture.tool.candidateCommits(
+            in: repo, attribution: attribution)
+        let squashes = try await fixture.tool.squashes(
+            in: repo, candidates: candidates, attribution: attribution)
+
+        #expect(squashes.count == 1)
+        let squash = try #require(squashes.first)
+        #expect(candidates.first { $0.sha == squash.sha }?.header.hasSuffix("(#74)") == true)
+        let originals = try await fixture.tool.commits(
+            in: repo, candidates: squash.originals, attribution: attribution)
+        #expect(originals.map(\.day).sorted() == ["2026-06-02", "2026-06-04"])
+
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let all = try await fixture.tool.commits(in: repo, attribution: attribution)
+        let table = CodeStatsFactBuilder.build(
+            commits: all + originals, replaced: [squash.sha], calendar: utc)
+        let days = Set(
+            table.commits.filter { $0.exclusion == nil }.map {
+                CodeStatsDay(ordinal: $0.day).string
+            })
+        #expect(days == ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05", "2026-06-22"])
+        #expect(CodeStatsAuditBuilder.build(table: table).entry(.squashIntegrated)?.commits == 1)
+    }
+}

@@ -23,7 +23,7 @@ public enum CodeStatsCategory: String, Codable, CaseIterable, Hashable, Sendable
 
 public enum CodeStatsLanguage {
     public static let other = "Other"
-    public static let rulesVersion = 2
+    public static let rulesVersion = 3
 
     public static let excludedPathspecs = [
         "**/node_modules/**", "**/dist/**", "**/build/**", "**/vendor/**", "**/.next/**",

@@ -722,7 +722,7 @@ struct CodeStatsAuditCommand: AsyncParsableCommand {
         discussion: """
             Reads the fact table the last refresh stored and compares the raw commits and \
             lines with what the report counts: bulk imports, formatter runs, generated files, \
-            data and markup, whitespace-only lines, duplicate content, squash-merged branches, \
+            data and markup, whitespace-only lines, duplicate content, squash merges, Git LFS files, \
             agent-assisted and co-authored work, and authors that look like you but are not \
             in your identities. It does not refresh or change anything.
             Example: ed code-stats audit --json
@@ -758,6 +758,7 @@ struct CodeStatsAuditCommand: AsyncParsableCommand {
             ]
             for entry in audit.entries {
                 let parts = [
+                    entry.files.map { CodeStatsNumberFormat.grouped($0) + " files" },
                     entry.commits.map { CodeStatsNumberFormat.grouped($0) + " commits" },
                     entry.lines.map { CodeStatsNumberFormat.grouped($0) + " lines" },
                 ].compactMap { $0 }

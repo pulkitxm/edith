@@ -16,6 +16,8 @@ public struct CodeStatsLogParser {
         "prettier", "biome", "reformat", "lint --fix", "lint:fix", "swiftformat",
         "swift-format", "swift format", "rustfmt", "gofmt", "clang-format", "black .",
     ]
+    static let lfsVersionPrefix = "version https://git-lfs.github.com/spec/"
+    static let lfsOidPrefix = "oid sha256:"
     static let formatVerbs: Set<String> = ["format", "formatted", "formatting", "fmt"]
     static let formatObjects: Set<String> = [
         "code", "codebase", "files", "all", "with", "using", "project", "sources", "source",
@@ -30,6 +32,8 @@ public struct CodeStatsLogParser {
         var digest = SHA256()
         var hashed = false
         var markerLines = 0
+        var lfs = false
+        var plain = false
     }
 
     private let repository: String
@@ -97,7 +101,13 @@ public struct CodeStatsLogParser {
             hunkFromTop = Self.startsAtTop(line)
         } else if inHunk, line.hasPrefix("+") {
             inserted += 1
-            let content = Self.normalized(line.dropFirst())
+            let body = line.dropFirst()
+            if Self.isLFSMarker(body) {
+                file.lfs = true
+            } else if !Self.isLFSPointerField(body) {
+                file.plain = true
+            }
+            let content = Self.normalized(body)
             if let count = removedLines[content], count > 0 {
                 removedLines[content] = count - 1
                 matched += 1
@@ -113,6 +123,7 @@ public struct CodeStatsLogParser {
             }
         } else if inHunk, line.hasPrefix("-") {
             removed += 1
+            if Self.isLFSMarker(line.dropFirst()) { file.lfs = true }
             let content = Self.normalized(line.dropFirst())
             removedLines[content, default: 0] += 1
             hash(content, sign: 0x2D)
@@ -127,6 +138,37 @@ public struct CodeStatsLogParser {
 
     static func normalized<Content: StringProtocol>(_ content: Content) -> [UInt8] {
         content.utf8.filter { $0 != 0x20 && $0 != 0x09 && $0 != 0x0D && $0 != 0x0B && $0 != 0x0C }
+    }
+
+    static func isLFSMarker<Content: StringProtocol>(_ content: Content) -> Bool {
+        if content.hasPrefix(lfsVersionPrefix) { return true }
+        guard content.hasPrefix(lfsOidPrefix) else { return false }
+        let digest = content.dropFirst(lfsOidPrefix.count)
+        return digest.count == 64 && digest.allSatisfy(\.isHexDigit)
+    }
+
+    static func isLFSPointerField<Content: StringProtocol>(_ content: Content) -> Bool {
+        if content.hasPrefix("ext-") { return true }
+        guard content.hasPrefix("size ") else { return false }
+        let digits = content.dropFirst(5)
+        return !digits.isEmpty && digits.allSatisfy(\.isNumber)
+    }
+
+    public static func pullRequest(header: String) -> Int? {
+        let fields = header.split(separator: "\t", omittingEmptySubsequences: false)
+        guard fields.count > 7 else { return nil }
+        return pullRequest(subject: fields[7...].joined(separator: "\t"))
+    }
+
+    public static func pullRequest(subject: String) -> Int? {
+        let trimmed = subject.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasSuffix(")"), let open = trimmed.range(of: "(#", options: .backwards)
+        else { return nil }
+        let digits = trimmed[open.upperBound..<trimmed.index(before: trimmed.endIndex)]
+        guard !digits.isEmpty, digits.allSatisfy(\.isASCII), digits.allSatisfy(\.isNumber) else {
+            return nil
+        }
+        return Int(digits)
     }
 
     static func startsAtTop<Line: StringProtocol>(_ header: Line) -> Bool {
@@ -185,7 +227,9 @@ public struct CodeStatsLogParser {
 
     private mutating func finishFile() {
         finishHunk()
-        if let language = file.language, !file.raw.isEmpty {
+        if file.lfs, !file.plain {
+            current?.lfsFiles += 1
+        } else if let language = file.language, !file.raw.isEmpty {
             current?.record(
                 language: language, category: file.category, counts: file.counts, raw: file.raw)
         }
