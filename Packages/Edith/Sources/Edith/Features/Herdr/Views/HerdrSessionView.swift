@@ -251,7 +251,7 @@ struct HerdrSessionView: View {
             get: { tab.split.companion },
             set: { companion in
                 tab.split.select(companion)
-                splitTerminalFocus = companion == .diff ? .diff : .files
+                splitTerminalFocus = companion == .diff ? .diff : .agent
             })
     }
 
