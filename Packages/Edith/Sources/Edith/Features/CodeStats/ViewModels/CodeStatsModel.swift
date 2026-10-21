@@ -27,7 +27,6 @@ final class CodeStatsModel {
     private(set) var audit: CodeStatsAudit?
     private(set) var largest: [CodeStatsFactCommit] = []
     private(set) var filter = CodeStatsFilter.default
-    var isComputing: Bool { computation.isRunning }
     private(set) var facets = CodeStatsFacets()
     private(set) var identityPendingRecount = false
     private(set) var explorer = CodeStatsExplorer()
@@ -80,8 +79,11 @@ final class CodeStatsModel {
 
     var loadingError: String? { statusLoad.errorMessage ?? reportLoad.errorMessage }
 
-    var isRefreshing: Bool {
-        report != nil && (statusLoad.isRunning || reportLoad.isRunning || computation.isRunning)
+    var activity: ContentActivity {
+        guard report != nil else { return .idle }
+        return .resolve(
+            updating: computation.isRunning,
+            refreshing: statusLoad.isRunning || reportLoad.isRunning || isRunning)
     }
 
     func cancelLoading() {

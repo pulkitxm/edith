@@ -70,11 +70,11 @@ import Testing
         await model.refresh()
         let request = model.reportLoad.begin()
         #expect(model.loadingState == .content)
-        #expect(model.isRefreshing)
+        #expect(model.activity == .refreshing)
         model.reportLoad.fail(request, message: "Synthetic refresh unavailable")
         #expect(model.loadingState == .content)
         #expect(model.report != nil)
-        #expect(!model.isRefreshing)
+        #expect(model.activity == .idle)
     }
 
     @Test func emptyMirrorShowsTheSetupChecklist() async {
@@ -307,7 +307,7 @@ import Testing
         await model.loadReport()
         #expect(model.phase == .content)
         #expect(model.loadingState == .content)
-        #expect(!model.isRefreshing)
+        #expect(model.activity == .idle)
         #expect(model.banners.isEmpty)
     }
 

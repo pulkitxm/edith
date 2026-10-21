@@ -14,6 +14,7 @@ struct PageLoading<Content: View>: View {
     var message = "There is nothing to show yet."
     var layout: PageSkeletonLayout = .list
     var refreshing = false
+    var activity: ContentActivity?
     var retry: (() -> Void)?
     var cancel: (() -> Void)?
     @ViewBuilder let content: () -> Content
@@ -21,7 +22,7 @@ struct PageLoading<Content: View>: View {
     var body: some View {
         LoadingContainer(
             state: state, title: title, message: message, retry: retry, cancel: cancel,
-            refreshing: refreshing
+            refreshing: activity == nil && refreshing, updating: activity == .updating
         ) {
             if layout == .editor {
                 content()

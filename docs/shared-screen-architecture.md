@@ -59,7 +59,15 @@ Reduced motion renders static placeholders, and inactive scenes pause updates.
 Determinate operations retain their actual progress values.
 
 Content remains visible during refresh. A refresh failure keeps the last good
-result and provides recovery feedback. Initial failure must not turn into an
+result and provides recovery feedback.
+
+`ContentActivity` separates a background `refreshing` pass, where the shown
+numbers are still right, from `updating`, where the user changed a range or
+filter and the shown numbers no longer match the controls. Pages pass one value
+to both `PageScaffold(activity:)`, which pins a single badge under the header,
+and `PageLoading(activity:)`, which dims stale content while it updates. Both
+wait briefly before appearing so fast recomputes do not flicker. Every card on a
+filtered page reads from the same filtered result, never from unfiltered data. Initial failure must not turn into an
 empty success, setup screen, or permanent loading animation.
 
 ## Page composition
