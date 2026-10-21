@@ -4,8 +4,8 @@ import SwiftUI
 
 @MainActor
 enum HerdrAgentWindow {
-    static let viewControlsContentWidth = 262.0
-    static let viewControlsWidth = 270.0
+    static let viewControlsContentWidth = 334.0
+    static let viewControlsWidth = 342.0
     private static var windows: [String: NSWindow] = [:]
 
     static var openIDs: Set<String> { Set(windows.keys) }
