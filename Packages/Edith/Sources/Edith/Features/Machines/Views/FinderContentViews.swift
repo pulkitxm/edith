@@ -78,7 +78,7 @@ struct FinderIconView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { model.selection = [] }
+        .onTapGesture { model.clearSelection() }
     }
 }
 
@@ -199,7 +199,7 @@ struct FinderListView: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { model.selection = [] }
+            .onTapGesture { model.clearSelection() }
         }
     }
 
@@ -525,6 +525,7 @@ private struct FinderSidebarRow: View {
     var body: some View {
         Button {
             model.navigate(to: place.path)
+            model.requestKeyFocus()
         } label: {
             HStack(spacing: UIScale.pt(7)) {
                 Image(systemName: place.symbol)

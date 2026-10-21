@@ -6,18 +6,23 @@ import UniformTypeIdentifiers
 struct FinderPane: View {
     let model: FinderModel
     var allowsConnections = true
+    var autoFocus = true
+    var onFocus: (() -> Void)?
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
 
     private var connectionsAllowed: Bool { allowsConnections && connectionsEnabled }
 
     var body: some View {
-        FinderBody(model: model, allowsConnections: allowsConnections)
-            .onAppear {
-                if connectionsAllowed { FinderUndoBridge.register(model) }
-            }
-            .onDisappear {
-                if connectionsAllowed { FinderUndoBridge.forget(model) }
-            }
+        FinderBody(
+            model: model, allowsConnections: allowsConnections, autoFocus: autoFocus,
+            onFocus: onFocus
+        )
+        .onAppear {
+            if connectionsAllowed { FinderUndoBridge.register(model) }
+        }
+        .onDisappear {
+            if connectionsAllowed { FinderUndoBridge.forget(model) }
+        }
     }
 }
 
@@ -30,6 +35,7 @@ struct FinderWindowView: View {
 
     var body: some View {
         FinderBody(model: model)
+            .machineActivity(model.session)
     }
 }
 
@@ -37,6 +43,8 @@ struct FinderBody: View {
     @Environment(\.machineViewPresented) private var presented
     @Bindable var model: FinderModel
     var allowsConnections = true
+    var autoFocus = true
+    var onFocus: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
@@ -84,13 +92,26 @@ struct FinderBody: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            FinderKeyCatcher(isEditing: model.renaming != nil) { key in
+            FinderKeyCatcher(
+                isEditing: model.renaming != nil, focusRequests: model.focusRequests,
+                autoFocus: autoFocus, onFocus: onFocus,
+                onHistory: { direction in
+                    switch direction {
+                    case .back:
+                        guard model.canGoBack else { return false }
+                        model.goBack()
+                    case .forward:
+                        guard model.canGoForward else { return false }
+                        model.goForward()
+                    }
+                    return true
+                }
+            ) { key in
                 handle(key)
             }
             .frame(width: 1, height: 1)
             .opacity(0.01)
         }
-        .background(shortcuts)
         .edithSheet(item: $model.infoTarget) { entry in
             FinderInfoSheet(model: model, entry: entry)
         }
@@ -155,44 +176,6 @@ struct FinderBody: View {
         return true
     }
 
-    private var shortcuts: some View {
-        ZStack {
-            Button("") { model.setViewMode(.icon) }.keyboardShortcut("1", modifiers: .command)
-            Button("") { model.setViewMode(.list) }.keyboardShortcut("2", modifiers: .command)
-            Button("") { model.goBack() }.keyboardShortcut("[", modifiers: .command)
-            Button("") { model.goForward() }.keyboardShortcut("]", modifiers: .command)
-            Button("") { model.selectAll() }.keyboardShortcut("a", modifiers: .command)
-            Button("") { model.invertSelection() }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-            Button("") { Task { await model.duplicateSelection() } }
-                .keyboardShortcut("d", modifiers: .command)
-            Button("") { Task { await model.undoLastOperation() } }
-                .keyboardShortcut("z", modifiers: .command)
-            Button("") { model.refresh() }.keyboardShortcut("r", modifiers: .command)
-            Button("") { model.toggleHidden() }.keyboardShortcut(
-                ".", modifiers: [.command, .shift])
-            Button("") { Task { await model.newFolder() } }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-            Button("") { model.copySelection(operation: .copy) }
-                .keyboardShortcut("c", modifiers: .command)
-            Button("") { model.copySelection(operation: .move) }
-                .keyboardShortcut("x", modifiers: .command)
-            Button("") { Task { await model.paste() } }.keyboardShortcut("v", modifiers: .command)
-            Button("") { model.copyPaths() }
-                .keyboardShortcut("c", modifiers: [.command, .option])
-            Button("") { model.showInfo() }.keyboardShortcut("i", modifiers: .command)
-            Button("") { Task { await model.trashSelection(permanently: false) } }
-                .keyboardShortcut(.delete, modifiers: .command)
-            Button("") { confirmDelete = !model.selection.isEmpty }
-                .keyboardShortcut(.delete, modifiers: [.command, .option])
-            Button("") { model.showSidebar.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
-            Button("") { model.toggleQuickLook() }.keyboardShortcut("y", modifiers: .command)
-        }
-        .opacity(0)
-        .allowsHitTesting(false)
-    }
-
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(8)) {
             Button {
@@ -206,6 +189,7 @@ struct FinderBody: View {
             HStack(spacing: UIScale.pt(2)) {
                 Button {
                     model.goBack()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.left")
                 }
@@ -213,6 +197,7 @@ struct FinderBody: View {
                 .help("Back (⌘[)")
                 Button {
                     model.goForward()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.right")
                 }
@@ -220,6 +205,7 @@ struct FinderBody: View {
                 .help("Forward (⌘])")
                 Button {
                     model.goUp()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "chevron.up")
                 }
@@ -227,6 +213,7 @@ struct FinderBody: View {
                 .help("Enclosing folder (⌘↑)")
                 Button {
                     model.goHome()
+                    model.requestKeyFocus()
                 } label: {
                     Image(systemName: "house")
                 }
@@ -352,6 +339,7 @@ struct FinderBody: View {
                 ForEach(FileListing.breadcrumbs(for: model.path), id: \.path) { crumb in
                     Button {
                         model.navigate(to: crumb.path)
+                        model.requestKeyFocus()
                     } label: {
                         HStack(spacing: UIScale.pt(4)) {
                             Image(
