@@ -29,7 +29,7 @@ struct HerdrAgentViewToggle: View {
             HStack(spacing: UIScale.pt(5)) {
                 Image(systemName: option.icon)
                     .font(.system(size: UIScale.pt(compactStyle ? 9 : 10), weight: .semibold))
-                Text(option.title)
+                Text(option.shortTitle)
                     .font(
                         .system(
                             size: UIScale.pt(compactStyle ? 10 : 11),
