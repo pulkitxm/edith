@@ -332,20 +332,53 @@ final class FinderModel {
     private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
         var resolvedPath = requestedPath
         if !session.isLocal, requestedPath == "~" || requestedPath.isEmpty {
-            let platform = session.remotePlatform ?? .linux
-            let result = await session.runCommand(
-                FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
+            let home = await remoteHome()
             guard !Task.isCancelled else { return nil }
-            if case let .success(output) = result {
-                let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
-                if home.hasPrefix("/") || FileListing.isWindowsPath(home) { resolvedPath = home }
-            }
+            if let home { resolvedPath = home }
         }
         let result = await directoryLoader(resolvedPath)
         guard !Task.isCancelled else { return nil }
         let freeSpaceKB = await freeSpaceLoader(resolvedPath)
         guard !Task.isCancelled else { return nil }
         return LoadOutcome(path: resolvedPath, result: result, freeSpaceKB: freeSpaceKB)
+    }
+
+    private func remoteHome() async -> String? {
+        let platform = session.remotePlatform ?? .linux
+        let result = await session.runCommand(
+            FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
+        guard case let .success(output) = result else { return nil }
+        let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return home.hasPrefix("/") || FileListing.isWindowsPath(home) ? home : nil
+    }
+
+    func locate(_ target: String) async -> RemoteFileEntry? {
+        if !session.isLocal, resolvedHome == nil, target == "~" || target.hasPrefix("~/") {
+            resolvedHome = await remoteHome()
+        }
+        let item = expandingHome(target)
+        guard let parent = FileListing.parentPath(of: item),
+            case let .success(items) = await directoryLoader(parent)
+        else { return nil }
+        let name = FileListing.name(of: item)
+        return items.first { $0.name == name }
+    }
+
+    func reveal(entry: RemoteFileEntry) async {
+        guard let parent = FileListing.parentPath(of: entry.path) else { return }
+        if parent == path {
+            await load()
+        } else {
+            navigate(to: parent)
+            await loadWorkerTask?.value
+        }
+        guard path == parent, entries.contains(where: { $0.path == entry.path }) else { return }
+        if entry.name.hasPrefix("."), !showHidden { showHidden = true }
+        await waitForEntryProjection()
+        selection = [entry.path]
+        anchor = entry.path
+        cursor = entry.path
+        reveal(entry.path)
     }
 
     private func publish(_ outcome: LoadOutcome, requestedPath: String) {

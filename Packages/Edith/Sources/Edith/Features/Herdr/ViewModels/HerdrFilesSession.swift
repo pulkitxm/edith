@@ -41,6 +41,17 @@ final class HerdrFilesSession {
         finder.navigate(to: start)
     }
 
+    func locate(
+        _ target: String, directory: String, isLocal: Bool, machine: Machine?
+    ) async -> RemoteFileEntry? {
+        prepare(directory: directory, isLocal: isLocal, machine: machine)
+        return await finder?.locate(target)
+    }
+
+    func reveal(_ entry: RemoteFileEntry) async {
+        await finder?.reveal(entry: entry)
+    }
+
     func stop() {
         finder?.stopLoading()
     }
