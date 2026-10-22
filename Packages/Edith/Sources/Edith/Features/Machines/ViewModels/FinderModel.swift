@@ -368,12 +368,11 @@ final class FinderModel {
         guard let parent = FileListing.parentPath(of: item),
             case let .success(items) = await directoryLoader(parent)
         else { return nil }
-        let name = FileListing.name(of: item)
-        return items.filter { Self.name($0.name, matches: name) }.min { $0.name < $1.name }
+        return Self.match(in: items, named: FileListing.name(of: item))
     }
 
     private func search(_ relative: String, under root: String) async -> RemoteFileEntry? {
-        let head = relative.split(separator: "/").first.map(String.init) ?? relative
+        let head = Self.firstComponent(of: relative)
         var folders = [root]
         var listings = 0
         for depth in 0..<3 {
@@ -387,10 +386,7 @@ final class FinderModel {
                 {
                     found.append(entry)
                 }
-                children += items.filter {
-                    $0.kind == .directory && !$0.name.hasPrefix(".")
-                        && !Self.searchSkippedFolders.contains($0.name)
-                }.map(\.path)
+                children += Self.searchableFolders(in: items)
             }
             if let newest = found.max(by: {
                 ($0.modified ?? .distantPast) < ($1.modified ?? .distantPast)
@@ -403,11 +399,28 @@ final class FinderModel {
     }
 
     private static let searchListingLimit = 160
-    private static let searchSkippedFolders: Set<String> = [
+    nonisolated private static let searchSkippedFolders: Set<String> = [
         "node_modules", "build", "dist", "target", "DerivedData", "Pods", "vendor",
     ]
 
-    private static func name(_ name: String, matches spelling: String) -> Bool {
+    nonisolated private static func match(
+        in items: [RemoteFileEntry], named spelling: String
+    ) -> RemoteFileEntry? {
+        items.filter { name($0.name, matches: spelling) }.min { $0.name < $1.name }
+    }
+
+    nonisolated private static func searchableFolders(in items: [RemoteFileEntry]) -> [String] {
+        items.filter {
+            $0.kind == .directory && !$0.name.hasPrefix(".")
+                && !searchSkippedFolders.contains($0.name)
+        }.map(\.path)
+    }
+
+    nonisolated private static func firstComponent(of relative: String) -> String {
+        relative.split(separator: "/").first.map(String.init) ?? relative
+    }
+
+    nonisolated private static func name(_ name: String, matches spelling: String) -> Bool {
         guard spelling.last == "…" else { return name == spelling }
         let stem = spelling.dropLast()
         return !stem.isEmpty && name.hasPrefix(stem)
