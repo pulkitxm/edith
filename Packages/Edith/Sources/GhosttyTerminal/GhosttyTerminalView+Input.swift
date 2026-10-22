@@ -443,10 +443,7 @@ extension GhosttyTerminalView {
     private func commandClickTarget(for event: NSEvent) -> String? {
         guard surface != nil, event.modifierFlags.contains(.command) else { return nil }
         if let hoveredLink { return hoveredLink }
-        guard let target = terminalTargetAtPointer(),
-            Self.linkTarget(
-                for: target, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
+        guard let target = terminalTargetAtPointer(), resolvedTarget(for: target) != nil
         else { return nil }
         return target
     }
@@ -763,13 +760,10 @@ extension GhosttyTerminalView {
             surface, point: local, flags: event.modifierFlags, escapeCapture: false, force: true)
         let link = hoveredLink ?? terminalTargetAtPointer()
         let menu = NSMenu()
-        if let link,
-            Self.linkTarget(
-                for: link, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
-        {
+        if let link, let target = resolvedTarget(for: link) {
             let open = menu.addItem(
-                withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
+                withTitle: target.openTitle, action: #selector(openContextLink(_:)),
+                keyEquivalent: "")
             open.target = self
             open.representedObject = link
             let copyLink = menu.addItem(

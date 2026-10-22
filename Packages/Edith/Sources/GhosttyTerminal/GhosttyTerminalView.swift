@@ -52,6 +52,7 @@ public final class GhosttyTerminalView: NSView {
     private(set) var configuredMouseReporting = true
     private var windowObservers: [NSObjectProtocol] = []
     var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
+    public var fileLinks: TerminalFileLinks?
 
     public override var isFlipped: Bool { false }
 

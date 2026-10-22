@@ -261,19 +261,10 @@ extension GhosttyTerminalView {
         allowsLocalFiles: Bool = true,
         fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)
     ) -> URL? {
-        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let wrappers: [(Character, Character)] = [("\"", "\""), ("'", "'"), ("<", ">")]
-        for wrapper in wrappers where value.first == wrapper.0 && value.last == wrapper.1 {
-            value.removeFirst()
-            value.removeLast()
-        }
-        while let last = value.last, ".,;!?".contains(last) { value.removeLast() }
+        let value = TerminalFileLinks.trimmed(rawValue)
         guard !value.isEmpty else { return nil }
 
-        let lowercase = value.lowercased()
-        if lowercase.hasPrefix("localhost:") || lowercase.hasPrefix("127.0.0.1:")
-            || lowercase.hasPrefix("[::1]:")
-        {
+        if TerminalFileLinks.isLoopbackAddress(value.lowercased()) {
             return URL(string: "http://\(value)")
         }
 
@@ -298,19 +289,20 @@ extension GhosttyTerminalView {
                 .appendingPathComponent(path).path
         }
 
-        if !fileExists(path) {
-            var components = path.split(separator: ":", omittingEmptySubsequences: false)
-            while components.count > 1, Int(components.last ?? "") != nil {
-                components.removeLast()
-                let candidate = components.joined(separator: ":")
-                if fileExists(candidate) {
-                    path = candidate
-                    break
-                }
-            }
-        }
-        guard fileExists(path) else { return nil }
-        return URL(fileURLWithPath: path).standardizedFileURL
+        guard let existing = TerminalFileLinks.withoutLocations(path).first(where: fileExists)
+        else { return nil }
+        return URL(fileURLWithPath: existing).standardizedFileURL
+    }
+
+    func resolvedTarget(for rawValue: String) -> TerminalLinkTarget? {
+        if let path = fileLinks?.path(for: rawValue) { return .file(path) }
+        guard
+            let url = Self.linkTarget(
+                for: rawValue, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks)
+        else { return nil }
+        if url.isFileURL, fileLinks != nil { return .file(url.path) }
+        return .url(url)
     }
 
     func openTerminalTarget(
@@ -327,17 +319,19 @@ extension GhosttyTerminalView {
             }
             return true
         }
-        guard
-            let url = Self.linkTarget(
-                for: rawValue, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks)
-        else {
-            return false
-        }
+        guard let target = resolvedTarget(for: rawValue) else { return false }
         commandClickOpenedTarget = true
-        let openResolvedURL = openResolvedURL
-        DispatchQueue.main.async {
-            openResolvedURL(url)
+        switch target {
+        case .url(let url):
+            let openResolvedURL = openResolvedURL
+            DispatchQueue.main.async {
+                openResolvedURL(url)
+            }
+        case .file(let path):
+            guard let reveal = fileLinks?.reveal else { return false }
+            DispatchQueue.main.async {
+                reveal(path)
+            }
         }
         return true
     }
