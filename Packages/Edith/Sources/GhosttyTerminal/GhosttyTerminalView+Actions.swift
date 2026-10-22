@@ -58,10 +58,15 @@ final class TerminalLinkHoverView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    func show(_ value: String?) {
+    func show(_ value: String?, revealsFile: Bool = false) {
         let value = value?.isEmpty == false ? value : nil
         label.stringValue = value ?? ""
-        setAccessibilityLabel(value.map { "Link \($0). Command-click to open." })
+        hint.stringValue = revealsFile ? "⌘ click to show in Files" : "⌘ click to open"
+        icon.image = NSImage(
+            systemSymbolName: revealsFile ? "folder" : "arrow.up.forward.square",
+            accessibilityDescription: nil)
+        let action = revealsFile ? "show it in Files" : "open"
+        setAccessibilityLabel(value.map { "Link \($0). Command-click to \(action)." })
         isHidden = value == nil
     }
 }
@@ -295,7 +300,9 @@ extension GhosttyTerminalView {
     }
 
     func resolvedTarget(for rawValue: String) -> TerminalLinkTarget? {
-        if let path = fileLinks?.path(for: rawValue) { return .file(path) }
+        if let path = fileLinks?.path(for: rawValue, reportedDirectory: currentDirectory) {
+            return .file(path)
+        }
         guard
             let url = Self.linkTarget(
                 for: rawValue, workingDirectory: currentDirectory,
@@ -303,6 +310,17 @@ extension GhosttyTerminalView {
         else { return nil }
         if url.isFileURL, fileLinks != nil { return .file(url.path) }
         return .url(url)
+    }
+
+    func resolvedPointerTarget(link: String?, word: String?) -> (String, TerminalLinkTarget)? {
+        let candidates: [String?] =
+            fileLinks == nil
+            ? [link ?? word]
+            : word?.contains(TerminalFileLinks.elision) == true ? [word, link] : [link, word]
+        for candidate in candidates.compactMap({ $0 }) {
+            if let target = resolvedTarget(for: candidate) { return (candidate, target) }
+        }
+        return nil
     }
 
     func openTerminalTarget(
@@ -319,7 +337,8 @@ extension GhosttyTerminalView {
             }
             return true
         }
-        guard let target = resolvedTarget(for: rawValue) else { return false }
+        guard let target = resolvedPointerTarget(link: rawValue, word: commandClickPointerWord)?.1
+        else { return false }
         commandClickOpenedTarget = true
         switch target {
         case .url(let url):
@@ -339,7 +358,17 @@ extension GhosttyTerminalView {
     func setHoveredLink(_ value: String?) {
         let value = value.flatMap { $0.isEmpty ? nil : $0 }
         hoveredLink = value
-        linkHoverView.show(value)
+        let target = value.flatMap { resolvedTarget(for: $0) }
+        linkHoverView.show(value, revealsFile: target.map(\.revealsFile) == true)
+        guard let value, fileLinks != nil, target.map(\.revealsFile) != true else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, hoveredLink == value,
+                let (link, target) = resolvedPointerTarget(
+                    link: value, word: terminalTargetAtPointer()),
+                target.revealsFile
+            else { return }
+            linkHoverView.show(link, revealsFile: true)
+        }
     }
 
     func setWorkingDirectory(_ value: String) {

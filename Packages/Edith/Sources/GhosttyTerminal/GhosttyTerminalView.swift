@@ -29,6 +29,7 @@ public final class GhosttyTerminalView: NSView {
     var terminalCursor = NSCursor.iBeam
     var mouseOverSurface = false
     var commandClickOpenedTarget = false
+    var commandClickPointerWord: String?
     var commandClickGesture = TerminalCommandClickGesture()
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)

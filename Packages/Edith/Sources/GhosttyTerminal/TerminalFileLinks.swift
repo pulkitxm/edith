@@ -10,23 +10,43 @@ enum TerminalLinkTarget: Equatable {
         case .file: "Show in Files"
         }
     }
+
+    var revealsFile: Bool {
+        if case .file = self { true } else { false }
+    }
+}
+
+public struct TerminalFileSystem {
+    public let fileExists: (String) -> Bool
+    public let contents: (String) -> [String]
+
+    public init(fileExists: @escaping (String) -> Bool, contents: @escaping (String) -> [String]) {
+        self.fileExists = fileExists
+        self.contents = contents
+    }
+
+    public static let local = TerminalFileSystem(
+        fileExists: { FileManager.default.fileExists(atPath: $0) },
+        contents: { (try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? [] })
 }
 
 public struct TerminalFileLinks {
+    public static let elision: Character = "…"
+
     public let directory: String
-    public let fileExists: ((String) -> Bool)?
+    public let fileSystem: TerminalFileSystem?
     public let reveal: (String) -> Void
 
     public init(
-        directory: String, fileExists: ((String) -> Bool)?,
+        directory: String, fileSystem: TerminalFileSystem?,
         reveal: @escaping (String) -> Void
     ) {
         self.directory = directory
-        self.fileExists = fileExists
+        self.fileSystem = fileSystem
         self.reveal = reveal
     }
 
-    public func path(for rawValue: String) -> String? {
+    public func path(for rawValue: String, reportedDirectory: String? = nil) -> String? {
         var value = Self.trimmed(rawValue)
         guard !value.isEmpty, !value.contains(where: \.isWhitespace) else { return nil }
         let lowercase = value.lowercased()
@@ -36,25 +56,82 @@ public struct TerminalFileLinks {
         } else if lowercase.contains("://") || Self.isLoopbackAddress(lowercase) {
             return nil
         }
-        let candidates = Self.withoutLocations(value)
-        guard let fileExists else {
-            guard let bare = candidates.last, Self.looksLikePath(bare) else { return nil }
-            return absolute(bare)
+        let leadingElided = value.first == Self.elision
+        if leadingElided {
+            value.removeFirst()
+            while value.first == "/" { value.removeFirst() }
         }
-        return candidates.compactMap { absolute($0) }.first(where: fileExists)
+        let trailingElided = value.last == Self.elision
+        if trailingElided { value.removeLast() }
+        guard !value.isEmpty, !value.contains(Self.elision) else { return nil }
+        let spellings = trailingElided ? [value] : Self.withoutLocations(value)
+        guard let fileSystem else {
+            guard let bare = spellings.last, Self.looksLikePath(bare),
+                let path = absolute(bare, base: directory, relative: leadingElided)
+            else { return nil }
+            return trailingElided ? path + String(Self.elision) : path
+        }
+        for base in bases(reportedDirectory: reportedDirectory, fileSystem: fileSystem) {
+            for spelling in spellings {
+                guard let path = absolute(spelling, base: base, relative: leadingElided)
+                else { continue }
+                if trailingElided {
+                    if let match = Self.prefixMatch(path, fileSystem: fileSystem) { return match }
+                } else if fileSystem.fileExists(path) {
+                    return path
+                }
+            }
+        }
+        return nil
     }
 
-    private var expandsHome: Bool { fileExists != nil }
-
-    private func absolute(_ value: String) -> String? {
-        if value == "~" || value.hasPrefix("~/") {
-            return expandsHome ? NSString(string: value).expandingTildeInPath : value
+    private func bases(reportedDirectory: String?, fileSystem: TerminalFileSystem) -> [String] {
+        var bases: [String] = []
+        for candidate in [reportedDirectory, directory].compactMap({ $0 }) {
+            let base = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard base.hasPrefix("/") else { continue }
+            let standardized = URL(fileURLWithPath: base).standardized.path
+            for folder in [standardized, Self.gitRoot(above: standardized, fileSystem: fileSystem)]
+            {
+                if let folder, !bases.contains(folder) { bases.append(folder) }
+            }
         }
-        if value.hasPrefix("/") { return URL(fileURLWithPath: value).standardized.path }
-        let base = directory.trimmingCharacters(in: .whitespacesAndNewlines)
+        return bases.isEmpty ? [""] : bases
+    }
+
+    private func absolute(_ value: String, base: String, relative: Bool) -> String? {
+        if !relative {
+            if value == "~" || value.hasPrefix("~/") {
+                return fileSystem == nil ? value : NSString(string: value).expandingTildeInPath
+            }
+            if value.hasPrefix("/") { return URL(fileURLWithPath: value).standardized.path }
+        }
+        let base = base.trimmingCharacters(in: .whitespacesAndNewlines)
         guard base.hasPrefix("/") else { return nil }
         return URL(fileURLWithPath: base, isDirectory: true)
             .appendingPathComponent(value).standardized.path
+    }
+
+    static func prefixMatch(_ path: String, fileSystem: TerminalFileSystem) -> String? {
+        let url = URL(fileURLWithPath: path)
+        let stem = url.lastPathComponent
+        let parent = url.deletingLastPathComponent().path
+        guard !stem.isEmpty,
+            let name = fileSystem.contents(parent).filter({ $0.hasPrefix(stem) }).sorted().first
+        else { return nil }
+        return URL(fileURLWithPath: parent).appendingPathComponent(name).path
+    }
+
+    static func gitRoot(above directory: String, fileSystem: TerminalFileSystem) -> String? {
+        var folder = directory
+        while true {
+            if fileSystem.fileExists((folder as NSString).appendingPathComponent(".git")) {
+                return folder == directory ? nil : folder
+            }
+            let parent = (folder as NSString).deletingLastPathComponent
+            guard !parent.isEmpty, parent != folder else { return nil }
+            folder = parent
+        }
     }
 
     static func trimmed(_ rawValue: String) -> String {
