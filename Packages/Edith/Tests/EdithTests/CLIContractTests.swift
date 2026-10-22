@@ -1008,7 +1008,7 @@ enum JSONContract {
         JSONCase("ed camera background", ["camera", "background", "blur", "--json"]),
         JSONCase("ed camera pause", ["camera", "pause", "--json"]),
         JSONCase("ed camera resume", ["camera", "resume", "--json"]),
-        JSONCase("ed camera audio", ["camera", "audio", "status", "--json"]),
+        JSONCase("ed camera audio", ["camera", "audio", "false", "--json"]),
         JSONCase("ed camera video", ["camera", "video", "/tmp/demo.mp4", "--json"]),
         JSONCase("ed camera play", ["camera", "play", "paused", "--json"]),
         JSONCase("ed camera freeze", ["camera", "freeze", "--json"]),

@@ -62,11 +62,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var referenceValue: CGImage?
     private var referenceAt: TimeInterval?
     private var recorder: VirtualCameraRecorder?
-    private var videoAudio: ((String, Double, Bool) -> Void)?
-    private var screenAudio: ((CMSampleBuffer) -> Void)?
-    private var stopAudio: (() -> Void)?
-    private var recordingAudioEnabled = false
-    private var pendingRecordingAudio = 0
+    private var sourceAudio: VirtualCameraSourceAudio?
 
     public init(
         state: VirtualCameraState, outputSize: CGSize, frameRate: Int = 30,
@@ -85,39 +81,36 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
 
     public var statistics: Statistics { lock.withLock { stats } }
 
-    public func setSourceAudio(
-        video: @escaping (String, Double, Bool) -> Void, screen: @escaping (CMSampleBuffer) -> Void,
-        stop: @escaping () -> Void
-    ) {
-        queue.async { [weak self] in
-            self?.videoAudio = video
-            self?.screenAudio = screen
-            self?.stopAudio = stop
-        }
-    }
-
-    public func appendRecordingAudio(_ buffer: AVAudioPCMBuffer, at time: TimeInterval) {
-        let accepted = lock.withLock {
-            guard recordingAudioEnabled, pendingRecordingAudio < 8 else { return false }
-            pendingRecordingAudio += 1
-            return true
-        }
-        guard accepted else { return }
-        queue.async { [weak self] in
-            guard let self else { return }
-            defer { self.lock.withLock { self.pendingRecordingAudio -= 1 } }
-            guard let recorder = self.recorder else { return }
-            do { try recorder.appendAudio(buffer, at: time) } catch {
-                self.updateStats { $0.failureMessage = error.localizedDescription }
-            }
-        }
-    }
-
-    public func startRecording(to url: URL, audio: Bool = false) throws {
+    public func startRecording(to url: URL) throws {
         try queue.sync {
             guard recorder == nil else { throw CocoaError(.fileWriteFileExists) }
+            let audio = state.media.audioEnabled && state.media.kind != .camera
             recorder = try VirtualCameraRecorder(url: url, size: outputSize, audio: audio)
-            lock.withLock { recordingAudioEnabled = audio }
+            sourceAudio = audio ? VirtualCameraSourceAudio() : nil
+        }
+    }
+
+    private func recordVideoAudio(path: String, time: Double, playing: Bool) {
+        guard let recorder, let sourceAudio else { return }
+        do {
+            for chunk in try sourceAudio.video(
+                path: path, time: time, playing: playing, now: clock())
+            {
+                try recorder.appendAudio(chunk.buffer, at: chunk.time)
+            }
+        } catch {
+            updateStats { $0.failureMessage = error.localizedDescription }
+        }
+    }
+
+    private func recordScreenAudio(_ sample: CMSampleBuffer) {
+        guard let recorder, let sourceAudio else { return }
+        do {
+            if let chunk = try sourceAudio.screen(sample, now: clock()) {
+                try recorder.appendAudio(chunk.buffer, at: chunk.time)
+            }
+        } catch {
+            updateStats { $0.failureMessage = error.localizedDescription }
         }
     }
 
@@ -129,7 +122,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
                     return
                 }
                 self.recorder = nil
-                self.lock.withLock { self.recordingAudioEnabled = false }
+                self.sourceAudio = nil
                 recorder.finish { continuation.resume(with: $0) }
             }
         }
@@ -166,7 +159,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             self.capture.stop()
             self.video.stop()
             self.screen.stop()
-            self.stopAudio?()
+            self.sourceAudio?.reset()
             self.stopPrivacyTimer()
             self.analyzer.reset()
             self.framer.reset()
@@ -241,7 +234,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     private func applyRunMode() {
-        stopAudio?()
+        sourceAudio?.reset()
         if state.privacy == .stopped {
             video.stop()
             screen.stop()
@@ -258,7 +251,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             video.stop()
             stopPrivacyTimer()
             screen.start(
-                state.media, size: outputSize, frameRate: frameRate, audio: screenAudio,
+                state.media, size: outputSize, frameRate: frameRate,
+                audio: { [weak self] sample in self?.recordScreenAudio(sample) },
                 failed: { [weak self] message in
                     self?.updateStats { $0.failureMessage = message }
                 }
@@ -276,7 +270,10 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
                 state.media, frameRate: frameRate,
                 failed: { [weak self] message in
                     self?.updateStats { $0.failureMessage = message }
-                }, audio: videoAudio
+                },
+                audio: { [weak self] path, time, playing in
+                    self?.recordVideoAudio(path: path, time: time, playing: playing)
+                }
             ) { [weak self] buffer in
                 self?.handleCapture(buffer, systemBackgroundActive: false)
             }

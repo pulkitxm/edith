@@ -10,7 +10,6 @@ struct VirtualCameraInspector: View {
     var body: some View {
         ScrollView {
             VStack(spacing: UIScale.pt(8)) {
-                meetingAudioControl
                 ForEach(VirtualCameraInspectorTab.allCases) { section in
                     let expanded = model.expandedInspectorSections.contains(section)
                     VStack(spacing: UIScale.pt(12)) {
@@ -37,29 +36,6 @@ struct VirtualCameraInspector: View {
         }
     }
 
-    private var meetingAudioControl: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack {
-                Text("Meeting audio").font(.edithText(.body))
-                Spacer()
-                Toggle(
-                    "Meeting audio",
-                    isOn: Binding(
-                        get: { model.state.audio.enabled },
-                        set: { model.performAudio(.enable($0)) })
-                )
-                .labelsHidden().toggleStyle(.switch).disabled(model.audioPending)
-            }
-            if let failure = model.snapshot?.audioStatus?.failure
-                ?? model.snapshot?.audioStatus?.sourceFailure
-            {
-                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
-    }
-
     @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {
         switch section {
         case .frame:
@@ -69,9 +45,6 @@ struct VirtualCameraInspector: View {
         case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
         case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
         case .output: VirtualCameraOutputPanel(model: model, dark: dark)
-        case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
-        case .voice: VirtualCameraAudioPanel(model: model, dark: dark, section: .voice)
-        case .devices: VirtualCameraAudioPanel(model: model, dark: dark, section: .devices)
         }
     }
 }

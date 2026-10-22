@@ -1082,7 +1082,7 @@ private extension VirtualCameraOperation {
             userInterface("Virtual Camera header", "pause behind a card", ["--style", "card"])
         case .resume:
             userInterface("Virtual Camera header", "go live again")
-        case .audio: userInterface("Meeting audio", "choose a voice effect", ["voice", "deep"])
+        case .audio: userInterface("Meeting options", "record source sound", ["true"])
         case .video: userInterface("Meeting controls", "choose a video file", ["demo.mp4"])
         case .play: userInterface("Meeting controls", "pause video playback", ["paused"])
         case .freeze: userInterface("Meeting controls", "freeze the meeting video")

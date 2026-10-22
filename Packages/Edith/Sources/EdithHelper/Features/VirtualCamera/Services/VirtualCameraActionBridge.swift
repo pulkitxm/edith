@@ -56,7 +56,7 @@ final class VirtualCameraActionBridge {
             runtime.isLive(at: Date()), let engine
         {
             switch runtime.request {
-            case .recordStart, .recordStop, .screenSources, .audio:
+            case .recordStart, .recordStop, .screenSources:
                 Task { @MainActor in
                     do {
                         let snapshot = try await engine.performRecording(runtime.request)

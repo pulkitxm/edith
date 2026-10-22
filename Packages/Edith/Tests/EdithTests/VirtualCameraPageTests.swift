@@ -77,22 +77,22 @@ import Testing
     @Test func multipleAccordionSectionsSurviveReopening() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
-        model.setInspectorExpanded(.audio, false)
-        model.setInspectorExpanded(.voice, true)
-        model.setInspectorExpanded(.devices, true)
-        model.setInspectorExpanded(.frame, true)
-        #expect(model.expandedInspectorSections == [.voice, .devices, .frame])
+        model.setInspectorExpanded(.frame, false)
+        model.setInspectorExpanded(.look, true)
+        model.setInspectorExpanded(.background, true)
+        model.setInspectorExpanded(.output, true)
+        #expect(model.expandedInspectorSections == [.look, .background, .output])
         let reopened = VirtualCameraPageModel(
             defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
-        #expect(reopened.tab == .frame)
-        #expect(reopened.expandedInspectorSections == [.voice, .devices, .frame])
-        reopened.setInspectorExpanded(.voice, false)
-        #expect(reopened.expandedInspectorSections == [.devices, .frame])
+        #expect(reopened.tab == .output)
+        #expect(reopened.expandedInspectorSections == [.look, .background, .output])
+        reopened.setInspectorExpanded(.look, false)
+        #expect(reopened.expandedInspectorSections == [.background, .output])
         let closed = VirtualCameraPageModel(
             defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
-        #expect(closed.expandedInspectorSections == [.devices, .frame])
-        closed.setInspectorExpanded(.devices, false)
-        closed.setInspectorExpanded(.frame, false)
+        #expect(closed.expandedInspectorSections == [.background, .output])
+        closed.setInspectorExpanded(.background, false)
+        closed.setInspectorExpanded(.output, false)
         let empty = VirtualCameraPageModel(
             defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
         #expect(empty.expandedInspectorSections.isEmpty)
@@ -123,18 +123,15 @@ import Testing
         var external = model.state
         external.composition.background.mode = .none
         external.media.audioEnabled = false
-        external.audio.enabled = true
         model.receive(
             VirtualCameraSnapshot(
                 enabled: true, helperRunning: true, extensionInstalled: false,
                 state: external))
         #expect(model.composition.background.mode == .none)
         #expect(!model.state.media.audioEnabled)
-        #expect(model.state.audio.enabled)
         model.setZoom(2)
         model.flushSave()
         #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
-        #expect(VirtualCameraStore.load(defaults).audio.enabled)
     }
 
     @Test func helperStatusDoesNotDiscardPendingWindowEdits() {
@@ -1001,24 +998,7 @@ enum VirtualCameraSyntheticStudio {
         let buffer = try #require(VirtualCameraPlaceholder.makeBuffer(width: 1280, height: 720))
         renderer.render(preview, into: buffer)
         model.showPreviewFrame(buffer)
-        model.update {
-            $0.audio.enabled = true
-            $0.audio.clips = [
-                MeetingAudioClip(name: "Good morning", path: "/tmp/demo-greeting.wav"),
-                MeetingAudioClip(name: "Thunder", path: "/tmp/demo-thunder.wav", speech: false),
-            ]
-        }
-        model.flushSave()
-        var meetingSnapshot = try #require(model.snapshot)
-        var audioStatus = MeetingAudioStatus()
-        audioStatus.running = true
-        meetingSnapshot.audioStatus = audioStatus
-        meetingSnapshot.state = model.state
-        model.injectForTesting(
-            snapshot: meetingSnapshot, sources: VirtualCameraPageModelTests.sources)
-        for tab in [
-            VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output, .audio,
-        ] {
+        for tab in VirtualCameraInspectorTab.allCases {
             for section in VirtualCameraInspectorTab.allCases {
                 model.setInspectorExpanded(section, section == tab)
             }
@@ -1031,16 +1011,13 @@ enum VirtualCameraSyntheticStudio {
         for dark in [true, false] {
             for (label, size, compact, zoom, controls) in [
                 ("meeting", CGSize(width: 1440, height: 900), false, 1.0, false),
-                ("audio", CGSize(width: 1440, height: 900), false, 1.0, true),
-                ("voice", CGSize(width: 1440, height: 1000), false, 1.0, true),
+                ("controls", CGSize(width: 1440, height: 900), false, 1.0, true),
                 ("compact", CGSize(width: 620, height: 720), true, 1.0, false),
                 ("zoom", CGSize(width: 1440, height: 1000), false, 1.3, true),
             ] {
                 UIScale.apply(zoom)
                 for section in VirtualCameraInspectorTab.allCases {
-                    model.setInspectorExpanded(
-                        section,
-                        label == "voice" ? [.voice, .devices].contains(section) : section == .audio)
+                    model.setInspectorExpanded(section, section == .frame)
                 }
                 try renderPage(
                     model, preview: preview, renderer: renderer,
