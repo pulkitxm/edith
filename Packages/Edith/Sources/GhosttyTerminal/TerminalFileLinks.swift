@@ -66,10 +66,7 @@ public struct TerminalFileLinks {
         guard !value.isEmpty, !value.contains(Self.elision) else { return nil }
         let spellings = trailingElided ? [value] : Self.withoutLocations(value)
         guard let fileSystem else {
-            guard let bare = spellings.last, Self.looksLikePath(bare),
-                let path = absolute(bare, base: directory, relative: leadingElided)
-            else { return nil }
-            return trailingElided ? path + String(Self.elision) : path
+            return unverified(spellings.last, leading: leadingElided, trailing: trailingElided)
         }
         for base in bases(reportedDirectory: reportedDirectory, fileSystem: fileSystem) {
             for spelling in spellings {
@@ -82,7 +79,19 @@ public struct TerminalFileLinks {
                 }
             }
         }
-        return nil
+        guard let bare = spellings.last, leadingElided || !Self.isAbsolute(bare) else { return nil }
+        return unverified(bare, leading: leadingElided, trailing: trailingElided)
+    }
+
+    private func unverified(_ bare: String?, leading: Bool, trailing: Bool) -> String? {
+        guard let bare, Self.looksLikePath(bare),
+            let path = absolute(bare, base: directory, relative: leading)
+        else { return nil }
+        return trailing ? path + String(Self.elision) : path
+    }
+
+    static func isAbsolute(_ value: String) -> Bool {
+        value.hasPrefix("/") || value == "~" || value.hasPrefix("~/")
     }
 
     private func bases(reportedDirectory: String?, fileSystem: TerminalFileSystem) -> [String] {

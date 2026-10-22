@@ -352,19 +352,65 @@ final class FinderModel {
         return home.hasPrefix("/") || FileListing.isWindowsPath(home) ? home : nil
     }
 
-    func locate(_ target: String) async -> RemoteFileEntry? {
+    func locate(_ target: String, under root: String? = nil) async -> RemoteFileEntry? {
         if !session.isLocal, resolvedHome == nil, target == "~" || target.hasPrefix("~/") {
             resolvedHome = await remoteHome()
         }
         let item = expandingHome(target)
+        if let entry = await entry(at: item) { return entry }
+        guard let root = root.map({ URL(fileURLWithPath: $0).standardized.path }),
+            item.hasPrefix(root + "/")
+        else { return nil }
+        return await search(String(item.dropFirst(root.count + 1)), under: root)
+    }
+
+    private func entry(at item: String) async -> RemoteFileEntry? {
         guard let parent = FileListing.parentPath(of: item),
             case let .success(items) = await directoryLoader(parent)
         else { return nil }
         let name = FileListing.name(of: item)
-        guard name.last == "…" else { return items.first { $0.name == name } }
-        let stem = name.dropLast()
-        return items.filter { !stem.isEmpty && $0.name.hasPrefix(stem) }
-            .min { $0.name < $1.name }
+        return items.filter { Self.name($0.name, matches: name) }.min { $0.name < $1.name }
+    }
+
+    private func search(_ relative: String, under root: String) async -> RemoteFileEntry? {
+        let head = relative.split(separator: "/").first.map(String.init) ?? relative
+        var folders = [root]
+        var listings = 0
+        for depth in 0..<3 {
+            var children: [String] = []
+            var found: [RemoteFileEntry] = []
+            for folder in folders where listings < Self.searchListingLimit {
+                listings += 1
+                guard case let .success(items) = await directoryLoader(folder) else { continue }
+                if depth > 0, items.contains(where: { Self.name($0.name, matches: head) }),
+                    let entry = await entry(at: folder + "/" + relative)
+                {
+                    found.append(entry)
+                }
+                children += items.filter {
+                    $0.kind == .directory && !$0.name.hasPrefix(".")
+                        && !Self.searchSkippedFolders.contains($0.name)
+                }.map(\.path)
+            }
+            if let newest = found.max(by: {
+                ($0.modified ?? .distantPast) < ($1.modified ?? .distantPast)
+            }) {
+                return newest
+            }
+            folders = children
+        }
+        return nil
+    }
+
+    private static let searchListingLimit = 160
+    private static let searchSkippedFolders: Set<String> = [
+        "node_modules", "build", "dist", "target", "DerivedData", "Pods", "vendor",
+    ]
+
+    private static func name(_ name: String, matches spelling: String) -> Bool {
+        guard spelling.last == "…" else { return name == spelling }
+        let stem = spelling.dropLast()
+        return !stem.isEmpty && name.hasPrefix(stem)
     }
 
     func reveal(entry: RemoteFileEntry) async {

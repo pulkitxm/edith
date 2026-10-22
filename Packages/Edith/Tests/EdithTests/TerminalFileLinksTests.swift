@@ -15,7 +15,8 @@ import Testing
         #expect(links.path(for: "(`Sources/App.swift:12`).") == file)
         #expect(links.path(for: file) == file)
         #expect(links.path(for: "file://\(file)") == file)
-        #expect(links.path(for: "Sources/Missing.swift") == nil)
+        #expect(links.path(for: "Sources/Missing.swift") == "/Users/me/repo/Sources/Missing.swift")
+        #expect(links.path(for: "/Users/me/repo/Sources/Missing.swift") == nil)
     }
 
     @Test func aLocalAgentExpandsHomeOnThisMac() {
