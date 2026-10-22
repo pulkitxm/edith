@@ -39,8 +39,6 @@
 	<string>Edith frames your camera for Edith Camera, the virtual camera video apps can pick, and shows a preview in the notch so you can check yourself before a call.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Edith mixes your microphone with saved speech, voice effects and media audio for meetings, and records snippets when you choose Record mic.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Edith needs this to scan an external drive you pick in the Cleaner.</string>
 	<key>NSUserNotificationAlertStyle</key>
