@@ -173,7 +173,6 @@ struct HerdrSessionView: View {
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
         .task(id: filesRequest) { prepareFilesIfNeeded() }
         .task(id: fileLinksRequest) { configureFileLinks() }
-        .onDisappear { tab.holder.fileLinks = nil }
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
         }
@@ -358,7 +357,7 @@ struct HerdrSessionView: View {
         let onSetView = onSetView
         tab.holder.fileLinks = TerminalFileLinks(
             directory: directory,
-            fileExists: isLocal ? { FileManager.default.fileExists(atPath: $0) } : nil,
+            fileSystem: isLocal ? .local : nil,
             reveal: { path in
                 Task { @MainActor in
                     guard

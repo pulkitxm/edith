@@ -108,6 +108,8 @@ import Testing
             }, freeSpaceLoader: { _ in nil })
 
         #expect(await finder.locate("/srv/repo/src/other.rs") == nil)
+        #expect(await finder.locate("/srv/repo/src/ma…")?.path == "/srv/repo/src/main.rs")
+        #expect(await finder.locate("/srv/repo/src/zz…") == nil)
         let entry = try #require(await finder.locate("/srv/repo/src/main.rs"))
         #expect(finder.path == "/srv/repo")
         await finder.reveal(entry: entry)
@@ -115,7 +117,7 @@ import Testing
         #expect(finder.path == "/srv/repo/src")
         #expect(finder.selection == ["/srv/repo/src/main.rs"])
         #expect(finder.scrollTarget == "/srv/repo/src/main.rs")
-        #expect(listed == ["/srv/repo/src", "/srv/repo/src", "/srv/repo/src"])
+        #expect(listed == Array(repeating: "/srv/repo/src", count: 5))
         finder.stopLoading()
     }
 

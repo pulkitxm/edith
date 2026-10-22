@@ -765,6 +765,7 @@ final class HerdrStore {
 
     func reattach(_ id: String) {
         detachedTabs[id]?.holder.stop()
+        detachedTabs[id]?.holder.fileLinks = nil
         detachedTabs[id]?.quinjet.stop()
         detachedTabs[id]?.files.stop()
         detachedTabs.removeValue(forKey: id)
@@ -1497,6 +1498,7 @@ final class HerdrStore {
         unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
         sessions[index].files.stop()
+        sessions[index].holder.fileLinks = nil
         sessions.remove(at: index)
         detachFromLayout(id)
     }

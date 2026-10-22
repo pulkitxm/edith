@@ -361,7 +361,10 @@ final class FinderModel {
             case let .success(items) = await directoryLoader(parent)
         else { return nil }
         let name = FileListing.name(of: item)
-        return items.first { $0.name == name }
+        guard name.last == "…" else { return items.first { $0.name == name } }
+        let stem = name.dropLast()
+        return items.filter { !stem.isEmpty && $0.name.hasPrefix(stem) }
+            .min { $0.name < $1.name }
     }
 
     func reveal(entry: RemoteFileEntry) async {

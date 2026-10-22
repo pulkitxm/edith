@@ -63,6 +63,7 @@ enum HerdrSpacePaneContent {
     @MainActor
     func stop() {
         holder.stop()
+        holder.fileLinks = nil
         if case let .agent(tab) = self {
             tab.quinjet.stop()
             tab.files.stop()
