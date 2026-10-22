@@ -67,7 +67,7 @@ struct CameraFreezeCommand: AsyncParsableCommand {
             source when you want to return to live video.
 
             Changes the saved camera privacy state through the running Edith helper.
-            Does not disable your meeting microphone or remove the camera source.
+            Does not remove the camera source.
 
             ed camera freeze --json
             """)
@@ -101,6 +101,31 @@ struct CameraMirrorCommand: AsyncParsableCommand {
         try await execute {
             try await CameraCLI.perform(
                 .mirrorOutput(try ConfigValueParser.boolean(enabled)), json: json)
+        }
+    }
+}
+
+struct CameraAudioCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "audio", abstract: "Record the sound of a video or screen source.",
+        discussion: """
+            Sets whether camera recordings include the sound of the selected video
+            file or shared screen. Camera sources never carry sound, and nothing is
+            sent to meeting apps.
+
+            Changes the saved source setting through the running Edith helper.
+            Recordings already in progress keep the setting they started with.
+
+            ed camera audio true --json
+            """)
+
+    @Argument(help: "true or false.") var enabled: String
+    @Flag(name: .long, help: "Emit JSON.") var json = false
+
+    func run() async throws {
+        try await execute {
+            try await CameraCLI.perform(
+                .sourceAudio(try ConfigValueParser.boolean(enabled)), json: json)
         }
     }
 }

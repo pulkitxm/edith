@@ -59,8 +59,6 @@ final class VirtualCameraEngine {
     private let previewBus: VirtualCameraPreviewBus
     private var recordingPath: String?
     private var recordingFinishing = false
-    private let audioMixer = MeetingAudioMixer()
-    private var audioBusy = false
 
     var streaming: Bool { streamingRoute != nil }
 
@@ -82,18 +80,9 @@ final class VirtualCameraEngine {
         pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: format.width, height: format.height),
             frameRate: format.frameRate)
-        let mixer = audioMixer
-        pipeline.setSourceAudio(
-            video: { mixer.syncVideoAudio(path: $0, time: $1, playing: $2) },
-            screen: { mixer.appendScreenAudio($0) },
-            stop: { mixer.stopSourceAudio() })
-        mixer.setMixedOutput { [weak pipeline] buffer, time in
-            pipeline?.appendRecordingAudio(buffer, at: time)
-        }
     }
 
     func start() {
-        audioMixer.configure(state.audio)
         stateToken = IPC.observe(
             IPC.Name.virtualCameraStateChanged,
             info: { [weak self] info in
@@ -124,7 +113,6 @@ final class VirtualCameraEngine {
     }
 
     func shutdown() {
-        audioMixer.shutdown()
         if recordingPath != nil {
             Task { [pipeline] in _ = try? await pipeline.stopRecording() }
             recordingPath = nil
@@ -145,7 +133,6 @@ final class VirtualCameraEngine {
         guard next != state else { return }
         let outputChanged = next.output != state.output
         state = next
-        audioMixer.configure(state.audio)
         pipeline.update(state: effectiveState())
         if outputChanged {
             refreshExtension()
@@ -158,7 +145,11 @@ final class VirtualCameraEngine {
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
         guard request.changesState else { return snapshot() }
         if case .pause(.stopped, _) = request, recordingPath != nil {
-            throw MeetingAudioLibrary.error("Stop the recording before stopping the camera.")
+            throw NSError(
+                domain: "MeetingRecording", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Stop the recording before stopping the camera."
+                ])
         }
         if request == .retry { stopStreaming() }
         var next = state
@@ -183,18 +174,6 @@ final class VirtualCameraEngine {
     }
 
     func performRecording(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
-        if case .audio(let request) = request {
-            guard !audioBusy else {
-                throw MeetingAudioLibrary.error("An audio change is still in progress.")
-            }
-            audioBusy = true
-            defer { audioBusy = false }
-            state.audio = try await audioMixer.perform(request, state: state.audio)
-            VirtualCameraStore.save(state)
-            VirtualCameraStore.announceChange(from: "helper", state: state)
-            publishIfChanged()
-            return snapshot(message: "Meeting audio updated.")
-        }
         guard !recordingFinishing else { throw CocoaError(.fileWriteUnknown) }
         switch request {
         case .screenSources:
@@ -208,8 +187,7 @@ final class VirtualCameraEngine {
                     domain: "MeetingRecording", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Choose Live before recording."])
             }
-            try pipeline.startRecording(
-                to: URL(fileURLWithPath: path), audio: audioMixer.status.running)
+            try pipeline.startRecording(to: URL(fileURLWithPath: path))
             recordingPath = path
             if !streaming { startRecordingPreview() }
             publishIfChanged()
@@ -241,7 +219,7 @@ final class VirtualCameraEngine {
         let statistics = pipeline.statistics
         let sources = VirtualCameraDevices.sources()
         let fallbackSource = sources.first { $0.id == state.sourceID } ?? sources.first
-        var result = VirtualCameraSnapshot(
+        return VirtualCameraSnapshot(
             enabled: true, helperRunning: true, extensionInstalled: edithInstalled,
             obsAvailable: obsInstalled, route: route, extensionBuild: extensionStatus?.build,
             clients: clients(), live: streaming, framesPerSecond: statistics.framesPerSecond,
@@ -251,8 +229,6 @@ final class VirtualCameraEngine {
             cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
             systemBackgroundActive: statistics.systemBackgroundActive,
             state: state, message: message, recordingPath: recordingPath)
-        result.audioStatus = audioMixer.status
-        return result
     }
 
     private func clients() -> [VirtualCameraClient] {
