@@ -20,6 +20,9 @@ final class TerminalSessionHolder {
     @ObservationIgnored private var swiftTermView: EdithTerminalView?
     @ObservationIgnored private var oscHandlers: [Int: @MainActor (String) -> Void] = [:]
     @ObservationIgnored var onExit: (@MainActor (Int32?) -> Void)?
+    @ObservationIgnored var fileLinks: TerminalFileLinks? {
+        didSet { ghosttyView?.fileLinks = fileLinks }
+    }
     private(set) var generation = 0
     private(set) var started = false
     private(set) var exitMessage: String?
@@ -165,6 +168,7 @@ final class TerminalSessionHolder {
             return ghosttyView
         }
         let view = GhosttyTerminalView(launch: launch, theme: theme)
+        view.fileLinks = fileLinks
         let viewGeneration = generation
         view.onClose = { [weak self, weak view] exitCode in
             Task { @MainActor in
