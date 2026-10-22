@@ -443,12 +443,7 @@ extension GhosttyTerminalView {
     private func commandClickTarget(for event: NSEvent) -> String? {
         guard surface != nil, event.modifierFlags.contains(.command) else { return nil }
         if let hoveredLink { return hoveredLink }
-        guard let target = terminalTargetAtPointer(),
-            Self.linkTarget(
-                for: target, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
-        else { return nil }
-        return target
+        return resolvedPointerTarget(link: nil, word: terminalTargetAtPointer())?.0
     }
 
     public enum CapturedPointerDelivery: Equatable {
@@ -525,9 +520,12 @@ extension GhosttyTerminalView {
             return
         }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
-        let target = hoveredLink ?? terminalTargetAtPointer()
+        let word = terminalTargetAtPointer()
+        let target = resolvedPointerTarget(link: hoveredLink, word: word)?.0 ?? hoveredLink ?? word
         commandClickOpenedTarget = false
+        commandClickPointerWord = word
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+        commandClickPointerWord = nil
         selectionMouseActive = false
         if !programOwnsMouseGesture { copyTerminalSelection(nil) }
         programOwnsMouseGesture = false
@@ -761,15 +759,13 @@ extension GhosttyTerminalView {
         let local = convert(event.locationInWindow, from: nil)
         sendPointerPosition(
             surface, point: local, flags: event.modifierFlags, escapeCapture: false, force: true)
-        let link = hoveredLink ?? terminalTargetAtPointer()
         let menu = NSMenu()
-        if let link,
-            Self.linkTarget(
-                for: link, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
+        if case let (link, target)? = resolvedPointerTarget(
+            link: hoveredLink, word: terminalTargetAtPointer())
         {
             let open = menu.addItem(
-                withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
+                withTitle: target.openTitle, action: #selector(openContextLink(_:)),
+                keyEquivalent: "")
             open.target = self
             open.representedObject = link
             let copyLink = menu.addItem(

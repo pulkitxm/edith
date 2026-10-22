@@ -29,6 +29,7 @@ public final class GhosttyTerminalView: NSView {
     var terminalCursor = NSCursor.iBeam
     var mouseOverSurface = false
     var commandClickOpenedTarget = false
+    var commandClickPointerWord: String?
     var commandClickGesture = TerminalCommandClickGesture()
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)
@@ -52,6 +53,7 @@ public final class GhosttyTerminalView: NSView {
     private(set) var configuredMouseReporting = true
     private var windowObservers: [NSObjectProtocol] = []
     var openResolvedURL: (URL) -> Void = { _ = NSWorkspace.shared.open($0) }
+    public var fileLinks: TerminalFileLinks?
 
     public override var isFlipped: Bool { false }
 

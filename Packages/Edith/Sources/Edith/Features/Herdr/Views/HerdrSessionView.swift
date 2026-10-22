@@ -172,6 +172,7 @@ struct HerdrSessionView: View {
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
         .task(id: filesRequest) { prepareFilesIfNeeded() }
+        .task(id: fileLinksRequest) { configureFileLinks() }
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
         }
@@ -335,6 +336,45 @@ struct HerdrSessionView: View {
         guard tab.showsFiles else { return }
         tab.files.prepare(
             directory: agent.cwd, isLocal: agent.machineIsLocal, machine: tab.machine)
+    }
+
+    private var fileLinksRequest: String {
+        "\(tab.id)|\(agent.cwd)|\(agent.machineIsLocal)|\(agent.isTerminal)|\(tab.machine?.id.uuidString ?? "")"
+    }
+
+    private func configureFileLinks() {
+        guard !agent.isTerminal else {
+            tab.holder.fileLinks = nil
+            return
+        }
+        let files = tab.files
+        let split = tab.split
+        let id = tab.id
+        let machine = tab.machine
+        let directory = agent.cwd
+        let isLocal = agent.machineIsLocal
+        let store = store
+        let onSetView = onSetView
+        tab.holder.fileLinks = TerminalFileLinks(
+            directory: directory,
+            fileSystem: isLocal ? .local : nil,
+            reveal: { path in
+                Task { @MainActor in
+                    guard
+                        let entry = await files.locate(
+                            path, directory: directory, isLocal: isLocal, machine: machine)
+                    else { return }
+                    split.select(.files)
+                    let view: HerdrAgentView =
+                        store.views(for: id).contains(.split) ? .split : .files
+                    if let onSetView {
+                        onSetView(view)
+                    } else {
+                        store.setView(view, for: id)
+                    }
+                    await files.reveal(entry)
+                }
+            })
     }
 
     private var filesPane: some View {

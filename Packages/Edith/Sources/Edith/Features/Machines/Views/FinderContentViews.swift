@@ -59,7 +59,7 @@ struct FinderIconView: View {
                     }
                     .padding(UIScale.pt(16))
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target else { return }
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo(target, anchor: .center)
@@ -193,7 +193,7 @@ struct FinderListView: View {
                         }
                     }
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target else { return }
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo(target, anchor: .center)

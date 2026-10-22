@@ -66,6 +66,121 @@ import Testing
         #expect(files.finder?.session.id == other.id)
     }
 
+    @Test func aLocalAgentRevealsAFileInsideItsFolder() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-reveal-\(UUID().uuidString)")
+        let sources = root.appendingPathComponent("Sources")
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: sources.appendingPathComponent("App.swift"))
+        let files = Self.session()
+
+        let entry = try #require(
+            await files.locate(
+                sources.appendingPathComponent("App.swift").path, directory: root.path,
+                isLocal: true, machine: nil))
+        #expect(files.finder?.path == root.path)
+        await files.reveal(entry)
+
+        #expect(files.finder?.path == sources.path)
+        #expect(files.finder?.selection == [entry.path])
+        #expect(files.finder?.scrollTarget == entry.path)
+        #expect(
+            await files.locate(
+                sources.appendingPathComponent("Missing.swift").path, directory: root.path,
+                isLocal: true, machine: nil) == nil)
+        files.stop()
+    }
+
+    @Test func aPathPrintedFromARepoInsideTheAgentFolderIsFoundThere() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edith-search-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let relative = "Packages/Kit/Services/Collector.swift"
+        for (repo, age) in [("old-tree", 3_600.0), ("new-tree", 0), ("node_modules/x", -60)] {
+            let file = root.appendingPathComponent("\(repo)/\(relative)")
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: file)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: file.path)
+        }
+        let files = Self.session()
+
+        let entry = try #require(
+            await files.locate(
+                root.appendingPathComponent(relative).path, directory: root.path + "/",
+                isLocal: true, machine: nil))
+        #expect(entry.path == root.appendingPathComponent("new-tree/\(relative)").path)
+        #expect(
+            await files.locate(
+                root.appendingPathComponent("Packages/Kit/Missing.swift").path,
+                directory: root.path, isLocal: true, machine: nil) == nil)
+        files.stop()
+    }
+
+    @Test func aRemoteSearchStaysInsideTheAgentFolder() async {
+        let machine = Machine(name: "tuf", host: "tuf.example")
+        let tree: [String: [RemoteFileEntry]] = [
+            "/srv": [
+                RemoteFileEntry(name: "api", path: "/srv/api", kind: .directory, sizeBytes: 0),
+                RemoteFileEntry(
+                    name: ".cache", path: "/srv/.cache", kind: .directory, sizeBytes: 0),
+            ],
+            "/srv/api": [
+                RemoteFileEntry(name: "src", path: "/srv/api/src", kind: .directory, sizeBytes: 0)
+            ],
+            "/srv/api/src": [
+                RemoteFileEntry(
+                    name: "main.rs", path: "/srv/api/src/main.rs", kind: .file, sizeBytes: 1)
+            ],
+        ]
+        var listed: [String] = []
+        let finder = FinderModel(
+            session: MachineSession(machine: machine, local: false, observesWakeRequests: false),
+            path: "/srv",
+            directoryLoader: { path in
+                listed.append(path)
+                return .success(tree[path] ?? [])
+            }, freeSpaceLoader: { _ in nil })
+
+        #expect(
+            await finder.locate("/srv/src/main.rs", under: "/srv")?.path == "/srv/api/src/main.rs")
+        #expect(await finder.locate("/srv/src/main.rs") == nil)
+        #expect(await finder.locate("/etc/src/main.rs", under: "/srv") == nil)
+        #expect(!listed.contains("/srv/.cache"))
+        finder.stopLoading()
+    }
+
+    @Test func aRemoteFileIsFoundThroughItsMachineListing() async throws {
+        let machine = Machine(name: "tuf", host: "tuf.example")
+        var listed: [String] = []
+        let finder = FinderModel(
+            session: MachineSession(machine: machine, local: false, observesWakeRequests: false),
+            path: "/srv/repo",
+            directoryLoader: { path in
+                listed.append(path)
+                guard path == "/srv/repo/src" else { return .success([]) }
+                return .success([
+                    RemoteFileEntry(
+                        name: "main.rs", path: "/srv/repo/src/main.rs", kind: .file, sizeBytes: 1)
+                ])
+            }, freeSpaceLoader: { _ in nil })
+
+        #expect(await finder.locate("/srv/repo/src/other.rs") == nil)
+        #expect(await finder.locate("/srv/repo/src/ma…")?.path == "/srv/repo/src/main.rs")
+        #expect(await finder.locate("/srv/repo/src/zz…") == nil)
+        let entry = try #require(await finder.locate("/srv/repo/src/main.rs"))
+        #expect(finder.path == "/srv/repo")
+        await finder.reveal(entry: entry)
+
+        #expect(finder.path == "/srv/repo/src")
+        #expect(finder.selection == ["/srv/repo/src/main.rs"])
+        #expect(finder.scrollTarget == "/srv/repo/src/main.rs")
+        #expect(listed == Array(repeating: "/srv/repo/src", count: 5))
+        finder.stopLoading()
+    }
+
     private static func session() -> HerdrFilesSession {
         HerdrFilesSession { id in
             MachineSession(
