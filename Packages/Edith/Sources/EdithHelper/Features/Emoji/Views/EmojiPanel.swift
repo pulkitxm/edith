@@ -81,7 +81,8 @@ final class EmojiPanel: NSObject, NSWindowDelegate {
         }
         if panel == nil { makePanel() }
         hosting?.rootView = AnyView(
-            EmojiPanelView(store: store, onDismiss: { [weak self] in self?.hide() }))
+            EmojiPanelView(store: store, onDismiss: { [weak self] in self?.hide() })
+                .themedControls())
         hosting?.layoutSubtreeIfNeeded()
     }
 

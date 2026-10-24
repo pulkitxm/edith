@@ -75,7 +75,11 @@ public struct HerdrHooksSnapshot: Codable, Equatable, Sendable {
     }
 
     public func armed(for agentID: String) -> HerdrAgentHook? {
-        hooks.first { $0.agentID == agentID && !$0.phase.settled }
+        armedHooks(for: agentID).first
+    }
+
+    public func armedHooks(for agentID: String) -> [HerdrAgentHook] {
+        hooks.filter { $0.agentID == agentID && !$0.phase.settled }
     }
 
     public func latestSettled(for agentID: String) -> HerdrAgentHook? {

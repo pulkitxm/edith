@@ -700,7 +700,7 @@ struct ExtensionSettingsSheet: View {
         case "machines": 420
         case "lidAwake": 400
         case "music": 460
-        case "focusDim", "colorPicker", "keystrokeHighlight": 430
+        case "focusDim", "hinge", "colorPicker", "keystrokeHighlight": 430
         case "system": 500
         case "presenter": 580
         default: 620
@@ -1094,6 +1094,7 @@ struct ExtensionDetailRows: View {
             case .lidAwake: LidAwakeRows()
             case .studio: StudioRows()
             case .latex: LaTeXRows()
+            case .socialManager: SocialManagerRows()
             case .timeLapse: TimeLapseRows()
             case .music:
                 MusicRows()
@@ -1106,6 +1107,7 @@ struct ExtensionDetailRows: View {
             case .clipboard: ClipboardRows()
             case .keystrokeHighlight: KeystrokeHighlightRows()
             case .focusDim: FocusDimRows()
+            case .hinge: HingeRows()
             case .windowSweaters: WindowSweatersRows()
             case .presenter: PresenterRows()
             case .colorPicker: ColorPickerRows()
@@ -1562,7 +1564,7 @@ private struct ExtensionPermissionSheet: View {
                     .foregroundStyle(.tint)
                     .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     .background(
-                        Color.accentColor.opacity(0.12),
+                        Color.themeAccent.opacity(0.12),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Enable \(request.entry.title)")
@@ -1661,7 +1663,7 @@ private struct ExtensionPermissionSheet: View {
         }
         .padding(UIScale.pt(14))
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.panel,
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {
@@ -1688,6 +1690,32 @@ private struct ExtensionPermissionSheet: View {
         } catch {
             actionError = error.localizedDescription
         }
+    }
+}
+
+private struct ClaudeQuotaAccountSelectionRow: View {
+    @AppStorage(MenuBarLimits.accountSelectionKey, store: SharedDefaults.store) private
+        var selectedID = ""
+    @State private var accounts: [ClaudeAccountLimits] = []
+
+    var body: some View {
+        Group {
+            if !accounts.isEmpty {
+                Picker("Menu bar account", selection: $selectedID) {
+                    Text("First account").tag("")
+                    ForEach(accounts) { Text($0.name).tag($0.id.uuidString) }
+                }
+                .presenterCover(.usage)
+            }
+        }
+        .pageTask {
+            for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
+            {
+                guard !Task.isCancelled else { return }
+                accounts = snapshot.claudeAccounts
+            }
+        }
+        .onChange(of: selectedID) { IPC.post(IPC.Name.settingsChanged) }
     }
 }
 
@@ -1828,6 +1856,7 @@ private struct UsageRows: View {
                 )
                 if claudeEnabled {
                     ClaudeStatusLineRow()
+                    ClaudeQuotaAccountSelectionRow()
                 }
                 Toggle(
                     "Codex limits",
@@ -2426,7 +2455,7 @@ private struct LimitWindowChipsRow: View {
         HStack {
             Text(title)
             Spacer()
-            ForEach(MenuBarLimits.slots(for: provider), id: \.self) { slot in
+            ForEach(MenuBarLimits.menuBarSlots(for: provider), id: \.self) { slot in
                 Toggle(slot.settingsLabel(for: provider), isOn: binding(for: slot))
                     .toggleStyle(.button)
             }
@@ -2440,7 +2469,7 @@ private struct LimitWindowChipsRow: View {
                 var current = Set(MenuBarLimits.parseSelection(raw, provider: provider))
                 if on { current.insert(slot) } else { current.remove(slot) }
                 raw = MenuBarLimits.encodeSelection(
-                    MenuBarLimits.slots(for: provider).filter(current.contains))
+                    MenuBarLimits.menuBarSlots(for: provider).filter(current.contains))
             })
     }
 }

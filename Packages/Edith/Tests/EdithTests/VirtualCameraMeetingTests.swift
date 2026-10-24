@@ -12,6 +12,59 @@ struct VirtualCameraMeetingTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(
             "meeting-av-\(UUID()).mp4")
         defer { try? FileManager.default.removeItem(at: url) }
+        try await Self.writeTone(to: url)
+        let asset = AVURLAsset(url: url)
+        #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+        let audio = try AVAudioFile(forReading: url)
+        #expect(Double(audio.length) / audio.processingFormat.sampleRate > 0.8)
+        #expect(try Self.loudness(of: url) > 0.05)
+    }
+
+    @Test func recordsTheSoundOfAVideoSource() async throws {
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meeting-source-\(UUID()).mp4")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meeting-sound-\(UUID()).mp4")
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: url)
+        }
+        try await Self.writeTone(to: source)
+        var state = VirtualCameraState()
+        state.media = VirtualCameraMedia(kind: .video, path: source.path, audioEnabled: true)
+        let pipeline = VirtualCameraPipeline(
+            state: state, outputSize: CGSize(width: 320, height: 180))
+        pipeline.start { _ in }
+        try pipeline.startRecording(to: url)
+        try await Task.sleep(for: .milliseconds(900))
+        _ = try await pipeline.stopRecording()
+        pipeline.stop()
+        let asset = AVURLAsset(url: url)
+        #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(try Self.loudness(of: url) > 0.05)
+    }
+
+    @Test func cameraRecordingsHaveNoAudioTrack() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meeting-silent-\(UUID()).mp4")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var state = VirtualCameraState()
+        state.privacy = .card
+        state.media.audioEnabled = true
+        let pipeline = VirtualCameraPipeline(
+            state: state, outputSize: CGSize(width: 320, height: 180))
+        pipeline.start { _ in }
+        try pipeline.startRecording(to: url)
+        try await Task.sleep(for: .milliseconds(400))
+        _ = try await pipeline.stopRecording()
+        pipeline.stop()
+        let asset = AVURLAsset(url: url)
+        #expect(try await asset.loadTracks(withMediaType: .audio).isEmpty)
+        #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+    }
+
+    private static func writeTone(to url: URL) async throws {
         let pool = try #require(VirtualCameraPipeline.makePool(width: 320, height: 180))
         var raw: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pool, &raw)
@@ -38,19 +91,18 @@ struct VirtualCameraMeetingTests {
         _ = try await withCheckedThrowingContinuation { continuation in
             writer.finish { continuation.resume(with: $0) }
         }
-        let asset = AVURLAsset(url: url)
-        #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
-        #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+    }
+
+    private static func loudness(of url: URL) throws -> Double {
         let audio = try AVAudioFile(forReading: url)
-        #expect(Double(audio.length) / audio.processingFormat.sampleRate > 0.8)
         let decoded = try #require(
             AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: 4800))
+        audio.framePosition = min(audio.length / 2, 2400)
         try audio.read(into: decoded)
         let channel = try #require(decoded.floatChannelData?[0])
-        let rms = sqrt(
+        return sqrt(
             (0..<Int(decoded.frameLength)).reduce(0.0) { $0 + Double(channel[$1] * channel[$1]) }
                 / Double(decoded.frameLength))
-        #expect(rms > 0.05)
     }
 
     @Test func recordsAPlayableComposedVideo() async throws {

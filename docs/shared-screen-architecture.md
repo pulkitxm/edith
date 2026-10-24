@@ -24,6 +24,7 @@ Feature code supplies data, actions, and domain-specific content to these APIs.
 | Database | `PageWorkspace`, shared readiness and connection-list request ownership, resource-owned connected sessions |
 | SEO Audit | Shared page composition, `PageLoading`, component skeletons using the shared motion clock |
 | Music | Shared page composition and controls, visibility-owned metadata requests, service-owned playback |
+| Social Manager | `PageWorkspace`, window-owned isolated browser sessions, shared tab strip and Agent Sessions split geometry, local account catalog loading |
 | Calendar | Shared page composition, window visibility-owned refresh, service-owned calendar data |
 | Downloads | Shared workspace and controls, page-owned estimates, service-owned transfers |
 | App Maintenance and Homebrew | Shared composition, `ContentLoad` inventory and discovery ownership, shared initial recipes and retained refresh feedback |
@@ -58,7 +59,15 @@ Reduced motion renders static placeholders, and inactive scenes pause updates.
 Determinate operations retain their actual progress values.
 
 Content remains visible during refresh. A refresh failure keeps the last good
-result and provides recovery feedback. Initial failure must not turn into an
+result and provides recovery feedback.
+
+`ContentActivity` separates a background `refreshing` pass, where the shown
+numbers are still right, from `updating`, where the user changed a range or
+filter and the shown numbers no longer match the controls. Pages pass one value
+to both `PageScaffold(activity:)`, which pins a single badge under the header,
+and `PageLoading(activity:)`, which dims stale content while it updates. Both
+wait briefly before appearing so fast recomputes do not flicker. Every card on a
+filtered page reads from the same filtered result, never from unfiltered data. Initial failure must not turn into an
 empty success, setup screen, or permanent loading animation.
 
 ## Page composition

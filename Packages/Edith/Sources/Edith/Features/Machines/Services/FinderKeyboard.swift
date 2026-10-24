@@ -88,9 +88,12 @@ enum FinderKey: Equatable {
     }
 }
 
-final class FinderKeyView: NSView {
+final class FinderKeyView: NSView, DirectKeyboardInputResponder, HistoryNavigatingView {
     var onKey: ((FinderKey) -> Bool)?
+    var onHistory: ((NavigationDirection) -> Bool)?
+    var onFocus: (() -> Void)?
     var isEditing: () -> Bool = { false }
+    var autoFocus = true
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -98,15 +101,26 @@ final class FinderKeyView: NSView {
         window?.firstResponder is NSText
     }
 
+    static func windowIsIdle(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return window.firstResponder == nil || window.firstResponder === window
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard window != nil else { return }
+        guard window != nil, autoFocus else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, window?.firstResponder !== self,
                 !FinderKeyView.isTextEditing(in: window)
             else { return }
             window?.makeFirstResponder(self)
         }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { onFocus?() }
+        return accepted
     }
 
     override func keyDown(with event: NSEvent) {
@@ -119,6 +133,20 @@ final class FinderKeyView: NSView {
         }
     }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard window?.firstResponder === self, !isEditing(),
+            event.modifierFlags.contains(.command),
+            let key = FinderKey.resolve(event: event),
+            onKey?(key) == true
+        else { return super.performKeyEquivalent(with: event) }
+        return true
+    }
+
+    func navigateHistory(_ direction: NavigationDirection) -> Bool {
+        guard !isEditing() else { return false }
+        return onHistory?(direction) ?? false
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
@@ -127,35 +155,62 @@ final class FinderKeyView: NSView {
 
 struct FinderKeyCatcher: NSViewRepresentable {
     let isEditing: Bool
+    var focusRequests = 0
+    var autoFocus = true
+    var onFocus: (() -> Void)?
+    var onHistory: ((NavigationDirection) -> Bool)?
     let onKey: (FinderKey) -> Bool
 
     func makeNSView(context: Context) -> FinderKeyView {
         let view = FinderKeyView()
+        view.autoFocus = autoFocus
         view.onKey = onKey
+        view.onFocus = onFocus
+        view.onHistory = onHistory
         view.isEditing = { context.coordinator.editing }
         return view
     }
 
     func updateNSView(_ view: FinderKeyView, context: Context) {
         context.coordinator.editing = isEditing
+        view.autoFocus = autoFocus
         view.onKey = onKey
-        if !isEditing, view.window?.firstResponder !== view,
-            !FinderKeyView.isTextEditing(in: view.window)
-        {
-            DispatchQueue.main.async {
-                guard !FinderKeyView.isTextEditing(in: view.window) else { return }
-                view.window?.makeFirstResponder(view)
-            }
+        view.onFocus = onFocus
+        view.onHistory = onHistory
+        let requested = context.coordinator.focusRequests != focusRequests
+        context.coordinator.focusRequests = focusRequests
+        guard
+            Self.claimsFocus(
+                requested: requested, autoFocus: autoFocus, editing: isEditing,
+                focused: view.window?.firstResponder === view,
+                textEditing: FinderKeyView.isTextEditing(in: view.window),
+                windowIdle: FinderKeyView.windowIsIdle(view.window))
+        else { return }
+        DispatchQueue.main.async {
+            guard !FinderKeyView.isTextEditing(in: view.window) else { return }
+            view.window?.makeFirstResponder(view)
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(editing: isEditing) }
+    static func claimsFocus(
+        requested: Bool, autoFocus: Bool, editing: Bool, focused: Bool, textEditing: Bool,
+        windowIdle: Bool
+    ) -> Bool {
+        guard !editing, !focused, !textEditing else { return false }
+        return requested || (autoFocus && windowIdle)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(editing: isEditing, focusRequests: focusRequests)
+    }
 
     final class Coordinator {
         var editing: Bool
+        var focusRequests: Int
 
-        init(editing: Bool) {
+        init(editing: Bool, focusRequests: Int) {
             self.editing = editing
+            self.focusRequests = focusRequests
         }
     }
 }

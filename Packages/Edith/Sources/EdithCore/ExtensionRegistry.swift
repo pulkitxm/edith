@@ -233,6 +233,13 @@ public enum ExtensionRegistry {
             symbolName: "circle.lefthalf.filled", suite: .desk, host: .bar, featured: false,
             defaultsKey: "focusDimEnabled", requiredCapabilities: [.windowDimming]),
         ExtensionRegistryEntry(
+            id: "hinge", title: "Hinge",
+            subtitle: "Folds the desktop as the MacBook lid closes.",
+            symbolName: "laptopcomputer.and.arrow.down", suite: .desk, host: .bar,
+            featured: false,
+            defaultsKey: "hingeEnabled", requiredCapabilities: [.lidFold],
+            optionalCapabilities: [.globalShortcuts]),
+        ExtensionRegistryEntry(
             id: "windowSweaters", title: "Window Sweaters",
             subtitle: "Knitted borders around your windows, in each app's own colours.",
             symbolName: "square.dashed", suite: .desk, host: .bar, featured: false,
@@ -249,6 +256,12 @@ public enum ExtensionRegistry {
             symbolName: "wand.and.stars", suite: .media, host: .window, featured: true,
             defaultsKey: "tabStudioEnabled", requiredCapabilities: [.localMediaEditing],
             optionalToolIDs: ["ffmpeg", "qpdf"]),
+        ExtensionRegistryEntry(
+            id: "socialManager", title: "Social Manager",
+            subtitle:
+                "Manage profiles with independent Instagram, YouTube, X, LinkedIn and custom website accounts in tabs and side-by-side layouts.",
+            symbolName: "person.crop.rectangle.stack", suite: .media, host: .window, featured: true,
+            defaultsKey: "tabSocialManagerEnabled", requiredCapabilities: [.webBrowsing]),
         ExtensionRegistryEntry(
             id: "latex", title: "LaTeX",
             subtitle: "Compile local documents or edit GitHub sources with pull request review.",

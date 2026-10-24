@@ -108,7 +108,7 @@ struct AgentEventsScreen: View {
                     systemImage: model.paused ? "pause.circle" : "dot.radiowaves.left.and.right"
                 )
                 .font(.edithText(.caption).weight(.medium))
-                .foregroundStyle(model.paused ? .secondary : Color.accentColor)
+                .foregroundStyle(model.paused ? .secondary : Color.themeAccent)
                 Button {
                     dismiss()
                 } label: {
@@ -180,7 +180,7 @@ struct AgentEventsScreen: View {
             minWidth: UIScale.pt(680), idealWidth: UIScale.pt(840), minHeight: UIScale.pt(460),
             idealHeight: UIScale.pt(620)
         )
-        .background(.regularMaterial)
+        .background(DashSkin.panel)
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
         .pageTask(id: retryID, active: !model.paused, cancel: { model.contentLoad.cancel() }) {
             await model.observe()

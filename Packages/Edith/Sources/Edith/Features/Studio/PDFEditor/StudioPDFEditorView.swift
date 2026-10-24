@@ -378,7 +378,7 @@ struct StudioPDFInspector: View {
                                 RoundedRectangle(cornerRadius: UIScale.pt(6))
                                     .strokeBorder(
                                         editor.pendingImageName == signature.name
-                                            ? Color.accentColor : Color.primary.opacity(0.15),
+                                            ? Color.themeAccent : Color.primary.opacity(0.15),
                                         lineWidth: 1.5)
                             )
                             .edithButtonTarget(.borderless)

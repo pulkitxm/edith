@@ -78,6 +78,15 @@ final class AttentionPageModel {
     let loading = ContentLoad()
     var loaded: Bool { loading.hasContent }
     var pending: Bool { loading.isRunning }
+    private var updatingGeneration: UInt64?
+
+    var activity: ContentActivity {
+        guard loaded else { return .idle }
+        let updating =
+            (pending && updatingGeneration != nil) || breakdownLoad.isRunning
+            || search != searchText
+        return .resolve(updating: updating, refreshing: pending)
+    }
     private(set) var hasStoredEvents = false
     private(set) var transferringBackup = false
     private(set) var categorizing = false
@@ -85,7 +94,6 @@ final class AttentionPageModel {
     private let repository: AttentionRepository
     private var reloadTask: Task<Void, Never>?
     private var loadedParts: Set<AttentionSummaryPart> = []
-    private var timelineTask: Task<Void, Never>?
     private var breakdownTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
 
@@ -166,7 +174,7 @@ final class AttentionPageModel {
 
     private func startLoading() {
         loadedParts = []
-        reload()
+        reload(updating: true)
     }
 
     private func ensurePart() {
@@ -175,10 +183,14 @@ final class AttentionPageModel {
         reload(retaining: retained)
     }
 
-    func reload(preserveSettings: Bool = false, retaining retained: Set<AttentionSummaryPart> = [])
-    {
+    func reload(
+        preserveSettings: Bool = false, retaining retained: Set<AttentionSummaryPart> = [],
+        updating: Bool = false
+    ) {
+        let continuesUpdate = pending && updatingGeneration != nil
         reloadTask?.cancel()
         let generation = loading.begin()
+        updatingGeneration = updating || continuesUpdate ? generation : nil
         let repository = repository
         let period = period
         let window = window
@@ -208,16 +220,15 @@ final class AttentionPageModel {
     }
 
     func waitForReload() async {
+        await searchTask?.value
         await reloadTask?.value
-        await timelineTask?.value
         await breakdownTask?.value
     }
 
     func cancelLoading() {
         reloadTask?.cancel()
         reloadTask = nil
-        timelineTask?.cancel()
-        timelineTask = nil
+        updatingGeneration = nil
         searchTask?.cancel()
         searchTask = nil
         breakdownTask?.cancel()
@@ -232,6 +243,7 @@ final class AttentionPageModel {
     ) {
         guard loading.isCurrent(generation) else { return }
         reloadTask = nil
+        updatingGeneration = nil
         if !preserveSettings, settings != state.settings { settings = state.settings }
         if let derived = state.derived {
             summary = derived.summary
@@ -254,6 +266,7 @@ final class AttentionPageModel {
     private func publishFailure(_ message: String, generation: UInt64) {
         guard loading.isCurrent(generation) else { return }
         reloadTask = nil
+        updatingGeneration = nil
         errorMessage = message
         loading.fail(generation, message: message)
     }
@@ -271,7 +284,7 @@ final class AttentionPageModel {
         let request = AttentionSummaryRequest(
             from: interval.start, to: interval.end, settings: settings,
             comparePeriod: period.comparePeriod, window: window, parts: parts,
-            allTime: period.preset == .allTime && retained.isEmpty)
+            allTime: period.preset == .allTime && retained.isEmpty, filter: filter)
         var snapshot = try await Self.snapshot(request, repository: repository)
         try Task.checkCancellation()
         if !retained.isEmpty {
@@ -284,7 +297,7 @@ final class AttentionPageModel {
                     AttentionSummaryRequest(
                         from: interval.start, to: interval.end, settings: settings,
                         comparePeriod: period.comparePeriod, window: window,
-                        parts: retained.union(parts)),
+                        parts: retained.union(parts), filter: filter),
                     repository: repository)
             }
         }
@@ -298,7 +311,7 @@ final class AttentionPageModel {
                 dayRibbon: summary.to.timeIntervalSince(summary.from) <= 90_000
                     ? AttentionPageDerived.dayRibbon(summary) : [],
                 timeline: retained.union(parts).contains(.timeline)
-                    ? AttentionPageDerived.timeline(summary, filter: filter) : [],
+                    ? AttentionPageDerived.timeline(summary) : [],
                 triage: triage(summary))
         return AttentionPageState(
             settings: snapshot.settings, derived: derived,
@@ -330,35 +343,15 @@ final class AttentionPageModel {
         breakdownTask?.cancel()
         let summary = summary
         let dimension = breakdownDimension
-        let filter = spanFilter
         let sort = breakdownSort
         breakdownTask = Task { [weak self] in
             guard let self else { return }
             await self.breakdownLoad.perform(operation: {
-                AttentionBreakdownProjection(
-                    summary: summary, dimension: dimension, filter: filter, sort: sort)
+                AttentionBreakdownProjection(summary: summary, dimension: dimension, sort: sort)
             }) { result in
                 self.breakdown = result
             }
         }
-    }
-
-    private func refilterTimeline() {
-        refilterBreakdown()
-        timelineTask?.cancel()
-        guard loadedParts.contains(.timeline) else { return }
-        let summary = summary
-        let filter = spanFilter
-        timelineTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let days = AttentionPageDerived.timeline(summary, filter: filter)
-            guard !Task.isCancelled else { return }
-            await self?.publishTimeline(days, filter: filter)
-        }
-    }
-
-    private func publishTimeline(_ days: [AttentionTimelineDay], filter: AttentionSpanFilter) {
-        guard filter == spanFilter else { return }
-        timeline = days
     }
 
     private func scheduleSearch() {
@@ -368,7 +361,7 @@ final class AttentionPageModel {
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled, let self, self.searchText == text else { return }
             self.search = text
-            self.refilterTimeline()
+            self.startLoading()
         }
     }
 
@@ -585,7 +578,7 @@ final class AttentionPageModel {
     func filter(category id: String?, navigate: Bool = true) {
         clearSelection()
         categoryFilter = id
-        refilterTimeline()
+        startLoading()
         if navigate { section = .breakdown }
     }
 
@@ -593,36 +586,14 @@ final class AttentionPageModel {
         let active = levelFilter == level
         clearSelection()
         levelFilter = active ? nil : level
-        refilterTimeline()
+        startLoading()
     }
 
     func toggle(sphere: AttentionSphere) {
         let active = sphereFilter == sphere
         clearSelection()
         sphereFilter = active ? nil : sphere
-        refilterTimeline()
-    }
-
-    func matches(
-        categories: [String: TimeInterval], levels: [String: TimeInterval],
-        spheres: [String: TimeInterval]
-    ) -> TimeInterval {
-        if let categoryFilter { return categories[categoryFilter] ?? 0 }
-        if let levelFilter { return levels[levelFilter.key] ?? 0 }
-        if let sphereFilter { return spheres[sphereFilter.rawValue] ?? 0 }
-        return Self.total(categories)
-    }
-
-    nonisolated static func total(_ values: [String: TimeInterval]) -> TimeInterval {
-        var total: TimeInterval = 0
-        for value in values.values { total += value }
-        return total
-    }
-
-    func matchesSearch(_ values: [String?]) -> Bool {
-        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return true }
-        return values.contains { $0?.lowercased().contains(query) == true }
+        startLoading()
     }
 
     var hasFilters: Bool {
@@ -637,11 +608,12 @@ final class AttentionPageModel {
     }
 
     func clearFilters() {
+        guard hasFilters || !searchText.isEmpty else { return }
         clearSelection()
         searchTask?.cancel()
         searchText = ""
         search = ""
-        refilterTimeline()
+        startLoading()
     }
 }
 

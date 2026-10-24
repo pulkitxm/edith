@@ -49,7 +49,7 @@ import EdithKit
         #expect(!settings.contains("List(selection: tab)"))
         #expect(
             settings.contains(
-                "case .permissions, .agent, .data, .surfaces, .agentActivity: .infinity"))
+                "case .permissions, .agent, .data, .storage, .surfaces, .agentActivity: .infinity"))
         #expect(settings.contains("UIScale.pt(1180)"))
         #expect(settings.contains("alignment: .topLeading"))
     }
@@ -63,7 +63,7 @@ import EdithKit
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         for category in [
-            "general", "permissions", "agent", "data", "shortcuts", "terminal", "icloud",
+            "general", "permissions", "agent", "data", "storage", "shortcuts", "terminal", "icloud",
             "updates",
         ] {
             #expect(source.contains("case .\(category): return"))

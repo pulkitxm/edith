@@ -17,8 +17,9 @@ import Testing
                 "appMaintenance", "homebrew", "cleaner", "blitztree",
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
-                "focusDim", "windowSweaters", "presenter",
-                "studio", "latex", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
+                "focusDim", "hinge", "windowSweaters", "presenter",
+                "studio", "socialManager", "latex", "timeLapse", "music", "downloads", "notchShelf",
+                "audioMixer",
                 "calendar", "virtualCamera",
                 "database", "attention", "seoAudit", "codeStats",
             ])

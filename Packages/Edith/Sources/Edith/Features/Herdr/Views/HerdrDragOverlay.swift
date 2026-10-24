@@ -3,7 +3,7 @@ import SwiftUI
 
 struct HerdrDragOverlay: View {
     var drag: HerdrDragCoordinator
-    var store: HerdrStore
+    var store: any PaneWorkspaceInteractions
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
@@ -91,11 +91,11 @@ struct HerdrDragOverlay: View {
 
     @ViewBuilder
     private func paneLabel(_ id: String, highlighted: Bool, target: HerdrDropTarget) -> some View {
-        if let agent = agent(for: id) {
+        if let pane = identity(for: id) {
             VStack(spacing: UIScale.pt(5)) {
-                HerdrKindMark(kind: agent.kind, size: UIScale.pt(highlighted ? 18 : 13))
+                WorkspacePaneMark(pane: pane, size: UIScale.pt(highlighted ? 18 : 13))
                     .foregroundStyle(highlighted ? accent : DashSkin.inkSoft(dark))
-                Text(hideAgents ? agent.kind : agent.title)
+                Text(hideAgents ? pane.category : pane.title)
                     .font(
                         .system(
                             size: UIScale.pt(highlighted ? 13 : 11),
@@ -118,16 +118,16 @@ struct HerdrDragOverlay: View {
         case .edge: "Split here"
         case .outerEdge: "Span the whole side"
         case .center:
-            drag.item.map { dragged($0).allSatisfy { store.session($0) != nil } } == true
-                ? "Swap places" : "Replace, the other agent gets its own tab"
+            drag.item.map { dragged($0).allSatisfy { store.paneIsOpen($0) } } == true
+                ? "Swap places" : "Replace, the other pane gets its own tab"
         case let .slot(template, _): template.title
         case .tabBar, .intoTab, .newTab, .window, .sidebarAgent, .sidebarSpace: nil
         }
     }
 
     private func caret(_ index: Int) -> some View {
-        let chips = drag.geometry.chips.filter { $0.id != HerdrStore.boardID }
-        let board = drag.geometry.chips.first { $0.id == HerdrStore.boardID }
+        let chips = drag.geometry.chips.filter { $0.id != store.interactionLibraryID }
+        let board = drag.geometry.chips.first { $0.id == store.interactionLibraryID }
         let reference = index < chips.count ? chips[index].frame : (chips.last ?? board)?.frame
         let x: CGFloat =
             index < chips.count
@@ -254,19 +254,19 @@ struct HerdrDragOverlay: View {
     }
 
     private func ghost(_ item: HerdrDragItem) -> some View {
-        let agents = dragged(item).compactMap(agent(for:))
+        let panes = dragged(item).compactMap(identity(for:))
         let tearing = drag.target == .window
         return HStack(spacing: UIScale.pt(6)) {
-            if agents.count > 1 {
-                HerdrKindMarks(agents: agents, dark: dark, size: 11)
-            } else if let agent = agents.first {
-                HerdrKindMark(kind: agent.kind, size: UIScale.pt(12))
+            if panes.count > 1 {
+                WorkspacePaneMarks(panes: panes, dark: dark, size: 11)
+            } else if let pane = panes.first {
+                WorkspacePaneMark(pane: pane, size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.ink(dark))
             } else if case .space = item {
                 Image(systemName: "folder")
                     .foregroundStyle(DashSkin.ink(dark))
             }
-            Text(ghostTitle(agents, tearing: tearing))
+            Text(ghostTitle(item, panes: panes, tearing: tearing))
                 .font(.system(size: UIScale.pt(11.5), weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
@@ -289,27 +289,28 @@ struct HerdrDragOverlay: View {
         .offset(x: drag.location.x + UIScale.pt(14), y: drag.location.y + UIScale.pt(12))
     }
 
-    private func ghostTitle(_ agents: [HerdrAgent], tearing: Bool) -> String {
-        if case let .space(id) = drag.item {
-            return hideAgents ? "Space" : store.agentSpaces.first { $0.id == id }?.title ?? "Space"
+    private func ghostTitle(_ item: HerdrDragItem, panes: [WorkspacePaneIdentity], tearing: Bool)
+        -> String
+    {
+        if case .space = item {
+            return hideAgents ? "Space" : store.dragTitle(item)
         }
         if tearing { return "Open in a New Window" }
-        guard let first = agents.first else { return "Agent" }
-        let title = hideAgents ? first.kind : first.title
-        return agents.count > 1 ? "\(title) +\(agents.count - 1)" : title
+        guard let first = panes.first else { return store.dragTitle(item) }
+        let title = hideAgents ? first.category : first.title
+        return panes.count > 1 ? "\(title) +\(panes.count - 1)" : title
     }
 
     private func dragged(_ item: HerdrDragItem) -> [String] {
-        switch store.normalized(item) {
-        case let .agent(agent): [agent.id]
-        case let .tab(id): store.tab(id)?.agentIDs ?? []
-        case .space: []
-        }
+        store.draggedPaneIDs(item)
     }
 
-    private func agent(for id: String) -> HerdrAgent? {
-        if let session = store.session(id) { return session.agent }
-        if case let .agent(agent) = drag.item, agent.id == id { return agent }
+    private func identity(for id: String) -> WorkspacePaneIdentity? {
+        if let pane = store.paneIdentity(id) { return pane }
+        if case let .agent(agent) = drag.item, agent.id == id {
+            return WorkspacePaneIdentity(
+                title: agent.title, category: agent.kind, symbol: "terminal", kind: agent.kind)
+        }
         return nil
     }
 }

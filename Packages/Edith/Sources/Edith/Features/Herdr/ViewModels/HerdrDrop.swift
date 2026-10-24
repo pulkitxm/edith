@@ -4,6 +4,7 @@ import Observation
 import SwiftUI
 
 enum HerdrDragItem: Equatable {
+    case pane(String)
     case agent(HerdrAgent)
     case tab(String)
     case space(String)
@@ -245,10 +246,11 @@ final class HerdrDragCoordinator {
     var frames: [String: CGRect] = [:]
 
     var geometry: HerdrDropGeometry {
-        .make(frames: frames, order: store?.orderedTabIDs ?? [])
+        .make(frames: frames, order: store?.interactionTabIDs ?? [])
     }
 
-    @ObservationIgnored weak var store: HerdrStore?
+    @ObservationIgnored weak var store: (any PaneWorkspaceInteractions)?
+    @ObservationIgnored var onPaneTearOff: ((String) -> Void)?
     @ObservationIgnored var gap: CGFloat = 6
     @ObservationIgnored var unit: CGFloat = 1
     @ObservationIgnored var onTearOff: ((HerdrAgent) -> Void)?
@@ -277,6 +279,7 @@ final class HerdrDragCoordinator {
         guard !cancelled, self.item != nil, let target, let store else { return }
         if target == .window {
             if case let .agent(agent) = store.normalized(item) { onTearOff?(agent) }
+            if case let .pane(id) = store.normalized(item) { onPaneTearOff?(id) }
             return
         }
         withAnimation(store.layoutAnimation) { store.drop(item, on: target) }
@@ -322,7 +325,7 @@ final class HerdrDragCoordinator {
             stopSpring()
             return
         }
-        let tab = store.currentTab
+        let tab = store.interactionTab
         if geometry.canvas.contains(location), let count = store.snapCount(for: item) {
             snapBar = HerdrSnapBar.make(
                 templates: store.templates(for: count), count: count, canvas: geometry.canvas,
@@ -332,10 +335,10 @@ final class HerdrDragCoordinator {
         }
         let proposed: HerdrDropTarget?
         if frames[HerdrDropGeometry.sidebarKey]?.contains(location) == true {
-            proposed = sidebarTarget(item, store: store)
+            proposed = store.sidebarTarget(item, at: location, frames: frames)
         } else {
             proposed = HerdrDropResolver.target(
-                at: location, geometry: geometry, tab: tab, boardID: HerdrStore.boardID,
+                at: location, geometry: geometry, tab: tab, boardID: store.interactionLibraryID,
                 snapBar: snapBar, previous: target, gap: gap)
         }
         let accepted = proposed.flatMap { store.accepts(item, $0) ? $0 : nil }
@@ -343,32 +346,8 @@ final class HerdrDragCoordinator {
         spring(toward: accepted)
     }
 
-    private func sidebarTarget(_ item: HerdrDragItem, store: HerdrStore) -> HerdrDropTarget? {
-        let prefix: String
-        var ids: [String] = []
-        switch item {
-        case .agent:
-            prefix = HerdrDropGeometry.agentPrefix
-            for agent in store.machineTerminals + store.listedAgents { ids.append(agent.id) }
-        case .space:
-            prefix = HerdrDropGeometry.spacePrefix
-            for space in store.agentSpaces { ids.append(space.id) }
-        case .tab:
-            return nil
-        }
-        guard
-            let row = HerdrDropResolver.sidebarRow(
-                at: location, ids: ids, prefix: prefix, frames: frames)
-        else {
-            return nil
-        }
-        let after = location.y >= row.frame.midY
-        if case .space = item { return .sidebarSpace(row.id, after: after) }
-        return .sidebarAgent(row.id, after: after)
-    }
-
     private func spring(toward target: HerdrDropTarget?) {
-        guard case let .intoTab(id) = target, id != store?.selectedTab else {
+        guard case let .intoTab(id) = target, id != store?.interactionSelection else {
             stopSpring()
             return
         }
@@ -378,7 +357,7 @@ final class HerdrDragCoordinator {
         springTask = Task { [weak self] in
             try? await Task.sleep(for: Self.springDelay)
             guard !Task.isCancelled, let self, self.target == .intoTab(id) else { return }
-            withAnimation(self.store?.layoutAnimation) { self.store?.selectedTab = id }
+            withAnimation(self.store?.layoutAnimation) { self.store?.interactionSelection = id }
             self.springTarget = nil
             self.resolve()
         }

@@ -31,6 +31,7 @@ struct PageContent: View {
             case .media: SuiteLandingPage(suite: SuiteRegistry.suite(.media))
             case .studio: StudioPage()
             case .latex: LaTeXPage()
+            case .socialManager: SocialManagerPage()
             case .timeLapse: TimeLapsePage()
             case .downloads: DownloadSheet(isPage: true)
             case .music: MusicPage()

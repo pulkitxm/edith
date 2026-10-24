@@ -8,15 +8,97 @@ struct HerdrLayoutPopover: View {
 
     @Environment(\.colorScheme) private var scheme
     @State private var actions = HerdrAgentActions()
-    @State private var naming = false
-    @State private var layoutName = ""
-
     private var dark: Bool { scheme == .dark }
-    private var count: Int { tab.agentIDs.count }
     private var otherTabs: [HerdrTab] { store.tabs.filter { $0.id != tab.id } }
     private var candidates: [HerdrAgent] {
         store.listedAgents.filter { !tab.layout.contains($0.id) }
     }
+
+    var body: some View {
+        WorkspaceLayoutPopover(store: store, tab: tab, itemName: "agent") { additions }
+            .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
+    }
+
+    private var additions: some View {
+        WorkspaceLayoutSection(title: tab.isSplit ? "Add to This Tab" : "Open Side by Side") {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                ForEach(otherTabs) { other in
+                    Button {
+                        perform { store.merge(other.id, into: tab.id) }
+                    } label: {
+                        HerdrTabSummary(
+                            store: store, tab: other, hideAgents: hideAgents, dark: dark)
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .herdrAgentContextMenu(
+                        agents: other.agentIDs.compactMap { store.session($0)?.agent }, store: store
+                    ) { EmptyView() }
+                    .help("Bring this tab in beside the current agents")
+                }
+                HStack(spacing: UIScale.pt(8)) {
+                    if !otherTabs.isEmpty {
+                        Button("Gather All Tabs") { perform { store.gatherAll(into: tab.id) } }
+                            .buttonStyle(.edith(.secondary))
+                            .help("Show every open tab together in this one")
+                    }
+                    if !candidates.isEmpty {
+                        Menu("Add Agent") {
+                            ForEach(candidates) { agent in
+                                Menu(hideAgents ? agent.kind : agent.title) {
+                                    Button("Add to This Tab") {
+                                        perform { store.open(agent, beside: .right) }
+                                    }
+                                    Divider()
+                                    HerdrAgentMenu(agent: agent, store: store, actions: actions)
+                                }
+                            }
+                        }
+                        .menuStyle(.borderlessButton).fixedSize()
+                        .help("Open another agent beside the focused one")
+                    }
+                }
+                if otherTabs.isEmpty, candidates.isEmpty {
+                    Text("Open more agents to place them side by side.")
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+            }
+        }
+    }
+
+    private func perform(_ change: () -> Void) { withAnimation(store.layoutAnimation, change) }
+}
+
+@MainActor
+protocol WorkspaceLayoutControls: AnyObject {
+    var animatesLayout: Bool { get set }
+    var layoutAnimation: Animation? { get }
+    func templates(for count: Int) -> [HerdrLayoutTemplate]
+    func currentTemplate(of tabID: String) -> HerdrLayoutTemplate?
+    func arrange(_ tabID: String, as template: HerdrLayoutTemplate)
+    func rotate(_ tabID: String)
+    func mirror(_ tabID: String, _ axis: SplitAxis)
+    func equalize(_ tabID: String)
+    func toggleZoom(_ paneID: String)
+    func separate(_ tabID: String)
+    @discardableResult func saveArrangement(of tabID: String, named name: String)
+        -> HerdrSavedArrangement?
+    func deleteArrangement(_ id: UUID)
+}
+
+extension HerdrStore: WorkspaceLayoutControls {}
+
+struct WorkspaceLayoutPopover<Additions: View>: View {
+    let store: any WorkspaceLayoutControls
+    let tab: HerdrTab
+    let itemName: String
+    @ViewBuilder var additions: () -> Additions
+    @Environment(\.colorScheme) private var scheme
+    @State private var naming = false
+    @State private var layoutName = ""
+
+    private var dark: Bool { scheme == .dark }
+    private var count: Int { tab.layout.paneCount }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
@@ -25,7 +107,7 @@ struct HerdrLayoutPopover: View {
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Text(count == 1 ? "1 agent" : "\(count) agents")
+                Text(count == 1 ? "1 \(itemName)" : "\(count) \(itemName)s")
                     .font(DashSkin.mono(10, weight: .medium))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -33,13 +115,12 @@ struct HerdrLayoutPopover: View {
                 arrangements
                 adjustments
             }
-            additions
+            additions()
             Divider()
             motion
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(348))
-        .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
     }
 
     private var arrangements: some View {
@@ -78,7 +159,7 @@ struct HerdrLayoutPopover: View {
                     .buttonStyle(.edith(.borderless))
                     .accessibilityLabel(template.title)
                     .accessibilityAddTraits(template == current ? .isSelected : [])
-                    .help("\(template.title): the focused agent takes the highlighted spot")
+                    .help("\(template.title): the focused \(itemName) takes the highlighted spot")
                     .contextMenu {
                         if case let .saved(saved) = template {
                             Button("Delete Saved Layout", role: .destructive) {
@@ -123,58 +204,8 @@ struct HerdrLayoutPopover: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "Saved layouts show up here and while dragging whenever \(count) agents share a tab."
+                "Saved layouts show up here and while dragging whenever \(count) \(itemName)s share a tab."
             )
-        }
-    }
-
-    private var additions: some View {
-        section(tab.isSplit ? "Add to This Tab" : "Open Side by Side") {
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                ForEach(otherTabs) { other in
-                    Button {
-                        perform { store.merge(other.id, into: tab.id) }
-                    } label: {
-                        HerdrTabSummary(
-                            store: store, tab: other, hideAgents: hideAgents, dark: dark)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .herdrAgentContextMenu(
-                        agents: other.agentIDs.compactMap { store.session($0)?.agent }, store: store
-                    ) { EmptyView() }
-                    .help("Bring this tab in beside the current agents")
-                }
-                HStack(spacing: UIScale.pt(8)) {
-                    if !otherTabs.isEmpty {
-                        Button("Gather All Tabs") {
-                            perform { store.gatherAll(into: tab.id) }
-                        }
-                        .buttonStyle(.edith(.secondary))
-                        .help("Show every open tab together in this one")
-                    }
-                    if !candidates.isEmpty {
-                        Menu("Add Agent") {
-                            ForEach(candidates) { agent in
-                                Menu(hideAgents ? agent.kind : agent.title) {
-                                    Button("Add to This Tab") {
-                                        perform { store.open(agent, beside: .right) }
-                                    }
-                                    Divider()
-                                    HerdrAgentMenu(agent: agent, store: store, actions: actions)
-                                }
-                            }
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                        .help("Open another agent beside the focused one")
-                    }
-                }
-                if otherTabs.isEmpty, candidates.isEmpty {
-                    Text("Open more agents to place them side by side.")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            }
         }
     }
 
@@ -192,23 +223,23 @@ struct HerdrLayoutPopover: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer(minLength: 0)
-            Toggle("Animate Changes", isOn: $store.animatesLayout)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+            Toggle(
+                "Animate Changes",
+                isOn: Binding(get: { store.animatesLayout }, set: { store.animatesLayout = $0 })
+            )
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.mini)
         }
         .help("Glide tabs and panes into place instead of switching instantly")
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content)
+    private func section<Content: View>(
+        _ title: String, @ViewBuilder content: @escaping () -> Content
+    )
         -> some View
     {
-        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            Text(title)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            content()
-        }
+        WorkspaceLayoutSection(title: title, content: content)
     }
 
     private func action(_ systemImage: String, _ title: String, run: @escaping () -> Void)
@@ -238,6 +269,20 @@ struct HerdrLayoutPopover: View {
 
     private func perform(_ change: () -> Void) {
         withAnimation(store.layoutAnimation, change)
+    }
+}
+
+struct WorkspaceLayoutSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: () -> Content
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            Text(title).font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+            content()
+        }
     }
 }
 
@@ -309,7 +354,9 @@ struct HerdrKindMarks: View {
         HStack(spacing: UIScale.pt(-3)) {
             ForEach(Array(agents.prefix(3).enumerated()), id: \.offset) { _, agent in
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(size))
-                    .foregroundStyle(agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                    .foregroundStyle(
+                        agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)
+                    )
                     .padding(UIScale.pt(1.5))
                     .background(DashSkin.paper2(dark), in: Circle())
             }

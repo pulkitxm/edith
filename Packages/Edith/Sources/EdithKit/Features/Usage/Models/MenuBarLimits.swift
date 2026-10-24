@@ -1,7 +1,7 @@
 import Foundation
 
 public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
-    case session, week, fable
+    case session, week, fable, credits
 
     public var kind: LimitWindowKind { self == .session ? .session : .weekly }
 
@@ -16,6 +16,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "F"
+        case (_, .credits): return "CR"
         }
     }
 
@@ -35,6 +36,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5h"
         case (_, .week): return "7d"
         case (_, .fable): return "Fable"
+        case (_, .credits): return "Credits"
         }
     }
 
@@ -46,6 +48,7 @@ public enum LimitWindowSlot: String, CaseIterable, Codable, Sendable {
         case (_, .session): return "5-hour limit"
         case (_, .week): return "Weekly · all models"
         case (_, .fable): return "Weekly · Fable"
+        case (_, .credits): return "Credits"
         }
     }
 
@@ -68,6 +71,7 @@ public enum MenuBarLimitsStyle: String, CaseIterable, Sendable {
 public struct MenuBarLimitSegment: Equatable, Sendable {
     public enum Value: Equatable, Sendable {
         case percent(Int)
+        case credits(Double)
         case missing
         case masked
     }
@@ -86,14 +90,58 @@ public struct MenuBarLimitSegment: Equatable, Sendable {
 public struct MenuBarProviderGroup: Equatable, Sendable {
     public let provider: LimitProvider
     public let segments: [MenuBarLimitSegment]
+    public let accountLabel: String?
+    public let accountHeader: String?
+    public let remainingAccounts: Int
 
-    public init(provider: LimitProvider, segments: [MenuBarLimitSegment]) {
+    public var hasPercent: Bool {
+        segments.contains {
+            if case .percent = $0.value { return true }
+            return false
+        }
+    }
+
+    public init(
+        provider: LimitProvider, segments: [MenuBarLimitSegment], accountLabel: String? = nil,
+        remainingAccounts: Int = 0, accountHeader: String? = nil
+    ) {
         self.provider = provider
         self.segments = segments
+        self.accountLabel = accountLabel
+        self.accountHeader = accountHeader
+        self.remainingAccounts = remainingAccounts
     }
 }
 
 public enum MenuBarLimits {
+    public static let accountSelectionKey = "menuBar.claudeAccount"
+
+    public static func accountGroups(
+        _ accounts: [ClaudeAccountLimits], selectedID: String?, slots: [LimitWindowSlot],
+        masked: Bool
+    ) -> [MenuBarProviderGroup] {
+        let visible = ClaudeAccountLimitsLayout.inlineAccounts(accounts, selectedID: selectedID)
+        return visible.compactMap { account in
+            let provider = ProviderLimits(
+                provider: .claude, session: fresh(account.limits.session),
+                week: fresh(account.limits.week), fable: fresh(account.limits.fable))
+            guard
+                let group = groups(providers: [provider], selection: { _ in slots }, masked: masked)
+                    .first
+            else { return nil }
+            return .init(
+                provider: .claude, segments: group.segments,
+                accountLabel: masked ? "Account" : String(account.name.prefix(8)),
+                remainingAccounts: !masked && accounts.count > 2 ? accounts.count - 1 : 0,
+                accountHeader: masked ? "Account" : String(account.name.prefix(16)))
+        }
+    }
+
+    private static func fresh(_ window: LimitWindow?) -> LimitWindow? {
+        guard let window, let percent = SurfaceQuotaValue(window).percent else { return nil }
+        return .init(percent: percent, resetsAt: window.resetsAt, period: window.period)
+    }
+
     public static func slots(for provider: LimitProvider) -> [LimitWindowSlot] {
         switch provider {
         case .claude: [.session, .week, .fable]
@@ -101,6 +149,14 @@ public enum MenuBarLimits {
         case .cursor: [.session, .week]
         case .grok: [.week]
         }
+    }
+
+    public static func menuBarSlots(for provider: LimitProvider) -> [LimitWindowSlot] {
+        provider == .codex ? slots(for: provider) + [.credits] : slots(for: provider)
+    }
+
+    public static func creditsBalance(_ balance: Double) -> String {
+        String(Int(balance.rounded(.down)))
     }
 
     public static func selectionKey(for provider: LimitProvider) -> String {
@@ -115,8 +171,8 @@ public enum MenuBarLimits {
     public static func parseSelection(
         _ raw: String?, provider: LimitProvider
     ) -> [LimitWindowSlot] {
-        let all = slots(for: provider)
-        guard let raw else { return all }
+        let all = menuBarSlots(for: provider)
+        guard let raw else { return slots(for: provider) }
         let chosen = Set(
             raw.split(separator: ",").compactMap {
                 LimitWindowSlot(rawValue: $0.trimmingCharacters(in: .whitespaces))
@@ -152,8 +208,10 @@ public enum MenuBarLimits {
                 let value: MenuBarLimitSegment.Value
                 if masked {
                     value = .masked
+                } else if slot == .credits {
+                    value = limits.credits.map { .credits($0) } ?? .missing
                 } else if let window {
-                    value = .percent(Int(window.percent.rounded()))
+                    value = .percent(window.shownPercent)
                 } else {
                     value = .missing
                 }

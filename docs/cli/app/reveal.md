@@ -8,8 +8,8 @@ ed app reveal [<section>] [--tab <tab>] [--list] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<section>` | `home`, `machines`, `docs`, `agents`, `dashboard`, `herdr`, `quinjet`, `companion`, `plugins`, `appMaintenance`, `blitztree`, `system`, `runningApps`, `desk`, `media`, `studio`, `downloads`, `music`, `calendar`, `virtualCamera`, `data`, `database`, `attention`, `seoAudit`, `codeStats`, `extensions`, `settings`, `about` | none | The sidebar section to show. Without it the window comes up where it already was, and the answer names that section. |
-| `--tab` | section-specific | none | A tab inside the section. `companion` has `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings`; `settings` has `general`, `permissions`, `shortcuts`, `terminal`, `icloud`, `updates`. |
+| `<section>` | `home`, `machines`, `docs`, `agents`, `dashboard`, `herdr`, `quinjet`, `companion`, `plugins`, `appMaintenance`, `blitztree`, `system`, `runningApps`, `desk`, `media`, `studio`, `socialManager`, `downloads`, `music`, `calendar`, `virtualCamera`, `data`, `database`, `attention`, `seoAudit`, `codeStats`, `extensions`, `settings`, `about` | none | The sidebar section to show. Without it the window comes up where it already was, and the answer names that section. |
+| `--tab` | section-specific | none | A tab inside the section. `companion` has `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings`; `settings` has `general`, `surfaces`, `agentActivity`, `permissions`, `agent`, `jev`, `data`, `storage`, `shortcuts`, `terminal`, `icloud`, `updates`. |
 | `--list` | flag | off | Print every sidebar section id and title. Does not change the window. |
 | `--json` | flag | off | Emit JSON on stdout. |
 

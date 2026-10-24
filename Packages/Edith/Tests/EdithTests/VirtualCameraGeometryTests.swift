@@ -71,6 +71,27 @@ import Testing
         #expect(untouched == start)
     }
 
+    @Test func mirroredDraggingStillMovesThePictureWithThePointer() {
+        let start = VirtualCameraFraming(zoom: 2)
+        let view = CGSize(width: 960, height: 540)
+        let straight = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 100, height: 40), viewSize: view, source: hd, output: hd)
+        let mirrored = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 100, height: 40), viewSize: view, source: hd, output: hd,
+            axes: VirtualCameraDragAxes(mirrorOutput: true, mirrorPreview: false))
+        let preview = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 100, height: 40), viewSize: view, source: hd, output: hd,
+            axes: VirtualCameraDragAxes(mirrorOutput: false, mirrorPreview: true))
+        let both = VirtualCameraGeometry.panned(
+            start, by: CGSize(width: 100, height: 40), viewSize: view, source: hd, output: hd,
+            axes: VirtualCameraDragAxes(mirrorOutput: true, mirrorPreview: true))
+        #expect(mirrored.centerX > start.centerX)
+        #expect(preview.centerX == mirrored.centerX)
+        #expect(both.centerX == straight.centerX)
+        #expect(mirrored.centerY == straight.centerY)
+        #expect(abs((mirrored.centerX - start.centerX) * 1920 - 100) < 0.01)
+    }
+
     @Test func draggingFollowsTheTiltedAxes() {
         let tilted = VirtualCameraFraming(zoom: 3, tilt: 30)
         let moved = VirtualCameraGeometry.panned(

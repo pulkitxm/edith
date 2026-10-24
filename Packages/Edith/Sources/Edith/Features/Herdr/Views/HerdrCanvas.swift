@@ -154,7 +154,7 @@ struct HerdrPaneHeader: View {
                 HStack(spacing: UIScale.pt(6)) {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
                         .foregroundStyle(
-                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                            agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.title)
                         .font(
                             .system(size: UIScale.pt(11), weight: focused ? .semibold : .medium)
@@ -253,6 +253,15 @@ struct HerdrPaneHeader: View {
 
     @ViewBuilder
     private var menuItems: some View {
+        if tab.isSplit {
+            let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
+            if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
+                Menu("Message This Tab") {
+                    HerdrBroadcastMenuItems(agents: agents, store: store, scopeTitle: "This Tab")
+                }
+                Divider()
+            }
+        }
         Button(zoomed ? "Restore Layout" : "Zoom") {
             withAnimation(store.layoutAnimation) {
                 store.toggleZoom(session.id)

@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 final class VideoPlaybackKeyView: NSView {
@@ -16,6 +17,7 @@ final class VideoPlaybackKeyView: NSView {
         event.type == .keyDown && event.keyCode == 49
             && event.modifierFlags.intersection([.command, .option, .control]).isEmpty
             && window.attachedSheet == nil && !(window.firstResponder is NSText)
+            && !InputFocus.takesKeysDirectly(window.firstResponder)
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {

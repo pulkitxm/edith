@@ -145,20 +145,41 @@ import Testing
         view.mouseDown(with: try event(.leftMouseDown, point: start, number: 1))
         view.mouseDragged(with: try event(.leftMouseDragged, point: end, number: 2))
         view.mouseUp(with: try event(.leftMouseUp, point: end, number: 3))
-        try await eventually {
-            guard let data = try? Data(contentsOf: output) else { return false }
-            return String(decoding: data, as: UTF8.self).contains("m")
+        let copiedText: String?
+        let reports: String
+        if surface == .split {
+            #expect(view.selectedText() == "alpha")
+            copiedText = board.string(forType: .string)
+            #expect(copiedText == "alpha")
+            let dragged = String(decoding: try Data(contentsOf: output), as: UTF8.self)
+            #expect(!dragged.contains("\u{1B}"))
+            board.clearContents()
+            view.mouseDown(with: try event(.leftMouseDown, point: start, number: 4))
+            view.mouseUp(with: try event(.leftMouseUp, point: start, number: 5))
+            try await eventually {
+                guard let data = try? Data(contentsOf: output) else { return false }
+                return String(decoding: data, as: UTF8.self).contains("m")
+            }
+            reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
+            #expect(reports.contains("\u{1B}[<0;"))
+            #expect(reports.contains("m"))
+        } else {
+            try await eventually {
+                guard let data = try? Data(contentsOf: output) else { return false }
+                return String(decoding: data, as: UTF8.self).contains("m")
+            }
+            reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
+            #expect(reports.contains("\u{1B}[<0;"))
+            #expect(reports.contains("\u{1B}[<32;"))
+            view.mouseDown(
+                with: try event(.leftMouseDown, point: start, number: 4, flags: .shift))
+            view.mouseDragged(
+                with: try event(.leftMouseDragged, point: end, number: 5, flags: .shift))
+            view.mouseUp(with: try event(.leftMouseUp, point: end, number: 6, flags: .shift))
+            #expect(view.selectedText() == "alpha")
+            copiedText = board.string(forType: .string)
+            #expect(copiedText == "alpha")
         }
-        let reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
-        #expect(reports.contains("\u{1B}[<0;"))
-        #expect(reports.contains("\u{1B}[<32;"))
-
-        view.mouseDown(with: try event(.leftMouseDown, point: start, number: 4, flags: .shift))
-        view.mouseDragged(with: try event(.leftMouseDragged, point: end, number: 5, flags: .shift))
-        view.mouseUp(with: try event(.leftMouseUp, point: end, number: 6, flags: .shift))
-        #expect(view.selectedText() == "alpha")
-        let copiedText = board.string(forType: .string)
-        #expect(copiedText == "alpha")
         board.clearContents()
         board.setString("paste-marker", forType: .string)
         let paste = try #require(

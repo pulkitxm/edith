@@ -51,6 +51,7 @@ the fixed order of the table above. Trimmed here to three of the ten rows:
       "reason": "Required to detect shared content or sample colors from the screen.",
       "requiredBy": [
         "focusDim",
+        "hinge",
         "presenter",
         "colorPicker"
       ],
@@ -108,7 +109,7 @@ notifications    granted                 usage,machines
 accessibility    granted                 system,clipboard
 inputMonitoring  granted                 system
 fullDisk         no
-screenRecording  granted                 focusDim,presenter,colorPicker
+screenRecording  granted                 focusDim,hinge,presenter,colorPicker
 applicationAudio on first use            notchShelf
 camera           granted                 notchShelf
 bluetooth        on first use            notchShelf

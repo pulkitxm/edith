@@ -11,6 +11,16 @@ public struct CodeStatsCandidate: Equatable, Sendable {
     }
 }
 
+public struct CodeStatsSquash: Equatable, Sendable {
+    public var sha: String
+    public var originals: [CodeStatsCandidate]
+
+    public init(sha: String, originals: [CodeStatsCandidate]) {
+        self.sha = sha
+        self.originals = originals
+    }
+}
+
 public struct CodeStatsRefState: Equatable, Sendable {
     public var fingerprint: String
     public var tips: [String]
@@ -25,7 +35,7 @@ public struct CodeStatsRefState: Equatable, Sendable {
 }
 
 public struct CodeStatsRepositoryCache: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 
     public var version: Int
     public var repository: String
@@ -33,13 +43,15 @@ public struct CodeStatsRepositoryCache: Codable, Equatable, Sendable {
     public var identityFingerprint: String
     public var tips: [String]
     public var integrated: [String]
+    public var replaced: [String]
+    public var originals: [String]
     public var authors: [CodeStatsAuthor]
     public var commits: [CodeStatsCommit]
 
     public init(
         repository: String, refsFingerprint: String, identityFingerprint: String,
-        tips: [String] = [], integrated: [String] = [], authors: [CodeStatsAuthor] = [],
-        commits: [CodeStatsCommit]
+        tips: [String] = [], integrated: [String] = [], replaced: [String] = [],
+        originals: [String] = [], authors: [CodeStatsAuthor] = [], commits: [CodeStatsCommit]
     ) {
         version = Self.currentVersion
         self.repository = repository
@@ -47,6 +59,8 @@ public struct CodeStatsRepositoryCache: Codable, Equatable, Sendable {
         self.identityFingerprint = identityFingerprint
         self.tips = tips
         self.integrated = integrated
+        self.replaced = replaced
+        self.originals = originals
         self.authors = authors
         self.commits = commits
     }

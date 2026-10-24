@@ -1082,7 +1082,7 @@ private extension VirtualCameraOperation {
             userInterface("Virtual Camera header", "pause behind a card", ["--style", "card"])
         case .resume:
             userInterface("Virtual Camera header", "go live again")
-        case .audio: userInterface("Meeting audio", "choose a voice effect", ["voice", "deep"])
+        case .audio: userInterface("Meeting options", "record source sound", ["true"])
         case .video: userInterface("Meeting controls", "choose a video file", ["demo.mp4"])
         case .play: userInterface("Meeting controls", "pause video playback", ["paused"])
         case .freeze: userInterface("Meeting controls", "freeze the meeting video")
@@ -1753,13 +1753,14 @@ private extension HerdrMessageOperation {
         switch self {
         case .send:
             userInterface(
-                "Herdr board", "send a message to one agent or every working or stopped agent",
+                "Herdr board",
+                "send or schedule a message for one agent, a tab, or a space",
                 ["w3:p1N", "run the tests again"])
         case .hooks:
-            userInterface("Herdr session tab", "see the message waiting for an agent to finish")
+            userInterface("Herdr session tab", "see the messages waiting on each agent")
         case .removeHook:
             userInterface(
-                "Herdr session tab", "cancel the message waiting for an agent", ["1F0C2A9B"])
+                "Herdr session tab", "cancel one message waiting for an agent", ["1F0C2A9B"])
         }
     }
 }

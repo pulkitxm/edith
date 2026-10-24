@@ -2353,7 +2353,7 @@ struct MusicFooter: View {
                 .frame(height: UIScale.pt(barHeight))
                 .padding(.trailing, UIScale.pt(28))
                 .frame(maxWidth: .infinity)
-                .background(.regularMaterial)
+                .background(DashSkin.panel)
                 .overlay(alignment: .top) {
                     Rectangle()
                         .fill(Color(nsColor: .separatorColor))

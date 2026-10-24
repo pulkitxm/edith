@@ -52,6 +52,7 @@ private struct HerdrResizeCursor: NSViewRepresentable {
 private enum HerdrTerminalFocus {
     case agent
     case diff
+    case files
 }
 
 enum HerdrAgentTerminalOverlay: Equatable {
@@ -152,6 +153,7 @@ struct HerdrSessionView: View {
         case .agent: .agent
         case .diff: .diff
         case .split: splitTerminalFocus
+        case .files: .files
         }
     }
 
@@ -169,6 +171,8 @@ struct HerdrSessionView: View {
         }
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
+        .task(id: filesRequest) { prepareFilesIfNeeded() }
+        .task(id: fileLinksRequest) { configureFileLinks() }
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
         }
@@ -195,7 +199,7 @@ struct HerdrSessionView: View {
                     sessionPane
                         .frame(width: sessionWidth(in: total))
                     splitHandle(total: total)
-                    diffPane
+                    companionPane
                         .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -209,8 +213,47 @@ struct HerdrSessionView: View {
                 diffPane
                     .opacity(tab.view == .diff ? 1 : 0)
                     .allowsHitTesting(tab.view == .diff)
+                if tab.view == .files, presented {
+                    filesPane
+                }
             }
         }
+    }
+
+    private var companionPane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: UIScale.pt(8)) {
+                EdithSegmentedPicker(
+                    "", selection: companionBinding, options: HerdrSplitCompanion.allCases,
+                    label: { $0.title }
+                )
+                .labelsHidden()
+                .frame(width: UIScale.pt(170))
+                .help("Show Quinjet or the agent's files beside the agent")
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, UIScale.pt(10))
+            .padding(.vertical, UIScale.pt(5))
+            .background(DashSkin.panel)
+            Divider()
+            ZStack {
+                diffPane
+                    .opacity(tab.showsDiff ? 1 : 0)
+                    .allowsHitTesting(tab.showsDiff)
+                if tab.showsFiles, presented {
+                    filesPane
+                }
+            }
+        }
+    }
+
+    private var companionBinding: Binding<HerdrSplitCompanion> {
+        Binding(
+            get: { tab.split.companion },
+            set: { companion in
+                tab.split.select(companion)
+                splitTerminalFocus = companion == .diff ? .diff : .agent
+            })
     }
 
     private var handleWidth: CGFloat { UIScale.pt(11) }
@@ -282,7 +325,81 @@ struct HerdrSessionView: View {
     }
 
     private var diffRequest: String {
-        "\(tab.id)|\(tab.view.rawValue)|\(dark)|\(quinjetThemeName)|\(appThemeName)"
+        "\(tab.id)|\(tab.view.rawValue)|\(tab.split.companion.rawValue)|\(dark)|\(quinjetThemeName)|\(appThemeName)"
+    }
+
+    private var filesRequest: String {
+        "\(tab.id)|\(tab.view.rawValue)|\(tab.split.companion.rawValue)|\(agent.cwd)|\(tab.machine?.id.uuidString ?? "")"
+    }
+
+    private func prepareFilesIfNeeded() {
+        guard tab.showsFiles else { return }
+        tab.files.prepare(
+            directory: agent.cwd, isLocal: agent.machineIsLocal, machine: tab.machine)
+    }
+
+    private var fileLinksRequest: String {
+        "\(tab.id)|\(agent.cwd)|\(agent.machineIsLocal)|\(agent.isTerminal)|\(tab.machine?.id.uuidString ?? "")"
+    }
+
+    private func configureFileLinks() {
+        guard !agent.isTerminal else {
+            tab.holder.fileLinks = nil
+            return
+        }
+        let files = tab.files
+        let split = tab.split
+        let id = tab.id
+        let machine = tab.machine
+        let directory = agent.cwd
+        let isLocal = agent.machineIsLocal
+        let store = store
+        let onSetView = onSetView
+        tab.holder.fileLinks = TerminalFileLinks(
+            directory: directory,
+            fileSystem: isLocal ? .local : nil,
+            reveal: { path in
+                Task { @MainActor in
+                    guard
+                        let entry = await files.locate(
+                            path, directory: directory, isLocal: isLocal, machine: machine)
+                    else { return }
+                    split.select(.files)
+                    let view: HerdrAgentView =
+                        store.views(for: id).contains(.split) ? .split : .files
+                    if let onSetView {
+                        onSetView(view)
+                    } else {
+                        store.setView(view, for: id)
+                    }
+                    await files.reveal(entry)
+                }
+            })
+    }
+
+    private var filesPane: some View {
+        ZStack {
+            DashSkin.paper(dark)
+            if let finder = tab.files.finder {
+                FinderPane(
+                    model: finder, autoFocus: tab.view == .files,
+                    onFocus: {
+                        splitTerminalFocus = .files
+                        onFocus?()
+                    }
+                )
+                .id(ObjectIdentifier(finder))
+                .machineActivity(finder.session)
+            } else if let message = tab.files.errorMessage {
+                Text(message)
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(DashSkin.warn)
+                    .multilineTextAlignment(.center)
+                    .padding(UIScale.pt(16))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .presenterCover(hideAgents, dark: dark)
     }
 
     private var sessionPane: some View {
@@ -291,6 +408,7 @@ struct HerdrSessionView: View {
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
                 wantsFocus: wantsFocus && terminalFocus == .agent,
+                dragSelectsOverCapturedMouse: !agent.isTerminal,
                 onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
                 onFocus: {
                     splitTerminalFocus = .agent
@@ -365,8 +483,8 @@ struct HerdrSessionView: View {
             Color(nsColor: palette.background)
             TerminalPane(
                 holder: tab.quinjet.holder, palette: palette,
-                active: presented && tab.view.showsDiff && tab.quinjet.live,
-                wantsFocus: wantsFocus && terminalFocus == .diff,
+                active: presented && tab.showsDiff && tab.quinjet.live,
+                wantsFocus: wantsFocus && tab.showsDiff && terminalFocus == .diff,
                 onFocus: {
                     splitTerminalFocus = .diff
                     onFocus?()
@@ -421,7 +539,7 @@ struct HerdrSessionView: View {
     }
 
     private func prepareDiffIfNeeded() async {
-        guard tab.view.showsDiff else { return }
+        guard tab.showsDiff else { return }
         await prepareDiff(restarting: false)
     }
 

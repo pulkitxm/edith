@@ -132,6 +132,7 @@ public enum AppStorageKeys {
         public static let includeArchived = "codeStatsIncludeArchived"
         public static let identitySubstrings = "codeStatsIdentitySubstrings"
         public static let identityEmails = "codeStatsIdentityEmails"
+        public static let excludedAccounts = "codeStatsExcludedAccounts"
     }
 
     public enum ColorPicker {
@@ -175,6 +176,7 @@ public enum AppStorageKeys {
         public static let agentViews = "herdrAgentViews"
         public static let ghosttyTerminal = "herdrGhosttyTerminal"
         public static let splitFraction = "herdrSplitFraction"
+        public static let splitCompanions = "herdrSplitCompanions"
         public static let railOpen = "herdrRailOpen"
         public static let railWidth = "herdrRailWidth"
         public static let detailOpen = "herdrDetailOpen"
@@ -194,6 +196,9 @@ public enum AppStorageKeys {
         public static let pendingOpen = "herdrPendingOpen"
         public static let launchDefaults = "herdrLaunchDefaults"
         public static let terminalPanelHeight = "herdrTerminalPanelHeight"
+        public static let terminalPanelWidthMode = "herdrTerminalPanelWidthMode"
+        public static let terminalPanelLeading = "herdrTerminalPanelLeading"
+        public static let terminalPanelWidth = "herdrTerminalPanelWidth"
         public static let terminalMouse = "herdrTerminalMouse"
         public static let terminalFontSize = "herdrTerminalFontSize"
         public static let terminalStartFolder = "herdrTerminalStartFolder"
@@ -385,6 +390,7 @@ public enum AppStorageKeys {
         public static let musicEnabled = "tabMusicEnabled"
         public static let timeLapseEnabled = "tabTimeLapseEnabled"
         public static let latexEnabled = "tabLaTeXEnabled"
+        public static let socialManagerEnabled = "tabSocialManagerEnabled"
         public static let studioEnabled = "tabStudioEnabled"
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"

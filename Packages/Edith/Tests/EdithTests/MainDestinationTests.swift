@@ -96,7 +96,8 @@ import Testing
                 .appMaintenance, .blitztree,
                 .system, .runningApps,
                 .desk,
-                .media, .studio, .latex, .timeLapse, .downloads, .music, .calendar, .virtualCamera,
+                .media, .studio, .latex, .socialManager, .timeLapse, .downloads, .music, .calendar,
+                .virtualCamera,
                 .data, .database, .attention, .seoAudit, .codeStats,
             ])
     }
@@ -104,7 +105,8 @@ import Testing
     @Test func settingsTabsUseInformationArchitectureOrder() {
         #expect(
             SettingsPane.Tab.allCases == [
-                .general, .surfaces, .agentActivity, .permissions, .agent, .jev, .data, .shortcuts,
+                .general, .surfaces, .agentActivity, .permissions, .agent, .jev, .data, .storage,
+                .shortcuts,
                 .terminal,
                 .icloud,
                 .updates,

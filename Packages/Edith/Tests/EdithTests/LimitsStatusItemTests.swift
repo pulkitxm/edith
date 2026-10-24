@@ -36,6 +36,48 @@ import Testing
         #expect(store.limitsError == "Website session unavailable")
     }
 
+    @Test func launchStartsFromSavedAccountLimitsInsteadOfTheCLIAccountHistory() async throws {
+        let restore = [LimitsHistory.url, LimitsSnapshotCache.url].map {
+            ($0, try? Data(contentsOf: $0))
+        }
+        defer {
+            for (url, previous) in restore {
+                if let previous {
+                    try? previous.write(to: url)
+                } else {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
+        var history = LimitsHistory(url: LimitsHistory.url)
+        let appended = history.append(
+            provider: .claude,
+            session: .init(percent: 64, resetsAt: Date().addingTimeInterval(3600)), week: nil)
+        #expect(appended)
+        let account = ClaudeAccountLimits(
+            id: UUID(), name: "Synthetic subscription",
+            limits: .init(
+                provider: .claude,
+                session: .init(percent: 12, resetsAt: Date().addingTimeInterval(3600)), week: nil),
+            refreshedAt: Date())
+        try LimitsSnapshotCache.save(
+            .init(refreshedAt: Date(), providers: [], failure: nil, claudeAccounts: [account]))
+
+        let store = UsageStore()
+        defer { store.shutdown() }
+        #expect(store.claudeAccounts.map(\.name) == ["Synthetic subscription"])
+        await store.reloadLimitsFromHistory()
+        #expect(store.limits(for: .claude).session == nil)
+
+        await store.receiveLimitsSnapshot(
+            .init(refreshedAt: Date(), providers: [], failure: nil, claudeUsesAccounts: true))
+        #expect(store.claudeAccounts.isEmpty)
+        #expect(store.limits(for: .claude).session == nil)
+
+        await store.receiveLimitsSnapshot(.init(refreshedAt: Date(), providers: [], failure: nil))
+        #expect(store.limits(for: .claude).session?.percent == 64)
+    }
+
     @Test func resetCountdownFormatsEveryUnitAndRollover() {
         let now = Date(timeIntervalSince1970: 0)
         let cases: [(TimeInterval, String)] = [

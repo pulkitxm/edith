@@ -10,63 +10,22 @@ struct HerdrFilterButton: View {
     var onOpenSpace: (HerdrAgentSpace) -> Void
     var onEditLaunch: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
-    private var dark: Bool { scheme == .dark }
     private var chips: [HerdrSessionFilterChip] { currentChips }
-    private var active: Bool { !chips.isEmpty }
 
     var body: some View {
-        Button(action: onPress) {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(active ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                .frame(minWidth: UIScale.pt(22), minHeight: UIScale.pt(22))
-                .padding(.horizontal, UIScale.pt(4))
-                .padding(.vertical, UIScale.pt(4))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: active ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
-                    stroke: active ? DashSkin.accent(dark).opacity(0.65) : DashSkin.line(dark),
-                    strokeWidth: active ? 1.4 : 1
-                )
-                .overlay(alignment: .topTrailing) { badge }
-        }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel("Filter sessions")
-        .accessibilityValue(HerdrSessionFilters.summary(of: chips))
-        .help("Filter by machine, agent, or space (⇧⌘F)")
-        .popover(isPresented: popoverPresented, arrowEdge: .top) {
+        WorkspaceFilterButton(
+            presented: $presented,
+            count: chips.count + (store.accountFilter == nil ? 0 : 1),
+            label: "Filter sessions",
+            summary: HerdrSessionFilters.summary(of: chips)
+                + (store.accountFilter == nil ? "" : ", Claude account filter active"),
+            help: "Filter by machine, agent, Claude account, or space (⇧⌘F)",
+            onPress: onPress, onDismissed: onDismissed
+        ) {
             HerdrFilterMenu(
                 store: store, hideAgents: hideAgents, onOpenSpace: onOpenSpace,
                 onEditLaunch: onEditLaunch,
                 dismiss: { presented = false })
-        }
-    }
-
-    private var popoverPresented: Binding<Bool> {
-        Binding(
-            get: { presented },
-            set: { isPresented in
-                if isPresented {
-                    presented = true
-                } else if presented {
-                    presented = false
-                    onDismissed()
-                }
-            })
-    }
-
-    @ViewBuilder private var badge: some View {
-        if active {
-            Text(chips.count > 9 ? "9+" : "\(chips.count)")
-                .font(DashSkin.mono(8, weight: .bold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, UIScale.pt(3))
-                .padding(.vertical, UIScale.pt(1))
-                .background(DashSkin.accent(dark), in: Capsule())
-                .offset(x: UIScale.pt(4), y: UIScale.pt(-4))
-                .accessibilityHidden(true)
         }
     }
 
@@ -90,15 +49,10 @@ private struct HerdrFilterMenu: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var searchFocused: Bool
-    @State private var query = ""
-    @State private var highlight = 0
-    @State private var scrollToken = 0
-    @State private var listHeight: CGFloat = 44
 
     private var dark: Bool { scheme == .dark }
 
-    private var rows: [HerdrSessionFilterRow] {
+    private func rows(matching query: String) -> [HerdrSessionFilterRow] {
         HerdrSessionFilters.rows(
             query: query,
             machines: store.machineChoices,
@@ -109,149 +63,62 @@ private struct HerdrFilterMenu: View {
             spaces: store.agentSpaces.map { ($0.id, $0.title) })
     }
 
-    private var resolvedHighlight: Int {
-        guard !rows.isEmpty else { return 0 }
-        return min(highlight, rows.count - 1)
+    private var removedAccountIDs: [String] {
+        Set(store.accountSessions.values)
+            .subtracting(store.claudeAccounts.state.accounts.map { $0.id.uuidString }).sorted()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            search
-            if rows.isEmpty {
-                Text("No matching filters")
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(6))
-            } else {
-                list
+            Picker(
+                "Claude account",
+                selection: Binding(
+                    get: { store.accountFilter }, set: { store.accountFilter = $0 })
+            ) {
+                Text("All accounts").tag(String?.none)
+                Text("Existing CLI login").tag(Optional("cli"))
+                ForEach(store.claudeAccounts.state.accounts) { account in
+                    Text(account.name).tag(Optional(account.id.uuidString))
+                }
+                ForEach(removedAccountIDs, id: \.self) { id in
+                    Text("Removed account (\(id.prefix(8)))").tag(Optional(id))
+                }
+            }
+            WorkspaceFilterList(
+                label: "Filter sessions", rows: rows, section: { $0.section },
+                activate: activate, dismiss: dismiss
+            ) { row, highlighted, action in
+                rowButton(row, highlighted: highlighted, action: action)
             }
         }
         .padding(UIScale.pt(12))
         .frame(width: UIScale.pt(288))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Session filters")
-        .onAppear { searchFocused = true }
-        .onChange(of: query) { _, _ in
-            highlight = 0
-            scrollToken += 1
-        }
+        .pageTask { await store.claudeAccounts.read() }
     }
 
-    private var search: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            TextField("Filter", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(13)))
-                .disableAutocorrection(true)
-                .focused($searchFocused)
-                .accessibilityLabel("Filter sessions")
-                .onKeyPress(keys: [.upArrow, .downArrow]) { press in
-                    highlight = HerdrSessionFilters.highlight(
-                        resolvedHighlight,
-                        movingBy: press.key == .upArrow ? -1 : 1,
-                        count: rows.count)
-                    scrollToken += 1
-                    return .handled
-                }
-                .onKeyPress(.escape) {
-                    dismiss()
-                    return .handled
-                }
-                .onKeyPress(keys: [.return]) { _ in
-                    if rows.indices.contains(resolvedHighlight) {
-                        activate(rows[resolvedHighlight])
-                    }
-                    return .handled
-                }
-        }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(6))
-        .widgetBar(
-            cornerRadius: 8, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
-    }
-
-    private var list: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if index == 0 || rows[index - 1].section != row.section {
-                            sectionTitle(row.section, first: index == 0)
-                        }
-                        rowButton(row, index: index)
-                    }
-                }
-                .background {
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: HerdrFilterMenuHeightKey.self, value: geometry.size.height)
-                    }
-                }
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(max(listHeight, 44), UIScale.pt(420)))
-            .onPreferenceChange(HerdrFilterMenuHeightKey.self) { listHeight = $0 }
-            .onChange(of: scrollToken) { _, _ in
-                guard rows.indices.contains(resolvedHighlight) else { return }
-                proxy.scrollTo(rows[resolvedHighlight].id, anchor: .center)
-            }
-        }
-    }
-
-    private func sectionTitle(_ title: String, first: Bool) -> some View {
-        Text(title)
-            .font(.system(size: UIScale.pt(10), weight: .semibold))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.top, UIScale.pt(first ? 2 : 10))
-            .padding(.bottom, UIScale.pt(2))
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private func rowButton(_ row: HerdrSessionFilterRow, index: Int) -> some View {
-        let highlighted = index == resolvedHighlight
+    private func rowButton(
+        _ row: HerdrSessionFilterRow, highlighted: Bool, action: @escaping () -> Void
+    ) -> some View {
         let space = isSpace(row)
-        return Button {
-            highlight = index
-            activate(row)
-        } label: {
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: symbol(for: row))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(markColor(row))
-                    .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-                if let kind = kindMark(row) {
-                    HerdrKindMark(kind: kind, size: UIScale.pt(13))
-                }
-                Text(row.title)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .lineLimit(1)
-                    .presenterTextBlur(hideAgents && space, fontSize: 12.5)
-                Spacer(minLength: 0)
+        return WorkspaceFilterRowButton(highlighted: highlighted, action: action) {
+            Image(systemName: symbol(for: row))
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .foregroundStyle(markColor(row))
+                .frame(width: UIScale.pt(14), height: UIScale.pt(14))
+            if let kind = kindMark(row) {
+                HerdrKindMark(kind: kind, size: UIScale.pt(13))
             }
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(6))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                highlighted ? DashSkin.accent(dark).opacity(0.14) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
-            )
-            .contentShape(Rectangle())
+            Text(row.title)
+                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                .foregroundStyle(DashSkin.ink(dark))
+                .lineLimit(1)
+                .presenterTextBlur(hideAgents && space, fontSize: 12.5)
         }
-        .buttonStyle(.edith(.borderless))
         .accessibilityLabel(accessibleTitle(row, space: space))
         .accessibilityAddTraits(row.selected && row.toggles ? .isSelected : [])
         .modifier(HerdrFilterRowHint(text: rowHint(row)))
-        .id(row.id)
-        .onHover { inside in
-            if inside { highlight = index }
-        }
     }
 
     private func symbol(for row: HerdrSessionFilterRow) -> String {
@@ -328,12 +195,5 @@ private struct HerdrFilterRowHint: ViewModifier {
         } else {
             content.accessibilityHint(text)
         }
-    }
-}
-
-private struct HerdrFilterMenuHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

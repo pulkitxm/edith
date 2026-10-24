@@ -21,7 +21,7 @@
 
 ## How it works
 
-- Repositories are listed with the GitHub CLI (`gh`), so run `gh auth login` once. Without `gh` the agent still analyses whatever is already in the folder.
+- Repositories are listed with the GitHub CLI (`gh`), so run `gh auth login` once for each account. Every account signed in to `gh` is counted, not just the active one, except the logins listed in `codeStatsExcludedAccounts` (the account checkboxes in Code Stats settings). Without `gh` the agent still analyses whatever is already in the folder.
 - New repositories are cloned bare into `<folder>/<owner>/<repo>.git` and existing ones are fetched. Clones made by other tools as `<folder>/<owner>/<repo>/.git` are read as they are. Nothing in the folder is ever deleted.
 - Results and the per-repository cache live in Edith's own data folder, not in the mirror, so the last report stays readable while an external drive is unplugged.
 - A folder on an external drive under `/Volumes` is remembered while the drive is away. A scheduled refresh that comes due then waits for the drive, and runs once when it returns. The schedule counts from the first refresh you start, even one that the drive cut short.

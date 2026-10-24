@@ -126,7 +126,7 @@ struct PointTooltip: View {
             .presenterBlur(blur)
         }
         .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(5))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
+        .background(DashSkin.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(7)).strokeBorder(.primary.opacity(0.12)))
     }
 }
@@ -432,7 +432,7 @@ struct HeatCard: View {
         }
         .padding(UIScale.pt(12))
         .frame(width: UIScale.pt(258))
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .background(DashSkin.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(.primary.opacity(0.1)))
     }
 

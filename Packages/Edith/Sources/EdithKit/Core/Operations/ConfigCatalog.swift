@@ -50,9 +50,9 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database", "codestats",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music", "studio", "latex", "calendar", "virtualCamera",
+        "music", "studio", "latex", "social-manager", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
-        "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
+        "notch", "focusdim", "hinge", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
         "backup", "permissions", "terminal",
     ]
@@ -62,8 +62,10 @@ public enum ConfigCatalog {
         + menuBar + alerts + budget + dashboard + database + codeStats + machines + herdr + quinjet
         + companion
         + finder + system + homebrew + cleaner
-        + music + studio + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
+        + music + socialManager + studio + calendar + virtualCamera + clipboard + keystrokeHighlight
+        + notch
         + focusDim
+        + hinge
         + presenter
         + windowSweaters + colorPicker + emoji + bifrost
         + micMute
@@ -291,7 +293,8 @@ public enum ConfigCatalog {
             fallback: .string("session,week,fable")),
         SettingDefinition(
             AppStorageKeys.MenuBar.codexWindows, .string, group: "menubar",
-            summary: "Codex windows shown in the menu bar, comma-separated (session, week).",
+            summary: "Codex windows shown in the menu bar, comma-separated"
+                + " (session, week, credits).",
             fallback: .string("session,week")),
         SettingDefinition(
             AppStorageKeys.MenuBar.cursorWindows, .string, group: "menubar",
@@ -729,6 +732,14 @@ public enum ConfigCatalog {
             summary: "Include the music folder in the iCloud backup."),
     ]
 
+    private static let socialManager: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.socialManagerEnabled, .bool, group: "social-manager",
+            summary:
+                "Social Manager extension: profiles with isolated website accounts, tabs and side-by-side browsing.",
+            fallback: .bool(false))
+    ]
+
     private static let codeStats: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Tabs.latexEnabled, .bool, group: "latex",
@@ -768,6 +779,9 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.CodeStats.identityEmails, .stringList, group: "codestats",
             summary: "Author emails that mark a commit as yours."),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.excludedAccounts, .stringList, group: "codestats",
+            summary: "gh account logins whose repositories are not synced or counted."),
     ]
 
     private static let studio: [SettingDefinition] = [
@@ -961,6 +975,42 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let hinge: [SettingDefinition] = [
+        SettingDefinition(
+            HingeState.activeKey, .bool, group: "hinge",
+            summary: "Hinge fold on right now.", fallback: .bool(false)),
+        SettingDefinition(
+            HingeState.enabledKey, .bool, group: "hinge",
+            summary: "Hinge extension: fold the desktop as the MacBook lid closes.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            HingeSettings.openAngle, .number, group: "hinge",
+            summary: "Lid angle, in degrees, that counts as fully open.",
+            fallback: .double(100)),
+        SettingDefinition(
+            HingeSettings.effectStrength, .number, group: "hinge",
+            summary: "Fold strength from 0.25 to 1.", fallback: .double(1)),
+        SettingDefinition(
+            HingeSettings.sideFill, .string, group: "hinge",
+            summary: "What fills the sides of the fold.",
+            allowed: HingeSideFill.allCases.map(\.rawValue), fallback: .string("blur")),
+        SettingDefinition(
+            HingeSettings.cropsTop, .bool, group: "hinge",
+            summary: "Crop the top of the desktop as it folds.", fallback: .bool(true)),
+        SettingDefinition(
+            HingeSettings.blursByDistance, .bool, group: "hinge",
+            summary: "Blur the fold more as it moves away.", fallback: .bool(true)),
+        SettingDefinition(
+            HingeSettings.hotKeyCode, .int, group: "hinge",
+            summary: "Virtual key code of the Hinge shortcut."),
+        SettingDefinition(
+            HingeSettings.hotKeyMods, .int, group: "hinge",
+            summary: "Carbon modifier mask of the Hinge shortcut."),
+        SettingDefinition(
+            HingeSettings.hotKeyLabel, .string, group: "hinge",
+            summary: "Printable label for the Hinge shortcut."),
     ]
 
     private static let windowSweaters: [SettingDefinition] = [

@@ -52,11 +52,22 @@ final class LimitsStatusItem {
             PresenterState.shared.active
             && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 as? Bool ?? false)
-        let source = Self.stableProviders(providers, defaults: defaults)
-        let groups = MenuBarLimits.groups(
-            providers: source,
-            selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
+        let accounts = store?.providerEnabled(.claude) == true ? store?.claudeAccounts ?? [] : []
+        let accountGroups = MenuBarLimits.accountGroups(
+            accounts, selectedID: defaults.string(forKey: MenuBarLimits.accountSelectionKey),
+            slots: MenuBarLimits.selection(for: .claude, defaults: defaults),
             masked: masked)
+        let showsAccounts =
+            !accounts.isEmpty && (masked || accountGroups.contains(where: \.hasPercent))
+        let source = Self.stableProviders(providers, defaults: defaults).filter {
+            !showsAccounts || $0.provider != .claude
+        }
+        let groups =
+            (showsAccounts ? accountGroups : [])
+            + MenuBarLimits.groups(
+                providers: source,
+                selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
+                masked: masked)
         guard !groups.isEmpty else {
             item?.isVisible = false
             return
@@ -87,7 +98,11 @@ final class LimitsStatusItem {
         let title = NSMutableAttributedString()
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            if showsLogo(group.provider, multi: multi) { appendLogo(group.provider, into: title) }
+            if let label = group.accountLabel {
+                appendLabel(label + " ", into: title)
+            } else if showsLogo(group.provider, multi: multi) {
+                appendLogo(group.provider, into: title)
+            }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
                 appendLabel(
@@ -95,6 +110,9 @@ final class LimitsStatusItem {
                         + " ",
                     into: title)
                 appendValue(segment, provider: group.provider, percentSuffix: !multi, into: title)
+            }
+            if group.remainingAccounts > 0 {
+                appendLabel(" +\(group.remainingAccounts)", into: title)
             }
         }
         return title
@@ -110,7 +128,11 @@ final class LimitsStatusItem {
             .withAlphaComponent(0.65)
         for (index, group) in groups.enumerated() {
             if index > 0 { title.append(NSAttributedString(string: "   ")) }
-            appendLogo(group.provider, into: title)
+            if let label = group.accountLabel {
+                appendLabel(label + " ", into: title)
+            } else {
+                appendLogo(group.provider, into: title)
+            }
             for (segmentIndex, segment) in group.segments.enumerated() {
                 if segmentIndex > 0 {
                     title.append(
@@ -123,6 +145,9 @@ final class LimitsStatusItem {
                             ]))
                 }
                 appendValue(segment, provider: group.provider, percentSuffix: false, into: title)
+            }
+            if group.remainingAccounts > 0 {
+                appendLabel(" +\(group.remainingAccounts)", into: title)
             }
         }
         return title
@@ -186,17 +211,30 @@ final class LimitsStatusItem {
     }
 
     private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
-        let multi = groups.count > 1
-        return groups.map { stackedGroup($0, multi: multi) }
+        Self.stackedGroups(groups, defaults: SharedDefaults.store)
     }
 
-    private func stackedGroup(
-        _ group: MenuBarProviderGroup, multi: Bool
+    static func stackedGroups(
+        _ groups: [MenuBarProviderGroup], defaults: UserDefaults
+    ) -> [StackedLimitsView.Group] {
+        let multi = groups.count > 1
+        let firstAccount = groups.firstIndex { $0.accountHeader != nil }
+        return groups.enumerated().map { index, group in
+            stackedGroup(
+                group, multi: multi, showsAccountLogo: index == firstAccount, defaults: defaults)
+        }
+    }
+
+    private static func stackedGroup(
+        _ group: MenuBarProviderGroup, multi: Bool, showsAccountLogo: Bool, defaults: UserDefaults
     ) -> StackedLimitsView.Group {
+        let subColor = textColor(defaults: defaults)
         let logoColor = subColor ?? NSColor.labelColor
         let labelColor = subColor ?? NSColor.secondaryLabelColor
         let dimColor = subColor ?? NSColor.tertiaryLabelColor
-        let showsLogo = showsLogo(group.provider, multi: multi)
+        let showsLogo =
+            group.accountHeader == nil
+            ? multi || group.provider == .cursor || group.provider == .grok : showsAccountLogo
         var columns: [StackedLimitsView.Column] = []
         columns.reserveCapacity(group.segments.count)
         for segment in group.segments {
@@ -209,14 +247,17 @@ final class LimitsStatusItem {
             case .missing:
                 value = "\u{2013}"
                 color = dimColor
+            case .credits(let balance):
+                value = MenuBarLimits.creditsBalance(balance)
+                color = subColor ?? NSColor.labelColor
             case .percent(let percent):
                 value = "\(percent)"
                 color =
                     segment.window.map {
-                        self.color(
+                        Self.color(
                             for: $0,
                             duration: segment.slot.pacingDuration(
-                                for: group.provider, period: $0.period))
+                                for: group.provider, period: $0.period), defaults: defaults)
                     }
                     ?? dimColor
             }
@@ -227,9 +268,15 @@ final class LimitsStatusItem {
                     valueColor: color,
                     labelColor: labelColor))
         }
+        if group.remainingAccounts > 0 {
+            columns.append(
+                .init(
+                    label: "accounts", value: "+\(group.remainingAccounts)",
+                    valueColor: dimColor, labelColor: labelColor))
+        }
         return StackedLimitsView.Group(
             logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
-            columns: columns)
+            columns: columns, header: group.accountHeader, headerColor: labelColor)
     }
 
     private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
@@ -268,6 +315,11 @@ final class LimitsStatusItem {
             out.append(
                 NSAttributedString(
                     string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .credits(let balance):
+            out.append(
+                NSAttributedString(
+                    string: MenuBarLimits.creditsBalance(balance),
+                    attributes: [.font: font, .foregroundColor: subColor ?? NSColor.labelColor]))
         case .percent(let percent):
             let tint =
                 segment.window.map {
@@ -292,7 +344,20 @@ final class LimitsStatusItem {
     }
 
     private func color(for window: LimitWindow, duration: TimeInterval) -> NSColor {
-        let d = SharedDefaults.store
+        Self.color(for: window, duration: duration, defaults: SharedDefaults.store)
+    }
+
+    private static func color(
+        for window: LimitWindow, duration: TimeInterval, defaults d: UserDefaults
+    ) -> NSColor {
+        let mode = MenuBarTintMode(preference: d.string(forKey: AppStorageKeys.MenuBar.colorMode))
+        func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
+            guard mode == .custom else { return fallback }
+            return nsColor(hex: d.string(forKey: key)) ?? fallback
+        }
+        let lowColor = anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen)
+        let midColor = anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange)
+        let highColor = anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed)
         if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
             let risk = LimitMath.smartRisk(
                 utilization: window.percent, resetsAt: window.resetsAt,
@@ -307,29 +372,17 @@ final class LimitsStatusItem {
         }
     }
 
-    private var mode: MenuBarTintMode {
-        MenuBarTintMode(
-            preference: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode))
-    }
-
     private var subColor: NSColor? {
-        switch mode {
-        case .automatic:
-            return nil
-        case .custom:
-            return Self.nsColor(
-                hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
-        }
+        Self.textColor(defaults: SharedDefaults.store)
     }
 
-    private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
-        guard mode == .custom else { return fallback }
-        return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
+    private static func textColor(defaults: UserDefaults) -> NSColor? {
+        guard
+            MenuBarTintMode(preference: defaults.string(forKey: AppStorageKeys.MenuBar.colorMode))
+                == .custom
+        else { return nil }
+        return nsColor(hex: defaults.string(forKey: AppStorageKeys.MenuBar.subColorHex))
     }
-
-    private var lowColor: NSColor { anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen) }
-    private var midColor: NSColor { anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange) }
-    private var highColor: NSColor { anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed) }
 
     static func color(
         forRisk risk: Double, low: NSColor = .systemGreen, mid: NSColor = .systemOrange,
@@ -383,6 +436,8 @@ final class StackedLimitsView: NSView {
     struct Group {
         let logo: NSImage?
         let columns: [Column]
+        var header: String? = nil
+        var headerColor: NSColor = .secondaryLabelColor
     }
 
     var groups: [Group] = [] {
@@ -403,10 +458,7 @@ final class StackedLimitsView: NSView {
         for (index, group) in groups.enumerated() {
             if index > 0 { width += Self.groupGap }
             if group.logo != nil { width += Self.logoSize + Self.logoGap }
-            for (columnIndex, column) in group.columns.enumerated() {
-                if columnIndex > 0 { width += Self.columnGap }
-                width += Self.columnWidth(column)
-            }
+            width += Self.groupWidth(group)
         }
         return width.rounded(.up)
     }
@@ -433,6 +485,26 @@ final class StackedLimitsView: NSView {
                     from: .zero, operation: .sourceOver, fraction: 1)
                 x += Self.logoSize + Self.logoGap
             }
+            if let header = group.header {
+                let width = Self.groupWidth(group)
+                let title = Self.attributed(header, font: Self.labelFont, color: group.headerColor)
+                title.draw(
+                    at: NSPoint(x: x + (width - title.size().width) / 2, y: blockTop - labelHeight))
+                let rowWidth = Self.rowWidth(group)
+                var columnX = x + (width - rowWidth) / 2
+                let valueY = blockTop - labelHeight - Self.rowGap - valueHeight
+                for column in group.columns {
+                    let label = Self.attributed(
+                        column.label, font: Self.labelFont, color: column.labelColor)
+                    let value = Self.attributed(
+                        column.value, font: Self.valueFont, color: column.valueColor)
+                    label.draw(at: NSPoint(x: columnX, y: valueY - 1))
+                    value.draw(at: NSPoint(x: columnX + label.size().width + 3, y: valueY))
+                    columnX += label.size().width + 3 + value.size().width + Self.columnGap
+                }
+                x += width
+                continue
+            }
             for (columnIndex, column) in group.columns.enumerated() {
                 if columnIndex > 0 { x += Self.columnGap }
                 let width = Self.columnWidth(column)
@@ -451,6 +523,22 @@ final class StackedLimitsView: NSView {
         }
     }
 
+    private static func rowWidth(_ group: Group) -> CGFloat {
+        group.columns.reduce(CGFloat(0)) { width, column in
+            width + attributed(column.label, font: labelFont, color: .labelColor).size().width
+                + 3 + attributed(column.value, font: valueFont, color: .labelColor).size().width
+        } + CGFloat(max(group.columns.count - 1, 0)) * columnGap
+    }
+
+    private static func groupWidth(_ group: Group) -> CGFloat {
+        if let header = group.header {
+            let headerWidth = attributed(header, font: labelFont, color: .labelColor).size().width
+            return ceil(max(rowWidth(group), headerWidth))
+        }
+        return group.columns.reduce(CGFloat(0)) { $0 + columnWidth($1) }
+            + CGFloat(max(group.columns.count - 1, 0)) * columnGap
+    }
+
     private static func columnWidth(_ column: Column) -> CGFloat {
         let label = attributed(column.label, font: labelFont, color: .labelColor).size().width
         let value = attributed(column.value, font: valueFont, color: .labelColor).size().width
@@ -467,6 +555,8 @@ final class StackedLimitsView: NSView {
 
 struct LimitsMenuPanel: View {
     let store: UsageStore
+    @AppStorage(MenuBarLimits.accountSelectionKey, store: SharedDefaults.store) private
+        var selectedID = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -476,16 +566,57 @@ struct LimitsMenuPanel: View {
                 Text("Usage hidden during presentation").foregroundStyle(.secondary)
             } else {
                 ForEach(store.enabledProviders) { provider in
-                    let limits = store.limits(for: provider)
-                    Text(provider.label).font(.edithText(.headline))
-                    let slots = MenuBarLimits.slots(for: provider).filter { slot in
-                        slot != .fable || limits.window(for: slot) != nil
-                    }
-                    ForEach(slots, id: \.self) { slot in
-                        let window = limits.window(for: slot)
-                        StatusProgressRow(
-                            title: slot.title(for: provider), percent: window?.percent,
-                            resetsAt: window?.resetsAt)
+                    if provider == .claude, !store.claudeAccounts.isEmpty {
+                        if store.claudeAccounts.count > 2 {
+                            Picker("Claude account", selection: $selectedID) {
+                                Text("First account").tag("")
+                                ForEach(store.claudeAccounts) {
+                                    Text($0.name).tag($0.id.uuidString)
+                                }
+                            }
+                        }
+                        ForEach(store.claudeAccounts) { account in
+                            Text("\(provider.label) · \(account.name)")
+                                .font(.edithText(.headline)).lineLimit(1)
+                            ForEach(
+                                MenuBarLimits.slots(for: provider).filter { slot in
+                                    slot != .fable || account.limits.fable != nil
+                                }, id: \.self
+                            ) { slot in
+                                let window = account.limits.window(for: slot)
+                                StatusProgressRow(
+                                    title: slot.title(for: provider),
+                                    percent: window.map { Double($0.shownPercent) },
+                                    resetsAt: window?.resetsAt)
+                            }
+                            if let error = account.limits.error {
+                                Text(error).font(.edithText(.caption))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    } else {
+                        let limits = store.limits(for: provider)
+                        Text(provider.label).font(.edithText(.headline))
+                        let slots = MenuBarLimits.slots(for: provider).filter { slot in
+                            slot != .fable || limits.window(for: slot) != nil
+                        }
+                        ForEach(slots, id: \.self) { slot in
+                            let window = limits.window(for: slot)
+                            StatusProgressRow(
+                                title: slot.title(for: provider),
+                                percent: window.map { Double($0.shownPercent) },
+                                resetsAt: window?.resetsAt)
+                        }
+                        if let credits = limits.credits {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LimitWindowSlot.credits.title(for: provider))
+                                Spacer(minLength: 8)
+                                Text("\(MenuBarLimits.creditsBalance(credits)) remaining")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
@@ -497,5 +628,6 @@ struct LimitsMenuPanel: View {
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
+        .onChange(of: selectedID) { store.refreshMenuBarItem() }
     }
 }

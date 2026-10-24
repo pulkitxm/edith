@@ -73,13 +73,14 @@ public struct CodeStatsCommit: Codable, Equatable, Hashable, Sendable {
     public var timestamp: Int
     public var subject: String
     public var files: Int
+    public var lfsFiles: Int
     public var fingerprint: String?
     public var flags: CodeStatsCommitFlags
     public var changes: [CodeStatsChange]
 
     public init(
         sha: String, day: String, hour: Int, repository: String, timestamp: Int = 0,
-        subject: String = "", files: Int = 0, fingerprint: String? = nil,
+        subject: String = "", files: Int = 0, lfsFiles: Int = 0, fingerprint: String? = nil,
         flags: CodeStatsCommitFlags = [], changes: [CodeStatsChange] = []
     ) {
         self.sha = sha
@@ -89,6 +90,7 @@ public struct CodeStatsCommit: Codable, Equatable, Hashable, Sendable {
         self.timestamp = timestamp
         self.subject = subject
         self.files = files
+        self.lfsFiles = lfsFiles
         self.fingerprint = fingerprint
         self.flags = flags
         self.changes = changes

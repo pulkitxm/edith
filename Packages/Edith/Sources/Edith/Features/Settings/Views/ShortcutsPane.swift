@@ -18,6 +18,8 @@ struct ShortcutsSettingsPane: View {
         false
     @AppStorage(FocusDimState.enabledKey, store: SharedDefaults.store) private var focusDimEnabled =
         false
+    @AppStorage(HingeState.enabledKey, store: SharedDefaults.store) private var hingeEnabled =
+        false
     @AppStorage(AppStorageKeys.Mic.muteEnabled, store: SharedDefaults.store) private
         var micMuteEnabled = false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
@@ -32,7 +34,7 @@ struct ShortcutsSettingsPane: View {
         ExtensionShortcutVisibility.visible(
             bifrost: bifrostEnabled, clipboard: clipboardEnabled, emoji: emojiEnabled,
             micMute: micMuteEnabled,
-            focusDim: focusDimEnabled, presenter: presenterEnabled,
+            focusDim: focusDimEnabled, hinge: hingeEnabled, presenter: presenterEnabled,
             colorPicker: colorPickerEnabled, keystrokeHighlight: keystrokeHighlightEnabled,
             virtualCamera: virtualCameraEnabled)
     }
@@ -149,6 +151,10 @@ struct ShortcutsSettingsPane: View {
             shortcutRow(
                 "Focus dim", subtitle: "Toggles background-window dimming",
                 keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
+        case .hinge:
+            shortcutRow(
+                "Hinge", subtitle: "Turns the desktop fold on or off",
+                keyPrefix: "hingeHotKey", defaultLabel: "⌃⌥H")
         case .presenter:
             shortcutRow(
                 "Presenter mode", subtitle: "Forces presenter blur on or off",

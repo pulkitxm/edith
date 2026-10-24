@@ -60,6 +60,7 @@ struct PageScaffold<Header: View, Content: View>: View {
     var width: PageContentWidth = .fluid
     var pinnedHeader = false
     var scrollIdentity = ""
+    var activity = ContentActivity.idle
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
@@ -87,6 +88,10 @@ struct PageScaffold<Header: View, Content: View>: View {
                 }
             }
             .scrollIndicators(.automatic)
+            .overlay(alignment: .top) {
+                ContentActivityBadge(activity)
+                    .padding(.top, UIScale.pt(8))
+            }
         }
         .pageSurface()
     }

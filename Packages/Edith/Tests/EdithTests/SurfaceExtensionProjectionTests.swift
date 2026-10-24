@@ -101,8 +101,9 @@ struct SurfaceExtensionProjectionTests {
         #expect(SurfaceExtensionProjection.percentage("-5%") == 0)
         #expect(SurfaceExtensionProjection.percentage("no progress") == nil)
         #expect(SurfaceExtensionProjection.duration(.infinity) == "Unavailable")
-        #expect(SurfaceExtensionProjection.duration(-20) == "0m")
+        #expect(SurfaceExtensionProjection.duration(-20) == "0s")
         #expect(SurfaceExtensionProjection.duration(3660) == "1h 1m")
+        #expect(SurfaceExtensionProjection.duration(97_260) == "1d 3h")
     }
 
     @Test func everyDataCardExposesFieldChoicesWithoutDuplicateIdentifiers() {

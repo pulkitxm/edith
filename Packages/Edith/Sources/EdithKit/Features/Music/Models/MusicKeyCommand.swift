@@ -22,9 +22,12 @@ public enum MusicKeyCommand {
     public static let volumeStep: Double = 0.05
 
     public static func handle(
-        keyCode: UInt16, modifiers: NSEvent.ModifierFlags, active: Bool, _ handlers: Handlers
+        keyCode: UInt16, modifiers: NSEvent.ModifierFlags, active: Bool,
+        responder: NSResponder? = NSApp.keyWindow?.firstResponder, _ handlers: Handlers
     ) -> Bool {
-        guard active, !isReceivingTextInput(NSApp.keyWindow?.firstResponder) else { return false }
+        guard active, !isReceivingTextInput(responder),
+            !usesKey(keyCode, responder: responder)
+        else { return false }
         guard modifiers.intersection([.command, .option, .control]).isEmpty else {
             return false
         }
@@ -39,9 +42,17 @@ public enum MusicKeyCommand {
         return true
     }
 
+    static func usesKey(_ keyCode: UInt16, responder: NSResponder?) -> Bool {
+        guard let responder else { return false }
+        if responder is NSTableView || responder is NSBrowser || responder is NSCollectionView {
+            return (123...126).contains(keyCode)
+        }
+        return responder is NSControl
+    }
+
     static func isReceivingTextInput(_ responder: NSResponder?) -> Bool {
         guard let responder else { return false }
-        if responder is DirectKeyboardInputResponder { return true }
+        if InputFocus.takesKeysDirectly(responder) { return true }
         if let text = responder as? NSTextView { return text.isFieldEditor || text.isEditable }
         return responder is NSTextField
     }

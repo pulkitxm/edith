@@ -199,6 +199,38 @@ public enum ExtensionLifecycleCatalog {
 
     public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
+            "socialManager",
+            "Manage profiles and their separate website accounts in tabs and side-by-side browser panes.",
+            workflows: [
+                instruction(
+                    "account", "Add a profile and its accounts",
+                    "Create a profile, add the platforms it uses, then sign in directly on each account's website."
+                ),
+                instruction(
+                    "layout", "Work side by side",
+                    "Use Side by side to combine accounts from any platform, then resize, maximize or separate panes."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "browser", "Use the built-in browser",
+                    "Enable Social Manager. No Chrome profiles or additional tools are needed.")
+            ],
+            examples: ["ed extensions enable socialManager", "ed app reveal socialManager"],
+            docs: [documentation("guide", "Social Manager guide", "docs/social-manager.md")],
+            recovery: [
+                instruction(
+                    "retry", "Reopen the account",
+                    "Reload the website, or clear that account's session from its account menu and sign in again.",
+                    "ed app reveal socialManager")
+            ],
+            verification: [
+                instruction(
+                    "verify", "Verify Social Manager",
+                    "Check the built-in browser capability and extension readiness.",
+                    "ed extensions verify socialManager --json")
+            ]),
+        descriptor(
             "latex", "Compile local LaTeX documents or review repository changes on GitHub.",
             workflows: [
                 instruction(
@@ -1104,6 +1136,38 @@ public enum ExtensionLifecycleCatalog {
                     "config", "Inspect dimming settings",
                     "Confirm the effect is enabled and configured.",
                     "ed config ls --group focusdim --json")
+            ]),
+        descriptor(
+            "hinge", "Fold the live desktop as the MacBook lid closes.",
+            workflows: [
+                instruction(
+                    "fold", "Follow the lid",
+                    "Turn the fold on, then close the lid to bend the desktop."),
+                instruction(
+                    "calibrate", "Set the open position",
+                    "Save the lid angle you sit at. Hinge starts from 100 degrees."),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Grant Screen Recording",
+                    "Screen Recording supplies the live desktop. The Mac also needs a lid angle sensor.",
+                    "ed permissions request screenRecording")
+            ],
+            examples: ["ed extensions enable hinge", "ed config ls --group hinge --json"],
+            docs: [
+                documentation("extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "permission", "Refresh Screen Recording",
+                    "Refresh the mirrored grant after changing System Settings.",
+                    "ed permissions refresh")
+            ],
+            verification: [
+                instruction(
+                    "config", "Inspect the fold",
+                    "Confirm the effect, open angle and strength.",
+                    "ed config ls --group hinge --json")
             ]),
         descriptor(
             "windowSweaters",

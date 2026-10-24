@@ -2,22 +2,17 @@ import SwiftUI
 
 private struct EdithSurface: ViewModifier {
     let cornerRadius: CGFloat
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: UIScale.pt(cornerRadius), style: .continuous)
+        let dark = scheme == .dark
         content
-            .background {
-                if reduceTransparency {
-                    shape.fill(Color(nsColor: .controlBackgroundColor))
-                } else {
-                    shape.fill(.regularMaterial)
-                }
-            }
+            .background { shape.fill(DashSkin.paper2(dark)) }
             .overlay {
                 shape.strokeBorder(
-                    Color.primary.opacity(contrast == .increased ? 0.3 : 0.07),
+                    contrast == .increased ? DashSkin.lineStrong(dark) : DashSkin.line(dark),
                     lineWidth: contrast == .increased ? 1 : 0.5
                 )
                 .allowsHitTesting(false)

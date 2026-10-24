@@ -219,8 +219,8 @@ private final class LidAwakeDaemonRegistrar {
 
     private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
     private var registrationInFlight = false
-    private var microphoneSyncInFlight = false
-    private var microphoneSynced = false
+    private var microphoneRemovalInFlight = false
+    private var microphoneRemoved = false
     private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in
         self?.publishStatus()
     }
@@ -300,40 +300,33 @@ private final class LidAwakeDaemonRegistrar {
             }
         SharedDefaults.store.setIfChanged(state, forKey: LidAwakePrivilegedService.stateKey)
         approvalRefresher.update(awaitingApproval: state == "awaitingApproval")
-        if state == "enabled" { synchronizeMeetingMicrophone() }
+        if state == "enabled" { removeMeetingMicrophone() }
     }
 
-    private func synchronizeMeetingMicrophone() {
-        guard !microphoneSyncInFlight, !microphoneSynced else { return }
-        microphoneSyncInFlight = true
+    private func removeMeetingMicrophone() {
+        guard !microphoneRemovalInFlight, !microphoneRemoved else { return }
+        microphoneRemovalInFlight = true
         let connection = NSXPCConnection(
             machServiceName: LidAwakePrivilegedService.machServiceName, options: .privileged)
         connection.remoteObjectInterface = NSXPCInterface(with: LidAwakePrivilegedProtocol.self)
         connection.resume()
         let finish: @Sendable (NSError?) -> Void = { [weak self] error in
             connection.invalidate()
-            let message = error?.localizedDescription
+            let removed = error == nil
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.microphoneSyncInFlight = false
-                self.microphoneSynced = message == nil
-                SharedDefaults.store.setIfChanged(
-                    message ?? "", forKey: MeetingMicrophoneDeployment.errorKey)
+                self.microphoneRemovalInFlight = false
+                self.microphoneRemoved = removed
             }
         }
         guard
             let proxy = connection.remoteObjectProxyWithErrorHandler({ finish($0 as NSError) })
                 as? LidAwakePrivilegedProtocol
         else {
-            finish(
-                NSError(
-                    domain: MeetingMicrophoneDeployment.identifier, code: 1,
-                    userInfo: [
-                        NSLocalizedDescriptionKey: "Edith’s privileged helper is unavailable."
-                    ]))
+            finish(NSError(domain: LidAwakePrivilegedService.bundleIdentifier, code: 1))
             return
         }
-        proxy.synchronizeMeetingMicrophone(reply: finish)
+        proxy.removeMeetingMicrophone(reply: finish)
     }
 
     private func persist(_ fingerprint: String?) {

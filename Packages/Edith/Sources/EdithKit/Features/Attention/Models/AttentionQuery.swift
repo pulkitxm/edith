@@ -1,5 +1,50 @@
 import Foundation
 
+public struct AttentionSpanFilter: Codable, Equatable, Hashable, Sendable {
+    public static let none = AttentionSpanFilter()
+
+    public var level: AttentionProductivity?
+    public var sphere: AttentionSphere?
+    public var category: String?
+    public var search: String
+
+    public init(
+        level: AttentionProductivity? = nil, sphere: AttentionSphere? = nil,
+        category: String? = nil, search: String = ""
+    ) {
+        self.level = level
+        self.sphere = sphere
+        self.category = category
+        self.search = search
+    }
+
+    public var query: String { search.trimmingCharacters(in: .whitespaces).lowercased() }
+    public var classifies: Bool { level != nil || sphere != nil || category != nil }
+    public var isEmpty: Bool { !classifies && query.isEmpty }
+
+    public func matches(
+        categoryID: String, productivity: AttentionProductivity, sphere: AttentionSphere,
+        texts: [String?]
+    ) -> Bool {
+        if let category, categoryID != category { return false }
+        if let level, productivity != level { return false }
+        if let required = self.sphere, sphere != required { return false }
+        return matchesText(texts)
+    }
+
+    public func matchesText(_ texts: [String?]) -> Bool {
+        let query = query
+        guard !query.isEmpty else { return true }
+        return texts.contains { $0?.lowercased().contains(query) == true }
+    }
+
+    public func matches(_ span: AttentionSpan) -> Bool {
+        matches(
+            categoryID: span.categoryID, productivity: span.productivity, sphere: span.sphere,
+            texts: [span.name, span.detail])
+    }
+}
+
 public struct AttentionTimeWindow: Codable, Equatable, Hashable, Sendable {
     public static let all = AttentionTimeWindow()
     public static let weekdays: Set<Int> = [2, 3, 4, 5, 6]

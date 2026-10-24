@@ -6,6 +6,7 @@ struct CodeStatsHeader: View {
     let model: CodeStatsModel
     @Environment(\.colorScheme) private var scheme
     @State private var sharePresentation: ExportCardPresentation<CodeStatsExportDeck>?
+    @State private var settingsPresented = false
 
     private var dark: Bool { scheme == .dark }
 
@@ -26,6 +27,14 @@ struct CodeStatsHeader: View {
                         deck: CodeStatsExportDeck(snapshot: shareSnapshot),
                         title: "Share code stats")
                 }
+                if model.phase != .setup {
+                    Button {
+                        settingsPresented = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .help("Code Stats settings")
+                }
                 if model.isRunning {
                     Button {
                         Task { await model.cancel() }
@@ -45,7 +54,7 @@ struct CodeStatsHeader: View {
             }
         } accessory: {
             HStack(spacing: UIScale.pt(12)) {
-                if let profile = model.status?.state.profile {
+                ForEach(model.status?.state.profiles ?? [], id: \.id) { profile in
                     CodeStatsProfileBadge(profile: profile, dark: dark)
                 }
                 Spacer(minLength: UIScale.pt(8))
@@ -55,6 +64,9 @@ struct CodeStatsHeader: View {
             }
         }
         .exportCardPresentation(item: $sharePresentation)
+        .edithSheet(isPresented: $settingsPresented) {
+            CodeStatsSettingsSheet(model: model)
+        }
     }
 }
 

@@ -319,11 +319,24 @@ import Testing
         #expect(CodeStatsIdentity.escapeRegex("a(b)+c") == "a\\(b\\)\\+c")
     }
 
-    @Test func seedingFromAProfileUsesTheLoginAndEmails() {
+    @Test func seedingFromProfilesUsesEveryLoginAndEmail() {
         let seeded = CodeStatsIdentity.seeded(
-            login: "octocat", emails: ["1+octocat@users.noreply.github.com"])
-        #expect(seeded.substrings == ["octocat"])
-        #expect(seeded.labels == ["1+octocat@users.noreply.github.com", "*octocat*"])
+            logins: ["octocat", "worker"],
+            emails: ["1+octocat@users.noreply.github.com", "2+worker@users.noreply.github.com"])
+        #expect(seeded.substrings == ["octocat", "worker"])
+        #expect(
+            seeded.labels == [
+                "1+octocat@users.noreply.github.com", "2+worker@users.noreply.github.com",
+                "*octocat*", "*worker*",
+            ])
+    }
+
+    @Test func mergingKeepsExistingValuesAndSkipsCaseInsensitiveDuplicates() {
+        let existing = CodeStatsIdentity(substrings: ["OctoCat"], emails: ["Me@Example.com"])
+        let merged = existing.merging(
+            logins: ["octocat", "worker", ""], emails: ["me@example.com", "w@example.com"])
+        #expect(merged.substrings == ["OctoCat", "worker"])
+        #expect(merged.emails == ["Me@Example.com", "w@example.com"])
     }
 
     @Test func theFingerprintIgnoresOrderAndCaseButNotContent() {
@@ -332,5 +345,100 @@ import Testing
         #expect(identity.fingerprint.count == 64)
         let edited = CodeStatsIdentity(substrings: ["octocat", "pk"], emails: identity.emails)
         #expect(identity.fingerprint != edited.fingerprint)
+    }
+}
+
+@Suite struct CodeStatsLFSParserTests {
+    private static let oid = String(repeating: "a", count: 64)
+    private static let nextOid = String(repeating: "b", count: 64)
+
+    private func parse(_ body: String) -> [CodeStatsCommit] {
+        CodeStatsLogParser.parse(
+            "C\tl1\t2026-06-01T12:00:00+05:30\tPulkit\tp@x.com\t1780300800\t\tframes\n" + body,
+            repository: "octo/reel", isMine: { _, _ in true })
+    }
+
+    @Test func newModifiedAndDeletedPointersCountAsFilesNotLines() {
+        let commits = parse(
+            """
+            diff --git a/frames/001.png b/frames/001.png
+            new file mode 100644
+            --- /dev/null
+            +++ b/frames/001.png
+            @@ -0,0 +1,3 @@
+            +version https://git-lfs.github.com/spec/v1
+            +oid sha256:\(Self.oid)
+            +size 48213
+            diff --git a/frames/002.png b/frames/002.png
+            --- a/frames/002.png
+            +++ b/frames/002.png
+            @@ -2,2 +2,2 @@
+            -oid sha256:\(Self.oid)
+            -size 10
+            +oid sha256:\(Self.nextOid)
+            +size 12
+            diff --git a/frames/003.png b/frames/003.png
+            deleted file mode 100644
+            --- a/frames/003.png
+            +++ /dev/null
+            @@ -1,3 +0,0 @@
+            -version https://git-lfs.github.com/spec/v1
+            -oid sha256:\(Self.oid)
+            -size 48213
+            diff --git a/src/render.py b/src/render.py
+            --- a/src/render.py
+            +++ b/src/render.py
+            @@ -0,0 +1,2 @@
+            +import os
+            +print(os.getcwd())
+            """)
+        #expect(commits.count == 1)
+        #expect(commits[0].lfsFiles == 3)
+        #expect(commits[0].files == 4)
+        #expect(commits[0].totals == CodeStatsLanguageCounts(added: 2))
+        #expect(commits[0].changes.map(\.language) == ["Python"])
+    }
+
+    @Test func replacingRealContentWithAPointerIsAMigrationNotAuthorship() {
+        let commits = parse(
+            """
+            diff --git a/data/big.csv b/data/big.csv
+            --- a/data/big.csv
+            +++ b/data/big.csv
+            @@ -1,3 +1,3 @@
+            -a,b
+            -1,2
+            -3,4
+            +version https://git-lfs.github.com/spec/v1
+            +oid sha256:\(Self.oid)
+            +size 99
+            """)
+        #expect(commits[0].lfsFiles == 1)
+        #expect(commits[0].changes.isEmpty)
+    }
+
+    @Test func textThatOnlyLooksLikeAPointerFieldStillCounts() {
+        let commits = parse(
+            """
+            diff --git a/notes.md b/notes.md
+            --- a/notes.md
+            +++ b/notes.md
+            @@ -0,0 +1,2 @@
+            +size 12
+            +oid sha256:short
+            """)
+        #expect(commits[0].lfsFiles == 0)
+        #expect(commits[0].totals.added == 2)
+    }
+
+    @Test func pullRequestNumbersComeFromTheTrailingSuffixOnly() {
+        #expect(CodeStatsLogParser.pullRequest(subject: "feat: planets (#74)") == 74)
+        #expect(CodeStatsLogParser.pullRequest(subject: "Revert \"x (#3)\" (#9) ") == 9)
+        #expect(CodeStatsLogParser.pullRequest(subject: "Revert \"x (#3)\"") == nil)
+        #expect(CodeStatsLogParser.pullRequest(subject: "fix (#)") == nil)
+        #expect(CodeStatsLogParser.pullRequest(subject: "see #12") == nil)
+        #expect(
+            CodeStatsLogParser.pullRequest(
+                header: "C\tabc\t2026-06-01T00:00:00Z\tA\ta@x\t1\t\tship it (#12)") == 12)
     }
 }

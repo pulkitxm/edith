@@ -415,6 +415,10 @@ import Testing
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
             ("studio", "StudioRows", "enabled", "ExtensionsPane.swift"),
             ("latex", "LaTeXRows", "enabled", "../../LaTeX/LaTeXRows.swift"),
+            (
+                "socialManager", "SocialManagerRows", "enabled",
+                "../../SocialManager/SocialManagerRows.swift"
+            ),
             ("timeLapse", "TimeLapseRows", "enabled", "ExtensionsPane.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
@@ -426,6 +430,7 @@ import Testing
                 "KeystrokeHighlightRows.swift"
             ),
             ("focusDim", "FocusDimRows", "enabled", "FocusDimRows.swift"),
+            ("hinge", "HingeRows", "enabled", "HingeRows.swift"),
             (
                 "windowSweaters", "WindowSweatersRows", "enabled",
                 "WindowSweatersRows.swift"

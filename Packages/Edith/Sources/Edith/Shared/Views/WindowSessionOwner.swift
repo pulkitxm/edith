@@ -7,6 +7,7 @@ final class WindowSessionOwner: ObservableObject {
     private var storedAttention: AttentionPageModel?
     private var storedCodeStats: CodeStatsModel?
     private var storedLaTeX: LaTeXModel?
+    private var storedSocialManager: SocialManagerModel?
     private var storedStudio: StudioModel?
     private var storedQuinjet: QuinjetPageModel?
     private var storedCapture: CompanionCaptureModel?
@@ -48,6 +49,13 @@ final class WindowSessionOwner: ObservableObject {
         if let storedStudio { return storedStudio }
         let model = StudioModel()
         storedStudio = model
+        return model
+    }
+
+    var socialManager: SocialManagerModel {
+        if let storedSocialManager { return storedSocialManager }
+        let model = SocialManagerModel()
+        storedSocialManager = model
         return model
     }
 
@@ -122,6 +130,7 @@ final class WindowSessionOwner: ObservableObject {
     }
 
     deinit {
+        if let model = storedSocialManager { Task { @MainActor in model.shutdown() } }
         if let model = storedRunningApps { Task { @MainActor in model.loading.cancel() } }
         for model in storedProcesses.values { Task { @MainActor in model.loading.cancel() } }
         if let model = storedAttention { Task { @MainActor in model.cancelLoading() } }

@@ -8,7 +8,7 @@ struct HerdrAgentViewToggle: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private static let options: [HerdrAgentView] = [.diff, .agent]
+    private static let options: [HerdrAgentView] = [.diff, .files, .agent]
 
     private var dark: Bool { scheme == .dark }
 
@@ -29,7 +29,7 @@ struct HerdrAgentViewToggle: View {
             HStack(spacing: UIScale.pt(5)) {
                 Image(systemName: option.icon)
                     .font(.system(size: UIScale.pt(compactStyle ? 9 : 10), weight: .semibold))
-                Text(option.title)
+                Text(option.shortTitle)
                     .font(
                         .system(
                             size: UIScale.pt(compactStyle ? 10 : 11),
@@ -49,6 +49,14 @@ struct HerdrAgentViewToggle: View {
         }
         .buttonStyle(.edith(.borderless))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help(option == .diff ? "Show the Quinjet diff" : "Show the agent session")
+        .help(Self.help(option))
+    }
+
+    private static func help(_ option: HerdrAgentView) -> String {
+        switch option {
+        case .diff: "Show the Quinjet diff"
+        case .files: "Browse the agent's files"
+        case .agent, .split: "Show the agent session"
+        }
     }
 }

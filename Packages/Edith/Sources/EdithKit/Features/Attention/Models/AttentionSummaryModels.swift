@@ -443,6 +443,7 @@ public struct AttentionSummary: Codable, Equatable, Sendable {
     public var agents: AttentionAgentSummary
     public var signals: AttentionSignals
     public var previous: AttentionTotals?
+    public var unmatchedDuration: TimeInterval
 
     public init(
         from: Date, to: Date, activeDuration: TimeInterval = 0, idleDuration: TimeInterval = 0,
@@ -454,7 +455,8 @@ public struct AttentionSummary: Codable, Equatable, Sendable {
         hours: [AttentionHourCell] = [], spans: [AttentionSpan] = [],
         focusBlocks: [AttentionFocusBlock] = [], transitions: [AttentionTransition] = [],
         dimensions: [AttentionDimension] = [], agents: AttentionAgentSummary = .init(),
-        signals: AttentionSignals = .init(), previous: AttentionTotals? = nil
+        signals: AttentionSignals = .init(), previous: AttentionTotals? = nil,
+        unmatchedDuration: TimeInterval = 0
     ) {
         self.from = from
         self.to = to
@@ -478,6 +480,7 @@ public struct AttentionSummary: Codable, Equatable, Sendable {
         self.agents = agents
         self.signals = signals
         self.previous = previous
+        self.unmatchedDuration = unmatchedDuration
     }
 
     public func screenTime(excludingIdle: Bool) -> TimeInterval {

@@ -6,6 +6,7 @@ import Observation
 @Observable
 final class CodeStatsModel {
     static let shared = CodeStatsModel()
+    static let largestShown = 12
 
     private(set) var status: CodeStatsStatus?
     private(set) var report: CodeStatsReport?
@@ -22,9 +23,10 @@ final class CodeStatsModel {
     var errorMessage: String?
     var range = CodeStatsRange.days(90)
     private(set) var table: CodeStatsFactTable?
+    private(set) var tableRevision = 0
     private(set) var audit: CodeStatsAudit?
+    private(set) var largest: [CodeStatsFactCommit] = []
     private(set) var filter = CodeStatsFilter.default
-    var isComputing: Bool { computation.isRunning }
     private(set) var facets = CodeStatsFacets()
     private(set) var identityPendingRecount = false
     private(set) var explorer = CodeStatsExplorer()
@@ -77,8 +79,11 @@ final class CodeStatsModel {
 
     var loadingError: String? { statusLoad.errorMessage ?? reportLoad.errorMessage }
 
-    var isRefreshing: Bool {
-        report != nil && (statusLoad.isRunning || reportLoad.isRunning || computation.isRunning)
+    var activity: ContentActivity {
+        guard report != nil else { return .idle }
+        return .resolve(
+            updating: computation.isRunning,
+            refreshing: statusLoad.isRunning || reportLoad.isRunning || isRunning)
     }
 
     func cancelLoading() {
@@ -122,15 +127,20 @@ final class CodeStatsModel {
     }
 
     var seededIdentity: CodeStatsIdentity? {
-        guard identity.isEmpty, let lookup = profileLookup, let profile = lookup.profile else {
-            return nil
+        let settings = settings
+        guard identity.isEmpty, let lookup = profileLookup else { return nil }
+        let logins = lookup.profiles.compactMap {
+            settings.includes(account: $0.login) ? $0.login : nil
         }
-        return CodeStatsIdentity.seeded(login: profile.login, emails: lookup.emails)
+        guard !logins.isEmpty else { return nil }
+        return CodeStatsIdentity.seeded(logins: logins, emails: lookup.emails)
     }
 
-    var schedule: CodeStatsSchedule {
-        status?.settings.schedule ?? CodeStatsPreferences.schedule(in: defaults)
+    var settings: CodeStatsSettings {
+        status?.settings ?? CodeStatsPreferences.load(from: defaults)
     }
+
+    var schedule: CodeStatsSchedule { settings.schedule }
 
     func observe() async {
         await withTaskGroup(of: Void.self) { group in
@@ -171,6 +181,7 @@ final class CodeStatsModel {
                 }.value
                 guard reportLoad.isCurrent(request) else { return }
                 table = facts
+                tableRevision &+= 1
                 facets = options
                 await recompute()
                 guard reportLoad.isCurrent(request) else { return }
@@ -292,18 +303,25 @@ final class CodeStatsModel {
             try Task.checkCancellation()
             let report = CodeStatsReportBuilder.build(
                 table: table, filter: filter, range: range, today: now, calendar: calendar)
+            let days = CodeStatsDay(report.startDay).flatMap { start in
+                CodeStatsDay(report.endDay).map { start...max(start, $0) }
+            }
             return (
                 report, CodeStatsProjection(report: report, calendar: calendar),
-                CodeStatsAuditBuilder.build(table: table, filter: filter).matching(identity),
+                CodeStatsAuditBuilder.build(table: table, filter: filter, days: days)
+                    .matching(identity),
                 CodeStatsExplorer(
                     table: table, filter: filter, startDay: report.startDay,
-                    endDay: report.endDay, calendar: calendar)
+                    endDay: report.endDay, calendar: calendar),
+                CodeStatsReportBuilder.largest(
+                    table, filter: filter, days: days, limit: Self.largestShown)
             )
         }) { result in
             report = result.0
             projection = result.1
             audit = result.2
             explorer = result.3
+            largest = result.4
         }
     }
 
@@ -345,7 +363,7 @@ final class CodeStatsModel {
     }
 
     func loadProfileIfNeeded() async {
-        guard profileLookup?.profile == nil else { return }
+        guard profileLookup?.profiles.isEmpty ?? true else { return }
         await loadProfile()
     }
 
@@ -412,7 +430,26 @@ final class CodeStatsModel {
                 weekday: weekday ?? CodeStatsPreferences.defaultWeekday,
                 hour: hour ?? CodeStatsPreferences.defaultHour)
         }
+        await setSchedule(next)
+    }
+
+    func setSchedule(_ next: CodeStatsSchedule) async {
         CodeStatsPreferences.setSchedule(next, in: defaults)
+        await loadStatus()
+    }
+
+    func setAccount(_ login: String, included: Bool) async {
+        CodeStatsPreferences.setAccount(login, included: included, in: defaults)
+        await loadStatus()
+    }
+
+    func setIncludeForks(_ value: Bool) async {
+        defaults.set(value, forKey: AppStorageKeys.CodeStats.includeForks)
+        await loadStatus()
+    }
+
+    func setIncludeArchived(_ value: Bool) async {
+        defaults.set(value, forKey: AppStorageKeys.CodeStats.includeArchived)
         await loadStatus()
     }
 

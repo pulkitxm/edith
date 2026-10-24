@@ -33,8 +33,7 @@ struct SweaterPreviewSwatch {
 
         var gauge = KnitGauge.standard
         gauge.rows = 6
-        let theme = AppTheme(
-            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme) ?? "")
+        let theme = ThemeStore.current
         let yarn = SweaterYarn.resolve(
             app: app, pattern: .byApp,
             basket: SweaterBaskets.basket(named: SweaterBaskets.defaultName), appTheme: theme)

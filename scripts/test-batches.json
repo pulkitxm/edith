@@ -20,11 +20,11 @@
     { "name": "companion", "filter": "^EdithTests\\.Companion" },
     {
       "name": "browser",
-      "filter": "^EdithTests\\.(Notch|Browser|Chrome|LocalStorage)"
+      "filter": "^EdithTests\\.(Notch|Browser|Chrome|LocalStorage|Social)"
     },
     {
       "name": "media",
-      "filter": "^EdithTests\\.(Music|MeetingAudio|MeetingMicrophone|MeetingVoice|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
+      "filter": "^EdithTests\\.(Music|MeetingMicrophone|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
     },
     { "name": "dashboard", "filter": "^EdithTests\\.(Dashboard|CodeStats)" },
     { "name": "extensions", "filter": "^EdithTests\\.(Extension|Lid)" },

@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 @MainActor
 public protocol DirectScrollHandling: AnyObject {}
@@ -42,7 +43,7 @@ public enum ScrollForwarding {
     public static func handlesScrollDirectly(from view: NSView) -> Bool {
         var current: NSView? = view
         while let candidate = current {
-            if candidate is DirectScrollHandling { return true }
+            if candidate is DirectScrollHandling || candidate is WKWebView { return true }
             current = candidate.superview
         }
         return false

@@ -4,8 +4,8 @@ import SwiftUI
 
 @MainActor
 enum HerdrAgentWindow {
-    static let viewControlsContentWidth = 262.0
-    static let viewControlsWidth = 270.0
+    static let viewControlsContentWidth = 334.0
+    static let viewControlsWidth = 342.0
     private static var windows: [String: NSWindow] = [:]
 
     static var openIDs: Set<String> { Set(windows.keys) }
@@ -46,7 +46,8 @@ enum HerdrAgentWindow {
         }
         let hosting = NSHostingController(
             rootView: HerdrDetachedView(
-                store: store, agentID: tab.id, launchEnabled: launchEnabled))
+                store: store, agentID: tab.id, launchEnabled: launchEnabled
+            ).themedControls())
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1000, height: 640))
@@ -66,6 +67,7 @@ enum HerdrAgentWindow {
             rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
                 .frame(width: viewControlsContentWidth, height: UIScale.pt(28))
                 .padding(.trailing, 8)
+                .themedControls()
         )
         hosting.frame = NSRect(x: 0, y: 0, width: viewControlsWidth, height: 28)
         accessory.view = hosting
@@ -128,7 +130,7 @@ struct HerdrTitlebarViewPicker: View {
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             HStack(spacing: UIScale.pt(2)) {
-                ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                ForEach(HerdrAgentView.modes, id: \.self) { mode in
                     HerdrTitlebarViewButton(
                         mode: mode,
                         selected: selection == mode,
@@ -140,10 +142,10 @@ struct HerdrTitlebarViewPicker: View {
                 }
             }
             .padding(UIScale.pt(2))
-            .frame(width: UIScale.pt(228))
+            .frame(width: UIScale.pt(300))
             .widgetBar(
                 cornerRadius: 8,
-                fill: DashSkin.paper(dark, theme: theme),
+                fill: DashSkin.paper(dark),
                 stroke: accent.opacity(dark ? 0.5 : 0.35)
             )
             Button {
@@ -153,14 +155,14 @@ struct HerdrTitlebarViewPicker: View {
             } label: {
                 Image(systemName: "sidebar.right")
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark, theme: theme).opacity(0.72))
+                    .foregroundStyle(DashSkin.ink(dark).opacity(0.72))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .padding(UIScale.pt(2))
                     .widgetBar(
                         cornerRadius: 8,
                         fill: store.detailOpen
                             ? accent.opacity(dark ? 0.24 : 0.16)
-                            : DashSkin.paper(dark, theme: theme),
+                            : DashSkin.paper(dark),
                         stroke: accent.opacity(dark ? 0.5 : 0.35)
                     )
             }
@@ -184,7 +186,7 @@ private struct HerdrTitlebarViewButton: View {
 
     private var accent: Color { DashSkin.accent(dark, theme: theme) }
     private var foreground: Color {
-        selected ? accent : DashSkin.ink(dark, theme: theme).opacity(hovered ? 0.92 : 0.68)
+        selected ? accent : DashSkin.ink(dark).opacity(hovered ? 0.92 : 0.68)
     }
 
     var body: some View {

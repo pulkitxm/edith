@@ -6,21 +6,27 @@ public struct CodeStatsSettings: Codable, Equatable, Sendable {
     public var includeForks: Bool
     public var includeArchived: Bool
     public var schedule: CodeStatsSchedule
+    public var excludedAccounts: [String]
 
     public init(
         folder: String? = nil, identity: CodeStatsIdentity = CodeStatsIdentity(),
         includeForks: Bool = false, includeArchived: Bool = true,
-        schedule: CodeStatsSchedule = .manual
+        schedule: CodeStatsSchedule = .manual, excludedAccounts: [String] = []
     ) {
         self.folder = folder
         self.identity = identity
         self.includeForks = includeForks
         self.includeArchived = includeArchived
         self.schedule = schedule
+        self.excludedAccounts = excludedAccounts
     }
 
     public func includes(_ repository: CodeStatsRemoteRepository) -> Bool {
         (includeForks || !repository.isFork) && (includeArchived || !repository.isArchived)
+    }
+
+    public func includes(account login: String) -> Bool {
+        !excludedAccounts.contains { $0.caseInsensitiveCompare(login) == .orderedSame }
     }
 }
 
@@ -81,7 +87,7 @@ public struct CodeStatsRunResult: Codable, Equatable, Sendable {
     public var outcome: CodeStatsRunOutcome
     public var startedAt: Date
     public var finishedAt: Date
-    public var profile: CodeStatsProfile?
+    public var profiles: [CodeStatsProfile]
     public var github: CodeStatsGitHubError?
     public var repositories: Int
     public var synced: Int
@@ -90,13 +96,13 @@ public struct CodeStatsRunResult: Codable, Equatable, Sendable {
 
     public init(
         outcome: CodeStatsRunOutcome, startedAt: Date, finishedAt: Date,
-        profile: CodeStatsProfile? = nil, github: CodeStatsGitHubError? = nil,
+        profiles: [CodeStatsProfile] = [], github: CodeStatsGitHubError? = nil,
         repositories: Int = 0, synced: Int = 0, failed: Int = 0, errors: [String] = []
     ) {
         self.outcome = outcome
         self.startedAt = startedAt
         self.finishedAt = finishedAt
-        self.profile = profile
+        self.profiles = profiles
         self.github = github
         self.repositories = repositories
         self.synced = synced

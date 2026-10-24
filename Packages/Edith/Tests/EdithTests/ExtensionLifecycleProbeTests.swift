@@ -99,6 +99,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
         MatrixRow(
+            id: "hinge", helper: true, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "windowSweaters", helper: true, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),
@@ -110,6 +114,10 @@ import EdithDatabase
             id: "studio", helper: false, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["ffmpeg", "qpdf"]),
+        MatrixRow(
+            id: "socialManager", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
         MatrixRow(
             id: "latex", helper: false, machine: false,
             toolRule: .all, adapter: true, requiredTools: [],

@@ -32,6 +32,7 @@ public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
     case emoji
     case micMute
     case focusDim
+    case hinge
     case presenter
     case colorPicker
     case keystrokeHighlight
@@ -41,6 +42,7 @@ public enum ExtensionShortcut: String, CaseIterable, Hashable, Sendable {
 public enum ExtensionShortcutVisibility {
     public static func visible(
         bifrost: Bool, clipboard: Bool, emoji: Bool, micMute: Bool, focusDim: Bool,
+        hinge: Bool = false,
         presenter: Bool, colorPicker: Bool, keystrokeHighlight: Bool, virtualCamera: Bool = false
     ) -> [ExtensionShortcut] {
         let states: [(ExtensionShortcut, Bool)] = [
@@ -49,6 +51,7 @@ public enum ExtensionShortcutVisibility {
             (.emoji, emoji),
             (.micMute, micMute),
             (.focusDim, focusDim),
+            (.hinge, hinge),
             (.presenter, presenter),
             (.colorPicker, colorPicker),
             (.keystrokeHighlight, keystrokeHighlight),

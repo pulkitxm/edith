@@ -16,15 +16,12 @@ final class SectionWindowController {
 struct DetachedSectionView: View {
     let controller: SectionWindowController
     @State private var router = WindowRouter()
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         NavigationRouteHost(router: router) {
             GeometryReader { geo in
                 detail
-                    .tint(themeColor(themeName))
                     .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(DashSkin.paper(scheme == .dark))

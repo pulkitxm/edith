@@ -34,7 +34,7 @@ private enum HerdrClosedRecord: Equatable {
 typealias HerdrNewAgentPaneCreator =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
-        _ newSpaceLabel: String?
+        _ newSpaceLabel: String?, _ environment: [String: String]
     ) async throws -> HerdrCreatedPane
 
 struct HerdrAgentSpace: Identifiable, Equatable {
@@ -120,6 +120,13 @@ final class HerdrStore {
         }
     }
 
+    var claudeAccounts: ClaudeAccountsModel
+    var accountFilter: String? {
+        didSet { reconcileCollapseCountsIfReady() }
+    }
+    var accountSessions: [String: String] = [:]
+    private var accountSessionIdentities: [String: HerdrNativeSession] = [:]
+
     var machineFilter = "all" {
         didSet {
             guard machineFilter != oldValue else { return }
@@ -152,6 +159,9 @@ final class HerdrStore {
     var inventoryReady: Bool { inventoryReceived && !settling && !refreshing }
 
     var inventoryFailureMessage: String? {
+        if hosts.contains(where: { $0.herdrPresent && $0.reachable && $0.error == nil }) {
+            return nil
+        }
         var failures: [String] = []
         for host in hosts where host.herdrPresent || !host.reachable {
             if let error = host.error { failures.append("\(host.name): \(error)") }
@@ -247,8 +257,12 @@ final class HerdrStore {
     private let agentCloser: HerdrAgentCloser
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
+    private let accountAgentStarter: @Sendable (String, String) async throws -> Void
+    private let remoteAccountAgentStarter:
+        @Sendable (ClaudeAccount, String, [String], String, String, Machine) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
-    @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var unconfirmedAgentKinds: [String: String] = [:]
+    @ObservationIgnored private(set) var agentStartupTasks: [String: Task<Void, Never>] = [:]
     private let agentFocuser: @Sendable (String, String, Machine?) async throws -> Void
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let workspacePresenter: @MainActor () -> Void
@@ -270,16 +284,17 @@ final class HerdrStore {
 
     init(
         defaults: UserDefaults = SharedDefaults.store,
+        claudeAccounts: ClaudeAccountsModel? = nil,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
         newAgentPaneCreator: @escaping HerdrNewAgentPaneCreator = {
-            kind, machine, existingSpace, newSpaceLabel in
+            kind, machine, existingSpace, newSpaceLabel, environment in
             if let existingSpace {
                 return try await HerdrLaunchOperations.createTab(
-                    workspaceID: existingSpace.id, on: machine)
+                    workspaceID: existingSpace.id, environment: environment, on: machine)
             }
             return try await HerdrLaunchOperations.createWorkspace(
-                label: newSpaceLabel ?? "New space", on: machine)
+                label: newSpaceLabel ?? "New space", environment: environment, on: machine)
         },
         agentStarter: @escaping @Sendable (String, String, Machine?) async throws -> Void = {
             kind, pane, machine in
@@ -288,6 +303,20 @@ final class HerdrStore {
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
                 pane: pane, on: machine)
         },
+        accountAgentStarter: @escaping @Sendable (String, String) async throws -> Void = {
+            command, pane in
+            try await HerdrLaunchOperations.launchLocalAccount(command: command, pane: pane)
+        },
+        remoteAccountAgentStarter:
+            @escaping @Sendable (ClaudeAccount, String, [String], String, String, Machine)
+            async throws ->
+            Void = {
+                account, command, arguments, environment, pane, machine in
+                try await HerdrLaunchOperations.launchRemoteAccount(
+                    account: account, command: command, arguments: arguments,
+                    environment: environment, pane: pane,
+                    on: machine)
+            },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
                 try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
@@ -304,6 +333,20 @@ final class HerdrStore {
         workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
+        self.claudeAccounts = claudeAccounts ?? ClaudeAccountsModel.shared
+        let restoredAccountSessions = Self.restoredAccountSessions(
+            defaults.dictionary(forKey: Self.accountSessionsKey) as? [String: String] ?? [:])
+        accountSessions = restoredAccountSessions
+        if let data = defaults.data(forKey: Self.accountSessionIdentitiesKey),
+            data.count <= 1_048_576
+        {
+            accountSessionIdentities =
+                ((try? JSONDecoder().decode([String: HerdrNativeSession].self, from: data)) ?? [:])
+                .filter {
+                    restoredAccountSessions[$0.key] != nil && $0.value.provider.utf8.count <= 256
+                        && $0.value.value.utf8.count <= 512
+                }
+        }
         sidebarAgentOrder = HerdrSidebarOrder(
             defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
         sidebarSpaceOrder = HerdrSidebarOrder(
@@ -315,6 +358,8 @@ final class HerdrStore {
         self.agentCloser = agentCloser
         self.newAgentPaneCreator = newAgentPaneCreator
         self.agentStarter = agentStarter
+        self.accountAgentStarter = accountAgentStarter
+        self.remoteAccountAgentStarter = remoteAccountAgentStarter
         self.terminalIDResolver = terminalIDResolver
         self.agentFocuser = agentFocuser
         self.workspacePresenter = workspacePresenter
@@ -473,6 +518,13 @@ final class HerdrStore {
                 if agent.machineID != machineFilter { return false }
             }
             if !kindFilter.isEmpty, !kindFilter.contains(agent.kind) { return false }
+            if let accountFilter {
+                guard agent.kind == "Claude Code",
+                    accountFilter == "cli"
+                        ? accountSessions[agent.id] == nil
+                        : accountSessions[agent.id] == accountFilter
+                else { return false }
+            }
             return true
         }
     }
@@ -502,6 +554,7 @@ final class HerdrStore {
     }
 
     func clearSessionFilters() {
+        accountFilter = nil
         machineFilter = "all"
         kindFilter = []
         spaceGroupingEnabled = false
@@ -631,7 +684,9 @@ final class HerdrStore {
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
         inventoryReceived = true
+        reconcileAccountSessions(snapshots.flatMap(\.agents))
         if hosts != snapshots { hosts = snapshots }
+        reconcileAgentStartupMessages()
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),
                 sessions[index].agent != updated
@@ -691,7 +746,9 @@ final class HerdrStore {
         if agent.isTerminal { resolved = .agent }
         return HerdrOpenTab(
             agent: agent, machine: machine(for: agent), view: resolved,
-            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
+            files: HerdrFilesSession(),
+            split: HerdrSplitCompanionState(agentID: agent.id, defaults: defaults))
     }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
@@ -708,7 +765,9 @@ final class HerdrStore {
 
     func reattach(_ id: String) {
         detachedTabs[id]?.holder.stop()
+        detachedTabs[id]?.holder.fileLinks = nil
         detachedTabs[id]?.quinjet.stop()
+        detachedTabs[id]?.files.stop()
         detachedTabs.removeValue(forKey: id)
     }
 
@@ -825,6 +884,7 @@ final class HerdrStore {
         var session = makeTab(for: agent)
         if let view, !agent.isTerminal {
             session.view = view
+            session.split.follow(view)
             HerdrAgentViews.set(view, for: agent.id, defaults)
         }
         sessions.append(session)
@@ -852,8 +912,8 @@ final class HerdrStore {
 
     func views(for id: String) -> [HerdrAgentView] {
         if session(id)?.agent.isTerminal == true { return [] }
-        if hidesSplitView(id) { return [.agent, .diff] }
-        return [.agent, .split, .diff]
+        if hidesSplitView(id) { return HerdrAgentView.modes.filter { $0 != .split } }
+        return HerdrAgentView.modes
     }
 
     private func hidesSplitView(_ id: String) -> Bool {
@@ -866,6 +926,7 @@ final class HerdrStore {
             revealSpace(containing: tab.agent)
             guard tab.view != view else { return }
             tab.view = view
+            tab.split.follow(view)
             detachedTabs[id] = tab
             HerdrAgentViews.set(view, for: id, defaults)
             if view == .split { detailOpen = false }
@@ -879,6 +940,7 @@ final class HerdrStore {
         revealSpace(containing: sessions[index].agent)
         guard sessions[index].view != view else { return }
         sessions[index].view = view
+        sessions[index].split.follow(view)
         HerdrAgentViews.set(view, for: id, defaults)
         if view == .split { detailOpen = false }
     }
@@ -894,10 +956,19 @@ final class HerdrStore {
     }
 
     func focusNeighbor(toward side: InsertSide) {
-        guard let tab = currentTab, tab.zoomed == nil,
-            let next = tab.layout.neighbor(of: tab.focused, toward: side)
-        else { return }
-        focus(next)
+        performWorkspaceLayout(.focus(side))
+    }
+
+    func workspaceFocus(_ pane: String, zoomed: String?) {
+        guard let tab = currentTab else { return }
+        terminalPanels.releaseFocus()
+        updateTab(tab.id) {
+            $0.focused = pane; $0.zoomed = zoomed
+        }
+        if let agent = session(pane)?.agent {
+            usage.record(agent)
+            revealSpace(containing: agent)
+        }
     }
 
     func toggleAgentDetails() {
@@ -913,11 +984,7 @@ final class HerdrStore {
             let key = HerdrLayoutKey.resolve(keyCode: keyCode, modifiers: modifiers)
         else { return false }
         withAnimation(layoutAnimation) {
-            switch key {
-            case let .focus(side): focusNeighbor(toward: side)
-            case let .cycle(backwards): cycleFocus(backwards: backwards)
-            case .zoom: toggleZoom(tab.focused)
-            }
+            performWorkspaceLayout(key)
         }
         return true
     }
@@ -935,19 +1002,7 @@ final class HerdrStore {
     }
 
     func cycleFocus(backwards: Bool) {
-        guard let tab = currentTab, tab.isSplit,
-            let index = tab.agentIDs.firstIndex(of: tab.focused)
-        else { return }
-        let count = tab.agentIDs.count
-        let next = tab.agentIDs[(index + (backwards ? count - 1 : 1)) % count]
-        updateTab(tab.id) { tab in
-            tab.focused = next
-            if tab.zoomed != nil { tab.zoomed = next }
-        }
-        if let agent = session(next)?.agent {
-            usage.record(agent)
-            revealSpace(containing: agent)
-        }
+        performWorkspaceLayout(.cycle(backwards: backwards))
     }
 
     func toggleZoom(_ agentID: String) {
@@ -1069,74 +1124,7 @@ final class HerdrStore {
     }
 
     static func adding(_ ids: [String], to layout: HerdrLayout) -> HerdrLayout {
-        if let current = HerdrArrangement.matching(layout),
-            let order = current.slotOrder(of: layout),
-            let flowed = current.layout(order + ids)
-        {
-            return flowed
-        }
-        return ids.reduce(layout) { result, id in result.inserting(.pane(id), atEdge: .right) }
-    }
-
-    private static func restoring(
-        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
-    )
-        -> HerdrLayout
-    {
-        guard snapshot.contains(agentID), !current.contains(agentID) else {
-            return current.contains(agentID) ? current : adding([agentID], to: current)
-        }
-        var survivors: [String] = []
-        for pane in current.panes where snapshot.contains(pane) {
-            survivors.append(pane)
-        }
-        guard !survivors.isEmpty else { return adding([agentID], to: current) }
-        var missing: [String] = []
-        for pane in snapshot.panes where pane != agentID && !current.contains(pane) {
-            missing.append(pane)
-        }
-        var extras: [String] = []
-        for pane in current.panes where !snapshot.contains(pane) {
-            extras.append(pane)
-        }
-        if missing.isEmpty, extras.isEmpty { return snapshot }
-        if extras.isEmpty {
-            var layout = snapshot
-            for pane in missing {
-                layout = layout.removing(pane) ?? .pane(agentID)
-            }
-            return layout.contains(agentID) ? layout : adding([agentID], to: current)
-        }
-        return insertingRestored(agentID, into: current, from: snapshot)
-    }
-
-    private static func insertingRestored(
-        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
-    ) -> HerdrLayout {
-        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
-        let frames = snapshot.frames(in: unit)
-        guard let origin = frames[agentID] else { return adding([agentID], to: current) }
-        var best: (distance: CGFloat, side: InsertSide, neighbor: String)?
-        for side in [InsertSide.left, .right, .top, .bottom] {
-            guard let neighbor = snapshot.neighbor(of: agentID, toward: side),
-                current.contains(neighbor),
-                let frame = frames[neighbor]
-            else { continue }
-            let distance =
-                side.axis == .horizontal
-                ? abs(frame.midX - origin.midX) : abs(frame.midY - origin.midY)
-            let previous = best?.distance ?? .greatestFiniteMagnitude
-            if distance < previous { best = (distance, side, neighbor) }
-        }
-        guard let best else { return adding([agentID], to: current) }
-        let towardAgent: InsertSide
-        switch best.side {
-        case .left: towardAgent = .right
-        case .right: towardAgent = .left
-        case .top: towardAgent = .bottom
-        case .bottom: towardAgent = .top
-        }
-        return current.inserting(.pane(agentID), near: best.neighbor, side: towardAgent)
+        WorkspaceLayoutRestoration.adding(ids, to: layout)
     }
 
     private func detachFromLayout(_ agentID: String) {
@@ -1507,12 +1495,16 @@ final class HerdrStore {
         }
         agentStartupTasks.removeValue(forKey: id)?.cancel()
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
+        sessions[index].files.stop()
+        sessions[index].holder.fileLinks = nil
         sessions.remove(at: index)
         detachFromLayout(id)
     }
 
     func normalized(_ item: HerdrDragItem) -> HerdrDragItem {
+        if case let .pane(id) = item, let agent = session(id)?.agent { return .agent(agent) }
         guard case let .tab(id) = item, let tab = tab(id), !tab.isSplit,
             let agent = session(tab.focused)?.agent
         else { return item }
@@ -1579,7 +1571,7 @@ final class HerdrStore {
         case let .tabBar(index):
             let moving: String?
             switch item {
-            case .space:
+            case .space, .pane:
                 return false
             case let .tab(id):
                 moving = id
@@ -1594,7 +1586,7 @@ final class HerdrStore {
         case let .intoTab(id):
             guard let destination = tab(id) else { return false }
             switch item {
-            case .space: return false
+            case .space, .pane: return false
             case let .tab(source): return source != id
             case let .agent(agent): return !destination.layout.contains(agent.id)
             }
@@ -1616,7 +1608,7 @@ final class HerdrStore {
             insertTab(item, at: index)
         case let .intoTab(id):
             switch item {
-            case .space: break
+            case .space, .pane: break
             case let .tab(source): merge(source, into: id)
             case let .agent(agent): add(agent, into: id)
             }
@@ -1647,7 +1639,7 @@ final class HerdrStore {
 
     private func draggedNode(_ item: HerdrDragItem) -> (node: HerdrLayout, focus: String)? {
         switch item {
-        case .space:
+        case .space, .pane:
             return nil
         case let .agent(agent):
             return (.pane(agent.id), agent.id)
@@ -1663,7 +1655,7 @@ final class HerdrStore {
         else { return }
         var displaced: String?
         switch item {
-        case .space:
+        case .space, .pane:
             return
         case let .agent(agent):
             if session(agent.id) == nil {
@@ -1697,7 +1689,7 @@ final class HerdrStore {
 
     private func insertTab(_ item: HerdrDragItem, at index: Int) {
         switch item {
-        case .space:
+        case .space, .pane:
             return
         case let .tab(id):
             moveTab(id, to: index)
@@ -1743,23 +1735,13 @@ final class HerdrStore {
 
     @discardableResult
     func cycleTab(backwards: Bool) -> Bool {
-        let ids = orderedTabIDs
-        guard ids.count > 1, let index = ids.firstIndex(of: selectedTab) else { return false }
-        let next = backwards ? (index - 1 + ids.count) % ids.count : (index + 1) % ids.count
-        selectedTab = ids[next]
-        return true
+        cycleWorkspaceTab(backwards: backwards)
     }
 
     @discardableResult
     func closeFocusedTab() -> Bool {
         if terminalPanels.closeFocused(in: selectedTab) { return true }
-        guard selectedTab != Self.boardID else { return false }
-        if let tab = currentTab, tab.isSplit {
-            close(tab.focused)
-        } else {
-            closeTab(selectedTab)
-        }
-        return true
+        return closeFocusedWorkspaceItem()
     }
 
     @discardableResult
@@ -1790,7 +1772,8 @@ final class HerdrStore {
         }
         if let host = tab(record.tabID) ?? tabHoldingPlacement(record) {
             updateTab(host.id) { tab in
-                tab.layout = Self.restoring(record.agent.id, into: tab.layout, from: record.layout)
+                tab.layout = WorkspaceLayoutRestoration.restoring(
+                    record.agent.id, into: tab.layout, from: record.layout)
                 tab.focused = record.agent.id
                 tab.zoomed = nil
             }
@@ -1870,15 +1853,7 @@ final class HerdrStore {
     }
 
     func selectTab(number: Int) {
-        let ids = orderedTabIDs
-        guard !ids.isEmpty else { return }
-        guard number != 9 else {
-            selectedTab = ids[ids.count - 1]
-            return
-        }
-        let index = number - 1
-        guard index >= 0, index < ids.count else { return }
-        selectedTab = ids[index]
+        selectWorkspaceTab(number: number)
     }
 
     func connection(for machine: Machine) async throws -> SSHConnection {
@@ -1926,36 +1901,200 @@ final class HerdrStore {
 
     func dismissAgentStartupMessage(_ id: String) {
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
     }
+
+    nonisolated static let accountSessionsKey = "herdr.claudeAccountSessions"
+    private func reconcileAgentStartupMessages() {
+        guard !unconfirmedAgentKinds.isEmpty else { return }
+        for host in hosts where host.reachable && host.error == nil {
+            for agent in host.agents where unconfirmedAgentKinds[agent.id] == agent.kind {
+                switch agent.status {
+                case .idle, .working, .done:
+                    dismissAgentStartupMessage(agent.id)
+                case .blocked, .unknown:
+                    break
+                }
+            }
+        }
+    }
+
+    nonisolated static func restoredAccountSessions(_ stored: [String: String]) -> [String: String]
+    {
+        Dictionary(
+            uniqueKeysWithValues: stored.filter {
+                $0.key.utf8.count <= 512 && !$0.key.utf8.contains(0)
+                    && UUID(uuidString: $0.value) != nil
+            }
+            .sorted { $0.key < $1.key }.prefix(4096).map { ($0.key, $0.value) })
+    }
+    nonisolated static let accountSessionIdentitiesKey = "herdr.claudeAccountSessionIdentities"
 
     func launchNewAgent(
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
-        newSpaceLabel: String?, openBeside: Bool = false
+        newSpaceLabel: String?, openBeside: Bool = false, accountID: String? = nil
     ) async throws {
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
+        let account = try await launchAccount(kind: kind, accountID: accountID, machine: machine)
+        let accountCommand = HerdrLaunchSettings.command(for: kind, in: defaults)
+        let accountArguments = HerdrLaunchSettings.launchArguments(
+            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
+        let accountEnvironment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
+        let accountDirectory: URL?
+        let localAccountCommand: String?
+        if let account {
+            accountDirectory = machine == nil ? claudeAccounts.directory : nil
+            let profile =
+                account.authentication == .browserLogin
+                ? accountDirectory?.appendingPathComponent(account.id.uuidString).path
+                    ?? "/validated/profile" : nil
+            let sessionTagging =
+                try accountDirectory.map {
+                    try ClaudeAccountSessions.launchArguments(account: account.id, directory: $0)
+                } ?? []
+            localAccountCommand = try account.launchCommand(
+                command: accountCommand, arguments: accountArguments + sessionTagging,
+                environment: accountEnvironment, configurationPath: profile)
+            if let machine {
+                try HerdrLaunchOperations.validateAccountTarget(account, on: machine)
+                _ = try HerdrLaunchOperations.accountLaunch(
+                    account: account, command: accountCommand, arguments: accountArguments,
+                    environment: accountEnvironment, configurationPath: profile,
+                    pane: "validated-pane")
+            }
+        } else {
+            accountDirectory = nil
+            localAccountCommand = nil
+        }
         let created = try await newAgentPaneCreator(
-            kind, machine, existingSpace, newSpaceLabel)
+            kind, machine, existingSpace, newSpaceLabel, account?.launchEnvironment ?? [:])
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
             status: .unknown, title: kind,
             workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        accountSessions[placeholder.id] = account?.id.uuidString
+        accountSessionIdentities.removeValue(forKey: placeholder.id)
+        persistAccountSessions()
         if openBeside {
             open(placeholder, beside: .right)
         } else {
             open(placeholder)
         }
         let start = agentStarter
+        let startAccount = accountAgentStarter
+        let startRemoteAccount = remoteAccountAgentStarter
         let id = placeholder.id
         agentStartupTasks[id] = Task { [weak self] in
             do {
-                try await start(kind, created.paneID, machine)
+                if let account, let accountDirectory, let localAccountCommand {
+                    if account.authentication == .browserLogin {
+                        try await ClaudeAccountStorage(directory: accountDirectory)
+                            .seedLogin(account: account)
+                    }
+                    try Task.checkCancellation()
+                    try await startAccount(localAccountCommand, created.paneID)
+                } else if let account, let machine {
+                    try await startRemoteAccount(
+                        account, accountCommand, accountArguments, accountEnvironment,
+                        created.paneID, machine)
+                } else {
+                    try await start(kind, created.paneID, machine)
+                }
+                try Task.checkCancellation()
+                if let account, account.isLoggedOut, account.authentication == .browserLogin {
+                    try await self?.markSignedIn(account)
+                }
             } catch {
                 guard !Task.isCancelled else { return }
-                self?.agentStartupMessages[id] = HerdrLaunchOperations.startupMessage(for: error)
+                self?.agentStartupMessages[id] =
+                    account == nil
+                    ? HerdrLaunchOperations.startupMessage(for: error)
+                    : "The selected account could not start. Check this terminal before trying again."
+                if account == nil, HerdrLaunchOperations.canConfirmStartup(after: error) {
+                    self?.unconfirmedAgentKinds[id] = kind
+                    self?.reconcileAgentStartupMessages()
+                }
             }
             self?.agentStartupTasks[id] = nil
+        }
+    }
+
+    private func launchAccount(kind: String, accountID: String?, machine: Machine?) async throws
+        -> ClaudeAccount?
+    {
+        guard kind == "Claude Code" else {
+            if accountID != nil { throw ClaudeAccountError.invalidRequest }
+            return nil
+        }
+        guard accountID != "cli" else { return nil }
+        do {
+            try await claudeAccounts.load()
+        } catch {
+            if accountID == nil { return nil }
+            throw error
+        }
+        let chosen =
+            accountID == nil || accountID == "default"
+            ? (claudeAccounts.state.defaultID ?? claudeAccounts.state.accounts.first?.id)?
+                .uuidString : accountID
+        guard let chosen, chosen != "cli" else { return nil }
+        guard let id = UUID(uuidString: chosen), let saved = claudeAccounts.account(id) else {
+            throw ClaudeAccountError.rejected("This account was removed. Choose another account.")
+        }
+        try saved.validateLaunch()
+        var selected = saved
+        if let machine {
+            if let associated = selected.remoteMachineID, associated != machine.id.uuidString {
+                throw ClaudeAccountError.rejected(
+                    "Choose the machine associated with this account.")
+            }
+            if selected.remoteMachineID == nil {
+                selected.remoteMachineID = machine.id.uuidString
+                var next = claudeAccounts.state
+                if let index = next.accounts.firstIndex(where: { $0.id == selected.id }) {
+                    next.accounts[index] = selected
+                }
+                try await claudeAccounts.persist(next)
+            }
+        }
+        return selected
+    }
+
+    private func markSignedIn(_ account: ClaudeAccount) async throws {
+        try await claudeAccounts.load()
+        guard claudeAccounts.account(account.id) == account else { return }
+        var next = claudeAccounts.state
+        next.accounts = next.accounts.map {
+            var current = $0
+            if current.id == account.id { current.isLoggedOut = false }
+            return current
+        }
+        try await claudeAccounts.persist(next)
+        await claudeAccounts.notifyChanged()
+    }
+
+    private func reconcileAccountSessions(_ agents: [HerdrAgent]) {
+        var changed = false
+        for agent in agents where accountSessions[agent.id] != nil {
+            guard let identity = agent.nativeSession else { continue }
+            if let previous = accountSessionIdentities[agent.id], previous != identity {
+                accountSessions.removeValue(forKey: agent.id)
+                accountSessionIdentities.removeValue(forKey: agent.id)
+                changed = true
+            } else if accountSessionIdentities[agent.id] != identity {
+                accountSessionIdentities[agent.id] = identity
+                changed = true
+            }
+        }
+        if changed { persistAccountSessions() }
+    }
+
+    private func persistAccountSessions() {
+        defaults.set(accountSessions, forKey: Self.accountSessionsKey)
+        if let data = try? JSONEncoder().encode(accountSessionIdentities) {
+            defaults.set(data, forKey: Self.accountSessionIdentitiesKey)
         }
     }
 
@@ -2142,6 +2281,11 @@ struct HerdrOpenTab: Identifiable {
     var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
+    let files: HerdrFilesSession
+    let split: HerdrSplitCompanionState
+
+    @MainActor var showsDiff: Bool { view.shows(.diff, beside: split.companion) }
+    @MainActor var showsFiles: Bool { view.shows(.files, beside: split.companion) }
 }
 
 enum HerdrRailHighlight: Equatable {

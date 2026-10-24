@@ -91,17 +91,11 @@ final class FakeCameraHelper: @unchecked Sendable {
         #expect(throws: CLIFailure.self) { try CameraCLI.pause("live") }
     }
 
-    @Test func modelPitchAcceptsNegativeSemitones() throws {
+    @Test func audioParsesTheSourceSoundSwitch() throws {
         let command = try #require(
-            EdRoot.parseAsRoot(["camera", "audio", "model-pitch", "--transpose", "-3", "--json"])
-                as? CameraAudioCommand)
-        #expect(command.action == "model-pitch")
-        #expect(command.transpose == -3)
+            EdRoot.parseAsRoot(["camera", "audio", "true", "--json"]) as? CameraAudioCommand)
+        #expect(command.enabled == "true")
         #expect(command.json)
-        let effects = try #require(
-            EdRoot.parseAsRoot(["camera", "audio", "effects", "--pitch", "-200"])
-                as? CameraAudioCommand)
-        #expect(effects.pitch == -200)
     }
 
     @Test func statusWorksWithoutTheAppFromStoredState() async {

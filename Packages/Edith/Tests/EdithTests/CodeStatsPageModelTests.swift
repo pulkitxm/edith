@@ -70,11 +70,11 @@ import Testing
         await model.refresh()
         let request = model.reportLoad.begin()
         #expect(model.loadingState == .content)
-        #expect(model.isRefreshing)
+        #expect(model.activity == .refreshing)
         model.reportLoad.fail(request, message: "Synthetic refresh unavailable")
         #expect(model.loadingState == .content)
         #expect(model.report != nil)
-        #expect(!model.isRefreshing)
+        #expect(model.activity == .idle)
     }
 
     @Test func emptyMirrorShowsTheSetupChecklist() async {
@@ -204,6 +204,21 @@ import Testing
         #expect(agent.recorded.contains("cancel"))
     }
 
+    @Test func settingsChangesAreSavedForTheAgent() async {
+        let defaults = UserDefaults(suiteName: defaultsName)!
+        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
+        let model = model(agent)
+        await model.setSchedule(.weekly(weekday: 6, hour: 22))
+        await model.setIncludeForks(true)
+        await model.setIncludeArchived(false)
+        let saved = CodeStatsPreferences.load(from: defaults)
+        #expect(saved.schedule == .weekly(weekday: 6, hour: 22))
+        #expect(saved.includeForks)
+        #expect(!saved.includeArchived)
+        await model.setSchedule(CodeStatsScheduleKind.daily)
+        #expect(CodeStatsPreferences.schedule(in: defaults) == .daily(hour: 22))
+    }
+
     @Test func discoveredAuthorsFollowIdentityEdits() async {
         let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
         let model = model(agent)
@@ -223,9 +238,9 @@ import Testing
         #expect(model.profileLookup?.issue == .signedOut)
         #expect(model.seededIdentity == nil)
         agent.profileLookup = CodeStatsProfileLookup(
-            profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
+            profiles: [CodeStatsProfile(id: 7, login: "octo")], emails: ["octo@example.com"])
         await model.loadProfileIfNeeded()
-        #expect(model.profileLookup?.profile?.login == "octo")
+        #expect(model.profileLookup?.profiles.map(\.login) == ["octo"])
         #expect(model.seededIdentity?.substrings == ["octo"])
         await model.loadProfileIfNeeded()
         #expect(agent.recorded.filter { $0 == "profile" }.count == 2)
@@ -292,7 +307,7 @@ import Testing
         await model.loadReport()
         #expect(model.phase == .content)
         #expect(model.loadingState == .content)
-        #expect(!model.isRefreshing)
+        #expect(model.activity == .idle)
         #expect(model.banners.isEmpty)
     }
 

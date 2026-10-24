@@ -11,6 +11,7 @@ struct ZoomableRoot<Content: View>: View {
             .font(.system(size: UIScale.pt(13)))
             .controlSize(UIScale.controlSize)
             .disclosureGroupStyle(EdithDisclosureGroupStyle())
+            .themedControls()
             .tracksWindowVisibility()
     }
 }

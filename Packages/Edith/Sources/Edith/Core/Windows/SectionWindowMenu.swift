@@ -251,6 +251,12 @@ enum SectionWindowMenu {
             let handled = MainActor.assumeIsolated { () -> Bool in
                 let flags = modifiers.chordOnly
                 let window = NSApp.keyWindow
+                if let command = WindowWorkspaceCommand.resolve(
+                    characters: characters, keyCode: keyCode, modifiers: modifiers),
+                    WindowRouter.router(for: window)?.performWorkspaceCommand(command) == true
+                {
+                    return true
+                }
                 if HerdrSpaceWindow.perform(
                     characters: characters, keyCode: keyCode, modifiers: modifiers,
                     in: window)
@@ -339,6 +345,9 @@ enum SectionWindowMenu {
 enum CloseCommand {
     static func perform(on window: NSWindow?) -> Bool {
         guard let window else { return true }
+        if WindowRouter.router(for: window)?.performWorkspaceCommand(.closeTab) == true {
+            return true
+        }
         if HerdrSpaceWindow.closeSelectedTab(in: window) { return true }
         if WindowTabs.isTabbed(window) {
             window.close()
@@ -496,6 +505,19 @@ final class SectionWindowMenuTarget: NSObject {
         default: command = nil
         }
         guard let command else { return }
+        let workspaceCommand: WindowWorkspaceCommand? =
+            switch command {
+            case .nextPaneTab: .nextTab
+            case .previousPaneTab: .previousTab
+            case .nextPane: .nextPane
+            case .previousPane: .previousPane
+            case .nextTerminalTab, .previousTerminalTab: nil
+            }
+        if let workspaceCommand,
+            WindowRouter.forKeyWindow()?.performWorkspaceCommand(workspaceCommand) == true
+        {
+            return
+        }
         if HerdrSpaceWindow.perform(command, in: NSApp.keyWindow) { return }
         switch command {
         case .nextPaneTab: WorkspaceModel.shared.cycleTab(backwards: false)
@@ -508,11 +530,13 @@ final class SectionWindowMenuTarget: NSObject {
     }
 
     @objc func nextTab(_ sender: NSMenuItem) {
+        if WindowRouter.forKeyWindow()?.performWorkspaceCommand(.nextTab) == true { return }
         if HerdrSpaceWindow.perform(.nextTerminalTab, in: NSApp.keyWindow) { return }
         _ = WindowTabs.selectNextTab(in: NSApp.keyWindow, backwards: false)
     }
 
     @objc func previousTab(_ sender: NSMenuItem) {
+        if WindowRouter.forKeyWindow()?.performWorkspaceCommand(.previousTab) == true { return }
         if HerdrSpaceWindow.perform(.previousTerminalTab, in: NSApp.keyWindow) { return }
         _ = WindowTabs.selectNextTab(in: NSApp.keyWindow, backwards: true)
     }

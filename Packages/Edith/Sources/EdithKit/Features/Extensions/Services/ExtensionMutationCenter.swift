@@ -91,6 +91,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case lidAwake
     case studio
     case latex
+    case socialManager
     case timeLapse
     case music
     case downloads
@@ -101,6 +102,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case clipboard
     case keystrokeHighlight
     case focusDim
+    case hinge
     case windowSweaters
     case presenter
     case colorPicker

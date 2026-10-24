@@ -398,9 +398,9 @@ import Testing
         #expect(second.railOpen == false)
     }
 
-    @Test func terminalsCarryTheirOwnToneAndAgentsFollowTheirStatus() {
+    @Test func terminalsFollowTheThemeAndAgentsFollowTheirStatus() {
         let terminal = HerdrMachineTerminal.agent(for: host)
-        #expect(HerdrStatusColor.tone(terminal, dark: false) == DashSkin.gold)
+        #expect(HerdrStatusColor.tone(terminal, dark: false) == DashSkin.accent(false))
         #expect(
             HerdrStatusColor.tone(agent, dark: false)
                 == HerdrStatusColor.color(.working, dark: false))

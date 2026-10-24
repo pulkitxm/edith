@@ -89,11 +89,6 @@ struct HerdrPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .herdrDropFrame(HerdrDropGeometry.canvasKey)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        HerdrTerminalPanelView(
-                            store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
-                            maximumHeight: proxy.size.height, hideAgents: hideAgents)
-                    }
                     if !onBoard, store.detailOpen, !compact, let focused = store.focusedSession {
                         HerdrDetailColumn(
                             store: store, tab: shown(focused), hideAgents: hideAgents,
@@ -101,6 +96,11 @@ struct HerdrPage: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topLeading) {
+                    HerdrTerminalPanelView(
+                        store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
+                        bounds: terminalBounds(in: proxy.size), hideAgents: hideAgents)
+                }
             }
         }
         .overlay { HerdrDragOverlay(drag: drag, store: store, hideAgents: hideAgents) }
@@ -156,8 +156,11 @@ struct HerdrPage: View {
         .edithSheet(item: messageDraft, dismissible: false) { draft in
             HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
         }
-        .edithSheet(isPresented: $launchSettingsPresented) {
-            HerdrLaunchSettingsSheet()
+        .edithSheet(
+            isPresented: $launchSettingsPresented,
+            dismissible: !store.claudeAccounts.subscriptionLogin.running
+        ) {
+            HerdrLaunchSettingsSheet(accounts: store.claudeAccounts)
         }
         .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)
@@ -193,12 +196,16 @@ struct HerdrPage: View {
     private var messageMenu: some View {
         let agents = store.filteredAgents
         return Menu {
-            ForEach(HerdrBroadcastGroup.allCases) { group in
-                let count = group.recipients(from: agents).count
-                Button("\(group.title) (\(count))") {
-                    store.messaging.compose(group, from: agents)
+            HerdrBroadcastMenuItems(agents: agents, store: store)
+            if let tab = store.currentTab, tab.isSplit {
+                let tabAgents = tab.agentIDs.compactMap { store.session($0)?.agent }
+                if !HerdrBroadcastGroup.all.recipients(from: tabAgents).isEmpty {
+                    Divider()
+                    Menu("This Tab") {
+                        HerdrBroadcastMenuItems(
+                            agents: tabAgents, store: store, scopeTitle: "This Tab")
+                    }
                 }
-                .disabled(count == 0)
             }
         } label: {
             Image(systemName: "paperplane")
@@ -210,7 +217,7 @@ struct HerdrPage: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Message")
-        .help("Send a message to every working or stopped agent in the list")
+        .help("Send a message to agents in the list or in the open side-by-side tab")
     }
 
     private var terminalCloseRequested: Binding<Bool> {
@@ -227,6 +234,24 @@ struct HerdrPage: View {
 
     private var railDisplayWidth: Double {
         UIScale.pt(HerdrPaneSizing.rail(liveRailWidth ?? store.railWidth))
+    }
+
+    private func terminalBounds(in size: CGSize) -> HerdrTerminalPanelBounds {
+        let unit = max(UIScale.current, 0.001)
+        let handle = UIScale.pt(9)
+        var leading = 0.0
+        var trailing = 0.0
+        if store.railOpen, !compact {
+            leading = min(railDisplayWidth, size.width * 0.28) + handle
+        }
+        if !onBoard, store.detailOpen, !compact {
+            let detail = min(
+                size.width * 0.3, UIScale.pt(HerdrPaneSizing.detail(store.detailWidth)))
+            trailing = detail + handle
+        }
+        return HerdrTerminalPanelBounds(
+            width: size.width / unit, height: size.height / unit, contentLeading: leading / unit,
+            contentWidth: max(0, size.width - leading - trailing) / unit)
     }
 
     private func resizeRail(_ translation: CGFloat) {
@@ -473,25 +498,7 @@ struct HerdrPage: View {
     }
 
     private func layoutButton(for tab: HerdrTab) -> some View {
-        let label = tab.isSplit ? "Layout" : "Side by side"
-        return Button {
-            layoutPopoverOpen.toggle()
-        } label: {
-            Image(systemName: tab.isSplit ? "square.grid.2x2" : "plus.rectangle.on.rectangle")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                .padding(UIScale.pt(4))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: layoutPopoverOpen
-                        ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
-                    stroke: DashSkin.line(dark))
-        }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel(label)
-        .help(tab.isSplit ? "Arrange the agents in this tab" : "Show agents side by side")
-        .popover(isPresented: $layoutPopoverOpen, arrowEdge: .bottom) {
+        WorkspaceLayoutButton(split: tab.isSplit, presented: $layoutPopoverOpen) {
             if let current = store.currentTab {
                 HerdrLayoutPopover(store: store, tab: current, hideAgents: hideAgents)
             }
@@ -505,88 +512,81 @@ struct HerdrPage: View {
         let selected = store.selectedTab == id
         let agent = agents.count == 1 ? agents.first : nil
         let tone = HerdrStatusColor.mostUrgent(agents)
-        return HStack(spacing: UIScale.pt(6)) {
-            if agents.count > 1 {
-                HerdrKindMarks(agents: agents, dark: dark, size: 11)
-            } else if let agent {
-                HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
-                    .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-            } else {
-                AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
-            }
-            Text(title)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .lineLimit(1)
-                .hidden()
-                .overlay(alignment: .leading) {
-                    Text(title)
-                        .font(
-                            .system(size: UIScale.pt(12), weight: selected ? .semibold : .medium)
-                        )
-                        .lineLimit(1)
-                        .presenterTextBlur(blurTitle, fontSize: 12)
+        return WorkspaceTabChip(
+            id: id, selected: selected,
+            fill: tone.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) },
+            stroke: tone.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) },
+            select: { store.selectedTab = id }
+        ) {
+            HStack(spacing: UIScale.pt(6)) {
+                if agents.count > 1 {
+                    HerdrKindMarks(agents: agents, dark: dark, size: 11)
+                } else if let agent {
+                    HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
+                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                } else {
+                    AppGlyph(.herdr, size: UIScale.pt(13), weight: .semibold)
                 }
-            if agents.count > 1 {
-                Text("+\(agents.count - 1)")
-                    .font(DashSkin.mono(9.5, weight: .semibold))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(5))
-                    .padding(.vertical, UIScale.pt(1))
-                    .background(DashSkin.paper(dark).opacity(0.8), in: Capsule())
-            }
-            if let agent, agent.isTerminal {
-                Text(agent.machineName)
-                    .font(DashSkin.mono(9))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(title)
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .lineLimit(1)
-            }
-            if let agent {
-                Button {
-                    store.copyAttachCommand(for: agent)
-                } label: {
-                    Image(
-                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
-                    )
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(
-                        store.copiedID == agent.id
-                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                    .hidden()
+                    .overlay(alignment: .leading) {
+                        Text(title)
+                            .font(
+                                .system(
+                                    size: UIScale.pt(12), weight: selected ? .semibold : .medium)
+                            )
+                            .lineLimit(1)
+                            .presenterTextBlur(blurTitle, fontSize: 12)
+                    }
+                if agents.count > 1 {
+                    Text("+\(agents.count - 1)")
+                        .font(DashSkin.mono(9.5, weight: .semibold))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .padding(.horizontal, UIScale.pt(5))
+                        .padding(.vertical, UIScale.pt(1))
+                        .background(DashSkin.paper(dark).opacity(0.8), in: Capsule())
                 }
-                .buttonStyle(.edith(.borderless))
-                .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
-            }
-            if closable, store.terminalPanels.isChecking(id) {
-                SkeletonGroup {
-                    SkeletonBlock(width: 9, height: 9, corner: 4.5)
-                }
-                .accessibilityLabel("Closing")
-            } else if closable {
-                Button {
-                    store.closeTab(id)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                if let agent, agent.isTerminal {
+                    Text(agent.machineName)
+                        .font(DashSkin.mono(9))
                         .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
                 }
-                .buttonStyle(.edith(.borderless))
-                .help("Close")
+                if let agent {
+                    Button {
+                        store.copyAttachCommand(for: agent)
+                    } label: {
+                        Image(
+                            systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
+                        )
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(
+                            store.copiedID == agent.id
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
+                }
+                if closable, store.terminalPanels.isChecking(id) {
+                    SkeletonGroup {
+                        SkeletonBlock(width: 9, height: 9, corner: 4.5)
+                    }
+                    .accessibilityLabel("Closing")
+                } else if closable {
+                    Button {
+                        store.closeTab(id)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .help("Close")
+                }
             }
         }
-        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-        .padding(.horizontal, UIScale.pt(10))
-        .padding(.vertical, UIScale.pt(6))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: tone.map { HerdrStatusColor.fill($0, dark: dark, selected: selected) }
-                ?? (selected
-                    ? DashSkin.paper2(dark) : DashSkin.paper2(dark).opacity(0.55)),
-            stroke: tone.map { HerdrStatusColor.stroke($0, dark: dark, selected: selected) }
-                ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
-            strokeWidth: selected ? 1.4 : 1
-        )
-        .contentShape(Rectangle())
-        .herdrDropFrame(HerdrDropGeometry.chipPrefix + id)
-        .onTapGesture { store.selectedTab = id }
         .modifier(HerdrTabDrag(id: id))
         .herdrAgentContextMenu(agents: agents, store: store) {
             tabContextMenu(id: id, closable: closable)
@@ -604,6 +604,14 @@ struct HerdrPage: View {
     private func tabContextMenu(id: String, closable: Bool) -> some View {
         if let tab = store.tab(id) {
             if tab.isSplit {
+                let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
+                if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
+                    Menu("Send Message") {
+                        HerdrBroadcastMenuItems(
+                            agents: agents, store: store, scopeTitle: "This Tab")
+                    }
+                    Divider()
+                }
                 Button("Separate Into Tabs") { animate { store.separate(id) } }
             }
             let others = store.tabs.filter { $0.id != id }
@@ -744,7 +752,7 @@ struct HerdrPage: View {
                 HStack(spacing: UIScale.pt(6)) {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                         .foregroundStyle(
-                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                            agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.kind)
                         .font(.system(size: UIScale.pt(10.5), weight: .semibold))
                     Spacer(minLength: 0)
@@ -882,6 +890,23 @@ struct HerdrPage: View {
         }
     }
 
+    private func spaceMessageMenu(_ space: HerdrAgentSpace, accessibleTitle: String) -> some View {
+        Menu {
+            HerdrBroadcastMenuItems(
+                agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
+        } label: {
+            Image(systemName: "paperplane")
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Message agents in \(accessibleTitle)")
+        .accessibilityLabel("Message agents in \(accessibleTitle)")
+    }
+
     private func spaceHeader(_ space: HerdrAgentSpace, count: Int? = nil) -> some View {
         let collapsed = store.spaceIsCollapsed(space.id)
         let shownCount = count ?? space.agents.count
@@ -925,6 +950,10 @@ struct HerdrPage: View {
             .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
             .herdrDraggable(.space(space.id), simultaneous: true)
 
+            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+                spaceMessageMenu(space, accessibleTitle: accessibleTitle)
+            }
+
             Button {
                 newAgentSpace = space
             } label: {
@@ -952,6 +981,15 @@ struct HerdrPage: View {
             .buttonStyle(.edith(.borderless))
             .help("Open \(accessibleTitle) in a new window")
             .accessibilityLabel("Open \(accessibleTitle) in a new window")
+        }
+        .contextMenu {
+            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+                Menu("Send Message") {
+                    HerdrBroadcastMenuItems(
+                        agents: space.agents, store: store, scopeTitle: space.title,
+                        redactScope: true)
+                }
+            }
         }
         .padding(.leading, UIScale.pt(14))
         .padding(.trailing, UIScale.pt(6))
@@ -997,7 +1035,7 @@ struct HerdrPage: View {
             HStack(alignment: .top, spacing: UIScale.pt(8)) {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(13))
                     .foregroundStyle(
-                        agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark)
+                        agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)
                     )
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -1017,13 +1055,14 @@ struct HerdrPage: View {
                         .presenterTextBlur(hideAgents, fontSize: 9.5)
                 }
                 Spacer(minLength: 0)
-                if let waiting = store.messaging.armedHook(for: agent.id) {
+                let waiting = store.messaging.armedHooks(for: agent.id)
+                if !waiting.isEmpty {
                     Image(systemName: "paperplane.circle.fill")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))
-                        .help(waiting.schedule.sendsPhrase(now: Date()))
-                        .accessibilityLabel(waiting.schedule.sendsPhrase(now: Date()))
+                        .help(waitingHelp(waiting))
+                        .accessibilityLabel(waitingHelp(waiting))
                 }
             }
             .padding(.leading, UIScale.pt(12))
@@ -1054,6 +1093,11 @@ struct HerdrPage: View {
         .herdrDraggable(.agent(agent), simultaneous: true)
         .herdrAgentContextMenu(agent, store: store)
         .herdrDropFrame(HerdrDropGeometry.agentPrefix + agent.id)
+    }
+
+    private func waitingHelp(_ hooks: [HerdrAgentHook]) -> String {
+        if hooks.count == 1 { return hooks[0].schedule.sendsPhrase(now: Date()) }
+        return "\(hooks.count) messages waiting"
     }
 
     private func rowValue(_ highlight: HerdrRailHighlight) -> String {
@@ -1172,7 +1216,7 @@ enum HerdrStatusColor {
     }
 
     static func tone(_ agent: HerdrAgent, dark: Bool) -> Color {
-        agent.isTerminal ? DashSkin.gold : color(agent.status, dark: dark)
+        agent.isTerminal ? DashSkin.accent(dark) : color(agent.status, dark: dark)
     }
 
     static func fill(_ agent: HerdrAgent, dark: Bool, selected: Bool) -> Color {
