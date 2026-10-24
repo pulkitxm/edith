@@ -222,8 +222,9 @@ def main(arguments):
         destination, application, team = rest
         write(destination, extension_entitlements(application, team))
     elif command == 'app-entitlements':
-        destination, application, team = rest
-        write(destination, app_entitlements(application, team))
+        destination, application, team, base = rest
+        with open(base, 'rb') as handle:
+            write(destination, {**plistlib.load(handle), **app_entitlements(application, team)})
     elif command == 'profile':
         path, identifier, team, entitlement = rest[:4]
         identity = rest[4] if len(rest) > 4 else ''

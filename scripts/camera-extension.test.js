@@ -65,6 +65,24 @@ print(json.dumps(dict(
   });
 });
 
+test("the app entitlements keep the hardened runtime resource grants", () => {
+  const result = python(`import json, os, plistlib, subprocess, sys, tempfile
+destination = os.path.join(tempfile.mkdtemp(), 'app.entitlements')
+subprocess.run([sys.executable, '-B', 'scripts/camera_extension.py', 'app-entitlements',
+    destination, 'com.pulkit.edith', 'TEAM123', 'Resources/Edith.entitlements'], check=True)
+with open(destination, 'rb') as handle:
+    print(json.dumps(plistlib.load(handle)))`);
+  expect(result).toEqual({
+    "com.apple.security.automation.apple-events": true,
+    "com.apple.security.device.audio-input": true,
+    "com.apple.security.device.camera": true,
+    "com.apple.security.personal-information.calendars": true,
+    "com.apple.developer.system-extension.install": true,
+    "com.apple.application-identifier": "TEAM123.com.pulkit.edith",
+    "com.apple.developer.team-identifier": "TEAM123",
+  });
+});
+
 test("provisioning profiles must match the app, team, entitlement and date", () => {
   const result = python(`import datetime, json
 from scripts.camera_extension import check_profile
@@ -123,7 +141,7 @@ test("build.sh embeds the extension and signs it before the app", () => {
 
 test("the install entitlement is only added with a verified profile", () => {
   const profileBlock = buildScript.slice(
-    buildScript.indexOf('APP_ENTITLEMENTS=""'),
+    buildScript.indexOf('APP_ENTITLEMENTS="Resources/Edith.entitlements"'),
     buildScript.indexOf('sign "$APP" "$APP_ENTITLEMENTS"'),
   );
   expect(profileBlock).toContain(

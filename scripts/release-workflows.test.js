@@ -209,7 +209,7 @@ test("release builds and publishes the macOS assets", () => {
     ciWorkflow.indexOf("\n  dmg:"),
     ciWorkflow.indexOf("\n  publish:"),
   );
-  expect(dmgJob).toContain("timeout-minutes: 60");
+  expect(dmgJob).toContain("timeout-minutes: 120");
   expect(dmgJob).toContain("name: Cache libghostty");
   expect(dmgJob).toContain("name: Build libghostty");
   expect(dmgJob).toContain("make ghostty");
@@ -233,7 +233,8 @@ test("release builds and publishes the macOS assets", () => {
   expect(dmgJob).toContain(
     "./scripts/package-database-pack.sh dist/edith-database .",
   );
-  expect(dmgJob).toContain("xcrun notarytool submit edith-database.zip --wait");
+  expect(dmgJob).toContain("./scripts/notarize.sh Edith.dmg");
+  expect(dmgJob).toContain("./scripts/notarize.sh edith-database.zip");
   expect(dmgJob.indexOf("name: Package the database pack")).toBeLessThan(
     dmgJob.indexOf("name: Notarize and staple"),
   );
@@ -332,16 +333,42 @@ test("bundle verification requires one executable and its CLI launcher", () => {
   expect(makefile).toContain("for name in ed edith; do");
 });
 
-test("macOS notarization is conditional on its optional credentials", () => {
-  expect(releaseWorkflow).toContain("HAS_NOTARY:");
-  expect(releaseWorkflow).toContain(
-    "if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'",
+test("release signing reaches every nested helper notarization inspects", () => {
+  expect(buildScript).toContain(
+    'for service in "$version"/XPCServices/*.xpc; do',
   );
-  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
+  expect(buildScript).toContain(
+    'sign_tool "$service" --preserve-metadata=entitlements',
+  );
+  expect(buildScript).toContain('for helper in "$version"/*.app; do');
+  expect(buildScript).toContain('SIGN_FLAGS="--options runtime --timestamp"');
+  expect(buildScript).toContain(
+    'APP_ENTITLEMENTS="Resources/Edith.entitlements"',
+  );
 });
 
-test("macOS release accepts the configured development certificate", () => {
-  expect(releaseWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
+test("macOS releases require Developer ID signing and notarization", () => {
+  const dmgJob = ciWorkflow.slice(
+    ciWorkflow.indexOf("\n  dmg:"),
+    ciWorkflow.indexOf("\n  publish:"),
+  );
+  expect(releaseWorkflow).toContain(
+    "NOTARY_KEY_ID, NOTARY_ISSUER_ID and NOTARY_KEY are required",
+  );
+  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY == 'true'");
+  expect(dmgJob).not.toContain("EDITH_RELEASE_ALLOW_DEV_SIGNING");
+  expect(dmgJob).toContain("DeveloperIDCA-G2.cer");
+  expect(dmgJob).toContain("is not a Developer ID Application identity");
+  expect(dmgJob).toContain(
+    'codesign --force --sign "Developer ID Application" --timestamp Edith.dmg',
+  );
+  expect(dmgJob.indexOf("--timestamp Edith.dmg")).toBeLessThan(
+    dmgJob.indexOf("./scripts/notarize.sh Edith.dmg"),
+  );
+  expect(dmgJob.indexOf("./scripts/notarize.sh Edith.dmg")).toBeLessThan(
+    dmgJob.indexOf("name: Generate the signed appcast"),
+  );
+  expect(dmgJob).toContain("spctl --assess --type execute -vv dist/Edith.app");
 });
 
 test("the publisher uses a token that clears the ruleset", () => {

@@ -9,11 +9,12 @@ usage() {
 usage: ./scripts/release-local.sh [--dry-run]
 
 Cuts a release the way CI used to, but entirely on this Mac:
-resolve the next version, build and sign the release app, package and verify the
-DMG, generate the signed Sparkle appcast, stamp the version files and cask,
+resolve the next version, build and sign the release app with Developer ID,
+package, sign, notarize, staple and verify the DMG, generate the signed Sparkle
+appcast, stamp the version files and cask,
 commit and tag on main, push, then publish the GitHub release with Pukbot.
 
-  --dry-run        build, sign, package, and verify, but do not commit, tag,
+  --dry-run        build, sign, package, notarize, and verify, but do not commit, tag,
                    push, or publish. Leaves the artifacts under dist/ for review.
 
 Signing material is read from .env at the repository root. See AGENTS.md.
@@ -40,7 +41,14 @@ set +a
 : "${MACOS_CERT_PASSWORD:?release blocked: MACOS_CERT_PASSWORD missing from .env}"
 : "${SPARKLE_PRIVATE_KEY:?release blocked: SPARKLE_PRIVATE_KEY missing from .env}"
 : "${EDITH_SIGN_IDENTITY:?release blocked: EDITH_SIGN_IDENTITY missing from .env}"
-export EDITH_RELEASE_ALLOW_DEV_SIGNING="${EDITH_RELEASE_ALLOW_DEV_SIGNING:-1}"
+: "${NOTARY_KEY_ID:?release blocked: NOTARY_KEY_ID missing from .env}"
+: "${NOTARY_ISSUER_ID:?release blocked: NOTARY_ISSUER_ID missing from .env}"
+: "${NOTARY_KEY:?release blocked: NOTARY_KEY missing from .env}"
+case "$EDITH_SIGN_IDENTITY" in
+  "Developer ID Application: "*) ;;
+  *) echo "release blocked: EDITH_SIGN_IDENTITY must be a Developer ID Application identity" >&2; exit 1 ;;
+esac
+unset EDITH_RELEASE_ALLOW_DEV_SIGNING
 
 if [ "$DRY_RUN" -eq 0 ]; then
   if [ "$(git branch --show-current)" != main ]; then
@@ -53,8 +61,8 @@ if [ "$DRY_RUN" -eq 0 ]; then
   fi
 fi
 
-WWDR="$(find /Applications/Xcode*.app -iname 'AppleWWDRCA-2030.cer' 2>/dev/null | head -1)"
-[ -n "$WWDR" ] || { echo "release blocked: the WWDR G3 intermediate (AppleWWDRCA-2030.cer) is not in Xcode" >&2; exit 1; }
+DEVELOPER_ID_CA="$(find /Applications/Xcode*.app -iname 'DeveloperIDCA-G2.cer' 2>/dev/null | head -1)"
+[ -n "$DEVELOPER_ID_CA" ] || { echo "release blocked: the Developer ID G2 intermediate (DeveloperIDCA-G2.cer) is not in Xcode" >&2; exit 1; }
 
 git fetch origin main --tags --quiet
 
@@ -85,7 +93,7 @@ trap cleanup EXIT
 security create-keychain -p release "$KEYCHAIN"
 security set-keychain-settings "$KEYCHAIN"
 security unlock-keychain -p release "$KEYCHAIN"
-security import "$WWDR" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
+security import "$DEVELOPER_ID_CA" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
 P12="$(mktemp).p12"
 printf '%s' "$MACOS_CERT_P12_BASE64" | base64 -d > "$P12"
 security import "$P12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null 2>&1
@@ -129,6 +137,13 @@ done
   -u "$PWD/dmg-root/Edith.app" 2>/dev/null || true
 rm -rf dmg-root
 [ "$verify_status" -eq 0 ] || { echo "release blocked: the DMG failed verification" >&2; exit 1; }
+codesign --force --sign "$EDITH_SIGN_IDENTITY" --timestamp Edith.dmg
+
+echo "==> notarizing the DMG and the database pack"
+./scripts/notarize.sh Edith.dmg
+./scripts/notarize.sh edith-database.zip
+spctl --assess --type open --context context:primary-signature -vv Edith.dmg
+spctl --assess --type execute -vv dist/Edith.app
 
 echo "==> generating the signed appcast"
 GENERATE_APPCAST="$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"

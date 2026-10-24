@@ -85,11 +85,10 @@ if [ -n "$PREBUILT" ]; then
     echo "--from-app requires --release --install without --pr or --branch." >&2
     exit 1
   fi
-  REQUIREMENT='anchor apple generic and identifier "com.pulkit.edith" and certificate leaf[subject.OU] = "HDYBQ2SLGT"'
-  if [ "${EDITH_RELEASE_ALLOW_DEV_SIGNING:-0}" != 1 ]; then
-    REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
-  fi
+  REQUIREMENT='anchor apple generic and identifier "com.pulkit.edith" and certificate leaf[subject.OU] = "NEWTEAMID"'
+  REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
   codesign --verify --deep --strict --test-requirement "=$REQUIREMENT" "$PREBUILT"
+  spctl --assess --type execute "$PREBUILT"
   python3 scripts/install_app.py "$PREBUILT" "/Applications/Edith.app"
   if [ "$NO_OPEN" != 1 ]; then open -n "/Applications/Edith.app"; fi
   exit 0
@@ -341,7 +340,7 @@ sign_tool() {
   if [ -d "$1" ]; then
     dot_clean -m "$1"
   fi
-  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
+  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS ${2:-} "$1"
   find "$APP" -type f -name '._*' -delete
 }
 
@@ -353,12 +352,21 @@ for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/
 done
 for framework in "$APP"/Contents/Frameworks/*.framework; do
   [ -d "$framework" ] || continue
-  if [ -d "$framework/Versions/A" ]; then
-    find "$framework/Versions/A" -maxdepth 1 -type f -perm -u+x -print0 \
-      | while IFS= read -r -d '' binary; do
-          sign_tool "$binary"
+  find "$framework/Versions" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null \
+    | while IFS= read -r -d '' version; do
+        for service in "$version"/XPCServices/*.xpc; do
+          [ -d "$service" ] || continue
+          sign_tool "$service" --preserve-metadata=entitlements
         done
-  fi
+        for helper in "$version"/*.app; do
+          [ -d "$helper" ] || continue
+          sign_tool "$helper"
+        done
+        find "$version" -maxdepth 1 -type f -perm -u+x -print0 \
+          | while IFS= read -r -d '' binary; do
+              sign_tool "$binary"
+            done
+      done
   sign_tool "$framework"
 done
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
@@ -387,14 +395,15 @@ case "$SIGN_FLAGS" in *runtime*) ;; *) CAMERA_RUNTIME="--options runtime" ;; esa
 sign_tool "$CAMERA/Contents/Frameworks/EdithCameraSupport.framework"
 sign "$CAMERA" "$CAMERA_ENTITLEMENTS" "$CAMERA_RUNTIME"
 
-APP_ENTITLEMENTS=""
+APP_ENTITLEMENTS="Resources/Edith.entitlements"
 if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then
   [ -n "$TEAM_ID" ] || { echo "EDITH_APP_PROVISIONING_PROFILE needs a team signing identity" >&2; exit 1; }
   python3 scripts/camera_extension.py profile "$EDITH_APP_PROVISIONING_PROFILE" \
     "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install "$SIGN_IDENTITY"
   cp "$EDITH_APP_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
+  python3 scripts/camera_extension.py app-entitlements "$DERIVED/EdithApp.entitlements" \
+    "$APP_IDENTIFIER" "$TEAM_ID" "$APP_ENTITLEMENTS"
   APP_ENTITLEMENTS="$DERIVED/EdithApp.entitlements"
-  python3 scripts/camera_extension.py app-entitlements "$APP_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
 fi
 sign "$APP" "$APP_ENTITLEMENTS"
 
