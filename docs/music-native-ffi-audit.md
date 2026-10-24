@@ -1,6 +1,6 @@
 # Music native bridge review
 
-Music loads its signed native library inside its owned extension worker. The public gateway accepts typed JSON commands, never pointers or native handles.
+Music loads its signed native library inside the loaded Music extension. The public gateway accepts typed JSON commands, never pointers or native handles.
 
 The Swift owner validates service and display-name identities before loading the library. Start and forget pass explicit UTF-8 byte lengths. Rust rejects null, empty, oversized, embedded-null and invalid UTF-8 input before copying a bounded slice. Service identities are limited to 256 bytes, display names to 128 bytes and commands to 4,096 bytes. Command delivery uses a queue with 32 slots and rejects overflow.
 

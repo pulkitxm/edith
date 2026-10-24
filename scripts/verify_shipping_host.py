@@ -16,21 +16,6 @@ def inspect_cli(executable, version):
     assert json.loads(run(str(executable), 'version', '--json'))['version'] == version, 'Invalid JSON CLI version'
 
 
-def extension_point_descriptor(identifier):
-    return {
-        'EXVersion': 1,
-        identifier + '.ExtensionUI': {
-            'EXExtensionPointIsPublic': True,
-            'EXExtensionPointName': 'ExtensionUI',
-            'EXPresentsUserInterface': True,
-            'EXRequiredEntitlements': {'com.apple.security.app-sandbox': True},
-            'EXRequiresEnhancedSecurity': False,
-            'EXSupportedPlatforms': ['macOS'],
-            '_EXScopeRestriction': 'none',
-        },
-    }
-
-
 def inspect_layout(bundle, release=False, launcher_required=True):
     bundle = Path(bundle).resolve()
     plist = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
@@ -44,20 +29,8 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     assert plist['SUPublicEDKey'] and plist['SUFeedURL'].startswith('https://github.com/pulkitxm/edith/releases/')
     executable = bundle / 'Contents/MacOS/Edith'
     assert executable.is_file() and not executable.is_symlink()
-    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature', 'Library', 'Extensions'}
+    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature'}
     assert {path.name for path in (bundle / 'Contents').iterdir()} <= allowed, 'Unexpected host payload directory'
-    extensions = bundle / 'Contents/Extensions'
-    assert {path.name for path in extensions.iterdir()} == {'ExtensionUI.appextensionpoints'}, 'Feature payload in host Extensions'
-    descriptor = extensions / 'ExtensionUI.appextensionpoints'
-    assert descriptor.is_file() and not descriptor.is_symlink(), 'Invalid host extension point file'
-    assert plistlib.loads(descriptor.read_bytes()) == extension_point_descriptor(identifier), 'Host extension point identity does not match its bundle'
-    library = bundle / 'Contents/Library'
-    label = 'com.pulkit.edith.extensions.carrier.v1'
-    assert {path.name for path in library.iterdir()} == {'LaunchDaemons'}, 'Feature payload in host Library'
-    daemons = library / 'LaunchDaemons'
-    assert {path.name for path in daemons.iterdir()} == {label + '.plist'}, 'Unexpected host daemon'
-    daemon = plistlib.loads((daemons / (label + '.plist')).read_bytes())
-    assert daemon == {'Label': label, 'BundleProgram': 'Contents/MacOS/Edith', 'ProgramArguments': ['Edith', '--extension-carrier'], 'MachServices': {label: True}}, 'Invalid generic host daemon'
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
     assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework'}, 'Feature framework in host'
     resources = {'AppIcon.icns', 'index.json', 'ed-launcher'} if launcher_required else {'AppIcon.icns', 'index.json'}
@@ -128,9 +101,9 @@ def inspect_host(bundle, release=False, launcher_required=True):
         signed = subprocess.run(['codesign', '-d', '--entitlements', '-', '--xml', str(executable)], capture_output=True, check=True).stdout
         entitlements = plistlib.loads(signed)
         for key in ('com.apple.security.automation.apple-events', 'com.apple.security.device.audio-input', 'com.apple.security.device.camera'):
-            assert entitlements.get(key) is True, f'Missing worker entitlement: {key}'
+            assert entitlements.get(key) is True, f'Missing host entitlement: {key}'
         for key in ('NSAppleEventsUsageDescription', 'NSMicrophoneUsageDescription', 'NSCameraUsageDescription', 'NSLocalNetworkUsageDescription'):
-            assert isinstance(plist.get(key), str) and plist[key].strip(), f'Missing worker usage description: {key}'
+            assert isinstance(plist.get(key), str) and plist[key].strip(), f'Missing host usage description: {key}'
     catalog = json.loads((bundle / 'Contents/Resources/index.json').read_text())
     assert len(catalog) >= 35
     inspect_cli(executable, plist['CFBundleShortVersionString'])

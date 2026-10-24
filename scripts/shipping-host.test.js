@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { discoverHostSizeTests } from "./host-size-test-inventory.mjs";
 
 const build = readFileSync("build.sh", "utf8");
 const minimal = readFileSync("scripts/build-minimal-host.mjs", "utf8");
@@ -23,23 +22,10 @@ test("isolated release version packaging preserves source and certificate signin
   expect(result.exitCode, result.stderr.toString()).toBe(0);
 });
 
-test.each([
-  "scripts/test-host-build-metadata.py",
-  "scripts/test-macho-code-identity.py",
-])("packaging provenance and size accounting pass %s", (script) => {
-  const result = run("python3", "-B", script);
-  expect(result.exitCode, result.stderr.toString()).toBe(0);
-});
-
-test.each(discoverHostSizeTests())(
-  "size accounting passes %s",
-  (identifier) => {
-    const result = run(
-      "python3",
-      "-B",
-      "scripts/test-extension-host-size-report.py",
-      identifier,
-    );
+test.each(["scripts/test-host-build-metadata.py"])(
+  "packaging provenance passes %s",
+  (script) => {
+    const result = run("python3", "-B", script);
     expect(result.exitCode, result.stderr.toString()).toBe(0);
   },
 );

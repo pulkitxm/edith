@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readEvidenceAPI } from "./extension-native-evidence.mjs";
 import {
   backoffDelay,
   isTransientFailure,
@@ -15,89 +14,14 @@ import {
 } from "./release-asset-upload.mjs";
 
 const repository = "synthetic/fixture";
-const jobsPath = "/actions/runs/9/attempts/1/jobs?per_page=100&page=1";
 
 function recordingSleep() {
   const delays = [];
   return { delays, sleep: async (delay) => delays.push(delay) };
 }
 
-function sequence(...statuses) {
-  const calls = [];
-  const fetch_ = async (url) => {
-    calls.push(url);
-    const next = statuses[Math.min(calls.length, statuses.length) - 1];
-    if (next instanceof Error) throw next;
-    const [status, body = "", headers = {}] = Array.isArray(next)
-      ? next
-      : [next];
-    return new Response(body, { status, headers });
-  };
-  return { calls, fetch_ };
-}
-
-test("a 502 followed by a 200 succeeds with backoff", async () => {
+test("422 command failures are never retried", () => {
   const { delays, sleep } = recordingSleep();
-  const { calls, fetch_ } = sequence(502, [
-    200,
-    JSON.stringify({ total_count: 0, jobs: [] }),
-  ]);
-  expect(
-    await readEvidenceAPI(jobsPath, fetch_, {
-      retry: { sleep, random: () => 0 },
-    }),
-  ).toEqual({ total_count: 0, jobs: [] });
-  expect(calls).toHaveLength(2);
-  expect(delays).toEqual([1000]);
-});
-
-test("network errors, empty bodies and Retry-After are retried", async () => {
-  const { delays, sleep } = recordingSleep();
-  const { calls, fetch_ } = sequence(
-    new TypeError("fetch failed"),
-    [200, ""],
-    [429, "", { "Retry-After": "7" }],
-    [200, JSON.stringify({ ok: true })],
-  );
-  expect(
-    await readEvidenceAPI(jobsPath, fetch_, {
-      retry: { sleep, random: () => 0 },
-    }),
-  ).toEqual({ ok: true });
-  expect(calls).toHaveLength(4);
-  expect(delays).toEqual([1000, 2000, 7000]);
-});
-
-test("persistent 502 fails after the maximum attempts", async () => {
-  const { delays, sleep } = recordingSleep();
-  const { calls, fetch_ } = sequence(502);
-  await expect(
-    readEvidenceAPI(jobsPath, fetch_, { retry: { sleep, random: () => 0 } }),
-  ).rejects.toThrow("HTTP 502");
-  expect(calls).toHaveLength(6);
-  expect(delays).toEqual([1000, 2000, 4000, 8000, 16000]);
-});
-
-test("404 with allowMissing returns null without retry", async () => {
-  const { delays, sleep } = recordingSleep();
-  const { calls, fetch_ } = sequence(404);
-  expect(
-    await readEvidenceAPI("/git/ref/tags/missing", fetch_, {
-      allowMissing: true,
-      retry: { sleep },
-    }),
-  ).toBeNull();
-  expect(calls).toHaveLength(1);
-  expect(delays).toEqual([]);
-});
-
-test("422 responses and commands are never retried", async () => {
-  const { delays, sleep } = recordingSleep();
-  const { calls, fetch_ } = sequence(422);
-  await expect(
-    readEvidenceAPI(jobsPath, fetch_, { retry: { sleep } }),
-  ).rejects.toThrow();
-  expect(calls).toHaveLength(1);
   let attempts = 0;
   expect(() =>
     withGitHubRetrySync(
@@ -112,16 +36,6 @@ test("422 responses and commands are never retried", async () => {
   ).toThrow("Command failed");
   expect(attempts).toBe(1);
   expect(delays).toEqual([]);
-});
-
-test("the remaining deadline stops retries early", async () => {
-  const { calls, fetch_ } = sequence(503);
-  await expect(
-    readEvidenceAPI(jobsPath, fetch_, {
-      retry: { sleep: async () => {}, remaining: () => 500 },
-    }),
-  ).rejects.toThrow("HTTP 503");
-  expect(calls).toHaveLength(1);
 });
 
 test("backoff doubles to a 30 second cap and parses Retry-After", () => {

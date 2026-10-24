@@ -82,7 +82,7 @@ and platform details.
 ## Command line
 
 The bundled `ed` launcher connects to the running Edith app. It manages downloaded
-extensions and sends JSON operations to an enabled extension worker.
+extensions and sends JSON operations to an enabled extension.
 
 ```sh
 ed extensions ls
@@ -95,8 +95,8 @@ ed invoke <id> <operation> --json '{"value":"synthetic"}'
 ```
 
 Command results are JSON. Errors are JSON on stderr with nonzero exit codes.
-Help and version work without a running app. Commands do not open Edith or start
-workers implicitly. Each downloaded extension defines its own operations.
+Help and version work without a running app. Commands do not open Edith or load
+extensions implicitly. Each downloaded extension defines its own operations.
 
 Full reference: **[docs/cli](docs/cli/README.md)**, also published to the
 [wiki](https://github.com/pulkitxm/edith/wiki).

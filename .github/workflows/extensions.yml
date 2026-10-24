@@ -19,7 +19,6 @@ name: Extensions
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/release-lookup.*
-      - scripts/hosted-public-release/**
       - scripts/build-minimal-host.mjs
       - scripts/build-contained-host-runtime.mjs
       - scripts/build-camera-carrier.mjs
@@ -38,11 +37,6 @@ name: Extensions
         type: boolean
         required: true
         default: false
-      production_cohort:
-        description: Observe two verified public hosts and coordinate the Keep Awake catalog update
-        type: string
-        required: false
-        default: ""
       validation_sha:
         description: Validate all 40 extensions at this exact source SHA without publishing
         type: string
@@ -56,15 +50,15 @@ concurrency:
       github.event_name == 'pull_request' && github.ref
       || github.event_name == 'workflow_dispatch' && inputs.publish == false
         && inputs.validation_sha != '' && inputs.validation_sha == github.sha
-        && inputs.production_cohort == '' && format('validation-{0}', inputs.validation_sha)
+        && format('validation-{0}', inputs.validation_sha)
       || 'publish'
     }}
   cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
 env:
   EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
 jobs:
-  frozen-host:
-    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true')) && (inputs.production_cohort == '' || (github.repository_id == '1289153439' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && fromJSON(inputs.production_cohort).source == github.sha))"
+  tests:
+    if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true'))"
     needs:
       - plan
     runs-on: macos-26
@@ -77,99 +71,14 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --check
       - run: bun install --frozen-lockfile
-      - name: Cache the worker host
+      - name: Cache the host build
+        if: "needs.plan.outputs.mode == 'validation'"
         uses: ./.github/actions/cache-host
       - name: Validate the full host before all-extension validation
         if: "needs.plan.outputs.mode == 'validation'"
         run: make ci-host host
-      - name: Build the frozen shipping host
-        if: "needs.plan.outputs.mode != 'validation'"
-        run: make host
-      - run: |
-          swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness &
-          lifecycle_harness=$!
-          swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
-          wait "$lifecycle_harness"
-          python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --carrier-products "$(swift build --package-path Packages/EdithHost --build-system native --configuration release --show-bin-path)" --output local/extension-tools
-      - name: Import the release signing certificate
-        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
-        env:
-          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
-          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
-        run: |
-          test -n "$MACOS_CERT_P12"
-          keychain="$RUNNER_TEMP/extensions.keychain-db"
-          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
-          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
-          security list-keychains -d user -s "$keychain"
-          rm "$RUNNER_TEMP/cert.p12"
-          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
-          if [ -z "$identity" ]; then
-            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
-          fi
-          test -n "$identity"
-          echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-      - name: Freeze the production host once for all changed extensions
-        if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
-        run: "python3 scripts/package-shipping-host.py local/minimal-host/Edith.app local/extension-release-host/Edith.app --identity \"$EXTENSION_SIGN_IDENTITY\" --release"
-      - name: Archive the frozen host without changing executable permissions
-        run: |
-          mkdir -p local/extension-host-artifact
-          if [ -d local/extension-release-host ]; then
-            tar -czf local/extension-host-artifact/host.tar.gz local/minimal-host local/extension-tools local/extension-release-host
-          else
-            tar -czf local/extension-host-artifact/host.tar.gz local/minimal-host local/extension-tools
-          fi
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: frozen-extension-host
-          path: local/extension-host-artifact/host.tar.gz
-          retention-days: 7
-      - name: Remove the temporary signing keychain
-        if: always()
-        run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
-  tests:
-    if: "needs['frozen-host'].result == 'success'"
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --check
-      - run: bun install --frozen-lockfile
-      - name: Restore the frozen host and lifecycle tools
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: frozen-extension-host
-          path: local/extension-host-artifact
-      - run: tar -xzf local/extension-host-artifact/host.tar.gz
-      - name: Verify lifecycle tools and their frozen index
-        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
-      - run: |
-          mkdir -p Packages/ExtensionMarketplace/.build/debug
-          cp local/extension-tools/MarketplaceHarness Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness
-      - name: Verify bounded peer failure diagnostics
-        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
-        run: make ci-extension-keep-awake-peer-diagnostics
-      - name: Verify authenticated peer transport and lifecycle
-        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
-        run: make ci-extension-keep-awake-peer-transport
-      - name: Exercise original Keep Awake controls and native lifecycle
-        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
-        env:
-          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
-          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
-          EXTENSION_PUBLISH: "${{ inputs.publish == true && 'true' || 'false' }}"
-        run: make ci-extension-keep-awake-native
-      - name: Verify Keep Awake peer rejection contracts
-        if: "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'"
-        run: make ci-extension-keep-awake-peer-contracts
+      - name: Build the marketplace harness
+        run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
       - name: Verify native cache integrity and private SDK composition
         if: "needs.plan.outputs.mode == 'validation'"
         timeout-minutes: 20
@@ -179,17 +88,14 @@ jobs:
         run: |
           source scripts/ci-setup-zig.sh
           bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
-      - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+      - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments
         if: "needs.plan.outputs.mode == 'validation'"
-        run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
+        run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments
       - name: Validate the shipping extension and marketplace
         if: "needs.plan.outputs.mode != 'validation'"
         run: make ci-marketplace-runtime ci-extension-keep-awake ci-comments
       - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
-    needs:
-      - frozen-host
-      - plan
   plan:
     runs-on: ubuntu-latest
     outputs:
@@ -215,7 +121,6 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/verify-extension-catalog.test.mjs
-      - run: python3 -B scripts/test-package-extension-lifecycle-tools.py
       - name: Check portable publication and selective planning
         run: bun test scripts/extension-publication-guard.test.js scripts/extension-release-plan.test.js scripts/extensions-workflow.test.js scripts/extension-all-validation.test.js
       - run: bun scripts/extension-host-abi.mjs --check
@@ -260,8 +165,7 @@ jobs:
     name: "build (${{ matrix.id }})"
     needs:
       - plan
-      - frozen-host
-    if: "!cancelled() && needs.plan.result == 'success' && needs['frozen-host'].result == 'success' && needs.plan.outputs.changed == 'true'"
+    if: "!cancelled() && needs.plan.result == 'success' && needs.plan.outputs.changed == 'true'"
     env:
       HAS_NOTARY: "${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}"
     strategy:
@@ -272,22 +176,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --check
-      - name: Restore the frozen host and lifecycle tools
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: frozen-extension-host
-          path: local/extension-host-artifact
-      - run: tar -xzf local/extension-host-artifact/host.tar.gz
-      - name: Verify lifecycle tools and their frozen index
-        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
-      - name: Require a native worker package
+      - name: Require a native package
         env:
           EXTENSION_ID: "${{ matrix.id }}"
         run: |
-          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extension workers can ship")'
+          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extensions can ship")'
       - name: Identify optional native prerequisites
         id: native
         env:
@@ -333,11 +230,6 @@ jobs:
           EXTENSION_ID: "${{ matrix.id }}"
           EXTENSION_PACKAGE_SUITES: "${{ (!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))) && 'skip' || 'run' }}"
         run: "bun scripts/test-extension-package.mjs \"$EXTENSION_ID\""
-      - name: Exercise this worker against the frozen host
-        run: "bun scripts/test-extension-workers.mjs \"${{ matrix.id }}\""
-        env:
-          EXTENSION_LIFECYCLE_HARNESS: local/extension-tools/HostLifecycleHarness
-          EXTENSION_SWIFT_JOBS: "3"
       - name: Import the release signing certificate
         if: "!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
         env:
@@ -360,12 +252,20 @@ jobs:
           fi
           test -n "$identity"
           echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Cache the host that contains the camera carrier
+        if: "matrix.id == 'virtualCamera'"
+        uses: ./.github/actions/cache-host
+      - name: Build the host that contains the camera carrier
+        if: "matrix.id == 'virtualCamera'"
+        run: make host
+      - name: Sign the containing host for publication
+        if: "matrix.id == 'virtualCamera' && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        run: python3 scripts/package-shipping-host.py local/minimal-host/Edith.app local/extension-release-host/Edith.app --identity "$EXTENSION_SIGN_IDENTITY" --release
       - name: Build only this extension
         env:
           EXTENSION_ID: "${{ matrix.id }}"
           EXTENSION_VERSION: "${{ matrix.version }}"
           DEVELOPMENT: "${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}"
-          EXTENSION_UI_CARRIER_TOOLS: local/extension-tools
           EXTENSION_SWIFT_JOBS: "3"
           EXTENSION_CONTAINING_HOST_APP: "${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true)) && 'local/minimal-host/Edith.app' || 'local/extension-release-host/Edith.app' }}"
         run: |
@@ -397,10 +297,9 @@ jobs:
         if: always()
         run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
   publish:
-    timeout-minutes: ${{ inputs.production_cohort != '' && 180 || 360 }}
+    timeout-minutes: 360
     permissions:
       contents: read
-      actions: read
     needs:
       - plan
       - build
@@ -436,35 +335,5 @@ jobs:
           gh release upload --help
       - name: Install verified release dependencies
         run: bun install --frozen-lockfile
-      - name: Verify closed public update coordination contracts
-        if: inputs.production_cohort != ''
-        run: |
-          set -euo pipefail
-          bun test scripts/hosted-public-release/production-inputs.test.mjs scripts/hosted-public-release/production-observer.test.mjs scripts/hosted-public-release/production-summary.test.mjs scripts/hosted-public-release/production-catalog-channel.test.mjs scripts/hosted-public-release/production-publication-coordinator.test.mjs scripts/hosted-public-release/production-publication-workflow.test.mjs scripts/hosted-public-release/production-bootstrap.test.mjs scripts/hosted-public-release/production-host-readiness.test.mjs scripts/hosted-public-release/production-completed-host.test.mjs scripts/hosted-public-release/production-publication-budget.test.mjs scripts/hosted-public-release/production-pending-cohort.test.mjs
-          python3 -I -B scripts/test-production-host-cohort.py
-      - name: Preserve immutable native evidence before publication
-        run: bun scripts/extension-native-evidence.mjs
       - name: Publish immutable extension releases and the signed catalog
-        env:
-          PUBLIC_HOST_UPDATE_REQUEST: ${{ inputs.production_cohort }}
-          PUBLIC_RELEASE_VERIFICATION: "1"
-        run: |
-          set -euo pipefail
-          if [ -n "$PUBLIC_HOST_UPDATE_REQUEST" ]; then
-            bun scripts/hosted-public-release/production-publication-coordinator.mjs
-          else
-            bun scripts/extension-publish.mjs
-          fi
-      - name: Emit only bounded sanitized public observations
-        if: always() && inputs.production_cohort != ''
-        env:
-          EXPECTED_SOURCE_SHA: "${{ github.sha }}"
-        run: bun scripts/hosted-public-release/production-summary.mjs
-      - name: Retain bounded sanitized public update observations
-        if: always() && inputs.production_cohort != ''
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: hosted-public-host-update-verification
-          path: local/public-host-cohort/summary.json
-          retention-days: 7
-          if-no-files-found: warn
+        run: bun scripts/extension-publish.mjs

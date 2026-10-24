@@ -34,7 +34,7 @@ class ShippingHostVersionTests(unittest.TestCase):
         (resources / 'HelperInfo.plist').write_bytes(plistlib.dumps(self.info))
         (resources / 'Host.entitlements').write_bytes(plistlib.dumps({'com.apple.security.app-sandbox': False}))
         (resources / 'ed-launcher').write_bytes(b'synthetic launcher')
-        for name in ['MacOS', 'Frameworks/Sparkle.framework', 'Resources', 'Extensions']:
+        for name in ['MacOS', 'Frameworks/Sparkle.framework', 'Resources']:
             (self.source / 'Contents' / name).mkdir(parents=True, exist_ok=True)
         (self.source / 'Contents/MacOS/Edith').write_bytes(b'synthetic compiled host')
         (self.source / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'Edith'}))

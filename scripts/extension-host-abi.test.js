@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostABI, writeHostABI } from "./extension-host-abi.mjs";
+import { hostABI, workerHostABI, writeHostABI } from "./extension-host-abi.mjs";
 
 async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "extension-host-contract-"));
@@ -131,7 +131,7 @@ test("isolated worker contracts survive unrelated legacy feature changes", async
       JSON.parse(await readFile(manifest, "utf8")).map(
         (entry) => entry.hostABI,
       ),
-    ).toEqual(["edith-host-2", next]);
+    ).toEqual([workerHostABI, next]);
   });
 });
 
@@ -164,7 +164,7 @@ test("database interfaces invalidate legacy bundles without changing the worker 
       JSON.parse(await readFile(manifest, "utf8")).map(
         (entry) => entry.hostABI,
       ),
-    ).toEqual(["edith-host-2", next]);
+    ).toEqual([workerHostABI, next]);
   });
 });
 
@@ -182,10 +182,10 @@ test("worker ABI preparation replaces an obsolete worker compatibility version",
     );
     await writeHostABI(root);
     expect(await readFile(configuration, "utf8")).toContain(
-      'workerHostABI = "edith-host-2"',
+      `workerHostABI = "${workerHostABI}"`,
     );
     expect(JSON.parse(await readFile(manifest, "utf8"))[0].hostABI).toBe(
-      "edith-host-2",
+      workerHostABI,
     );
   });
 });
@@ -196,12 +196,12 @@ test.each(["legacy source", "worker source", "worker manifest"])(
     await fixture(async ({ root, configuration, manifest }) => {
       await writeFile(
         configuration,
-        'public static let hostABI = "stale"\npublic static let workerHostABI = "edith-host-2"\n',
+        `public static let hostABI = "stale"\npublic static let workerHostABI = "${workerHostABI}"\n`,
       );
       await writeFile(
         manifest,
         JSON.stringify([
-          { id: "isolated", contractVersion: 1, hostABI: "edith-host-2" },
+          { id: "isolated", contractVersion: 1, hostABI: workerHostABI },
           { id: "legacy", hostABI: "stale" },
         ]),
       );
@@ -215,7 +215,7 @@ test.each(["legacy source", "worker source", "worker manifest"])(
         await writeFile(
           configuration,
           (await readFile(configuration, "utf8")).replace(
-            "edith-host-2",
+            workerHostABI,
             "edith-host-1",
           ),
         );
@@ -223,7 +223,7 @@ test.each(["legacy source", "worker source", "worker manifest"])(
         await writeFile(
           manifest,
           (await readFile(manifest, "utf8")).replace(
-            "edith-host-2",
+            workerHostABI,
             "edith-host-1",
           ),
         );
@@ -267,10 +267,10 @@ test.each(["legacy source", "worker source", "worker manifest"])(
         }
       }
       expect(await readFile(configuration, "utf8")).toContain(
-        'workerHostABI = "edith-host-2"',
+        `workerHostABI = "${workerHostABI}"`,
       );
       expect(JSON.parse(await readFile(manifest, "utf8"))[0].hostABI).toBe(
-        "edith-host-2",
+        workerHostABI,
       );
     });
   },

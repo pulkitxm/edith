@@ -49,7 +49,7 @@ class WatchdogTests(unittest.TestCase):
             self.assertEqual(command[command.index('--jobs') + 1], '1')
         core = watchdog.command('core', developer, helper, executable)
         ui = watchdog.command('ui', developer, helper, executable)
-        self.assertIn('HostLifecycleHarnessTests', core[core.index('--filter') + 1])
+        self.assertEqual(core[core.index('--filter') + 1], '^EdithHostCoreTests\\.')
         self.assertNotIn('EdithHostUITests', core[core.index('--filter') + 1])
         self.assertEqual(ui[ui.index('--filter') + 1], '^EdithHostUITests\\.')
         with self.assertRaises(ValueError):

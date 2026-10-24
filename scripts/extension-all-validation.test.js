@@ -163,9 +163,9 @@ process.exit(92);
   }
 }
 
-test("validation closes selection to the current exact 40 unique manifest IDs", () => {
-  expect(manifest).toHaveLength(40);
-  expect(new Set(validationExtensionIDs).size).toBe(40);
+test("validation closes selection to the current exact 41 unique manifest IDs", () => {
+  expect(manifest).toHaveLength(41);
+  expect(new Set(validationExtensionIDs).size).toBe(41);
   expect(manifest.map(({ id }) => id).sort()).toEqual(
     [...validationExtensionIDs].sort(),
   );
@@ -250,7 +250,7 @@ test("repeat validation includes unchanged published owners with current version
         mode: "validation",
         sourceSHA,
       });
-      expect(plan.include).toHaveLength(40);
+      expect(plan.include).toHaveLength(41);
       for (const entry of plan.include) {
         const definition = definitions.find(({ id }) => id === entry.id);
         expect(entry.version).toBe(definition.version);
@@ -282,7 +282,6 @@ function concurrencyValue(value, changes = {}) {
   const inputs = {
     publish: false,
     validation_sha: sourceSHA,
-    production_cohort: "",
     ...changes.inputs,
   };
   return value.replace(/\$\{\{([\s\S]*?)\}\}/g, (_, expression) =>
@@ -322,7 +321,6 @@ test("ordinary publishers and pull requests retain their original concurrency an
     { inputs: { publish: true } },
     { inputs: { validation_sha: "" } },
     { inputs: { validation_sha: "b".repeat(40) } },
-    { inputs: { production_cohort: "synthetic-cohort" } },
     { github: { event_name: "workflow_run" } },
   ]) {
     expect(concurrencyValue(workflow.concurrency.group, changes)).toBe(
@@ -473,7 +471,6 @@ function admitted(expression, changes = {}) {
   const inputs = {
     publish: true,
     validation_sha: "",
-    production_cohort: "",
     ...changes.inputs,
   };
   const needs = {
@@ -488,7 +485,6 @@ function admitted(expression, changes = {}) {
     },
     build: { result: changes.buildResult ?? "success" },
     tests: { result: "success" },
-    "frozen-host": { result: "success" },
   };
   return Boolean(
     new Function(
@@ -504,14 +500,6 @@ function admitted(expression, changes = {}) {
 
 test("all maintained signing and publication guards independently reject validation input even with forged successful outputs", () => {
   const productionGuards = [
-    workflow.jobs["frozen-host"].steps.find(
-      (step) => step.name === "Import the release signing certificate",
-    ),
-    workflow.jobs["frozen-host"].steps.find(
-      (step) =>
-        step.name ===
-        "Freeze the production host once for all changed extensions",
-    ),
     workflow.jobs.plan.steps.find(
       (step) => step.name === "Require production publication from main",
     ),
@@ -558,13 +546,9 @@ test("all maintained signing and publication guards independently reject validat
   ).toBe(false);
 });
 
-test("validation preserves all native lifecycle package and global gates while withholding release privileges", () => {
+test("validation preserves all native package and global gates while withholding release privileges", () => {
   const context = { inputs: { publish: false, validation_sha: sourceSHA } };
-  for (const job of [
-    workflow.jobs["frozen-host"],
-    workflow.jobs.build,
-    workflow.jobs.tests,
-  ])
+  for (const job of [workflow.jobs.build, workflow.jobs.tests])
     expect(admitted(job.if, context)).toBe(true);
   expect(admitted(workflow.jobs.publish.if, context)).toBe(false);
   expect(workflow.permissions).toEqual({ contents: "read" });
@@ -613,14 +597,9 @@ test("validation preserves all native lifecycle package and global gates while w
     ).run,
   ).toContain("test-extension-package.mjs");
   expect(
-    workflow.jobs.build.steps.find(
-      (step) => step.name === "Exercise this worker against the frozen host",
-    ).run,
-  ).toContain("test-extension-workers.mjs");
-  expect(
     workflow.jobs.tests.steps.some((step) =>
       step.run?.includes(
-        "ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments",
+        "ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments",
       ),
     ),
   ).toBe(true);

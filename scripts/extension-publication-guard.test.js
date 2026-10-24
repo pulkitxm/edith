@@ -392,7 +392,7 @@ test("production workflow refuses feature-ref publication before native jobs", (
   expect(workflow.jobs.publish.if).toContain(
     "inputs.publish == true && github.ref == 'refs/heads/main'",
   );
-  expect(workflow.jobs["frozen-host"].needs).toContain("plan");
+  expect(workflow.jobs.build.needs).toContain("plan");
 });
 
 test("authenticated planning preserves draft revisions so rejected first publication can retry", async () => {
@@ -593,7 +593,7 @@ test("unchanged source retries finalize an authenticated draft once without pack
   }
 });
 
-test("zero-matrix workflow verifies the frozen runtime before trusted draft finalization", () => {
+test("zero-matrix workflow tests the marketplace before trusted draft finalization", () => {
   const workflow = Bun.YAML.parse(
     readFileSync(".github/workflows/extensions.yml", "utf8"),
   );
@@ -613,14 +613,12 @@ test("zero-matrix workflow verifies the frozen runtime before trusted draft fina
       "inputs",
       "cancelled",
       `return (${job.if});`,
-    )(needs, github, { publish: true, production_cohort: "" }, () => cancelled);
+    )(needs, github, { publish: true }, () => cancelled);
   const needs = {
     plan: { result: "success", outputs: { changed: "false", draft: "true" } },
     build: { result: "skipped" },
     tests: { result: "success" },
-    "frozen-host": { result: "success" },
   };
-  expect(run(workflow.jobs["frozen-host"], needs)).toBe(true);
   expect(run(workflow.jobs.tests, needs)).toBe(true);
   expect(run(workflow.jobs.build, needs)).toBe(false);
   expect(run(workflow.jobs.publish, needs)).toBe(true);
@@ -660,7 +658,7 @@ test("zero-matrix workflow verifies the frozen runtime before trusted draft fina
   ).toBe(true);
 });
 
-test("the actual no-argument publisher refuses unqualified zero-build drafts and stale or corrupt retries", () => {
+test("the actual no-argument publisher finalizes an owned zero-build draft once and refuses stale or corrupt retries", () => {
   const directory = mkdtempSync(join(tmpdir(), "catalog-publisher-cli-"));
   const binary = join(directory, "bin");
   mkdirSync(binary);
@@ -732,16 +730,18 @@ test("the actual no-argument publisher refuses unqualified zero-build drafts and
     expect(run().status).not.toBe(0);
     expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(0);
     writeFileSync(stateFile, JSON.stringify(state));
-    for (let index = 0; index < 2; index++) {
-      const result = run();
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("native-evidence.json");
-      const unchanged = JSON.parse(readFileSync(stateFile));
-      expect(unchanged.mutations).toBe(0);
-      expect(unchanged.release.draft).toBe(true);
-    }
+    const finalized = run();
+    expect(finalized.status, finalized.stderr).toBe(0);
+    const published = JSON.parse(readFileSync(stateFile));
+    expect(published.mutations).toBe(1);
+    expect(published.release.draft).toBe(false);
+    const replay = run();
+    expect(replay.status).not.toBe(0);
+    expect(replay.stderr).toContain("owned draft catalog");
+    expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
     for (const invalid of ["stale", "corrupt"]) {
       const invalidState = JSON.parse(readFileSync(stateFile));
+      invalidState.mutations = 0;
       invalidState.release.draft = true;
       invalidState.target = target;
       invalidState.data = live.data.toString("base64");

@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 
 const required = ["Sparkle.framework"];
 
-function verify({ missing, extra, pointIdentifier, artwork = "valid" } = {}) {
+function verify({ missing, extra, artwork = "valid" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
   try {
     const app = join(root, "Edith.app");
@@ -59,22 +59,14 @@ function verify({ missing, extra, pointIdentifier, artwork = "valid" } = {}) {
         `import sys, plistlib
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from verify_shipping_host import extension_point_descriptor, inspect_layout
+from verify_shipping_host import inspect_layout
 app = Path(sys.argv[2])
 plist = dict(CFBundleIdentifier='com.pulkit.edith', CFBundleDisplayName='Edith', CFBundleExecutable='Edith', SUPublicEDKey='synthetic-key', SUFeedURL='https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml')
 (app/'Contents/Info.plist').write_bytes(plistlib.dumps(plist))
-points = app/'Contents/Extensions'
-points.mkdir(parents=True, exist_ok=True)
-(points/'ExtensionUI.appextensionpoints').write_bytes(plistlib.dumps(extension_point_descriptor(sys.argv[3] or plist['CFBundleIdentifier'])))
-label = 'com.pulkit.edith.extensions.carrier.v1'
-daemons = app/'Contents/Library/LaunchDaemons'
-daemons.mkdir(parents=True, exist_ok=True)
-(daemons/(label+'.plist')).write_bytes(plistlib.dumps(dict(Label=label, BundleProgram='Contents/MacOS/Edith', ProgramArguments=['Edith', '--extension-carrier'], MachServices={label: True})))
 inspect_layout(app, release=True)
 `,
         resolve("scripts"),
         app,
-        pointIdentifier ?? "",
       ],
       { encoding: "utf8" },
     );
@@ -103,17 +95,11 @@ test.each(required)("release bundle rejects missing %s", (missing) => {
 
 test.each([
   "Contents/Extensions/Feature.appex",
-  "Contents/Extensions/extra.appextensionpoints",
+  "Contents/Library/LaunchDaemons",
   "Contents/Frameworks/ExtensionMarketplace.framework/ExtensionMarketplace.framework",
   "Contents/Frameworks/EdithShared.framework",
   "Contents/MacOS/downloaded-worker",
   "Contents/Resources/GhosttyResources",
 ])("release bundle rejects bundled feature payloads at %s", (extra) => {
   expect(verify({ extra }).status).not.toBe(0);
-});
-
-test("host rejects a public extension point belonging to another app identity", () => {
-  expect(
-    verify({ pointIdentifier: "com.pulkit.edith.dev.foreign" }).status,
-  ).not.toBe(0);
 });

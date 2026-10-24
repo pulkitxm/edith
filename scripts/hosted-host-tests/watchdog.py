@@ -126,7 +126,7 @@ def command(batch, developer, helper=None, executable=None):
         return [str(Path(developer) / 'Toolchains/XcodeDefault.xctoolchain/usr/bin/swift'),
                 'build', '--build-tests', *common]
     filters = {'transport': '^EdithHostCoreTests\\.HostCLITransportTests',
-               'core': '^(EdithHostCoreTests|HostLifecycleHarnessTests)\\.',
+               'core': '^EdithHostCoreTests\\.',
                'ui': '^EdithHostUITests\\.'}
     selected = filters[batch]
     if helper is None or executable is None:

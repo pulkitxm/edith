@@ -229,73 +229,32 @@ if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  if (process.env.COORDINATED_HOST_RELEASE) {
-    const root = resolve(process.argv[2] ?? process.cwd());
-    const dispatch = await import(
-      "./hosted-public-release/production-host-dispatch.mjs"
-    );
-    const template = dispatch.validateHostReleaseDispatch(
-      process.env.COORDINATED_HOST_RELEASE,
-      JSON.parse(process.env.COORDINATED_RELEASE_INPUTS),
-      process.env,
-    );
-    dispatch.verifyCoordinatedHostSource(root, template.source);
-    const bootstrap = await import(
-      "./hosted-public-release/production-bootstrap.mjs"
-    );
-    const readiness = await import(
-      "./hosted-public-release/production-host-readiness.mjs"
-    );
-    const intent = await bootstrap.admitHostBootstrapIntent(
-      process.env.COORDINATED_HOST_RELEASE,
-      process.env,
-    );
-    try {
-      const expected = await expectedPackages(root);
-      dispatch.verifyCoordinatedHostSource(root, template.source);
-      const descriptor = await readiness.waitForStagedHostReadiness(
-        intent,
-        expected,
-        "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
-        process.env,
-      );
-      dispatch.verifyCoordinatedHostSource(root, template.source);
-      process.stdout.write(
-        `Staged cohort host readiness verified: ${descriptor.candidateCatalog.revision}\n`,
-      );
-    } finally {
-      bootstrap.retireHostBootstrapIntent(intent);
-    }
-  } else {
-    const fetchMetadata = (url, options = {}) =>
-      fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(15_000),
-        headers: {
-          "Cache-Control": "no-cache",
-          ...(new URL(url).origin === "https://api.github.com" &&
-          process.env.GH_TOKEN
-            ? { Authorization: `Bearer ${process.env.GH_TOKEN}` }
-            : {}),
-        },
-      });
-    const target = process.env.REBUILD ? undefined : process.env.BUILT_SHA;
-    const revision = await waitForPackages({
-      expected: await expectedPackages(process.argv[2] ?? process.cwd()),
-      publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
-      fetchCatalog: fetchMetadata,
-      verifySource:
-        target === undefined
-          ? async () => {}
-          : () =>
-              verifyCurrentMain({
-                target,
-                releaseTag: process.env.RELEASE_TAG,
-                fetchMetadata,
-              }),
+  const fetchMetadata = (url, options = {}) =>
+    fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(15_000),
+      headers: {
+        "Cache-Control": "no-cache",
+        ...(new URL(url).origin === "https://api.github.com" &&
+        process.env.GH_TOKEN
+          ? { Authorization: `Bearer ${process.env.GH_TOKEN}` }
+          : {}),
+      },
     });
-    process.stdout.write(
-      `Compatible extension catalog verified: ${revision}\n`,
-    );
-  }
+  const target = process.env.REBUILD ? undefined : process.env.BUILT_SHA;
+  const revision = await waitForPackages({
+    expected: await expectedPackages(process.argv[2] ?? process.cwd()),
+    publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
+    fetchCatalog: fetchMetadata,
+    verifySource:
+      target === undefined
+        ? async () => {}
+        : () =>
+            verifyCurrentMain({
+              target,
+              releaseTag: process.env.RELEASE_TAG,
+              fetchMetadata,
+            }),
+  });
+  process.stdout.write(`Compatible extension catalog verified: ${revision}\n`);
 }

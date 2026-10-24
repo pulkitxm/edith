@@ -1,20 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
-  access,
   mkdir,
   mkdtemp,
   readFile,
   rename,
   rm,
-  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  definitionInputs,
   extensionFingerprint,
   extensionReleaseTag,
   planExtensionBuilds,
@@ -23,7 +20,6 @@ import {
   planUnpublishedExtensions,
   readPullRequestBaseline,
   supportCacheFingerprint,
-  workerRuntimeInputs,
 } from "./extension-release-plan.mjs";
 
 const definitions = [
@@ -789,315 +785,6 @@ test("returning to earlier source publishes a new immutable version and then reu
   }
 });
 
-test("same-executable worker inputs rebuild consumers while host presentation changes remain independent", () => {
-  const workers = definitions.map((entry) => ({
-    ...entry,
-    sameExecutableWorker: true,
-  }));
-  expect(
-    planExtensionBuilds(workers, [
-      "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
-    ]).map((entry) => entry.id),
-  ).toEqual(["music", "calendar", "shelf"]);
-  for (const path of [
-    "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
-  ])
-    expect(
-      planExtensionBuilds(workers, [path]).map((entry) => entry.id),
-    ).toEqual(["music", "calendar", "shelf"]);
-  expect(
-    planExtensionBuilds(workers, [
-      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
-    ]),
-  ).toEqual([]);
-  expect(
-    planExtensionBuilds(workers, ["Extensions/music/Track.swift"]).map(
-      (entry) => entry.id,
-    ),
-  ).toEqual(["music", "shelf"]);
-});
-
-test("all39 workers rebuild for launcher, navigation and privileged ownership changes", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const current = JSON.parse(
-    await readFile("Extensions/manifest.json", "utf8"),
-  );
-  expect(current).toHaveLength(40);
-  for (const path of workerRuntimeInputs) await access(path);
-  for (const path of [
-    "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedProcess.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedWorker.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCarrier.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedAdmission.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCaller.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
-  ]) {
-    expect(workerRuntimeInputs).toContain(path);
-    expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
-  }
-  expect(
-    planPullRequestBuilds(
-      current.filter(({ id }) => id !== "virtualCamera"),
-      ["Packages/EdithHost/Sources/EdithHost/HostSidebar.swift"],
-      current.filter(({ id }) => id !== "virtualCamera"),
-    ),
-  ).toEqual([]);
-});
-
-test("all39 workers fingerprint admission and fixture support production sources", async () => {
-  const current = JSON.parse(
-    await readFile("Extensions/manifest.json", "utf8"),
-  );
-  const paths = [
-    "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",
-    "Extensions/fixtureSupport/Package.swift",
-    "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
-  ];
-  const future = "Extensions/fixtureSupport/FutureAdmission.swift";
-  expect(current).toHaveLength(40);
-  expect(workerRuntimeInputs).toContain("Extensions/fixtureSupport");
-  for (const path of [...paths, future])
-    expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
-  const root = await mkdtemp(
-    join(tmpdir(), "extension-worker-admission-inputs-"),
-  );
-  const worker = {
-    id: "mockWorker",
-    inputs: [],
-    sharedInputs: [],
-    dependencies: [],
-    sameExecutableWorker: true,
-  };
-  try {
-    for (const path of workerRuntimeInputs) {
-      if (/\.(swift|resolved|mjs|py)$/.test(path)) {
-        await mkdir(join(root, path, ".."), { recursive: true });
-        await writeFile(join(root, path), "synthetic source");
-      } else {
-        await mkdir(join(root, path), { recursive: true });
-        await writeFile(
-          join(root, path, "Synthetic.swift"),
-          "synthetic source",
-        );
-      }
-    }
-    for (const path of paths)
-      await writeFile(join(root, path), "synthetic source");
-    const first = await extensionFingerprint(root, worker, [worker]);
-    for (const path of paths) {
-      await writeFile(join(root, path), "changed synthetic admission");
-      expect(await extensionFingerprint(root, worker, [worker])).not.toBe(
-        first,
-      );
-      await writeFile(join(root, path), "synthetic source");
-      expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
-    }
-    await writeFile(join(root, future), "future synthetic admission");
-    expect(await extensionFingerprint(root, worker, [worker])).not.toBe(first);
-    await rm(join(root, future));
-    expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
-    const nonCamera = current.filter(({ id }) => id !== "virtualCamera");
-    for (const path of [
-      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
-      "Extensions/fixtureSupport/Tests/WorkerFixtureAdmissionTests.swift",
-      "Extensions/fixtureSupport/Tests/Support/EngineFixture.swift",
-    ]) {
-      expect(planPullRequestBuilds(nonCamera, [path], nonCamera)).toEqual([]);
-      await mkdir(join(root, path, ".."), { recursive: true });
-      await writeFile(join(root, path), "unrelated synthetic source");
-      expect(await extensionFingerprint(root, worker, [worker])).toBe(first);
-    }
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("shared runtime fingerprints include code fixes and exclude generated legacy compatibility hashes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "extension-worker-inputs-"));
-  const definition = {
-    id: "calendar",
-    inputs: ["Extensions/calendar"],
-    sharedInputs: [],
-    dependencies: [],
-    sameExecutableWorker: true,
-  };
-  try {
-    for (const path of workerRuntimeInputs) {
-      if (
-        path.endsWith(".swift") ||
-        path.endsWith(".resolved") ||
-        path.endsWith(".mjs") ||
-        path.endsWith(".py")
-      ) {
-        await mkdir(join(root, path, ".."), { recursive: true });
-        await writeFile(join(root, path), "synthetic source");
-      } else {
-        await mkdir(join(root, path), { recursive: true });
-        await writeFile(
-          join(root, path, "Synthetic.swift"),
-          "synthetic source",
-        );
-      }
-    }
-    await mkdir(join(root, "Extensions/calendar"), { recursive: true });
-    await writeFile(
-      join(root, "Extensions/calendar/Calendar.swift"),
-      "synthetic calendar",
-    );
-    const generated = join(
-      root,
-      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
-    );
-    await writeFile(generated, "legacy hash one");
-    const first = await extensionFingerprint(root, definition, [definition]);
-    for (const path of [
-      "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedProcess.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedWorker.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCarrier.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedAdmission.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCaller.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
-    ]) {
-      await writeFile(join(root, path), "changed ambient worker admission");
-      expect(
-        await extensionFingerprint(root, definition, [definition]),
-      ).not.toBe(first);
-      await writeFile(join(root, path), "synthetic source");
-      expect(await extensionFingerprint(root, definition, [definition])).toBe(
-        first,
-      );
-    }
-    await writeFile(generated, "legacy hash two");
-    expect(await extensionFingerprint(root, definition, [definition])).toBe(
-      first,
-    );
-    await writeFile(
-      join(
-        root,
-        "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
-      ),
-      "changed owned worker runtime",
-    );
-    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
-      first,
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("all39 fingerprints and publication plans include carried engine and request helpers", async () => {
-  const current = JSON.parse(
-    await readFile("Extensions/manifest.json", "utf8"),
-  );
-  expect(current).toHaveLength(40);
-  expect(
-    current.every(({ sameExecutableWorker }) => sameExecutableWorker),
-  ).toBe(true);
-  const helpers = [
-    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
-  ];
-  const root = await mkdtemp(join(tmpdir(), "extension-all39-runtime-"));
-  const fingerprints = () =>
-    Promise.all(
-      current.map((entry) => extensionFingerprint(root, entry, current)),
-    );
-  try {
-    const inputs = new Set(current.flatMap(definitionInputs));
-    for (const path of [...new Set([...inputs, ...helpers])].sort()) {
-      if ((await stat(path)).isDirectory()) {
-        await mkdir(join(root, path), { recursive: true });
-        await writeFile(
-          join(root, path, "Synthetic.swift"),
-          "synthetic source",
-        );
-      } else {
-        await mkdir(join(root, path, ".."), { recursive: true });
-        await writeFile(join(root, path), "synthetic source");
-      }
-    }
-    const initial = await fingerprints();
-    const published = current.map((entry, index) => ({
-      id: entry.id,
-      version: entry.version,
-      hostABI: entry.hostABI,
-      architecture: "arm64",
-      sourceFingerprint: initial[index],
-    }));
-    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
-      [],
-    );
-    for (const path of helpers) {
-      expect(workerRuntimeInputs).toContain(path);
-      expect(planExtensionBuilds(current, [path])).toEqual(current);
-      expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
-      await writeFile(join(root, path), `changed synthetic helper ${path}`);
-      const changed = await fingerprints();
-      for (const [index, fingerprint] of changed.entries())
-        expect(fingerprint).not.toBe(initial[index]);
-      const pending = await planUnpublishedExtensions(root, current, published);
-      expect(pending.map(({ id }) => id)).toEqual(current.map(({ id }) => id));
-      for (const [index, row] of pending.entries()) {
-        expect(row.fingerprint).toBe(changed[index]);
-        expect(row.tag).toBe(extensionReleaseTag(row));
-      }
-      await writeFile(join(root, path), "synthetic source");
-      expect(await fingerprints()).toEqual(initial);
-    }
-    const excluded = [
-      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
-      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/.DS_Store",
-      ...[
-        "Tests",
-        "tests",
-        "EmbeddedTests",
-        ".build",
-        "build",
-        "dist",
-        "target",
-      ].map(
-        (directory) =>
-          `Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/${directory}/Synthetic.swift`,
-      ),
-    ];
-    for (const path of excluded) {
-      await mkdir(join(root, path, ".."), { recursive: true });
-      await writeFile(join(root, path), "synthetic excluded input");
-    }
-    expect(await fingerprints()).toEqual(initial);
-    expect(planPullRequestBuilds(current, excluded, current)).toEqual([]);
-    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
-      [],
-    );
-    const independent = current.filter(({ id }) => id !== "virtualCamera");
-    for (const path of [
-      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineOwner.swift",
-    ])
-      expect(planPullRequestBuilds(independent, [path], independent)).toEqual(
-        [],
-      );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 test("role overrides fingerprint the complete selected SDK without changing unrelated consumers", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-role-support-"));
   const definition = {
@@ -1566,14 +1253,14 @@ describe("pull request candidate planning", () => {
       ),
     ).toEqual(consumers);
   });
-  test("worker protocols rebuild all consumers while host presentation changes remain independent", () => {
+  test("marketplace runtime sources rebuild all consumers while host presentation changes remain independent", () => {
     const workers = pullRequestDefinitions.map((entry) => ({
       ...entry,
-      sameExecutableWorker: true,
+      usesHostRuntime: true,
     }));
     for (const path of [
-      "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
-      "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/ExtensionStore.swift",
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/ExtensionBundleRuntime.swift",
     ])
       expect(planPullRequestBuilds(workers, [path], workers)).toEqual(workers);
     expect(
@@ -1589,7 +1276,7 @@ describe("pull request candidate planning", () => {
     const current = JSON.parse(
       await readFile("Extensions/manifest.json", "utf8"),
     );
-    expect(current).toHaveLength(40);
+    expect(current).toHaveLength(41);
     expect(planPullRequestBuilds(current, [], null)).toEqual(current);
     await pullRequestRepository(
       async ({ root, commit, baseSHA }) => {

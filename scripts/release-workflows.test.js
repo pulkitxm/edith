@@ -514,7 +514,4 @@ test("DMG version preparation leaves frozen source clean and reaches the isolate
     'PACKAGE_ARGUMENTS=(--identity "$SIGN_IDENTITY")',
   );
   expect(buildScript).toContain(['"$', '{PACKAGE_ARGUMENTS[@]}"'].join(""));
-  expect(
-    readFileSync("scripts/package_extension_lifecycle_tools.py", "utf8"),
-  ).toContain("metadata.get('sourceTreeDirty') is not False");
 });

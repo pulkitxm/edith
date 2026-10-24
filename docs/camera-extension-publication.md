@@ -1,13 +1,13 @@
 # Camera package publication
 
-The Extensions workflow packages Camera around a frozen production host signed with the imported `MACOS_CERT_P12` identity. It derives `CAMERA_SIGN_TEAM` from that host's signature and passes the matching profiles to the carrier builder. It never substitutes ad hoc signing for a release. Development checks use a separate synthetic test identity and do not activate the system extension.
+The Extensions workflow packages Camera inside a containing host signed with the imported `MACOS_CERT_P12` identity. It derives `CAMERA_SIGN_TEAM` from that host's signature and passes the matching profiles to the carrier builder. It never substitutes ad hoc signing for a release. Development checks use a separate synthetic test identity and do not activate the system extension.
 
 Publication requires two repository secrets containing base64-encoded CMS provisioning profiles:
 
 - `CAMERA_CARRIER_PROVISIONING_PROFILE`: authorizes `com.pulkit.edith.cameraCarrier`, the system extension installation entitlement and the shared `<team>.com.pulkit.edith.camera` application group.
 - `CAMERA_EXTENSION_PROVISIONING_PROFILE`: authorizes `com.pulkit.edith.camera` and the same application group.
 
-Both profiles must be unexpired, belong to the host's signing team, include the imported certificate and permit the build Mac when device restrictions apply. The workflow writes private profile files into its temporary directory, validates their metadata before packaging, and removes them with the frozen host at job completion. Missing secrets fail with their exact names.
+Both profiles must be unexpired, belong to the host's signing team, include the imported certificate and permit the build Mac when device restrictions apply. The workflow writes private profile files into its temporary directory, validates their metadata before packaging, and removes them at job completion. Missing secrets fail with their exact names.
 
 `make camera-profiles` uses the existing signed-in Xcode account and configured `EDITH_TEAM_ID` and `EDITH_SIGN_IDENTITY` to request the carrier and provider profiles. It does not install or activate Camera. Local preparation can also receive existing files through `CAMERA_CARRIER_PROFILE` and `CAMERA_EXTENSION_PROFILE`.
 

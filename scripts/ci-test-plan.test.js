@@ -92,7 +92,7 @@ test.each([
     const changed = [`Extensions/${id}/${path}`];
     const owners = definitions.map((definition) => ({
       ...definition,
-      sameExecutableWorker: false,
+      usesHostRuntime: false,
     }));
     expect(planSwiftTests(changed).include).toEqual([
       { lane: `extension-${id}`, extension: id, targets, ghostty },
@@ -162,8 +162,7 @@ test("host tests select runtime checks without feature compilation fanout", () =
       {
         lane: "extension-virtualCamera",
         extension: "virtualCamera",
-        targets:
-          "ci-extension-camera ci-extension-camera-carrier",
+        targets: "ci-extension-camera ci-extension-camera-carrier",
         ghostty: false,
       },
     ]);
@@ -521,7 +520,7 @@ test("every extension test directory selects a deduplicated executable lane", ()
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(40);
+  expect(definitions).toHaveLength(41);
   for (const { id } of definitions) {
     const paths = [
       `Extensions/${id}/Tests/RegressionTests.swift`,
@@ -727,18 +726,15 @@ test("shared fixture test sources select one umbrella without a release build", 
     { lane: "feature-models", targets: "ci-extension-support" },
   ]);
   expect(planPullRequestBuilds(definitions, paths, definitions)).toEqual([]);
-  expect(planExtensionBuilds(definitions, paths)).toEqual(definitions);
-  expect(definitions).toHaveLength(40);
-  for (const path of [
-    "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
-    "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",
-    "Extensions/fixtureSupport/Package.swift",
-    "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
-    "Extensions/fixtureSupport/FutureAdmission.swift",
-  ])
-    expect(planPullRequestBuilds(definitions, [path], definitions)).toEqual(
+  expect(planExtensionBuilds(definitions, paths)).toEqual([]);
+  expect(definitions).toHaveLength(41);
+  expect(
+    planPullRequestBuilds(
       definitions,
-    );
+      ["Extensions/fixtureSupport/WorkerFixtureAdmission.swift"],
+      definitions,
+    ).length,
+  ).toBeGreaterThan(0);
   const root = mkdtempSync(join(tmpdir(), "fixture-test-fingerprint-"));
   const definition = {
     id: "focusDim",

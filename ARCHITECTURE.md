@@ -55,6 +55,11 @@ clients of the same operation catalog.
 
 The privileged lid-awake helper is unchanged: a `pmset`-only LaunchDaemon.
 
+Downloaded extensions run in process inside the Edith app: a package is
+`<id>/package.json` plus one `<role>.bundle` per role, loaded by the host. The
+only separate processes are the lid-awake helper, the virtual camera system
+extension carrier, short-lived native task and CLI children, and `ed`.
+
 **Placement rule.** A job lives in the agent unless it needs a WindowServer
 session or a TCC grant. The agent never asks for a permission.
 

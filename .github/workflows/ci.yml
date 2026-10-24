@@ -6,71 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      hosted_native_owner_tests_sha:
-        description: "Exact reviewed source for original hosted native owner tests."
-        type: string
-        required: false
-        default: ""
-      hosted_native_owner:
-        description: "attention, terminal, timeLapse, studio, machines, virtualCamera, feature-models, database-mutation or database-executor."
-        type: string
-        required: false
-        default: ""
-      hosted_native_compile_sha:
-        description: "Exact reviewed source for verbose hosted Attention test compilation."
-        type: string
-        required: false
-        default: ""
-      hosted_host_tests_sha:
-        description: "Reviewed synthetic hosted host diagnostics commit."
-        type: string
-        required: false
-        default: ""
-      hosted_shell_journey_sha:
-        description: "Reviewed synthetic original shell journey commit."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_views_sha:
-        description: "Reviewed synthetic hosted managed original-view smoke commit."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_artifacts_run:
-        description: "Completed immutable nonpublishing Extensions run containing all 40 packages."
-        type: string
-        required: false
-        default: ""
-      hosted_managed_artifacts_sha:
-        description: "Exact original package and frozen host source commit."
-        type: string
-        required: false
-        default: ""
-      hosted_sparkle_update_sha:
-        description: "Reviewed synthetic standard Sparkle update commit."
-        type: string
-        required: false
-        default: ""
-      public_release_validation_sha:
-        description: "Exact reviewed current main release commit for public verification."
-        type: string
-        required: false
-        default: ""
-      public_release_validation:
-        description: "Closed source, packagesRun, hostRun, tag, updateIDs and retainedRuns JSON pins."
-        type: string
-        required: false
-        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
         required: false
         default: false
-      coordinated_host_release:
-        description: "Closed pending host intent for a coordinated public release."
-        type: string
-        required: false
-        default: ""
       rebuild:
         description: "Current release tag to rebuild and re-upload."
         type: string
@@ -91,84 +31,12 @@ permissions:
   contents: read
 
 jobs:
-  hosted-native-owner-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_owner_tests_sha != '' && inputs.hosted_native_owner_tests_sha == github.sha && (inputs.hosted_native_owner == 'attention' || inputs.hosted_native_owner == 'terminal' || inputs.hosted_native_owner == 'timeLapse' || inputs.hosted_native_owner == 'studio' || inputs.hosted_native_owner == 'machines' || inputs.hosted_native_owner == 'virtualCamera' || inputs.hosted_native_owner == 'feature-models' || inputs.hosted_native_owner == 'database-mutation' || inputs.hosted_native_owner == 'database-executor') && !inputs.hosted_native_compile_sha && !inputs.hosted_host_tests_sha && !inputs.hosted_shell_journey_sha && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && github.repository_id == '1289153439' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-native-owner-tests.yml
-    with:
-      expected_sha: ${{ inputs.hosted_native_owner_tests_sha }}
-      owner: ${{ inputs.hosted_native_owner }}
-
-  hosted-native-compile:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_native_compile_sha != '' && inputs.hosted_native_compile_sha == github.sha && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-native-compile-diagnostics.yml
-    with:
-      expected_sha: ${{ inputs.hosted_native_compile_sha }}
-
-  hosted-host-tests:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_host_tests_sha != '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_host_tests_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-host-test-diagnostics.yml
-    with:
-      expected_sha: ${{ inputs.hosted_host_tests_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-
-  hosted-original-shell:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/hosted-journey-registration' || github.ref == 'refs/heads/feat/hosted-journey-attachments' || github.ref == 'refs/heads/feat/hosted-journey-state' || github.ref == 'refs/heads/fix/hosted-journey-environment' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_shell_journey_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-original-shell.yml
-    with:
-      expected_sha: ${{ inputs.hosted_shell_journey_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-managed-views:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_managed_views_sha != '' && inputs.hosted_managed_artifacts_run != '' && inputs.hosted_managed_artifacts_sha != '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_host_tests_sha == '' && !inputs.hosted_sparkle_update_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-managed-view-execution' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_managed_views_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/hosted-managed-views.yml
-    with:
-      expected_sha: ${{ inputs.hosted_managed_views_sha }}
-      artifact_run: ${{ inputs.hosted_managed_artifacts_run }}
-      artifact_source: ${{ inputs.hosted_managed_artifacts_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-sparkle-update:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_sparkle_update_sha != '' && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && !inputs.hosted_managed_views_sha && !inputs.hosted_managed_artifacts_run && !inputs.hosted_managed_artifacts_sha && !inputs.public_release_validation_sha && !inputs.public_release_validation && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-sparkle-verification' || github.ref == 'refs/heads/feat/hosted-sparkle-ui-flow' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.hosted_sparkle_update_sha == github.sha && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    uses: ./.github/workflows/hosted-sparkle-update.yml
-    with:
-      expected_sha: ${{ inputs.hosted_sparkle_update_sha }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-    secrets:
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-
-  hosted-public-release-verification:
-    if: github.event_name == 'workflow_dispatch' && inputs.public_release_validation_sha != '' && inputs.public_release_validation != '' && inputs.public_release_validation_sha == github.sha && inputs.hosted_host_tests_sha == '' && inputs.hosted_shell_journey_sha == '' && inputs.hosted_managed_views_sha == '' && inputs.hosted_managed_artifacts_run == '' && inputs.hosted_managed_artifacts_sha == '' && inputs.hosted_sparkle_update_sha == '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/main' && !inputs.hosted_native_compile_sha && !inputs.hosted_native_owner_tests_sha && !inputs.hosted_native_owner && !inputs.coordinated_host_release
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/hosted-public-release-verification.yml
-    with:
-      expected_sha: ${{ inputs.public_release_validation_sha }}
-      request: ${{ inputs.public_release_validation }}
-      release: ${{ inputs.release }}
-      rebuild: ${{ inputs.rebuild }}
-
   changes:
     name: changes
     if: >-
-      !(github.event_name == 'workflow_dispatch' && (inputs.hosted_shell_journey_sha != '' || inputs.hosted_host_tests_sha != '' || inputs.hosted_managed_views_sha != '' || inputs.hosted_managed_artifacts_run != '' || inputs.hosted_managed_artifacts_sha != '' || inputs.hosted_sparkle_update_sha != '' || inputs.public_release_validation_sha != '' || inputs.public_release_validation != '' || inputs.hosted_native_compile_sha != '' || inputs.hosted_native_owner_tests_sha != '' || inputs.hosted_native_owner != ''))
-      && (github.event_name != 'push'
+      github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
-      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
@@ -259,7 +127,6 @@ jobs:
     needs: changes
     if: >-
       needs.changes.outputs.music_player == 'true'
-      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -442,7 +309,6 @@ jobs:
     if: >-
       (needs.changes.outputs.companion == 'true'
       || needs.changes.outputs.workflows == 'true')
-      && !(github.event_name == 'workflow_dispatch' && inputs.release == true && inputs.coordinated_host_release != '')
     runs-on: ubuntu-latest
     concurrency:
       group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
@@ -555,14 +421,6 @@ jobs:
             test "$HAS_TAP_TOKEN" = true \
               || { echo "release blocked: TAP_PUSH_TOKEN is required" >&2; exit 1; }
           fi
-
-      - name: Validate coordinated host release dispatch
-        if: inputs.coordinated_host_release != ''
-        env:
-          COORDINATED_HOST_RELEASE: ${{ inputs.coordinated_host_release }}
-          COORDINATED_RELEASE_INPUTS: ${{ toJSON(inputs) }}
-          PUBLIC_RELEASE_VERIFICATION: "1"
-        run: node release-source/scripts/hosted-public-release/production-host-dispatch.mjs
 
       - name: Resolve the version to release
         id: resolve
@@ -819,19 +677,8 @@ jobs:
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-        if: inputs.coordinated_host_release != ''
-
-      - name: Install verified coordinated release dependencies
-        if: inputs.coordinated_host_release != ''
-        working-directory: release-source
-        run: bun install --frozen-lockfile
-
       - name: Wait for compatible extension releases
         env:
-          COORDINATED_HOST_RELEASE: ${{ inputs.coordinated_host_release }}
-          COORDINATED_RELEASE_INPUTS: ${{ toJSON(inputs) }}
-          PUBLIC_RELEASE_VERIFICATION: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: node release-source/scripts/extension-release-ready.mjs release-source
 

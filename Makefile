@@ -131,7 +131,7 @@ ci-comments:
 
 .PHONY: local-checks
 local-checks: ci-comments
-	bun test scripts/hosted-managed-views-contract.test.js scripts/hosted-original-shell-overlay.test.js scripts/ci-routing.test.js scripts/ci-test-plan.test.js scripts/hosted-native-owner-routing.test.js scripts/cli-docs.test.js scripts/generate-cli-docs-bundle.test.js scripts/extension-manifest-sources.test.js
+	bun test scripts/ci-routing.test.js scripts/ci-test-plan.test.js scripts/cli-docs.test.js scripts/generate-cli-docs-bundle.test.js scripts/extension-manifest-sources.test.js
 	swift build --package-path Packages/EdithHost --target EdithHost -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 .PHONY: ci-host-packaging-arguments
@@ -160,9 +160,6 @@ ci-scripts-batch: ci-host-abi
 	  paths="$$(python3 scripts/test-batches.py script-paths "$(BATCH)")"; \
 	  bun test $$paths
 
-.PHONY: ci-release-orchestration-local
-ci-release-orchestration-local:
-	bun test scripts/production-orchestration.test.js
 
 ci-performance:
 	bun scripts/check-performance-audit.mjs
@@ -208,11 +205,7 @@ ci-swift-build:
 ci-swift-test:
 	$(MAKE) ci-marketplace-host ci-music-native
 
-.PHONY: ci-host ci-host-core host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-extension-commands ci-extension-workers
-.PHONY: ci-host-core-owner-local
-ci-host-core-owner-local:
-	python3 -I -B scripts/test-host-core-owner-local.test.py
-	python3 -I -B scripts/test-host-core-owner-local.py
+.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs
 
 .PHONY: ci-host-invocation
 ci-host-invocation:
@@ -225,22 +218,13 @@ ci-host: ci-host-invocation
 	swift test --skip-build --disable-swift-testing --package-path Packages/EdithHost --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	python3 -B scripts/run-host-swift-testing.py
 
-ci-host-core:
-	bun scripts/test-host-core.mjs
 
 .PHONY: ci-host-navigation-local
 ci-host-navigation-local:
 	python3 -B scripts/test-host-navigation-local.test.py
 	python3 -B scripts/test-host-navigation-local.py
 
-.PHONY: ci-codesign-requirements-local
-ci-codesign-requirements-local:
-	python3 -B scripts/test-codesign-requirement.py
-	bun test scripts/codesign-requirements.test.js
 
-.PHONY: ci-cohort-dispatch-local
-ci-cohort-dispatch-local:
-	bun test scripts/hosted-native-owner-routing.test.js scripts/hosted-native-compile-routing.test.js scripts/hosted-coordinated-release-routing.test.js scripts/hosted-public-release/production-completed-host.test.mjs
 
 host:
 	bun scripts/build-minimal-host.mjs
@@ -248,56 +232,28 @@ host:
 extension-dev:
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
-.PHONY: ci-extension-keep-awake-compile ci-extension-keep-awake package-extension-keep-awake ci-extension-keep-awake-native ci-extension-keep-awake-peer-contracts
+.PHONY: ci-extension-keep-awake-compile ci-extension-keep-awake package-extension-keep-awake
 ci-extension-keep-awake-compile:
 	/usr/bin/time -p swift build --package-path Extensions/keepAwake --target KeepAwakeExtensionTests --build-system native --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-.PHONY: ci-extension-keep-awake-local
-ci-extension-keep-awake-local:
-	python3 -I -B scripts/test-keep-awake-local.test.py
-	python3 -I -B scripts/test-keep-awake-local.py
 
 ci-extension-keep-awake:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
 	/usr/bin/time -p swift format lint --strict --recursive Extensions/keepAwake
 	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/data"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")" /usr/bin/time -p python3 -B scripts/run-host-swift-testing.py package-test --package-path Extensions/keepAwake --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-.PHONY: ci-extension-keep-awake-peer-diagnostics
-ci-extension-keep-awake-peer-diagnostics:
-	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
-	$(call PREPARE_ARGUMENT_PARSER,Packages/ExtensionSupport)
-	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/data"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Packages/ExtensionSupport --filter ExtensionPeerFailureDiagnosticsTests --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-.PHONY: ci-extension-keep-awake-peer-transport
-ci-extension-keep-awake-peer-transport:
-	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
-	$(call PREPARE_ARGUMENT_PARSER,Packages/ExtensionSupport)
-	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/data"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Packages/ExtensionSupport --filter 'ExtensionPeerSocketTests|ExtensionPeerTests' --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-ci-extension-keep-awake-peer-contracts:
-	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
-	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/data"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.keepAwake.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Packages/EdithHost --filter SurfaceActionRejectionTests --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 package-extension-keep-awake:
 	/usr/bin/time -p bun scripts/build-extension-package.mjs keepAwake
 
-.PHONY: ci-extension-control-contracts
-ci-extension-control-contracts:
-	python3 -I -B scripts/test-hosted-native-owner-tests.py
-	python3 -I -B scripts/test-keep-awake-hosted-acceptance-contracts.py
-	bun test scripts/hosted-managed-views-contract.test.js
 
-ci-extension-keep-awake-native:
-	/usr/bin/time -p python3 -B scripts/test-keep-awake-hosted-acceptance.py
 
 .PHONY: ci-extension-accounts-local
 ci-extension-accounts-local:
 	python3 -B scripts/test-account-sdk-local.py
 
-.PHONY: ci-functional-filesystem-local
-ci-functional-filesystem-local:
-	python3 -I -B scripts/test-functional-filesystem-local.test.py
-	python3 -I -B scripts/test-functional-filesystem-local.py
 
 .PHONY: ci-extension-owned-process-groups-local
 ci-extension-owned-process-groups-local:
@@ -457,13 +413,7 @@ ci-extension-bifrost-native:
 	fixture=$$(mktemp -d /tmp/edith-bifrost-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.bifrost.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/bifrost --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 
-ci-extension-workers:
-	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
-	bun scripts/test-extension-workers.mjs $(EXTENSION)
 
-.PHONY: ci-privileged-worker
-ci-privileged-worker:
-	python3 -B scripts/test-privileged-extension-worker.py
 
 .PHONY: ci-extension-bifrost ci-extension-lid-awake
 ci-extension-bifrost:
@@ -483,37 +433,19 @@ ci-extension-studio:
 ci-extension-studio-native:
 	swift test --package-path Extensions/studio/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-ci-extension-commands:
-	swift build --package-path Packages/EdithHost --build-system native --configuration debug --jobs $(EXTENSION_SWIFT_JOBS) --product HostCommandHarness -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
-	@set -eu; \
-	  products="$$(swift build --package-path Packages/EdithHost --build-system native --configuration debug --show-bin-path)"; \
-	  test -n "$$products"; \
-	  test -x "$$products/HostCommandHarness"; \
-	  bun scripts/test-extension-commands.mjs "$$products/HostCommandHarness"
 
-.PHONY: ci-host-cli
-ci-host-cli:
-	bun scripts/test-host-cli.mjs
 
 ci-marketplace-runtime:
 	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
 	swift test --package-path Packages/ExtensionMarketplace --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)
 
-.PHONY: ci-marketplace-runtime-diagnostics
-ci-marketplace-runtime-diagnostics:
-	python3 scripts/hosted-host-tests/marketplace.py
 
 ci-marketplace-host: ci-host host
-	$(MAKE) ci-host-cli
-	python3 -B scripts/test-extension-size-report.py
-	python3 -B scripts/test-extension-host-size-report.py
 	python3 -B scripts/test-host-build-metadata.py
 	bun scripts/extension-host-abi.mjs --write
 	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
 	$(MAKE) ci-marketplace-runtime
 	$(MAKE) ci-extension-support ci-extension-docs
-	$(MAKE) ci-extension-commands
-	$(MAKE) ci-extension-workers
 	$(MAKE) ci-comments
 
 ci-swift-test-batch:

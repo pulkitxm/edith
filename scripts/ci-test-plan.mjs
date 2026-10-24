@@ -123,7 +123,7 @@ export function planSwiftTests(
     inputs: definition.inputs ?? [`Extensions/${definition.id}`],
     sharedInputs: definition.sharedInputs ?? [],
     dependencies: definition.dependencies ?? [],
-    sameExecutableWorker: false,
+    usesHostRuntime: false,
   }));
   const supportPackageChanged = paths.some((path) =>
     /^Packages\/ExtensionSupport\/Package\.(swift|resolved)$/.test(path),

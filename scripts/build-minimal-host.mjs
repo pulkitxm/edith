@@ -12,7 +12,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { extensionUIExtensionPoint } from "./build-extension-ui-carrier.mjs";
 
 function hostUntrackedInputs(execute = execFileSync) {
   return (
@@ -98,13 +97,6 @@ const swift = [
   `${developer}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
 ];
 execFileSync("swift", swift, { env: environment, stdio: "inherit" });
-const carrierBuild = [...swift];
-carrierBuild[carrierBuild.indexOf("--jobs") + 1] = "1";
-carrierBuild[carrierBuild.indexOf("EdithHost")] = "EdithExtensionCarrier";
-carrierBuild[
-  carrierBuild.indexOf(join(packageDirectory, ".build", "EdithHost-lto.o"))
-] = join(packageDirectory, ".build", "EdithExtensionCarrier-lto.o");
-execFileSync("swift", carrierBuild, { env: environment, stdio: "inherit" });
 
 const products = execFileSync(
   "swift",
@@ -189,17 +181,6 @@ await cp(
   join(contents, "Resources/EdithHost_EdithHost.bundle"),
   { recursive: true, dereference: false },
 );
-await mkdir(join(contents, "Library/LaunchDaemons"), { recursive: true });
-await writeFile(
-  join(
-    contents,
-    "Library/LaunchDaemons/com.pulkit.edith.extensions.carrier.v1.plist",
-  ),
-  `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>Label</key><string>com.pulkit.edith.extensions.carrier.v1</string><key>BundleProgram</key><string>Contents/MacOS/Edith</string><key>ProgramArguments</key><array><string>Edith</string><string>--extension-carrier</string></array><key>MachServices</key><dict><key>com.pulkit.edith.extensions.carrier.v1</key><true/></dict></dict></plist>
-`,
-);
 const identity = `com.pulkit.edith.dev.${basename(root)}`;
 const plist = {
   CFBundleIdentifier: identity,
@@ -232,13 +213,6 @@ execFileSync("python3", [
   "import json,plistlib,sys; plistlib.dump(json.loads(sys.argv[1]),open(sys.argv[2],'wb'))",
   JSON.stringify(plist),
   join(contents, "Info.plist"),
-]);
-await mkdir(join(contents, "Extensions"), { recursive: true });
-execFileSync("python3", [
-  "-c",
-  "import json,plistlib,sys; plistlib.dump(json.loads(sys.argv[1]),open(sys.argv[2],'wb'))",
-  JSON.stringify(extensionUIExtensionPoint(identity)),
-  join(contents, "Extensions/ExtensionUI.appextensionpoints"),
 ]);
 removeCopiedCodeSignature(executable);
 const linked = execFileSync("otool", ["-L", executable], { encoding: "utf8" });
@@ -364,25 +338,6 @@ await writeFile(
 assert(
   bytes < 10_000_000,
   `The minimal host exceeds its 10 MB size limit: ${bytes}`,
-);
-const carrierTools = join(destination, "..", "carrier-tools");
-await rm(carrierTools, { recursive: true, force: true });
-execFileSync(
-  "python3",
-  [
-    "-B",
-    resolve(root, "scripts/package_extension_lifecycle_tools.py"),
-    "--root",
-    root,
-    "--host",
-    destination,
-    "--carrier-only",
-    "--carrier-products",
-    products,
-    "--output",
-    carrierTools,
-  ],
-  { env: environment, stdio: "inherit" },
 );
 const index = JSON.parse(
   await readFile(join(contents, "Resources/index.json"), "utf8"),

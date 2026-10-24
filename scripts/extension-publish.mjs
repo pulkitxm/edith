@@ -1,7 +1,5 @@
-import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
-  chmod,
   copyFile,
   mkdtemp,
   readFile,
@@ -19,10 +17,8 @@ import {
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
-import { verifyCohortReleaseStamp } from "./extension-stage-continuity.mjs";
 import {
   publishExtensionAssets,
-  snapshotReleaseFile,
   verifyImmutableReleaseAssets,
 } from "./immutable-release-assets.mjs";
 import {
@@ -37,66 +33,13 @@ import {
 
 export { publishExtensionAssets } from "./immutable-release-assets.mjs";
 
-const stagedPublications = new WeakMap();
-
-export function stagedExtensionPublication(capability) {
-  const stage = stagedPublications.get(capability);
-  if (!stage || stage.claimed)
-    throw new Error("Unknown or consumed staged publication");
-  return stage.identity;
-}
-
-export async function promoteStagedExtensionPublication(capability) {
-  const stage = stagedPublications.get(capability);
-  if (!stage || stage.claimed)
-    throw new Error("Unknown or consumed staged publication");
-  stage.checkPromotion();
-  stage.claimed = true;
-  return stage.promote();
-}
-
-function availableStage(capability) {
-  const stage = stagedPublications.get(capability);
-  if (!stage || stage.claimed)
-    throw new Error("Unknown or consumed staged publication");
-  return stage;
-}
-
-export async function publishStagedHostReadiness(capability, hostIntent) {
-  const stage = availableStage(capability);
-  const bootstrap = await import(
-    "./hosted-public-release/production-bootstrap.mjs"
-  );
-  assert.equal(typeof bootstrap.verifiedHostBootstrapIntent, "function");
-  const intent = bootstrap.verifiedHostBootstrapIntent(hostIntent);
-  await intent.revalidate();
-  assert.equal(availableStage(capability), stage);
-  return stage.readiness(intent);
-}
-
-export async function bindStagedHostContinuation(capability, completedHost) {
-  const stage = availableStage(capability);
-  const bootstrap = await import(
-    "./hosted-public-release/production-bootstrap.mjs"
-  );
-  assert.equal(typeof bootstrap.verifiedCompletedHostBootstrap, "function");
-  const completed =
-    await bootstrap.verifiedCompletedHostBootstrap(completedHost);
-  await completed.revalidate();
-  assert.equal(availableStage(capability), stage);
-  return stage.bindContinuation(completed);
-}
-
 import { withGitHubRetrySync } from "./github-retry.mjs";
 import {
   listReleases,
   lookupRelease,
   releaseFromListing,
 } from "./release-lookup.mjs";
-import {
-  assertShippingExtensions,
-  shippingDefinitions,
-} from "./shipping-extension-policy.mjs";
+import { assertShippingExtensions } from "./shipping-extension-policy.mjs";
 import {
   maximumCatalogPackages,
   maximumEnvelopeBytes,
@@ -327,46 +270,6 @@ export async function restorePublishedExtension({
   }
 }
 
-export async function restorePublishedNativeLineage({
-  repository,
-  record,
-  asset,
-  file,
-  publicKey,
-  downloadAsset = downloadReleaseAsset,
-}) {
-  if (!asset) throw new Error("Original immutable native evidence is missing");
-  const { data } = await downloadAsset({
-    repository,
-    asset,
-    maximumBytes: 16 * 1024,
-  });
-  const { verifiedLineage, verifiedEnvelope } = await import(
-    "./hosted-public-release/evidence.mjs"
-  );
-  const lineage = verifiedLineage(
-    data,
-    publicKey,
-    record ?? verifiedEnvelope(data, publicKey, 16 * 1024).package,
-  );
-  if (file) await writeFile(file, data);
-  return lineage;
-}
-
-function nativeEvidenceFetch(url, options = {}) {
-  if (new URL(url).origin !== "https://api.github.com")
-    throw new Error("Invalid native evidence API origin");
-  if (!process.env.GITHUB_TOKEN)
-    throw new Error("Missing native evidence read token");
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-    },
-  });
-}
-
 export async function verifiedPublicationState({
   ref,
   target,
@@ -523,218 +426,6 @@ export async function promoteExtensionCatalog({
   await updatePointer(current.release.id, JSON.stringify(pointer));
 }
 
-export async function publishNativeComposition({
-  repository,
-  directory,
-  target,
-  include,
-  publicKey,
-  next,
-  nativeEvidence,
-  verifyState,
-  cohort = false,
-  verifyOriginal = async (value) => {
-    const { verifyOriginalNativeLineage } = await import(
-      "./extension-native-evidence.mjs"
-    );
-    return verifyOriginalNativeLineage(value);
-  },
-}) {
-  const { currentPackages, digest } = await import(
-    "./hosted-public-release/contract.mjs"
-  );
-  const {
-    closedAssetInventory,
-    publicationComposition,
-    verifiedComposition,
-    verifiedEvidence,
-    verifiedLineage,
-  } = await import("./hosted-public-release/evidence.mjs");
-  const evidencePayload = verifiedEvidence(
-    await readFile(resolve(directory, "native-evidence.json")),
-    publicKey,
-  );
-  const manifest = JSON.parse(
-    await readFile(resolve("Extensions/manifest.json"), "utf8"),
-  );
-  const definitions = cohort
-    ? (
-        await import("./hosted-public-release/shipping-scope.mjs")
-      ).shippingReleaseDefinitions(manifest)
-    : shippingDefinitions(manifest);
-  const shippingFingerprints = Object.fromEntries(
-    definitions.map(({ id }) => [id, evidencePayload.fingerprints[id]]),
-  );
-  const current = currentPackages(
-    next,
-    definitions,
-    evidencePayload.fingerprints,
-  );
-  const origins = [];
-  const originalAdmissions = new Map();
-  for (const record of current) {
-    let bytes;
-    if (include.some(({ id }) => id === record.id))
-      bytes = await readFile(
-        resolve(directory, `${record.id}.native-evidence.json`),
-      );
-    else {
-      const tag = decodeURIComponent(
-        new URL(record.downloadURL).pathname.split("/").at(-2),
-      );
-      const item = release(repository, tag);
-      const assets =
-        item?.assets.filter(
-          ({ name }) => name === `${record.id}.native-evidence.json`,
-        ) ?? [];
-      if (assets.length !== 1)
-        throw new Error("Retained original native lineage is missing");
-      bytes = (
-        await downloadReleaseAsset({
-          repository,
-          asset: assets[0],
-          maximumBytes: 16 * 1024,
-        })
-      ).data;
-    }
-    const origin = verifiedLineage(bytes, publicKey, record);
-    if (
-      origin.sourceCommit !== target ||
-      origin.runID !== evidencePayload.runID ||
-      origin.runAttempt !== evidencePayload.runAttempt
-    ) {
-      const key = `${origin.runID}:${origin.runAttempt}:${origin.evidenceSHA256}:${origin.evidenceBytes}`;
-      if (!originalAdmissions.has(key))
-        originalAdmissions.set(
-          key,
-          await verifyOriginal({
-            origin,
-            publicKey,
-            currentSource: target,
-            currentFingerprints: evidencePayload.fingerprints,
-            fetchAPI: nativeEvidenceFetch,
-          }),
-        );
-      const original = originalAdmissions.get(key).payload;
-      if (
-        original.sourceCommit !== origin.sourceCommit ||
-        !original.plannedIDs.includes(record.id) ||
-        original.fingerprints[record.id] !== record.sourceFingerprint
-      )
-        throw new Error("Original native package identity differs");
-    }
-    origins.push({
-      package: record,
-      lineageSHA256: digest(bytes),
-      lineageBytes: bytes.length,
-      sourceCommit: origin.sourceCommit,
-      runID: origin.runID,
-      runAttempt: origin.runAttempt,
-      evidenceSHA256: origin.evidenceSHA256,
-      evidenceBytes: origin.evidenceBytes,
-    });
-  }
-  const compositionPayload = resolve(directory, "composition-payload.json");
-  const compositionPath = resolve(directory, "publication-composition.json");
-  await writeFile(
-    compositionPayload,
-    JSON.stringify(
-      publicationComposition(
-        target,
-        evidencePayload.runID,
-        evidencePayload.runAttempt,
-        origins,
-        shippingFingerprints,
-      ),
-    ),
-  );
-  execFileSync(
-    "swift",
-    [
-      "scripts/extension-catalog-sign.swift",
-      "sign",
-      compositionPayload,
-      compositionPath,
-    ],
-    { stdio: "inherit", timeout: 60000 },
-  );
-  const compositionBytes = await readFile(compositionPath);
-  verifiedComposition(compositionBytes, publicKey, {
-    source: target,
-    runID: evidencePayload.runID,
-    attempt: evidencePayload.runAttempt,
-    records: current,
-    fingerprints: shippingFingerprints,
-  });
-  const snapshotRoot = await mkdtemp(
-    resolve(tmpdir(), "extension-composition-"),
-  );
-  await chmod(snapshotRoot, 0o700);
-  try {
-    const snapshot = await snapshotReleaseFile(
-      compositionPath,
-      resolve(snapshotRoot, "publication-composition.json"),
-    );
-    await verifyState();
-    const evidenceRelease = release(repository, nativeEvidence.tag);
-    const existing = evidenceRelease.assets.filter(
-      ({ name }) => name === "publication-composition.json",
-    );
-    if (existing.length > 1)
-      throw new Error("Duplicate immutable publication composition");
-    const pin = { bytes: snapshot.bytes, sha256: snapshot.sha256 };
-    const envelopePin = {
-      bytes: nativeEvidence.envelopeBytes,
-      sha256: nativeEvidence.envelopeSHA256,
-    };
-    closedAssetInventory(
-      evidencePayload,
-      envelopePin,
-      evidenceRelease.assets,
-      existing.length ? pin : undefined,
-    );
-    if (!existing.length) {
-      preflightReleaseAsset({
-        repository,
-        file: snapshot.file,
-        name: "publication-composition.json",
-      });
-      await upload(
-        repository,
-        evidenceRelease.id,
-        nativeEvidence.tag,
-        snapshot.file,
-        "publication-composition.json",
-      );
-    }
-    const final = release(repository, nativeEvidence.tag);
-    if (!final || final.id !== evidenceRelease.id || final.draft)
-      throw new Error("Immutable evidence release changed");
-    const inventory = closedAssetInventory(
-      evidencePayload,
-      envelopePin,
-      final.assets,
-      pin,
-    );
-    const asset = final.assets.find(
-      ({ name }) => name === "publication-composition.json",
-    );
-    const result = await downloadReleaseAsset({
-      repository,
-      asset,
-      expectedBytes: pin.bytes,
-      expectedSHA256: pin.sha256,
-      collect: false,
-    });
-    if (result.sha256 !== pin.sha256)
-      throw new Error("Immutable publication composition differs");
-    Object.assign(nativeEvidence, inventory, { compositionSHA256: pin.sha256 });
-  } finally {
-    await rm(snapshotRoot, { recursive: true, force: true });
-  }
-  return nativeEvidence;
-}
-
 export async function publishExtensions({
   directory,
   repository,
@@ -742,23 +433,7 @@ export async function publishExtensions({
   ref,
   catalogTag,
   publicKey,
-  catalogPhase = "complete",
-  publishEvidence = async (value) => {
-    const { preparedNativeEvidence } = await import(
-      "./extension-native-evidence.mjs"
-    );
-    return preparedNativeEvidence(value);
-  },
-  publishComposition = publishNativeComposition,
-  verifyOriginal = async (value) => {
-    const { verifyOriginalNativeLineage } = await import(
-      "./extension-native-evidence.mjs"
-    );
-    return verifyOriginalNativeLineage(value);
-  },
 }) {
-  if (!["complete", "stage"].includes(catalogPhase))
-    throw new Error("Invalid catalog publication phase");
   if (!publicKey || !process.env.EXTENSION_CATALOG_PRIVATE_KEY)
     throw new Error(
       "Catalog signing credentials are required before publication",
@@ -777,28 +452,11 @@ export async function publishExtensions({
   const { include } = JSON.parse(
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
-  if (catalogPhase === "stage" && (old.revision < 1 || include.length === 0))
-    throw new Error(
-      "Staging requires an existing public catalog and package plan",
-    );
   assertShippingExtensions(include);
-  let continuation;
-  const continuationSource = async () => {
-    if (!continuation) return target;
-    await continuation.completed.revalidate();
-    const stamp = await verifyCohortReleaseStamp({
-      source: target,
-      host: continuation.completed.intent.host,
-      proof: continuation.completed.proof,
-      release: continuation.completed.release,
-    });
-    assert.deepEqual(stamp, continuation.stamp);
-    return stamp.continuation;
-  };
   const verifyState = async () => {
     const current = await verifiedPublicationState({
       ref,
-      target: await continuationSource(),
+      target,
       previous: old,
       publicKey,
       readMain: async () =>
@@ -806,13 +464,9 @@ export async function publishExtensions({
           .sha,
       readCatalog: () => readPublicationCatalog(repository, catalogTag),
     });
-    if (catalogPhase === "stage" && current?.release?.draft !== false)
-      throw new Error("Staging requires an existing public catalog");
     return current ? { ...current, catalogRevision: old.revision } : undefined;
   };
-  const initial = await verifyState();
-  if (catalogPhase === "stage" && initial?.release?.draft !== false)
-    throw new Error("Staging requires an existing public catalog");
+  await verifyState();
   const publishDraft = async (id, tag) =>
     mutate(
       "release",
@@ -833,59 +487,20 @@ export async function publishExtensions({
     include,
     previous: old,
   });
-  const nativeEvidence = await publishEvidence({
-    directory,
-    target,
-    include,
-    publicKey,
-    publishFiles: publishExtensionAssets,
-    lookupRelease: release,
-    mutate,
-    publishDraft,
-  });
   if (include.length === 0) {
     const current = await verifyState();
     if (current?.release?.draft !== true || !current.asset)
       throw new Error(
         "A verified owned draft catalog is required for an empty publication resume",
       );
-    await publishComposition({
-      repository,
-      directory,
-      target,
-      include,
-      publicKey,
-      next: old,
-      nativeEvidence,
-      verifyState,
-      verifyOriginal,
-    });
     await finalizeDraftCatalog({
       verifyState,
       publish: (id) => publishDraft(id, catalogTag),
     });
     await verifyState();
-    return { published: [], revision: old.revision, nativeEvidence };
+    return { published: [], revision: old.revision };
   }
   const records = [];
-  const originalAdmissions = new Map();
-  const admitOriginal = async (value) => {
-    const { origin } = value;
-    const key = `${origin.sourceCommit}:${origin.runID}:${origin.runAttempt}:${origin.evidenceSHA256}:${origin.evidenceBytes}`;
-    if (!originalAdmissions.has(key))
-      originalAdmissions.set(
-        key,
-        await verifyOriginal({ ...value, fetchAPI: nativeEvidenceFetch }),
-      );
-    const admission = originalAdmissions.get(key);
-    if (
-      !admission.payload.plannedIDs.includes(origin.package.id) ||
-      admission.payload.fingerprints[origin.package.id] !==
-        origin.package.sourceFingerprint
-    )
-      throw new Error("Original native package identity differs");
-    return admission;
-  };
   const existingReleases = listReleases({ repository });
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);
@@ -926,27 +541,8 @@ export async function publishExtensions({
       (asset) => asset.name === `${entry.id}.zip`,
     );
     if (publishedArchive) {
-      const lineageAsset = item.assets.find(
-        (asset) => asset.name === `${entry.id}.native-evidence.json`,
-      );
-      const original = await restorePublishedNativeLineage({
-        repository,
-        publicKey,
-        asset: lineageAsset,
-      });
-      validateExtensionReleaseIdentity({
-        repository,
-        entry,
-        record: original.package,
-      });
-      await admitOriginal({
-        origin: original,
-        publicKey,
-        currentSource: target,
-        currentFingerprints: Object.fromEntries(
-          include.map(({ id, fingerprint }) => [id, fingerprint]),
-        ),
-      });
+      if (!publishedRecord)
+        throw new Error("Existing release is missing its package record");
       record = await restorePublishedExtension({
         repository,
         record,
@@ -957,18 +553,6 @@ export async function publishExtensions({
         checksumPath,
         recordPath,
         zip,
-        recordData: publishedRecord
-          ? undefined
-          : Buffer.from(JSON.stringify(original.package)),
-      });
-      await restorePublishedNativeLineage({
-        repository,
-        record,
-        publicKey,
-        asset: item.assets.find(
-          (asset) => asset.name === `${entry.id}.native-evidence.json`,
-        ),
-        file: resolve(directory, `${entry.id}.native-evidence.json`),
       });
     }
     const publishedAssets = await publishExtensionAssets({
@@ -976,10 +560,6 @@ export async function publishExtensions({
       item,
       entry,
       files: [
-        [
-          resolve(directory, `${entry.id}.native-evidence.json`),
-          `${entry.id}.native-evidence.json`,
-        ],
         [zip, `${entry.id}.zip`],
         [recordPath, `${entry.id}.json`],
         [checksumPath, `${entry.id}.zip.sha256`],
@@ -1010,18 +590,6 @@ export async function publishExtensions({
     records,
     Math.max(Date.now(), old.revision + 1),
   );
-  await publishComposition({
-    repository,
-    directory,
-    target,
-    include,
-    publicKey,
-    next,
-    nativeEvidence,
-    verifyState,
-    cohort: catalogPhase === "stage",
-    verifyOriginal: admitOriginal,
-  });
   const payload = resolve(directory, "payload.json");
   const envelope = resolve(directory, "catalog.json");
   await writeFile(payload, JSON.stringify(next));
@@ -1076,358 +644,44 @@ export async function publishExtensions({
     if (!isDeepStrictEqual(verified, next))
       throw new Error("Staged catalog differs");
   };
-  const result = {
+  await promoteExtensionCatalog({
+    pointer,
+    verifyState,
+    verifyAsset,
+    updatePointer: async (id, body) =>
+      mutate(
+        "release",
+        "edit",
+        "--repo",
+        repository,
+        String(id),
+        "--tag",
+        catalogTag,
+        "--body",
+        body,
+        "--make-latest",
+        "false",
+      ),
+  });
+  if (catalog.draft)
+    await finalizeDraftCatalog({
+      verifyState: () =>
+        verifiedPublicationState({
+          ref,
+          target,
+          previous: next,
+          publicKey,
+          readMain: async () =>
+            JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
+              .object.sha,
+          readCatalog: () => readPublicationCatalog(repository, catalogTag),
+        }),
+      publish: (id) => publishDraft(id, catalogTag),
+    });
+  return {
     published: records.map(({ id, version }) => ({ id, version })),
     revision: next.revision,
-    nativeEvidence,
   };
-  const promote = async () => {
-    await promoteExtensionCatalog({
-      pointer,
-      verifyState,
-      verifyAsset,
-      updatePointer: async (id, body) =>
-        mutate(
-          "release",
-          "edit",
-          "--repo",
-          repository,
-          String(id),
-          "--tag",
-          catalogTag,
-          "--body",
-          body,
-          "--make-latest",
-          "false",
-        ),
-    });
-    if (catalog.draft)
-      await finalizeDraftCatalog({
-        verifyState: () =>
-          verifiedPublicationState({
-            ref,
-            target,
-            previous: next,
-            publicKey,
-            readMain: async () =>
-              JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
-                .object.sha,
-            readCatalog: () => readPublicationCatalog(repository, catalogTag),
-          }),
-        publish: (id) => publishDraft(id, catalogTag),
-      });
-    return result;
-  };
-  if (catalogPhase === "complete") return promote();
-  const current = await verifyState();
-  const assets = current.release.assets.filter(
-    ({ name }) => name === candidate,
-  );
-  if (assets.length !== 1 || assets[0].size !== pointer.bytes)
-    throw new Error("Catalog upload did not finish");
-  await verifyAsset(assets[0], pointer);
-  await verifyState();
-  const capability = Object.freeze({});
-  let readiness;
-  let readinessOwner;
-  const verifyStageAssets = async (fresh) => {
-    assert.equal(fresh.release.draft, false);
-    assert.deepEqual(trustedPublicationCatalog(fresh, publicKey), old);
-    assert.deepEqual(fresh.pointer, current.pointer);
-    const staged = fresh.release.assets.filter(
-      ({ name }) => name === candidate,
-    );
-    assert.equal(fresh.release.id, current.release.id);
-    assert.equal(fresh.asset.id, current.asset.id);
-    assert.equal(staged.length, 1);
-    assert.equal(staged[0].id, assets[0].id);
-    await verifyAsset(staged[0], pointer);
-    return fresh;
-  };
-  const verifyStage = async () => verifyStageAssets(await verifyState());
-  const readinessNative = async () => {
-    const { boundedReadinessFile } = await import(
-      "./extension-host-readiness.mjs"
-    );
-    const evidence = await import("./hosted-public-release/evidence.mjs");
-    const native = await import("./extension-native-evidence.mjs");
-    const bootstrap = await import(
-      "./hosted-public-release/production-host-readiness.mjs"
-    );
-    assert.equal(typeof bootstrap.verifyHostReadinessNativeFacts, "function");
-    const payload = evidence.verifiedEvidence(
-      await boundedReadinessFile(
-        resolve(directory, "native-evidence.json"),
-        evidence.maximumEvidenceBytes,
-      ),
-      publicKey,
-    );
-    assert.equal(payload.sourceCommit, target);
-    assert.equal(String(payload.runID), process.env.GITHUB_RUN_ID);
-    assert.equal(String(payload.runAttempt), process.env.GITHUB_RUN_ATTEMPT);
-    assert.deepEqual(payload.plannedIDs, ["keepAwake"]);
-    const observed = await native.evidenceInventory(
-      payload.runID,
-      payload.runAttempt,
-      nativeEvidenceFetch,
-    );
-    bootstrap.verifyHostReadinessNativeFacts(payload, {
-      run: observed.run,
-      jobs: { total_count: observed.jobs.length, jobs: observed.jobs },
-      artifacts: {
-        total_count: observed.artifacts.length,
-        artifacts: observed.artifacts,
-      },
-    });
-    const item = release(repository, nativeEvidence.tag);
-    assert.equal(item.draft, false);
-    assert.equal(
-      item.tag_name,
-      evidence.evidenceTag(target, payload.runID, payload.runAttempt),
-    );
-    assert.equal(item.target_commitish, target);
-    const raw = JSON.parse(
-      gh(
-        "api",
-        `repos/${repository}/git/ref/tags/${encodeURIComponent(item.tag_name)}`,
-      ),
-    );
-    assert.equal(raw.ref, `refs/tags/${item.tag_name}`);
-    assert.equal(raw.object.type, "commit");
-    assert.equal(raw.object.sha, target);
-    const asset = (name, bytes, sha256) => {
-      const found = item.assets.filter((row) => row.name === name);
-      assert.equal(found.length, 1);
-      assert(Number.isSafeInteger(found[0].id) && found[0].id > 0);
-      assert.equal(found[0].size, bytes);
-      assert.equal(found[0].digest, `sha256:${sha256}`);
-      return found[0];
-    };
-    const envelopeAsset = asset(
-      "native-evidence.json",
-      nativeEvidence.envelopeBytes,
-      nativeEvidence.envelopeSHA256,
-    );
-    const compositionAsset = asset(
-      "publication-composition.json",
-      nativeEvidence.compositionBytes,
-      nativeEvidence.compositionSHA256,
-    );
-    const envelope = (
-      await downloadReleaseAsset({
-        repository,
-        asset: envelopeAsset,
-        expectedBytes: nativeEvidence.envelopeBytes,
-        expectedSHA256: nativeEvidence.envelopeSHA256,
-        maximumBytes: evidence.maximumEvidenceBytes,
-      })
-    ).data;
-    assert.deepEqual(evidence.verifiedEvidence(envelope, publicKey), payload);
-    const composition = (
-      await downloadReleaseAsset({
-        repository,
-        asset: compositionAsset,
-        expectedBytes: nativeEvidence.compositionBytes,
-        expectedSHA256: nativeEvidence.compositionSHA256,
-        maximumBytes: evidence.maximumEvidenceBytes,
-      })
-    ).data;
-    evidence.verifiedComposition(composition, publicKey, {
-      source: target,
-      runID: payload.runID,
-      attempt: payload.runAttempt,
-      records,
-      fingerprints: { keepAwake: records[0].sourceFingerprint },
-    });
-    evidence.closedAssetInventory(
-      payload,
-      {
-        bytes: nativeEvidence.envelopeBytes,
-        sha256: nativeEvidence.envelopeSHA256,
-      },
-      item.assets,
-      {
-        bytes: nativeEvidence.compositionBytes,
-        sha256: nativeEvidence.compositionSHA256,
-      },
-    );
-    return Object.freeze({
-      tag: item.tag_name,
-      sourceCommit: target,
-      runID: payload.runID,
-      runAttempt: payload.runAttempt,
-      envelopeSHA256: nativeEvidence.envelopeSHA256,
-      envelopeBytes: nativeEvidence.envelopeBytes,
-      compositionSHA256: nativeEvidence.compositionSHA256,
-      compositionBytes: nativeEvidence.compositionBytes,
-      releaseID: item.id,
-      envelopeAssetID: envelopeAsset.id,
-      compositionAssetID: compositionAsset.id,
-    });
-  };
-  const stage = {
-    claimed: false,
-    checkPromotion: () =>
-      assert(
-        !readinessOwner || continuation,
-        "Completed host continuation is required before cohort promotion",
-      ),
-    identity: Object.freeze({
-      source: target,
-      previous: Object.freeze({ ...current.pointer }),
-      candidate: Object.freeze({ ...pointer }),
-    }),
-    readiness: async (intent) => {
-      const { boundedReadinessFile, hostReadinessDescriptor } = await import(
-        "./extension-host-readiness.mjs"
-      );
-      assert(!continuation, "Host continuation already bound");
-      assert.equal(intent.role, "extensions");
-      assert.equal(intent.source, target);
-      assert.equal(intent.host.source, target);
-      assert.deepEqual(intent.previousCatalog, stage.identity.previous);
-      assert.deepEqual(intent.extensions, {
-        run: Number(process.env.GITHUB_RUN_ID),
-        runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
-      });
-      assert.equal(records.length, 1);
-      assert.equal(records[0].id, "keepAwake");
-      assert.equal(records[0].version, "1.0.1");
-      assert.deepEqual(records[0].dependencies, []);
-      const owner = { host: intent.host, extensions: intent.extensions };
-      if (readinessOwner) assert.deepEqual(owner, readinessOwner);
-      else readinessOwner = structuredClone(owner);
-      await verifyStage();
-      const native = await readinessNative();
-      const payload = hostReadinessDescriptor({
-        source: target,
-        intent,
-        previous: stage.identity.previous,
-        candidate: stage.identity.candidate,
-        record: records[0],
-        native,
-        catalogReleaseID: current.release.id,
-        previousAssetID: current.asset.id,
-        candidateAssetID: assets[0].id,
-      });
-      const name = `host-readiness-${intent.host.run}-${intent.host.runAttempt}.json`;
-      assert(Number.isSafeInteger(intent.host.run) && intent.host.run > 0);
-      assert(
-        Number.isSafeInteger(intent.host.runAttempt) &&
-          intent.host.runAttempt > 0,
-      );
-      const work = await mkdtemp(
-        resolve(tmpdir(), "extension-host-readiness-"),
-      );
-      await chmod(work, 0o700);
-      try {
-        const input = resolve(work, "payload.json");
-        const output = resolve(work, name);
-        await writeFile(input, JSON.stringify(payload), {
-          mode: 0o600,
-          flag: "wx",
-        });
-        assert((await stat(input)).size <= 8192);
-        execFileSync(
-          "swift",
-          ["scripts/extension-catalog-sign.swift", "sign", input, output],
-          {
-            stdio: "inherit",
-            timeout: 60_000,
-          },
-        );
-        const bytes = await boundedReadinessFile(output, 16384);
-        const { verifiedEnvelope } = await import(
-          "./hosted-public-release/evidence.mjs"
-        );
-        assert.deepEqual(verifiedEnvelope(bytes, publicKey, 16384), payload);
-        const snapshot = await snapshotReleaseFile(
-          output,
-          resolve(work, "immutable.json"),
-        );
-        await intent.revalidate();
-        const fresh = await verifyStage();
-        assert.deepEqual(await readinessNative(), native);
-        assert.equal(availableStage(capability), stage);
-        assert(!continuation, "Host continuation already bound");
-        const matches = fresh.release.assets.filter((row) => row.name === name);
-        assert(matches.length <= 1);
-        if (!matches.length) {
-          preflightReleaseAsset({ repository, file: snapshot.file, name });
-          await upload(
-            repository,
-            fresh.release.id,
-            catalogTag,
-            snapshot.file,
-            name,
-          );
-        }
-        const published = await verifyStageAssets(
-          await readPublicationCatalog(repository, catalogTag),
-        );
-        const written = published.release.assets.filter(
-          (row) => row.name === name,
-        );
-        assert.equal(written.length, 1);
-        if (matches.length) assert.equal(written[0].id, matches[0].id);
-        assert(Number.isSafeInteger(written[0].id) && written[0].id > 0);
-        await downloadReleaseAsset({
-          repository,
-          asset: written[0],
-          expectedBytes: snapshot.bytes,
-          expectedSHA256: snapshot.sha256,
-          maximumBytes: 16384,
-          collect: false,
-        });
-        assert.deepEqual(await readinessNative(), native);
-        assert.equal(availableStage(capability), stage);
-        readiness = payload;
-        return Object.freeze({
-          name,
-          assetID: written[0].id,
-          bytes: snapshot.bytes,
-          sha256: snapshot.sha256,
-        });
-      } finally {
-        await rm(work, { recursive: true, force: true });
-      }
-    },
-    bindContinuation: async (completed) => {
-      assert(readiness, "Host readiness has not been published");
-      assert.equal(completed.intent.role, "extensions");
-      assert.equal(completed.intent.source, target);
-      assert.deepEqual(completed.intent.host, readiness.host);
-      assert.deepEqual(completed.intent.extensions, readiness.extensions);
-      assert.deepEqual(
-        completed.intent.previousCatalog,
-        stage.identity.previous,
-      );
-      assert(!continuation, "Host continuation already bound");
-      const stamp = await verifyCohortReleaseStamp({
-        source: target,
-        host: completed.intent.host,
-        proof: completed.proof,
-        release: completed.release,
-      });
-      await completed.revalidate();
-      assert.equal(availableStage(capability), stage);
-      assert(!continuation, "Host continuation already bound");
-      continuation = { completed, stamp };
-      try {
-        await verifyStage();
-      } catch (error) {
-        continuation = undefined;
-        throw error;
-      }
-      return Object.freeze({ ...stamp });
-    },
-    promote: async () => {
-      await verifyStage();
-      return promote();
-    },
-  };
-  stagedPublications.set(capability, stage);
-  return { ...result, catalogStage: capability };
 }
 
 if (import.meta.main) {

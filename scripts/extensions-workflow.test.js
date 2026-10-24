@@ -6,7 +6,6 @@ const workflow = Bun.YAML.parse(
   readFileSync(".github/workflows/extensions.yml", "utf8"),
 );
 const { plan, build, publish } = workflow.jobs;
-const frozen = workflow.jobs["frozen-host"];
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
 test("portable planning uses Ubuntu while native checks and publication keep macOS", () => {
@@ -92,20 +91,22 @@ test.each(["pull_request"])(
   },
 );
 
-test("all extension releases reuse one signed host without Camera provisioning", () => {
-  const signing = frozen.steps.findIndex(
-    (step) => step.name === "Import the release signing certificate",
+test("only the camera carrier build prepares a containing host without Camera provisioning", () => {
+  const names = build.steps.map((step) => step.name);
+  const signing = names.indexOf("Import the release signing certificate");
+  const compile = names.indexOf(
+    "Build the host that contains the camera carrier",
   );
-  const preparation = frozen.steps.findIndex(
-    (step) =>
-      step.name ===
-      "Freeze the production host once for all changed extensions",
-  );
+  const preparation = names.indexOf("Sign the containing host for publication");
+  expect(compile).toBeGreaterThan(signing - 1);
   expect(preparation).toBeGreaterThan(signing);
-  expect(frozen.steps[preparation].run).toContain("package-shipping-host.py");
-  expect(frozen.steps[preparation].run).toContain("--release");
-  expect(text(frozen)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
-  expect(text(frozen)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
+  for (const index of [compile, preparation])
+    expect(build.steps[index].if).toContain("matrix.id == 'virtualCamera'");
+  expect(build.steps[compile].run).toBe("make host");
+  expect(build.steps[preparation].run).toContain("package-shipping-host.py");
+  expect(build.steps[preparation].run).toContain("--release");
+  expect(text(build)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
+  expect(text(build)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
   const packaging = build.steps.find(
     (step) => step.name === "Build only this extension",
   );
@@ -115,8 +116,7 @@ test("all extension releases reuse one signed host without Camera provisioning",
   expect(packaging.env.EXTENSION_CONTAINING_HOST_APP).toContain(
     "local/minimal-host/Edith.app",
   );
-  for (const job of [frozen, build])
-    expect(job.steps.at(-1).if).toBe("always()");
+  expect(build.steps.at(-1).if).toBe("always()");
 });
 
 test("release asset helper changes run the extension checks", () => {
@@ -129,7 +129,7 @@ test("extension builds consume independent fingerprints without a feature framew
   expect(text(plan)).toContain("extension-release-plan.mjs");
   expect(workflow.jobs.host).toBeUndefined();
   expect(plan.outputs.host).toBeUndefined();
-  expect(build.needs).toEqual(["plan", "frozen-host"]);
+  expect(build.needs).toEqual(["plan"]);
   expect(text(build)).not.toContain("host-interfaces");
   expect(text(build)).not.toContain("EXTENSION_HOST_PRODUCTS");
   const cache = build.steps.find(
@@ -141,12 +141,12 @@ test("extension builds consume independent fingerprints without a feature framew
   expect(build.strategy.matrix).toContain("needs.plan.outputs.matrix");
 });
 
-test("every extension passes native lifecycle checks before release signing", () => {
+test("every extension passes native package checks before release signing", () => {
   const guard = build.steps.findIndex(
-    (step) => step.name === "Require a native worker package",
+    (step) => step.name === "Require a native package",
   );
-  const lifecycle = build.steps.findIndex(
-    (step) => step.name === "Exercise this worker against the frozen host",
+  const suites = build.steps.findIndex(
+    (step) => step.name === "Test this extension's optional native packages",
   );
   const signing = build.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
@@ -158,12 +158,9 @@ test("every extension passes native lifecycle checks before release signing", ()
   expect(build.steps[guard].run).toContain("contractVersion!==1");
   expect(build.steps[guard].run).toContain("surfaceContractVersion!==1");
   expect(build.steps[guard].run).toContain("usesHostFramework");
-  expect(guard).toBeLessThan(lifecycle);
-  expect(lifecycle).toBeLessThan(signing);
+  expect(guard).toBeLessThan(suites);
+  expect(suites).toBeLessThan(signing);
   expect(signing).toBeLessThan(bundle);
-  expect(build.steps[lifecycle].run).not.toContain("make host");
-  expect(text(frozen)).toContain("make ci-host host");
-  expect(build.steps[lifecycle].run).toContain("test-extension-workers.mjs");
   expect(build.steps[bundle].run).toContain('"$EXTENSION_ID" --development');
   expect(text(build)).toContain("secrets.MACOS_CERT_P12");
   expect(text(build)).toContain("secrets.NOTARY_KEY");
@@ -172,7 +169,6 @@ test("every extension passes native lifecycle checks before release signing", ()
 test("changed packages require successful builds before publication", () => {
   expect(build.if).toContain("!cancelled()");
   expect(build.if).toContain("needs.plan.result == 'success'");
-  expect(build.if).toContain("needs['frozen-host'].result == 'success'");
   expect(build.if).toContain("needs.plan.outputs.changed == 'true'");
   expect(publish.needs).toEqual(["plan", "build", "tests"]);
   expect(publish.if).toContain("needs.tests.result == 'success'");
@@ -211,7 +207,7 @@ test("manual publication is explicit and checked builds can publish from main", 
   );
 });
 
-test("terminal dependencies are restored before native lifecycle builds", () => {
+test("terminal dependencies are restored before native package checks", () => {
   const native = build.steps.findIndex((step) => step.id === "native");
   const cache = build.steps.findIndex(
     (step) => step.name === "Cache the optional terminal library",
@@ -219,13 +215,13 @@ test("terminal dependencies are restored before native lifecycle builds", () => 
   const bootstrap = build.steps.findIndex(
     (step) => step.name === "Build the optional terminal library",
   );
-  const lifecycle = build.steps.findIndex(
-    (step) => step.name === "Exercise this worker against the frozen host",
+  const suites = build.steps.findIndex(
+    (step) => step.name === "Test this extension's optional native packages",
   );
   expect(native).toBeGreaterThan(-1);
   expect(native).toBeLessThan(cache);
   expect(cache).toBeLessThan(bootstrap);
-  expect(bootstrap).toBeLessThan(lifecycle);
+  expect(bootstrap).toBeLessThan(suites);
   expect(build.steps[native].run).toContain(
     'nativeProduct==="GhosttyTerminal"',
   );
@@ -241,53 +237,48 @@ test("common extension checks do not repeat every native release build", () => {
   const checks = text(workflow.jobs.tests);
   expect(checks).toContain("ci-extension-support");
   expect(checks).toContain("ci-marketplace-runtime");
-  expect(checks).toContain("ci-extension-commands");
   expect(checks).not.toContain("ci-marketplace-host");
+  expect(checks).not.toContain("ci-extension-commands");
   expect(checks).not.toContain("ci-extension-workers");
-  expect(text(build)).toContain("test-extension-workers.mjs");
 });
 
-test("selected optional native suites gate lifecycle and release signing", () => {
+test("selected optional native suites gate release signing", () => {
   const suites = build.steps.findIndex(
     (step) => step.name === "Test this extension's optional native packages",
   );
   const prerequisites = build.steps.findIndex(
     (step) => step.name === "Build the optional terminal library",
   );
-  const lifecycle = build.steps.findIndex(
-    (step) => step.name === "Exercise this worker against the frozen host",
-  );
   const cache = build.steps.findIndex(
     (step) =>
       step.name === "Reuse this extension's unchanged support libraries",
   );
+  const signing = build.steps.find(
+    (step) => step.name === "Import the release signing certificate",
+  );
   expect(suites).toBeGreaterThan(prerequisites);
   expect(cache).toBeLessThan(suites);
-  expect(suites).toBeLessThan(lifecycle);
+  expect(suites).toBeLessThan(build.steps.indexOf(signing));
   expect(build.steps[suites].env.EXTENSION_ID).toContain("matrix.id");
   expect(build.steps[suites].run).toBe(
     'bun scripts/test-extension-package.mjs "$EXTENSION_ID"',
   );
   expect(build.steps[suites].if).toBeUndefined();
-  const signing = build.steps.find(
-    (step) => step.name === "Import the release signing certificate",
-  );
   expect(build.steps[suites].env.EXTENSION_PACKAGE_SUITES).toBe(
     `\${{ (${signing.if}) && 'skip' || 'run' }}`,
   );
 });
 
-test("matrix jobs restore executable modes and never rebuild the shared host", () => {
+test("matrix jobs never restore a frozen host and only the camera build compiles one", () => {
   for (const job of [workflow.jobs.tests, build]) {
-    expect(job.needs).toContain("frozen-host");
-    expect(text(job)).toContain("frozen-extension-host");
-    expect(text(job)).toContain("tar -xzf");
-    expect(text(job)).not.toContain("make host");
+    expect(job.needs).toContain("plan");
+    expect(job.needs).not.toContain("frozen-host");
+    expect(text(job)).not.toContain("frozen-extension-host");
+    expect(text(job)).not.toContain("tar -xzf");
   }
-  expect(frozen["runs-on"]).toBe("macos-26");
-  expect(text(frozen)).toContain("tar -czf");
-  expect(text(frozen)).toContain("HostLifecycleHarness");
-  expect(text(frozen)).toContain("MarketplaceHarness");
+  expect(workflow.jobs["frozen-host"]).toBeUndefined();
+  expect(text(workflow)).not.toContain("HostLifecycleHarness");
+  expect(text(workflow)).not.toContain("extension-tools");
 });
 
 test("native cache keys include maintained patch and exact toolchain; validation gates release signing", () => {
@@ -325,22 +316,20 @@ test("native cache keys include maintained patch and exact toolchain; validation
   expect(build.steps[validation]["continue-on-error"]).toBeUndefined();
 });
 
-test("common frozen runtime changes rebuild all39 while Camera-only packaging stays selective", () => {
+test("camera carrier packaging inputs rebuild only the camera package", () => {
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(40);
-  const common = "scripts/build-contained-host-runtime.mjs";
-  const camera = ["scripts/build-camera-carrier.mjs"];
+  const camera = [
+    "scripts/build-contained-host-runtime.mjs",
+    "scripts/build-camera-carrier.mjs",
+  ];
   for (const event of [workflow.on.pull_request]) {
-    for (const path of [common, ...camera])
+    for (const path of camera)
       expect(
         event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
       ).toBe(true);
   }
-  expect(
-    planExtensionBuilds(definitions, [common]).map(({ id }) => id),
-  ).toEqual(definitions.map(({ id }) => id));
   for (const path of camera) {
     expect(
       planExtensionBuilds(definitions, [path]).map(({ id }) => id),
@@ -352,7 +341,7 @@ test("signed retained catalogs must pass actual native selection before package 
   expect(text(workflow.jobs.tests)).toContain(
     "test-extension-catalog-retention.mjs",
   );
-  expect(workflow.jobs.tests.needs).toContain("frozen-host");
+  expect(workflow.jobs.tests.needs).toContain("plan");
 });
 
 test("PR planning fetches the exact trusted base while releases retain signed catalog planning", () => {
@@ -391,54 +380,16 @@ test("PR planning fetches the exact trusted base while releases retain signed ca
   expect(publish.if).toContain("github.ref == 'refs/heads/main'");
 });
 
-test("frozen lifecycle tools include and verify their exact sibling source index", () => {
-  const packaging = frozen.steps.find((step) =>
-    step.run?.includes("package_extension_lifecycle_tools.py --host "),
-  );
-  expect(packaging).toBeDefined();
-  expect(packaging.run).toContain("--host local/minimal-host/Edith.app");
-  expect(packaging.run).toContain("--output local/extension-tools");
-  expect(packaging.run).toContain("--host-products");
-  expect(packaging.run).toContain("--marketplace-products");
-  expect(packaging.run).toContain("--show-bin-path");
-  expect(packaging.run).not.toContain("cp ");
-  const archive = frozen.steps.findIndex((step) =>
-    step.run?.includes("tar -czf"),
-  );
-  expect(frozen.steps.indexOf(packaging)).toBeLessThan(archive);
-  expect(frozen.steps[archive].run).toContain("local/extension-tools");
-  for (const job of [workflow.jobs.tests, build]) {
-    const restore = job.steps.findIndex((step) =>
-      step.run?.includes("tar -xzf"),
-    );
-    const verification = job.steps.findIndex((step) =>
-      step.run?.includes("package_extension_lifecycle_tools.py --verify"),
-    );
-    expect(verification).toBe(restore + 1);
-    expect(job.steps[verification].run).toContain(
-      "--host local/minimal-host/Edith.app --output local/extension-tools",
-    );
-  }
-  expect(text(plan)).toContain("test-package-extension-lifecycle-tools.py");
-});
-
-test("carrier packaging changes rebuild all shipping packages while proof-only edits do not", () => {
+test("workflow and test edits do not rebuild shipping packages", () => {
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(40);
   expect(
     planExtensionBuilds(definitions, [
-      "scripts/test-package-extension-lifecycle-tools.py",
       "scripts/extensions-workflow.test.js",
       ".github/workflows/extensions.yml",
     ]),
   ).toEqual([]);
-  for (const path of [
-    "scripts/package_extension_lifecycle_tools.py",
-    "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
-  ])
-    expect(planExtensionBuilds(definitions, [path])).toHaveLength(40);
 });
 
 test("package build job names bind the closed artifact intake to one owner", () => {
@@ -469,7 +420,6 @@ function routingContext(changes = {}) {
         result: "success",
         outputs: { changed: "true", draft: "false" },
       },
-      "frozen-host": { result: "success" },
       tests: { result: "success" },
       build: { result: "success" },
       ...changes.needs,
@@ -480,7 +430,7 @@ function routingContext(changes = {}) {
       ref: "refs/heads/main",
       ...changes.github,
     },
-    inputs: { publish: true, production_cohort: "", ...changes.inputs },
+    inputs: { publish: true, ...changes.inputs },
     cancelled: changes.cancelled ?? false,
   };
 }
@@ -514,29 +464,24 @@ function jobAdmitted(job, context) {
   );
 }
 
-test("changed worker builds overlap global tests but require the successful frozen plan", () => {
+test("changed builds overlap global tests but require the successful plan", () => {
   for (const result of ["success", "failure", "skipped", "cancelled"]) {
     const context = routingContext({ needs: { tests: { result } } });
     expect(jobAdmitted(build, context)).toBe(true);
     expect(jobAdmitted(publish, context)).toBe(result === "success");
   }
-  for (const dependency of ["plan", "frozen-host"]) {
-    for (const result of ["failure", "skipped", "cancelled"]) {
-      const context = routingContext({
-        needs: {
-          [dependency]: {
-            result,
-            outputs: { changed: "true", draft: "false" },
-          },
-        },
-      });
-      expect(jobAdmitted(build, context)).toBe(false);
-    }
+  for (const result of ["failure", "skipped", "cancelled"]) {
+    const context = routingContext({
+      needs: {
+        plan: { result, outputs: { changed: "true", draft: "false" } },
+      },
+    });
+    expect(jobAdmitted(build, context)).toBe(false);
   }
   expect(jobAdmitted(build, routingContext({ cancelled: true }))).toBe(false);
 });
 
-test("unchanged draft resumes freeze and test the host before publication", () => {
+test("unchanged draft resumes test before publication", () => {
   const context = routingContext({
     needs: {
       plan: {
@@ -546,12 +491,11 @@ test("unchanged draft resumes freeze and test the host before publication", () =
       build: { result: "skipped" },
     },
   });
-  expect(jobAdmitted(frozen, context)).toBe(true);
   expect(jobAdmitted(workflow.jobs.tests, context)).toBe(true);
   expect(jobAdmitted(build, context)).toBe(false);
   expect(jobAdmitted(publish, context)).toBe(true);
   context.needs.plan.outputs.draft = "false";
-  expect(jobAdmitted(frozen, context)).toBe(false);
+  expect(jobAdmitted(workflow.jobs.tests, context)).toBe(false);
   expect(jobAdmitted(publish, context)).toBe(false);
 });
 
@@ -593,7 +537,7 @@ test("both publication paths require successful independent tests and their exac
   }
 });
 
-test("failed frozen or planning gates prevent real tests on changed and draft paths", () => {
+test("failed planning gates prevent real tests on changed and draft paths", () => {
   for (const changed of ["true", "false"]) {
     for (const result of ["failure", "skipped", "cancelled"]) {
       const context = routingContext({
@@ -602,12 +546,10 @@ test("failed frozen or planning gates prevent real tests on changed and draft pa
             result,
             outputs: { changed, draft: "true" },
           },
-          "frozen-host": { result },
           tests: { result: "skipped" },
           build: { result: "skipped" },
         },
       });
-      expect(jobAdmitted(frozen, context)).toBe(false);
       expect(jobAdmitted(workflow.jobs.tests, context)).toBe(false);
       expect(jobAdmitted(build, context)).toBe(false);
       expect(jobAdmitted(publish, context)).toBe(false);
@@ -652,20 +594,13 @@ test("publication rejects untrusted repositories refs and implicit manual publis
 });
 
 test("all extension pipeline ABI preflights validate committed source without generation", () => {
-  for (const job of [plan, frozen, workflow.jobs.tests, build, publish]) {
+  for (const job of [plan, workflow.jobs.tests, build, publish]) {
     const checks = job.steps.filter((step) =>
       step.run?.includes("bun scripts/extension-host-abi.mjs"),
     );
     expect(checks).toHaveLength(1);
     expect(checks[0].run).toBe("bun scripts/extension-host-abi.mjs --check");
   }
-  expect(
-    frozen.steps.findIndex((step) =>
-      step.run?.includes("bun scripts/extension-host-abi.mjs"),
-    ),
-  ).toBeLessThan(
-    frozen.steps.findIndex((step) => step.run === "make ci-host host"),
-  );
 });
 
 test("shipping tests exclude unrelated native models while all-extension validation retains them", () => {
@@ -681,126 +616,32 @@ test("shipping tests exclude unrelated native models while all-extension validat
   const allModels = checks.steps.find(
     (step) =>
       step.name ===
-      "Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments",
+      "Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments",
   );
   expect(allModels.if).toBe("needs.plan.outputs.mode == 'validation'");
-  expect(allModels.run).toContain(
-    "ci-extension-support ci-extension-docs ci-extension-commands",
-  );
+  expect(allModels.run).toContain("ci-extension-support ci-extension-docs");
   const cache = checks.steps.find(
     (step) =>
       step.name === "Verify native cache integrity and private SDK composition",
   );
   expect(cache.if).toBe(allModels.if);
-  expect(
-    build.steps.find(
-      (step) => step.name === "Exercise this worker against the frozen host",
-    ).run,
-  ).toContain("matrix.id");
-  const fullHost = frozen.steps.find(
+  const fullHost = checks.steps.find(
     (step) => step.run === "make ci-host host",
   );
-  const shippingHost = frozen.steps.find((step) => step.run === "make host");
   expect(fullHost.if).toBe("needs.plan.outputs.mode == 'validation'");
-  expect(shippingHost.if).toBe("needs.plan.outputs.mode != 'validation'");
-  for (const mode of ["selective", "validation"])
-    for (const event_name of ["push", "pull_request", "workflow_dispatch"]) {
-      const context = routingContext({
-        github: { event_name },
-        needs: { plan: { result: "success", outputs: { mode } } },
-      });
-      expect(jobAdmitted({ ...fullHost, needs: ["plan"] }, context)).toBe(
-        mode === "validation",
-      );
-      expect(jobAdmitted({ ...shippingHost, needs: ["plan"] }, context)).toBe(
-        mode !== "validation",
-      );
-    }
+  expect(checks.steps.indexOf(fullHost)).toBeLessThan(
+    checks.steps.indexOf(allModels),
+  );
 });
 
-test("shipping publication exercises original Keep Awake controls through the exact frozen lifecycle tools", () => {
-  const checks = workflow.jobs.tests;
-  const native = checks.steps.find(
-    (step) =>
-      step.name ===
-      "Exercise original Keep Awake controls and native lifecycle",
-  );
-  expect(native.if).toBe(
-    "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
-  );
-  expect(native.env.EXPECTED_SOURCE_SHA).toBe(`\${{ github.sha }}`);
-  expect(native.env.EXTENSION_PUBLISH).toBe(
-    `\${{ inputs.publish == true && 'true' || 'false' }}`,
-  );
-  expect(native.env.EXTENSION_LIFECYCLE_HARNESS).toBe(
-    "local/extension-tools/HostLifecycleHarness",
-  );
-  expect(native.run).toBe("make ci-extension-keep-awake-native");
-  for (const [mode, event_name, admitted] of [
-    ["selective", "push", true],
-    ["selective", "workflow_dispatch", true],
-    ["selective", "pull_request", false],
-    ["validation", "push", false],
-    ["validation", "workflow_dispatch", false],
-  ]) {
-    const context = routingContext({
-      github: { event_name },
-      needs: { plan: { result: "success", outputs: { mode } } },
-    });
-    expect(jobAdmitted({ ...native, needs: ["plan"] }, context)).toBe(admitted);
-  }
-  const verifyTools = checks.steps.findIndex(
-    (step) => step.name === "Verify lifecycle tools and their frozen index",
-  );
-  expect(verifyTools).toBeGreaterThan(-1);
-  expect(checks.steps.indexOf(native)).toBeGreaterThan(verifyTools);
-  expect(publish.needs).toContain("tests");
-});
-
-test("shipping native controls run before the broad marketplace suite with verified frozen prerequisites", () => {
+test("the marketplace harness is compiled before the marketplace lifecycle suite", () => {
   const steps = workflow.jobs.tests.steps;
-  const verification = steps.findIndex(
-    (step) => step.name === "Verify lifecycle tools and their frozen index",
+  const harness = steps.findIndex((step) =>
+    step.run?.includes("--product MarketplaceHarness"),
   );
-  const harnessCopy = steps.findIndex((step) =>
-    step.run?.includes("cp local/extension-tools/MarketplaceHarness"),
+  const marketplace = steps.findIndex((step) =>
+    step.run?.includes("test-extension-marketplace.mjs"),
   );
-  const native = steps.findIndex(
-    (step) =>
-      step.name ===
-      "Exercise original Keep Awake controls and native lifecycle",
-  );
-  const general = steps.findIndex(
-    (step) => step.name === "Validate the shipping extension and marketplace",
-  );
-  expect(verification).toBeGreaterThan(-1);
-  expect(harnessCopy).toBeGreaterThan(verification);
-  expect(native).toBeGreaterThan(harnessCopy);
-  expect(general).toBeGreaterThan(native);
-  expect(steps[native].if).toBe(
-    "needs.plan.outputs.mode != 'validation' && github.event_name != 'pull_request'",
-  );
-  expect(steps[native].run).toBe("make ci-extension-keep-awake-native");
-  expect(steps[native].env).toEqual({
-    EXPECTED_SOURCE_SHA: `\${{ github.sha }}`,
-    EXTENSION_LIFECYCLE_HARNESS: "local/extension-tools/HostLifecycleHarness",
-    EXTENSION_PUBLISH: `\${{ inputs.publish == true && 'true' || 'false' }}`,
-  });
-  expect(steps[general].run).toBe(
-    "make ci-marketplace-runtime ci-extension-keep-awake ci-comments",
-  );
-});
-
-test("frozen outer carrier uses the host build and restored source bound tools", () => {
-  const compile = frozen.steps.find((step) =>
-    step.run?.includes("--carrier-products"),
-  );
-  expect(compile.run).toContain("--configuration release --show-bin-path");
-  expect(compile.run).toContain("--output local/extension-tools");
-  const packageStep = build.steps.find(
-    (step) => step.env?.EXTENSION_CONTAINING_HOST_APP,
-  );
-  expect(packageStep.env.EXTENSION_UI_CARRIER_TOOLS).toBe(
-    "local/extension-tools",
-  );
+  expect(harness).toBeGreaterThan(-1);
+  expect(marketplace).toBeGreaterThan(harness);
 });

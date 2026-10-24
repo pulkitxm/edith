@@ -17,7 +17,6 @@ import {
   rewriteSupportImports,
   supportProducts,
 } from "./build-extension-support.mjs";
-import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
@@ -284,7 +283,6 @@ export function extensionPackageHostContext({
   developmentHostRoot,
   environment = {},
   containedHostApp = environment.EXTENSION_CONTAINING_HOST_APP,
-  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS,
 }) {
   if (developmentHostRoot !== undefined && development !== true)
     throw new Error(
@@ -300,8 +298,6 @@ export function extensionPackageHostContext({
       (development
         ? resolve(contextRoot, "local/minimal-host/Edith.app")
         : undefined),
-    carrierTools:
-      carrierTools ?? resolve(contextRoot, "local/minimal-host/carrier-tools"),
   });
 }
 
@@ -313,10 +309,8 @@ export async function buildExtensionPackage({
   version,
   tagOverride,
   environment = process.env,
-  functionalRoleBuild,
   developmentHostRoot,
   containedHostApp = environment.EXTENSION_CONTAINING_HOST_APP,
-  carrierTools = environment.EXTENSION_UI_CARRIER_TOOLS,
 }) {
   const hostContext = extensionPackageHostContext({
     root,
@@ -324,29 +318,7 @@ export async function buildExtensionPackage({
     developmentHostRoot,
     environment,
     containedHostApp,
-    carrierTools,
   });
-  const functionalInputs = {
-    root,
-    id,
-    version,
-    output,
-    hostApp: containedHostApp,
-  };
-  if (functionalRoleBuild) {
-    if (development || tagOverride)
-      throw new Error(
-        "Functional roles require their exact admitted release inputs",
-      );
-    const { functionalRoleBuildEnvironment } = await import(
-      "./hosted-functional-actions/functional-build.mjs"
-    );
-    environment = await functionalRoleBuildEnvironment(
-      functionalRoleBuild,
-      functionalInputs,
-      environment,
-    );
-  }
   const run = (file, args, options = {}) => {
     const attempts =
       file === "codesign" && args.includes("--timestamp") ? 4 : 1;
@@ -373,13 +345,15 @@ export async function buildExtensionPackage({
   await verifyExtensionNativeDependencies(root, definition);
   await writeHostABI(root);
   containedHostApp = hostContext.hostApp;
-  if (!containedHostApp)
-    throw new Error(
-      "A frozen signed host app is required for extension UI packages",
-    );
-  run("codesign", ["--verify", "--deep", "--strict", containedHostApp], {
-    stdio: "pipe",
-  });
+  if (definition.systemExtensionCarrier) {
+    if (!containedHostApp)
+      throw new Error(
+        "A frozen signed host app is required for a system extension carrier",
+      );
+    run("codesign", ["--verify", "--deep", "--strict", containedHostApp], {
+      stdio: "pipe",
+    });
+  }
   const nativePolicy = nativeRolePolicy(definition);
   if (definition.contractVersion === 1 && definition.usesHostFramework)
     throw new Error(
@@ -659,11 +633,6 @@ export async function buildExtensionPackage({
       contents,
       resourceNames,
     );
-    const fixtureFlags = functionalRoleBuild
-      ? await (
-          await import("./hosted-functional-actions/functional-build.mjs")
-        ).functionalRoleCompilerInputs(functionalRoleBuild, functionalInputs)
-      : [];
     run(
       "xcrun",
       [
@@ -682,7 +651,6 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}`,
         ...compileSources,
-        ...fixtureFlags,
         ...(support
           ? [
               "-swift-version",
@@ -724,6 +692,14 @@ export async function buildExtensionPackage({
               "-exported_symbol",
               "-Xlinker",
               "_edith_extension_create",
+              ...(support
+                ? [
+                    "-Xlinker",
+                    "-exported_symbol",
+                    "-Xlinker",
+                    "_edith_extension_configure_environment",
+                  ]
+                : []),
             ]
           : []),
         "-o",
@@ -859,27 +835,6 @@ export async function buildExtensionPackage({
   await writeFile(
     resolve(payload, "package.json"),
     JSON.stringify(payloadManifest),
-  );
-  const uiCarrier = await buildExtensionUICarrier({
-    root: hostContext.root,
-    environment,
-    functionalRoleBuild,
-    functionalInputs,
-    carrierTools: hostContext.carrierTools,
-    frozenHostApp: hostContext.frozenHostApp,
-    minimumSystemVersion: definition.minimumSystemVersion,
-    hostApp: containedHostApp,
-    payloadDirectory: payload,
-    id,
-    version: releaseVersion,
-    hostABI: definition.hostABI,
-    dependencies: definition.dependencies,
-    development,
-    identity,
-  });
-  await writeFile(
-    resolve(target, `${id}.ui-carrier-provenance.json`),
-    `${JSON.stringify(uiCarrier, null, 2)}\n`,
   );
   const archive = resolve(target, `${id}.zip`);
   const summary = JSON.parse(

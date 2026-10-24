@@ -55,11 +55,9 @@ test("production defaults preserve the strict source workspace and explicit sign
     root,
     hostApp: undefined,
     frozenHostApp: resolve(root, "local/minimal-host/Edith.app"),
-    carrierTools: resolve(root, "local/minimal-host/carrier-tools"),
   });
   const environment = {
     EXTENSION_CONTAINING_HOST_APP: "/source/current/local/signed/Edith.app",
-    EXTENSION_UI_CARRIER_TOOLS: "/source/current/local/admitted-carrier",
   };
   expect(
     extensionPackageHostContext({ root, development: false, environment }),
@@ -67,7 +65,6 @@ test("production defaults preserve the strict source workspace and explicit sign
     root,
     hostApp: environment.EXTENSION_CONTAINING_HOST_APP,
     frozenHostApp: resolve(root, "local/minimal-host/Edith.app"),
-    carrierTools: environment.EXTENSION_UI_CARRIER_TOOLS,
   });
 });
 
@@ -83,10 +80,6 @@ test("development binds host verifier inputs to the actual source context indepe
     root: developmentHostRoot,
     hostApp: resolve(developmentHostRoot, "local/minimal-host/Edith.app"),
     frozenHostApp: resolve(developmentHostRoot, "local/minimal-host/Edith.app"),
-    carrierTools: resolve(
-      developmentHostRoot,
-      "local/minimal-host/carrier-tools",
-    ),
   });
   expect(Object.isFrozen(context)).toBe(true);
   expect(context.root).not.toBe(root);
@@ -210,9 +203,6 @@ describe.skipIf(process.platform !== "darwin")(
         join(hostRoot, "local/minimal-host/Edith.app"),
       );
       expect(context.frozenHostApp).toBe(context.hostApp);
-      expect(context.carrierTools).toBe(
-        join(hostRoot, "local/minimal-host/carrier-tools"),
-      );
       expect(() => verify(context.hostApp)).not.toThrow();
       const previous = extensionPackageHostContext({
         root: packageRoot,

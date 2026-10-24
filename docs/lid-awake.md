@@ -28,7 +28,7 @@ Choose one policy before starting:
 | 2 hours | The timer expires. |
 | Until lid reopens | The lid has closed and then opens again. |
 
-The timer and lid-cycle state are owned by the active extension worker, so closing the main Edith window does not cancel them.
+The timer and lid-cycle state are owned by the loaded extension, so closing the main Edith window does not cancel them.
 
 ## Battery and quit behavior
 

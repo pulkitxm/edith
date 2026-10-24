@@ -7,50 +7,7 @@ import { ghosttyNativeInputs } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 
-export const workerRuntimeInputs = [
-  "Packages/EdithHost/Package.swift",
-  "Packages/EdithHost/Package.resolved",
-  "scripts/build-minimal-host.mjs",
-  "scripts/package-shipping-host.py",
-  "Packages/EdithHost/Sources/HostBootstrap",
-  "Packages/EdithHost/Sources/EdithExtensionCarrier",
-  "scripts/package_extension_lifecycle_tools.py",
-  "Packages/EdithHost/Sources/EdithHost/HostEntry.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
-  "Packages/EdithHost/Sources/EdithHost/HostWorkerApplication.swift",
-  "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",
-  "Extensions/fixtureSupport",
-  "Packages/EdithHost/Sources/EdithHost/HostWorkerControl.swift",
-  "Packages/EdithHost/Sources/EdithHost/HostNativeTask.swift",
-  "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProcessGroups.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedProcess.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedWorker.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCarrier.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedAdmission.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCaller.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostWorker.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostContract.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostExtensionSessions.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostSurfaces.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteProtocol.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteAuthentication.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEndpoint.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteChannel.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteConfiguration.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
-  "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
+export const hostRuntimeInputs = [
   "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
 ];
 
@@ -113,7 +70,7 @@ export function definitionInputs(definition) {
     ...definition.inputs,
     ...ghosttyNativeInputs(definition),
     ...shared,
-    ...(definition.sameExecutableWorker ? workerRuntimeInputs : []),
+    ...(definition.usesHostRuntime ? hostRuntimeInputs : []),
   ];
 }
 

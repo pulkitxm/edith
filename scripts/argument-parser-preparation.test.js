@@ -13,8 +13,6 @@ test.each([
   ["ci-extension-system-stats", "Extensions/systemStats"],
   ["ci-extension-docs-native", "Extensions/docs"],
   ["ci-extension-usage-accounts", "Extensions/usage"],
-  ["ci-extension-keep-awake-peer-diagnostics", "Packages/ExtensionSupport"],
-  ["ci-extension-keep-awake-peer-transport", "Packages/ExtensionSupport"],
   ["ci-extension-support", "Packages/ExtensionSupport"],
 ])(
   "ordinary parser preparation precedes the real compiler in %s",

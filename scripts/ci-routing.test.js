@@ -616,19 +616,17 @@ test("full native extension contracts run on macOS with private SDK execution en
     step.run?.includes("scripts/build-extension-support.native.test.js"),
   );
   expect(job["runs-on"]).toBe("macos-26");
-  expect(job.needs).toContain("frozen-host");
+  expect(job.needs).toContain("plan");
   expect(proof.env.EXTENSION_SUPPORT_NATIVE_TESTS).toBe("1");
   expect(proof.run).toContain("scripts/extension-ghostty-native.test.js");
   expect(proof.if).toBe("needs.plan.outputs.mode == 'validation'");
   expect(proof["timeout-minutes"]).toBeGreaterThan(0);
-  const restore = job.steps.findIndex((step) =>
-    step.run?.includes("tar -xzf local/extension-host-artifact/host.tar.gz"),
-  );
-  expect(restore).toBeGreaterThanOrEqual(0);
-  expect(job.steps.indexOf(proof)).toBeGreaterThan(restore);
+  const host = job.steps.findIndex((step) => step.run === "make ci-host host");
+  expect(host).toBeGreaterThanOrEqual(0);
+  expect(job.steps.indexOf(proof)).toBeGreaterThan(host);
 });
 
-test("standalone terminal consumers get verified native prerequisites independently of the frozen host", () => {
+test("standalone terminal consumers get verified native prerequisites independently of the host build", () => {
   const job = ciJobs["swift-test"];
   expect(job.needs).toBe("changes");
   const setup = job.steps.find((step) => step.id === "ghostty-toolchain");

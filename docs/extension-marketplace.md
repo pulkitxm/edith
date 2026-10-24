@@ -1,6 +1,6 @@
 # Extension marketplace
 
-Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Its 40 optional extensions download separately from GitHub Releases. An extension uses internal workers from the same Edith executable; users do not install a separate executable.
+Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Its 40 optional extensions download separately from GitHub Releases. Each extension loads in process into the single Edith app; users do not install a separate executable.
 
 ## Choose a workflow
 
@@ -22,9 +22,9 @@ Downloads are verified before they replace installed state. An active version ke
 
 ## Disable, remove and inspect storage
 
-Disabling stops an extension's owned worker, native tasks, commands and registered descendants. It keeps the downloaded package on disk. Pending cleanup remains visible until exit is confirmed. Removing first disables the extension, then removes its package files when they are no longer in use. Removal retains extension user data, including agentic usage history.
+Disabling unloads an extension's code and stops its native tasks, commands and registered descendants. It keeps the downloaded package on disk. Pending cleanup remains visible until exit is confirmed. Removing first disables the extension, then removes its package files when they are no longer in use. Removal retains extension user data, including agentic usage history.
 
-Storage shows actual file measurements separately from signed catalog download estimates. It includes the app, package versions, repeated carrier and worker executables, packaged frameworks, owned user data, retained storage and known caches or deployment copies. Removal is available per extension. Files awaiting removal continue to count.
+Storage shows actual file measurements separately from signed catalog download estimates. It includes the app, package versions, packaged frameworks, owned user data, retained storage and known caches or deployment copies. Removal is available per extension. Files awaiting removal continue to count.
 
 Logical bytes describe file contents; allocated bytes describe filesystem blocks. Hard links count once. APFS clones, compression and shared extents can make exclusive physical usage differ. The scan displays its time, issues and known-root exclusions. It does not promise to measure arbitrary external models, provider storage or every operating-system cache.
 
@@ -34,14 +34,8 @@ Camera uses the separately installed OBS Virtual Camera provider. Disabling Edit
 
 Each extension release contains its ZIP, JSON package metadata and detached checksum. A signed shared catalog points to immutable release assets. Package verification checks the expected publisher, package identity, archive boundaries, checksum and compatibility before installation. Catalog signatures and revision checks prevent untrusted catalogs and rollback from replacing a verified cache.
 
-Production planning fingerprints each extension's production inputs, scoped support libraries, relevant worker contracts and dependencies. A change rebuilds the affected extensions and their dependents. Test-only edits do not change shipping fingerprints. Shared runtime or ABI changes can correctly rebuild several or all packages. Extension releases remain separate from the app release, and the app release waits for a compatible published catalog before advertising the new host.
+Production planning fingerprints each extension's production inputs, scoped support libraries, the marketplace runtime and dependencies. A change rebuilds the affected extensions and their dependents. Test-only edits do not change shipping fingerprints. Shared runtime or ABI changes can correctly rebuild several or all packages. Extension releases remain separate from the app release, and the app release waits for a compatible published catalog before advertising the new host.
 
-Native builds, closed worker lifecycle checks and package verification gate publication. Build jobs can run alongside portable tests, but publishing requires those tests to succeed. Resuming an interrupted release verifies existing assets before promotion instead of trusting an unfinished draft.
+Native builds, package tests and package verification gate publication. Build jobs can run alongside portable tests, but publishing requires those tests to succeed. Resuming an interrupted release verifies existing assets before promotion instead of trusting an unfinished draft.
 
-## Size comparisons and verification scope
-
-The [extension size report](extension-size-report.md) lists each of the 39 measured ZIP and expanded package sizes. The [host rebuild report](extension-host-rebuild-size-report.md) includes the empty app, baseline, component breakdown and example selections. Each report identifies its exact measured source, toolchain, signing mode and verification scope. Historical measurements remain historical until the complete current artifact set is available.
-
-Installing every extension can use more disk space than the former bundled app because independently installed packages contain repeated runtime code and native dependencies. The benefit comes from the small empty app and choosing only the extensions needed. Comparison ZIP sizes are separate from actual shipping DMG sizes, retained releases, user data and operating-system deployment copies.
-
-[The measurement procedure](extension-host-rebuild-measurements.md) describes the source and artifact checks needed to regenerate the reports. Native unit tests, closed worker lifecycle checks, original-view tests, user journeys and public release verification cover different behavior. A passing size calculation or synthetic view fixture does not establish real hardware or external provider behavior.
+Installing every extension can use more disk space than the former bundled app because independently installed packages contain repeated native dependencies. The benefit comes from the small empty app and choosing only the extensions needed. A passing package test or synthetic view fixture does not establish real hardware or external provider behavior.

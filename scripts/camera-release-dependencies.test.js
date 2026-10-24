@@ -19,7 +19,7 @@ test("camera-specific app and release preparation changes select only their cons
   }
 });
 
-test("shared host packaging changes rebuild all same-executable consumers", async () => {
+test("shared host packaging changes rebuild only the package that ships inside the host", async () => {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
@@ -32,5 +32,5 @@ test("shared host packaging changes rebuild all same-executable consumers", asyn
   ])
     expect(
       planExtensionBuilds(definitions, [source]).map(({ id }) => id),
-    ).toEqual(definitions.map(({ id }) => id));
+    ).toEqual(["virtualCamera"]);
 });

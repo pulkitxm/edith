@@ -114,7 +114,6 @@ function buildPackage(entry, hostApp) {
           ...environment,
           EXTENSION_ID: entry.id,
           EXTENSION_VERSION: entry.version,
-          EXTENSION_UI_CARRIER_TOOLS: "local/extension-tools",
           EXTENSION_SWIFT_JOBS: process.env.EXTENSION_SWIFT_JOBS ?? "3",
           EXTENSION_CONTAINING_HOST_APP: hostApp,
           EXTENSION_SIGN_IDENTITY: process.env.EDITH_SIGN_IDENTITY,
@@ -192,76 +191,8 @@ step(
 );
 
 step("building the host the extensions are packaged against");
-await rm("local/extension-tools", { recursive: true, force: true });
 await rm("local/extension-release-host", { recursive: true, force: true });
 run("make", ["host"], { stdio: ["ignore", "inherit", "inherit"] });
-const hostProducts = run("swift", [
-  "build",
-  "--package-path",
-  "Packages/EdithHost",
-  "--build-system",
-  "native",
-  "--show-bin-path",
-]).trim();
-run(
-  "swift",
-  [
-    "build",
-    "--package-path",
-    "Packages/EdithHost",
-    "--build-system",
-    "native",
-    "--product",
-    "HostLifecycleHarness",
-  ],
-  { stdio: ["ignore", "inherit", "inherit"] },
-);
-run(
-  "swift",
-  [
-    "build",
-    "--package-path",
-    "Packages/ExtensionMarketplace",
-    "--build-system",
-    "native",
-    "--product",
-    "MarketplaceHarness",
-  ],
-  { stdio: ["ignore", "inherit", "inherit"] },
-);
-run(
-  "python3",
-  [
-    "scripts/package_extension_lifecycle_tools.py",
-    "--host",
-    "local/minimal-host/Edith.app",
-    "--host-products",
-    hostProducts,
-    "--marketplace-products",
-    run("swift", [
-      "build",
-      "--package-path",
-      "Packages/ExtensionMarketplace",
-      "--build-system",
-      "native",
-      "--show-bin-path",
-    ]).trim(),
-    "--carrier-products",
-    run("swift", [
-      "build",
-      "--package-path",
-      "Packages/EdithHost",
-      "--build-system",
-      "native",
-      "--configuration",
-      "release",
-      "--show-bin-path",
-    ]).trim(),
-    "--output",
-    "local/extension-tools",
-  ],
-  { stdio: ["ignore", "inherit", "inherit"] },
-);
 run(
   "python3",
   [
