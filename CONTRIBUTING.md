@@ -208,9 +208,10 @@ form instead.
 ## Releases
 
 Merging application changes into `main` publishes a new patch version through the
-CI workflow. Its `version` and `dmg` jobs prepare the signed DMG alongside the
-routed checks, notarize it when Apple credentials are available, and generate the
-signed Sparkle appcast. The `publish` job waits for the required checks to pass
+CI workflow. Its `version` and `dmg` jobs build the app signed with Developer ID
+alongside the routed checks, sign and notarize the DMG, staple the ticket,
+confirm Gatekeeper accepts both the DMG and the app, and generate the signed
+Sparkle appcast. The `publish` job waits for the required checks to pass
 and the DMG build to succeed without being superseded before publishing both
 assets to one GitHub Release. All jobs appear in the same CI run on the commit.
 The versioned plists and cask land together in one release commit and tag, and the
@@ -229,8 +230,11 @@ same publication gate. Choose either `release` or `rebuild`, not both.
 | Secret | Why |
 | --- | --- |
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
-| `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
+| `MACOS_CERT_P12` | Base64 of the exported Developer ID Application certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
+| `NOTARY_KEY_ID` | Identifies the App Store Connect API key used for notarization. |
+| `NOTARY_ISSUER_ID` | Identifies the App Store Connect API key issuer. |
+| `NOTARY_KEY` | Contains the App Store Connect API private key (`.p8`). |
 | `RELEASE_PUSH_TOKEN` | Pushes the release commit and tag to a protected `main`. |
 | `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
 
@@ -247,17 +251,6 @@ failing at the push.
 `TAP_PUSH_TOKEN` is the equivalent for the Homebrew tap, scoped to
 `pulkitxm/homebrew-tap`, and is documented in
 [docs/homebrew-internals.md](docs/homebrew-internals.md).
-
-### Optional notarization secrets
-
-The workflow notarizes and staples the DMG when all three Apple credentials are
-configured. A signed DMG is still published when they are absent.
-
-| Secret | Why |
-| --- | --- |
-| `NOTARY_KEY_ID` | Identifies the App Store Connect API key used for notarization. |
-| `NOTARY_ISSUER_ID` | Identifies the App Store Connect API key issuer. |
-| `NOTARY_KEY` | Contains the App Store Connect API private key. |
 
 `SPARKLE_PRIVATE_KEY` is the EdDSA key `generate_keys -x` exports, the private
 half of `SUPublicEDKey` in `Info.plist`:
@@ -280,9 +273,19 @@ gh secret set MACOS_CERT_P12 < <(base64 -i cert.p12)
 printf %s "<pick-a-password>" | gh secret set MACOS_CERT_PASSWORD
 ```
 
-A Developer ID Application certificate is preferred for public distribution.
-The workflow also accepts the configured Apple Development certificate so the
-signed release flow remains available, but Gatekeeper can warn on other Macs.
+The release refuses any identity other than Developer ID Application, because
+only that certificate plus notarization lets a downloaded app open without a
+Gatekeeper warning. The notary key is an App Store Connect team key with the
+Developer role:
+
+```bash
+gh secret set NOTARY_KEY_ID --body "<key id>"
+gh secret set NOTARY_ISSUER_ID --body "<issuer id>"
+gh secret set NOTARY_KEY < AuthKey_<key id>.p8
+```
+
+`scripts/notarize.sh` submits an artifact, prints Apple's log and fails when the
+submission is not accepted, and staples the ticket to disk images.
 
 The DMG is published as `Edith.dmg` rather than a versioned name so
 `releases/latest/download/Edith.dmg` always resolves to the newest build, which
@@ -305,8 +308,9 @@ identifier "com.pulkit.edith" and anchor apple generic
   and certificate leaf[subject.OU] = "<team id>"
 ```
 
-Every certificate the team owns satisfies that, so grants survive renewals and
-the move to Developer ID. macOS records the requirement at the moment a
+Every certificate the team owns satisfies that, so grants survive renewals. A
+different team id is a different requirement, so moving releases to a new team
+resets grants once. macOS records the requirement at the moment a
 permission is granted, so reset once after installing a build made with this
 change:
 

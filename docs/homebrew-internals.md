@@ -453,21 +453,18 @@ warn, or refuse.
 returns a ticket, and `stapler` attaches that ticket to the artifact so verification
 works without a network round trip.
 
-Edith's release workflow signs unconditionally and notarizes conditionally:
+Edith's release workflow signs the app with a Developer ID Application certificate,
+signs the disk image, notarizes it, staples the ticket, and runs `spctl` against both
+the disk image and the app. The Developer ID certificate, the three notary secrets
+(`NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`, `NOTARY_KEY`) and the Sparkle key are all
+mandatory: the `version` job refuses to start a release without them, and a rejected
+notarization fails the job with Apple's log.
 
-```yaml
-HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
-```
-
-The notarize-and-staple step and the `spctl` verification both run only when those
-three secrets exist. Signing and the Sparkle key, by contrast, are mandatory: the
-job fails outright without them.
-
-This matters to Homebrew users specifically. If a build is not notarized, installing
-through `brew install --cask` produces the same Gatekeeper warning as downloading the
-disk image by hand, because Homebrew applied the same quarantine attribute. The cask
-does not and cannot paper over that. The fix is notarization in the release
-pipeline, not a cask stanza.
+This matters to Homebrew users specifically. Installing through `brew install --cask`
+applies the same quarantine attribute as downloading the disk image by hand, so the
+same Gatekeeper check runs. Because every release is notarized, both paths open
+without a warning. The cask does not and should not paper over quarantine; a
+Gatekeeper warning means the release pipeline is broken, not the cask.
 
 ---
 
@@ -714,7 +711,7 @@ which commit is being built.
 with the release version, imports the signing certificate into a temporary keychain,
 builds with `./build.sh --no-open --release`, checks the built bundle carries the
 version it was told to build, packages a ULMO disk image with an `/Applications`
-symlink inside, notarizes and staples when the notary secrets exist, generates the
+symlink inside, signs, notarizes and staples it, checks Gatekeeper accepts it, generates the
 Sparkle appcast signed with the Sparkle key, verifies the appcast points at the right
 disk image and carries a signature, and uploads `Edith.dmg`, `appcast.xml`, and the
 two stamped plists for the publisher.
@@ -1053,7 +1050,7 @@ question worth asking after a failed release run.
 | `GH013: Repository rule violations found for refs/heads/main` | A job pushed to `main` with `GITHUB_TOKEN`, which no ruleset bypass covers | Check out with `RELEASE_PUSH_TOKEN` |
 | `brew upgrade` never updates Edith | `auto_updates true`, working as designed | `brew upgrade --cask --greedy edith` |
 | `brew info` shows an older version than the running app | Sparkle updated in place | Cosmetic; a greedy upgrade re-syncs it |
-| Gatekeeper warning on first launch | Build was not notarized; Homebrew applied quarantine like any download | Notary secrets in the release workflow |
+| Gatekeeper warning on first launch | Build was not notarized; Homebrew applied quarantine like any download | Check the `dmg` job's notarization log and the Developer ID and notary secrets |
 | `ed` runs Edith instead of the editor | `binary "ed"` links ahead of `/usr/bin` on `PATH` | `/usr/bin/ed`, documented behaviour |
 | Uninstall leaves the menu bar icon | A helper process still running | `uninstall quit:` handles it; if it persists, quit Edith first |
 | `brew update` is slow | Every installed tap is fetched | Not this tap's doing at a few kilobytes; check `brew tap` for large third-party taps |

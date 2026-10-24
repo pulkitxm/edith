@@ -208,9 +208,9 @@ Xcode assembles the main application, menu bar companion, CLI executable and
 alias, background agent, privileged helper, resources, and Sparkle framework
 into one bundle. `make verify-bundle` asserts the layout, including the agent
 binary, its LaunchAgent plist and its code-signing identifier. Release
-automation signs the bundle, optionally notarizes it, creates a DMG and signed
-appcast, publishes a GitHub Release, and mirrors the Homebrew cask. GitHub
-Pages deploys `apps/site` independently.
+automation signs the bundle with Developer ID, creates, notarizes and staples a
+DMG, signs the appcast, publishes a GitHub Release, and mirrors the Homebrew
+cask. GitHub Pages deploys `apps/site` independently.
 
 Surviving an update: on first launch of a new build the app compares its
 version to the `installedBuild` stamp, re-registers the agent and restarts it,

@@ -11,14 +11,12 @@ installer:
 ./build.sh --release --install --from-app /Volumes/Edith/Edith.app
 ```
 
-This verifies the production bundle identity and signing certificate for
-team `HDYBQ2SLGT` before replacement. It preserves the published signature and
-uses the same quit, atomic exchange and process retirement behavior as a local
-Release install. `--no-open` installs without launching. Development bundle
-identifiers, ad-hoc signatures and other-team signatures cannot use this path.
-The default requires Developer ID. For releases published with the repository's
-existing Apple Development signing configuration, explicitly set
-`EDITH_RELEASE_ALLOW_DEV_SIGNING=1`, as for a local Release build.
+This verifies the production bundle identity, the Developer ID Application
+certificate for team `NEWTEAMID` and Gatekeeper acceptance before replacement. It
+preserves the published signature and uses the same quit, atomic exchange and
+process retirement behavior as a local Release install. `--no-open` installs
+without launching. Development bundle identifiers, ad-hoc signatures,
+development certificates and other-team signatures cannot use this path.
 
 Edith uses `edithd` as the single owner for scheduled work, durable tasks, shared
 state collection, and operations that must outlive a window. The main application and
