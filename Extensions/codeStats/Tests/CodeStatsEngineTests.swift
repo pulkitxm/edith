@@ -6,17 +6,23 @@ import Testing
 private struct FakeGitHub: CodeStatsGitHubClient {
     var listing: [CodeStatsRemoteRepository]
     var listingDelay: Duration?
+    var accounts: [String: [CodeStatsRemoteRepository]] = [:]
 
-    func profile() async throws -> CodeStatsProfile {
-        CodeStatsProfile(id: 1, login: "octocat", name: "Octo")
+    func profiles() async throws -> [CodeStatsProfile] {
+        [CodeStatsProfile(id: 1, login: "octocat", name: "Octo")]
+            + accounts.keys.sorted().enumerated().map { index, login in
+                CodeStatsProfile(id: index + 2, login: login)
+            }
     }
 
     func emails(for profile: CodeStatsProfile) async -> [String] { [profile.noreplyEmail] }
 
-    func repositories() async throws -> [CodeStatsRemoteRepository] {
+    func repositories(for profile: CodeStatsProfile) async throws -> [CodeStatsRemoteRepository] {
         if let listingDelay { try await Task.sleep(for: listingDelay) }
-        return listing
+        return accounts[profile.login] ?? listing
     }
+
+    func token(for profile: CodeStatsProfile) async -> String? { "token-" + profile.login }
 }
 
 @Suite struct CodeStatsEngineTests {
@@ -43,6 +49,73 @@ private struct FakeGitHub: CodeStatsGitHubClient {
         store.loadReports().first { $0.range == .all }
     }
 
+    @Test func everySignedInAccountIsListedAndSynced() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mine = try await remote("mine", in: fixture)
+        let work = try await remote("work", in: fixture)
+        let mirror = try mirror(fixture)
+        let store = CodeStatsStore(root: fixture.root.appendingPathComponent("state"))
+        let shared = CodeStatsRemoteRepository(fullName: "octo/mine", cloneURL: mine.remote.path)
+        let github = FakeGitHub(
+            listing: [shared],
+            accounts: [
+                "worker": [
+                    shared,
+                    CodeStatsRemoteRepository(fullName: "worker/work", cloneURL: work.remote.path),
+                ]
+            ])
+        let engine = CodeStatsEngine(
+            github: github, git: fixture.tool, store: store, progressInterval: 0)
+        let result = await engine.run(
+            settings: CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me))
+        #expect(result.outcome == .completed)
+        #expect(result.profiles.map(\.login) == ["octocat", "worker"])
+        #expect(result.synced == 2)
+        #expect(result.repositories == 2)
+        for name in ["octo/mine.git/HEAD", "worker/work.git/HEAD"] {
+            #expect(
+                FileManager.default.fileExists(atPath: mirror.appendingPathComponent(name).path))
+        }
+    }
+
+    @Test func anUntickedAccountIsNeitherListedNorSynced() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mine = try await remote("mine", in: fixture)
+        let work = try await remote("work", in: fixture)
+        let mirror = try mirror(fixture)
+        let store = CodeStatsStore(root: fixture.root.appendingPathComponent("state"))
+        let github = FakeGitHub(
+            listing: [CodeStatsRemoteRepository(fullName: "octo/mine", cloneURL: mine.remote.path)],
+            accounts: [
+                "worker": [
+                    CodeStatsRemoteRepository(fullName: "worker/work", cloneURL: work.remote.path)
+                ]
+            ])
+        let engine = CodeStatsEngine(
+            github: github, git: fixture.tool, store: store, progressInterval: 0)
+        let settings = CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me)
+        #expect(await engine.run(settings: settings).repositories == 2)
+        var unticked = settings
+        unticked.excludedAccounts = ["Worker"]
+        let result = await engine.run(settings: unticked)
+        #expect(result.outcome == .completed)
+        #expect(result.profiles.map(\.login) == ["octocat"])
+        #expect(result.synced == 1)
+        #expect(result.repositories == 1)
+    }
+
+    @Test func aTokenIsHandedToGitOnlyWithTheGitHubCredentialHelper() {
+        let plain = CodeStatsGit(executable: URL(fileURLWithPath: "/usr/bin/git"), environment: [:])
+        #expect(plain.credentialEnvironment(token: "secret").isEmpty)
+        let helped = CodeStatsGit(
+            executable: URL(fileURLWithPath: "/usr/bin/git"), environment: [:],
+            credentialHelper: URL(fileURLWithPath: "/usr/local/bin/gh"))
+        #expect(helped.credentialEnvironment(token: "secret") == ["GH_TOKEN": "secret"])
+        #expect(helped.credentialEnvironment(token: nil).isEmpty)
+    }
+
     @Test func clonesThenFetchesNewCommitsWithMonotonicProgress() async throws {
         let fixture = try CodeStatsGitFixture()
         defer { fixture.remove() }
@@ -66,7 +139,7 @@ private struct FakeGitHub: CodeStatsGitHubClient {
             events.update { $0.append(event) }
         }
         #expect(first.outcome == .completed)
-        #expect(first.profile?.login == "octocat")
+        #expect(first.profiles.map(\.login) == ["octocat"])
         #expect(first.synced == 1)
         #expect(first.failed == 1)
         #expect(first.errors.first?.hasPrefix("octo/broken: ") == true)

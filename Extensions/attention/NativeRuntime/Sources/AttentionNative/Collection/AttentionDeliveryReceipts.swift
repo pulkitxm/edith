@@ -19,9 +19,6 @@ extension AttentionEventStore {
                 arguments: [producer])
             if let previous {
                 if request.sequence <= previous { return }
-                guard previous < Int64.max, request.sequence == previous + 1 else {
-                    throw AttentionServiceError(.refused, "Attention delivery is out of sequence.")
-                }
             } else {
                 try database.execute(
                     sql: "DELETE FROM attention_delivery_receipt WHERE updatedAt < ?",

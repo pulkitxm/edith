@@ -12,10 +12,6 @@ struct AttentionUIStatus: Codable, Sendable {
 struct AttentionUIBreakdownRequest: Codable, Sendable {
     var summary: AttentionSummaryRequest
     var dimension: String
-    var level: AttentionProductivity?
-    var sphere: AttentionSphere?
-    var category: String?
-    var search: String
     var sort: String
 }
 

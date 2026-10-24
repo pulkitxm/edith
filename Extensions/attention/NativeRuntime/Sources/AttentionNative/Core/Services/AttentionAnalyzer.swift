@@ -18,7 +18,7 @@ struct AttentionAnalyzer: Sendable {
     func summary(
         events: [AttentionEvent], settings: AttentionSettings,
         classifications: AttentionClassifications = .init(), from: Date, to: Date,
-        detailed: Bool = true
+        detailed: Bool = true, filter: AttentionSpanFilter = .none
     ) -> AttentionSummary {
         let ignored = Set(settings.ignoredBundleIDs.map { $0.lowercased() })
         let prepared = events.compactMap { event -> AttentionEvent? in
@@ -34,16 +34,48 @@ struct AttentionAnalyzer: Sendable {
             settings: settings, calendar: calendar, from: from, to: to, detailed: detailed)
         for interval in resolvedPrimaryIntervals(events: prepared, from: from, to: to) {
             if interval.presence == .active {
-                builder.addActive(interval, classifier.classify(interval))
-            } else {
+                let classification = classifier.classify(interval)
+                if Self.matches(interval, classification, filter: filter) {
+                    builder.addActive(interval, classification)
+                } else {
+                    builder.addUnmatched(interval)
+                }
+            } else if filter.isEmpty {
                 builder.addInactive(interval)
             }
         }
-        builder.addAgents(prepared.filter { $0.source == .agent })
+        builder.addAgents(
+            prepared.filter { $0.source == .agent && Self.matchesAgent($0, filter: filter) })
         if detailed {
-            builder.music = musicSummary(events: prepared, from: from, to: to)
+            builder.music = musicSummary(events: prepared, from: from, to: to).filter {
+                !filter.classifies
+                    && filter.matchesText([$0.title, $0.artist, $0.album, $0.service])
+            }
         }
         return builder.finish()
+    }
+
+    static func matches(
+        _ interval: AttentionEvent, _ classification: AttentionClassification,
+        filter: AttentionSpanFilter
+    ) -> Bool {
+        filter.isEmpty
+            || filter.matches(
+                categoryID: classification.categoryID, productivity: classification.productivity,
+                sphere: classification.sphere,
+                texts: [
+                    classification.entityName, interval.windowTitle, interval.url,
+                    interval.domain, classification.domain,
+                ])
+    }
+
+    static func matchesAgent(_ event: AttentionEvent, filter: AttentionSpanFilter) -> Bool {
+        guard !filter.classifies else { return false }
+        return filter.matchesText(
+            [
+                event.windowTitle, event.tag(AttentionTag.agent), event.tag(AttentionTag.project),
+                event.tag(AttentionTag.machine),
+            ])
     }
 
     func musicSummary(
@@ -104,6 +136,7 @@ struct AttentionSummaryBuilder {
 
     private var active: TimeInterval = 0
     private var idle: TimeInterval = 0
+    private var unmatched: TimeInterval = 0
     private var levels: [String: TimeInterval] = [:]
     private var spheres: [String: TimeInterval] = [:]
     private var unclassified: TimeInterval = 0
@@ -176,6 +209,10 @@ struct AttentionSummaryBuilder {
         if to.timeIntervalSince(from) <= AttentionAnalyzer.spanDays {
             appendSpan(interval, classification, interactions: interactions)
         }
+    }
+
+    mutating func addUnmatched(_ interval: AttentionEvent) {
+        unmatched += interval.duration
     }
 
     mutating func addInactive(_ interval: AttentionEvent) {
@@ -348,7 +385,8 @@ struct AttentionSummaryBuilder {
             hours: hours.values.sorted { $0.id < $1.id },
             spans: Array(spanList.prefix(8_000)), focusBlocks: focusBlocks,
             transitions: transitions.values.sorted { $0.count > $1.count }.prefix(10).map { $0 },
-            dimensions: dimensionList, agents: agentSummary, signals: signals)
+            dimensions: dimensionList, agents: agentSummary, signals: signals,
+            unmatchedDuration: unmatched)
     }
 
     private var daySwitches: [Date: Int] = [:]

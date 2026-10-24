@@ -120,7 +120,7 @@ struct QuinjetPage: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(9))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private var configuration: QuinjetLaunchConfiguration {
@@ -394,7 +394,7 @@ private struct QuinjetTerminalWorkspace: View {
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(9))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     @ViewBuilder

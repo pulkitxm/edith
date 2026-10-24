@@ -339,7 +339,7 @@ struct StudioToast: View {
             .font(.system(size: UIScale.pt(12), weight: .medium))
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(8))
-            .background(.regularMaterial, in: Capsule())
+            .background(DashSkin.panel, in: Capsule())
             .overlay(Capsule().strokeBorder(DashSkin.line(scheme == .dark)))
             .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
     }

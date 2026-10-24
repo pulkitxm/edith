@@ -24,6 +24,59 @@ public enum ContentLoadingState: Equatable, Sendable {
     }
 }
 
+public enum ContentActivity: Equatable, Sendable {
+    case idle
+    case refreshing
+    case updating
+
+    public static func resolve(updating: Bool, refreshing: Bool) -> ContentActivity {
+        updating ? .updating : refreshing ? .refreshing : .idle
+    }
+
+    public var label: String? {
+        switch self {
+        case .idle: nil
+        case .refreshing: "Refreshing"
+        case .updating: "Updating results"
+        }
+    }
+}
+
+public enum ContentActivityTiming {
+    public static let revealDelay = Duration.milliseconds(180)
+}
+
+public struct ContentActivityBadge: View {
+    public let activity: ContentActivity
+    @State private var shown = ContentActivity.idle
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    public init(_ activity: ContentActivity) { self.activity = activity }
+
+    public var body: some View {
+        ZStack {
+            if let label = shown.label {
+                LoadingIndicator(label)
+                    .padding(.horizontal, UIScale.pt(10))
+                    .padding(.vertical, UIScale.pt(5))
+                    .background(DashSkin.panel, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.separator.opacity(0.6)))
+                    .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: shown)
+        .task(id: activity) {
+            if activity != .idle, shown == .idle {
+                try? await Task.sleep(for: ContentActivityTiming.revealDelay)
+                guard !Task.isCancelled else { return }
+            }
+            shown = activity
+        }
+    }
+}
+
 public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let state: ContentLoadingState
     public let title: String
@@ -31,6 +84,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let retry: (() -> Void)?
     public let cancel: (() -> Void)?
     public let refreshing: Bool
+    public let updating: Bool
+    @State private var dimmed = false
     private let content: () -> Content
     private let placeholder: () -> Placeholder
 
@@ -43,6 +98,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         retry: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil,
         refreshing: Bool = false,
+        updating: Bool = false,
         @ViewBuilder content: @escaping () -> Content,
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
@@ -52,6 +108,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         self.retry = retry
         self.cancel = cancel
         self.refreshing = refreshing
+        self.updating = updating
         self.content = content
         self.placeholder = placeholder
     }
@@ -60,11 +117,14 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         ZStack {
             if state.presentsContent {
                 content()
+                    .opacity(dimmed ? 0.45 : 1)
+                    .saturation(dimmed ? 0.4 : 1)
+                    .accessibilityValue(dimmed ? "Updating results" : "")
                     .overlay(alignment: .topTrailing) {
-                        if refreshing {
+                        if refreshing, !updating {
                             LoadingIndicator("Refreshing")
                                 .padding(8)
-                                .background(.regularMaterial, in: Capsule())
+                                .background(DashSkin.panel, in: Capsule())
                                 .allowsHitTesting(false)
                         }
                     }
@@ -77,6 +137,16 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         .animation(
             Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: state
         )
+        .animation(
+            Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: dimmed
+        )
+        .task(id: updating) {
+            if updating, !dimmed {
+                try? await Task.sleep(for: ContentActivityTiming.revealDelay)
+                guard !Task.isCancelled else { return }
+            }
+            dimmed = updating
+        }
     }
 
     private var unavailable: some View {
@@ -274,19 +344,27 @@ public struct LoadingIndicator: View {
 public struct LoadingProgress: View {
     public let value: Double
     public var total: Double = 1
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
-    private var themeName = "accent"
+    public var tint: Color?
+    @Environment(\.colorScheme) private var scheme
 
-    public init(value: Double, total: Double = 1) {
+    public init(value: Double, total: Double = 1, tint: Color? = nil) {
         self.value = value
         self.total = total
+        self.tint = tint
     }
 
     public var body: some View {
-        ProgressView(value: fraction)
-            .tint(themeColor(themeName))
-            .accessibilityLabel("Progress")
-            .accessibilityValue("\(Int(fraction * 100)) percent")
+        GeometryReader { proxy in
+            Capsule().fill(DashSkin.line(scheme == .dark))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(tint ?? DashSkin.accent(scheme == .dark))
+                        .frame(width: proxy.size.width * fraction)
+                }
+        }
+        .frame(height: UIScale.pt(6))
+        .accessibilityElement()
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int(fraction * 100)) percent")
     }
 
     public var fraction: Double {

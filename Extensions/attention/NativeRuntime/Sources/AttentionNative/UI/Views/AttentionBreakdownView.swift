@@ -16,7 +16,6 @@ struct AttentionBreakdownView: View {
         let total = model.breakdown.total
         let selection = rows.first { $0.key == selected } ?? rows.first
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            AttentionFilterBar(model: model)
             AttentionPanel(
                 "Activity explorer",
                 subtitle: "Group time by app, category, title, URL, profile or recorded context.",
@@ -43,9 +42,6 @@ struct AttentionBreakdownView: View {
                         metrics
                         sortPicker
                     }
-                }
-                if model.breakdownLoad.isRunning {
-                    LoadingIndicator("Updating activity…")
                 }
                 if rows.isEmpty && !model.breakdownLoad.isRunning {
                     AttentionEmpty(
@@ -78,9 +74,10 @@ struct AttentionBreakdownView: View {
         HStack(alignment: .top, spacing: UIScale.pt(28)) {
             metric("Matching time", value: AttentionFormat.duration(model.breakdown.total))
             metric(
-                "Share of active",
+                "Share of all active",
                 value: AttentionFormat.percent(
-                    model.breakdown.total, of: model.summary.activeDuration))
+                    model.breakdown.total,
+                    of: model.summary.activeDuration + model.summary.unmatchedDuration))
             metric("Groups", value: "\(model.breakdown.rows.count)")
         }
         .fixedSize()
@@ -187,11 +184,6 @@ struct AttentionBreakdownView: View {
             Text("\(AttentionFormat.duration(row.duration)) matching time").font(
                 DashSkin.heading(23)
             ).monospacedDigit()
-            if model.hasFilters {
-                Text(
-                    "Filtered from \(AttentionFormat.duration(row.categories.values.reduce(0, +))) total time in this group."
-                ).font(.system(size: UIScale.pt(12))).foregroundStyle(.secondary)
-            }
             Text("FULL CATEGORY SPLIT").font(DashSkin.mono(10)).foregroundStyle(.secondary)
             ForEach(row.categories.sorted { $0.value > $1.value }, id: \.key) { key, duration in
                 Button {

@@ -86,7 +86,7 @@ struct StudioOptionField: View {
                     .scrollContentBackground(.hidden)
                     .padding(UIScale.pt(4))
                     .background(
-                        Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6)
+                        DashSkin.canvas, in: RoundedRectangle(cornerRadius: 6)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.15)))

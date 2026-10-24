@@ -20,6 +20,20 @@ import Testing
         #expect(!settings.includeForks)
     }
 
+    @Test func accountsAreExcludedAndIncludedAgainIgnoringCase() {
+        let (defaults, name) = defaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        CodeStatsPreferences.setAccount("monalisa", included: false, in: defaults)
+        CodeStatsPreferences.setAccount("monalisa", included: false, in: defaults)
+        var settings = CodeStatsPreferences.load(from: defaults)
+        #expect(settings.excludedAccounts == ["monalisa"])
+        #expect(!settings.includes(account: "MonaLisa"))
+        #expect(settings.includes(account: "octocat"))
+        CodeStatsPreferences.setAccount("MONALISA", included: true, in: defaults)
+        settings = CodeStatsPreferences.load(from: defaults)
+        #expect(settings.excludedAccounts.isEmpty)
+    }
+
     @Test func schedulesRoundTripThroughTheirKeys() {
         let (defaults, name) = defaults()
         defer { defaults.removePersistentDomain(forName: name) }

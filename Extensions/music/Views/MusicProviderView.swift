@@ -426,7 +426,7 @@ struct MusicStreamingControls: View {
                 accounts.spotify.library.setShuffle(!accounts.spotify.library.shuffle)
             } label: {
                 Image(systemName: "shuffle").foregroundStyle(
-                    accounts.spotify.library.shuffle ? Color.accentColor : .secondary)
+                    accounts.spotify.library.shuffle ? Color.themeAccent : .secondary)
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel("Shuffle")
             Button {
                 let modes = ["off", "context", "track"]
@@ -438,7 +438,8 @@ struct MusicStreamingControls: View {
                         ? "repeat.1" : "repeat"
                 )
                 .foregroundStyle(
-                    accounts.spotify.library.repeatMode == "off" ? Color.secondary : .accentColor)
+                    accounts.spotify.library.repeatMode == "off"
+                        ? Color.secondary : Color.themeAccent)
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel(
                 "Repeat: \(accounts.spotify.library.repeatMode)")
         }

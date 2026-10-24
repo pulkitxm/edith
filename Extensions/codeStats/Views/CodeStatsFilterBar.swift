@@ -105,13 +105,8 @@ struct CodeStatsFilterBar: View {
     }
 
     private var rangeControls: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            CodeStatsRangePicker(range: model.range) { range in
-                Task { await model.select(range) }
-            }
-            if model.isComputing {
-                LoadingIndicator()
-            }
+        CodeStatsRangePicker(range: model.range) { range in
+            Task { await model.select(range) }
         }
     }
 

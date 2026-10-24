@@ -435,3 +435,110 @@ import Testing
         #expect(categories[1].sphere == .personal)
     }
 }
+
+@Suite struct AttentionFilterScopeTests {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private var settings: AttentionSettings {
+        var settings = AttentionSettings()
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "Work", categoryID: "focus", domains: ["work.example"],
+                productivity: .veryProductive, sphere: .work),
+            AttentionIdentityRule(
+                name: "Feed", categoryID: "social", domains: ["feed.example"],
+                productivity: .veryDistracting, sphere: .personal),
+        ]
+        return settings
+    }
+
+    private var events: [AttentionEvent] {
+        [
+            AttentionEvent(
+                startedAt: start, duration: 1_200, source: .browser, windowTitle: "Spec review",
+                url: "https://work.example/spec", domain: "work.example"),
+            AttentionEvent(
+                startedAt: start.addingTimeInterval(1_200), duration: 300, source: .browser,
+                windowTitle: "Timeline", url: "https://feed.example/home", domain: "feed.example"),
+            AttentionEvent(
+                startedAt: start.addingTimeInterval(1_500), duration: 600,
+                source: .application, presence: .idle, appName: "Finder",
+                bundleID: "com.apple.finder"),
+            AttentionEvent(
+                id: "agent:deploy", startedAt: start, duration: 900, source: .agent,
+                windowTitle: "Task deploy",
+                tags: ["machine": "studio", "agent": "codex", "session": "deploy"]),
+        ]
+    }
+
+    private func summary(_ filter: AttentionSpanFilter) -> AttentionSummary {
+        AttentionAnalyzer(calendar: calendar).summary(
+            events: events, settings: settings, from: start, to: start.addingTimeInterval(7_200),
+            filter: filter)
+    }
+
+    @Test func aCategoryFilterNarrowsEveryPartOfTheSummary() {
+        let all = summary(.none)
+        #expect(all.activeDuration == 1_500)
+        #expect(all.idleDuration == 600)
+        #expect(all.agents.working == 900)
+        let social = summary(AttentionSpanFilter(category: "social"))
+        #expect(social.activeDuration == 300)
+        #expect(social.unmatchedDuration == 1_200)
+        #expect(social.idleDuration == 0)
+        #expect(social.categories.map(\.category.id) == ["social"])
+        #expect(social.entities.map(\.domain) == ["feed.example"])
+        #expect(social.levels.keys.sorted() == [AttentionProductivity.veryDistracting.key])
+        #expect(social.spheres.keys.sorted() == [AttentionSphere.personal.rawValue])
+        #expect(social.spans.allSatisfy { $0.categoryID == "social" })
+        #expect(social.days.reduce(0) { $0 + $1.active } == 300)
+        #expect(
+            social.hours.reduce(0) { $0 + $1.levels.values.reduce(0, +) } == 300)
+        #expect(
+            social.dimensions.allSatisfy { dimension in
+                dimension.rows.allSatisfy { Set($0.categories.keys) == ["social"] }
+            })
+        #expect(social.agents.working == 0)
+        #expect(social.agents.sessions.isEmpty)
+        #expect(social.focusBlocks.isEmpty)
+    }
+
+    @Test func levelAndSphereFiltersMatchTheirClassification() {
+        let focused = summary(AttentionSpanFilter(level: .veryProductive))
+        #expect(focused.activeDuration == 1_200)
+        #expect(focused.entities.map(\.domain) == ["work.example"])
+        let personal = summary(AttentionSpanFilter(sphere: .personal))
+        #expect(personal.activeDuration == 300)
+        #expect(personal.categories.map(\.category.id) == ["social"])
+    }
+
+    @Test func searchMatchesTitlesUrlsAndAgentSessions() {
+        let spec = summary(AttentionSpanFilter(search: " SPEC "))
+        #expect(spec.activeDuration == 1_200)
+        #expect(spec.agents.working == 0)
+        let deploy = summary(AttentionSpanFilter(search: "deploy"))
+        #expect(deploy.activeDuration == 0)
+        #expect(deploy.unmatchedDuration == 1_500)
+        #expect(deploy.agents.working == 900)
+        #expect(deploy.agents.sessions.map(\.id) == ["deploy"])
+    }
+
+    @Test func thePreviousPeriodUsesTheSameFilter() {
+        let shifted = events.map { event -> AttentionEvent in
+            var copy = event
+            copy.startedAt = event.startedAt.addingTimeInterval(-7_200)
+            return copy
+        }
+        let previous = AttentionAnalyzer(calendar: calendar).summary(
+            events: shifted, settings: settings, from: start.addingTimeInterval(-7_200),
+            to: start, detailed: false, filter: AttentionSpanFilter(category: "social"))
+        #expect(previous.totals.active == 300)
+        #expect(previous.totals.agentWorking == 0)
+    }
+}

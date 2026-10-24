@@ -61,17 +61,20 @@ public struct PageScaffold<Header: View, Content: View>: View {
     var width: PageContentWidth = .fluid
     var pinnedHeader = false
     var scrollIdentity = ""
+    var activity = ContentActivity.idle
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
 
     public init(
         width: PageContentWidth = .fluid, pinnedHeader: Bool = false, scrollIdentity: String = "",
+        activity: ContentActivity = .idle,
         @ViewBuilder header: @escaping () -> Header, @ViewBuilder content: @escaping () -> Content
     ) {
         self.width = width
         self.pinnedHeader = pinnedHeader
         self.scrollIdentity = scrollIdentity
+        self.activity = activity
         self.header = header
         self.content = content
     }
@@ -90,6 +93,10 @@ public struct PageScaffold<Header: View, Content: View>: View {
                     .pageContent(compact, width: width)
                 }
                 .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
+            }
+            .overlay(alignment: .top) {
+                ContentActivityBadge(activity)
+                    .padding(.top, UIScale.pt(8))
             }
         }
         .pageSurface()

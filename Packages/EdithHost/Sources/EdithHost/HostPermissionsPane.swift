@@ -244,7 +244,7 @@ private struct HostPermissionCard: View {
         .padding(UIScale.pt(14))
         .frame(maxWidth: .infinity, minHeight: UIScale.pt(92), alignment: .topLeading)
         .background(
-            Color(nsColor: .controlBackgroundColor),
+            DashSkin.panel,
             in: RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
         )
         .overlay {

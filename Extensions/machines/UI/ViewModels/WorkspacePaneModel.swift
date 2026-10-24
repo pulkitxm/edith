@@ -314,7 +314,7 @@ struct WorkspacePaneView: View {
         }
         .padding(.horizontal, UIScale.pt(9))
         .padding(.vertical, UIScale.pt(8))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private func split(_ side: InsertSide) {

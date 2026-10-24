@@ -21,7 +21,7 @@ import Testing
                 author("dependabot[bot]", "49699333+dependabot[bot]@users.noreply.github.com", 80),
                 author("pulkitxm", "p@work.com", 70),
             ],
-            identity: identity, login: "pulkitxm", name: "Pulkit Mittal")
+            identity: identity, logins: ["pulkitxm"], names: ["Pulkit Mittal"])
         #expect(
             suggestions.map(\.value) == [
                 "4242+pulkitxm@users.noreply.github.com", "pulkit@Pulkits-MacBook-Pro.local",
@@ -38,8 +38,8 @@ import Testing
     @Test func nothingIsSuggestedWithoutReferences() {
         #expect(
             CodeStatsIdentitySuggester.suggestions(
-                authors: [author("a", "a@x.com")], identity: CodeStatsIdentity(), login: nil,
-                name: nil
+                authors: [author("a", "a@x.com")], identity: CodeStatsIdentity(), logins: [],
+                names: []
             ).isEmpty)
     }
 }

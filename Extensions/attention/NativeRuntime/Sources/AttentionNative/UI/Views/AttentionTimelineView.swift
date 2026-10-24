@@ -125,7 +125,6 @@ struct AttentionTimelineView: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            AttentionFilterBar(model: model)
             if !model.period.showsSpans {
                 AttentionPanel("Timeline") {
                     AttentionEmpty(

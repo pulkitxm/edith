@@ -3,11 +3,7 @@ import EdithExtensionSupport
 import SwiftUI
 
 public enum DashSkin {
-    private static var currentTheme: AppTheme {
-        AppTheme(
-            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
-                ?? AppTheme.accent.rawValue)
-    }
+    private static var currentTheme: AppTheme { ThemeStore.current }
 
     private static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)
         -> Color
@@ -25,22 +21,32 @@ public enum DashSkin {
         return shifted(base, toward: NSColor(theme.color), by: dark ? darkFraction : lightFraction)
     }
 
-    private static let paperPair = (DashPalette.color("#f5f5f7"), DashPalette.color("#18181a"))
-    private static let paper2Pair = (DashPalette.color("#ffffff"), DashPalette.color("#242426"))
-    private static let inkPair = (DashPalette.color("#1d1d1f"), DashPalette.color("#f5f5f7"))
-    private static let inkSoftPair = (DashPalette.color("#636366"), DashPalette.color("#b0b0b5"))
-    private static let inkFaintPair = (DashPalette.color("#76767b"), DashPalette.color("#98989f"))
-    private static let linePair = (DashPalette.color("#e5e5ea"), DashPalette.color("#363639"))
-    private static let lineStrongPair = (DashPalette.color("#d2d2d7"), DashPalette.color("#48484a"))
-    private static let accentPair = (DashPalette.color("#d97757"), DashPalette.color("#e08a6a"))
-    private static let accentDeepPair = (DashPalette.color("#b3543a"), DashPalette.color("#eea486"))
-    private static let gridPair = (DashPalette.color("#ebebef"), DashPalette.color("#303033"))
+    private static let paperPair = (ThemeColor.color("#f5f5f7"), ThemeColor.color("#18181a"))
+    private static let paper2Pair = (ThemeColor.color("#ffffff"), ThemeColor.color("#242426"))
+    private static let inkPair = (ThemeColor.color("#1d1d1f"), ThemeColor.color("#f5f5f7"))
+    private static let inkSoftPair = (ThemeColor.color("#636366"), ThemeColor.color("#b0b0b5"))
+    private static let inkFaintPair = (ThemeColor.color("#76767b"), ThemeColor.color("#98989f"))
+    private static let linePair = (ThemeColor.color("#e5e5ea"), ThemeColor.color("#363639"))
+    private static let lineStrongPair = (ThemeColor.color("#d2d2d7"), ThemeColor.color("#48484a"))
+    private static let accentDeepPair = (ThemeColor.color("#b3543a"), ThemeColor.color("#eea486"))
+    private static let gridPair = (ThemeColor.color("#ebebef"), ThemeColor.color("#303033"))
     private static let heatSteps: [(NSColor, CGFloat)] = [
         (.black, 0.3), (.black, 0.05), (.white, 0.2), (.white, 0.55),
     ]
     private static let heatStepsDark: [(NSColor, CGFloat)] = [
         (.black, 0.45), (.black, 0.2), (.white, 0.05), (.white, 0.35),
     ]
+
+    private static func adaptive(_ pair: (Color, Color)) -> Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                NSColor(appearance.isDark ? pair.1 : pair.0)
+            })
+    }
+
+    public static let canvas = adaptive(paperPair)
+    public static let panel = adaptive(paper2Pair)
+    public static let hairline = adaptive(linePair)
 
     public static func paper(_ d: Bool) -> Color {
         d ? paperPair.1 : paperPair.0
@@ -94,8 +100,7 @@ public enum DashSkin {
         accent(d, theme: currentTheme)
     }
     public static func accent(_ d: Bool, theme: AppTheme) -> Color {
-        guard theme != .accent else { return d ? accentPair.1 : accentPair.0 }
-        return shifted(theme.color, toward: d ? .white : .black, by: d ? 0.12 : 0)
+        theme.accent(dark: d)
     }
     public static func accentDeep(_ d: Bool) -> Color {
         guard currentTheme != .accent else { return d ? accentDeepPair.1 : accentDeepPair.0 }
@@ -111,31 +116,18 @@ public enum DashSkin {
         let (target, fraction) = (d ? heatStepsDark : heatSteps)[max(0, min(level, 3))]
         return shifted(accent(d), toward: target, by: fraction)
     }
-    public static let gold = DashPalette.color("#c89b3c")
-    public static let sage = DashPalette.color("#6a8d73")
-    public static let networkDownload = DashPalette.color("#5685a3")
-    public static let networkUpload = DashPalette.color("#b27691")
-    public static let ok = DashPalette.color("#34C759")
-    public static let warn = DashPalette.color("#FF9500")
-    public static let danger = DashPalette.color("#FF3B30")
+    public static let gold = ThemeColor.color("#c89b3c")
+    public static let sage = ThemeColor.color("#6a8d73")
+    public static let networkDownload = ThemeColor.color("#5685a3")
+    public static let networkUpload = ThemeColor.color("#b27691")
+    public static let ok = ThemeColor.color("#34C759")
+    public static let warn = ThemeColor.color("#FF9500")
+    public static let danger = ThemeColor.color("#FF3B30")
 
     public static func heading(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         .system(size: UIScale.pt(size), weight: weight)
     }
     public static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: UIScale.pt(size), weight: weight, design: .monospaced)
-    }
-}
-
-private enum DashPalette {
-    static func color(_ hex: String) -> Color {
-        var s = hex
-        if s.hasPrefix("#") { s.removeFirst() }
-        var value: UInt64 = 0
-        Scanner(string: s).scanHexInt64(&value)
-        let r = Double((value >> 16) & 0xff) / 255
-        let g = Double((value >> 8) & 0xff) / 255
-        let b = Double(value & 0xff) / 255
-        return Color(.sRGB, red: r, green: g, blue: b, opacity: 1)
     }
 }

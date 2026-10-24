@@ -310,7 +310,9 @@ struct HerdrKindMarks: View {
         HStack(spacing: UIScale.pt(-3)) {
             ForEach(Array(agents.prefix(3).enumerated()), id: \.offset) { _, agent in
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(size))
-                    .foregroundStyle(agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                    .foregroundStyle(
+                        agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)
+                    )
                     .padding(UIScale.pt(1.5))
                     .background(DashSkin.paper2(dark), in: Circle())
             }

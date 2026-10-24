@@ -155,7 +155,7 @@ struct HerdrPaneHeader: View {
                 HStack(spacing: UIScale.pt(6)) {
                     HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
                         .foregroundStyle(
-                            agent.isTerminal ? DashSkin.gold : DashSkin.inkSoft(dark))
+                            agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.title)
                         .font(
                             .system(size: UIScale.pt(11), weight: focused ? .semibold : .medium)

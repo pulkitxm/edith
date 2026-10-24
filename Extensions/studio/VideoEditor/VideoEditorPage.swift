@@ -490,7 +490,7 @@ struct VideoEditorPage: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(
                                     model.selectedClipID == clip.id
-                                        ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.1),
+                                        ? Color.themeAccent.opacity(0.2) : Color.gray.opacity(0.1),
                                     in: RoundedRectangle(cornerRadius: 9))
                             }
                             .buttonStyle(.edith(.borderless))
@@ -785,7 +785,7 @@ struct ZoomTimelineRegion: View {
             height: UIScale.pt(32)
         )
         .background(
-            selected ? Color.accentColor : Color.blue.opacity(0.75),
+            selected ? Color.themeAccent : Color.blue.opacity(0.75),
             in: RoundedRectangle(cornerRadius: 7)
         )
         .overlay {

@@ -12,6 +12,11 @@ struct AttentionFocusView: View {
         let dark = scheme == .dark
         let blocks = model.summary.focusBlocks.reversed()
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            if model.hasFilters {
+                PageNotice(
+                    "Detected deep work follows the filters. Focus sessions you started are always listed in full.",
+                    symbol: "scope")
+            }
             AttentionPanel(
                 model.activeFocus == nil ? "Start a focus session" : "Focusing",
                 subtitle: "A named timer you control. Detected deep work below needs no timer."

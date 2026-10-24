@@ -15,25 +15,14 @@ import Testing
                         entityNames: ["Sample browser"], levels: ["productive": Double(index + 1)])
                 }, total: 50_005_000)
         ]
-        let filter = AttentionSpanFilter(search: "")
         let projection = AttentionBreakdownProjection(
-            summary: summary,
-            dimension: AttentionDimension.title, filter: filter, sort: .time)
+            summary: summary, dimension: AttentionDimension.title, sort: .time)
         #expect(projection.rows.count == 10_000)
         #expect(projection.rows.first?.label == "Sample page 9999")
         #expect(projection.top.count == 8)
         #expect(projection.total == 50_005_000)
-        let searched = AttentionBreakdownProjection(
-            summary: summary,
-            dimension: AttentionDimension.title, filter: AttentionSpanFilter(search: "9999"),
-            sort: .name)
-        #expect(searched.rows.map(\.label) == ["Sample page 9999"])
-        #expect(searched.total == 10_000)
-        let excluded = AttentionBreakdownProjection(
-            summary: summary,
-            dimension: AttentionDimension.title,
-            filter: AttentionSpanFilter(category: "other", search: ""), sort: .inputs)
-        #expect(excluded.rows.isEmpty)
-        #expect(excluded.total == 0)
+        let named = AttentionBreakdownProjection(
+            summary: summary, dimension: AttentionDimension.title, sort: .name)
+        #expect(named.rows.first?.label == "Sample page 0")
     }
 }

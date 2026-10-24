@@ -93,39 +93,67 @@ public enum CodeStatsReportBuilder {
     public static func entries(
         _ table: CodeStatsFactTable, filter: CodeStatsFilter
     ) -> [Entry] {
-        let repositoryAllowed = table.repositories.map { name in
-            !filter.excludedRepositories.contains(name)
-                && (filter.repositories.isEmpty || filter.repositories.contains(name))
-                && (filter.owners.isEmpty
-                    || filter.owners.contains(
-                        name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))
-        }
-        let languageAllowed = table.languages.map {
-            filter.languages.isEmpty || filter.languages.contains($0)
-        }
+        let scope = CodeStatsScope(table: table, filter: filter)
         let excludedCommits = filter.excludedCommitFlags
         let excludedLines = filter.excludedLineFlags
         var result: [Entry] = []
-        result.reserveCapacity(table.rows.count)
-        for row in table.rows {
-            guard repositoryAllowed.indices.contains(row.repository),
-                repositoryAllowed[row.repository],
-                languageAllowed.indices.contains(row.language)
-                    ? languageAllowed[row.language] : filter.languages.isEmpty,
-                row.flags.isDisjoint(with: excludedCommits)
+        result.reserveCapacity(table.commits.count * 2)
+        for fact in table.commits where fact.exclusion == nil {
+            guard fact.flags.isDisjoint(with: excludedCommits),
+                let changes = scope.changes(of: fact)
             else { continue }
-            let counted =
-                filter.categories.contains(row.category)
-                && row.flags.isDisjoint(with: excludedLines)
-            let counts = counted ? row.counts : .zero
-            guard row.commits > 0 || !counts.isEmpty else { continue }
+            let day = CodeStatsDay(ordinal: fact.day)
             result.append(
                 Entry(
-                    day: CodeStatsDay(ordinal: row.day), hour: row.hour,
-                    repository: row.repository, language: row.language, commits: row.commits,
-                    counts: counts))
+                    day: day, hour: fact.hour, repository: fact.repository,
+                    language: primaryLanguage(changes), commits: 1, counts: .zero))
+            guard fact.flags.isDisjoint(with: excludedLines) else { continue }
+            for change in changes
+            where filter.categories.contains(change.category) && !change.counts.isEmpty {
+                result.append(
+                    Entry(
+                        day: day, hour: fact.hour, repository: fact.repository,
+                        language: change.language, commits: 0, counts: change.counts))
+            }
         }
         return result
+    }
+
+    public static func largest(
+        _ table: CodeStatsFactTable, filter: CodeStatsFilter,
+        days: ClosedRange<CodeStatsDay>? = nil, limit: Int = 50
+    ) -> [CodeStatsFactCommit] {
+        let scope = CodeStatsScope(table: table, filter: filter)
+        var picked: [(fact: CodeStatsFact, raw: Int, lines: Int)] = []
+        for fact in table.commits where fact.exclusion == nil {
+            if let days, !days.contains(CodeStatsDay(ordinal: fact.day)) { continue }
+            guard fact.flags.isDisjoint(with: filter.excludedCommitFlags),
+                let changes = scope.changes(of: fact)
+            else { continue }
+            let counted =
+                fact.flags.isDisjoint(with: filter.excludedLineFlags)
+                ? changes.filter { filter.categories.contains($0.category) }.reduce(0) {
+                    $0 + $1.counts.authored
+                } : 0
+            picked.append((fact, changes.reduce(0) { $0 + $1.raw }, counted))
+        }
+        picked.sort { ($0.raw, $1.fact.sha) > ($1.raw, $0.fact.sha) }
+        return picked.prefix(limit).map { entry in
+            CodeStatsFactCommit(
+                sha: entry.fact.sha,
+                repository: table.repositories.indices.contains(entry.fact.repository)
+                    ? table.repositories[entry.fact.repository] : "",
+                day: CodeStatsDay(ordinal: entry.fact.day).string, subject: entry.fact.subject,
+                lines: entry.lines, raw: entry.raw, files: entry.fact.files,
+                lfsFiles: entry.fact.lfsFiles, flags: entry.fact.flags)
+        }
+    }
+
+    static func primaryLanguage(_ changes: [CodeStatsFactChange]) -> Int {
+        let authored = changes.filter { $0.category != .generated }
+        return (authored.isEmpty ? changes : authored).max {
+            ($0.counts.authored, $0.raw, $1.language) < ($1.counts.authored, $1.raw, $0.language)
+        }?.language ?? CodeStatsFactTable.noLanguage
     }
 
     private static func totals(
@@ -323,5 +351,36 @@ public enum CodeStatsReportBuilder {
             grid[entry.day.weekdayIndex][min(max(entry.hour, 0), 23)] += entry.commits
         }
         return grid
+    }
+}
+
+public struct CodeStatsScope: Sendable {
+    private let repositoryAllowed: [Bool]
+    private let languageAllowed: [Bool]
+    private let filtersLanguages: Bool
+
+    public init(table: CodeStatsFactTable, filter: CodeStatsFilter) {
+        repositoryAllowed = table.repositories.map { name in
+            !filter.excludedRepositories.contains(name)
+                && (filter.repositories.isEmpty || filter.repositories.contains(name))
+                && (filter.owners.isEmpty
+                    || filter.owners.contains(
+                        name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))
+        }
+        languageAllowed = table.languages.map {
+            filter.languages.isEmpty || filter.languages.contains($0)
+        }
+        filtersLanguages = !filter.languages.isEmpty
+    }
+
+    public func changes(of fact: CodeStatsFact) -> [CodeStatsFactChange]? {
+        guard repositoryAllowed.indices.contains(fact.repository),
+            repositoryAllowed[fact.repository]
+        else { return nil }
+        guard filtersLanguages else { return fact.changes }
+        let selected = fact.changes.filter {
+            languageAllowed.indices.contains($0.language) && languageAllowed[$0.language]
+        }
+        return selected.isEmpty ? nil : selected
     }
 }

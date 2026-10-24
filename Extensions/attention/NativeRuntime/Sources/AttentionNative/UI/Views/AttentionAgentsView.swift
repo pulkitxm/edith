@@ -13,6 +13,14 @@ struct AttentionAgentsView: View {
         let violet = AttentionPalette.accent(dark)
         let interval = model.period.interval()
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            if model.spanFilter.classifies {
+                PageNotice(
+                    "Agent sessions have no productivity, context or category, so those filters hide them. Search still applies to agents, projects and machines.",
+                    symbol: "sparkles",
+                    actions: {
+                        Button("Clear filters") { model.clearFilters() }
+                    })
+            }
             LazyVGrid(
                 columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
                 spacing: UIScale.pt(12)

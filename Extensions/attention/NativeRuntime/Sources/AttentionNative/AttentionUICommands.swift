@@ -80,18 +80,15 @@ import Foundation
         case "attention.ui.breakdown.copy":
             let request = try AttentionPayload.decode(
                 AttentionUIBreakdownRequest.self, from: payload)
-            guard request.search.utf8.count <= 4096,
+            guard request.summary.filter.search.utf8.count <= 4096,
                 let sort = AttentionBreakdownSort(rawValue: request.sort)
             else { throw ExtensionPeerError.invalidRequest }
             try AttentionCommands.interval(
                 from: request.summary.from, to: request.summary.to, allTime: request.summary.allTime
             )
             let snapshot = try await service.summary(request.summary)
-            let filter = AttentionSpanFilter(
-                level: request.level, sphere: request.sphere,
-                category: request.category, search: request.search)
             let rows = AttentionBreakdownProjection(
-                summary: snapshot.summary, dimension: request.dimension, filter: filter, sort: sort
+                summary: snapshot.summary, dimension: request.dimension, sort: sort
             ).rows
             let title =
                 snapshot.summary.dimensions.first(where: { $0.key == request.dimension })?.title

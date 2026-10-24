@@ -325,7 +325,7 @@ struct AttentionLabeledBar: View {
     let title: String
     let duration: TimeInterval
     let total: TimeInterval
-    var color: Color = .accentColor
+    var color: Color = Color.themeAccent
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {

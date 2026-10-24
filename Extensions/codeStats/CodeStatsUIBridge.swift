@@ -64,6 +64,7 @@ struct CodeStatsUIPreferences: Codable {
     let schedule: CodeStatsSchedule
     let includeForks: Bool
     let includeArchived: Bool
+    let excludedAccounts: [String]
 }
 
 struct CodeStatsUIBridge: Sendable {
@@ -128,7 +129,10 @@ struct CodeStatsUIBridge: Sendable {
             schedule: CodeStatsPreferences.schedule(in: defaults),
             includeForks: defaults.bool(forKey: AppStorageKeys.CodeStats.includeForks),
             includeArchived: defaults.object(forKey: AppStorageKeys.CodeStats.includeArchived)
-                as? Bool ?? true)
+                as? Bool ?? true,
+            excludedAccounts: defaults.stringArray(
+                forKey: AppStorageKeys.CodeStats.excludedAccounts)
+                ?? [])
         _ = try await invoke("codeStats.ui.settings", JSONEncoder().encode(request), 30)
     }
     @MainActor static func execute(
@@ -196,6 +200,8 @@ struct CodeStatsUIBridge: Sendable {
                 request.includeForks, forKey: AppStorageKeys.CodeStats.includeForks)
             SharedDefaults.store.set(
                 request.includeArchived, forKey: AppStorageKeys.CodeStats.includeArchived)
+            SharedDefaults.store.set(
+                request.excludedAccounts, forKey: AppStorageKeys.CodeStats.excludedAccounts)
             await workflow.settingsChanged()
             return Data("{}".utf8)
         default: throw ExtensionPeerError.invalidRequest

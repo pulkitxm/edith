@@ -5,18 +5,8 @@ public enum CodeStatsFactBuilder {
     public static let minimumBulkLines = 20_000
     public static let bulkPercentile = 0.995
     public static let bulkFileLimit = 400
-    public static let largestCount = 200
     public static let duplicateRepositoryFraction = 0.5
     public static let duplicateRepositoryMinimum = 3
-
-    private struct Key: Hashable {
-        let day: Int
-        let hour: Int
-        let repository: Int
-        let language: Int
-        let category: CodeStatsCategory
-        let flags: CodeStatsCommitFlags
-    }
 
     private struct Pair: Hashable {
         let first: String
@@ -24,19 +14,17 @@ public enum CodeStatsFactBuilder {
     }
 
     public static func build(
-        commits: [CodeStatsCommit], integrated: Set<String> = [],
-        suggestions: [CodeStatsIdentitySuggestion] = []
+        commits: [CodeStatsCommit], integrated: Set<String> = [], replaced: Set<String> = [],
+        suggestions: [CodeStatsIdentitySuggestion] = [], calendar: Calendar = .current
     ) -> CodeStatsFactTable {
         let ordered = commits.sorted {
             ($0.timestamp, $0.repository, $0.sha) < ($1.timestamp, $1.repository, $1.sha)
         }
         var seenSHAs = Set<String>()
         var seenFingerprints = Set<String>()
-        var integratedTally = CodeStatsTally()
-        var duplicateTally = CodeStatsTally()
         var fingerprints: [String: Set<String>] = [:]
         var firstSeen: [String: Int] = [:]
-        var kept: [CodeStatsCommit] = []
+        var kept: [(commit: CodeStatsCommit, exclusion: CodeStatsExclusion?)] = []
         for commit in ordered {
             if let fingerprint = commit.fingerprint {
                 fingerprints[commit.repository, default: []].insert(fingerprint)
@@ -44,78 +32,59 @@ public enum CodeStatsFactBuilder {
             firstSeen[commit.repository] = min(
                 firstSeen[commit.repository] ?? commit.timestamp, commit.timestamp)
             guard seenSHAs.insert(commit.sha).inserted else { continue }
-            if integrated.contains(commit.sha) {
-                integratedTally.add(commits: 1, lines: commit.totals.authored)
-                continue
-            }
-            if let fingerprint = commit.fingerprint,
+            if integrated.contains(commit.sha) || replaced.contains(commit.sha) {
+                kept.append((commit, .integrated))
+            } else if let fingerprint = commit.fingerprint,
                 !seenFingerprints.insert(fingerprint).inserted
             {
-                duplicateTally.add(commits: 1, lines: commit.totals.authored)
-                continue
+                kept.append((commit, .duplicate))
+            } else {
+                kept.append((commit, nil))
             }
-            kept.append(commit)
         }
-        let threshold = bulkThreshold(kept.map(\.totals.authored))
-        let repositories = Set(kept.map(\.repository)).sorted()
-        let languages = Set(kept.flatMap { $0.changes.map(\.language) }).sorted()
+        let threshold = bulkThreshold(
+            kept.filter { $0.exclusion == nil }.map(\.commit.totals.authored))
+        let repositories = Set(kept.map(\.commit.repository)).sorted()
+        let languages = Set(kept.flatMap { $0.commit.changes.map(\.language) }).sorted()
         let repositoryIndex = Dictionary(
             uniqueKeysWithValues: repositories.enumerated().map { ($1, $0) })
         let languageIndex = Dictionary(
             uniqueKeysWithValues: languages.enumerated().map { ($1, $0) })
-        var rows: [CodeStatsFact] = []
-        var positions: [Key: Int] = [:]
-        var largest: [CodeStatsFactCommit] = []
-        func add(_ key: Key, commits: Int, counts: CodeStatsLanguageCounts, raw: Int) {
-            if let position = positions[key] {
-                rows[position].commits += commits
-                rows[position].counts.add(counts)
-                rows[position].raw += raw
-                return
-            }
-            positions[key] = rows.count
-            rows.append(
-                CodeStatsFact(
-                    day: key.day, hour: key.hour, repository: key.repository,
-                    language: key.language, category: key.category, flags: key.flags,
-                    commits: commits, counts: counts, raw: raw))
-        }
-        for commit in kept {
-            guard let day = CodeStatsDay(commit.day),
-                let repository = repositoryIndex[commit.repository]
-            else { continue }
+        var facts: [CodeStatsFact] = []
+        facts.reserveCapacity(kept.count)
+        for (commit, exclusion) in kept {
+            let (day, hour) = moment(commit, calendar: calendar)
+            guard let day, let repository = repositoryIndex[commit.repository] else { continue }
             var flags = commit.flags
-            let totals = commit.totals
-            if totals.authored > threshold || commit.files > bulkFileLimit { flags.insert(.bulk) }
-            let primary = primaryChange(commit)
-            add(
-                Key(
-                    day: day.ordinal, hour: commit.hour, repository: repository,
-                    language: primary.flatMap { languageIndex[$0.language] }
-                        ?? CodeStatsFactTable.noLanguage,
-                    category: primary?.category ?? .code, flags: flags),
-                commits: 1, counts: .zero, raw: 0)
-            for change in commit.changes {
-                add(
-                    Key(
-                        day: day.ordinal, hour: commit.hour, repository: repository,
-                        language: languageIndex[change.language] ?? CodeStatsFactTable.noLanguage,
-                        category: change.category, flags: flags),
-                    commits: 0, counts: change.counts, raw: change.raw.authored)
+            if commit.totals.authored > threshold || commit.files > bulkFileLimit {
+                flags.insert(.bulk)
             }
-            largest.append(
-                CodeStatsFactCommit(
-                    sha: commit.sha, repository: commit.repository, day: commit.day,
-                    subject: commit.subject, lines: totals.authored,
-                    raw: commit.rawTotals.authored, files: commit.files, flags: flags))
+            facts.append(
+                CodeStatsFact(
+                    sha: commit.sha, subject: commit.subject, day: day.ordinal, hour: hour,
+                    repository: repository, flags: flags, files: commit.files,
+                    lfsFiles: commit.lfsFiles, exclusion: exclusion,
+                    changes: commit.changes.map {
+                        CodeStatsFactChange(
+                            language: languageIndex[$0.language] ?? CodeStatsFactTable.noLanguage,
+                            category: $0.category, counts: $0.counts, raw: $0.raw.authored)
+                    }))
         }
-        largest.sort { ($0.raw, $1.sha) > ($1.raw, $0.sha) }
         return CodeStatsFactTable(
-            repositories: repositories, languages: languages, rows: rows,
-            bulkThreshold: threshold, largest: Array(largest.prefix(largestCount)),
-            duplicates: duplicateTally, integrated: integratedTally,
+            repositories: repositories, languages: languages, commits: facts,
+            bulkThreshold: threshold,
             duplicateRepositories: duplicateRepositories(fingerprints, firstSeen: firstSeen),
             suggestions: suggestions)
+    }
+
+    static func moment(
+        _ commit: CodeStatsCommit, calendar: Calendar
+    ) -> (day: CodeStatsDay?, hour: Int) {
+        guard commit.timestamp > 0 else { return (CodeStatsDay(commit.day), commit.hour) }
+        let date = Date(timeIntervalSince1970: TimeInterval(commit.timestamp))
+        return (
+            CodeStatsDay(date: date, calendar: calendar), calendar.component(.hour, from: date)
+        )
     }
 
     public static func bulkThreshold(_ sizes: [Int]) -> Int {
@@ -123,14 +92,6 @@ public enum CodeStatsFactBuilder {
         guard !sorted.isEmpty else { return minimumBulkLines }
         let index = Int((Double(sorted.count - 1) * bulkPercentile).rounded(.down))
         return max(minimumBulkLines, sorted[index])
-    }
-
-    static func primaryChange(_ commit: CodeStatsCommit) -> CodeStatsChange? {
-        let authored = commit.changes.filter { $0.category != .generated }
-        return (authored.isEmpty ? commit.changes : authored).max {
-            ($0.counts.authored, $0.raw.authored, $1.language)
-                < ($1.counts.authored, $1.raw.authored, $0.language)
-        }
     }
 
     static func duplicateRepositories(
@@ -170,28 +131,16 @@ public enum CodeStatsFactBuilder {
 
 public enum CodeStatsAuditBuilder {
     public static func build(
-        table: CodeStatsFactTable, filter: CodeStatsFilter = .default
+        table: CodeStatsFactTable, filter: CodeStatsFilter = .default,
+        days: ClosedRange<CodeStatsDay>? = nil
     ) -> CodeStatsAudit {
+        let scope = CodeStatsScope(table: table, filter: filter)
         var counted = CodeStatsTally()
-        let scoped =
-            !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
-            || !filter.excludedRepositories.isEmpty
-        var raw =
-            scoped
-            ? CodeStatsTally()
-            : CodeStatsTally(
-                commits: table.duplicates.commits + table.integrated.commits,
-                lines: table.duplicates.lines + table.integrated.lines)
-        let repositoryAllowed = table.repositories.map { name in
-            !filter.excludedRepositories.contains(name)
-                && (filter.repositories.isEmpty || filter.repositories.contains(name))
-                && (filter.owners.isEmpty
-                    || filter.owners.contains(
-                        name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))
-        }
-        let languageAllowed = table.languages.map {
-            filter.languages.isEmpty || filter.languages.contains($0)
-        }
+        var raw = CodeStatsTally()
+        var duplicates = CodeStatsTally()
+        var integrated = CodeStatsTally()
+        var lfs = CodeStatsTally()
+        var lfsFiles = 0
         var flagged: [CodeStatsAuditReason: CodeStatsTally] = [:]
         var categories: [CodeStatsCategory: Int] = [:]
         var whitespace = 0
@@ -199,23 +148,42 @@ public enum CodeStatsAuditBuilder {
             (.bulk, .bulk), (.formatting, .formatting), (.agentAssisted, .agentAssisted),
             (.coAuthored, .coAuthored),
         ]
-        for row in table.rows {
-            guard repositoryAllowed.indices.contains(row.repository),
-                repositoryAllowed[row.repository],
-                languageAllowed.indices.contains(row.language)
-                    ? languageAllowed[row.language] : filter.languages.isEmpty
-            else { continue }
-            raw.add(commits: row.commits, lines: row.raw)
-            categories[row.category, default: 0] += row.counts.authored
-            if row.category != .generated { whitespace += max(row.raw - row.counts.authored, 0) }
-            let lines = filter.categories.contains(row.category) ? row.counts.authored : 0
-            for (flag, reason) in flagReasons where row.flags.contains(flag) {
-                flagged[reason, default: CodeStatsTally()].add(commits: row.commits, lines: lines)
+        for fact in table.commits {
+            if let days, !days.contains(CodeStatsDay(ordinal: fact.day)) { continue }
+            guard let changes = scope.changes(of: fact) else { continue }
+            raw.add(commits: 1, lines: changes.reduce(0) { $0 + $1.raw })
+            let authored = changes.reduce(0) {
+                $0 + ($1.category == .generated ? 0 : $1.counts.authored)
             }
-            guard row.flags.isDisjoint(with: filter.excludedCommitFlags) else { continue }
+            switch fact.exclusion {
+            case .duplicate:
+                duplicates.add(commits: 1, lines: authored)
+                continue
+            case .integrated:
+                integrated.add(commits: 1, lines: authored)
+                continue
+            case nil:
+                break
+            }
+            if fact.lfsFiles > 0 {
+                lfs.add(commits: 1)
+                lfsFiles += fact.lfsFiles
+            }
+            var lines = 0
+            for change in changes {
+                categories[change.category, default: 0] += change.counts.authored
+                if change.category != .generated {
+                    whitespace += max(change.raw - change.counts.authored, 0)
+                }
+                if filter.categories.contains(change.category) { lines += change.counts.authored }
+            }
+            for (flag, reason) in flagReasons where fact.flags.contains(flag) {
+                flagged[reason, default: CodeStatsTally()].add(commits: 1, lines: lines)
+            }
+            guard fact.flags.isDisjoint(with: filter.excludedCommitFlags) else { continue }
             counted.add(
-                commits: row.commits,
-                lines: row.flags.isDisjoint(with: filter.excludedLineFlags) ? lines : 0)
+                commits: 1,
+                lines: fact.flags.isDisjoint(with: filter.excludedLineFlags) ? lines : 0)
         }
         let included: [CodeStatsAuditReason: Bool] = [
             .bulk: filter.includeBulk, .formatting: filter.includeFormatting,
@@ -238,11 +206,13 @@ public enum CodeStatsAuditBuilder {
             CodeStatsAuditEntry(
                 reason: .whitespace, counted: false, commits: nil, lines: whitespace),
             CodeStatsAuditEntry(
-                reason: .duplicate, counted: false, commits: table.duplicates.commits,
-                lines: table.duplicates.lines),
+                reason: .duplicate, counted: false, commits: duplicates.commits,
+                lines: duplicates.lines),
             CodeStatsAuditEntry(
-                reason: .squashIntegrated, counted: false, commits: table.integrated.commits,
-                lines: table.integrated.lines),
+                reason: .squashIntegrated, counted: false, commits: integrated.commits,
+                lines: integrated.lines),
+            CodeStatsAuditEntry(
+                reason: .lfs, counted: false, commits: lfs.commits, lines: nil, files: lfsFiles),
             CodeStatsAuditEntry(
                 reason: .unmatchedIdentity, counted: false,
                 commits: table.suggestions.reduce(0) { $0 + $1.commits }, lines: nil),

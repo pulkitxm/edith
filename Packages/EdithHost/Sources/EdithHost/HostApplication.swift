@@ -47,7 +47,7 @@ struct HostApplication: App {
                 .font(.system(size: UIScale.pt(13)))
                 .controlSize(UIScale.controlSize)
                 .disclosureGroupStyle(EdithDisclosureGroupStyle())
-                .tint(themeColor(theme))
+                .themedControls()
                 #if EDITH_GUI_FIXTURE
                 .background { HostGUIVisibilityProbe() }
                 #endif

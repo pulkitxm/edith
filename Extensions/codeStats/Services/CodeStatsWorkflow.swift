@@ -156,7 +156,8 @@ public actor CodeStatsWorkflow {
             let calendar = environment.calendar
             let report = await BlockingWork.value { () -> CodeStatsReport? in
                 if query.filter == .default,
-                    let cached = store.loadReports().first(where: { $0.range == query.range })
+                    let cached = store.loadReports().first(where: { $0.range == query.range }),
+                    cached.endDay == CodeStatsDay(date: now, calendar: calendar).string
                 {
                     return cached
                 }
@@ -373,12 +374,15 @@ public actor CodeStatsWorkflow {
             return CodeStatsProfileLookup(issue: .unavailable)
         }
         do {
-            let profile = try await github.profile()
-            let emails = await github.emails(for: profile)
+            let profiles = try await github.profiles()
+            let settings = environment.settings()
+            let counted = profiles.filter { settings.includes(account: $0.login) }
+            var emails: [String] = []
+            for profile in counted { emails += await github.emails(for: profile) }
             try Task.checkCancellation()
             guard !stopped else { return CodeStatsProfileLookup(issue: .unavailable) }
-            if state.profile != profile { state.profile = profile; persist(); await announce() }
-            return CodeStatsProfileLookup(profile: profile, emails: emails)
+            if state.profiles != counted { state.profiles = counted; persist(); await announce() }
+            return CodeStatsProfileLookup(profiles: counted, emails: emails)
         } catch let issue as CodeStatsGitHubError {
             return Task.isCancelled ? nil : CodeStatsProfileLookup(issue: issue)
         } catch {
@@ -426,16 +430,9 @@ public actor CodeStatsWorkflow {
                 finishedAt: environment.now())
         }
         let github = environment.github()
-        if settings.identity.isEmpty, let github, let profile = try? await github.profile() {
-            let seeded = CodeStatsIdentity.seeded(
-                login: profile.login, emails: await github.emails(for: profile))
-            let current = environment.settings().identity
-            if current.isEmpty {
-                environment.saveIdentity(seeded)
-                settings.identity = seeded
-            } else {
-                settings.identity = current
-            }
+        if let github, let profiles = try? await github.profiles() {
+            settings.identity = await seed(
+                profiles.filter { settings.includes(account: $0.login) }, github: github)
         }
         let engine = environment.makeEngine(github, git, environment.store, environment.probe)
         let (updates, continuation) = AsyncStream.makeStream(
@@ -446,6 +443,23 @@ public actor CodeStatsWorkflow {
         await observed
         result.startedAt = run.startedAt
         return result
+    }
+
+    private func seed(
+        _ profiles: [CodeStatsProfile], github: any CodeStatsGitHubClient
+    ) async -> CodeStatsIdentity {
+        let current = environment.settings().identity
+        let seeded = Set(state.seededLogins.map { $0.lowercased() })
+        let fresh =
+            current.isEmpty ? profiles : profiles.filter { !seeded.contains($0.login.lowercased()) }
+        guard !fresh.isEmpty else { return current }
+        var emails: [String] = []
+        for profile in fresh { emails += await github.emails(for: profile) }
+        let merged = current.merging(logins: fresh.map(\.login), emails: emails)
+        if merged != current { environment.saveIdentity(merged) }
+        state.seededLogins += fresh.map(\.login).filter { !seeded.contains($0.lowercased()) }
+        persist()
+        return merged
     }
 
     private func observe(_ updates: AsyncStream<CodeStatsRunProgress>) async {
@@ -462,7 +476,7 @@ public actor CodeStatsWorkflow {
 
     static func describe(_ progress: CodeStatsRunProgress) -> String {
         switch progress.phase {
-        case .profile: "Reading the GitHub profile"
+        case .profile: "Reading the GitHub profiles"
         case .listing: "Listing repositories"
         case .syncing: "Synced \(progress.completed) of \(progress.total) repositories"
         case .analyzing: "Analyzed \(progress.completed) of \(progress.total) repositories"
@@ -476,7 +490,7 @@ public actor CodeStatsWorkflow {
         state.cancelRequested = nil
         progress = nil
         state.lastRun = result
-        if let profile = result.profile { state.profile = profile }
+        if !result.profiles.isEmpty { state.profiles = result.profiles }
         switch result.outcome {
         case .completed:
             state.lastRunAt = run.startedAt

@@ -73,7 +73,7 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
     private var failing: Set<CodeStatsRange> = []
     private var table: CodeStatsFactTable?
     private var lookup = CodeStatsProfileLookup(
-        profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
+        profiles: [CodeStatsProfile(id: 7, login: "octo")], emails: ["octo@example.com"])
     private var discovered = [
         CodeStatsDiscoveredAuthor(
             name: "Octo", email: "octo@example.com", commits: 12, countedAsYou: false)

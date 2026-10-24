@@ -303,7 +303,7 @@ struct FinderBody: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(8))
-        .background(.regularMaterial)
+        .background(DashSkin.panel)
     }
 
     @ViewBuilder
@@ -392,7 +392,7 @@ struct FinderBody: View {
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(5))
         }
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private var statusBar: some View {
@@ -442,7 +442,7 @@ struct FinderBody: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(4))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private func chooseUpload() {

@@ -29,7 +29,7 @@ import Vision
                             .environment(\.colorScheme, scheme)
                             .transaction { $0.animation = nil }
                             .frame(width: width, height: 900)
-                            .background(UsageExtension.DashSkin.paper(scheme == .dark)))
+                            .background(DashSkin.paper(scheme == .dark)))
                     host.sizingOptions = []
                     host.frame = CGRect(x: 0, y: 0, width: width, height: 900)
                     host.wantsLayer = true
@@ -133,7 +133,7 @@ import Vision
                                 .environment(\.colorScheme, scheme)
                                 .transaction { $0.animation = nil }
                                 .frame(width: width, height: 900)
-                                .background(UsageExtension.DashSkin.paper(scheme == .dark)))
+                                .background(DashSkin.paper(scheme == .dark)))
                         host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                         host.sizingOptions = []
                         host.frame = CGRect(x: 0, y: 0, width: width, height: 900)

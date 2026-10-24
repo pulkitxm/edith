@@ -123,6 +123,7 @@ public enum HostSettingsCatalog {
         AppStorageKeys.Clipboard.saveImages,
         AppStorageKeys.Clipboard.saveText,
         AppStorageKeys.Clipboard.showFooter,
+        AppStorageKeys.CodeStats.excludedAccounts,
         AppStorageKeys.CodeStats.identityEmails,
         AppStorageKeys.CodeStats.identitySubstrings,
         AppStorageKeys.CodeStats.includeArchived,

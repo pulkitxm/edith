@@ -14,6 +14,7 @@ public struct PageLoading<Content: View>: View {
     var message = "There is nothing to show yet."
     var layout: PageSkeletonLayout = .list
     var refreshing = false
+    var activity: ContentActivity?
     var retry: (() -> Void)?
     var cancel: (() -> Void)?
     @ViewBuilder let content: () -> Content
@@ -21,14 +22,15 @@ public struct PageLoading<Content: View>: View {
     public init(
         state: ContentLoadingState, title: String = "No content yet",
         message: String = "There is nothing to show yet.", layout: PageSkeletonLayout = .list,
-        refreshing: Bool = false, retry: (() -> Void)? = nil, cancel: (() -> Void)? = nil,
-        @ViewBuilder content: @escaping () -> Content
+        refreshing: Bool = false, activity: ContentActivity? = nil, retry: (() -> Void)? = nil,
+        cancel: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content
     ) {
         self.state = state
         self.title = title
         self.message = message
         self.layout = layout
         self.refreshing = refreshing
+        self.activity = activity
         self.retry = retry
         self.cancel = cancel
         self.content = content
@@ -37,7 +39,7 @@ public struct PageLoading<Content: View>: View {
     public var body: some View {
         LoadingContainer(
             state: state, title: title, message: message, retry: retry, cancel: cancel,
-            refreshing: refreshing
+            refreshing: activity == nil && refreshing, updating: activity == .updating
         ) {
             if layout == .editor {
                 content()

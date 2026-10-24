@@ -509,7 +509,7 @@ actor AttentionBackgroundService {
         let repository = repository
         let full = AttentionSummaryRequest(
             from: request.from, to: request.to, settings: settings,
-            comparePeriod: request.comparePeriod, window: request.window)
+            comparePeriod: request.comparePeriod, window: request.window, filter: request.filter)
         let task = Task.detached(priority: .userInitiated) { () throws -> AttentionPageSnapshot in
             try Task.checkCancellation()
             let previous = try full.previousInterval.map {
@@ -553,7 +553,7 @@ actor AttentionBackgroundService {
         let identity = try Self.summaryKeyEncoder.encode(
             AttentionSummaryIdentity(
                 from: request.from, window: request.window, comparePeriod: request.comparePeriod,
-                settings: settings))
+                filter: request.filter, settings: settings))
         return AttentionSummaryCacheKey(identity: identity, classifications: classifications)
     }
 
@@ -692,5 +692,6 @@ private struct AttentionSummaryIdentity: Encodable {
     let from: Date
     let window: AttentionTimeWindow
     let comparePeriod: TimeInterval?
+    let filter: AttentionSpanFilter
     let settings: AttentionSettings
 }

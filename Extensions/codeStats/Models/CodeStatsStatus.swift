@@ -22,7 +22,8 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
     public var lastRun: CodeStatsRunResult?
     public var lastRunAt: Date?
     public var reportedAt: Date?
-    public var profile: CodeStatsProfile?
+    public var profiles: [CodeStatsProfile]
+    public var seededLogins: [String]
     public var active: CodeStatsActiveRun?
     public var waitingFor: String?
     public var firstAttemptAt: Date?
@@ -30,13 +31,15 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
 
     public init(
         lastRun: CodeStatsRunResult? = nil, lastRunAt: Date? = nil, reportedAt: Date? = nil,
-        profile: CodeStatsProfile? = nil, active: CodeStatsActiveRun? = nil,
-        waitingFor: String? = nil, firstAttemptAt: Date? = nil, cancelRequested: Bool? = nil
+        profiles: [CodeStatsProfile] = [], seededLogins: [String] = [],
+        active: CodeStatsActiveRun? = nil, waitingFor: String? = nil, firstAttemptAt: Date? = nil,
+        cancelRequested: Bool? = nil
     ) {
         self.lastRun = lastRun
         self.lastRunAt = lastRunAt
         self.reportedAt = reportedAt
-        self.profile = profile
+        self.profiles = profiles
+        self.seededLogins = seededLogins
         self.active = active
         self.waitingFor = waitingFor
         self.firstAttemptAt = firstAttemptAt
@@ -76,15 +79,15 @@ public struct CodeStatsStatus: Codable, Equatable, Sendable {
 }
 
 public struct CodeStatsProfileLookup: Codable, Equatable, Sendable {
-    public var profile: CodeStatsProfile?
+    public var profiles: [CodeStatsProfile]
     public var emails: [String]
     public var issue: CodeStatsGitHubError?
 
     public init(
-        profile: CodeStatsProfile? = nil, emails: [String] = [],
+        profiles: [CodeStatsProfile] = [], emails: [String] = [],
         issue: CodeStatsGitHubError? = nil
     ) {
-        self.profile = profile
+        self.profiles = profiles
         self.emails = emails
         self.issue = issue
     }

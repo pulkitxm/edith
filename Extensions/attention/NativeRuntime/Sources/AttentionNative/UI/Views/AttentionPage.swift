@@ -14,7 +14,9 @@ struct AttentionPage: View {
     }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true, scrollIdentity: model.section.rawValue) {
+        PageScaffold(
+            pinnedHeader: true, scrollIdentity: model.section.rawValue, activity: model.activity
+        ) {
             PageHeader(
                 title: { Text("Attention") },
                 trailing: {
@@ -25,6 +27,7 @@ struct AttentionPage: View {
                         AttentionSectionBar(model: model)
                         if model.section.usesPeriod {
                             AttentionPeriodControl(model: model)
+                            AttentionFilterBar(model: model)
                         }
                     }
                 })
@@ -50,7 +53,7 @@ struct AttentionPage: View {
                 title: "No attention activity",
                 message: model.loading.errorMessage
                     ?? "Enable a tracking source to begin collecting activity.",
-                layout: .analytics, refreshing: model.loading.isRefreshing,
+                layout: .analytics, activity: model.activity,
                 retry: { model.reload() }
             ) {
                 Group {
@@ -58,7 +61,12 @@ struct AttentionPage: View {
                         AttentionSetupView(model: model)
                     } else if model.section == .settings {
                         AttentionSettingsView(model: model)
+                    } else if model.hasFilters, !model.hasActivity, model.section != .focus {
+                        AttentionNoMatchView(model: model)
                     } else {
+                        if model.hasFilters {
+                            AttentionFilterScopeNotice(model: model)
+                        }
                         Group {
                             switch model.section {
                             case .overview:
@@ -433,6 +441,50 @@ private struct AttentionSetupView: View {
     }
 }
 
+private struct AttentionFilterScopeNotice: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        let summary = model.summary
+        PageNotice(
+            "Every section shows only matching activity: "
+                + AttentionFormat.duration(summary.activeDuration) + " of "
+                + AttentionFormat.duration(summary.activeDuration + summary.unmatchedDuration)
+                + " active time. Idle time is left out while filtering.",
+            symbol: "line.3.horizontal.decrease.circle",
+            actions: {
+                Button("Clear filters") { model.clearFilters() }
+            })
+    }
+}
+
+private struct AttentionNoMatchView: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        PageCard {
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.system(size: UIScale.pt(30), weight: .light))
+                    .foregroundStyle(.secondary)
+                Text("Nothing matches these filters").font(DashSkin.heading(20))
+                Text(
+                    "No activity in \(model.period.title()) matches the current filters. "
+                        + AttentionFormat.duration(model.summary.unmatchedDuration)
+                        + " of other activity is hidden."
+                )
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                Button("Clear filters") { model.clearFilters() }
+                    .buttonStyle(.edith(.primary))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, UIScale.pt(24))
+        }
+    }
+}
+
 private struct AttentionCollectingView: View {
     @Bindable var model: AttentionPageModel
 
@@ -440,11 +492,11 @@ private struct AttentionCollectingView: View {
         PageCard {
             VStack(spacing: 18) {
                 ZStack {
-                    Circle().fill(Color.accentColor.opacity(0.12)).frame(
+                    Circle().fill(Color.themeAccent.opacity(0.12)).frame(
                         width: UIScale.pt(76), height: UIScale.pt(76))
                     Image(systemName: "waveform.path.ecg")
                         .font(.system(size: UIScale.pt(30), weight: .medium))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.themeAccent)
                 }
                 Text(
                     model.settings.isEnabled
@@ -492,8 +544,8 @@ struct SetupStep: View {
             Text(number)
                 .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
                 .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                .background(Color.accentColor.opacity(0.14), in: Circle())
-                .foregroundStyle(Color.accentColor)
+                .background(Color.themeAccent.opacity(0.14), in: Circle())
+                .foregroundStyle(Color.themeAccent)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
                 Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
@@ -509,7 +561,7 @@ struct SourceLabel: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: UIScale.pt(24))
+            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(24))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: UIScale.pt(13), weight: .semibold))
                 Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)

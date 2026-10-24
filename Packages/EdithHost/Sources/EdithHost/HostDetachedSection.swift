@@ -18,8 +18,6 @@ struct HostDetachedSection: View {
         var settings = "general"
     @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
         var maintenance = "Updates"
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
-        "accent"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -36,7 +34,7 @@ struct HostDetachedSection: View {
                 .font(.system(size: UIScale.pt(13)))
                 .controlSize(UIScale.controlSize)
                 .disclosureGroupStyle(EdithDisclosureGroupStyle())
-                .tint(themeColor(theme))
+                .themedControls()
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(DashSkin.paper(scheme == .dark))

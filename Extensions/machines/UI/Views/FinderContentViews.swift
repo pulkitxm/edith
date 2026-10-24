@@ -219,7 +219,7 @@ struct FinderListView: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(5))
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 
     private func headerButton(_ title: String, key: FileSortKey) -> some View {
@@ -533,7 +533,7 @@ struct FinderSidebar: View {
             }
             .padding(.vertical, UIScale.pt(12))
         }
-        .background(.thinMaterial)
+        .background(DashSkin.panel)
     }
 }
 

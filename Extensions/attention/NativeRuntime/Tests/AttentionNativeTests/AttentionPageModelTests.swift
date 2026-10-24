@@ -286,7 +286,8 @@ import Testing
         #expect(model.timeline.first?.blocks.map(\.name) == ["Slack"])
         model.toggle(level: .veryProductive)
         await model.waitForReload()
-        #expect(model.timeline.first?.blocks.isEmpty == true)
+        #expect(model.timeline.allSatisfy { $0.blocks.isEmpty })
+        #expect(!model.hasActivity)
     }
 
     @Test func presetsCoverTheirDaysAndStepByTheirLength() {
@@ -380,6 +381,64 @@ import Testing
         #expect(
             AttentionEventIconDescriptor(entity: application)
                 == .application(bundleID: "com.pulkit.edith"))
+    }
+
+    @Test func filtersReachEverySectionFromOneFilteredSummary() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        var settings = AttentionSettings(isEnabled: true, trackingEnabled: true)
+        settings.rules = [
+            AttentionIdentityRule(
+                name: "Feed", categoryID: "social", bundleIDs: ["test.feed"],
+                productivity: .veryDistracting, sphere: .personal)
+        ]
+        try fixture.repository.saveSettings(settings)
+        let start = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-7_200)
+        for (offset, app) in [("test.editor", "Sample Editor"), ("test.feed", "Sample Feed")]
+            .enumerated()
+        {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: start.addingTimeInterval(Double(offset) * 900),
+                    duration: Double(600 - offset * 300), source: .application,
+                    appName: app.1, bundleID: app.0, windowTitle: app.1 + " window"))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.last7)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 900)
+        #expect(model.activity == .idle)
+        model.toggle(level: .veryDistracting)
+        #expect(model.activity == .updating)
+        await model.waitForReload()
+        #expect(model.activity == .idle)
+        for section in [AttentionPageSection.overview, .timeline, .breakdown, .agents, .focus] {
+            model.section = section
+            await model.waitForReload()
+            #expect(model.summary.activeDuration == 300)
+            #expect(model.summary.unmatchedDuration == 600)
+            #expect(model.summary.entities.allSatisfy { $0.bundleID == "test.feed" })
+            #expect(model.summary.categories.map(\.category.id) == ["social"])
+        }
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.breakdown.total == 300)
+        model.section = .timeline
+        await model.waitForReload()
+        #expect(
+            model.timeline.flatMap(\.blocks).allSatisfy { $0.categoryID == "social" })
+        model.clearFilters()
+        model.section = .overview
+        model.searchText = "editor"
+        #expect(model.activity == .updating)
+        try await Task.sleep(for: .milliseconds(400))
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 600)
+        #expect(model.summary.entities.map(\.bundleID) == ["test.editor"])
+        model.clearFilters()
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 900)
+        #expect(!model.hasFilters)
     }
 
     private func fixture() -> Fixture {

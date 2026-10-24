@@ -9,20 +9,25 @@ import EdithExtensionSupport
 struct CodeStatsWorkflowGitHub: CodeStatsGitHubClient {
     var listing: [CodeStatsRemoteRepository] = []
     var failure: CodeStatsGitHubError?
+    var accounts: CodeStatsLocked<[CodeStatsProfile]> = CodeStatsLocked([
+        CodeStatsProfile(id: 7, login: "octocat", name: "Octo")
+    ])
     var onProfile: @Sendable () -> Void = {}
 
-    func profile() async throws -> CodeStatsProfile {
+    func profiles() async throws -> [CodeStatsProfile] {
         onProfile()
         if let failure { throw failure }
-        return CodeStatsProfile(id: 7, login: "octocat", name: "Octo")
+        return accounts.update { $0 }
     }
 
     func emails(for profile: CodeStatsProfile) async -> [String] { [profile.noreplyEmail] }
 
-    func repositories() async throws -> [CodeStatsRemoteRepository] {
+    func repositories(for profile: CodeStatsProfile) async throws -> [CodeStatsRemoteRepository] {
         if let failure { throw failure }
-        return listing
+        return profile == accounts.update({ $0 }).first ? listing : []
     }
+
+    func token(for profile: CodeStatsProfile) async -> String? { nil }
 }
 
 struct CodeStatsWorkflowHarness {
@@ -136,7 +141,7 @@ struct CodeStatsWorkflowHarness {
         #expect(status.progress == nil)
         #expect(status.state.lastRun?.outcome == .completed)
         #expect(status.state.lastRunAt == run.startedAt)
-        #expect(status.state.profile?.login == "octocat")
+        #expect(status.state.profiles.map(\.login) == ["octocat"])
         #expect(status.storage.isReady)
         #expect(harness.published.update { $0.last?.isRunning } == false)
 
@@ -241,6 +246,35 @@ struct CodeStatsWorkflowHarness {
         #expect(identity.emails == ["7+octocat@users.noreply.github.com"])
     }
 
+    @Test func aGitHubAccountSignedInLaterIsAddedToTheIdentity() async throws {
+        let harness = try CodeStatsWorkflowHarness()
+        defer { harness.fixture.remove() }
+        let mine = CodeStatsIdentity(substrings: ["octocat"], emails: ["me@example.com"])
+        harness.settings.update { $0.identity = mine }
+        let github = CodeStatsWorkflowGitHub()
+        let workflow = await harness.workflow(github: github)
+        let first = try await workflow.start(.manual)
+        #expect(try await harness.finished(first.taskID) == .succeeded)
+        #expect(
+            harness.settings.update { $0.identity }
+                == CodeStatsIdentity(
+                    substrings: ["octocat"],
+                    emails: ["me@example.com", "7+octocat@users.noreply.github.com"]))
+
+        harness.settings.update { $0.identity = mine }
+        github.accounts.update { $0.append(CodeStatsProfile(id: 9, login: "worker")) }
+        let second = try await workflow.start(.manual)
+        #expect(try await harness.finished(second.taskID) == .succeeded)
+        #expect(
+            harness.settings.update { $0.identity }
+                == CodeStatsIdentity(
+                    substrings: ["octocat", "worker"],
+                    emails: ["me@example.com", "9+worker@users.noreply.github.com"]))
+        let status = try await harness.status(workflow)
+        #expect(status.state.profiles.map(\.login) == ["octocat", "worker"])
+        #expect(status.state.seededLogins == ["octocat", "worker"])
+    }
+
     @Test func aDisabledAbilityRefusesToStart() async throws {
         let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
@@ -338,18 +372,21 @@ struct CodeStatsWorkflowHarness {
         let workflow = await harness.workflow(github: github)
         let run = try await workflow.start(.manual)
         #expect(try await harness.finished(run.taskID) == .succeeded)
-        #expect(settings.update { $0.identity } == added)
+        #expect(
+            settings.update { $0.identity }
+                == added.merging(
+                    logins: ["octocat"], emails: ["7+octocat@users.noreply.github.com"]))
     }
 
     @Test func theProfileLookupReportsTheGitHubState() async throws {
         let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let signedIn = await harness.workflow().profile()
-        #expect(signedIn.profile?.login == "octocat")
+        #expect(signedIn.profiles.map(\.login) == ["octocat"])
         #expect(signedIn.emails == ["7+octocat@users.noreply.github.com"])
         #expect(signedIn.issue == nil)
         let reloaded = try await harness.status(await harness.workflow())
-        #expect(reloaded.state.profile?.login == "octocat")
+        #expect(reloaded.state.profiles.map(\.login) == ["octocat"])
 
         let signedOut = await harness.workflow(
             github: CodeStatsWorkflowGitHub(failure: .signedOut)

@@ -23,9 +23,12 @@ private actor CodeStatsGitGate {
 private struct CodeStatsCancelledGitHub: CodeStatsGitHubClient {
     let failure: @Sendable () -> Error
 
-    func profile() async throws -> CodeStatsProfile { throw failure() }
+    func profiles() async throws -> [CodeStatsProfile] { throw failure() }
     func emails(for profile: CodeStatsProfile) async -> [String] { [] }
-    func repositories() async throws -> [CodeStatsRemoteRepository] { throw failure() }
+    func repositories(for profile: CodeStatsProfile) async throws -> [CodeStatsRemoteRepository] {
+        throw failure()
+    }
+    func token(for profile: CodeStatsProfile) async -> String? { nil }
 }
 
 @MainActor @Suite struct CodeStatsInstantPageTests {
@@ -112,7 +115,7 @@ private struct CodeStatsCancelledGitHub: CodeStatsGitHubClient {
             let workflow = CodeStatsWorkflow(environment: environment)
             let lookup = await workflow.profile()
             if case .failed? = lookup.issue { Issue.record("cancellation surfaced as a failure") }
-            #expect(lookup.profile == nil)
+            #expect(lookup.profiles.isEmpty)
             await workflow.shutdown()
         }
     }

@@ -2,6 +2,51 @@ internal import EdithExtensionSupport_attention_native
 internal import EdithExtensionUI_attention_native
 import Foundation
 
+struct AttentionSpanFilter: Codable, Equatable, Hashable, Sendable {
+    static let none = AttentionSpanFilter()
+
+    var level: AttentionProductivity?
+    var sphere: AttentionSphere?
+    var category: String?
+    var search: String
+
+    init(
+        level: AttentionProductivity? = nil, sphere: AttentionSphere? = nil,
+        category: String? = nil, search: String = ""
+    ) {
+        self.level = level
+        self.sphere = sphere
+        self.category = category
+        self.search = search
+    }
+
+    var query: String { search.trimmingCharacters(in: .whitespaces).lowercased() }
+    var classifies: Bool { level != nil || sphere != nil || category != nil }
+    var isEmpty: Bool { !classifies && query.isEmpty }
+
+    func matches(
+        categoryID: String, productivity: AttentionProductivity, sphere: AttentionSphere,
+        texts: [String?]
+    ) -> Bool {
+        if let category, categoryID != category { return false }
+        if let level, productivity != level { return false }
+        if let required = self.sphere, sphere != required { return false }
+        return matchesText(texts)
+    }
+
+    func matchesText(_ texts: [String?]) -> Bool {
+        let query = query
+        guard !query.isEmpty else { return true }
+        return texts.contains { $0?.lowercased().contains(query) == true }
+    }
+
+    func matches(_ span: AttentionSpan) -> Bool {
+        matches(
+            categoryID: span.categoryID, productivity: span.productivity, sphere: span.sphere,
+            texts: [span.name, span.detail])
+    }
+}
+
 struct AttentionTimeWindow: Codable, Equatable, Hashable, Sendable {
     static let all = AttentionTimeWindow()
     static let weekdays: Set<Int> = [2, 3, 4, 5, 6]

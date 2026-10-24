@@ -271,7 +271,7 @@ import Vision
                                         .environment(\.colorScheme, scheme)
                                         .transaction { $0.animation = nil }
                                         .frame(width: width, height: height, alignment: .topLeading)
-                                        .background(UsageExtension.DashSkin.paper(scheme == .dark)))
+                                        .background(DashSkin.paper(scheme == .dark)))
                             )
                             host.sizingOptions = []
                             host.frame = CGRect(x: 0, y: 0, width: width, height: height)
