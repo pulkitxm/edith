@@ -350,20 +350,31 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         var failure: Error?
-        do {
-            if preparation.isClosed {
-                try await preparation.join()
-            } else if reason != .applicationQuit || !preparedApplicationQuit {
-                try await preparation.prepare {
-                    for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
-                    for runtime in self.runtimes { try await runtime.prepareDisableAll() }
-                }
+        if reason == .applicationQuit, !preparation.isClosed {
+            let runtimes = runtimes
+            _ = await HostDeadline.run(.milliseconds(400)) {
+                for runtime in runtimes { try? await runtime.prepareToStopAll() }
             }
-        } catch { failure = error }
-        for runtime in runtimes {
-            do { try await runtime.prepareToStopAll() } catch { failure = error }
+        } else {
+            do {
+                if preparation.isClosed {
+                    try await preparation.join()
+                } else {
+                    try await preparation.prepare {
+                        for runtime in self.runtimes { try await runtime.suspendCommandsAll() }
+                        for runtime in self.runtimes { try await runtime.prepareDisableAll() }
+                    }
+                }
+            } catch { failure = error }
+            for runtime in runtimes {
+                do { try await runtime.prepareToStopAll() } catch { failure = error }
+            }
         }
-        await peerServer?.shutdownAndWait()
+        if reason == .applicationQuit {
+            peerServer?.shutdown()
+        } else {
+            await peerServer?.shutdownAndWait()
+        }
         peerServer = nil
         for runtime in runtimes {
             do { try runtime.stopAll() } catch { failure = error }
@@ -381,5 +392,28 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         defaults.set(configuration.theme, forKey: AppStorageKeys.General.theme)
         defaults.set(configuration.appearance, forKey: AppStorageKeys.General.appearance)
         defaults.set(configuration.zoom, forKey: AppStorageKeys.General.mainWindowZoom)
+    }
+}
+
+@MainActor
+enum HostDeadline {
+    static func run(_ limit: Duration, _ work: @escaping @MainActor () async -> Void) async -> Bool
+    {
+        await withCheckedContinuation { continuation in
+            var finished = false
+            let finish: @MainActor (Bool) -> Void = { completed in
+                guard !finished else { return }
+                finished = true
+                continuation.resume(returning: completed)
+            }
+            Task { @MainActor in
+                await work()
+                finish(true)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: limit)
+                finish(false)
+            }
+        }
     }
 }

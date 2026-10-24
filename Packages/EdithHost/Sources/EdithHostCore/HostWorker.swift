@@ -161,7 +161,7 @@ public final class HostWorker {
             !configuration.recoveryOnly
         {
             try await prepare(operation: "prepareApplicationQuit", reason: reason)
-        } else {
+        } else if reason != .applicationQuit {
             try await prepareDisable()
         }
     }
