@@ -36,7 +36,7 @@ def validate_assets(directory, repository, tag, source, rebuild=False):
     require(rebuild or proof['workflowSourceCommit'] == source, 'Workflow source differs from built source')
     require(proof['sourceQualification'] == ('release-version-stamp-only' if metadata['sourceTreeDirty'] else 'clean'), 'Proof source qualification differs')
     require(proof['version'] == tag[1:] and type(proof['build']) is str and re.fullmatch('[0-9]+', proof['build']) is not None and len(proof['build']) <= 32, 'Proof version or build differs')
-    for name, minimum, maximum in [('installedBytes', 1, 9999999), ('extensionPayloadBytes', 0, 0), ('indexedExtensions', 39, 39), ('dmgBytes', 1, 1024 ** 3)]:
+    for name, minimum, maximum in [('installedBytes', 1, 9999999), ('extensionPayloadBytes', 0, 0), ('indexedExtensions', 40, 40), ('dmgBytes', 1, 1024 ** 3)]:
         require(type(proof[name]) is int and minimum <= proof[name] <= maximum, 'Invalid proof byte count or extension inventory')
     require(proof['deepStrictSignatureVerified'] is True and proof['sparkleEd25519Verified'] is True, 'Missing shipping signature qualification')
     require(all(proof[name] is False for name in ('publicationVerified', 'managedViewsVerified', 'hardwareVerified')), 'Static proof claims runtime qualification')

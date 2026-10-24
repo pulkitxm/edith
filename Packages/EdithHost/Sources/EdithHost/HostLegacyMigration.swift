@@ -35,6 +35,7 @@ enum HostLegacyMigration {
         "presenter": "presenterEnabled",
         "quinjet": "tabQuinjetEnabled",
         "seoAudit": "tabSEOAuditEnabled",
+        "socialManager": "tabSocialManagerEnabled",
         "studio": "tabStudioEnabled",
         "system": "tabSystemEnabled",
         "systemStats": "menuBarSystemStats",

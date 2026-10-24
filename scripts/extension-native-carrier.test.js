@@ -41,7 +41,7 @@ async function fixture(operation) {
       await mkdir(dirname(join(root, path)), { recursive: true, mode: 0o700 });
       await copyFile(join(sourceRoot, path), join(root, path));
     }
-    const rows = Array.from({ length: 39 }, (_, index) => ({
+    const rows = Array.from({ length: 40 }, (_, index) => ({
       id: `owner${index}`,
       title: `Synthetic ${index}`,
       symbolName: "square",

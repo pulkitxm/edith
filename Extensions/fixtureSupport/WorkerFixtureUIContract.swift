@@ -26,7 +26,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         "blitztree", "plugins", "notchShelf", "clipboard", "music", "docs", "latex",
         "companion", "terminal", "studio", "usage", "bifrost", "lidAwake", "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
-        "quinjet", "database",
+        "quinjet", "database", "socialManager",
     ]
     static let helperOwners: Set<String> = [
         "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",

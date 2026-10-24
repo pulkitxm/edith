@@ -57,7 +57,7 @@ export function request(value) {
     /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/,
   );
   for (const key of ["packagesRun", "hostRun"]) integer(result[key]);
-  assert(Array.isArray(result.updateIDs) && result.updateIDs.length <= 39);
+  assert(Array.isArray(result.updateIDs) && result.updateIDs.length <= 40);
   assert.equal(new Set(result.updateIDs).size, result.updateIDs.length);
   for (const id of result.updateIDs)
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
@@ -66,7 +66,7 @@ export function request(value) {
       typeof result.retainedRuns === "object" &&
       !Array.isArray(result.retainedRuns),
   );
-  assert(Object.keys(result.retainedRuns).length <= 39);
+  assert(Object.keys(result.retainedRuns).length <= 40);
   for (const [id, runID] of Object.entries(result.retainedRuns)) {
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
     integer(runID);
@@ -154,13 +154,13 @@ export function productionRun({
   successfulRun(run, source, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(run.event));
   assert.equal(run.head_branch, "main");
-  assert.equal(definitions.length, 39);
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.equal(definitions.length, 40);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
   assert.deepEqual(
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
   );
-  assert(plannedIDs.length <= 39);
+  assert(plannedIDs.length <= 40);
   if (!plannedIDs.length) {
     ownedDraftResume(resume);
     assert.deepEqual(resume.definitions, definitions);
@@ -302,8 +302,8 @@ export function ownedDraftResume(value) {
   assert.deepEqual(plan, { include: [] });
   assert.deepEqual(state, { draft: true });
   validateCatalog(previous);
-  assert.equal(definitions.length, 39);
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.equal(definitions.length, 40);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
   assert.deepEqual(
     Object.keys(fingerprints).sort(),
     definitions.map(({ id }) => id).sort(),
@@ -331,8 +331,8 @@ export function unchangedCatalogPublication({
   validateCatalog(catalog);
   assert.deepEqual(plan, { include: [] });
   for (const entries of [definitions, priorDefinitions]) {
-    assert.equal(entries.length, 39);
-    assert.equal(new Set(entries.map(({ id }) => id)).size, 39);
+    assert.equal(entries.length, 40);
+    assert.equal(new Set(entries.map(({ id }) => id)).size, 40);
   }
   assert.deepEqual(
     Object.keys(fingerprints).sort(),

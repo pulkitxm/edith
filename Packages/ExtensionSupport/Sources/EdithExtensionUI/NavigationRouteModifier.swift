@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 public enum NavigationDirection: Equatable {
     case back
@@ -59,6 +60,22 @@ enum NavigationShortcutGate {
             current = (candidate as? NSView)?.superview
         }
         return nil
+    }
+
+    static func webView(from view: NSView?) -> WKWebView? {
+        var current = view
+        while let candidate = current {
+            if let webView = candidate as? WKWebView { return webView }
+            current = candidate.superview
+        }
+        return nil
+    }
+
+    static func pageHistory(_ direction: NavigationDirection, in webView: WKWebView?) -> Bool {
+        guard let webView, direction == .back ? webView.canGoBack : webView.canGoForward
+        else { return false }
+        if direction == .back { webView.goBack() } else { webView.goForward() }
+        return true
     }
 
     static func textRole(of responder: NSResponder) -> NavigationTextRole {
@@ -521,6 +538,11 @@ enum NavigationHistoryInput {
             event.type == .keyDown
             ? NSApp.keyWindow?.firstResponder as? NSView
             : event.window?.contentView?.hitTest(event.locationInWindow)
+        if NavigationShortcutGate.pageHistory(
+            direction, in: NavigationShortcutGate.webView(from: target))
+        {
+            return true
+        }
         if event.type == .keyDown,
             NavigationShortcutGate.historyView(from: target)?.navigateHistory(direction) == true
         {

@@ -73,7 +73,7 @@ final class OriginalShellJourneyTests: XCTestCase {
                 .appendingPathComponent("Contents/Resources/index.json"))
         let entries = try XCTUnwrap(
             JSONSerialization.jsonObject(with: indexData) as? [[String: Any]])
-        XCTAssertEqual(entries.count, 39)
+        XCTAssertEqual(entries.count, 40)
         var reviewScroll: XCUIElement?
         for id in ["clipboard", "system", "keepAwake", "emoji"] {
             let entry = try XCTUnwrap(entries.first { $0["id"] as? String == id })

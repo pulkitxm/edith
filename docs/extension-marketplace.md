@@ -1,6 +1,6 @@
 # Extension marketplace
 
-Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Its 39 optional extensions download separately from GitHub Releases. An extension uses internal workers from the same Edith executable; users do not install a separate executable.
+Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Its 40 optional extensions download separately from GitHub Releases. An extension uses internal workers from the same Edith executable; users do not install a separate executable.
 
 ## Choose a workflow
 

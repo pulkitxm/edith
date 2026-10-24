@@ -171,7 +171,7 @@ struct WorkerLifecycleFixtureTests {
             try WorkerLifecycleFixture.requireSupported(id)
         }
         let allIDs = WorkerLifecycleFixture.supportedIDs
-        guard allIDs.count == 39 else { throw WorkerLifecycleFixtureError.identity }
+        guard allIDs.count == 40 else { throw WorkerLifecycleFixtureError.identity }
         for id in allIDs.subtracting(["calendar"]) {
             let selectedData = base.appendingPathComponent("Data").appendingPathComponent(id)
             let admittedRole =

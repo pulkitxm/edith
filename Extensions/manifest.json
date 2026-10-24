@@ -860,7 +860,6 @@
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
-        "Extensions/notchShelf/Browser/Models/BrowserAddress.swift",
         "Extensions/notchShelf/Browser/Models/BrowserSession.swift",
         "Extensions/notchShelf/Browser/Models/BrowserShortcut.swift",
         "Extensions/notchShelf/Browser/Models/BrowserTab.swift",
@@ -877,7 +876,6 @@
         "Extensions/notchShelf/Browser/Views/NotchBrowserChrome.swift",
         "Extensions/notchShelf/Browser/Views/NotchBrowserPane.swift",
         "Extensions/notchShelf/Browser/Views/NotchBrowserSetupView.swift",
-        "Extensions/notchShelf/BrowserContract/BrowserSearchEngine.swift",
         "Extensions/notchShelf/Browser/Remote/NotchBrowserRemoteContract.swift",
         "Extensions/notchShelf/Browser/Remote/NotchBrowserEngine.swift",
         "Extensions/notchShelf/Browser/Remote/NotchBrowserDownloadEngine.swift",
@@ -3313,6 +3311,74 @@
     "sameExecutableWorker": true,
     "testTargets": [
       "ci-extension-database"
+    ]
+  },
+  {
+    "id": "socialManager",
+    "version": "1.0.0",
+    "hostABI": "edith-host-2",
+    "minimumSystemVersion": "14.0.0",
+    "roles": {
+      "app": [
+        "Extensions/socialManager/Models/HerdrArrangement.swift",
+        "Extensions/socialManager/Models/HerdrLayout.swift",
+        "Extensions/socialManager/Models/HerdrLayoutTemplate.swift",
+        "Extensions/socialManager/Models/SocialAccount.swift",
+        "Extensions/socialManager/Models/SocialAccountFile.swift",
+        "Extensions/socialManager/Models/SocialAvatarFiles.swift",
+        "Extensions/socialManager/Runtime.swift",
+        "Extensions/socialManager/Support/HerdrDragOverlay.swift",
+        "Extensions/socialManager/Support/HerdrDrop.swift",
+        "Extensions/socialManager/Support/HerdrLayoutDividerHandle.swift",
+        "Extensions/socialManager/Support/HerdrTab.swift",
+        "Extensions/socialManager/Support/PageTabs.swift",
+        "Extensions/socialManager/Support/PaneWorkspaceInteractions.swift",
+        "Extensions/socialManager/Support/SplitAxis.swift",
+        "Extensions/socialManager/Support/WindowWorkspaceCommand.swift",
+        "Extensions/socialManager/Support/WorkspaceCommandMonitor.swift",
+        "Extensions/socialManager/Support/WorkspaceFilterButton.swift",
+        "Extensions/socialManager/Support/WorkspaceFilterList.swift",
+        "Extensions/socialManager/Support/WorkspaceFilterRowButton.swift",
+        "Extensions/socialManager/Support/WorkspaceKeyCommand.swift",
+        "Extensions/socialManager/Support/WorkspaceLayoutPopover.swift",
+        "Extensions/socialManager/Support/WorkspaceLayoutRestoration.swift",
+        "Extensions/socialManager/Support/WorkspaceNavigation.swift",
+        "Extensions/socialManager/Support/WorkspaceTabControls.swift",
+        "Extensions/socialManager/ViewModels/SocialManagerModel.swift",
+        "Extensions/socialManager/ViewModels/SocialWorkspaceInteractions.swift",
+        "Extensions/socialManager/ViewModels/SocialWorkspaceLayout.swift",
+        "Extensions/socialManager/Views/SocialAccountControls.swift",
+        "Extensions/socialManager/Views/SocialAccountEditor.swift",
+        "Extensions/socialManager/Views/SocialAccountFilterMenu.swift",
+        "Extensions/socialManager/Views/SocialAccountViews.swift",
+        "Extensions/socialManager/Views/SocialBrowserCanvas.swift",
+        "Extensions/socialManager/Views/SocialBrowserSession.swift",
+        "Extensions/socialManager/Views/SocialManagerPage.swift",
+        "Extensions/socialManager/Views/SocialManagerSettings.swift",
+        "Extensions/socialManager/Views/SocialPictureControls.swift",
+        "Extensions/socialManager/Views/SocialProfileEditor.swift",
+        "Extensions/socialManager/Views/SocialWorkspaceControls.swift",
+        "Extensions/socialManager/Views/SocialWorkspaceWindow.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/socialManager"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-contained-host-runtime.mjs"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-social-manager"
     ]
   }
 ]

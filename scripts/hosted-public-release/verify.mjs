@@ -97,7 +97,7 @@ export function validateInstallerProof(
   { source, current, updateIDs, scope = "full39" },
 ) {
   assert(["full39", "shipping"].includes(scope));
-  const owners = scope === "shipping" ? 1 : 39;
+  const owners = scope === "shipping" ? 1 : 40;
   assert.equal(current.length, owners);
   const currentIDs = current.map(({ id }) => id).sort();
   assert.equal(new Set(currentIDs).size, owners);
@@ -287,8 +287,8 @@ export async function run({ scope = "full39" } = {}) {
   const definitions = JSON.parse(
     await readFile(join(sourceDirectory, "Extensions/manifest.json"), "utf8"),
   );
-  assert.equal(definitions.length, 39);
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.equal(definitions.length, 40);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
   const fingerprints = Object.fromEntries(
     await Promise.all(
       definitions.map(async (definition) => [
@@ -784,7 +784,7 @@ export async function run({ scope = "full39" } = {}) {
     const priorDefinitions = JSON.parse(
       await readFile(join(directory, "Extensions/manifest.json"), "utf8"),
     );
-    assert.equal(priorDefinitions.length, 39);
+    assert.equal(priorDefinitions.length, 40);
     const priorFingerprints = Object.fromEntries(
       await Promise.all(
         priorDefinitions.map(async (definition) => [
@@ -1221,7 +1221,7 @@ export async function run({ scope = "full39" } = {}) {
     productionPlan,
     admissionMode: reusedCatalogPublication
       ? "host-only-reused-catalog"
-      : changed.size === 39
+      : changed.size === 40
         ? "initial-full39"
         : "composed-selective",
     retainedPlans: [...productionByRun.values()]

@@ -18,7 +18,7 @@ struct HostStoragePageTests {
         let fixture = try Fixture()
         defer { fixture.clean() }
         let initial = try fixture.inventory()
-        #expect(initial.extensions.count == 39)
+        #expect(initial.extensions.count == 40)
         #expect(initial.extensions.first { $0.id == "sample" }?.compressedDownloadBytes == nil)
         await fixture.marketplace.loadCachedCatalog()
         let inventory = try fixture.inventory()
@@ -292,7 +292,7 @@ struct HostStoragePageTests {
                         id: "sample", title: "Sample extension", symbolName: "square",
                         category: "Tools")
                 ]
-                    + (1..<39).map {
+                    + (1..<40).map {
                         HostExtension(
                             id: "tool\($0)", title: "Sample tool \($0)", symbolName: "square",
                             category: "Tools")

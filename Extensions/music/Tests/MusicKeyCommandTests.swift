@@ -3,6 +3,7 @@ import EdithExtensionUI
 import AppKit
 import Foundation
 import Testing
+import WebKit
 
 @testable import MusicExtension
 
@@ -147,6 +148,13 @@ extension MusicExtensionTests {
             #expect(recorder.playPauseCount == 0)
             #expect(recorder.seeks.isEmpty)
             #expect(recorder.volumes.isEmpty)
+        }
+
+        @Test func focusedWebPagesAndTerminalsKeepSpaceAndArrowKeys() {
+            #expect(MusicKeyCommand.isReceivingTextInput(WKWebView()))
+            #expect(MusicKeyCommand.isReceivingTextInput(NSTextField()))
+            #expect(!MusicKeyCommand.isReceivingTextInput(NSView()))
+            #expect(!MusicKeyCommand.isReceivingTextInput(nil))
         }
 
         @Test(arguments: [UInt16(0), 36, 53, 122])

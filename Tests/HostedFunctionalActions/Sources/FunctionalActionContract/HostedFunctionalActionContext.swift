@@ -191,7 +191,7 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
         "blitztree", "plugins", "notchShelf", "clipboard", "music", "docs", "latex",
         "companion", "terminal", "studio", "usage", "bifrost", "lidAwake", "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
-        "quinjet", "database",
+        "quinjet", "database", "socialManager",
     ]
 
     public static func validHash(_ value: String) -> Bool { hex(value, length: 64) }

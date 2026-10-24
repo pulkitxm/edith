@@ -823,7 +823,7 @@ test("all39 workers rebuild for launcher, navigation and privileged ownership ch
   const current = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  expect(current).toHaveLength(39);
+  expect(current).toHaveLength(40);
   for (const path of workerRuntimeInputs) await access(path);
   for (const path of [
     "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
@@ -860,7 +860,7 @@ test("all39 workers fingerprint admission and fixture support production sources
     "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
   ];
   const future = "Extensions/fixtureSupport/FutureAdmission.swift";
-  expect(current).toHaveLength(39);
+  expect(current).toHaveLength(40);
   expect(workerRuntimeInputs).toContain("Extensions/fixtureSupport");
   for (const path of [...paths, future])
     expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
@@ -1002,7 +1002,7 @@ test("all39 fingerprints and publication plans include carried engine and reques
   const current = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  expect(current).toHaveLength(39);
+  expect(current).toHaveLength(40);
   expect(
     current.every(({ sameExecutableWorker }) => sameExecutableWorker),
   ).toBe(true);
@@ -1589,7 +1589,7 @@ describe("pull request candidate planning", () => {
     const current = JSON.parse(
       await readFile("Extensions/manifest.json", "utf8"),
     );
-    expect(current).toHaveLength(39);
+    expect(current).toHaveLength(40);
     expect(planPullRequestBuilds(current, [], null)).toEqual(current);
     await pullRequestRepository(
       async ({ root, commit, baseSHA }) => {

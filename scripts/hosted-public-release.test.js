@@ -23,7 +23,7 @@ import { validateInstallerProof } from "./hosted-public-release/verify.mjs";
 
 const source = "a".repeat(40);
 const fingerprints = Object.fromEntries(
-  Array.from({ length: 39 }, (_, index) => [`owner${index}`, "b".repeat(64)]),
+  Array.from({ length: 40 }, (_, index) => [`owner${index}`, "b".repeat(64)]),
 );
 const definitions = Object.keys(fingerprints).map((id) => ({ id }));
 function fixture(publishing) {
@@ -74,8 +74,8 @@ function fixture(publishing) {
 
 describe("Public release admission", () => {
   test("all43 publishing native jobs are required independently of the nonpublishing tier", () => {
-    expect(productionRun(fixture(true))).toHaveLength(39);
-    expect(nativeRun(fixture(false)).originals).toHaveLength(39);
+    expect(productionRun(fixture(true))).toHaveLength(40);
+    expect(nativeRun(fixture(false)).originals).toHaveLength(40);
     expect(() => nativeRun(fixture(true))).toThrow();
     expect(() => productionRun(fixture(false))).toThrow();
   });
@@ -331,7 +331,7 @@ function installerFixture(updateIDs = ["owner3"]) {
   return {
     schema: 1,
     sourceCommit: source,
-    owners: 39,
+    owners: 40,
     installationVerified: true,
     productionSignaturesVerified: true,
     storeSelectionVerified: true,

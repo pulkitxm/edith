@@ -219,7 +219,7 @@ test("all39 independent releases retain bounded compatible rollback records beyo
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(39);
+  expect(definitions).toHaveLength(40);
   let catalog = { schemaVersion: 1, revision: 0, packages: [] };
   for (let generation = 0; generation < 32; generation++) {
     const records = definitions.map(({ id, dependencies }) => ({
@@ -234,7 +234,7 @@ test("all39 independent releases retain bounded compatible rollback records beyo
       downloadURL: `https://github.com/pulkitxm/edith/releases/download/synthetic/${id}.zip`,
     }));
     catalog = mergeExtensionCatalog(catalog, records, generation + 1);
-    expect(catalog.packages).toHaveLength(generation === 0 ? 39 : 78);
+    expect(catalog.packages).toHaveLength(generation === 0 ? 40 : 80);
   }
   for (const { id } of definitions) {
     expect(

@@ -40,6 +40,7 @@ export const functionalActionOwners = Object.freeze([
   "herdr",
   "quinjet",
   "database",
+  "socialManager",
 ]);
 
 export const functionalActionBatches = Object.freeze({
@@ -85,6 +86,7 @@ export const functionalActionBatches = Object.freeze({
     "herdr",
     "quinjet",
     "database",
+    "socialManager",
   ]),
 });
 
@@ -100,15 +102,15 @@ export function functionalActionCasePaths(owner) {
 }
 
 export function validateFunctionalOwnerInventory(definitions) {
-  assert.equal(definitions.length, 39);
+  assert.equal(definitions.length, 40);
   assert.deepEqual(
     definitions.map(({ id }) => id).sort(),
     [...functionalActionOwners].sort(),
   );
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
   const batches = Object.values(functionalActionBatches).flat();
-  assert.equal(batches.length, 39);
+  assert.equal(batches.length, 40);
   assert.deepEqual([...batches].sort(), [...functionalActionOwners].sort());
-  assert.equal(new Set(batches).size, 39);
+  assert.equal(new Set(batches).size, 40);
   return definitions;
 }

@@ -477,6 +477,7 @@ export const validationExtensionIDs = [
   "herdr",
   "quinjet",
   "database",
+  "socialManager",
 ];
 
 export function assertValidationContext(validationSHA, environment) {
@@ -519,7 +520,7 @@ export function assertValidationExtensions(entries) {
     ids.some((id) => !validationExtensionIDs.includes(id))
   )
     throw new Error(
-      "All-extension validation requires the exact 39 manifest IDs without duplicates",
+      "All-extension validation requires the exact 40 manifest IDs without duplicates",
     );
 }
 

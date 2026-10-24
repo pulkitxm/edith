@@ -6,20 +6,27 @@ import {
 
 export const managedChunkCount = 3;
 
+export function managedChunkSize(total, chunk) {
+  return (
+    Math.floor(total / managedChunkCount) +
+    (chunk < total % managedChunkCount ? 1 : 0)
+  );
+}
+
 export function managedChunkOwners(owners, chunk) {
   assert(Number.isInteger(chunk) && chunk >= 0 && chunk < managedChunkCount);
-  assert.equal(owners.length, 39);
+  assert.equal(owners.length, 40);
   const sorted = [...owners].sort((a, b) =>
     a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
   );
-  assert.equal(new Set(sorted.map(({ id }) => id)).size, 39);
+  assert.equal(new Set(sorted.map(({ id }) => id)).size, 40);
   return sorted.filter((_, index) => index % managedChunkCount === chunk);
 }
 
 export function selectManagedArtifactRows(intake, definitions, chunk) {
   const expected = definitions.map(({ id }) => id).sort();
-  assert.equal(expected.length, 39);
-  assert.equal(new Set(expected).size, 39);
+  assert.equal(expected.length, 40);
+  assert.equal(new Set(expected).size, 40);
   assert.deepEqual(
     intake.originals.map(({ extensionID }) => extensionID).sort(),
     expected,
@@ -38,7 +45,7 @@ export function validateManagedChunkResults({
   bindings,
 }) {
   const owners = managedChunkOwners(review.owners, chunk);
-  assert.equal(owners.length, 13);
+  assert.equal(owners.length, managedChunkSize(review.owners.length, chunk));
   validateManagedOwnerResults(results, owners, fixtures);
   validateManagedChunkBindings(bindings);
   for (const fixture of fixtures) {
@@ -49,7 +56,7 @@ export function validateManagedChunkResults({
     schema: 1,
     outcome: "passed",
     chunk,
-    owners: 13,
+    owners: owners.length,
     all39Validated: false,
     functionalActionsValidated: false,
     bindings,
@@ -112,7 +119,10 @@ export function aggregateManagedChunks(chunks, review, bindings) {
     assert.equal(value.outcome, "passed");
     assert.equal(value.all39Validated, false);
     assert.equal(value.functionalActionsValidated, false);
-    assert.equal(value.owners, 13);
+    assert.equal(
+      value.owners,
+      managedChunkSize(review.owners.length, value.chunk),
+    );
     assert.deepEqual(value.bindings, bindings);
     validateManagedChunkResults({ ...value, review });
     results.push(...value.results);

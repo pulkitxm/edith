@@ -28,7 +28,7 @@ const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const sha = "a".repeat(40);
 const fingerprint = "b".repeat(64);
 function input() {
-  const definitions = Array.from({ length: 39 }, (_, index) => ({
+  const definitions = Array.from({ length: 40 }, (_, index) => ({
     id: `feature${index}`,
     roles: { app: [] },
   }));
@@ -126,7 +126,7 @@ function receipt(id = "feature0") {
 describe("closed successful CI39 intake", () => {
   test("binds every original archive to successful exact source build and artifact digest", () => {
     const result = validateCIArtifactSet(input());
-    expect(result.originals).toHaveLength(39);
+    expect(result.originals).toHaveLength(40);
     expect(result.originals[0].jobID).toBe(1000);
     expect(result.sourceCommit).toBe(sha);
   });
@@ -195,12 +195,12 @@ describe("closed successful CI39 intake", () => {
         const data = url.includes("/jobs?")
           ? { total_count: value.jobs.length, jobs: value.jobs }
           : url.includes("/artifacts?")
-            ? { total_count: 39, artifacts: value.artifacts }
+            ? { total_count: 40, artifacts: value.artifacts }
             : value.run;
         return new Response(JSON.stringify(data));
       },
     });
-    expect(result.originals).toHaveLength(39);
+    expect(result.originals).toHaveLength(40);
     expect(urls).toHaveLength(3);
     expect(
       urls.every((url) =>
@@ -424,7 +424,7 @@ describe("original and fixture payload truth", () => {
 });
 
 describe("atomic complete preparation receipts", () => {
-  test("only a complete exact-source 39-set produces an aggregate and executes no package", async () => {
+  test("only a complete exact-source 40-set produces an aggregate and executes no package", async () => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), "managed-preparation-test-")),
     );
@@ -449,7 +449,7 @@ describe("atomic complete preparation receipts", () => {
             url.includes("/jobs?")
               ? { total_count: value.jobs.length, jobs: value.jobs }
               : url.includes("/artifacts?")
-                ? { total_count: 39, artifacts: value.artifacts }
+                ? { total_count: 40, artifacts: value.artifacts }
                 : value.run,
           ),
         );
@@ -478,8 +478,8 @@ describe("atomic complete preparation receipts", () => {
           };
         },
       });
-      expect(result.originals).toHaveLength(39);
-      expect(visited).toHaveLength(39);
+      expect(result.originals).toHaveLength(40);
+      expect(visited).toHaveLength(40);
       expect(result.packageCodeExecuted).toBe(false);
       const selected = await prepareCIArtifacts({
         ...common,
@@ -490,8 +490,8 @@ describe("atomic complete preparation receipts", () => {
           sourceHostExecutableSHA256: hostSHA256,
         }),
       });
-      expect(selected.originals).toHaveLength(13);
-      expect(selected.allOriginalArtifacts).toHaveLength(39);
+      expect(selected.originals).toHaveLength(14);
+      expect(selected.allOriginalArtifacts).toHaveLength(40);
       const unselected = value.jobs.find(
         (job) =>
           job.name.startsWith("build (") &&

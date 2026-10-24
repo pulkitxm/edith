@@ -128,7 +128,7 @@ export async function loadAllFunctionalActionCases(
         admittedSnapshots?.[owner],
       ),
     );
-  assert.equal(cases.length, 39);
+  assert.equal(cases.length, 40);
   return Object.freeze(cases);
 }
 

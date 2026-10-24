@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 public protocol DirectKeyboardInputResponder: AnyObject {}
 
@@ -13,7 +14,7 @@ public enum InputFocus {
             if event.type == .keyDown,
                 isSearchShortcut(
                     characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags),
-                !(window.firstResponder is DirectKeyboardInputResponder),
+                !takesKeysDirectly(window.firstResponder),
                 (window.firstResponder as? NSTextView).map({ $0.isFieldEditor }) != false,
                 TypeAhead.shared.focusField(in: window, selectAll: true)
             {
@@ -64,8 +65,12 @@ public enum InputFocus {
     static func shouldStartTypeAhead(
         characters: String?, modifiers: NSEvent.ModifierFlags, responder: NSResponder?
     ) -> Bool {
-        !(responder is DirectKeyboardInputResponder)
+        !takesKeysDirectly(responder)
             && isTypeAheadKey(characters: characters, modifiers: modifiers)
+    }
+
+    public static func takesKeysDirectly(_ responder: NSResponder?) -> Bool {
+        responder is DirectKeyboardInputResponder || responder is WKWebView
     }
 
     private static func editingTextView(in window: NSWindow) -> NSTextView? {

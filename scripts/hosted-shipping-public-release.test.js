@@ -20,7 +20,7 @@ import { validateInstallerProof } from "./hosted-public-release/verify.mjs";
 
 const source = "a".repeat(40);
 const hash = "b".repeat(64);
-const definitions = Array.from({ length: 39 }, (_, index) => ({
+const definitions = Array.from({ length: 40 }, (_, index) => ({
   id: index ? `owner${index}` : "keepAwake",
   dependencies: [],
 }));

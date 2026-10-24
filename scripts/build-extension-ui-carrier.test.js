@@ -368,7 +368,7 @@ int main(int argc, char **argv) {
     ]) {
       expect(extensionUIWorkerEntitlements(id)).toEqual(sandbox);
     }
-    for (const id of ["music", "notchShelf"]) {
+    for (const id of ["music", "notchShelf", "socialManager"]) {
       expect(extensionUIWorkerEntitlements(id)).toEqual({
         ...sandbox,
         "com.apple.security.network.client": true,

@@ -14,7 +14,7 @@ enum HostWorkerStartAdmission {
         "clipboard", "docs", "latex", "companion", "terminal", "usage", "bifrost", "lidAwake",
         "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr", "quinjet",
-        "database",
+        "database", "socialManager",
     ]
 
     static func perform<Role>(

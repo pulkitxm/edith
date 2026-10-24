@@ -1621,7 +1621,7 @@ export function validateFunctionalLiteralPolicies({
   assert(Buffer.isBuffer(manifestBytes));
   const manifest = JSON.parse(manifestBytes.toString("utf8"));
   validateFunctionalOwnerInventory(manifest);
-  assert.equal(cases.length, 39);
+  assert.equal(cases.length, 40);
   assert.deepEqual(
     Object.keys(literalPolicies).sort(),
     [...functionalActionOwners].sort(),

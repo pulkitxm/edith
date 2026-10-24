@@ -139,8 +139,8 @@ extension MarketplaceHarness {
                     && request.previous.allSatisfy({ $0.dependencies.isEmpty }))
         } else {
             try requirePublic(
-                request.current.count == 39 && request.previous.count == request.updateIDs.count)
-            try requirePublic(Set(request.current.map(\.id)).count == 39)
+                request.current.count == 40 && request.previous.count == request.updateIDs.count)
+            try requirePublic(Set(request.current.map(\.id)).count == 40)
         }
         try requirePublic(
             Set(request.previous.map(\.id)) == Set(request.updateIDs)

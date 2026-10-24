@@ -159,7 +159,7 @@ test("all39 aggregation refuses missing views, stale archives, failed drain and 
     },
   }));
   const aggregate = validateManagedExecutionResults(results, review, fixtures);
-  expect(aggregate.owners).toBe(39);
+  expect(aggregate.owners).toBe(40);
   expect(aggregate.functionalActionsValidated).toBe(false);
   for (const change of [
     (rows) => rows.pop(),

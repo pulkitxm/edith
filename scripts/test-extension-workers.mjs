@@ -81,6 +81,7 @@ export const supportedFixtureWorkers = new Set([
   "herdr",
   "quinjet",
   "database",
+  "socialManager",
 ]);
 
 export function validateWorkerFixtureSelection(definitions, requested) {
@@ -347,8 +348,8 @@ export async function validateCameraFixtureHost(
   );
   assert(
     Array.isArray(index) &&
-      index.length === 39 &&
-      new Set(index.map((entry) => entry.id)).size === 39 &&
+      index.length === 40 &&
+      new Set(index.map((entry) => entry.id)).size === 40 &&
       index.some((entry) => entry.id === "virtualCamera"),
     "Camera fixture host must have the complete current extension index",
   );

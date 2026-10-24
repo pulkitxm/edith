@@ -109,11 +109,11 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
     if (frozen['measurement'].get('sourceMode') != 'final'
             or frozen['measurement'].get('carrierHostProvenanceVerified') is not True
             or frozen['measurement'].get('sourceFingerprintsVerified') is not True
-            or frozen.get('indexedExtensions') != 39 or frozen.get('migratedExtensions') != 39
+            or frozen.get('indexedExtensions') != 40 or frozen.get('migratedExtensions') != 40
             or frozen.get('unmeasuredExtensions') != []):
         raise ValueError('Aggregate requires freshly verified clean frozen host and all39 packages')
     identifiers = {package['id'] for package in frozen['packages']}
-    if (len(frozen['packages']) != 39 or len(identifiers) != 39 or identifiers != set(frozen['sourceFingerprints'])
+    if (len(frozen['packages']) != 40 or len(identifiers) != 40 or identifiers != set(frozen['sourceFingerprints'])
             or identifiers != set(frozen['packageHostProvenance'])
             or any(package.get('sourceFingerprint') != frozen['sourceFingerprints'][package['id']]
                    for package in frozen['packages'])):
@@ -157,7 +157,7 @@ def aggregate_release(frozen, shipping_app, shipping_metadata, assets, catalog_n
             or proof.get('sourceCommit') != source or shipping_metadata.get('sourceCommit') != source
             or shipping_metadata.get('sourceTreeDirty') is not expected_dirty
             or proof.get('deepStrictSignatureVerified') is not True or proof.get('sparkleEd25519Verified') is not True
-            or proof.get('indexedExtensions') != 39 or proof.get('extensionPayloadBytes') != 0
+            or proof.get('indexedExtensions') != 40 or proof.get('extensionPayloadBytes') != 0
             or proof.get('dmgSHA256') != by_name['Edith.dmg']['sha256']
             or proof.get('dmgBytes') != by_name['Edith.dmg']['bytes']
             or proof.get('appcastSHA256') != by_name['appcast.xml']['sha256']):

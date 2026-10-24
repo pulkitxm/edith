@@ -110,18 +110,18 @@ export function managedApplicationEnvironment(fixture, environment) {
 }
 
 export function validateManagedExecutionResults(results, review, fixtures) {
-  assert.equal(results.length, 39);
-  assert.equal(fixtures.length, 39);
-  assert.equal(review.owners.length, 39);
+  assert.equal(results.length, 40);
+  assert.equal(fixtures.length, 40);
+  assert.equal(review.owners.length, 40);
   const ids = review.owners.map(({ id }) => id).sort();
-  assert.equal(new Set(ids).size, 39);
+  assert.equal(new Set(ids).size, 40);
   assert.deepEqual(results.map(({ extensionID }) => extensionID).sort(), ids);
   assert.deepEqual(fixtures.map(({ extensionID }) => extensionID).sort(), ids);
   validateManagedOwnerResults(results, review.owners, fixtures);
   return {
     schema: 1,
     outcome: "passed",
-    owners: 39,
+    owners: 40,
     managedNativeViewSmokeValidated: true,
     functionalActionsValidated: false,
     shippingHostExecutableUnchanged: false,

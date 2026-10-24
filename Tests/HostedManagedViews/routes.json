@@ -855,6 +855,28 @@
           "sha256": "f9bc9c65b9f1bc23625e3a109ec2e4e42ca7c0d8857a019124d707a693402f7c"
         }
       ]
+    },
+    {
+      "id": "socialManager",
+      "location": "main",
+      "section": "socialManager",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "Local profile catalog and isolated website data stores only. No account creation, website load, sign-in or session clear action; page task start only on visibility.",
+      "sources": [
+        {
+          "path": "Extensions/socialManager/Runtime.swift",
+          "sha256": "03dca050c5c0a6745939d338c317556a204afb43d2976378123ecd7075baecd3"
+        },
+        {
+          "path": "Extensions/socialManager/ViewModels/SocialManagerModel.swift",
+          "sha256": "7939ae9de063c3baf117148e50c1d20671bede1df226053317588f1cfa1c0b59"
+        }
+      ]
     }
   ]
 }

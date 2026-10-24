@@ -62,7 +62,7 @@ struct FunctionalActionContractTests {
         #expect(throws: (any Error).self) {
             try context.ownedPath(named: "foreign", kind: "directory")
         }
-        #expect(HostedFunctionalActionContext.owners.count == 39)
+        #expect(HostedFunctionalActionContext.owners.count == 40)
     }
 
     @Test func emptyOwnedPathsRetainSourceOwnerAndPeerAdmission() throws {

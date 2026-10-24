@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import WebKit
 
 @testable import EdithExtensionUI
 
@@ -62,5 +63,17 @@ struct InputFocusTests {
         #expect(!TypeAhead.shared.focusField(in: window, typeAheadOnly: true))
         #expect(TypeAhead.shared.focusField(in: window, selectAll: true))
         #expect(field.currentEditor()?.selectedRange == NSRange(location: 0, length: 5))
+    }
+
+    @Test func webViewsScrollAndTakeTypingThemselves() {
+        let web = WKWebView()
+        let child = NSView()
+        web.addSubview(child)
+
+        #expect(ScrollForwarding.handlesScrollDirectly(from: web))
+        #expect(ScrollForwarding.handlesScrollDirectly(from: child))
+        #expect(!InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: web))
+        #expect(
+            InputFocus.shouldStartTypeAhead(characters: "k", modifiers: [], responder: NSView()))
     }
 }

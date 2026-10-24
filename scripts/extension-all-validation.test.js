@@ -163,9 +163,9 @@ process.exit(92);
   }
 }
 
-test("validation closes selection to the current exact 39 unique manifest IDs", () => {
-  expect(manifest).toHaveLength(39);
-  expect(new Set(validationExtensionIDs).size).toBe(39);
+test("validation closes selection to the current exact 40 unique manifest IDs", () => {
+  expect(manifest).toHaveLength(40);
+  expect(new Set(validationExtensionIDs).size).toBe(40);
   expect(manifest.map(({ id }) => id).sort()).toEqual(
     [...validationExtensionIDs].sort(),
   );
@@ -176,7 +176,7 @@ test("validation closes selection to the current exact 39 unique manifest IDs", 
     [manifest[0], ...manifest.slice(0, -1)],
     [...manifest.slice(0, -1), { id: "unexpected" }],
   ])
-    expect(() => assertValidationExtensions(invalid)).toThrow("exact 39");
+    expect(() => assertValidationExtensions(invalid)).toThrow("exact 40");
 });
 
 test("validation admits only exact immutable source and authorized nonpublishing dispatch context", () => {
@@ -250,7 +250,7 @@ test("repeat validation includes unchanged published owners with current version
         mode: "validation",
         sourceSHA,
       });
-      expect(plan.include).toHaveLength(39);
+      expect(plan.include).toHaveLength(40);
       for (const entry of plan.include) {
         const definition = definitions.find(({ id }) => id === entry.id);
         expect(entry.version).toBe(definition.version);
@@ -457,7 +457,7 @@ test("the validation CLI refuses missing duplicate and substituted manifests", a
       );
       const result = invoke();
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("exact 39 manifest IDs");
+      expect(result.stderr).toContain("exact 40 manifest IDs");
       expect(result.stdout).toBe("");
     }
   });
@@ -570,7 +570,7 @@ test("validation preserves all native lifecycle package and global gates while w
   expect(workflow.permissions).toEqual({ contents: "read" });
   expect(workflow.on.workflow_dispatch.inputs.validation_sha).toEqual({
     description:
-      "Validate all 39 extensions at this exact source SHA without publishing",
+      "Validate all 40 extensions at this exact source SHA without publishing",
     type: "string",
     required: false,
     default: "",

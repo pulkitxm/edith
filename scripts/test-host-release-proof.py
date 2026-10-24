@@ -22,7 +22,7 @@ class HostReleaseProofTests(unittest.TestCase):
         self.exe.write_bytes(b'synthetic host code')
         self.index = self.bundle / 'Contents/Resources/index.json'
         self.index.parent.mkdir()
-        self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(39)]))
+        self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(40)]))
         self.source = 'a' * 40
         self.key = base64.b64encode(bytes(32)).decode()
         self.signature = base64.b64encode(bytes(64)).decode()
@@ -184,7 +184,7 @@ class HostReleaseProofTests(unittest.TestCase):
         self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(38)]))
         with self.assertRaises(ValueError):
             self.proof()
-        self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(39)]))
+        self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(40)]))
         payload = self.bundle / 'Contents/Resources/Feature.appex'
         payload.mkdir()
         with self.assertRaises(ValueError):

@@ -521,7 +521,7 @@ test("every extension test directory selects a deduplicated executable lane", ()
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(39);
+  expect(definitions).toHaveLength(40);
   for (const { id } of definitions) {
     const paths = [
       `Extensions/${id}/Tests/RegressionTests.swift`,
@@ -728,7 +728,7 @@ test("shared fixture test sources select one umbrella without a release build", 
   ]);
   expect(planPullRequestBuilds(definitions, paths, definitions)).toEqual([]);
   expect(planExtensionBuilds(definitions, paths)).toEqual(definitions);
-  expect(definitions).toHaveLength(39);
+  expect(definitions).toHaveLength(40);
   for (const path of [
     "Packages/EdithHost/Sources/EdithHost/HostWorkerStartAdmission.swift",
     "Packages/EdithHost/Sources/EdithHostCore/HostCoreAdmission.swift",

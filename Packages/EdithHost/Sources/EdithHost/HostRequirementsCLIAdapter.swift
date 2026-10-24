@@ -273,5 +273,6 @@ import Foundation
         "herdr": ["app"],
         "quinjet": ["app"],
         "database": ["app"],
+        "socialManager": ["app"],
     ]
 }

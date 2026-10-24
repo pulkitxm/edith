@@ -107,6 +107,9 @@ enum HostNavigationCatalog {
             id: "latex", title: "LaTeX", symbol: "doc.richtext", suite: "media", parentID: "media",
             extensionID: "latex"),
         .init(
+            id: "socialManager", title: "Social Manager", symbol: "person.crop.rectangle.stack",
+            suite: "media", parentID: "media", extensionID: "socialManager", detachable: false),
+        .init(
             id: "timeLapse", title: "Screen Recorder", symbol: "record.circle", suite: "media",
             parentID: "media", extensionID: "timeLapse"),
         .init(
@@ -152,8 +155,8 @@ enum HostNavigationCatalog {
             "presenter", "windowSweaters",
         ],
         "media": [
-            "studio", "latex", "timeLapse", "downloads", "music", "calendar", "virtualCamera",
-            "audioMixer", "notchShelf",
+            "studio", "latex", "socialManager", "timeLapse", "downloads", "music", "calendar",
+            "virtualCamera", "audioMixer", "notchShelf",
         ],
         "data": ["database", "attention", "seoAudit", "codeStats"],
     ]

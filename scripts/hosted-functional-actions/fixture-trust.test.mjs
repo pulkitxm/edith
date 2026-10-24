@@ -384,7 +384,7 @@ test("fixture anchor is generated only from independently hash-admitted source-b
   assert(!result.source.includes("ProcessInfo"));
   assert.equal(
     (result.source.match(/try WorkerFixtureRolePolicy\(/g) ?? []).length,
-    39,
+    40,
   );
   assert(result.source.includes('section: "extension"'));
 });
@@ -765,7 +765,7 @@ test("single live issuer compiles bootstrap before final Host and preserves all3
   assert(f.bootstrap.source.includes(f.manifest.producer.executableSHA256));
   assert.equal(
     (f.bootstrap.source.match(/try WorkerFixtureRolePolicy\(/g) ?? []).length,
-    39,
+    40,
   );
   const role = generate(f);
   assert(role.source.includes(f.artifact.host.executableSHA256));

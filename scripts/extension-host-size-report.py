@@ -288,8 +288,8 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         raise ValueError("Unknown measurement source mode")
     if source_mode == "final":
         validate_final_source(expected_source_commit, source_state, host_build)
-        if len(known) != 39 or set(migrated) != known or set(expected_fingerprints or {}) != known:
-            raise ValueError("Final reports require exactly 39 indexed packages and current source fingerprints")
+        if len(known) != 40 or set(migrated) != known or set(expected_fingerprints or {}) != known:
+            raise ValueError("Final reports require exactly 40 indexed packages and current source fingerprints")
         if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in expected_fingerprints.values()):
             raise ValueError("Final source fingerprints must be SHA-256 digests")
     app_snapshot = TreeSnapshot(app)

@@ -52,7 +52,7 @@ export function fixture(existing = false) {
     build: "123",
     installedBytes: 1234,
     extensionPayloadBytes: 0,
-    indexedExtensions: 39,
+    indexedExtensions: 40,
     indexSHA256: "c".repeat(64),
     hostExecutableSHA256,
     certificateCategory: "Apple Development",

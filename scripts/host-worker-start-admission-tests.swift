@@ -173,7 +173,7 @@ struct HostWorkerStartAdmissionTests {
         let owners = manifest.filter { $0["contractVersion"] as? Int == 1 }.map {
             $0["id"] as! String
         }
-        try require(owners.count == 39 && Set(owners) == HostWorkerStartAdmission.fixtureOwners)
+        try require(owners.count == 40 && Set(owners) == HostWorkerStartAdmission.fixtureOwners)
         for owner in owners {
             let fixture = try Fixture(owner: owner)
             defer { try? FileManager.default.removeItem(at: fixture.root) }

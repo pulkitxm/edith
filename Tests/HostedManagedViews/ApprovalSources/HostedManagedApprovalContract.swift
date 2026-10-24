@@ -30,7 +30,7 @@ struct HostedManagedApprovalRoute: Decodable, Equatable {
         "system", "timeLapse", "cleaner", "appMaintenance", "plugins", "blitztree", "notchShelf",
         "clipboard", "docs", "latex", "companion", "terminal", "usage", "bifrost", "lidAwake",
         "attention", "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "studio",
-        "herdr", "quinjet", "database",
+        "herdr", "quinjet", "database", "socialManager",
     ]
     var workerIdentifier: String { hostIdentifier + ".extension." + extensionID + ".worker" }
     var extensionPoint: String { hostIdentifier + ".ExtensionUI" }

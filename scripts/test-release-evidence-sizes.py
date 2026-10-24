@@ -238,7 +238,7 @@ class SignedCompositionSizeTests(unittest.TestCase):
     def test_all39_retained_links_include_distinct_current_release_and_every_byte(self):
         result = self.measure()
         self.assertEqual(len(result['releases']), 2)
-        self.assertEqual(len(result['links']), 39)
+        self.assertEqual(len(result['links']), 40)
         self.assertEqual(result['currentPublicationTag'], 'extension-evidence/' + 'b' * 40 + '/300-2')
         self.assertEqual({row['lineage']['sourceCommit'] for row in result['links']}, {'a' * 40})
         self.assertEqual(result['originalArchiveBytes'], 44 * len(b'original synthetic archive bytes'))
@@ -370,7 +370,7 @@ class ZeroPlanCompositionSizeTests(unittest.TestCase):
 
     def test_shared_origin_and_zero_plan_current_are_counted_with_every_asset(self):
         measured = self.measure()
-        self.assertEqual(len(measured['links']), 39)
+        self.assertEqual(len(measured['links']), 40)
         self.assertEqual(len(measured['releases']), 2)
         self.assertEqual(len(measured['closedAssetInventory']), 46)
         self.assertEqual(measured['originalArchiveBytes'], 43 * len(b'original synthetic archive bytes'))

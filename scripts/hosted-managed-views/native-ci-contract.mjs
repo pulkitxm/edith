@@ -27,10 +27,10 @@ export const shippingNativeTestSteps = [
 ];
 
 export function validateNonpublishingNativeJobs(jobs, definitions, runID) {
-  assert.equal(definitions.length, 39);
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
-  assert.equal(jobs.length, 43);
-  assert.equal(new Set(jobs.map(({ id }) => id)).size, 43);
+  assert.equal(definitions.length, 40);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
+  assert.equal(jobs.length, 44);
+  assert.equal(new Set(jobs.map(({ id }) => id)).size, 44);
   assert.deepEqual(
     jobs.map(({ name }) => name).sort(),
     [

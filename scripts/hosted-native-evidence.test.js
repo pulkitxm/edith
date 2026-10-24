@@ -45,7 +45,7 @@ function envelope(payload) {
 }
 function fixture() {
   const fingerprints = Object.fromEntries(
-    Array.from({ length: 39 }, (_, index) => [`owner${index}`, "b".repeat(64)]),
+    Array.from({ length: 40 }, (_, index) => [`owner${index}`, "b".repeat(64)]),
   );
   const plannedIDs = ["owner0"];
   const run = {
@@ -797,7 +797,7 @@ function emptyDraftFixture() {
 
 test("an exact owned full draft can resume without rebuilding while retaining every global native gate", () => {
   const value = emptyDraftFixture();
-  expect(ownedDraftResume(value.resume)).toHaveLength(39);
+  expect(ownedDraftResume(value.resume)).toHaveLength(40);
   const payload = stagedEvidence(value);
   expect(verifiedEvidence(envelope(payload), publicKey)).toEqual(payload);
   const success = completed(value);

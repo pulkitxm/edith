@@ -277,7 +277,7 @@ try {
   console.log(
     JSON.stringify({
       outcome: "passed",
-      owners: 13,
+      owners: results.length,
       chunk: options.chunk,
       all39Validated: false,
       chunkManagedNativeViewSmokeValidated: true,

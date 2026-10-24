@@ -101,13 +101,13 @@ private struct UICarrierFixture {
     }
 }
 
-@Test(arguments: ["calendar", "music", "notchShelf", "camera", "micMute"])
+@Test(arguments: ["calendar", "music", "notchShelf", "socialManager", "camera", "micMute"])
 func signedWorkerRequiresExactlyItsOwnedCapabilities(id: String) throws {
     let fixture = try UICarrierFixture(id: id)
     defer { fixture.clean() }
     let selected = try ExtensionUICarrier(payload: fixture.root, package: fixture.package)
     var expected: [String: Any] = ["com.apple.security.app-sandbox": true]
-    let network = ["music", "notchShelf"].contains(id)
+    let network = ["music", "notchShelf", "socialManager"].contains(id)
     if network { expected["com.apple.security.network.client"] = true }
     try fixture.sign(workerEntitlements: expected)
     try selected.verifyDevelopment()

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import WebKit
 
 @testable import EdithExtensionUI
 
@@ -707,4 +708,30 @@ private final class NavigationWKWebView: NSView {}
 
 private enum FixtureInspectorTab: String {
     case audio, voice, devices, frame, look, background, overlays, output
+}
+
+@Suite @MainActor struct NavigationPageHistoryTests {
+    private func settle(_ web: WKWebView, until condition: () -> Bool) async throws {
+        for _ in 0..<200 where !(condition() && !web.isLoading) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @Test func webViewsHandleHistoryBeforeTheWindow() async throws {
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        web.load(URLRequest(url: URL(string: "data:text/html,first")!))
+        try await settle(web) { web.url?.absoluteString.hasSuffix("first") == true }
+        web.load(URLRequest(url: URL(string: "data:text/html,second")!))
+        try await settle(web) { web.canGoBack }
+
+        let child = NSView()
+        web.addSubview(child)
+        let found = NavigationShortcutGate.webView(from: child)
+        #expect(found === web)
+        #expect(NavigationShortcutGate.pageHistory(.back, in: found))
+        try await settle(web) { web.canGoForward }
+        #expect(NavigationShortcutGate.pageHistory(.forward, in: found))
+        #expect(!NavigationShortcutGate.pageHistory(.back, in: WKWebView()))
+        #expect(!NavigationShortcutGate.pageHistory(.forward, in: nil))
+    }
 }

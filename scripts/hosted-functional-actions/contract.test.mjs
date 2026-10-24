@@ -318,7 +318,7 @@ function validate(f) {
 }
 
 test("all owners have disjoint case ownership and the exact maintained inventory", () => {
-  assert.equal(functionalActionOwners.length, 39);
+  assert.equal(functionalActionOwners.length, 40);
   assert.equal(functionalActionBatches.controls.length, 20);
   assert.equal(functionalActionBatches.applications.length, 19);
   validateFunctionalOwnerInventory(

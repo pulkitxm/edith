@@ -135,7 +135,7 @@ public struct ExtensionUICarrier: Sendable {
 
     private func requireWorkerCapabilities() throws {
         var expected = ["com.apple.security.app-sandbox": true]
-        if ["music", "notchShelf"].contains(extensionID) {
+        if ["music", "notchShelf", "socialManager"].contains(extensionID) {
             expected["com.apple.security.network.client"] = true
         }
         try Self.requireEntitlements(worker, expected: expected)

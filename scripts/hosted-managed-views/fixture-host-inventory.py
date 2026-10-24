@@ -111,7 +111,7 @@ def fixture_host_inventory(host, payload, metadata, *, identity=executable_ident
             raise ValueError('Fixture carrier Host resources differ')
         result[role] = {'identity': bundle_identifier, 'metadata': expected, 'code': copied_code, 'hostResources': copied_resources}
     expected_entitlements = {'com.apple.security.app-sandbox': True}
-    if owner in ('music', 'notchShelf'):
+    if owner in ('music', 'notchShelf', 'socialManager'):
         expected_entitlements['com.apple.security.network.client'] = True
     actual_entitlements = entitlements(worker)
     if actual_entitlements != expected_entitlements or any(type(value) is not bool for value in actual_entitlements.values()):

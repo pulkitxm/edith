@@ -294,6 +294,7 @@ public enum HostSettingsCatalog {
         AppStorageKeys.Tabs.pluginsEnabled,
         AppStorageKeys.Tabs.quinjetEnabled,
         AppStorageKeys.Tabs.seoAuditEnabled,
+        AppStorageKeys.Tabs.socialManagerEnabled,
         AppStorageKeys.Tabs.studioEnabled,
         AppStorageKeys.Tabs.systemEnabled,
         AppStorageKeys.Tabs.timeLapseEnabled,

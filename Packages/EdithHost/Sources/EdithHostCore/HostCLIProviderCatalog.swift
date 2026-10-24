@@ -276,7 +276,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             "uninstall", "completions", "extensions", "agent",
         ],
         "keepAwake": [], "focusDim": [], "windowSweaters": [], "keystrokeHighlight": [],
-        "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [],
+        "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [], "socialManager": [],
         "calendar": ["calendar"], "music": ["music"], "usage": ["usage"],
         "machines": ["machines"], "herdr": ["herdr"], "quinjet": ["quinjet"],
         "studio": ["studio"], "database": ["database"], "docs": ["docs"],
@@ -352,7 +352,7 @@ public struct HostCLIProviderRegistry: Sendable {
             throw HostCLIError.rejected("Invalid provider list.")
         }
         let states = try JSONDecoder().decode([HostCLIProviderState].self, from: data)
-        guard states.count <= 39, Set(states.map(\.id)).count == states.count else {
+        guard states.count <= 40, Set(states.map(\.id)).count == states.count else {
             throw HostCLIError.rejected("Invalid provider list.")
         }
         return states

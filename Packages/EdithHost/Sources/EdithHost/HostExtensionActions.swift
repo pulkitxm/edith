@@ -12,7 +12,7 @@ enum HostExtensionSettingsPolicy: Equatable {
             .init(section: "extension", policy: .preferences)
         case "bifrost", "clipboard", "codeStats", "downloads", "lidAwake", "attention",
             "appMaintenance", "studio", "quinjet", "notchShelf", "audioMixer", "latex",
-            "timeLapse":
+            "timeLapse", "socialManager":
             .init(section: "extension", policy: .active)
         case "calendar": .init(section: "calendar", policy: .active)
         case "jev": .init(section: "jev", policy: .active)

@@ -85,8 +85,8 @@ export function validateCIArtifactSet({
     "The requested CI run did not succeed",
   );
   const ids = definitions.map(({ id }) => id).sort();
-  assert.equal(ids.length, 39);
-  assert.equal(new Set(ids).size, 39);
+  assert.equal(ids.length, 40);
+  assert.equal(new Set(ids).size, 40);
   assert.deepEqual(Object.keys(fingerprints).sort(), ids);
   assert(jobs.length <= 1000 && artifacts.length <= 1000);
   validateNonpublishingNativeJobs(jobs, definitions, run.id);

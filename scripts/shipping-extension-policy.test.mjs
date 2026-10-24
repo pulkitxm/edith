@@ -26,7 +26,7 @@ test("the release selects every manifest extension without modifying the manifes
   const definitions = await manifestDefinitions();
   const before = JSON.stringify(definitions);
   const selected = shippingDefinitions(definitions);
-  assert.equal(definitions.length, 39);
+  assert.equal(definitions.length, 40);
   assert.deepEqual(
     selected.map((entry) => entry.id),
     definitions

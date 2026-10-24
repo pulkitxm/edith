@@ -12,7 +12,7 @@ import { validateInstallerProof } from "./hosted-public-release/verify.mjs";
 const source = "a".repeat(40);
 const fingerprint = "b".repeat(64);
 function catalogFixture() {
-  const definitions = Array.from({ length: 39 }, (_, index) => ({
+  const definitions = Array.from({ length: 40 }, (_, index) => ({
     id: `owner${index}`,
     hostABI: "syntheticABI",
     minimumSystemVersion: "14.0.0",
@@ -418,7 +418,7 @@ function reusedInstallerFixture(updateIDs) {
     proof: {
       schema: 1,
       sourceCommit: source,
-      owners: 39,
+      owners: 40,
       installationVerified: true,
       productionSignaturesVerified: true,
       storeSelectionVerified: true,
@@ -454,7 +454,7 @@ describe("Reused public packages retain explicit lifecycle and update scope", ()
       const { proof, context } = reusedInstallerFixture(updateIDs);
       expect(() => validateInstallerProof(proof, context)).not.toThrow();
       expect(proof.updatedIDs).toEqual(updateIDs);
-      expect(proof.reinstalledIDs).toHaveLength(39);
+      expect(proof.reinstalledIDs).toHaveLength(40);
       for (const changed of [
         { updatedIDs: undefined },
         { updatedIDs: [...updateIDs, "foreign"] },

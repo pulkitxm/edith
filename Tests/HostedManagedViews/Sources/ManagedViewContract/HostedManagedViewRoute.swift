@@ -22,7 +22,7 @@ struct HostedManagedViewRoute: Codable, Equatable {
         "system", "timeLapse", "cleaner", "appMaintenance", "plugins", "blitztree", "notchShelf",
         "clipboard", "docs", "latex", "companion", "terminal", "usage", "bifrost", "lidAwake",
         "attention", "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "studio",
-        "herdr", "quinjet", "database",
+        "herdr", "quinjet", "database", "socialManager",
     ]
     static let settingsOwners: Set<String> = [
         "keepAwake", "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",

@@ -626,15 +626,15 @@ test("finite observation budget derives all owners and three phases from exact s
   const maximum = createFunctionalProcessObservationBudget(
     observationBudgetFixture(16),
   );
-  assert.equal(minimum.recipes.length, 39);
-  assert.equal(minimum.literalSteps, 39);
+  assert.equal(minimum.recipes.length, 40);
+  assert.equal(minimum.literalSteps, 40);
   assert.equal(minimum.phases, 3);
   assert.equal(
     minimum.limit,
-    256 + 39 * 64 + 39 * 3 * 16 * 4 + 39 * 3 * 12 * 4 + 2,
+    256 + 40 * 64 + 40 * 3 * 16 * 4 + 40 * 3 * 12 * 4 + 2,
   );
-  assert.equal(maximum.limit, 100098);
-  assert.equal(maximum.stepBoundaries, 39 * 16 * 3 * 12 * 4);
+  assert.equal(maximum.limit, 102658);
+  assert.equal(maximum.stepBoundaries, 40 * 16 * 3 * 12 * 4);
   assert(Object.isFrozen(maximum) && Object.isFrozen(maximum.recipes));
 });
 

@@ -15,8 +15,8 @@ export function shippingRequest(value, expectedSHA) {
 }
 
 export function shippingReleaseDefinitions(definitions) {
-  assert.equal(definitions.length, 39);
-  assert.equal(new Set(definitions.map(({ id }) => id)).size, 39);
+  assert.equal(definitions.length, 40);
+  assert.equal(new Set(definitions.map(({ id }) => id)).size, 40);
   const selected = definitions.filter(({ id }) => id === "keepAwake");
   assert.equal(selected.length, 1);
   assert.deepEqual(selected[0].dependencies, []);

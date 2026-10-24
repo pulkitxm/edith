@@ -63,6 +63,8 @@ enum HostMarketplaceCatalog {
         "windowSweaters": "Knitted borders around your windows, in each app's own colours.",
         "presenter": "Blurs sensitive numbers while sharing your screen.",
         "studio": "Edit, convert, compress and combine images, PDFs, video and audio.",
+        "socialManager":
+            "Profiles with separate website accounts, tabs and resizable side-by-side panes.",
         "latex": "Compile local documents or edit GitHub sources with pull request review.",
         "timeLapse": "Record displays or windows with audio, or capture a compact time-lapse.",
         "music": "Play local music, connect Spotify, or listen with YouTube Music.",

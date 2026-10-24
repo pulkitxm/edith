@@ -288,7 +288,7 @@ import Testing
             try JSONSerialization.jsonObject(
                 with: Data(contentsOf: root.appendingPathComponent("Extensions/manifest.json")))
                 as? [[String: Any]])
-        #expect(rows.count == 39 && HostRequirementsCLIAdapter.packagedRoles.count == 39)
+        #expect(rows.count == 40 && HostRequirementsCLIAdapter.packagedRoles.count == 40)
         for row in rows {
             let id = try #require(row["id"] as? String)
             let roles = try #require(row["roles"] as? [String: Any])

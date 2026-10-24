@@ -290,14 +290,14 @@ export function functionalFixtureRolePolicySource(
       admittedPolicies.manifest.bytes,
     ),
   );
-  assert(Array.isArray(manifest) && manifest.length === 39);
+  assert(Array.isArray(manifest) && manifest.length === 40);
   assert.deepEqual(
     manifest.map((entry) => entry.id).sort(),
     [...functionalActionOwners].sort(),
   );
   assert(
     Array.isArray(admittedPolicies.cases) &&
-      admittedPolicies.cases.length === 39,
+      admittedPolicies.cases.length === 40,
   );
   assert.deepEqual(
     admittedPolicies.cases.map((entry) => entry.owner).sort(),
@@ -315,7 +315,7 @@ export function functionalFixtureRolePolicySource(
     new TextDecoder("utf-8", { fatal: true }).decode(policyBytes),
   );
   assert.equal(functionalCanonicalJSON(policies), policyBytes.toString("utf8"));
-  assert(Array.isArray(policies) && policies.length === 39);
+  assert(Array.isArray(policies) && policies.length === 40);
   assert.deepEqual(
     policies.map((entry) => entry.owner).sort(),
     [...functionalActionOwners].sort(),

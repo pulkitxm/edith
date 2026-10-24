@@ -136,7 +136,7 @@ class HostSizeReportTests(unittest.TestCase):
         self.assertIn("It does not establish merge readiness", rendered)
 
     def test_complete_39_package_coverage_does_not_infer_publication_or_release_readiness(self):
-        index = [{"id": f"sample{number}", "title": f"Sample {number}"} for number in range(39)]
+        index = [{"id": f"sample{number}", "title": f"Sample {number}"} for number in range(40)]
         for entry in index:
             self.package(entry["id"])
         definitions = [{"id": entry["id"], "contractVersion": 1} for entry in index]
@@ -147,8 +147,8 @@ class HostSizeReportTests(unittest.TestCase):
         self.assertEqual(result["measurement"]["artifactPublication"], "not-verified")
         self.assertTrue(result["measurement"]["sourceFingerprintsVerified"])
         rendered = report.render_markdown(result, index)
-        self.assertIn("All 39 indexed features have measured", rendered)
-        self.assertIn("All 39 measured packages", rendered)
+        self.assertIn("All 40 indexed features have measured", rendered)
+        self.assertIn("All 40 measured packages", rendered)
         self.assertNotIn("remaining feature migrations", rendered)
         self.assertNotIn("remaining Home card data", rendered)
         self.assertIn("neither publishes them nor proves", rendered)
@@ -249,7 +249,7 @@ class HostSizeReportTests(unittest.TestCase):
 
     def final_fixture(self):
         (self.app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.example.fixture"}))
-        index = [{"id": f"sample{number}", "title": f"Sample {number}"} for number in range(39)]
+        index = [{"id": f"sample{number}", "title": f"Sample {number}"} for number in range(40)]
         fingerprints = {}
         for entry in index:
             identifier = entry["id"]
@@ -289,7 +289,7 @@ class HostSizeReportTests(unittest.TestCase):
         index, definitions, fingerprints, source, host = self.final_fixture()
         for selected, values in [(definitions[:-1], fingerprints), (definitions, {**fingerprints, "foreign": "a" * 64}),
                                  (definitions, {**fingerprints, "sample0": "fixture"})]:
-            with self.subTest(selected=selected, values=values), self.assertRaisesRegex(ValueError, "39 indexed|SHA-256"):
+            with self.subTest(selected=selected, values=values), self.assertRaisesRegex(ValueError, "40 indexed|SHA-256"):
                 report.build_report(self.baseline, self.app, self.packages, selected, index, values, host,
                     expected_source_commit=source["sourceCommit"], source_state=source)
 

@@ -33,7 +33,7 @@ export function extensionUIWorkerEntitlements(id) {
     throw new Error("Invalid extension UI identity");
   return {
     "com.apple.security.app-sandbox": true,
-    ...(["music", "notchShelf"].includes(id)
+    ...(["music", "notchShelf", "socialManager"].includes(id)
       ? { "com.apple.security.network.client": true }
       : {}),
   };

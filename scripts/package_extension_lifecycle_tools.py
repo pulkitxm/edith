@@ -57,11 +57,11 @@ def index_bytes(root, host):
     manifest, _ = read_file(root, 'Extensions/manifest.json', 8_388_608)
     entries = json.loads(source)
     definitions = json.loads(manifest)
-    if not isinstance(entries, list) or not isinstance(definitions, list) or len(entries) != 39 or len(definitions) != 39:
+    if not isinstance(entries, list) or not isinstance(definitions, list) or len(entries) != 40 or len(definitions) != 40:
         raise ValueError('Lifecycle tools require the exact current39 source index and manifest')
     ids = [row.get('id') for row in entries if isinstance(row, dict)]
     declared = [row.get('id') for row in definitions if isinstance(row, dict)]
-    if len(ids) != 39 or len(declared) != 39 or any(not isinstance(value, str) or not value for value in ids + declared) or len(set(ids)) != 39 or len(set(declared)) != 39 or set(ids) != set(declared):
+    if len(ids) != 40 or len(declared) != 40 or any(not isinstance(value, str) or not value for value in ids + declared) or len(set(ids)) != 40 or len(set(declared)) != 40 or set(ids) != set(declared):
         raise ValueError('Lifecycle tool index differs from the current39 manifest')
     if any(set(row) != {'id', 'title', 'symbolName', 'category'} or any(not isinstance(value, str) or not value for value in row.values()) for row in entries):
         raise ValueError('Lifecycle tool index contains invalid source entries')

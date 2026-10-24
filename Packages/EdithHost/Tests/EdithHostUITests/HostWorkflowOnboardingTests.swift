@@ -141,7 +141,7 @@ import Testing
         let fixture = Fixture()
         defer { fixture.remove() }
         let entries = try HostIndex.bundled()
-        #expect(entries.count == 39)
+        #expect(entries.count == 40)
         let suggested = Set(["clipboard", "calendar", "system", "keepAwake", "emoji"])
         fixture.available = Dictionary(uniqueKeysWithValues: suggested.map { ($0, package($0)) })
         let model = fixture.model(entries: entries)

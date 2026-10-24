@@ -56,7 +56,7 @@ private func identity(
 }
 
 @Test func allKnownOwnersRequireTheirExactSyntheticHostAndPublicPoint() throws {
-    #expect(HostedManagedApprovalRoute.owners.count == 39)
+    #expect(HostedManagedApprovalRoute.owners.count == 40)
     let catalog = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(
             "routes.json")

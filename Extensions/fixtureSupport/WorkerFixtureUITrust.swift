@@ -56,7 +56,7 @@ public struct WorkerFixtureUITrust: Sendable {
             roleCertificateSHA256.count == 32,
             producerExecutable == root + "/Producer/functional-producer",
             WorkerFixtureUIContract.hex(producerExecutableSHA256, count: 64),
-            rolePolicies.count <= 39, Set(rolePolicies.map(\.owner)).count == rolePolicies.count
+            rolePolicies.count <= 40, Set(rolePolicies.map(\.owner)).count == rolePolicies.count
         else { throw WorkerFixtureError.invalid }
     }
 }

@@ -22,7 +22,7 @@ class HostSourceCleanlinessTests(unittest.TestCase):
         (self.scripts / 'clean_source_probe.py').write_text('value = 42\n')
         self.source = 'a' * 40
         self.info = {'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}
-        self.definitions = [{'id': 'owner' + str(i)} for i in range(39)]
+        self.definitions = [{'id': 'owner' + str(i)} for i in range(40)]
 
     def bytecode_policy(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()

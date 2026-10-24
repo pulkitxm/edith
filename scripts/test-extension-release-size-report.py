@@ -57,7 +57,7 @@ class ReleaseAggregateTests(unittest.TestCase):
                          'xcode': 'Xcode 27.0\nBuild version 27A100', 'sdk': '27.0', 'signature': 'synthetic certificate'}
         self.proof = {'schema': 1, 'sourceCommit': source['sourceCommit'], 'version': '1.2.3', 'build': '123',
             'sourceQualification': 'release-version-stamp-only', 'deepStrictSignatureVerified': True,
-            'sparkleEd25519Verified': True, 'indexedExtensions': 39, 'extensionPayloadBytes': 0,
+            'sparkleEd25519Verified': True, 'indexedExtensions': 40, 'extensionPayloadBytes': 0,
             'hostExecutableSHA256': report.digest_file(self.exe),
             'dmgSHA256': report.digest_file(self.assets / 'Edith.dmg'),
             'dmgBytes': (self.assets / 'Edith.dmg').stat().st_size,
@@ -142,8 +142,8 @@ class ReleaseAggregateTests(unittest.TestCase):
                    'packages': self.catalog['packages'] + [old]}
         key = self.write_signed_catalog(catalog)
         result = self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
-        self.assertEqual(len(result['frozenPackageHost']['packages']), 39)
-        self.assertEqual(len(result['nativeEvidence']['links']), 39)
+        self.assertEqual(len(result['frozenPackageHost']['packages']), 40)
+        self.assertEqual(len(result['nativeEvidence']['links']), 40)
         self.assertEqual(result['shippingAppPlusAll39LogicalBytes'], before['shippingAppPlusAll39LogicalBytes'])
         self.assertEqual(result['shippingDMGPlusAll39ZIPBytes'], before['shippingDMGPlusAll39ZIPBytes'])
         for name in ['catalog-1.json', 'pointer.json']:
@@ -167,7 +167,7 @@ class ReleaseAggregateTests(unittest.TestCase):
                 key = self.write_signed_catalog(catalog)
                 result = self.aggregate(catalog_key=key, catalog_verify=report.verify_catalog)
                 self.assertEqual(result['frozenPackageHost']['packages'][0], current)
-                self.assertEqual(len(result['nativeEvidence']['links']), 39)
+                self.assertEqual(len(result['nativeEvidence']['links']), 40)
 
     def test_duplicate_current_identity_is_rejected_even_with_ambiguous_metadata(self):
         for change in [{}, {'sha256': 'b' * 64}]:

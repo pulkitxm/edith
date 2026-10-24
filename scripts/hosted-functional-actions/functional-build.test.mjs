@@ -559,7 +559,7 @@ test("compiler budget consumes every exact source-pinned recipe and retains no r
   const f = budgetFixture();
   const result = await probeFunctionalCompilationObservationBudget(f);
   assert.deepEqual(f.reads, [...f.files.keys()]);
-  assert.equal(result.recipes.length, 39);
+  assert.equal(result.recipes.length, 40);
   assert.equal(result.phases, 3);
   assert.equal(result.retirementBoundaries, 2);
   const steps = [...f.files.values()].reduce(
@@ -569,7 +569,7 @@ test("compiler budget consumes every exact source-pinned recipe and retains no r
   assert.equal(result.literalSteps, steps);
   assert.equal(
     result.limit,
-    256 + 39 * 64 + 39 * 3 * 16 * 4 + steps * 3 * 12 * 4 + 2,
+    256 + 40 * 64 + 40 * 3 * 16 * 4 + steps * 3 * 12 * 4 + 2,
   );
   assert.equal(result.sourceReady, false);
   assert.equal(result.nativeProof, false);

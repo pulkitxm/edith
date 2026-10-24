@@ -140,9 +140,9 @@ export function validateEvidence(payload) {
   assert.equal(payload.workflowPath, ".github/workflows/extensions.yml");
   assert(["push", "workflow_dispatch"].includes(payload.event));
   evidenceTag(payload.sourceCommit, payload.runID, payload.runAttempt);
-  assert(Array.isArray(payload.plannedIDs) && payload.plannedIDs.length <= 39);
+  assert(Array.isArray(payload.plannedIDs) && payload.plannedIDs.length <= 40);
   assert.equal(new Set(payload.plannedIDs).size, payload.plannedIDs.length);
-  assert.equal(Object.keys(payload.fingerprints).length, 39);
+  assert.equal(Object.keys(payload.fingerprints).length, 40);
   for (const [id, value] of Object.entries(payload.fingerprints)) {
     assert.match(id, /^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
     assert.match(value, hash);
@@ -415,7 +415,7 @@ export function publicationComposition(
   fingerprints,
 ) {
   evidenceTag(source, runID, attempt);
-  assert(packages.length > 0 && packages.length <= 39);
+  assert(packages.length > 0 && packages.length <= 40);
   assert.equal(packages.length, Object.keys(fingerprints).length);
   assert.equal(
     new Set(packages.map(({ package: record }) => record.id)).size,

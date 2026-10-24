@@ -37,7 +37,7 @@ on:
         required: false
         default: ""
       hosted_managed_artifacts_run:
-        description: "Completed immutable nonpublishing Extensions run containing all 39 packages."
+        description: "Completed immutable nonpublishing Extensions run containing all 40 packages."
         type: string
         required: false
         default: ""

@@ -136,7 +136,7 @@ def host_proof(value, source, version, build, index_sha256, sparkle_key, team, c
     require(value['version'] == version and value['build'] == build and value['indexSHA256'] == index_sha256 and value['sparklePublicKey'] == sparkle_key, 'Host proof version or source resources differ')
     require(value['certificateCategory'] == certificate and certificate in ('Developer ID Application','Apple Development','Apple Distribution') and value['teamIdentifier'] == team and re.fullmatch('[A-Z0-9]{10}', team), 'Host signing identity differs')
     require(value['verifiedDesignatedRequirement'] == f'identifier "com.pulkit.edith" and anchor apple generic and certificate leaf[subject.OU] = "{team}"', 'Designated requirement differs')
-    require(type(value['installedBytes']) is int and 0 < value['installedBytes'] < 10000000 and type(value['extensionPayloadBytes']) is int and value['extensionPayloadBytes'] == 0 and type(value['indexedExtensions']) is int and value['indexedExtensions'] == 39, 'Empty host size or index differs')
+    require(type(value['installedBytes']) is int and 0 < value['installedBytes'] < 10000000 and type(value['extensionPayloadBytes']) is int and value['extensionPayloadBytes'] == 0 and type(value['indexedExtensions']) is int and value['indexedExtensions'] == 40, 'Empty host size or index differs')
     require(re.fullmatch('[0-9a-f]{64}', value['hostExecutableSHA256']), 'Invalid host executable checksum')
     require(value['deepStrictSignatureVerified'] is True and value['sparkleEd25519Verified'] is True and value['publicationVerified'] is False and value['managedViewsVerified'] is False and value['hardwareVerified'] is False, 'Host proof tier claims differ')
     require(value['sourceQualification'] in ('clean','release-version-stamp-only') and value['notarization'] in ('verified','skipped'), 'Unknown host source or notarization qualification')
@@ -179,7 +179,7 @@ def public_host(root, request_path):
     actual, sanitized = maintained.collect_proof(values['bundle'], values['dmg'], values['appcast'], metadata, info, index, source, tag, version, build, proof['notarization'])
     expected = {key: value for key, value in proof.items() if key not in ('sourceQualification','workflowSourceCommit','sourceMode')}
     require(actual == expected and sanitized == metadata, 'Actual public DMG host differs from source-bound CI host proof')
-    return {'schema': 1, 'sourceCommit': source, 'hostExecutableSHA256': actual['hostExecutableSHA256'], 'installedBytes': actual['installedBytes'], 'dmgBytes': actual['dmgBytes'], 'dmgSHA256': actual['dmgSHA256'], 'appcastSHA256': actual['appcastSHA256'], 'teamIdentifier': actual['teamIdentifier'], 'certificateCategory': actual['certificateCategory'], 'notarization': actual['notarization'], 'sparkleEd25519Verified': True, 'extensionPayloadBytes': 0, 'indexedExtensions': 39, 'productExecuted': False}
+    return {'schema': 1, 'sourceCommit': source, 'hostExecutableSHA256': actual['hostExecutableSHA256'], 'installedBytes': actual['installedBytes'], 'dmgBytes': actual['dmgBytes'], 'dmgSHA256': actual['dmgSHA256'], 'appcastSHA256': actual['appcastSHA256'], 'teamIdentifier': actual['teamIdentifier'], 'certificateCategory': actual['certificateCategory'], 'notarization': actual['notarization'], 'sparkleEd25519Verified': True, 'extensionPayloadBytes': 0, 'indexedExtensions': 40, 'productExecuted': False}
 
 
 def main():

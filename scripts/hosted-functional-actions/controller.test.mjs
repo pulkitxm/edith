@@ -563,8 +563,8 @@ test("source readiness compiles all39 literal policies against actual case and m
     admitted.admittedPolicies,
   );
   assert.equal(result.sourceCommit, fixture.sourceCommit);
-  assert.equal(admitted.admittedPolicies.cases.length, 39);
-  assert.equal(JSON.parse(admitted.policyBytes.toString()).length, 39);
+  assert.equal(admitted.admittedPolicies.cases.length, 40);
+  assert.equal(JSON.parse(admitted.policyBytes.toString()).length, 40);
   assert(!Object.hasOwn(admitted, "nativeProof"));
   for (const mutate of [
     (f) => {

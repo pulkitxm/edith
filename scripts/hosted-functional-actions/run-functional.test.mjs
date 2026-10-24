@@ -89,7 +89,7 @@ test("all owners execute once with the same current issuer and complete phase pl
   const f = fixture();
   const results = await executeFunctionalOwners(f);
   assert.deepEqual(f.counts().visited, functionalActionOwners);
-  assert.equal(results.length, 39);
+  assert.equal(results.length, 40);
   assert.equal(f.counts().observations, 80);
   assert.equal(f.counts().cleanups, 0);
   assert.equal(Object.isFrozen(results), true);
@@ -1750,7 +1750,7 @@ function qualifiedSealFixture(change = () => {}) {
 test("closed signed aggregate binds genuine envelope bytes and complete canonical owner metadata", () => {
   const fixture = qualifiedSealFixture();
   const payload = validateFunctionalQualifiedSeal(fixture);
-  assert.equal(payload.owners.length, 39);
+  assert.equal(payload.owners.length, 40);
   assert.throws(() =>
     validateFunctionalQualifiedSeal({
       ...fixture,

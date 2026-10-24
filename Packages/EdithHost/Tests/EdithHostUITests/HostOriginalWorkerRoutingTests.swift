@@ -16,8 +16,8 @@ import Testing
             HostNavigationCatalog.pages.map(\.id) == [
                 "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet", "companion",
                 "plugins", "appMaintenance", "blitztree", "system", "runningApps", "desk", "media",
-                "studio", "latex", "timeLapse", "downloads", "music", "calendar", "virtualCamera",
-                "data", "database", "attention", "seoAudit", "codeStats", "extensions", "settings",
+                "studio", "latex", "socialManager", "timeLapse", "downloads", "music", "calendar",
+                "virtualCamera", "data", "database", "attention", "seoAudit", "codeStats", "extensions", "settings",
                 "about",
             ])
         #expect(

@@ -138,6 +138,12 @@
     "category": "media"
   },
   {
+    "id": "socialManager",
+    "title": "Social Manager",
+    "symbolName": "person.crop.rectangle.stack",
+    "category": "media"
+  },
+  {
     "id": "latex",
     "title": "LaTeX",
     "symbolName": "doc.richtext",

@@ -1071,7 +1071,7 @@ try {
   const disabled = await command(["calendar", "ls"], 4);
   assert.match(disabled.stderr, /calendar command provider is unavailable/);
   const list = await command(["extensions", "ls"]);
-  assert.equal(list.length, 39);
+  assert.equal(list.length, 40);
   await command(["extensions", "info", "missing"], 1);
   let info = await command(["extensions", "install", "keepAwake"]);
   assert.equal(info.version, "1.0.0");

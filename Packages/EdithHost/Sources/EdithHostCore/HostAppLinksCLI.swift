@@ -35,6 +35,9 @@ public enum HostAppLinksCLI {
         .init(owner: "latex", id: "guide", title: "LaTeX guide", path: "docs/latex.md"),
         .init(owner: "blitztree", id: "guide", title: "BlitzTree guide", path: "docs/blitztree.md"),
         .init(
+            owner: "socialManager", id: "guide", title: "Social Manager guide",
+            path: "docs/social-manager.md"),
+        .init(
             owner: "attention", id: "guide", title: "Attention guide",
             path: "docs/cli/attention/README.md"),
         .init(

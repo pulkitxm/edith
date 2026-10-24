@@ -6,12 +6,12 @@ import { join } from "node:path";
 export function validateManagedViewReview(review, definitions) {
   assert.equal(review.schema, 1);
   assert.match(review.reviewedSource, /^[a-f0-9]{40}$/);
-  assert.equal(review.owners.length, 39);
+  assert.equal(review.owners.length, 40);
   assert.deepEqual(
     review.owners.map(({ id }) => id).sort(),
     definitions.map(({ id }) => id).sort(),
   );
-  assert.equal(new Set(review.owners.map(({ id }) => id)).size, 39);
+  assert.equal(new Set(review.owners.map(({ id }) => id)).size, 40);
   for (const owner of review.owners) {
     assert(["main", "settings"].includes(owner.location));
     assert.match(owner.section, /^[A-Za-z][A-Za-z0-9]{0,63}$/);

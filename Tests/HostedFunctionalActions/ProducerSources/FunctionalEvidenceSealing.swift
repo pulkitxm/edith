@@ -62,7 +62,7 @@ enum FunctionalEvidenceSealing {
         "blitztree", "plugins", "notchShelf", "clipboard", "music", "docs", "latex",
         "companion", "terminal", "studio", "usage", "bifrost", "lidAwake", "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
-        "quinjet", "database",
+        "quinjet", "database", "socialManager",
     ]
 
     static func presentation(

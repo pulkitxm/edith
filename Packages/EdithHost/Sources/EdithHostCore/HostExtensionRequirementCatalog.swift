@@ -206,6 +206,15 @@ public enum HostExtensionRequirementCatalog {
                 toolRule: .all, requiresHelper: false), dependencies: [],
             setupInstruction: "Add a local source or GitHub repository in the LaTeX window."),
         .init(
+            id: "socialManager", title: "Social Manager",
+            original: .init(
+                requiredTools: [], optionalTools: [], requiredPermissions: [],
+                optionalPermissions: [], requiredCapabilities: ["webBrowsing"],
+                optionalCapabilities: [], toolRule: .all, requiresHelper: false), dependencies: [],
+            setupInstruction:
+                "Create a profile, add its website accounts and sign in to each independent browser session."
+        ),
+        .init(
             id: "companion", title: "Memory",
             original: .init(
                 requiredTools: [], optionalTools: [], requiredPermissions: [],

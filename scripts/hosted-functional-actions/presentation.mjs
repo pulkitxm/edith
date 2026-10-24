@@ -788,7 +788,7 @@ export function installedPresentationUITestSource({ plan, issuerPublicKey }) {
     Buffer.from(issuerPublicKey, "base64").toString("base64"),
     issuerPublicKey,
   );
-  assert.equal(plan.definitions.length, 39);
+  assert.equal(plan.definitions.length, 40);
   assert.deepEqual(
     plan.definitions.map(({ owner }) => owner).sort(),
     [...functionalActionOwners].sort(),

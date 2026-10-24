@@ -77,8 +77,8 @@ test("fixed three chunks form an exact deterministic disjoint39 partition", () =
   const selected = [0, 1, 2].map((chunk) =>
     managedChunkOwners(review.owners, chunk),
   );
-  expect(selected.map((x) => x.length)).toEqual([13, 13, 13]);
-  expect(new Set(selected.flat().map(({ id }) => id)).size).toBe(39);
+  expect(selected.map((x) => x.length)).toEqual([14, 13, 13]);
+  expect(new Set(selected.flat().map(({ id }) => id)).size).toBe(40);
   expect(managedChunkOwners([...review.owners].reverse(), 0)).toEqual(
     selected[0],
   );
@@ -91,7 +91,7 @@ test("selected artifact download requires complete39 metadata even for unselecte
   const intake = {
     originals: review.owners.map(({ id }) => ({ extensionID: id })),
   };
-  expect(selectManagedArtifactRows(intake, review.owners, 0)).toHaveLength(13);
+  expect(selectManagedArtifactRows(intake, review.owners, 0)).toHaveLength(14);
   const missing = structuredClone(intake);
   missing.originals.pop();
   expect(() => selectManagedArtifactRows(missing, review.owners, 0)).toThrow();
@@ -106,12 +106,12 @@ test("only the aggregate may claim all39 and every owner retains native ready an
   const chunks = complete();
   for (const chunk of chunks) {
     expect(chunk.all39Validated).toBe(false);
-    expect(chunk.owners).toBe(13);
+    expect(chunk.owners).toBe(chunk.chunk === 0 ? 14 : 13);
   }
   const result = aggregateManagedChunks(chunks, review, bindings);
   expect(result.all39Validated).toBe(true);
-  expect(result.owners).toBe(39);
-  expect(result.results).toHaveLength(39);
+  expect(result.owners).toBe(40);
+  expect(result.results).toHaveLength(40);
   expect(result.functionalActionsValidated).toBe(false);
   for (const change of [
     (x) => x.pop(),

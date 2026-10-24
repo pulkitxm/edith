@@ -21,8 +21,8 @@ class LifecycleToolsTests(unittest.TestCase):
         self.host_products = self.root / 'Packages/EdithHost/.build/arm64/debug'
         self.marketplace_products = self.root / 'Packages/ExtensionMarketplace/.build/arm64/debug'
         self.output = self.root / 'local/extension-tools'
-        self.index = json.dumps([{'id': 'owner' + str(index), 'title': 'Synthetic', 'symbolName': 'circle', 'category': 'utility'} for index in range(39)]).encode()
-        self.write('Extensions/manifest.json', json.dumps([{'id': 'owner' + str(index)} for index in range(39)]).encode())
+        self.index = json.dumps([{'id': 'owner' + str(index), 'title': 'Synthetic', 'symbolName': 'circle', 'category': 'utility'} for index in range(40)]).encode()
+        self.write('Extensions/manifest.json', json.dumps([{'id': 'owner' + str(index)} for index in range(40)]).encode())
         self.write('Packages/EdithHost/Sources/EdithHostCore/Resources/index.json', self.index)
         self.write(self.host / 'Contents/Resources/index.json', self.index)
         self.write(self.host_products / FILES[0], b'synthetic lifecycle executable', 0o751)
@@ -68,13 +68,13 @@ class LifecycleToolsTests(unittest.TestCase):
             path.write_bytes(original)
 
     def test_source_index_must_match_all39_manifest_owners(self):
-        self.write('Extensions/manifest.json', json.dumps([{'id': 'other' + str(index)} for index in range(39)]).encode())
+        self.write('Extensions/manifest.json', json.dumps([{'id': 'other' + str(index)} for index in range(40)]).encode())
         with self.assertRaisesRegex(ValueError, 'manifest'):
             self.package()
         self.assertFalse(self.output.exists())
 
     def test_duplicate_or_missing_manifest_owners_are_rejected(self):
-        for rows in [[{'id': 'owner0'}] * 39, [{'id': 'owner' + str(index)} for index in range(38)]]:
+        for rows in [[{'id': 'owner0'}] * 40, [{'id': 'owner' + str(index)} for index in range(38)]]:
             self.write('Extensions/manifest.json', json.dumps(rows).encode())
             with self.assertRaises(ValueError):
                 self.package()

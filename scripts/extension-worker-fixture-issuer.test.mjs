@@ -39,7 +39,7 @@ const definitions = JSON.parse(
 const workers = definitions.filter((entry) => entry.contractVersion === 1);
 
 test("all39 declared workers are admitted before any fixture build", () => {
-  assert.equal(workers.length, 39);
+  assert.equal(workers.length, 40);
   assert.deepEqual(validateWorkerFixtureSelection(definitions, []), workers);
   for (const requested of [[], ["futureWorker"], ["music", "futureWorker"]])
     assert.throws(

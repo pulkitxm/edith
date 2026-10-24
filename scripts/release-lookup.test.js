@@ -203,7 +203,7 @@ test("a known release ID is one direct read with no tag probe or listing", () =>
 
 test("one release listing answers every tag without per-tag probes", () => {
   const calls = [];
-  const releases = Array.from({ length: 39 }, (_, index) => ({
+  const releases = Array.from({ length: 40 }, (_, index) => ({
     ...item,
     id: index + 1,
     tag_name: `extensions/package${index}/1.0.0-source`,

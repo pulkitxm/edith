@@ -90,7 +90,7 @@ released package leases. Public approval required is a failed smoke, never
 native-view success. It does not open an approval browser or a standalone
 extension main-page window. The result is `result-managed-shipping.json`.
 
-Each of the 39 final packages still needs its selected original-role smoke with
+Each of the 40 final packages still needs its selected original-role smoke with
 provider-owned safe fixtures after the final source and frozen host settle.
 Passing worker lifecycle checks or the synthetic `sample` registration fixture
 is insufficient. No visible layout, keyboard interaction or OS feature actions

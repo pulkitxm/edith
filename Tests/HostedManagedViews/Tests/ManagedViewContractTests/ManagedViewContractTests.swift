@@ -70,7 +70,7 @@ private func route(id: String, directory: String = "/synthetic") -> HostedManage
 }
 
 @Test func everyClosedOriginalRouteRejectsWrongOwnerVersionAndFingerprint() throws {
-    #expect(HostedManagedViewRoute.owners.count == 39)
+    #expect(HostedManagedViewRoute.owners.count == 40)
     for id in HostedManagedViewRoute.owners {
         let route = route(id: id)
         try route.validate(

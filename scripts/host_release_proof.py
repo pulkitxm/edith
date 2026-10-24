@@ -125,7 +125,7 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
     index_bytes = document(bundle / 'Contents/Resources/index.json')
     require(index_bytes == expected_index, 'Host index differs from pinned source')
     index = json.loads(index_bytes)
-    require(len(index) == 39 and len({row['id'] for row in index}) == 39, 'Expected exactly39 indexed extensions')
+    require(len(index) == 40 and len({row['id'] for row in index}) == 40, 'Expected exactly39 indexed extensions')
     installed = 0
     for path in bundle.rglob('*'):
         status = path.lstat()
@@ -166,7 +166,7 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
     require(digest(bundle / 'Contents/MacOS/Edith') == executable_hash, 'Shipping executable changed during qualification')
     sanitized = {name: metadata[name] for name in METADATA_FIELDS}
     validate_metadata(sanitized)
-    return {'schema': 1, 'sourceCommit': source, 'version': version, 'build': build, 'installedBytes': installed, 'extensionPayloadBytes': 0, 'indexedExtensions': 39, 'indexSHA256': hashlib.sha256(index_bytes).hexdigest(), 'hostExecutableSHA256': executable_hash, 'certificateCategory': categories[0], 'teamIdentifier': teams[0], 'verifiedDesignatedRequirement': requirement, 'deepStrictSignatureVerified': True, 'dmgBytes': dmg_status.st_size, 'dmgSHA256': dmg_hash, 'dmgURL': url, 'appcastSHA256': hashlib.sha256(appcast_bytes).hexdigest(), 'sparklePublicKey': key, 'sparkleEd25519Verified': True, 'notarization': notary, 'publicationVerified': False, 'managedViewsVerified': False, 'hardwareVerified': False}, sanitized
+    return {'schema': 1, 'sourceCommit': source, 'version': version, 'build': build, 'installedBytes': installed, 'extensionPayloadBytes': 0, 'indexedExtensions': 40, 'indexSHA256': hashlib.sha256(index_bytes).hexdigest(), 'hostExecutableSHA256': executable_hash, 'certificateCategory': categories[0], 'teamIdentifier': teams[0], 'verifiedDesignatedRequirement': requirement, 'deepStrictSignatureVerified': True, 'dmgBytes': dmg_status.st_size, 'dmgSHA256': dmg_hash, 'dmgURL': url, 'appcastSHA256': hashlib.sha256(appcast_bytes).hexdigest(), 'sparklePublicKey': key, 'sparkleEd25519Verified': True, 'notarization': notary, 'publicationVerified': False, 'managedViewsVerified': False, 'hardwareVerified': False}, sanitized
 
 
 def pinned_sources(source, version, build, run=command):
@@ -183,7 +183,7 @@ def pinned_sources(source, version, build, run=command):
     index = subprocess.check_output(['git', 'show', f'{source}:Packages/EdithHost/Sources/EdithHostCore/Resources/index.json'])
     definitions = json.loads(subprocess.check_output(['git', 'show', f'{source}:Extensions/manifest.json']))
     ids = [row['id'] for row in definitions]
-    require(len(ids) == 39 and len(set(ids)) == 39 and sorted(ids) == sorted(row['id'] for row in json.loads(index)), 'Pinned source index differs from39-owner manifest')
+    require(len(ids) == 40 and len(set(ids)) == 40 and sorted(ids) == sorted(row['id'] for row in json.loads(index)), 'Pinned source index differs from39-owner manifest')
     return info, index, bool(paths)
 
 

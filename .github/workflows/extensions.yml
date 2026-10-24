@@ -44,7 +44,7 @@ name: Extensions
         required: false
         default: ""
       validation_sha:
-        description: Validate all 39 extensions at this exact source SHA without publishing
+        description: Validate all 40 extensions at this exact source SHA without publishing
         type: string
         required: false
         default: ""

@@ -329,7 +329,7 @@ test("common frozen runtime changes rebuild all39 while Camera-only packaging st
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(39);
+  expect(definitions).toHaveLength(40);
   const common = "scripts/build-contained-host-runtime.mjs";
   const camera = ["scripts/build-camera-carrier.mjs"];
   for (const event of [workflow.on.pull_request]) {
@@ -426,7 +426,7 @@ test("carrier packaging changes rebuild all shipping packages while proof-only e
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
-  expect(definitions).toHaveLength(39);
+  expect(definitions).toHaveLength(40);
   expect(
     planExtensionBuilds(definitions, [
       "scripts/test-package-extension-lifecycle-tools.py",
@@ -438,7 +438,7 @@ test("carrier packaging changes rebuild all shipping packages while proof-only e
     "scripts/package_extension_lifecycle_tools.py",
     "Packages/EdithHost/Sources/EdithExtensionCarrier/Entry.swift",
   ])
-    expect(planExtensionBuilds(definitions, [path])).toHaveLength(39);
+    expect(planExtensionBuilds(definitions, [path])).toHaveLength(40);
 });
 
 test("package build job names bind the closed artifact intake to one owner", () => {

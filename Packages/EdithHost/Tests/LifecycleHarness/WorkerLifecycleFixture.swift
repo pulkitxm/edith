@@ -20,7 +20,7 @@ public struct WorkerLifecycleFixture {
         "cleaner", "appMaintenance", "blitztree", "notchShelf", "clipboard", "docs",
         "latex", "companion", "terminal", "usage", "bifrost", "lidAwake", "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr",
-        "quinjet", "database",
+        "quinjet", "database", "socialManager",
     ]
 
     public static func requireSupported(_ id: String) throws {

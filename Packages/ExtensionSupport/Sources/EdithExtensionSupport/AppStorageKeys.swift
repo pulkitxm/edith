@@ -389,6 +389,7 @@ public enum AppStorageKeys {
         public static let order = "tabOrder"
         public static let quinjetEnabled = "tabQuinjetEnabled"
         public static let seoAuditEnabled = "tabSEOAuditEnabled"
+        public static let socialManagerEnabled = "tabSocialManagerEnabled"
         public static let systemEnabled = "tabSystemEnabled"
         public static let usageEnabled = "tabUsageEnabled"
     }

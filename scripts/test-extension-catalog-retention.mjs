@@ -14,7 +14,7 @@ try {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  assert.equal(definitions.length, 39);
+  assert.equal(definitions.length, 40);
   const record = (definition, generation, contract = {}) => ({
     id: definition.id,
     version: `1.0.${generation}`,
@@ -39,7 +39,7 @@ try {
       generation + 1,
     );
   }
-  assert.equal(catalog.packages.length, 78);
+  assert.equal(catalog.packages.length, 80);
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const encodedKey = Buffer.from(
     publicKey.export({ format: "jwk" }).x,
@@ -136,7 +136,7 @@ try {
   );
   assert.notEqual(rejected.status, 0);
   process.stdout.write(
-    `${JSON.stringify({ independentExtensions: 39, releaseGenerations: 32, retainedPackages: 78, nativeCurrentSelections: 39, nativeOSContractArchitectureSelections: 8, rollbackVersionsRetained: true, tamperedSignatureRejected: true })}\n`,
+    `${JSON.stringify({ independentExtensions: 40, releaseGenerations: 32, retainedPackages: 80, nativeCurrentSelections: 40, nativeOSContractArchitectureSelections: 8, rollbackVersionsRetained: true, tamperedSignatureRejected: true })}\n`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });
