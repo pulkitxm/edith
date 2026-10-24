@@ -77,6 +77,19 @@ private final class Clock: @unchecked Sendable {
     func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
 }
 
+private final class PauseOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    func claim() -> Bool {
+        lock.withLock {
+            if claimed { return false }
+            claimed = true
+            return true
+        }
+    }
+}
+
 private actor PublicationGate {
     private var entered: CheckedContinuation<Void, Never>?
     private var release: CheckedContinuation<Void, Never>?
@@ -320,15 +333,77 @@ struct HerdrAgentHookTests {
         #expect(fixture.script.sent.isEmpty)
     }
 
-    @Test func armingAgainReplacesTheArmedHook() async throws {
+    @Test func armingAgainKeepsBothHooks() async throws {
         let fixture = HookFixture()
         defer { fixture.close() }
         let service = fixture.service()
         _ = try await service.arm(HerdrHookArmRequest(agent: agent(), message: "first"))
-        let snapshot = try await service.arm(HerdrHookArmRequest(agent: agent(), message: "second"))
-        #expect(snapshot.hooks.map(\.message) == ["second"])
+        let snapshot = try await service.arm(
+            HerdrHookArmRequest(agent: agent(), message: "second"))
+        #expect(snapshot.hooks.map(\.message) == ["first", "second"])
+        #expect(snapshot.armedHooks(for: agent().id).map(\.message) == ["first", "second"])
         let removed = try await service.remove(snapshot.hooks[0].id)
-        #expect(removed.hooks.isEmpty)
+        #expect(removed.hooks.map(\.message) == ["second"])
+    }
+
+    @Test func aSecondFinishMessageWaitsForTheNextTurn() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let service = fixture.service()
+        let working = agent(status: .working, sequence: 4)
+        _ = try await service.arm(HerdrHookArmRequest(agent: working, message: "first"))
+        _ = try await service.arm(HerdrHookArmRequest(agent: working, message: "second"))
+        fixture.script.queue(
+            "w1:p1", observed(.done, 5), observed(.done, 5), observed(.working, 6),
+            observed(.done, 7))
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: first"])
+        let waiting = try #require(await service.list().armedHooks(for: working.id).first)
+        #expect(waiting.message == "second")
+        #expect(!waiting.ran)
+        #expect(waiting.baselineSequence == 5)
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: first"])
+        await service.tick()
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: first", "w1:p1: second"])
+    }
+
+    @Test func differentAgentsKeepDifferentSchedules() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let service = fixture.service()
+        let later = fixture.clock.now.addingTimeInterval(3600)
+        let alpha = agent(pane: "w1:p1", status: .working)
+        let beta = agent(pane: "w1:p2", status: .idle)
+        _ = try await service.arm(HerdrHookArmRequest(agent: alpha, message: "alpha"))
+        _ = try await service.arm(
+            HerdrHookArmRequest(agent: beta, message: "beta", schedule: .at(later)))
+        fixture.script.queue("w1:p1", observed(.done, 8))
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: alpha"])
+        #expect(await service.list().armedHooks(for: beta.id).map(\.message) == ["beta"])
+        fixture.clock.advance(3600)
+        fixture.script.queue("w1:p2", observed(.idle, 4))
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: alpha", "w1:p2: beta"])
+        #expect(await service.list().armedHooks(for: alpha.id).isEmpty)
+    }
+
+    @Test func aTimedMessageSendsWhileAnEarlierFinishMessageWaits() async throws {
+        let fixture = HookFixture()
+        defer { fixture.close() }
+        let service = fixture.service()
+        let when = fixture.clock.now.addingTimeInterval(60)
+        let target = agent(status: .working, sequence: 4)
+        _ = try await service.arm(HerdrHookArmRequest(agent: target, message: "after"))
+        _ = try await service.arm(
+            HerdrHookArmRequest(agent: target, message: "at time", schedule: .at(when)))
+        fixture.clock.advance(60)
+        fixture.script.queue("w1:p1", observed(.working, 4), observed(.working, 4))
+        await service.tick()
+        #expect(fixture.script.sent == ["w1:p1: at time"])
+        #expect(await service.list().armedHooks(for: target.id).map(\.message) == ["after"])
     }
 
     @Test func cancellingWhileDeliveryIsPublishedPreventsTheSend() async throws {
@@ -353,13 +428,14 @@ struct HerdrAgentHookTests {
         #expect(await service.list().hooks.isEmpty)
     }
 
-    @Test func replacingWhileDeliveryIsPublishedPreventsTheOldSend() async throws {
+    @Test func armingWhileASendIsPublishedKeepsBothMessages() async throws {
         let fixture = HookFixture()
         defer { fixture.close() }
         let gate = PublicationGate()
+        let once = PauseOnce()
         let service = fixture.service { data in
             let snapshot = try? AgentPayload.decode(HerdrHooksSnapshot.self, from: data)
-            if snapshot?.hooks.contains(where: { $0.phase == .sending }) == true {
+            if snapshot?.hooks.contains(where: { $0.phase == .sending }) == true, once.claim() {
                 await gate.pause()
             }
         }
@@ -372,8 +448,10 @@ struct HerdrAgentHookTests {
             HerdrHookArmRequest(agent: agent(status: .idle, sequence: 5), message: "new"))
         await gate.resume()
         await tick.value
-        #expect(fixture.script.sent.isEmpty)
-        #expect(await service.list().hooks.map(\.message) == ["new"])
+        #expect(fixture.script.sent == ["w1:p1: old"])
+        let hooks = await service.list().hooks
+        #expect(hooks.map(\.message) == ["old", "new"])
+        #expect(hooks.map(\.phase) == [.sent, .armed])
     }
 
     @Test func saveFailuresDoNotArmOrSend() async throws {

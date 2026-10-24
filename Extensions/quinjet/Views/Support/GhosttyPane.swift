@@ -25,6 +25,7 @@ struct GhosttyPane: NSViewRepresentable {
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onFocus: (() -> Void)?
 
     final class Coordinator {
@@ -42,6 +43,7 @@ struct GhosttyPane: NSViewRepresentable {
     func makeNSView(context: Context) -> GhosttyTerminalView {
         let view = holder.retainedGhosttyView(theme: theme)
         let generation = holder.generation
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus
         view.onFocusChange = { focused in
@@ -54,6 +56,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         let generation = holder.generation
         view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus

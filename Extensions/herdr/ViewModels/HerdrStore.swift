@@ -35,7 +35,7 @@ private enum HerdrClosedRecord: Equatable {
 typealias HerdrNewAgentPaneCreator =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
-        _ newSpaceLabel: String?
+        _ newSpaceLabel: String?, _ environment: [String: String]
     ) async throws -> HerdrCreatedPane
 
 struct HerdrAgentSpace: Identifiable, Equatable {
@@ -196,6 +196,9 @@ final class HerdrStore {
     var inventoryReady: Bool { inventoryReceived && !settling && !refreshing }
 
     var inventoryFailureMessage: String? {
+        if hosts.contains(where: { $0.herdrPresent && $0.reachable && $0.error == nil }) {
+            return nil
+        }
         var failures: [String] = [uiError, terminalPanels.uiError].compactMap { $0 }
         for host in hosts where host.herdrPresent || !host.reachable {
             if let error = host.error { failures.append("\(host.name): \(error)") }
@@ -304,7 +307,8 @@ final class HerdrStore {
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
-    @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var unconfirmedAgentKinds: [String: String] = [:]
+    @ObservationIgnored private(set) var agentStartupTasks: [String: Task<Void, Never>] = [:]
     private let agentFocuser: @Sendable (String, String, Machine?) async throws -> Void
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let workspacePresenter: @MainActor () -> Void
@@ -330,13 +334,13 @@ final class HerdrStore {
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
         newAgentPaneCreator: @escaping HerdrNewAgentPaneCreator = {
-            kind, machine, existingSpace, newSpaceLabel in
+            kind, machine, existingSpace, newSpaceLabel, environment in
             if let existingSpace {
                 return try await HerdrLaunchOperations.createTab(
-                    workspaceID: existingSpace.id, on: machine)
+                    workspaceID: existingSpace.id, environment: environment, on: machine)
             }
             return try await HerdrLaunchOperations.createWorkspace(
-                label: newSpaceLabel ?? "New space", on: machine)
+                label: newSpaceLabel ?? "New space", environment: environment, on: machine)
         },
         agentStarter: @escaping @Sendable (String, String, Machine?) async throws -> Void = {
             kind, pane, machine in
@@ -898,6 +902,7 @@ final class HerdrStore {
         }
         persistAccountSessions()
         if hosts != snapshots { hosts = snapshots }
+        reconcileAgentStartupMessages()
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),
                 sessions[index].agent != updated
@@ -957,7 +962,29 @@ final class HerdrStore {
         if agent.isTerminal { resolved = .agent }
         return HerdrOpenTab(
             agent: agent, machine: machine(for: agent), view: resolved,
-            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession())
+            holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
+            files: HerdrFilesSession { [weak self] machine in
+                self?.filesSource(for: machine) ?? .direct(on: machine)
+            },
+            split: HerdrSplitCompanionState(agentID: agent.id, defaults: defaults))
+    }
+
+    private func filesSource(for machine: Machine) -> HerdrFilesSource {
+        guard uiClient != nil else { return .direct(on: machine) }
+        let machineID = machine.id.uuidString
+        return HerdrFilesSource(
+            home: { [weak self] in
+                guard let self else { throw ExtensionPeerError.unavailable }
+                let data = try await self.requestUI(
+                    "herdr.ui.files.home", object: ["machineID": machineID])
+                return try JSONDecoder().decode(HerdrFilesHomeReply.self, from: data).path
+            },
+            list: { [weak self] path in
+                guard let self else { throw ExtensionPeerError.unavailable }
+                let data = try await self.requestUI(
+                    "herdr.ui.files.list", object: ["machineID": machineID, "path": path])
+                return try JSONDecoder().decode(HerdrFilesListReply.self, from: data).entries
+            })
     }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
@@ -974,7 +1001,9 @@ final class HerdrStore {
 
     func reattach(_ id: String) {
         detachedTabs[id]?.holder.stop()
+        detachedTabs[id]?.holder.fileLinks = nil
         detachedTabs[id]?.quinjet.stop()
+        detachedTabs[id]?.files.stop()
         detachedTabs.removeValue(forKey: id)
     }
 
@@ -1102,6 +1131,7 @@ final class HerdrStore {
         var session = makeTab(for: agent)
         if let view, !agent.isTerminal {
             session.view = view
+            session.split.follow(view)
             HerdrAgentViews.set(view, for: agent.id, defaults)
         }
         sessions.append(session)
@@ -1129,8 +1159,8 @@ final class HerdrStore {
 
     func views(for id: String) -> [HerdrAgentView] {
         if session(id)?.agent.isTerminal == true { return [] }
-        if hidesSplitView(id) { return [.agent, .diff] }
-        return [.agent, .split, .diff]
+        if hidesSplitView(id) { return HerdrAgentView.modes.filter { $0 != .split } }
+        return HerdrAgentView.modes
     }
 
     private func hidesSplitView(_ id: String) -> Bool {
@@ -1143,6 +1173,7 @@ final class HerdrStore {
             revealSpace(containing: tab.agent)
             guard tab.view != view else { return }
             tab.view = view
+            tab.split.follow(view)
             detachedTabs[id] = tab
             HerdrAgentViews.set(view, for: id, defaults)
             if view == .split { detailOpen = false }
@@ -1165,6 +1196,7 @@ final class HerdrStore {
         revealSpace(containing: sessions[index].agent)
         guard sessions[index].view != view else { return }
         sessions[index].view = view
+        sessions[index].split.follow(view)
         HerdrAgentViews.set(view, for: id, defaults)
         if view == .split { detailOpen = false }
     }
@@ -1797,7 +1829,10 @@ final class HerdrStore {
         }
         agentStartupTasks.removeValue(forKey: id)?.cancel()
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
+        sessions[index].files.stop()
+        sessions[index].holder.fileLinks = nil
         sessions.remove(at: index)
         detachFromLayout(id)
     }
@@ -2222,6 +2257,21 @@ final class HerdrStore {
 
     func dismissAgentStartupMessage(_ id: String) {
         agentStartupMessages.removeValue(forKey: id)
+        unconfirmedAgentKinds.removeValue(forKey: id)
+    }
+
+    private func reconcileAgentStartupMessages() {
+        guard !unconfirmedAgentKinds.isEmpty else { return }
+        for host in hosts where host.reachable && host.error == nil {
+            for agent in host.agents where unconfirmedAgentKinds[agent.id] == agent.kind {
+                switch agent.status {
+                case .idle, .working, .done:
+                    dismissAgentStartupMessage(agent.id)
+                case .blocked, .unknown:
+                    break
+                }
+            }
+        }
     }
 
     func launchNewAgent(
@@ -2305,7 +2355,8 @@ final class HerdrStore {
             accountDirectory = nil
             localAccountCommand = nil
         }
-        let created = try await newAgentPaneCreator(kind, machine, existingSpace, newSpaceLabel)
+        let created = try await newAgentPaneCreator(
+            kind, machine, existingSpace, newSpaceLabel, account?.launchEnvironment ?? [:])
         try Task.checkCancellation()
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
@@ -2363,6 +2414,10 @@ final class HerdrStore {
                     account == nil
                     ? HerdrLaunchOperations.startupMessage(for: error)
                     : "The selected account could not start. Check this terminal before trying again."
+                if account == nil, HerdrLaunchOperations.canConfirmStartup(after: error) {
+                    self?.unconfirmedAgentKinds[id] = kind
+                    self?.reconcileAgentStartupMessages()
+                }
             }
             self?.agentStartupTasks[id] = nil
         }
@@ -2918,6 +2973,11 @@ struct HerdrOpenTab: Identifiable {
     var view: HerdrAgentView = .agent
     let holder: TerminalSessionHolder
     let quinjet: HerdrQuinjetSession
+    let files: HerdrFilesSession
+    let split: HerdrSplitCompanionState
+
+    @MainActor var showsDiff: Bool { view.shows(.diff, beside: split.companion) }
+    @MainActor var showsFiles: Bool { view.shows(.files, beside: split.companion) }
 }
 
 enum HerdrRailHighlight: Equatable {

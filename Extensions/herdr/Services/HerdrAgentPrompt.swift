@@ -295,11 +295,11 @@ public enum HerdrMessageOperation: String, CaseIterable, Sendable {
         case .send:
             descriptor(
                 "herdr.send",
-                "Type a message into an agent now, when it finishes, or at a chosen time.",
+                "Type a message now, when each agent finishes, or at a chosen time.",
                 cli: ["herdr", "send"], effect: .write)
         case .hooks:
             descriptor(
-                "herdr.hooks.list", "List messages waiting for an agent to finish.",
+                "herdr.hooks.list", "List messages waiting on each agent.",
                 cli: ["herdr", "hooks", "ls"], effect: .read)
         case .removeHook:
             descriptor(

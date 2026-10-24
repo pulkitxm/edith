@@ -411,7 +411,7 @@ import Testing
     @Test func shiftReturnUsesTheNativeTerminalBinding() {
         let theme = GhosttyTheme(palette: .edith(dark: false))
         #expect(theme.configuration.contains(#"keybind = shift+enter=text:\x1b\r"#))
-        #expect(theme.configuration.contains("mouse-shift-capture = false"))
+        #expect(theme.configuration.contains("mouse-shift-capture = never"))
     }
 
     @Test func commandCAndCommandVReachTheNativeTerminalInput() {

@@ -114,6 +114,7 @@ extension GhosttyTerminalView {
         else { return event }
         suppressNextLeftMouseUp = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         let focused = window.firstResponder === self
         guard !focused else { return event }
         let activatesTerminalLink =
@@ -442,17 +443,28 @@ extension GhosttyTerminalView {
     private func commandClickTarget(for event: NSEvent) -> String? {
         guard surface != nil, event.modifierFlags.contains(.command) else { return nil }
         if let hoveredLink { return hoveredLink }
-        guard let target = terminalTargetAtPointer(),
-            Self.linkTarget(
-                for: target, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
-        else { return nil }
-        return target
+        return resolvedPointerTarget(link: nil, word: terminalTargetAtPointer())?.0
+    }
+
+    public enum CapturedPointerDelivery: Equatable {
+        case program
+        case selection
+        case heldClick
+    }
+
+    public static func capturedPointerDelivery(
+        shift: Bool, commandClick: Bool, clickCount: Int, dragSelects: Bool
+    ) -> CapturedPointerDelivery {
+        if shift || commandClick { return .selection }
+        if dragSelects, clickCount > 1 { return .selection }
+        if dragSelects { return .heldClick }
+        return .program
     }
 
     public override func mouseDown(with event: NSEvent) {
         suppressNextLeftMouseUp = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         resumeSelectionMouseReporting()
         programOwnsMouseGesture = false
         selectionMouseActive = true
@@ -463,12 +475,24 @@ extension GhosttyTerminalView {
             active: commandClick, at: local,
             candidate: commandClick ? commandClickTarget(for: event) : nil)
         if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface) {
-            if event.modifierFlags.contains(.shift) || commandClick {
+            switch Self.capturedPointerDelivery(
+                shift: event.modifierFlags.contains(.shift), commandClick: commandClick,
+                clickCount: event.clickCount, dragSelects: dragSelectsOverCapturedMouse)
+            {
+            case .selection:
                 selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
-            } else {
+            case .program:
                 programOwnsMouseGesture = true
+            case .heldClick:
+                heldCapturedClick = event
+                selectionMouseActive = false
+                return
             }
         }
+        sendLeftPress(event)
+    }
+
+    private func sendLeftPress(_ event: NSEvent) {
         if event.clickCount == 1 {
             button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
         } else if let surface {
@@ -482,12 +506,26 @@ extension GhosttyTerminalView {
         if suppressNextLeftMouseUp {
             suppressNextLeftMouseUp = false
             focusMouseDown = nil
+            heldCapturedClick = nil
+            return
+        }
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            programOwnsMouseGesture = true
+            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+            button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+            selectionMouseActive = false
+            programOwnsMouseGesture = false
+            resumeSelectionMouseReporting()
             return
         }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
-        let target = hoveredLink ?? terminalTargetAtPointer()
+        let word = terminalTargetAtPointer()
+        let target = resolvedPointerTarget(link: hoveredLink, word: word)?.0 ?? hoveredLink ?? word
         commandClickOpenedTarget = false
+        commandClickPointerWord = word
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+        commandClickPointerWord = nil
         selectionMouseActive = false
         if !programOwnsMouseGesture { copyTerminalSelection(nil) }
         programOwnsMouseGesture = false
@@ -535,6 +573,13 @@ extension GhosttyTerminalView {
     public override func mouseDragged(with event: NSEvent) {
         if let focusMouseDown { mouseDown(with: focusMouseDown) }
         guard !suppressNextLeftMouseUp else { return }
+        if let down = heldCapturedClick {
+            heldCapturedClick = nil
+            selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
+            selectionMouseActive = true
+            programOwnsMouseGesture = false
+            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+        }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
     }
@@ -552,6 +597,7 @@ extension GhosttyTerminalView {
         }
         programOwnsMouseGesture = false
         focusMouseDown = nil
+        heldCapturedClick = nil
         selectionMouseActive = false
         selectionCopyPending = false
         resumeSelectionMouseReporting()
@@ -713,15 +759,13 @@ extension GhosttyTerminalView {
         let local = convert(event.locationInWindow, from: nil)
         sendPointerPosition(
             surface, point: local, flags: event.modifierFlags, escapeCapture: false, force: true)
-        let link = hoveredLink ?? terminalTargetAtPointer()
         let menu = NSMenu()
-        if let link,
-            Self.linkTarget(
-                for: link, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
+        if case let (link, target)? = resolvedPointerTarget(
+            link: hoveredLink, word: terminalTargetAtPointer())
         {
             let open = menu.addItem(
-                withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
+                withTitle: target.openTitle, action: #selector(openContextLink(_:)),
+                keyEquivalent: "")
             open.target = self
             open.representedObject = link
             let copyLink = menu.addItem(

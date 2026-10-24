@@ -172,15 +172,164 @@ struct HerdrPanelTerminalOperations: Sendable {
         run: { try await HerdrPaneOperations.run(session: $0, pane: $1, command: $2, on: $3) })
 }
 
+enum HerdrTerminalPanelWidth: Equatable {
+    case content
+    case full
+    case custom(leading: Double, width: Double)
+}
+
+struct HerdrTerminalPanelBounds: Equatable {
+    var width: Double
+    var height: Double
+    var contentLeading: Double
+    var contentWidth: Double
+}
+
+struct HerdrTerminalPanelFrame: Equatable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+}
+
+struct HerdrTerminalPanelResize: Equatable {
+    var width: HerdrTerminalPanelWidth
+    var height: Double
+    var maximized: Bool
+}
+
 enum HerdrTerminalPanelSizing {
+    enum Edge: Equatable {
+        case top
+        case leading
+        case trailing
+    }
+
     static let heightDefault = 260.0
     static let heightMinimum = 120.0
+    static let widthMinimum = 360.0
     static let listWidth = 184.0
+    static let snapDistance = 18.0
     static let refreshInterval = Duration.seconds(2)
     static let checkTimeout = Duration.seconds(3)
 
     static func height(_ value: Double, maximum: Double) -> Double {
         min(max(heightMinimum, maximum), max(heightMinimum, value))
+    }
+
+    static func frame(
+        bounds: HerdrTerminalPanelBounds, width: HerdrTerminalPanelWidth, height: Double,
+        maximized: Bool
+    ) -> HerdrTerminalPanelFrame {
+        let cap = max(bounds.height, 0)
+        let resolvedHeight = maximized ? cap : min(self.height(height, maximum: cap), cap)
+        let horizontal = horizontal(bounds, width: width)
+        return HerdrTerminalPanelFrame(
+            x: horizontal.leading, y: max(0, cap - resolvedHeight), width: horizontal.width,
+            height: resolvedHeight)
+    }
+
+    static func moved(
+        start: HerdrTerminalPanelFrame, bounds: HerdrTerminalPanelBounds, edge: Edge,
+        translation: Double
+    ) -> HerdrTerminalPanelFrame {
+        switch edge {
+        case .top:
+            let cap = max(bounds.height, 0)
+            let floor = min(heightMinimum, cap)
+            var resolved = start.height - translation
+            if cap - resolved <= snapDistance { resolved = cap }
+            resolved = min(cap, max(floor, resolved))
+            return HerdrTerminalPanelFrame(
+                x: start.x, y: cap - resolved, width: start.width, height: resolved)
+        case .leading, .trailing:
+            return movedHorizontally(
+                start: start, limit: max(bounds.width, 0), edge: edge, translation: translation)
+        }
+    }
+
+    static func describe(frame: HerdrTerminalPanelFrame, bounds: HerdrTerminalPanelBounds)
+        -> HerdrTerminalPanelResize
+    {
+        let cap = max(bounds.height, 0)
+        let maximized = cap > 0 && frame.y <= 0.5 && abs(frame.height - cap) <= 0.5
+        let column = horizontal(bounds, width: .content)
+        let spansColumn =
+            abs(frame.x - column.leading) <= 0.5 && abs(frame.width - column.width) <= 0.5
+        let spansWindow =
+            frame.x <= 0.5 && abs(frame.x + frame.width - max(bounds.width, 0)) <= 0.5
+        let width: HerdrTerminalPanelWidth =
+            if spansColumn {
+                .content
+            } else if spansWindow {
+                .full
+            } else {
+                .custom(leading: frame.x, width: frame.width)
+            }
+        return HerdrTerminalPanelResize(width: width, height: frame.height, maximized: maximized)
+    }
+
+    private static func horizontal(
+        _ bounds: HerdrTerminalPanelBounds, width: HerdrTerminalPanelWidth
+    ) -> (leading: Double, width: Double) {
+        let limit = max(bounds.width, 0)
+        switch width {
+        case .content:
+            let fitted = min(limit, max(0, bounds.contentWidth))
+            let leading = min(max(0, bounds.contentLeading), max(0, limit - fitted))
+            return (leading, fitted)
+        case .full:
+            return (0, limit)
+        case .custom(let leading, let width):
+            let fitted = fittedWidth(width, limit: limit)
+            let maxLeading = max(0, limit - fitted)
+            return (min(max(0, leading), maxLeading), fitted)
+        }
+    }
+
+    private static func fittedWidth(_ value: Double, limit: Double) -> Double {
+        if limit <= widthMinimum { return limit }
+        return min(limit, max(widthMinimum, value))
+    }
+
+    private static func movedHorizontally(
+        start: HerdrTerminalPanelFrame, limit: Double, edge: Edge, translation: Double
+    ) -> HerdrTerminalPanelFrame {
+        let floor = min(widthMinimum, limit)
+        var leading = start.x
+        var trailing = start.x + start.width
+        if edge == .leading {
+            leading += translation
+            if leading < 0 {
+                trailing = min(limit, trailing - leading)
+                leading = 0
+            }
+        } else {
+            trailing += translation
+            if trailing > limit {
+                leading = max(0, leading - (trailing - limit))
+                trailing = limit
+            }
+        }
+        if edge == .leading, translation < 0, leading <= snapDistance { leading = 0 }
+        if edge == .trailing, translation > 0, limit - trailing <= snapDistance {
+            trailing = limit
+        }
+        leading = min(max(0, leading), limit)
+        trailing = min(max(leading, trailing), limit)
+        if trailing - leading < floor {
+            if edge == .leading {
+                leading = max(0, trailing - floor)
+            } else {
+                trailing = min(limit, leading + floor)
+            }
+            if trailing - leading < floor {
+                leading = max(0, min(leading, limit - floor))
+                trailing = min(limit, leading + floor)
+            }
+        }
+        return HerdrTerminalPanelFrame(
+            x: leading, y: start.y, width: max(0, trailing - leading), height: start.height)
     }
 }
 
@@ -287,6 +436,25 @@ final class HerdrTerminalPanels {
         }
     }
     var closeRequest: HerdrTerminalCloseRequest?
+    var widthMode = HerdrTerminalPanelWidth.content {
+        didSet {
+            guard widthMode != oldValue else { return }
+            switch widthMode {
+            case .content:
+                defaults.set("content", forKey: AppStorageKeys.Herdr.terminalPanelWidthMode)
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalPanelLeading)
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalPanelWidth)
+            case .full:
+                defaults.set("full", forKey: AppStorageKeys.Herdr.terminalPanelWidthMode)
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalPanelLeading)
+                defaults.removeObject(forKey: AppStorageKeys.Herdr.terminalPanelWidth)
+            case .custom(let leading, let width):
+                defaults.set("custom", forKey: AppStorageKeys.Herdr.terminalPanelWidthMode)
+                defaults.set(leading, forKey: AppStorageKeys.Herdr.terminalPanelLeading)
+                defaults.set(width, forKey: AppStorageKeys.Herdr.terminalPanelWidth)
+            }
+        }
+    }
     var height = HerdrTerminalPanelSizing.heightDefault {
         didSet {
             guard height != oldValue else { return }
@@ -315,6 +483,24 @@ final class HerdrTerminalPanels {
         height =
             defaults.object(forKey: AppStorageKeys.Herdr.terminalPanelHeight) as? Double
             ?? HerdrTerminalPanelSizing.heightDefault
+        widthMode = Self.storedWidth(defaults)
+    }
+
+    private static func storedWidth(_ defaults: UserDefaults) -> HerdrTerminalPanelWidth {
+        switch defaults.string(forKey: AppStorageKeys.Herdr.terminalPanelWidthMode) {
+        case "full":
+            return .full
+        case "custom":
+            guard
+                let leading = defaults.object(forKey: AppStorageKeys.Herdr.terminalPanelLeading)
+                    as? Double,
+                let width = defaults.object(forKey: AppStorageKeys.Herdr.terminalPanelWidth)
+                    as? Double
+            else { return .content }
+            return .custom(leading: leading, width: width)
+        default:
+            return .content
+        }
     }
 
     var isEmpty: Bool { panels.isEmpty }

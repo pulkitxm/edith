@@ -18,6 +18,12 @@ public enum HerdrPaneState: Equatable, Sendable {
     case missing
 }
 
+public enum HerdrShellAvailability: Equatable, Sendable {
+    case available
+    case initializing
+    case occupied
+}
+
 public enum HerdrPaneProcessCommand {
     public static func arguments(session: String, pane: String) -> [String] {
         HerdrSessionCommand.scoped(["pane", "process-info", "--pane", pane], session: session)
@@ -104,6 +110,29 @@ public enum HerdrPaneOperations {
                 }
             }
             guard !Task.isCancelled else { return false }
+            try? await Task.sleep(for: interval)
+        }
+        return false
+    }
+
+    public static func waitForAvailableShell(
+        timeout: Duration, interval: Duration = .milliseconds(100),
+        clock: ContinuousClock = ContinuousClock(),
+        read: @Sendable () async throws -> String
+    ) async -> Bool {
+        let deadline = clock.now.advanced(by: timeout)
+        while !Task.isCancelled {
+            if let output = try? await read() {
+                switch HerdrListParser.shellAvailability(from: output) {
+                case .available:
+                    return true
+                case .occupied:
+                    return false
+                case .initializing:
+                    break
+                }
+            }
+            guard clock.now < deadline else { return false }
             try? await Task.sleep(for: interval)
         }
         return false

@@ -201,6 +201,113 @@ import Testing
                 flags: .command, matchesWindow: true, focused: false))
     }
 
+    @Test func agentSessionsHoldACapturedClickUntilItBecomesADrag() {
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: false, commandClick: false, clickCount: 1, dragSelects: true) == .heldClick)
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: true, commandClick: false, clickCount: 1, dragSelects: true) == .selection)
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: false, commandClick: true, clickCount: 1, dragSelects: true) == .selection)
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: false, commandClick: false, clickCount: 2, dragSelects: true) == .selection)
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: false, commandClick: false, clickCount: 1, dragSelects: false) == .program)
+        #expect(
+            GhosttyTerminalView.capturedPointerDelivery(
+                shift: false, commandClick: false, clickCount: 2, dragSelects: false) == .program)
+    }
+
+    @Test(arguments: [false, true]) @MainActor
+    func agentDragSelectsWhileAClickStillReachesTheProgram(focusClick: Bool) async throws {
+        _ = TestWindowHost.application
+        let board = NSPasteboard.general
+        let previous = (board.types ?? []).compactMap { type in
+            board.data(forType: type).map { (type, $0) }
+        }
+        defer {
+            board.declareTypes(previous.map(\.0), owner: nil)
+            for (type, data) in previous { board.setData(data, forType: type) }
+        }
+        var writes = Data()
+        let io = GhosttyExternalIO(
+            write: { writes.append($0) }, resize: { _, _, _, _ in }, failure: {})
+        let view = GhosttyTerminalView(
+            externalIO: io,
+            theme: GhosttyTheme(
+                background: "#111111", foreground: "#eeeeee", cursor: "#eeeeee", fontSize: 13))
+        view.dragSelectsOverCapturedMouse = true
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = TestWindowHost.window(contentRect: view.frame)
+        window.contentView = view
+        defer {
+            window.contentView = nil
+            view.shutdown()
+        }
+        let surface = try #require(view.surface)
+        let output = Data(
+            "\u{1b}[2J\u{1b}[3J\u{1b}[Halpha beta gamma\u{1b}[?1002h\u{1b}[?1006h".utf8)
+        #expect(view.receiveOutput(output))
+        for _ in 0..<100 {
+            if ghostty_surface_mouse_captured(surface) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(ghostty_surface_mouse_captured(surface))
+        let size = ghostty_surface_size(surface)
+        let cellWidth = CGFloat(size.cell_width_px) / window.backingScaleFactor
+        let cellHeight = CGFloat(size.cell_height_px) / window.backingScaleFactor
+        let start = NSPoint(x: 6 + cellWidth * 0.1, y: 600 - 4 - cellHeight * 0.5)
+        let end = NSPoint(x: start.x + cellWidth * 5, y: start.y)
+        func event(
+            _ type: NSEvent.EventType, at point: NSPoint, number: Int
+        ) throws -> NSEvent {
+            try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [],
+                    timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
+                    eventNumber: number, clickCount: 1, pressure: 0))
+        }
+        board.clearContents()
+        board.setString("previous clipboard", forType: .string)
+        let down = try event(.leftMouseDown, at: start, number: 1)
+        if focusClick {
+            view.suppressNextLeftMouseUp = true
+            view.focusMouseDown = down
+        } else {
+            view.mouseDown(with: down)
+            #expect(view.heldCapturedClick != nil)
+            #expect(!view.programOwnsMouseGesture)
+        }
+        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 2))
+        #expect(view.heldCapturedClick == nil)
+        #expect(view.selectionMouseReportingSuspended)
+        #expect(!view.programOwnsMouseGesture)
+        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 3))
+        #expect(view.selectedText() == "alpha")
+        #expect(board.string(forType: .string) == "alpha")
+        #expect(!view.selectionMouseReportingSuspended)
+        #expect(!writes.contains(0x1B))
+
+        view.mouseDown(with: try event(.leftMouseDown, at: end, number: 4))
+        #expect(view.heldCapturedClick != nil)
+        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 5))
+        #expect(view.heldCapturedClick == nil)
+        #expect(board.string(forType: .string) == "alpha")
+        var reports = ""
+        for _ in 0..<200 {
+            reports = String(decoding: writes, as: UTF8.self)
+            if reports.contains("[<0;") && reports.contains("m") { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(reports.contains("[<0;"))
+        #expect(reports.contains("M"))
+        #expect(reports.contains("m"))
+    }
+
     @Test func visibleUnfocusedSurfaceReceivesWindowModifierChanges() {
         #expect(
             GhosttyTerminalView.shouldForwardLocalModifier(

@@ -26,6 +26,7 @@ struct TerminalPane: View {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
     var hostPaneAction:
@@ -41,8 +42,9 @@ struct TerminalPane: View {
                 theme: GhosttyTheme(
                     palette: palette,
                     fontSize: TerminalSettings.clampedFontSize(preferredFontSize) * UIScale.current),
-                active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles, onFocus: onFocus,
-                hostPaneAction: hostPaneAction
+                active: active, wantsFocus: wantsFocus,
+                dragSelectsOverCapturedMouse: dragSelectsOverCapturedMouse,
+                onDropFiles: onDropFiles, onFocus: onFocus, hostPaneAction: hostPaneAction
             )
             .id(holder.generation)
         }
@@ -54,6 +56,7 @@ struct GhosttyPane: NSViewRepresentable {
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
     var hostPaneAction:
@@ -77,6 +80,7 @@ struct GhosttyPane: NSViewRepresentable {
         holder.hostPaneAction = hostPaneAction
         holder.presented = active
         let view = holder.retainedGhosttyView(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles
         view.setRenderingActive(active)
@@ -92,6 +96,7 @@ struct GhosttyPane: NSViewRepresentable {
         holder.hostPaneAction = hostPaneAction
         holder.presented = active
         view.apply(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onFocus = onFocus
         view.onDropFiles = onDropFiles
         view.setRenderingActive(active)

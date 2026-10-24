@@ -42,6 +42,9 @@ final class TerminalSessionHolder {
     private var events: [Event] = []
     private var queuedBytes = 0
     private(set) var ghosttyView: GhosttyTerminalView?
+    @ObservationIgnored var fileLinks: TerminalFileLinks? {
+        didSet { ghosttyView?.fileLinks = fileLinks }
+    }
 
     private var queuedGhosttyInput = ""
     private var pendingUserClose: PendingUserClose?
@@ -352,6 +355,7 @@ final class TerminalSessionHolder {
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt
                 ?? terminalLaunch?.resetTerminalAfterInterrupt ?? false,
             theme: theme)
+        view.fileLinks = fileLinks
         if let hostWindowState {
             view.setHostWindowState(
                 active: hostWindowState.active, key: hostWindowState.key && hostWindowState.visible)

@@ -4,6 +4,7 @@ internal import GhosttyKit
 public final class GhosttyTerminalView: NSView {
     public var onClose: ((Int32?) -> Void)?
     public var onOpenTarget: ((String, Bool) -> Bool)?
+    public var fileLinks: TerminalFileLinks?
     public var onDropFiles: ((TerminalDropPayload) -> Bool)?
     public var onFocus: (() -> Void)?
     public var onFocusChange: ((Bool) -> Void)?
@@ -40,6 +41,7 @@ public final class GhosttyTerminalView: NSView {
     var terminalCursor = NSCursor.iBeam
     var mouseOverSurface = false
     var commandClickOpenedTarget = false
+    var commandClickPointerWord: String?
     var commandClickGesture = TerminalCommandClickGesture()
     let linkHoverView = TerminalLinkHoverView(frame: .zero)
     let searchBar = TerminalSearchBar(frame: .zero)
@@ -52,8 +54,10 @@ public final class GhosttyTerminalView: NSView {
     let markedText = NSMutableAttributedString()
     var keyTextAccumulator: [String]?
     var localEventMonitor: Any?
+    public var dragSelectsOverCapturedMouse = false
     var suppressNextLeftMouseUp = false
     var focusMouseDown: NSEvent?
+    var heldCapturedClick: NSEvent?
     var programOwnsMouseGesture = false
     var selectionMouseActive = false
     var selectionCopyPending = false
@@ -184,6 +188,7 @@ public final class GhosttyTerminalView: NSView {
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = nil
         focusMouseDown = nil
+        heldCapturedClick = nil
         programOwnsMouseGesture = false
         selectionMouseActive = false
         selectionCopyPending = false
@@ -375,8 +380,14 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        guard let surface else { return }
         let scale = window?.backingScaleFactor ?? 2
+        if let layer, layer.contentsScale != scale {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.contentsScale = scale
+            CATransaction.commit()
+        }
+        guard let surface else { return }
         ghostty_surface_set_content_scale(surface, scale, scale)
         applySize()
         applyPresentationState()

@@ -4,6 +4,7 @@ import Foundation
 import Observation
 
 enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
+    case all
     case working
     case stopped
 
@@ -11,6 +12,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .all: "All Agents"
         case .working: "Working Agents"
         case .stopped: "Stopped Agents"
         }
@@ -18,6 +20,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
+        case .all: "Every agent in this set."
         case .working: "Agents in the middle of a turn. They read it when they can."
         case .stopped: "Idle and finished agents waiting at their prompt."
         }
@@ -25,6 +28,7 @@ enum HerdrBroadcastGroup: String, CaseIterable, Identifiable {
 
     func contains(_ status: HerdrAgentStatus) -> Bool {
         switch self {
+        case .all: true
         case .working: status == .working
         case .stopped: status == .idle || status == .done
         }
@@ -56,7 +60,8 @@ struct HerdrMessageDraft: Identifiable, Equatable {
         var detail: String {
             switch self {
             case .now: "Herdr types it in and presses Return."
-            case .whenFinished: "Edith sends it once, the next time this agent finishes a turn."
+            case .whenFinished:
+                "Edith sends it once, the next time the agent finishes a turn."
             case .after: "Edith sends it after the delay you pick."
             case .at: "Edith sends it at the time you pick."
             }
@@ -66,6 +71,8 @@ struct HerdrMessageDraft: Identifiable, Equatable {
     let id = UUID()
     var recipients: [HerdrAgent]
     var group: HerdrBroadcastGroup?
+    var scopeTitle: String?
+    var redactScope = false
     var delivery: Delivery
     var presenterID: String?
 
@@ -112,7 +119,11 @@ final class HerdrMessaging {
     }
 
     func armedHook(for agentID: String) -> HerdrAgentHook? {
-        hooks.armed(for: agentID)
+        armedHooks(for: agentID).first
+    }
+
+    func armedHooks(for agentID: String) -> [HerdrAgentHook] {
+        hooks.armedHooks(for: agentID)
     }
 
     func lastHook(for agentID: String) -> HerdrAgentHook? {
@@ -129,12 +140,16 @@ final class HerdrMessaging {
             recipients: [agent], group: nil, delivery: delivery, presenterID: presenterID)
     }
 
-    func compose(_ group: HerdrBroadcastGroup, from agents: [HerdrAgent]) {
+    func compose(
+        _ group: HerdrBroadcastGroup, from agents: [HerdrAgent], scopeTitle: String? = nil,
+        redactScope: Bool = false
+    ) {
         let recipients = group.recipients(from: agents)
         guard !recipients.isEmpty else { return }
         errorMessage = nil
         draft = HerdrMessageDraft(
-            recipients: recipients, group: group, delivery: .now, presenterID: nil)
+            recipients: recipients, group: group, scopeTitle: scopeTitle, redactScope: redactScope,
+            delivery: .now, presenterID: nil)
     }
 
     func send(_ text: String, to agents: [HerdrAgent]) async -> [String: HerdrPromptOutcome] {
@@ -146,15 +161,32 @@ final class HerdrMessaging {
     func arm(
         _ text: String, for agent: HerdrAgent, schedule: HerdrHookSchedule
     ) async -> Bool {
-        guard let text = HerdrAgentPrompt.normalized(text) else { return false }
-        do {
-            adopt(try await armer(text, agent, schedule))
-            errorMessage = nil
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
+        await arm(text, for: [agent], schedule: schedule).count == 1
+    }
+
+    @discardableResult
+    func arm(
+        _ text: String, for agents: [HerdrAgent], schedule: HerdrHookSchedule
+    ) async -> [String] {
+        guard let text = HerdrAgentPrompt.normalized(text), !agents.isEmpty else { return [] }
+        var armed: [String] = []
+        var failures: [(String, String)] = []
+        for agent in agents {
+            do {
+                adopt(try await armer(text, agent, schedule))
+                armed.append(agent.id)
+            } catch {
+                failures.append((agent.title, error.localizedDescription))
+            }
         }
+        if failures.isEmpty {
+            errorMessage = nil
+        } else if agents.count == 1 {
+            errorMessage = failures[0].1
+        } else {
+            errorMessage = failures.map { "\($0.0): \($0.1)" }.joined(separator: " ")
+        }
+        return armed
     }
 
     func remove(_ id: UUID) async {

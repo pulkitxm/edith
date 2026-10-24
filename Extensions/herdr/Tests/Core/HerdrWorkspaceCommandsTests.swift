@@ -1,4 +1,5 @@
 @testable import HerdrUI
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -23,6 +24,24 @@ import Testing
         #expect(
             HerdrTabCreateCommand.arguments(workspaceID: "w5", cwd: nil)
                 == ["tab", "create", "--workspace", "w5", "--no-focus"])
+    }
+
+    @Test func paneCreationPassesEnvironmentWithoutTypingIt() {
+        let environment = ["EDITH_ACCOUNT_CREDENTIAL": "synthetic-'token", "A_FIRST": "1"]
+        #expect(
+            HerdrWorkspaceCreateCommand.arguments(
+                label: "my-space", cwd: nil, environment: environment)
+                == [
+                    "workspace", "create", "--label", "my-space", "--no-focus", "--env",
+                    "A_FIRST=1", "--env", "EDITH_ACCOUNT_CREDENTIAL=synthetic-'token",
+                ])
+        #expect(
+            HerdrTabCreateCommand.arguments(workspaceID: "w5", cwd: nil, environment: environment)
+                .suffix(4) == [
+                    "--env", "A_FIRST=1", "--env", "EDITH_ACCOUNT_CREDENTIAL=synthetic-'token",
+                ])
+        let browser = ClaudeAccount(name: "Browser", authentication: .browserLogin)
+        #expect(browser.launchEnvironment.isEmpty)
     }
 
     @Test func workspaceListTakesNoArguments() {

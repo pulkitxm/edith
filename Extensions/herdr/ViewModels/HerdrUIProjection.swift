@@ -257,6 +257,12 @@ final class HerdrUIDefaults: UserDefaults {
 
     init(worker: HerdrWorker) { self.worker = worker }
 
+    private static func filesMachine(_ object: [String: Any]) -> Machine? {
+        guard let id = object["machineID"] as? String else { return nil }
+        if id == Machine.localID.uuidString { return Machine.local }
+        return MachineRegistry.machines().first { $0.id.uuidString == id }
+    }
+
     func execute(_ operation: String, payload: Data) async throws -> Data {
         guard !worker.isStopped, payload.count <= 131072,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
@@ -450,6 +456,19 @@ final class HerdrUIDefaults: UserDefaults {
             try await store.launchNewAgent(
                 kind: kind, host: host, existingSpace: workspace, newSpaceLabel: label,
                 openBeside: beside.boolValue, accountID: object["accountID"] as? String)
+        case "herdr.ui.files.home":
+            guard Set(object.keys) == ["machineID"], let machine = Self.filesMachine(object)
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                HerdrFilesHomeReply(path: try await HerdrFilesListing.home(on: machine)))
+        case "herdr.ui.files.list":
+            guard Set(object.keys) == ["machineID", "path"],
+                let machine = Self.filesMachine(object),
+                let path = object["path"] as? String, !path.isEmpty, path.utf8.count <= 4096,
+                !path.utf8.contains(0)
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                HerdrFilesListReply(entries: try await HerdrFilesListing.list(path, on: machine)))
         case "herdr.ui.search":
             guard Set(object.keys) == ["query", "machineID", "agentIDs"],
                 let query = object["query"] as? String, query.utf8.count <= 4096,
@@ -636,7 +655,7 @@ final class HerdrUIDefaults: UserDefaults {
         self.init(
             defaults: defaults, liveWatcher: { _ in },
             agentCloser: { _ in throw ExtensionPeerError.unavailable },
-            newAgentPaneCreator: { _, _, _, _ in throw ExtensionPeerError.unavailable },
+            newAgentPaneCreator: { _, _, _, _, _ in throw ExtensionPeerError.unavailable },
             agentStarter: { _, _, _ in throw ExtensionPeerError.unavailable },
             terminalIDResolver: { _, _, _ in throw ExtensionPeerError.unavailable },
             agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },

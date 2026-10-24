@@ -58,10 +58,15 @@ final class TerminalLinkHoverView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    func show(_ value: String?) {
+    func show(_ value: String?, revealsFile: Bool = false) {
         let value = value?.isEmpty == false ? value : nil
         label.stringValue = value ?? ""
-        setAccessibilityLabel(value.map { "Link \($0). Command-click to open." })
+        hint.stringValue = revealsFile ? "⌘ click to show in Files" : "⌘ click to open"
+        icon.image = NSImage(
+            systemSymbolName: revealsFile ? "folder" : "arrow.up.forward.square",
+            accessibilityDescription: nil)
+        let action = revealsFile ? "show it in Files" : "open"
+        setAccessibilityLabel(value.map { "Link \($0). Command-click to \(action)." })
         isHidden = value == nil
     }
 }
@@ -261,19 +266,10 @@ extension GhosttyTerminalView {
         allowsLocalFiles: Bool = true,
         fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)
     ) -> URL? {
-        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let wrappers: [(Character, Character)] = [("\"", "\""), ("'", "'"), ("<", ">")]
-        for wrapper in wrappers where value.first == wrapper.0 && value.last == wrapper.1 {
-            value.removeFirst()
-            value.removeLast()
-        }
-        while let last = value.last, ".,;!?".contains(last) { value.removeLast() }
+        let value = TerminalFileLinks.trimmed(rawValue)
         guard !value.isEmpty else { return nil }
 
-        let lowercase = value.lowercased()
-        if lowercase.hasPrefix("localhost:") || lowercase.hasPrefix("127.0.0.1:")
-            || lowercase.hasPrefix("[::1]:")
-        {
+        if TerminalFileLinks.isLoopbackAddress(value.lowercased()) {
             return URL(string: "http://\(value)")
         }
 
@@ -298,28 +294,51 @@ extension GhosttyTerminalView {
                 .appendingPathComponent(path).path
         }
 
-        if !fileExists(path) {
-            var components = path.split(separator: ":", omittingEmptySubsequences: false)
-            while components.count > 1, Int(components.last ?? "") != nil {
-                components.removeLast()
-                let candidate = components.joined(separator: ":")
-                if fileExists(candidate) {
-                    path = candidate
-                    break
-                }
-            }
+        guard let existing = TerminalFileLinks.withoutLocations(path).first(where: fileExists)
+        else { return nil }
+        return URL(fileURLWithPath: existing).standardizedFileURL
+    }
+
+    func resolvedTarget(for rawValue: String) -> TerminalLinkTarget? {
+        if let path = fileLinks?.path(for: rawValue, reportedDirectory: currentDirectory) {
+            return .file(path)
         }
-        guard fileExists(path) else { return nil }
-        return URL(fileURLWithPath: path).standardizedFileURL
+        guard
+            let url = Self.linkTarget(
+                for: rawValue, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks)
+        else { return nil }
+        if url.isFileURL, fileLinks != nil { return .file(url.path) }
+        return .url(url)
+    }
+
+    func resolvedPointerTarget(link: String?, word: String?) -> (String, TerminalLinkTarget)? {
+        let candidates: [String?] =
+            fileLinks == nil
+            ? [link ?? word]
+            : word?.contains(TerminalFileLinks.elision) == true ? [word, link] : [link, word]
+        for candidate in candidates.compactMap({ $0 }) {
+            if let target = resolvedTarget(for: candidate) { return (candidate, target) }
+        }
+        return nil
     }
 
     func openTerminalTarget(
         _ rawValue: String,
         kind: ghostty_action_open_url_kind_e = GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN
     ) -> Bool {
-        guard rawValue.utf8.count <= 4_096, !rawValue.utf8.contains(0),
-            let onOpenTarget
-        else { return false }
+        guard rawValue.utf8.count <= 4_096, !rawValue.utf8.contains(0) else { return false }
+        if kind != GHOSTTY_ACTION_OPEN_URL_KIND_OSC8, let reveal = fileLinks?.reveal,
+            case .file(let path)? = resolvedPointerTarget(
+                link: rawValue, word: commandClickPointerWord)?.1
+        {
+            commandClickOpenedTarget = true
+            DispatchQueue.main.async {
+                reveal(path)
+            }
+            return true
+        }
+        guard let onOpenTarget else { return false }
         let accepted = onOpenTarget(rawValue, kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8)
         commandClickOpenedTarget = accepted
         return accepted
@@ -328,7 +347,17 @@ extension GhosttyTerminalView {
     func setHoveredLink(_ value: String?) {
         let value = value.flatMap { $0.isEmpty ? nil : $0 }
         hoveredLink = value
-        linkHoverView.show(value)
+        let target = value.flatMap { resolvedTarget(for: $0) }
+        linkHoverView.show(value, revealsFile: target.map(\.revealsFile) == true)
+        guard let value, fileLinks != nil, target.map(\.revealsFile) != true else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, hoveredLink == value,
+                let (link, target) = resolvedPointerTarget(
+                    link: value, word: terminalTargetAtPointer()),
+                target.revealsFile
+            else { return }
+            linkHoverView.show(link, revealsFile: true)
+        }
     }
 
     func setWorkingDirectory(_ value: String) {

@@ -105,15 +105,7 @@ public actor AgentHookService {
         else {
             throw AgentError(.refused, "The agent is no longer available to watch.")
         }
-        guard
-            !snapshot.hooks.contains(where: {
-                $0.agentID == request.agent.id && inFlight.contains($0.id)
-            })
-        else {
-            throw AgentError(.refused, "A message is already being sent to this agent.")
-        }
         var next = snapshot
-        next.hooks.removeAll { $0.agentID == request.agent.id && !$0.phase.settled }
         next.hooks.append(
             HerdrAgentHook(
                 agent: request.agent, message: message, observation: observation,
@@ -136,15 +128,14 @@ public actor AgentHookService {
 
     public func tick() async {
         let date = now()
-        let armed = snapshot.hooks.filter(\.isArmed)
-        let readyForRemote = armed.filter { isDue($0, at: date) && !$0.machineIsLocal }
+        let armed = dueHooks(at: date)
+        let readyForRemote = armed.filter { !$0.machineIsLocal }
         let dueRemote = Set(
             readyForRemote.map(\.machineID).filter {
                 date.timeIntervalSince(remoteCheckedAt[$0] ?? .distantPast) >= Self.remoteInterval
             })
         for machine in dueRemote { remoteCheckedAt[machine] = date }
-        let ready = armed.filter { isDue($0, at: date) }
-        let due = ready.filter { $0.machineIsLocal || dueRemote.contains($0.machineID) }
+        let due = armed.filter { $0.machineIsLocal || dueRemote.contains($0.machineID) }
         var pending = Dictionary(grouping: due, by: \.machineID).values[...]
         await withTaskGroup(of: Void.self) { group in
             func startNext() {
@@ -194,6 +185,9 @@ public actor AgentHookService {
                 !Task.isCancelled,
                 snapshot.hooks.contains(where: { $0.id == id && $0.phase == .sending })
             else { return }
+            if case .agent(let observation) = observed {
+                await holdBackLaterFinishes(next, sequence: observation.sequence)
+            }
             inFlight.insert(id)
             let outcome = await send(next)
             inFlight.remove(id)
@@ -218,6 +212,34 @@ public actor AgentHookService {
         try data.write(to: url, options: .atomic)
         snapshot = next
         await publish(data)
+    }
+
+    private func dueHooks(at date: Date) -> [HerdrAgentHook] {
+        var seenFinish: Set<String> = []
+        return snapshot.hooks.filter { hook in
+            guard hook.isArmed, isDue(hook, at: date) else { return false }
+            guard case .whenFinished = hook.schedule else { return true }
+            return seenFinish.insert(hook.agentID).inserted
+        }
+    }
+
+    private func holdBackLaterFinishes(_ hook: HerdrAgentHook, sequence: Int?) async {
+        guard case .whenFinished = hook.schedule,
+            let start = snapshot.hooks.firstIndex(where: { $0.id == hook.id })
+        else { return }
+        var next = snapshot
+        var changed = false
+        for index in next.hooks.indices where index > start {
+            let other = next.hooks[index]
+            guard other.agentID == hook.agentID, other.isArmed,
+                other.schedule == .whenFinished
+            else { continue }
+            next.hooks[index].ran = false
+            next.hooks[index].baselineSequence = sequence ?? other.baselineSequence
+            changed = true
+        }
+        guard changed else { return }
+        try? await commit(next)
     }
 
     private func isDue(_ hook: HerdrAgentHook, at date: Date) -> Bool {

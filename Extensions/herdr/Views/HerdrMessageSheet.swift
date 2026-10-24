@@ -17,6 +17,7 @@ struct HerdrMessageSheet: View {
     @State private var clockHour: Int
     @State private var clockMinute: Int
     @State private var sending = false
+    @State private var scheduled: Set<String> = []
     @State private var outcomes: [String: HerdrPromptOutcome]?
     @FocusState private var editorFocused: Bool
 
@@ -32,12 +33,24 @@ struct HerdrMessageSheet: View {
     }
 
     private var dark: Bool { scheme == .dark }
-    private var waiting: HerdrAgentHook? {
-        guard let agent = initial.single else { return nil }
-        guard let hook = messaging.armedHook(for: agent.id), hook.phase == .armed else {
-            return nil
+    private var waiting: [HerdrAgentHook] {
+        let ids = Set(initial.recipients.map(\.id))
+        return messaging.hooks.hooks.filter { ids.contains($0.agentID) && $0.phase == .armed }
+    }
+
+    private var waitingNote: String? {
+        guard !waiting.isEmpty else { return nil }
+        if initial.single != nil {
+            if waiting.count == 1 {
+                return "\(waiting[0].schedule.sendsPhrase(now: now)). This one is added behind it."
+            }
+            return "\(waiting.count) messages already waiting. This one is added behind them."
         }
-        return hook
+        let agents = Set(waiting.map(\.agentID)).count
+        if agents == 1 {
+            return "1 agent already has a message waiting. Each agent keeps its own."
+        }
+        return "\(agents) agents already have a message waiting. Each agent keeps its own."
     }
     private var now: Date { Date() }
     private var canSend: Bool {
@@ -72,10 +85,18 @@ struct HerdrMessageSheet: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else if let group = initial.group {
                 let count = initial.recipients.count
-                Text("\(count) \(count == 1 ? "agent" : "agents"). \(group.detail)")
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    if let scopeTitle = initial.scopeTitle {
+                        Text(scopeTitle)
+                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                            .foregroundStyle(DashSkin.ink(dark))
+                            .presenterTextBlur(hideAgents && initial.redactScope, fontSize: 11.5)
+                    }
+                    Text("\(count) \(count == 1 ? "agent" : "agents"). \(group.detail)")
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -83,16 +104,15 @@ struct HerdrMessageSheet: View {
     private var composer: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             messageField
-            if let waiting {
-                Text("\(waiting.schedule.sendsPhrase(now: now)). Sending again replaces it.")
+            if let waitingNote {
+                Text(waitingNote)
                     .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.accent(dark))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if initial.single != nil {
-                HerdrTimingChoice(mode: $mode)
-                timing
-            } else {
+            HerdrTimingChoice(mode: $mode)
+            timing
+            if initial.single == nil {
                 recipientList
             }
             if let error = messaging.errorMessage {
@@ -133,7 +153,7 @@ struct HerdrMessageSheet: View {
     private var timing: some View {
         switch mode {
         case .now, .whenFinished:
-            Text(mode.detail)
+            Text(timingDetail)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
@@ -228,12 +248,17 @@ struct HerdrMessageSheet: View {
         }
     }
 
+    private var timingDetail: String {
+        guard mode == .whenFinished, initial.single == nil else { return mode.detail }
+        return "Each agent gets this message the next time that agent finishes a turn."
+    }
+
     private var sendTitle: String {
         if sending { return "Sending…" }
-        guard initial.single != nil else { return "Send" }
+        let many = initial.single == nil
         switch mode {
         case .now: return "Send"
-        case .whenFinished: return "Send when it finishes"
+        case .whenFinished: return many ? "Send when each finishes" : "Send when it finishes"
         case .after:
             return "Send \(HerdrHookSchedule.delayPhrase(hours: hours, minutes: minutes))"
         case .at:
@@ -284,7 +309,7 @@ struct HerdrMessageSheet: View {
         guard canSend, let text = HerdrAgentPrompt.normalized(text) else { return }
         sending = true
         defer { sending = false }
-        if let agent = initial.single, mode != .now {
+        if mode != .now {
             let schedule: HerdrHookSchedule? =
                 if mode == .whenFinished {
                     .whenFinished
@@ -292,7 +317,9 @@ struct HerdrMessageSheet: View {
                     scheduledAt.map { .at($0) }
                 }
             guard let schedule else { return }
-            if await messaging.arm(text, for: agent, schedule: schedule) { dismiss() }
+            let pending = initial.recipients.filter { !scheduled.contains($0.id) }
+            scheduled.formUnion(await messaging.arm(text, for: pending, schedule: schedule))
+            if scheduled.count == initial.recipients.count { dismiss() }
             return
         }
         let replies = await messaging.send(text, to: initial.recipients)

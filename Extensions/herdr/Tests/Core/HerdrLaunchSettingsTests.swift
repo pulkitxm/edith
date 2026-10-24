@@ -1,4 +1,5 @@
 @testable import HerdrUI
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -83,6 +84,7 @@ import Testing
                     "--settings", #"{"fastMode":true}"#,
                 ])
         #expect(launch.remote(.linux).hasSuffix(#"--settings '{"fastMode":true}'"#))
+        #expect(launch.waitsForAvailableShell)
     }
 
     @Test func everyStartedAgentGetsItsOwnHerdrName() {
@@ -108,6 +110,7 @@ import Testing
                     "--session", "default", "pane", "run", "w5:p1",
                     #"cx --yolo -m gpt-6-sol -c 'service_tier="fast"'"#,
                 ])
+        #expect(!launch.waitsForAvailableShell)
     }
 
     @Test func kindsWithoutOptionsLaunchUnchanged() {
@@ -117,6 +120,31 @@ import Testing
             options: AgentLaunchOptions(model: "anything"), defaults: defaults)
         #expect(!launch.local.contains("--"))
         #expect(!launch.local.contains("anything"))
+    }
+
+    @Test func sharedClaudeOptionsJoinEveryClaudeLaunch() throws {
+        let defaults = Self.scratchDefaults()
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "", in: defaults)
+        let launch = HerdrLaunchOperations.agentLaunch(
+            kind: "Claude Code", name: "claude", pane: "w5:p1", options: .none,
+            defaults: defaults)
+        #expect(Array(launch.local.suffix(2)) == ["--", "--verbose"])
+        #expect(HerdrLaunchSettings.usesHerdrAgentStart(for: "Claude Code", in: defaults))
+        try HerdrLaunchSettings.setSharedClaudeLaunch(
+            arguments: "--verbose", environment: "IS_DEMO=1", in: defaults)
+        #expect(!HerdrLaunchSettings.usesHerdrAgentStart(for: "Claude Code", in: defaults))
+        let exported = HerdrLaunchOperations.agentLaunch(
+            kind: "Claude Code", name: "claude", pane: "w5:p1", options: .none,
+            defaults: defaults)
+        #expect(exported.local.last == "export IS_DEMO=1; claude --verbose")
+        #expect(HerdrLaunchSettings.usesHerdrAgentStart(for: "Codex", in: defaults))
+        #expect(throws: ClaudeAccountError.self) {
+            try HerdrLaunchSettings.setSharedClaudeLaunch(
+                arguments: "", environment: "ANTHROPIC_API_KEY=synthetic", in: defaults)
+        }
+        #expect(HerdrLaunchSettings.sharedEnvironment(in: defaults) == "IS_DEMO=1")
+        #expect(defaults.string(forKey: "herdr.sharedClaudeArguments") == "--verbose")
     }
 
     private static func scratchDefaults() -> UserDefaults {

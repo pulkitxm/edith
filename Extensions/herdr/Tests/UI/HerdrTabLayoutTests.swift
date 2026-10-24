@@ -100,11 +100,11 @@ import Testing
         let codex = agent("Codex", pane: "b")
         store.open(claude, showing: .split)
         #expect(store.shownView(for: claude.id) == .split)
-        #expect(store.views(for: claude.id) == [.agent, .split, .diff])
+        #expect(store.views(for: claude.id) == [.agent, .split, .diff, .files])
 
         store.open(codex, beside: .right)
         #expect(store.shownView(for: claude.id) == .agent)
-        #expect(store.views(for: claude.id) == [.agent, .diff])
+        #expect(store.views(for: claude.id) == [.agent, .diff, .files])
         store.setView(.split, for: codex.id)
         #expect(store.view(for: codex.id) == .agent)
         #expect(store.view(for: claude.id) == .split)
@@ -120,14 +120,14 @@ import Testing
         let codex = agent("Codex", pane: "b")
         store.open(claude, showing: .split)
         store.open(codex, beside: .right)
-        #expect(store.views(for: claude.id) == [.agent, .diff])
+        #expect(store.views(for: claude.id) == [.agent, .diff, .files])
         #expect(store.shownView(for: claude.id) == .agent)
 
         store.toggleZoom(claude.id)
         #expect(store.currentTab?.zoomed == claude.id)
-        #expect(store.views(for: claude.id) == [.agent, .split, .diff])
+        #expect(store.views(for: claude.id) == [.agent, .split, .diff, .files])
         #expect(store.shownView(for: claude.id) == .split)
-        #expect(store.views(for: codex.id) == [.agent, .diff])
+        #expect(store.views(for: codex.id) == [.agent, .diff, .files])
         store.setView(.diff, for: claude.id)
         #expect(store.shownView(for: claude.id) == .diff)
         store.setView(.split, for: claude.id)
@@ -135,7 +135,7 @@ import Testing
 
         store.toggleZoom(claude.id)
         #expect(store.currentTab?.zoomed == nil)
-        #expect(store.views(for: claude.id) == [.agent, .diff])
+        #expect(store.views(for: claude.id) == [.agent, .diff, .files])
         #expect(store.shownView(for: claude.id) == .agent)
         #expect(store.view(for: claude.id) == .split)
     }
@@ -590,6 +590,44 @@ import Testing
 
     private func frames(of layout: HerdrLayout) -> [String: CGRect] {
         layout.frames(in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+
+    @Test func splitShowsFilesBesideTheAgentOnceFilesWasChosen() throws {
+        let defaults = Self.scratchDefaults()
+        let store = HerdrStore(defaults: defaults)
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude, showing: .split)
+        var tab = try #require(store.session(claude.id))
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
+
+        store.setView(.files, for: claude.id)
+        store.setView(.split, for: claude.id)
+        tab = try #require(store.session(claude.id))
+        #expect(tab.view == .split)
+        #expect(tab.split.companion == .files)
+        #expect(tab.showsFiles)
+        #expect(!tab.showsDiff)
+
+        tab.split.select(.diff)
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
+        tab.split.select(.files)
+
+        let reopened = store.makeTab(for: claude)
+        #expect(reopened.view == .split)
+        #expect(reopened.showsFiles)
+    }
+
+    @Test func choosingTheDiffMovesQuinjetBackBesideTheAgent() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        store.open(claude, showing: .files)
+        store.setView(.diff, for: claude.id)
+        store.setView(.split, for: claude.id)
+        let tab = try #require(store.session(claude.id))
+        #expect(tab.showsDiff)
+        #expect(!tab.showsFiles)
     }
 
     private static func scratchDefaults() -> UserDefaults {

@@ -254,6 +254,15 @@ struct HerdrPaneHeader: View {
 
     @ViewBuilder
     private var menuItems: some View {
+        if tab.isSplit {
+            let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
+            if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
+                Menu("Message This Tab") {
+                    HerdrBroadcastMenuItems(agents: agents, store: store, scopeTitle: "This Tab")
+                }
+                Divider()
+            }
+        }
         Button(zoomed ? "Restore Layout" : "Zoom") {
             withAnimation(store.layoutAnimation) {
                 store.toggleZoom(session.id)

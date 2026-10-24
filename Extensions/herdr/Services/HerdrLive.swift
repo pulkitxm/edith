@@ -34,12 +34,7 @@ public enum HerdrLive {
         while await admission.admit("local.discovery") {
             let sockets = HerdrSocketDiscovery.local()
             if sockets.isEmpty {
-                let present = HerdrCollector.executable() != nil
-                fleet.put(
-                    .local(
-                        herdrPresent: present,
-                        error: present
-                            ? "no herdr server is running" : "herdr is not on PATH"))
+                fleet.put(await HerdrCollector.collectLocal())
                 continue
             }
             await runHost(
@@ -160,7 +155,12 @@ public enum HerdrLive {
                         session: socket.name,
                         text: try await snapshot(path: socket.path, connect: connect)))
             } catch {
-                fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
+                if sessions.machineIsLocal {
+                    fleet.put(await HerdrCollector.collectLocal())
+                } else {
+                    fleet.put(
+                        sessions.failed(session: socket.name, error: error.localizedDescription))
+                }
             }
         }
     }

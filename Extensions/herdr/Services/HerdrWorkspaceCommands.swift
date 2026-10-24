@@ -2,10 +2,12 @@ import EdithExtensionSupport
 import Foundation
 
 public enum HerdrWorkspaceCreateCommand {
-    public static func arguments(label: String, cwd: String?) -> [String] {
+    public static func arguments(
+        label: String, cwd: String?, environment: [String: String] = [:]
+    ) -> [String] {
         var args = ["workspace", "create", "--label", label, "--no-focus"]
         if let cwd, !cwd.isEmpty { args += ["--cwd", cwd] }
-        return args
+        return args + environmentArguments(environment)
     }
 
     public static func shellLine(
@@ -16,10 +18,12 @@ public enum HerdrWorkspaceCreateCommand {
 }
 
 public enum HerdrTabCreateCommand {
-    public static func arguments(workspaceID: String, cwd: String?) -> [String] {
+    public static func arguments(
+        workspaceID: String, cwd: String?, environment: [String: String] = [:]
+    ) -> [String] {
         var args = ["tab", "create", "--workspace", workspaceID, "--no-focus"]
         if let cwd, !cwd.isEmpty { args += ["--cwd", cwd] }
-        return args
+        return args + environmentArguments(environment)
     }
 
     public static func shellLine(
@@ -28,6 +32,10 @@ public enum HerdrTabCreateCommand {
         remoteHerdrCommand(
             arguments: arguments(workspaceID: workspaceID, cwd: cwd), platform: platform)
     }
+}
+
+private func environmentArguments(_ environment: [String: String]) -> [String] {
+    environment.sorted { $0.key < $1.key }.flatMap { ["--env", $0.key + "=" + $0.value] }
 }
 
 public enum HerdrWorkspaceListCommand {

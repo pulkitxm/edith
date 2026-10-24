@@ -26,6 +26,7 @@ struct TerminalPane: View {
     let palette: TerminalPalette
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onFocus: (() -> Void)?
 
     var body: some View {
@@ -35,7 +36,8 @@ struct TerminalPane: View {
                 theme: GhosttyTheme(
                     palette: palette,
                     fontSize: TerminalSettings.clampedFontSize(holder.fontSize)),
-                active: active, wantsFocus: wantsFocus, onFocus: onFocus
+                active: active, wantsFocus: wantsFocus,
+                dragSelectsOverCapturedMouse: dragSelectsOverCapturedMouse, onFocus: onFocus
             )
             .id(holder.generation)
         }
@@ -47,6 +49,7 @@ struct GhosttyPane: NSViewRepresentable {
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
+    var dragSelectsOverCapturedMouse = false
     var onFocus: (() -> Void)?
 
     final class Coordinator {
@@ -63,6 +66,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
         let view = holder.retainedGhosttyView(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onFocus = onFocus
         view.setRenderingActive(active)
         return view
@@ -70,6 +74,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
+        view.dragSelectsOverCapturedMouse = dragSelectsOverCapturedMouse
         view.onFocus = onFocus
         view.setRenderingActive(active)
         if context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) {

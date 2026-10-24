@@ -22,24 +22,26 @@ enum HerdrAccountFixture {
     }
 
     static func run(
-        _ command: String, home: URL, shell: String = "/bin/sh"
+        _ command: String, home: URL, shell: String = "/bin/sh", credential: String? = nil
     ) async throws -> [String: String] {
+        var environment = [
+            "PATH": "/usr/bin:/bin", "SHELL": shell, "HOME": home.path,
+            "ZDOTDIR": home.path, "TMPDIR": home.path,
+            "ANTHROPIC_API_KEY": "synthetic-inherited-key",
+            "CLAUDE_CODE_OAUTH_TOKEN": "synthetic-inherited-token",
+            "ANTHROPIC_AUTH_TOKEN": "synthetic-inherited-auth",
+            "ANTHROPIC_PROFILE": "synthetic-inherited-profile",
+            "CLAUDE_CODE_USE_BEDROCK": "1",
+            "CLAUDE_CONFIG_DIR": home.appendingPathComponent("native-config").path,
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR": home.appendingPathComponent("native-secure").path,
+            "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST": "synthetic-inherited-provider",
+        ]
+        environment[ClaudeAccount.launchCredentialVariable] = credential
         let result = try await CLICommandRunner.runLocal(
             CLICommandRequest(
                 executableURL: URL(fileURLWithPath: shell), arguments: ["-lic", command],
-                environment: [
-                    "PATH": "/usr/bin:/bin", "SHELL": shell, "HOME": home.path,
-                    "ZDOTDIR": home.path, "TMPDIR": home.path,
-                    "ANTHROPIC_API_KEY": "synthetic-inherited-key",
-                    "CLAUDE_CODE_OAUTH_TOKEN": "synthetic-inherited-token",
-                    "ANTHROPIC_AUTH_TOKEN": "synthetic-inherited-auth",
-                    "ANTHROPIC_PROFILE": "synthetic-inherited-profile",
-                    "CLAUDE_CODE_USE_BEDROCK": "1",
-                    "CLAUDE_CONFIG_DIR": home.appendingPathComponent("native-config").path,
-                    "CLAUDE_SECURESTORAGE_CONFIG_DIR": home.appendingPathComponent("native-secure")
-                        .path,
-                    "CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST": "synthetic-inherited-provider",
-                ], currentDirectoryURL: home, timeout: 5, maximumOutputBytes: 65_536,
+                environment: environment, currentDirectoryURL: home, timeout: 5,
+                maximumOutputBytes: 65_536,
                 terminatesProcessGroup: true), onLine: { _ in })
         try #require(result.terminationStatus == 0)
         return Dictionary(
@@ -115,8 +117,10 @@ enum HerdrAccountFixture {
             let launch = try account.launchCommand(
                 command: command, arguments: arguments,
                 environment: HerdrLaunchSettings.sharedEnvironment(in: defaults))
+            #expect(!launch.contains(account.credential))
             let environment = try await HerdrAccountFixture.run(
-                launch, home: root, shell: "/bin/zsh")
+                launch, home: root, shell: "/bin/zsh", credential: account.credential)
+            #expect(environment[ClaudeAccount.launchCredentialVariable] == nil)
             #expect(environment["FLAG_VALUE"] == "two words")
             #expect(environment["IS_DEMO"] == "1")
             #expect(environment["LITERAL"] == "$(touch forbidden); 'quoted'")
@@ -166,8 +170,11 @@ enum HerdrAccountFixture {
         let second = try company.launchCommand(command: "/usr/bin/env", arguments: [])
         let third = try await storage.profileDirectory(for: browser.id)
         try await storage.seedLogin(account: browser)
-        let personalEnvironment = try await HerdrAccountFixture.run(first, home: root)
-        let companyEnvironment = try await HerdrAccountFixture.run(second, home: root)
+        #expect(!first.contains("synthetic-'token") && !second.contains(company.credential))
+        let personalEnvironment = try await HerdrAccountFixture.run(
+            first, home: root, credential: personal.credential)
+        let companyEnvironment = try await HerdrAccountFixture.run(
+            second, home: root, credential: company.credential)
         #expect(personalEnvironment["CLAUDE_CODE_OAUTH_TOKEN"] == token)
         #expect(personalEnvironment["ANTHROPIC_API_KEY"] == nil)
         #expect(companyEnvironment["ANTHROPIC_API_KEY"] == company.credential)
@@ -208,7 +215,10 @@ enum HerdrAccountFixture {
                 command: "cc",
                 arguments: ["MODEL=synthetic model", "LITERAL_ARG=$(touch forbidden)"],
                 environment: "IS_DEMO=1\nLITERAL_ENV=$(touch forbidden); 'quoted'")
-            let result = try await HerdrAccountFixture.run(command, home: root, shell: shell)
+            #expect(!command.contains(account.credential))
+            let result = try await HerdrAccountFixture.run(
+                command, home: root, shell: shell, credential: account.credential)
+            #expect(result[ClaudeAccount.launchCredentialVariable] == nil)
             let selected =
                 account.authentication == .apiKey ? "ANTHROPIC_API_KEY" : "CLAUDE_CODE_OAUTH_TOKEN"
             let competing =
@@ -242,7 +252,12 @@ enum HerdrAccountFixture {
         #expect(
             command.contains(
                 "Remove-Item Env:CLAUDE_CODE_OAUTH_TOKEN -ErrorAction SilentlyContinue"))
-        #expect(command.contains("$env:ANTHROPIC_API_KEY='synthetic''key;$env:HOME'"))
+        #expect(!command.contains("synthetic'key") && !command.contains("synthetic''key"))
+        #expect(command.contains("$env:ANTHROPIC_API_KEY=$env:EDITH_ACCOUNT_CREDENTIAL"))
+        #expect(
+            command.contains(
+                "Remove-Item Env:EDITH_ACCOUNT_CREDENTIAL -ErrorAction SilentlyContinue"))
+        #expect(account.launchEnvironment == ["EDITH_ACCOUNT_CREDENTIAL": account.credential])
         #expect(command.contains("$env:LITERAL='synthetic''value;$env:HOME'"))
         #expect(!command.contains("CLAUDE_CONFIG_DIR"))
         #expect(

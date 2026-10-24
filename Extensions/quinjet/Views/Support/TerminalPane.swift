@@ -11,6 +11,7 @@ struct TerminalPane: View {
     var active = true
     var wantsFocus = true
     var fontSize: Double?
+    var dragSelectsOverCapturedMouse = false
     var onFocus: (() -> Void)?
 
     @AppStorage("quinjetTerminalFontSize", store: SharedDefaults.store)
@@ -26,6 +27,7 @@ struct TerminalPane: View {
                 holder: holder,
                 theme: GhosttyTheme(palette: palette, fontSize: resolvedFontSize),
                 active: active, wantsFocus: wantsFocus,
+                dragSelectsOverCapturedMouse: dragSelectsOverCapturedMouse,
                 onFocus: onFocus
             )
             .id(holder.generation)

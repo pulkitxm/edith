@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import AppKit
 import Foundation
 import Testing
@@ -23,6 +24,66 @@ extension MusicExtensionTests {
                 playPause: { recorder.playPauseCount += 1 },
                 seekBy: { recorder.seeks.append($0) },
                 volumeBy: { recorder.volumes.append($0) })
+        }
+
+        private final class DirectKeyView: NSView, DirectKeyboardInputResponder {}
+
+        @Test func musicLeavesSpaceAndArrowsToADirectKeyboardOwner() {
+            let recorder = Recorder()
+            let owner = DirectKeyView()
+            for code: UInt16 in [49, 123, 124, 125, 126] {
+                #expect(
+                    !MusicKeyCommand.handle(
+                        keyCode: code, modifiers: [], active: true, responder: owner,
+                        handlers(recorder)))
+            }
+            #expect(recorder.playPauseCount == 0)
+            #expect(recorder.seeks.isEmpty)
+            #expect(recorder.volumes.isEmpty)
+        }
+
+        @Test func musicLeavesArrowsToListsButStillPlaysOnSpace() {
+            let recorder = Recorder()
+            for list in [NSTableView(), NSOutlineView(), NSCollectionView(), NSBrowser()]
+                as [NSView]
+            {
+                for code: UInt16 in [123, 124, 125, 126] {
+                    #expect(
+                        !MusicKeyCommand.handle(
+                            keyCode: code, modifiers: [], active: true, responder: list,
+                            handlers(recorder)))
+                }
+                #expect(
+                    MusicKeyCommand.handle(
+                        keyCode: 49, modifiers: [], active: true, responder: list,
+                        handlers(recorder)))
+            }
+            #expect(recorder.playPauseCount == 4)
+        }
+
+        @Test func musicLeavesEveryKeyToAFocusedControl() {
+            let recorder = Recorder()
+            for control in [NSButton(), NSSlider(), NSSegmentedControl()] as [NSView] {
+                for code: UInt16 in [49, 123, 124, 125, 126] {
+                    #expect(
+                        !MusicKeyCommand.handle(
+                            keyCode: code, modifiers: [], active: true, responder: control,
+                            handlers(recorder)))
+                }
+            }
+            #expect(recorder.playPauseCount == 0)
+        }
+
+        @Test func musicStillPlaysWhenNothingIsFocused() {
+            let recorder = Recorder()
+            #expect(
+                MusicKeyCommand.handle(
+                    keyCode: 49, modifiers: [], active: true, responder: nil, handlers(recorder)))
+            #expect(
+                MusicKeyCommand.handle(
+                    keyCode: 49, modifiers: [], active: true, responder: NSView(),
+                    handlers(recorder)))
+            #expect(recorder.playPauseCount == 2)
         }
 
         @Test func spaceTriggersPlayPauseAndConsumes() {

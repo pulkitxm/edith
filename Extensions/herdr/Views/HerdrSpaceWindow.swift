@@ -418,7 +418,7 @@ struct HerdrSpaceView: View {
         let agent = tab?.agentTab
         return HStack(spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(2)) {
-                ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                ForEach(HerdrAgentView.modes, id: \.self) { mode in
                     Button {
                         tab?.setAgentView(mode, defaults: store.uiDefaults)
                     } label: {
@@ -436,7 +436,7 @@ struct HerdrSpaceView: View {
                 }
             }
             .padding(UIScale.pt(2))
-            .frame(width: UIScale.pt(218))
+            .frame(width: UIScale.pt(288))
             .widgetBar(
                 cornerRadius: 8, fill: DashSkin.paper(dark),
                 stroke: DashSkin.line(dark))

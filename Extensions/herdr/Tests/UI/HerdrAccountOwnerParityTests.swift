@@ -10,12 +10,14 @@ import Testing
 private actor HerdrAccountParityLaunches {
     var paneCount = 0
     var outputs: [String: [String: String]] = [:]
+    var credentials: [String: String] = [:]
     var remote: (UUID, UUID, String, [String], String)?
 
-    func pane() -> HerdrCreatedPane {
+    func pane(_ environment: [String: String] = [:]) -> HerdrCreatedPane {
         paneCount += 1
-        return .init(
-            workspaceID: "synthetic", tabID: "synthetic-tab", paneID: "synthetic-\(paneCount)")
+        let pane = "synthetic-\(paneCount)"
+        credentials[pane] = environment[ClaudeAccount.launchCredentialVariable]
+        return .init(workspaceID: "synthetic", tabID: "synthetic-tab", paneID: pane)
     }
 
     func record(_ pane: String, environment: [String: String]) { outputs[pane] = environment }
@@ -50,10 +52,13 @@ private actor HerdrAccountParityLaunches {
         let launches = HerdrAccountParityLaunches()
         let store = HerdrStore(
             defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            newAgentPaneCreator: { _, _, _, _, environment in
+                await launches.pane(environment)
+            },
             agentStarter: { _, _, _ in Issue.record("Named account used ambient CLI starter") },
             accountAgentStarter: { command, pane in
-                let environment = try await HerdrAccountFixture.run(command, home: root)
+                let environment = try await HerdrAccountFixture.run(
+                    command, home: root, credential: await launches.credentials[pane])
                 await launches.record(pane, environment: environment)
             }, machinesProvider: { [] })
         do {
@@ -124,7 +129,7 @@ private actor HerdrAccountParityLaunches {
         let launches = HerdrAccountParityLaunches()
         let store = HerdrStore(
             defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, machine, _, _ in
+            newAgentPaneCreator: { _, machine, _, _, _ in
                 #expect(machine?.id == selected.id)
                 return await launches.pane()
             },
@@ -179,7 +184,7 @@ private actor HerdrAccountParityLaunches {
         let launches = HerdrAccountParityLaunches()
         let store = HerdrStore(
             defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await launches.pane() },
             accountAgentStarter: { _, _ in Issue.record("Invalid settings reached account startup")
             },
             machinesProvider: { [] })
@@ -223,7 +228,7 @@ private actor HerdrAccountParityLaunches {
         let launches = HerdrAccountParityLaunches()
         let store = HerdrStore(
             defaults: defaults, claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await launches.pane() },
             remoteAccountAgentStarter: { _, _, _, _, _, _ in
                 Issue.record("Oversized command reached remote startup")
             },
@@ -254,7 +259,7 @@ private actor HerdrAccountParityLaunches {
         try await model.persist(.init(accounts: [account], defaultID: account.id))
         let store = HerdrStore(
             defaults: HerdrUIDefaults(), claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in throw HerdrCommandError.malformedResponse },
+            newAgentPaneCreator: { _, _, _, _, _ in throw HerdrCommandError.malformedResponse },
             accountAgentStarter: { _, _ in Issue.record("Failed pane reached account startup") },
             machinesProvider: { [] })
         await #expect(throws: HerdrCommandError.self) {
@@ -280,7 +285,7 @@ private actor HerdrAccountParityLaunches {
         let launches = HerdrAccountParityLaunches()
         let store = HerdrStore(
             defaults: HerdrUIDefaults(), claudeAccounts: model, liveWatcher: { _ in },
-            newAgentPaneCreator: { _, _, _, _ in await launches.pane() },
+            newAgentPaneCreator: { _, _, _, _, _ in await launches.pane() },
             accountAgentStarter: { command, _ in throw HerdrCommandError.commandFailed(command) },
             machinesProvider: { [] })
         try await store.launchNewAgent(

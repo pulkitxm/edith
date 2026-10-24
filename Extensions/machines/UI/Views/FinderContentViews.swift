@@ -60,7 +60,7 @@ struct FinderIconView: View {
                     }
                     .padding(UIScale.pt(16))
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target else { return }
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo(target, anchor: .center)
@@ -79,7 +79,7 @@ struct FinderIconView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { model.selection = [] }
+        .onTapGesture { model.clearSelection() }
     }
 }
 
@@ -174,6 +174,7 @@ private struct FinderIconCell: View {
 
 struct FinderListView: View {
     let model: FinderModel
+    var columns = FinderListColumn.allCases
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -186,12 +187,14 @@ struct FinderListView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(model.visibleEntries) { entry in
-                            FinderListRow(model: model, entry: entry, dark: dark)
-                                .id(entry.path)
+                            FinderListRow(
+                                model: model, entry: entry, columns: columns, dark: dark
+                            )
+                            .id(entry.path)
                         }
                     }
                 }
-                .onChange(of: model.scrollTarget) { _, target in
+                .onChange(of: model.scrollTarget, initial: true) { _, target in
                     guard let target else { return }
                     withAnimation(.easeOut(duration: 0.18)) {
                         proxy.scrollTo(target, anchor: .center)
@@ -200,7 +203,7 @@ struct FinderListView: View {
                 }
             }
             .contentShape(Rectangle())
-            .onTapGesture { model.selection = [] }
+            .onTapGesture { model.clearSelection() }
         }
     }
 
@@ -209,12 +212,10 @@ struct FinderListView: View {
             headerButton("Name", key: .name)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, UIScale.pt(30))
-            headerButton("Date Modified", key: .modified)
-                .frame(width: UIScale.pt(130), alignment: .trailing)
-            headerButton("Size", key: .size)
-                .frame(width: UIScale.pt(78), alignment: .trailing)
-            headerButton("Kind", key: .kind)
-                .frame(width: UIScale.pt(92), alignment: .trailing)
+            ForEach(columns, id: \.self) { column in
+                headerButton(column.title, key: column.sortKey)
+                    .frame(width: UIScale.pt(column.width), alignment: .trailing)
+            }
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(5))
@@ -222,6 +223,12 @@ struct FinderListView: View {
     }
 
     private func headerButton(_ title: String, key: FileSortKey) -> some View {
+        headerLabel(title, key: key)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func headerLabel(_ title: String, key: FileSortKey) -> some View {
         Button {
             if model.sortKey == key {
                 model.sortAscending.toggle()
@@ -250,6 +257,7 @@ struct FinderListView: View {
 private struct FinderListRow: View {
     @Bindable var model: FinderModel
     let entry: RemoteFileEntry
+    let columns: [FinderListColumn]
     let dark: Bool
     @State private var hovering = false
     @State private var dropTargeted = false
@@ -264,19 +272,10 @@ private struct FinderListRow: View {
                 .frame(width: UIScale.pt(16), height: UIScale.pt(16))
             nameLabel
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(entry.modified.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "\u{2014}")
-                .font(DashSkin.mono(10))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(130), alignment: .trailing)
-            Text(entry.isDirectory ? "\u{2014}" : ByteFormatter.string(entry.sizeBytes))
-                .font(DashSkin.mono(10))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(78), alignment: .trailing)
-            Text(entry.kindDescription)
-                .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
-                .frame(width: UIScale.pt(92), alignment: .trailing)
+            ForEach(columns, id: \.self) { column in
+                cell(column)
+                    .frame(width: UIScale.pt(column.width), alignment: .trailing)
+            }
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(4))
@@ -312,6 +311,30 @@ private struct FinderListRow: View {
             return true
         }
         .contextMenu { FinderRowContextMenu(model: model, entry: entry) }
+    }
+
+    @ViewBuilder
+    private func cell(_ column: FinderListColumn) -> some View {
+        switch column {
+        case .modified:
+            Text(
+                entry.modified.map { $0.formatted(date: .abbreviated, time: .shortened) }
+                    ?? "\u{2014}"
+            )
+            .font(DashSkin.mono(10))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .lineLimit(1)
+        case .size:
+            Text(entry.isDirectory ? "\u{2014}" : ByteFormatter.string(entry.sizeBytes))
+                .font(DashSkin.mono(10))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .lineLimit(1)
+        case .kind:
+            Text(entry.kindDescription)
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .lineLimit(1)
+        }
     }
 
     @ViewBuilder
@@ -526,6 +549,7 @@ private struct FinderSidebarRow: View {
     var body: some View {
         Button {
             model.navigate(to: place.path)
+            model.requestKeyFocus()
         } label: {
             HStack(spacing: UIScale.pt(7)) {
                 Image(systemName: place.symbol)

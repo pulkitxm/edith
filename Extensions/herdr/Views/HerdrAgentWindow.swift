@@ -5,8 +5,8 @@ import SwiftUI
 
 @MainActor
 enum HerdrAgentWindow {
-    static let viewControlsContentWidth = 262.0
-    static let viewControlsWidth = 270.0
+    static let viewControlsContentWidth = 334.0
+    static let viewControlsWidth = 342.0
     private static var windows: [String: NSWindow] = [:]
 
     static var openIDs: Set<String> { Set(windows.keys) }
@@ -141,7 +141,7 @@ struct HerdrTitlebarViewPicker: View {
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             HStack(spacing: UIScale.pt(2)) {
-                ForEach([HerdrAgentView.agent, .split, .diff], id: \.self) { mode in
+                ForEach(HerdrAgentView.modes, id: \.self) { mode in
                     HerdrTitlebarViewButton(
                         mode: mode,
                         selected: selection == mode,
@@ -153,7 +153,7 @@ struct HerdrTitlebarViewPicker: View {
                 }
             }
             .padding(UIScale.pt(2))
-            .frame(width: UIScale.pt(228))
+            .frame(width: UIScale.pt(300))
             .widgetBar(
                 cornerRadius: 8,
                 fill: DashSkin.paper(dark, theme: theme),

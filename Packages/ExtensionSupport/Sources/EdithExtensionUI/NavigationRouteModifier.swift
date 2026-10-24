@@ -1,9 +1,14 @@
 import AppKit
 import SwiftUI
 
-enum NavigationDirection: Equatable {
+public enum NavigationDirection: Equatable {
     case back
     case forward
+}
+
+@MainActor
+public protocol HistoryNavigatingView: AnyObject {
+    func navigateHistory(_ direction: NavigationDirection) -> Bool
 }
 
 enum NavigationTextRole: Equatable {
@@ -45,6 +50,15 @@ enum NavigationShortcutGate {
         default:
             return nil
         }
+    }
+
+    static func historyView(from responder: NSResponder?) -> HistoryNavigatingView? {
+        var current = responder
+        while let candidate = current {
+            if let owner = candidate as? HistoryNavigatingView { return owner }
+            current = (candidate as? NSView)?.superview
+        }
+        return nil
     }
 
     static func textRole(of responder: NSResponder) -> NavigationTextRole {
@@ -502,6 +516,15 @@ enum NavigationHistoryInput {
             else { return false }
         } else {
             guard NavigationShortcutGate.allowsMouseHistory(event) else { return false }
+        }
+        let target =
+            event.type == .keyDown
+            ? NSApp.keyWindow?.firstResponder as? NSView
+            : event.window?.contentView?.hitTest(event.locationInWindow)
+        if event.type == .keyDown,
+            NavigationShortcutGate.historyView(from: target)?.navigateHistory(direction) == true
+        {
+            return true
         }
         guard let router = WindowRouter.router(for: event.window ?? NSApp.keyWindow),
             (direction == .back ? router.canGoBack : router.canGoForward)
