@@ -128,7 +128,6 @@ import Testing
         await engine.finishShutdown()
         #expect(engine.isStopped)
         #expect(!engine.streaming)
-        #expect(engine.snapshot().audioStatus?.running == false)
         #expect(throws: (any Error).self) { try engine.perform(.zoom(2)) }
         await #expect(throws: (any Error).self) {
             try await surface.execute(

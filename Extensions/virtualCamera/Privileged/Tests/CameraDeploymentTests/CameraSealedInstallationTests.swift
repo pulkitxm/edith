@@ -27,11 +27,8 @@ import Testing
             let provider = source.appendingPathComponent(
                 "Contents/Library/SystemExtensions/" + host + ".camera.systemextension")
             let embedded = source.appendingPathComponent("Contents/PlugIns/privileged.bundle")
-            let driver = source.appendingPathComponent(
-                "Contents/Library/Audio/Plug-Ins/HAL/" + host + ".microphone.driver")
             for directory in [
                 source.appendingPathComponent("Contents/MacOS"), provider, embedded, privilege,
-                driver,
             ] {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
@@ -81,9 +78,7 @@ import Testing
                         digest = wrongInstaller && path != privilege ? 2 : 1
                     } else if path.pathExtension == "systemextension" {
                         identifier = host + ".camera"; digest = revision
-                    } else if path.pathExtension == "driver"
-                        || path.lastPathComponent.hasPrefix(".camera-microphone-")
-                    {
+                    } else if path.pathExtension == "driver" {
                         identifier = host + ".microphone"; digest = revision
                     } else {
                         identifier = host + ".cameraCarrier"; digest = revision
@@ -114,15 +109,13 @@ import Testing
                 atPath: fixture.root.appendingPathComponent("Installed").path))
     }
 
-    @Test func obsCarrierInstallsOnlyItsVerifiedMicrophone() throws {
+    @Test func obsCarrierInstallsWithoutACameraProvider() throws {
         let fixture = try Fixture(obs: true)
         let installer = try fixture.installer()
         let installed = try installer.installCarrier(source: fixture.source, providerExited: true)
         #expect(
             !FileManager.default.fileExists(
                 atPath: installed.appendingPathComponent("Contents/Library/SystemExtensions").path))
-        #expect(try installer.installMicrophone(carrier: installed))
-        #expect(try installer.removeMicrophone())
     }
 
     @Test func obsCarrierRejectsAnEmbeddedCameraProvider() throws {
@@ -232,14 +225,16 @@ import Testing
         #expect(repaired.path == installed.path)
     }
 
-    @Test func microphoneCopyIsVerifiedAndRemainsOutsideBaseApp() throws {
+    @Test func installedMicrophoneIsRemovedOnce() throws {
         let fixture = try Fixture()
         let installer = try fixture.installer()
-        let installed = try installer.installCarrier(source: fixture.source, providerExited: true)
-        #expect(try installer.installMicrophone(carrier: installed))
-        #expect(try !installer.installMicrophone(carrier: installed))
         let path = fixture.root.appendingPathComponent("HAL/" + fixture.host + ".microphone.driver")
-        #expect(FileManager.default.fileExists(atPath: path.path))
+        try FileManager.default.createDirectory(
+            at: path, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755])
+        #expect(try installer.removeMicrophone())
+        #expect(!FileManager.default.fileExists(atPath: path.path))
+        #expect(try !installer.removeMicrophone())
     }
 
     @Test func invalidMetadataAndAdHocSignaturesAreRejected() throws {

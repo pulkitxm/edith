@@ -283,7 +283,7 @@ import Testing
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
                 "look", "background", "systemBackgroundActive", "message",
                 "videoSource", "videoPath", "playback", "loop", "sourceAudio", "mirrorOutput",
-                "recordingPath", "audio",
+                "recordingPath",
             ])
         #expect(object["cameraResolution"] == .string("1920x1080"))
         #expect(object["message"] == .string("Done."))

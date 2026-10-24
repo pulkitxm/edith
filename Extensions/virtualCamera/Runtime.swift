@@ -65,19 +65,6 @@ final class ExtensionRuntime: NSObject {
                 return try JSONEncoder().encode(
                     try await worker.engine.performRecording(request.request))
             }
-            if command == "camera.extension" {
-                guard
-                    let values = try JSONSerialization.jsonObject(with: payload)
-                        as? [String: String],
-                    values.count == 1
-                else { throw ExtensionPeerError.invalidRequest }
-                guard values["operation"] == "microphone" else {
-                    throw ExtensionPeerError.rejected(
-                        "Camera video uses OBS Virtual Camera. Keep OBS Studio closed.")
-                }
-                try await worker.client.prepareMicrophone()
-                return try JSONEncoder().encode(worker.client.currentStatus)
-            }
             return try await worker.surface.execute(command, payload: payload)
         }
     }
@@ -329,7 +316,7 @@ enum CameraCarrierLaunchEnvironment {
     private let actions = VirtualCameraActionBridge()
     private let manager: VirtualCameraExtensionManager
     private var drainTask: Task<Void, Never>?
-    private var microphoneWarmup: Task<Void, Never>?
+    private var microphoneRemoval: Task<Void, Never>?
     private(set) var draining = false
     static let pendingKey = "cameraPendingDisable"
 
@@ -397,7 +384,6 @@ enum CameraCarrierLaunchEnvironment {
                 VirtualCameraRunningApplication(pid: 303303, bundleIdentifier: "synthetic.meeting")
             }; environment.sources = { [] }
         }
-        environment.prepareMicrophone = { try await client.prepareMicrophone() }
         let bus = VirtualCameraPreviewBus()
         var state = VirtualCameraStore.load(defaults)
         state.output = .obs
@@ -432,9 +418,10 @@ enum CameraCarrierLaunchEnvironment {
             if !fixture {
                 let privilege = ExtensionPrivilegedClient(
                     owner: "virtualCamera", source: layout.privileged, version: version)
-                microphoneWarmup = Task { [client] in
+                microphoneRemoval = Task {
                     guard privilege.status == .enabled else { return }
-                    try? await client.prepareMicrophone()
+                    _ = try? await privilege.invoke("microphoneRemove", payload: Data("{}".utf8))
+                    try? await privilege.release()
                 }
             }
         }
@@ -456,7 +443,7 @@ enum CameraCarrierLaunchEnvironment {
 
     func beginDrain() {
         draining = true
-        microphoneWarmup?.cancel()
+        microphoneRemoval?.cancel()
         HotKeyRegistrar.shutdown()
         ui.beginSuspension()
         model.beginSuspension()

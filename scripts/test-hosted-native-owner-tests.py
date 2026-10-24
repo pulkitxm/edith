@@ -120,7 +120,7 @@ class OriginalNativeOwnerTests(unittest.TestCase):
             'timeLapse': ['make', 'ci-extension-time-lapse'],
             'studio': ['make', 'ci-extension-studio', 'ci-extension-studio-native'],
             'machines': ['make', 'ci-extension-machines'],
-            'virtualCamera': ['make', 'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'],
+            'virtualCamera': ['make', 'ci-extension-camera', 'ci-extension-camera-carrier'],
             'feature-models': ['make', 'ci-extension-support', 'ci-extension-docs'],
         }
         for owner, command in expected.items():
@@ -146,7 +146,7 @@ class OriginalNativeOwnerTests(unittest.TestCase):
         self.assertTrue(lines[2].strip().startswith('swiftc -typecheck '))
         definitions = json.loads((root / 'Extensions/manifest.json').read_text())
         self.assertEqual(runner.original_command('virtualCamera', definitions), [
-            'make', 'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'])
+            'make', 'ci-extension-camera', 'ci-extension-camera-carrier'])
 
     def run_fixture(self, text, process, ownership, sample=None, selection=None):
         clock = Clock()

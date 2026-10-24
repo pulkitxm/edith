@@ -2600,7 +2600,6 @@
         "Extensions/virtualCamera/CameraCarrierRuntime.swift",
         "Extensions/virtualCamera/CameraCarrierSession.swift",
         "Extensions/virtualCamera/CameraContext.swift",
-        "Extensions/virtualCamera/CameraNativeLibrary.swift",
         "Extensions/virtualCamera/CameraReadiness.swift",
         "Extensions/virtualCamera/CameraSurface.swift",
         "Extensions/virtualCamera/CameraSystemExtensionController.swift",
@@ -2630,20 +2629,10 @@
         "Extensions/virtualCamera/Core/Services/VirtualCameraRecorder.swift",
         "Extensions/virtualCamera/Core/Services/VirtualCameraScreenCapture.swift",
         "Extensions/virtualCamera/Core/Services/VirtualCameraSink.swift",
+        "Extensions/virtualCamera/Core/Services/VirtualCameraSourceAudio.swift",
         "Extensions/virtualCamera/Core/Services/VirtualCameraVideoSource.swift",
         "Extensions/virtualCamera/Helper/Services/VirtualCameraActionBridge.swift",
         "Extensions/virtualCamera/Helper/Services/VirtualCameraEngine.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingAudioCapture.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingAudioDevices.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingAudioJSON.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingAudioMixer.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingAudioState.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingMediaAudio.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingMicrophone.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingSoundboard.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceEffects.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceModel.swift",
-        "Extensions/virtualCamera/MeetingAudio/MeetingVoiceStream.swift",
         "Extensions/virtualCamera/Runtime.swift",
         "Extensions/virtualCamera/Support/VirtualCameraExtensionStatus.swift",
         "Extensions/virtualCamera/Support/VirtualCameraFormat.swift",
@@ -2657,7 +2646,6 @@
         "Extensions/virtualCamera/Views/ScreenCaptureSourceCatalog.swift",
         "Extensions/virtualCamera/Views/TimeLapseSourcePicker.swift",
         "Extensions/virtualCamera/Views/TimeLapseSources.swift",
-        "Extensions/virtualCamera/Views/VirtualCameraAudioPanel.swift",
         "Extensions/virtualCamera/Views/VirtualCameraExtensionManager.swift",
         "Extensions/virtualCamera/Views/VirtualCameraInspector.swift",
         "Extensions/virtualCamera/Views/VirtualCameraMeetingControls.swift",
@@ -2667,7 +2655,6 @@
         "Extensions/virtualCamera/CLI/CameraExtensionCommands.swift",
         "Extensions/virtualCamera/CLI/CameraCommands.swift",
         "Extensions/virtualCamera/CLI/CameraMediaCommands.swift",
-        "Extensions/virtualCamera/CLI/CameraAudioCommands.swift",
         "Extensions/virtualCamera/CLI/CameraCLICatalog.swift",
         "Extensions/virtualCamera/CLI/CameraCLIExecution.swift",
         "Extensions/virtualCamera/CameraUICommands.swift"
@@ -2687,40 +2674,6 @@
         "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraSealedInstallation.swift"
       ]
     },
-    "resources": {
-      "app": [
-        "Extensions/virtualCamera/Resources/soundboard-airhorn.wav",
-        "Extensions/virtualCamera/Resources/soundboard-applause.wav",
-        "Extensions/virtualCamera/Resources/soundboard-chime.wav",
-        "Extensions/virtualCamera/Resources/soundboard-countdown.wav",
-        "Extensions/virtualCamera/Resources/soundboard-credits.txt",
-        "Extensions/virtualCamera/Resources/soundboard-drumroll.wav",
-        "Extensions/virtualCamera/Resources/soundboard-error.wav",
-        "Extensions/virtualCamera/Resources/soundboard-pop.wav",
-        "Extensions/virtualCamera/Resources/soundboard-rimshot.wav",
-        "Extensions/virtualCamera/Resources/soundboard-scratch.wav",
-        "Extensions/virtualCamera/Resources/soundboard-success.wav",
-        "Extensions/virtualCamera/Resources/soundboard-thunder.wav",
-        "Extensions/virtualCamera/Resources/soundboard-whoosh.wav"
-      ]
-    },
-    "nativePackage": "Extensions/virtualCamera/NativeRuntime",
-    "nativeProduct": "MeetingVoice",
-    "nativeRoles": [
-      "app"
-    ],
-    "nativeLink": false,
-    "nativeLicenses": [
-      {
-        "source": "Extensions/virtualCamera/NativeRuntime/LICENSES.txt",
-        "destination": "meeting-voice-licenses.txt"
-      }
-    ],
-    "nativeSources": [
-      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingMicrophone/EdithMicrophone.cpp",
-      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingVoiceRuntime/MeetingVoiceRuntime.cpp",
-      "Extensions/virtualCamera/NativeRuntime/Sources/MeetingVoiceRuntime/include/MeetingVoiceRuntime.h"
-    ],
     "inputs": [
       "Extensions/virtualCamera"
     ],
@@ -2731,7 +2684,6 @@
       "scripts/build-contained-host-runtime.mjs",
       "scripts/build-camera-carrier.mjs",
       "scripts/prepare-camera-extension-release.py",
-      "scripts/build-camera-microphone.py",
       "scripts/camera_extension.py",
       "Packages/ExtensionSupport",
       "Packages/EdithHost/Sources",
@@ -2745,8 +2697,7 @@
     "dependencies": [],
     "testTargets": [
       "ci-extension-camera",
-      "ci-extension-camera-carrier",
-      "ci-extension-camera-voice"
+      "ci-extension-camera-carrier"
     ],
     "systemExtensionCarrier": {
       "role": "cameraCarrier",

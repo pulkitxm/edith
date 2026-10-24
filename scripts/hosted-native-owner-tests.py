@@ -29,7 +29,7 @@ TARGETS = {
     'studio': ['ci-extension-studio', 'ci-extension-studio-native'],
     'machines': ['ci-extension-machines'],
     'virtualCamera': [
-        'ci-extension-camera', 'ci-extension-camera-carrier', 'ci-extension-camera-voice'],
+        'ci-extension-camera', 'ci-extension-camera-carrier'],
     'feature-models': ['ci-extension-support', 'ci-extension-docs'],
     'database-mutation': ['ci-extension-database-mutation'],
     'database-executor': ['ci-extension-database-executor'],

@@ -95,14 +95,14 @@ test("development binds host verifier inputs to the actual source context indepe
   expect(defaults.hostApp).toBe(resolve(root, "local/minimal-host/Edith.app"));
 });
 
-test("camera voice fixture requires the real host prerequisite and selects development-only source context", async () => {
+test("camera carrier fixture requires the real host prerequisite and selects development-only source context", async () => {
   const recipe = await readFile(
     new URL("../Makefile", import.meta.url),
     "utf8",
   );
-  expect(recipe).toMatch(/^ci-extension-camera-voice: host$/m);
+  expect(recipe).toMatch(/^ci-extension-camera-carrier: host$/m);
   const commands = recipe.match(
-    /^ci-extension-camera-voice: host\n((?:\t[^\n]*\n)+)/m,
+    /^ci-extension-camera-carrier: host\n((?:\t[^\n]*\n)+)/m,
   )[1];
   const signedContext = commands.indexOf(
     "bun test scripts/extension-development-host-context.test.js",

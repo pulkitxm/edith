@@ -10,7 +10,6 @@ struct VirtualCameraInspector: View {
     var body: some View {
         ScrollView {
             VStack(spacing: UIScale.pt(8)) {
-                meetingAudioControl
                 ForEach(VirtualCameraInspectorTab.allCases) { section in
                     let expanded = model.expandedInspectorSections.contains(section)
                     VStack(spacing: UIScale.pt(12)) {
@@ -37,29 +36,6 @@ struct VirtualCameraInspector: View {
         }
     }
 
-    private var meetingAudioControl: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack {
-                Text("Meeting audio").font(.edithText(.body))
-                Spacer()
-                Toggle(
-                    "Meeting audio",
-                    isOn: Binding(
-                        get: { model.state.audio.enabled },
-                        set: { model.performAudio(.enable($0)) })
-                )
-                .labelsHidden().toggleStyle(.switch).disabled(model.audioPending)
-            }
-            if let failure = model.snapshot?.audioStatus?.failure
-                ?? model.snapshot?.audioStatus?.sourceFailure
-            {
-                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
-    }
-
     @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {
         switch section {
         case .frame:
@@ -69,9 +45,6 @@ struct VirtualCameraInspector: View {
         case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
         case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
         case .output: VirtualCameraOutputPanel(model: model, dark: dark)
-        case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
-        case .voice: VirtualCameraAudioPanel(model: model, dark: dark, section: .voice)
-        case .devices: VirtualCameraAudioPanel(model: model, dark: dark, section: .devices)
         }
     }
 }
@@ -168,6 +141,15 @@ extension VirtualCameraPageModel {
             set: { value in self.updateComposition { $0[keyPath: keyPath] = value } })
     }
 
+    func pictureBinding(_ keyPath: WritableKeyPath<VirtualCameraFraming, Double>) -> Binding<Double>
+    {
+        Binding(
+            get: { 1 - self.composition.framing[keyPath: keyPath] },
+            set: { value in
+                self.updateComposition { $0.framing[keyPath: keyPath] = 1 - value }
+            })
+    }
+
     func stateBinding<Value>(_ keyPath: WritableKeyPath<VirtualCameraState, Value>) -> Binding<
         Value
     > {
@@ -212,10 +194,10 @@ struct VirtualCameraFramePanel: View {
                 dark: dark
             ) {
                 VirtualCameraSliderRow(
-                    title: "Left to right", value: model.binding(\.framing.centerX), range: 0...1,
+                    title: "Left to right", value: model.pictureBinding(\.centerX), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)
                 VirtualCameraSliderRow(
-                    title: "Top to bottom", value: model.binding(\.framing.centerY), range: 0...1,
+                    title: "Top to bottom", value: model.pictureBinding(\.centerY), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)
                 VirtualCameraSliderRow(
                     title: "Tilt", value: model.binding(\.framing.tilt),

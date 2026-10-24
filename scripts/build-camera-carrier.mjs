@@ -206,22 +206,6 @@ export async function buildCameraCarrier({
           recursive: true,
         });
       }
-      const microphone = resolve(contents, "Library/Audio/Plug-Ins/HAL");
-      execFileSync(
-        "python3",
-        [
-          resolve(root, "scripts/build-camera-microphone.py"),
-          "--application",
-          hostIdentifier,
-          "--version",
-          version,
-          "--identity",
-          identity,
-          "--output",
-          microphone,
-        ],
-        { stdio: "inherit" },
-      );
     }
     const runtime = await copyContainedHostRuntime(hostApp, contents, {
       identity,

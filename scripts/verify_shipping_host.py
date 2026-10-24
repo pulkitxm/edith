@@ -117,11 +117,11 @@ def inspect_host(bundle, release=False, launcher_required=True):
     }
     assert set(binaries) == expected_binaries, 'Unexpected nested host executable'
     symbols = run('nm', '-g', str(executable))
-    for feature in ('HerdrStore', 'MusicPlayerEngine', 'MeetingVoice', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
+    for feature in ('HerdrStore', 'MusicPlayerEngine', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
     assert bytes_installed < 10_000_000, f'Empty host exceeds 10 MB: {bytes_installed}'
     closure = run('otool', '-L', str(executable))
-    for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
+    for feature in ('EdithKit', 'EdithShared', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'
     run('codesign', '--verify', '--deep', '--strict', str(bundle))
     if launcher_required:

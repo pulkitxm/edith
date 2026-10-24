@@ -62,9 +62,7 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
         case .pause:
             descriptor(["pause"], "Hide the camera behind a card, blank or frozen frame.", .write)
         case .resume: descriptor(["resume"], "Show the live camera again.", .write)
-        case .audio:
-            descriptor(
-                ["audio"], "Manage the meeting microphone, snippets and voice effects.", .write)
+        case .audio: descriptor(["audio"], "Record the sound of a video or screen.", .write)
         case .video: descriptor(["video"], "Use a video file as the camera.", .write)
         case .play: descriptor(["play"], "Control video playback.", .write)
         case .freeze: descriptor(["freeze"], "Hold the last video frame.", .write)
@@ -132,7 +130,6 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var state: VirtualCameraState
     public var message: String?
     public var recordingPath: String?
-    public var audioStatus: MeetingAudioStatus?
     public var screenSources: [VirtualCameraScreenSource]?
 
     public init(

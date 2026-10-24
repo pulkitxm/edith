@@ -27,6 +27,22 @@ public struct VirtualCameraCrop: Equatable, Sendable {
     }
 }
 
+public struct VirtualCameraDragAxes: Equatable, Sendable {
+    public var horizontal: Double
+    public var vertical: Double
+
+    public static let identity = VirtualCameraDragAxes(horizontal: 1, vertical: 1)
+
+    public init(horizontal: Double = 1, vertical: Double = 1) {
+        self.horizontal = horizontal == 0 ? 1 : horizontal
+        self.vertical = vertical == 0 ? 1 : vertical
+    }
+
+    public init(mirrorOutput: Bool, mirrorPreview: Bool) {
+        self.init(horizontal: (mirrorOutput != mirrorPreview) ? -1 : 1, vertical: 1)
+    }
+}
+
 public enum VirtualCameraGeometry {
     public static func orientedSize(_ size: CGSize, quarterTurns: Int) -> CGSize {
         quarterTurns % 2 == 0 ? size : CGSize(width: size.height, height: size.width)
@@ -91,7 +107,7 @@ public enum VirtualCameraGeometry {
 
     public static func panned(
         _ framing: VirtualCameraFraming, by translation: CGSize, viewSize: CGSize,
-        source: CGSize, output: CGSize
+        source: CGSize, output: CGSize, axes: VirtualCameraDragAxes = .identity
     ) -> VirtualCameraFraming {
         guard viewSize.width > 0, viewSize.height > 0, source.width > 0, source.height > 0 else {
             return framing
@@ -100,8 +116,8 @@ public enum VirtualCameraGeometry {
         let crop = crop(source: source, output: output, framing: current)
         let scale = crop.size.width / viewSize.width
         let radians = current.tilt * .pi / 180
-        let dx = translation.width * scale
-        let dy = translation.height * scale
+        let dx = translation.width * scale * axes.horizontal
+        let dy = translation.height * scale * axes.vertical
         let rotatedX = dx * cos(radians) - dy * sin(radians)
         let rotatedY = dx * sin(radians) + dy * cos(radians)
         var next = current

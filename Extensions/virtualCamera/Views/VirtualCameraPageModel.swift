@@ -7,9 +7,6 @@ import ImageIO
 import UniformTypeIdentifiers
 
 enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
-    case audio
-    case voice
-    case devices
     case frame
     case look
     case background
@@ -25,9 +22,6 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "Background"
         case .overlays: "Overlays"
         case .output: "Output"
-        case .audio: "Sounds"
-        case .voice: "Voice"
-        case .devices: "Audio devices"
         }
     }
 
@@ -38,9 +32,6 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "person.crop.rectangle"
         case .overlays: "text.below.photo"
         case .output: "video.badge.checkmark"
-        case .audio: "waveform"
-        case .voice: "person.wave.2"
-        case .devices: "mic"
         }
     }
 }
@@ -53,7 +44,7 @@ enum VirtualCameraImageTarget {
 @MainActor
 final class VirtualCameraPageModel: ObservableObject {
     static let shared = VirtualCameraPageModel()
-    static let previewSize = CGSize(width: 1280, height: 720)
+    static let previewSize = CGSize(width: 1920, height: 1080)
     static let saveDelay: TimeInterval = 0.15
 
     @Published private(set) var state: VirtualCameraState
@@ -76,7 +67,7 @@ final class VirtualCameraPageModel: ObservableObject {
             updateLookThumbnails(from: reference)
         }
     }
-    @Published private(set) var expandedInspectorSections: Set<VirtualCameraInspectorTab> = [.audio]
+    @Published private(set) var expandedInspectorSections: Set<VirtualCameraInspectorTab> = [.frame]
     {
         didSet {
             var storedSections: [String] = []
@@ -90,7 +81,6 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published var showsGrid = false
     @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
     @Published var errorMessage: String?
-    @Published var audioPending = false
 
     let display = VirtualCameraPreviewDisplay()
     let extensionManager: VirtualCameraExtensionManager
@@ -148,7 +138,7 @@ final class VirtualCameraPageModel: ObservableObject {
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
-        var restoredSections: Set<VirtualCameraInspectorTab> = [.audio]
+        var restoredSections: Set<VirtualCameraInspectorTab> = [.frame]
         if let storedSections = defaults.stringArray(
             forKey: "virtualCameraInspectorExpandedSections")
         {
@@ -171,8 +161,8 @@ final class VirtualCameraPageModel: ObservableObject {
         self.cameraAccess = accessProvider()
         self.tab =
             VirtualCameraInspectorTab(
-                rawValue: defaults.string(forKey: "virtualCameraInspectorSection") ?? "audio")
-            ?? .audio
+                rawValue: defaults.string(forKey: "virtualCameraInspectorSection") ?? "frame")
+            ?? .frame
         self.expandedInspectorSections = restoredSections
         display.onAvailabilityChanged = { [weak self] available in
             self?.hasPreviewFrame = available
@@ -251,20 +241,6 @@ final class VirtualCameraPageModel: ObservableObject {
         } onCancel: {
             task.cancel()
         }
-    }
-
-    func loadAudioDevices() async -> [MeetingAudioDevice] {
-        await read { [self] in await loadAudioDevicesOwned() } ?? []
-    }
-
-    private func loadAudioDevicesOwned() async -> [MeetingAudioDevice] {
-        if let engineClient {
-            guard let data = try? await engineClient.invoke("camera.ui.devices"), !stopped,
-                !Task.isCancelled
-            else { return [] }
-            return (try? JSONDecoder().decode([MeetingAudioDevice].self, from: data)) ?? []
-        }
-        return await Task.detached { MeetingAudioDevices.list() }.value
     }
 
     func makeScreenCatalog() -> ScreenCaptureSourceCatalog {
@@ -958,10 +934,12 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func pan(by translation: CGSize, in viewSize: CGSize) {
         let previous = state
+        let axes = VirtualCameraDragAxes(
+            mirrorOutput: state.mirrorOutput, mirrorPreview: state.mirrorPreview)
         updateComposition {
             $0.framing = VirtualCameraGeometry.panned(
                 $0.framing, by: translation, viewSize: viewSize, source: sourceSize,
-                output: outputSize)
+                output: outputSize, axes: axes)
         }
         if engineClient == nil, state != previous, snapshot?.live == true {
             VirtualCameraStore.announceChange(from: "window", state: state)

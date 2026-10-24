@@ -107,9 +107,6 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
                     ] as CFDictionary)
             }
             return try JSONEncoder().encode(CameraUIImage(image: image.flatMap(Self.image)))
-        case "camera.ui.devices":
-            try empty(payload)
-            return try JSONEncoder().encode(MeetingAudioDevices.list())
         case "camera.ui.permission":
             try empty(payload); model.requestCameraAccess()
         case "camera.ui.screenSources":

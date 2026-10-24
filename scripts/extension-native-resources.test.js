@@ -192,7 +192,7 @@ test("native payloads can be limited to selected roles without eager dynamic lin
       cameraCarrier: ["carrier.swift"],
     },
     nativePackage: "Extensions/mock/Native",
-    nativeProduct: "MeetingVoice",
+    nativeProduct: "MockNative",
     nativeRoles: ["app"],
     nativeLink: false,
   };
@@ -224,7 +224,7 @@ test("native payloads can be limited to selected roles without eager dynamic lin
       existing,
       "/payload/app.bundle/Contents",
     ),
-  ).toContain("-lMeetingVoice");
+  ).toContain("-lMockNative");
   expect(nativeRolePolicy({ roles: { app: [] } })).toEqual({
     roles: [],
     link: true,
@@ -258,7 +258,7 @@ test("native role policy rejects empty, duplicated, unknown and mistyped declara
   const definition = {
     roles: { app: [], helper: [] },
     nativePackage: "Extensions/mock/Native",
-    nativeProduct: "MeetingVoice",
+    nativeProduct: "MockNative",
   };
   for (const nativeRoles of [
     [],

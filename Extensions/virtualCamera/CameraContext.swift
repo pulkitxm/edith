@@ -21,18 +21,6 @@ public enum AppBuildIdentity {
     }
 }
 
-private final class CameraResourcesMarker: NSObject {}
-
-public enum BundledResources {
-    public static func url(forResource name: String, withExtension suffix: String) -> URL? {
-        #if SWIFT_PACKAGE
-        return Bundle.module.url(forResource: name, withExtension: suffix)
-        #else
-        return Bundle(for: CameraResourcesMarker.self).url(forResource: name, withExtension: suffix)
-        #endif
-    }
-}
-
 public enum IPC {
     public enum Name: String {
         case requestVirtualCameraAction, virtualCameraActionResult, virtualCameraStateChanged

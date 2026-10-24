@@ -106,10 +106,6 @@ test.each([
   "Contents/Extensions/extra.appextensionpoints",
   "Contents/Frameworks/ExtensionMarketplace.framework/ExtensionMarketplace.framework",
   "Contents/Frameworks/EdithShared.framework",
-  "Contents/Frameworks/MeetingVoice.framework",
-  "Contents/Library/LoginItems/Edith.app/Contents/Frameworks/MeetingVoice.framework",
-  "Contents/Frameworks/onnxruntime.framework",
-  "Contents/Library/LoginItems/Edith.app/Contents/Frameworks/onnxruntime.framework",
   "Contents/MacOS/downloaded-worker",
   "Contents/Resources/GhosttyResources",
 ])("release bundle rejects bundled feature payloads at %s", (extra) => {

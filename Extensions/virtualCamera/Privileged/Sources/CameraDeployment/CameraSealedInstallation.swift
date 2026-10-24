@@ -123,52 +123,6 @@ public final class CameraSealedInstallation {
         return installed
     }
 
-    public func installMicrophone(carrier: URL) throws -> Bool {
-        try protectedTree(carrier)
-        _ = try carrierIdentity(carrier)
-        let identifier = configuration.hostIdentifier + ".microphone"
-        let source = carrier.appendingPathComponent(
-            "Contents/Library/Audio/Plug-Ins/HAL/" + identifier + ".driver")
-        try regularTree(source)
-        let signature = try verify(source)
-        guard signature.identifier == identifier, signature.team == ownIdentity.team else {
-            throw failure("The microphone signature is invalid.")
-        }
-        try protectedDirectory(configuration.microphoneDestination)
-        let installed = configuration.microphoneDestination.appendingPathComponent(
-            identifier + ".driver")
-        if files.fileExists(atPath: installed.path) {
-            try protectedTree(installed)
-            if try verify(installed) == signature { return false }
-        }
-        let staging = configuration.microphoneDestination.appendingPathComponent(
-            ".camera-microphone-" + UUID().uuidString)
-        defer { try? files.removeItem(at: staging) }
-        try files.copyItem(at: source, to: staging)
-        try regularTree(staging)
-        guard try verify(staging) == signature else {
-            throw failure("The microphone changed during installation.")
-        }
-        try protect(staging)
-        let existed = files.fileExists(atPath: installed.path)
-        try atomicReplace(staging, installed)
-        var committed = false
-        defer {
-            if !committed {
-                if existed {
-                    try? atomicReplace(staging, installed)
-                } else {
-                    try? files.removeItem(at: installed)
-                }
-            }
-        }
-        guard try verify(installed) == signature else {
-            throw failure("The installed microphone signature is invalid.")
-        }
-        committed = true
-        return true
-    }
-
     public func removeMicrophone() throws -> Bool {
         let identifier = configuration.hostIdentifier + ".microphone"
         let installed = configuration.microphoneDestination.appendingPathComponent(
@@ -209,15 +163,8 @@ public final class CameraSealedInstallation {
         if bundle.object(forInfoDictionaryKey: "EdithCameraTransport") as? String == "obs" {
             let providers = url.appendingPathComponent("Contents/Library/SystemExtensions")
             guard !files.fileExists(atPath: providers.path) else {
-                throw failure("An OBS microphone carrier cannot contain a camera provider.")
+                throw failure("An OBS carrier cannot contain a camera provider.")
             }
-            let driver = url.appendingPathComponent(
-                "Contents/Library/Audio/Plug-Ins/HAL/" + configuration.hostIdentifier
-                    + ".microphone.driver")
-            let microphoneIdentity = try verify(driver)
-            guard microphoneIdentity.identifier == configuration.hostIdentifier + ".microphone",
-                microphoneIdentity.team == ownIdentity.team
-            else { throw failure("The microphone signature is invalid.") }
             return identity
         }
         let provider = url.appendingPathComponent(

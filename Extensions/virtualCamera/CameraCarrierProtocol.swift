@@ -6,7 +6,7 @@ struct CameraCarrierRestartRequired: LocalizedError {
 }
 
 enum CameraCarrierOperation: String, Codable, Sendable {
-    case activate, deactivate, prepareDisable, status, cancel, microphonePrepare
+    case activate, deactivate, prepareDisable, status, cancel
 }
 
 struct CameraCarrierRequest: Codable, Sendable {

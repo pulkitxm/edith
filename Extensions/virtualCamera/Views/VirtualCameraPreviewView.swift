@@ -167,8 +167,7 @@ final class VirtualCameraPreviewNSView: NSView {
         let point = convert(event.locationInWindow, from: nil)
         guard let last = lastDrag else { return }
         lastDrag = point
-        let delta = CGSize(
-            width: (point.x - last.x) * (mirrored ? -1 : 1), height: -(point.y - last.y))
+        let delta = CGSize(width: point.x - last.x, height: -(point.y - last.y))
         onPan?(delta, pictureRect.size)
     }
 

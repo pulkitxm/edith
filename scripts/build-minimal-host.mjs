@@ -292,7 +292,6 @@ const closure = execFileSync("otool", ["-L", executable], {
 for (const name of [
   "EdithShared",
   "EdithKit",
-  "MeetingVoice",
   "Ghostty",
   "EdithStudio",
   "NIO",
@@ -310,7 +309,6 @@ const symbols = execFileSync("nm", ["-g", executable], {
 for (const name of [
   "HerdrStore",
   "MusicPlayerEngine",
-  "MeetingVoice",
   "DatabasePage",
   "StudioPage",
   "QuinjetPage",

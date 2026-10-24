@@ -4,7 +4,6 @@ import Foundation
 @MainActor protocol CameraCarrierLease: AnyObject {
     func begin() async throws -> Bool
     func providerExited() async throws -> Bool
-    func prepareMicrophone() async throws
     func retireMicrophone() async throws
     func release() async throws
 }
@@ -19,11 +18,6 @@ import Foundation
     func begin() async throws -> Bool { try await boolean("beginSession", field: "providerExited") }
     func providerExited() async throws -> Bool {
         try await boolean("providerStatus", field: "providerExited")
-    }
-    func prepareMicrophone() async throws {
-        guard try await boolean("microphonePrepare", field: "ok") else {
-            throw CocoaError(.fileWriteUnknown)
-        }
     }
     func retireMicrophone() async throws {
         if try await boolean("microphoneDisable", field: "restartRequired") {

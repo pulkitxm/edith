@@ -72,14 +72,14 @@ import Security
                     let lease = try environment.lease(host, source, version)
                     self.lease = lease
                     let exited = try await lease.begin()
-                    let microphoneOnly =
+                    let obsTransport =
                         Bundle.main.object(forInfoDictionaryKey: "EdithCameraTransport") as? String
                         == "obs"
                     let controller = CameraSystemExtensionController(
                         identifier: host + ".camera",
-                        broker: microphoneOnly
-                            ? CameraMicrophoneOnlyBroker() : environment.broker(),
-                        initiallyActive: microphoneOnly ? false : !exited,
+                        broker: obsTransport
+                            ? CameraOBSTransportBroker() : environment.broker(),
+                        initiallyActive: obsTransport ? false : !exited,
                         providerExited: {
                             let deadline = ContinuousClock.now.advanced(by: .seconds(30))
                             repeat {
@@ -91,8 +91,7 @@ import Security
                     session = CameraCarrierSession(
                         controller: controller,
                         send: { [environment] in try environment.output.write(contentsOf: $0) },
-                        microphoneOnly: microphoneOnly,
-                        prepareMicrophone: { try await lease.prepareMicrophone() },
+                        obsTransport: obsTransport,
                         prepareDisableResources: { try await lease.retireMicrophone() },
                         releaseResources: { try await lease.release() },
                         exited: { [weak self, environment] in
@@ -150,7 +149,6 @@ import Security
     var microphoneActive = false
     func begin() async throws -> Bool { !providerActive }
     func providerExited() async throws -> Bool { !providerActive }
-    func prepareMicrophone() async throws { microphoneActive = true }
     func retireMicrophone() async throws { microphoneActive = false }
     func release() async throws {
         guard !providerActive, !microphoneActive else { throw CocoaError(.fileWriteUnknown) }
@@ -211,7 +209,7 @@ enum CameraCarrierCaller {
     }
 }
 
-@MainActor private final class CameraMicrophoneOnlyBroker: CameraSystemExtensionSubmitting {
+@MainActor private final class CameraOBSTransportBroker: CameraSystemExtensionSubmitting {
     func submit(
         _ operation: CameraSystemExtensionOperation, identifier: String,
         completion: @escaping @MainActor (CameraSystemExtensionEvent) -> Void

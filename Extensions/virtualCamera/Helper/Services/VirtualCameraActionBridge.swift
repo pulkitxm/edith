@@ -67,7 +67,7 @@ final class VirtualCameraActionBridge {
             runtime.isLive(at: Date()), let engine
         {
             switch runtime.request {
-            case .recordStart, .recordStop, .screenSources, .audio:
+            case .recordStart, .recordStop, .screenSources:
                 guard requests.count < 8 else { return }
                 let token = UUID()
                 requests[token] = Task { @MainActor [weak self] in

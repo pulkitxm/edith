@@ -21,7 +21,6 @@ private final class CameraControlProbe: CameraCarrierControlling {
         }
         publish(.init(phase: "stopped", ownsProvider: false, pending: false))
     }
-    func prepareMicrophone() async throws { calls.append("microphone") }
     func prepareDisable(providerVisible: Bool) async throws { try await deactivate() }
     func publish(_ status: CameraCarrierStatus) { currentStatus = status; changed?(status) }
 }
@@ -139,7 +138,6 @@ private final class CameraControlProbe: CameraCarrierControlling {
                     else:
                         active=False
                         phase='stopped'
-                elif operation=='microphonePrepare': error='Synthetic microphone approval was rejected.'
                 reply={'token':request['token'],'status':{'phase':phase,'ownsProvider':active,'pending':False}}
                 if error: reply['error']=error
                 print(json.dumps(reply),flush=True)
@@ -235,14 +233,6 @@ private final class CameraControlProbe: CameraCarrierControlling {
         #expect(client.currentStatus?.ownsProvider == true)
         try await client.prepareDisable(providerVisible: true)
         #expect(client.currentStatus?.ownsProvider == false)
-    }
-
-    @Test func microphoneFailureDoesNotClaimProviderActivation() async throws {
-        let fixture = try Fixture()
-        let client = fixture.client()
-        await #expect(throws: (any Error).self) { try await client.prepareMicrophone() }
-        #expect(client.currentStatus?.ownsProvider == false)
-        try await client.prepareDisable(providerVisible: false)
     }
 
     @Test func managerUsesCarrierAndKeepsRestartRequiredState() async throws {

@@ -756,15 +756,15 @@
       "factoryOverlay": false,
       "scope": "original-view-creation-close-reopen-disable",
       "functionalActionsValidated": false,
-      "effects": "Remote page constructs denied camera-access provider, empty sources and no install entitlement. No preview/live/permission/device/HAL/OBS actions.",
+      "effects": "Remote page constructs denied camera-access provider, empty sources and no install entitlement. No preview/live/permission/device/OBS actions.",
       "sources": [
         {
           "path": "Extensions/virtualCamera/Runtime.swift",
-          "sha256": "f35e6e4df4f3ea6a5d086dd6125b9cf36e3e319fb4043aa602131d07171f743f"
+          "sha256": "86c1f5c795386030a29449973fd8f7b21038d4e33bf0c621668fbd9b12b707d7"
         },
         {
           "path": "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-          "sha256": "cc0ccf845b64b4e703326a836e41dffc5c9fcb4c55d1bd44ff0234a0c36824a8"
+          "sha256": "0c03b46c99d20b58759856ecfc2c10757372347e3161b501cfb06dba6b4dbc7b"
         }
       ]
     },

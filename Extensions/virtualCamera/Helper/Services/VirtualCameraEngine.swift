@@ -14,7 +14,6 @@ struct VirtualCameraEngineEnvironment {
     var obsRunning: () -> Bool
     var frontmostApplication: () -> VirtualCameraRunningApplication?
     var sources: () -> [VirtualCameraSource] = { VirtualCameraDevices.sources() }
-    var prepareMicrophone: (@MainActor () async throws -> Void)?
     var applicationNotifications: () -> NotificationCenter? = { nil }
 
     static var live: VirtualCameraEngineEnvironment {
@@ -67,16 +66,8 @@ final class VirtualCameraEngine {
     private let previewBus: VirtualCameraPreviewBus
     private var recordingPath: String?
     private var recordingFinishing = false
-    private let audioMixer = MeetingAudioMixer()
-    private var audioBusy = false
     private(set) var isStopped = false
     private var recordingShutdown: Task<Void, Never>?
-    private var microphonePreparation: Task<Void, Error>?
-    private var microphonePreparationID: UUID?
-    private var audioStartup: Task<Void, Never>?
-    private var audioStarting = false
-    private var microphonePrepared = false
-    private var audioPreparationFailure: String?
 
     var streaming: Bool { streamingRoute != nil }
 
@@ -98,19 +89,10 @@ final class VirtualCameraEngine {
         pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: format.width, height: format.height),
             frameRate: format.frameRate)
-        let mixer = audioMixer
-        pipeline.setSourceAudio(
-            video: { mixer.syncVideoAudio(path: $0, time: $1, playing: $2) },
-            screen: { mixer.appendScreenAudio($0) },
-            stop: { mixer.stopSourceAudio() })
-        mixer.setMixedOutput { [weak pipeline] buffer, time in
-            pipeline?.appendRecordingAudio(buffer, at: time)
-        }
     }
 
     func start() {
         guard !isStopped, !draining, stateToken == nil else { return }
-        configureAudio()
         let callbacks = callbacks
         stateToken = IPC.observe(
             IPC.Name.virtualCameraStateChanged,
@@ -152,8 +134,6 @@ final class VirtualCameraEngine {
         guard !draining else { return }
         draining = true
         callbacks.close()
-        audioStartup?.cancel()
-        microphonePreparation?.cancel()
         stopWork?.cancel()
         if let stateToken { IPC.stopObserving(stateToken) }
         stateToken = nil
@@ -167,7 +147,6 @@ final class VirtualCameraEngine {
         beginSuspension()
         guard !isStopped else { return }
         isStopped = true
-        audioMixer.shutdown()
         if recordingPath != nil {
             recordingShutdown = Task { [pipeline] in _ = try? await pipeline.stopRecording() }
             recordingPath = nil
@@ -178,19 +157,15 @@ final class VirtualCameraEngine {
     func finishShutdown() async {
         if let shutdownTask { await shutdownTask.value; return }
         shutdown()
-        let recording = recordingShutdown, audio = audioStartup, microphone = microphonePreparation
-        let task = Task { [self, recording, audio, microphone] in
+        let recording = recordingShutdown
+        let task = Task { [self, recording] in
             await recording?.value
-            await audio?.value
-            _ = try? await microphone?.value
             await callbacks.wait()
             await withCheckedContinuation { continuation in
                 stopWorkReturns.notify(queue: .main) { continuation.resume() }
             }
             await pipeline.stopAndDrain()
-            await audioMixer.shutdownAndWait()
             recordingShutdown = nil
-            audioStartup = nil; microphonePreparation = nil; microphonePreparationID = nil
             stopWork = nil
             previewBus.close()
         }
@@ -204,7 +179,6 @@ final class VirtualCameraEngine {
         guard next != state else { return }
         let outputChanged = next.output != state.output
         state = next
-        configureAudio()
         pipeline.update(state: effectiveState())
         if outputChanged {
             refreshExtension()
@@ -225,7 +199,11 @@ final class VirtualCameraEngine {
         guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
         guard request.changesState else { return snapshot() }
         if case .pause(.stopped, _) = request, recordingPath != nil {
-            throw MeetingAudioLibrary.error("Stop the recording before stopping the camera.")
+            throw NSError(
+                domain: "MeetingRecording", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Stop the recording before stopping the camera."
+                ])
         }
         if request == .retry { stopStreaming() }
         var next = state
@@ -251,36 +229,6 @@ final class VirtualCameraEngine {
 
     func performRecording(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
         guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
-        if case .audio(let request) = request {
-            guard !audioBusy else {
-                throw MeetingAudioLibrary.error("An audio change is still in progress.")
-            }
-            audioBusy = true
-            defer { audioBusy = false }
-            let needsMicrophone: Bool
-            switch request {
-            case .enable(true):
-                needsMicrophone =
-                    state.audio.outputID == nil
-                    || state.audio.outputID == MeetingMicrophone.id
-            case .output(let identifier):
-                needsMicrophone =
-                    state.audio.enabled
-                    && (identifier.isEmpty || identifier == MeetingMicrophone.id)
-            default: needsMicrophone = false
-            }
-            if needsMicrophone { try await prepareMicrophone() }
-            try Task.checkCancellation()
-            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
-            let updated = try await audioMixer.perform(request, state: state.audio)
-            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
-            try Task.checkCancellation()
-            state.audio = updated
-            VirtualCameraStore.save(state)
-            VirtualCameraStore.announceChange(from: "helper", state: state)
-            publishIfChanged()
-            return snapshot(message: "Meeting audio updated.")
-        }
         guard !recordingFinishing else { throw CocoaError(.fileWriteUnknown) }
         switch request {
         case .screenSources:
@@ -294,8 +242,7 @@ final class VirtualCameraEngine {
                     domain: "MeetingRecording", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Choose Live before recording."])
             }
-            try pipeline.startRecording(
-                to: URL(fileURLWithPath: path), audio: audioMixer.status.running)
+            try pipeline.startRecording(to: URL(fileURLWithPath: path))
             recordingPath = path
             if !streaming { startRecordingPreview() }
             publishIfChanged()
@@ -317,59 +264,6 @@ final class VirtualCameraEngine {
         }
     }
 
-    private func configureAudio() {
-        var audio = state.audio
-        let needsMicrophone =
-            audio.enabled
-            && (audio.outputID == nil || audio.outputID == MeetingMicrophone.id)
-        if needsMicrophone, environment.prepareMicrophone != nil, !microphonePrepared {
-            audio.enabled = false
-            if !audioStarting {
-                audioStarting = true
-                let previous = audioStartup
-                audioStartup = Task { [self, previous] in
-                    defer { audioStarting = false }
-                    await previous?.value
-                    guard !isStopped, !draining, !Task.isCancelled else { return }
-                    do {
-                        try await prepareMicrophone()
-                        try Task.checkCancellation()
-                        guard !isStopped, !draining else { return }
-                        audioMixer.configure(state.audio)
-                        publishIfChanged()
-                    } catch {
-                        guard !isStopped, !draining else { return }
-                        audioPreparationFailure = String(error.localizedDescription.prefix(1024))
-                        publishIfChanged()
-                    }
-                }
-            }
-        }
-        audioMixer.configure(audio)
-    }
-
-    private func prepareMicrophone() async throws {
-        guard !microphonePrepared, let prepare = environment.prepareMicrophone else { return }
-        if microphonePreparation == nil {
-            microphonePreparationID = UUID()
-            microphonePreparation = Task { try await prepare() }
-        }
-        let id = microphonePreparationID
-        guard let pending = microphonePreparation else { throw CancellationError() }
-        do {
-            try await pending.value
-            try Task.checkCancellation()
-            guard !isStopped, !draining else { throw ExtensionPeerError.unavailable }
-            microphonePrepared = true
-            audioPreparationFailure = nil
-        } catch {
-            if microphonePreparationID == id {
-                microphonePreparation = nil; microphonePreparationID = nil
-            }
-            throw error
-        }
-    }
-
     private func startRecordingPreview() {
         pipeline.update(state: effectiveState())
         let bus = previewBus
@@ -380,7 +274,7 @@ final class VirtualCameraEngine {
         let statistics = pipeline.statistics
         let sources = environment.sources()
         let fallbackSource = sources.first { $0.id == state.sourceID } ?? sources.first
-        var result = VirtualCameraSnapshot(
+        return VirtualCameraSnapshot(
             enabled: true, helperRunning: true, extensionInstalled: edithInstalled,
             obsAvailable: obsInstalled, route: route, extensionBuild: extensionStatus?.build,
             clients: clients(), live: streaming, framesPerSecond: statistics.framesPerSecond,
@@ -390,9 +284,6 @@ final class VirtualCameraEngine {
             cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
             systemBackgroundActive: statistics.systemBackgroundActive,
             state: state, message: message, recordingPath: recordingPath)
-        result.audioStatus = audioMixer.status
-        if let audioPreparationFailure { result.audioStatus?.failure = audioPreparationFailure }
-        return result
     }
 
     private func clients() -> [VirtualCameraClient] {

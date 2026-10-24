@@ -7,14 +7,12 @@ struct VirtualCameraMeetingControls: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
     @State private var choosingScreen = false
-    @State private var audioDevices: [MeetingAudioDevice] = []
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(12)) {
                 sourceMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
-                microphoneMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
                 Spacer(minLength: 0)
                 Menu {
                     if model.state.media.kind != .camera {
@@ -43,7 +41,6 @@ struct VirtualCameraMeetingControls: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UIScale.pt(12)) {
                     playbackButton.fixedSize()
-                    microphoneButton.fixedSize()
                     Spacer(minLength: UIScale.pt(12))
                     zoomSlider.frame(width: UIScale.pt(220))
                     recordingButton.fixedSize()
@@ -51,7 +48,6 @@ struct VirtualCameraMeetingControls: View {
                 VStack(spacing: UIScale.pt(10)) {
                     HStack(spacing: UIScale.pt(12)) {
                         playbackButton
-                        microphoneButton
                         Spacer(minLength: UIScale.pt(4))
                         recordingButton
                     }
@@ -65,9 +61,6 @@ struct VirtualCameraMeetingControls: View {
         .edithSurface(cornerRadius: 12)
         .edithSheet(isPresented: $choosingScreen, dismissible: false) {
             VirtualCameraScreenPicker(model: model, compact: compact)
-        }
-        .pageTask {
-            audioDevices = await model.loadAudioDevices()
         }
     }
 
@@ -84,27 +77,6 @@ struct VirtualCameraMeetingControls: View {
         .buttonStyle(.edith(.primary))
         .help(
             model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
-    }
-
-    private var microphoneButton: some View {
-        Button {
-            if !model.state.audio.enabled {
-                model.performAudio(.enable(true))
-            } else {
-                model.performAudio(.mute(!model.state.audio.muted))
-            }
-        } label: {
-            Label(
-                !model.state.audio.enabled
-                    ? "Enable audio"
-                    : model.state.audio.muted ? "Unmute mic" : "Mute mic",
-                systemImage: model.state.audio.muted || !model.state.audio.enabled
-                    ? "mic.slash.fill" : "mic.fill"
-            )
-            .frame(minHeight: UIScale.pt(28))
-        }
-        .buttonStyle(.edith(.secondary))
-        .disabled(model.audioPending)
     }
 
     private var recordingButton: some View {
@@ -133,22 +105,6 @@ struct VirtualCameraMeetingControls: View {
             Text(String(format: "%.1fx", model.composition.framing.zoom))
                 .font(.edithText(.caption)).monospacedDigit().frame(width: UIScale.pt(36))
         }
-    }
-
-    private var microphoneMenu: some View {
-        Menu {
-            Button("System microphone") { model.performAudio(.input("")) }
-            ForEach(audioDevices.filter { $0.inputChannels > 0 && !$0.virtual }) { device in
-                Button(device.name) { model.performAudio(.input(device.id)) }
-            }
-        } label: {
-            Label(model.snapshot?.audioStatus?.inputName ?? "Microphone", systemImage: "mic")
-                .lineLimit(1).truncationMode(.middle)
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
-        }
-        .menuStyle(.borderlessButton)
-        .disabled(model.audioPending)
-        .accessibilityLabel("Audio source")
     }
 
     private var sourceMenu: some View {

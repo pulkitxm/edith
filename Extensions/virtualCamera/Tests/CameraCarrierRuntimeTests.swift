@@ -6,30 +6,25 @@ import Testing
     var failBegin = false
     var failRelease = false
     var providerActive = false
-    var microphoneActive = false
+    var driverActive = false
     var begins = 0
     var releases = 0
-    var microphonePreparations = 0
-    var microphoneRetirements = 0
+    var driverRetirements = 0
     func begin() async throws -> Bool {
         begins += 1
         if failBegin { throw CocoaError(.fileReadUnknown) }
         return !providerActive
     }
     func providerExited() async throws -> Bool { !providerActive }
-    func prepareMicrophone() async throws {
-        microphonePreparations += 1
-        microphoneActive = true
-    }
     func retireMicrophone() async throws {
-        microphoneRetirements += 1
-        microphoneActive = false
+        driverRetirements += 1
+        driverActive = false
     }
     func release() async throws {
         releases += 1
         if failRelease { throw CocoaError(.fileWriteUnknown) }
         #expect(!providerActive)
-        #expect(!microphoneActive)
+        #expect(!driverActive)
     }
 }
 
@@ -81,7 +76,7 @@ import Testing
         try await wait { exited }
     }
 
-    @Test func pipeCommandsAndDisconnectDrainOwnedProviderAndMicrophone() async throws {
+    @Test func pipeCommandsAndDisconnectDrainOwnedProviderAndDriver() async throws {
         let lease = RuntimeLeaseProbe()
         let broker = RuntimeBrokerProbe(lease)
         let input = Pipe(), output = Pipe()
@@ -97,15 +92,11 @@ import Testing
             contentsOf: CameraCarrierFrames.encode(
                 CameraCarrierRequest(token: UUID(), operation: .activate)))
         try await wait { lease.providerActive }
-        try input.fileHandleForWriting.write(
-            contentsOf: CameraCarrierFrames.encode(
-                CameraCarrierRequest(token: UUID(), operation: .microphonePrepare)))
-        try await wait { lease.microphoneActive }
         #expect(lease.releases == 0)
         try input.fileHandleForWriting.close()
         try await wait { exited }
         #expect(broker.submissions == 2)
-        #expect(lease.microphoneRetirements == 1)
+        #expect(lease.driverRetirements == 1)
         #expect(lease.releases == 1)
         #expect(input.fileHandleForReading.readabilityHandler == nil)
         try input.fileHandleForReading.close()

@@ -5,7 +5,6 @@ import Foundation
     var changed: ((CameraCarrierStatus) -> Void)? { get set }
     func activate() async throws
     func deactivate() async throws
-    func prepareMicrophone() async throws
     func prepareDisable(providerVisible: Bool) async throws
 }
 
@@ -34,7 +33,6 @@ import Foundation
 
     func activate() async throws { _ = try await request(.activate) }
     func deactivate() async throws { _ = try await request(.deactivate) }
-    func prepareMicrophone() async throws { _ = try await request(.microphonePrepare) }
 
     func prepareDisable(providerVisible: Bool) async throws {
         guard process != nil || preparation != nil || providerVisible else { return }

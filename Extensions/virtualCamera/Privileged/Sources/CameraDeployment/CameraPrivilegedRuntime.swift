@@ -9,13 +9,9 @@ final class CameraPrivilegedRuntime: NSObject {
     private var retirement: CameraMicrophoneRetirement?
     private var installer: CameraSealedInstallation?
     private var fixtureProviderActive = false
-    private var fixtureMicrophoneActive = false
     private let files = FileManager.default
     private var bundle: Bundle { Bundle(for: CameraPrivilegedRuntime.self) }
     private var host: String { Bundle.main.bundleIdentifier ?? "" }
-    private var carrier: URL {
-        URL(fileURLWithPath: "/Applications/Edith Extensions/" + host + ".cameraCarrier.app")
-    }
     private var fixture: Bool {
         getuid() != 0 && host.hasPrefix("com.pulkit.edith.tests.")
             && ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
@@ -59,14 +55,9 @@ final class CameraPrivilegedRuntime: NSObject {
                 case "providerStatus":
                     guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
                     result = ["providerExited": try providerExited()]
-                case "microphonePrepare":
-                    guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
-                    if fixture {
-                        fixtureMicrophoneActive = true
-                    } else {
-                        _ = try makeInstaller().installMicrophone(carrier: carrier)
-                    }
-                    result = ["ok": true]
+                case "microphoneRemove":
+                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                    result = ["restartRequired": try retireMicrophone()]
                 case "microphoneDisable":
                     guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
                     result = ["restartRequired": try retireMicrophone()]
@@ -130,7 +121,7 @@ final class CameraPrivilegedRuntime: NSObject {
     }
 
     private func retireMicrophone() throws -> Bool {
-        if fixture { fixtureMicrophoneActive = false; return false }
+        if fixture { return false }
         if retirement == nil {
             let installer = try makeInstaller()
             let path = URL(

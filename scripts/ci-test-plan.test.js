@@ -163,7 +163,7 @@ test("host tests select runtime checks without feature compilation fanout", () =
         lane: "extension-virtualCamera",
         extension: "virtualCamera",
         targets:
-          "ci-extension-camera ci-extension-camera-carrier ci-extension-camera-voice",
+          "ci-extension-camera ci-extension-camera-carrier",
         ghostty: false,
       },
     ]);

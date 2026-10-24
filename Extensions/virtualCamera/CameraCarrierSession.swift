@@ -3,9 +3,8 @@ import Foundation
 @MainActor
 final class CameraCarrierSession {
     private let controller: CameraSystemExtensionController
-    private let microphoneOnly: Bool
+    private let obsTransport: Bool
     private let send: (Data) throws -> Void
-    private let prepareMicrophone: @MainActor () async throws -> Void
     private let prepareDisableResources: @MainActor () async throws -> Void
     private let releaseResources: @MainActor () async throws -> Void
     private let exited: () -> Void
@@ -19,15 +18,13 @@ final class CameraCarrierSession {
 
     init(
         controller: CameraSystemExtensionController, send: @escaping (Data) throws -> Void,
-        microphoneOnly: Bool = false,
-        prepareMicrophone: @escaping @MainActor () async throws -> Void,
+        obsTransport: Bool = false,
         prepareDisableResources: @escaping @MainActor () async throws -> Void = {},
         releaseResources: @escaping @MainActor () async throws -> Void, exited: @escaping () -> Void
     ) {
-        self.microphoneOnly = microphoneOnly
+        self.obsTransport = obsTransport
         self.controller = controller
         self.send = send
-        self.prepareMicrophone = prepareMicrophone
         self.prepareDisableResources = prepareDisableResources
         self.releaseResources = releaseResources
         self.exited = exited
@@ -45,7 +42,7 @@ final class CameraCarrierSession {
                         || requests.count < 8),
                     (request.operation == .cancel) == (request.cancelledToken != nil)
                 else { throw CocoaError(.fileReadCorruptFile) }
-                if microphoneOnly
+                if obsTransport
                     && (request.operation == .activate || request.operation == .deactivate)
                 {
                     publish(
@@ -60,11 +57,8 @@ final class CameraCarrierSession {
                     if let token = request.cancelledToken { requests[token]?.cancel() }
                     publish(token: request.token)
                 case .status: publish(token: request.token)
-                case .activate, .deactivate, .prepareDisable, .microphonePrepare:
-                    if draining
-                        && (request.operation == .activate
-                            || request.operation == .microphonePrepare)
-                    {
+                case .activate, .deactivate, .prepareDisable:
+                    if draining && request.operation == .activate {
                         publish(token: request.token, error: "Camera is releasing its resources.")
                         continue
                     }
@@ -84,7 +78,6 @@ final class CameraCarrierSession {
                             case .prepareDisable:
                                 for task in preceding { await task.value }
                                 try await deactivateOwnedResources()
-                            case .microphonePrepare: try await prepareMicrophone()
                             default: throw CocoaError(.fileReadCorruptFile)
                             }
                             try Task.checkCancellation()

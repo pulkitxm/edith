@@ -81,7 +81,6 @@ test.each(["pull_request"])(
         ]),
       ),
     ].filter((path) => /^scripts\/[^*?[\]{}]+\.(mjs|js|py|sh)$/.test(path));
-    expect(inputs).toContain("scripts/build-camera-microphone.py");
     expect(
       inputs.filter(
         (path) =>
@@ -332,10 +331,7 @@ test("common frozen runtime changes rebuild all39 while Camera-only packaging st
   );
   expect(definitions).toHaveLength(39);
   const common = "scripts/build-contained-host-runtime.mjs";
-  const camera = [
-    "scripts/build-camera-carrier.mjs",
-    "scripts/build-camera-microphone.py",
-  ];
+  const camera = ["scripts/build-camera-carrier.mjs"];
   for (const event of [workflow.on.pull_request]) {
     for (const path of [common, ...camera])
       expect(

@@ -97,17 +97,6 @@ enum CameraFixture {
             throw CameraHarnessFailure("camera check failed at CameraFixture.swift:90")
         }
         _ = try await request(endpoint, ["pause": ["_0": "stopped"]])
-        let microphone = try await carrier(endpoint, "microphone")
-        guard microphone["ownsProvider"] as? Bool == false else {
-            throw CameraHarnessFailure("camera check failed at CameraFixture.swift:94")
-        }
-        for operation in ["activate", "deactivate"] {
-            var rejected = false
-            do { _ = try await carrier(endpoint, operation) } catch { rejected = true }
-            guard rejected else {
-                throw CameraHarnessFailure("camera check failed at CameraFixture.swift:99")
-            }
-        }
     }
 
     @MainActor private static func hardware(
@@ -132,17 +121,5 @@ enum CameraFixture {
                 "request": encoded, "requestID": UUID().uuidString,
                 "deadline": Date().addingTimeInterval(30).timeIntervalSince1970,
             ]))
-    }
-
-    @MainActor private static func carrier(_ endpoint: ExtensionPeerEndpoint, _ operation: String)
-        async throws -> [String: Any]
-    {
-        let data = try await endpoint.invoke(
-            "camera.extension",
-            payload: JSONSerialization.data(withJSONObject: ["operation": operation]))
-        guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw CameraHarnessFailure("camera check failed at CameraFixture.swift:134")
-        }
-        return value
     }
 }
