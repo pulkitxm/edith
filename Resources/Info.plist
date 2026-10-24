@@ -15,13 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.325</string>
+	<string>0.0.350</string>
 	<key>CFBundleVersion</key>
-	<string>336</string>
+	<string>361</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Edith controls playback and opens terminal sessions in the app you select.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

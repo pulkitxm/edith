@@ -7,6 +7,7 @@ const expectedActions = new Map([
     "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff",
   ],
   ["actions/cache", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
+  ["actions/cache/save", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
   ["actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"],
   ["actions/configure-pages", "45bfe0192ca1faeb007ade9deae92b16b8254a0d"],
   [
@@ -28,14 +29,14 @@ const expectedActions = new Map([
   ["aquasecurity/trivy-action", "ed142fd0673e97e23eac54620cfb913e5ce36c25"],
   [
     "github/codeql-action/upload-sarif",
-    "24c54180a607b1449ed407dd24f251e4e9147c8d",
+    "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee",
   ],
   ["gitleaks/gitleaks-action", "e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e"],
   ["lycheeverse/lychee-action", "e7477775783ea5526144ba13e8db5eec57747ce8"],
   ["ossf/scorecard-action", "fa7117db83c52d787ae5a89f350999701505d78e"],
   ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
   ["pascalgn/size-label-action", "56b489b027932ec0cf60438a1a5f1a19c8fc71ff"],
-  ["taiki-e/install-action", "ab6895351a88b908e96a4697860d4ffea5e57dbe"],
+  ["taiki-e/install-action", "8cca0918f8471c33515202b73f56ab27f2bed283"],
 ]);
 
 const workflows = readdirSync(".github/workflows")

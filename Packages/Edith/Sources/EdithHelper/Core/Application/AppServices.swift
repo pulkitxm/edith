@@ -7,38 +7,34 @@ final class AppServices {
     private(set) var usage: UsageStore?
     private(set) var music: MusicPlayer?
     private(set) var system: SystemStore?
-    private(set) var keepAwake: (any KeepAwakeService)?
+    private(set) var keepAwake: KeepAwakeStore?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var notchBrowser: NotchBrowserStore?
-    private(set) var colorPicker: DownloadedHelperService?
+    private(set) var colorPicker: ColorPickerStore?
     private(set) var clipboard: ClipboardStore?
     private(set) var bifrost: BifrostStore?
     private(set) var emoji: EmojiStore?
-    private(set) var keystrokeHighlight: DownloadedHelperService?
-    private(set) var focusDim: DownloadedHelperService?
-    private(set) var windowSweaters: DownloadedHelperService?
-    private(set) var presenter: DownloadedHelperService?
-    private(set) var micMute: DownloadedHelperService?
+    private(set) var keystrokeHighlight: KeystrokeHighlightRuntime?
+    private(set) var focusDim: FocusDimEngine?
+    private(set) var hinge: HingeEngine?
+    private(set) var windowSweaters: SweaterEngine?
+    private(set) var presenter: PresenterDetector?
+    private(set) var micMute: MicMuteEngine?
     private(set) var lidAwake: LidAwakeEngine?
     private(set) var virtualCamera: VirtualCameraEngine?
-    private(set) var systemStats: DownloadedHelperService?
+    private(set) var systemStats: SystemStatsStatusItem?
     private let startup = StartupCoordinator()
     private let lidAwakeRestorationGate = LidAwakeRestorationGate()
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
     private var terminating = false
-    private let keepAwakeFactory: @MainActor () -> (any KeepAwakeService)?
 
     init(
-        keepAwakeFactory: @escaping @MainActor () -> (any KeepAwakeService)? = {
-            KeepAwakeExtensionService.make()
-        },
         lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
             await LidAwakeEngine.restoreOrphanedState()
         }
     ) {
-        self.keepAwakeFactory = keepAwakeFactory
         self.lidAwakeOrphanRestorer = lidAwakeOrphanRestorer
     }
 
@@ -76,8 +72,6 @@ final class AppServices {
     }
 
     func start() {
-        try? MarketplaceServices.store.completePendingRemovals()
-        try? MarketplaceServices.store.prune(hostABI: MarketplaceServices.helperRuntime.hostABI)
         startup.start([
             StartupPhase(name: "helper.services.media") { [weak self] in
                 self?.reconcileMediaServices()
@@ -242,7 +236,7 @@ final class AppServices {
             system = nil
         }
         let keepAwakeOn = Self.extensionEnabled(AppStorageKeys.General.keepAwakeEnabled)
-        if keepAwakeOn, keepAwake == nil { keepAwake = keepAwakeFactory() }
+        if keepAwakeOn, keepAwake == nil { keepAwake = KeepAwakeStore() }
         if !keepAwakeOn, let store = keepAwake {
             store.shutdown()
             keepAwake = nil
@@ -296,9 +290,7 @@ final class AppServices {
         let colorPickerOn =
             SharedDefaults.store.object(forKey: AppStorageKeys.ColorPicker.enabled) as? Bool
             ?? false
-        if colorPickerOn, colorPicker == nil {
-            colorPicker = DownloadedHelperService(id: "colorPicker")
-        }
+        if colorPickerOn, colorPicker == nil { colorPicker = ColorPickerStore() }
         if !colorPickerOn, let store = colorPicker {
             store.shutdown()
             colorPicker = nil
@@ -372,7 +364,7 @@ final class AppServices {
             enabled: keystrokeHighlightEnabled,
             active: SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active))
         if keystrokeHighlightWanted, keystrokeHighlight == nil {
-            keystrokeHighlight = DownloadedHelperService(id: "keystrokeHighlight")
+            keystrokeHighlight = KeystrokeHighlightRuntime()
         }
         if !keystrokeHighlightWanted, let runtime = keystrokeHighlight {
             runtime.shutdown()
@@ -381,17 +373,23 @@ final class AppServices {
         keystrokeHighlight?.syncSettings()
 
         let focusDimOn = FocusDimState.isEnabled()
-        if focusDimOn, focusDim == nil { focusDim = DownloadedHelperService(id: "focusDim") }
+        if focusDimOn, focusDim == nil { focusDim = FocusDimEngine() }
         if !focusDimOn, let engine = focusDim {
             engine.shutdown()
             focusDim = nil
             FocusDimState.setActive(false)
         }
 
-        let sweatersOn = SweaterState.isEnabled()
-        if sweatersOn, windowSweaters == nil {
-            windowSweaters = DownloadedHelperService(id: "windowSweaters")
+        let hingeOn = HingeState.isEnabled()
+        if hingeOn, hinge == nil { hinge = HingeEngine() }
+        if !hingeOn, let engine = hinge {
+            engine.shutdown()
+            hinge = nil
+            HingeState.setActive(false)
         }
+
+        let sweatersOn = SweaterState.isEnabled()
+        if sweatersOn, windowSweaters == nil { windowSweaters = SweaterEngine() }
         if !sweatersOn, let engine = windowSweaters {
             engine.shutdown()
             windowSweaters = nil
@@ -407,7 +405,7 @@ final class AppServices {
         let presenterOn = FeatureGates.presenterDetectorWanted(
             presenterEnabled: presenterExtensionOn,
             autoEnabled: Self.extensionEnabled(AppStorageKeys.Presenter.autoEnabled))
-        if presenterOn, presenter == nil { presenter = DownloadedHelperService(id: "presenter") }
+        if presenterOn, presenter == nil { presenter = PresenterDetector() }
         if !presenterOn, let detector = presenter {
             detector.shutdown()
             presenter = nil
@@ -416,7 +414,7 @@ final class AppServices {
 
     private func reconcileHardwareServices() {
         let micOn = Self.extensionEnabled(AppStorageKeys.Mic.muteEnabled)
-        if micOn, micMute == nil { micMute = DownloadedHelperService(id: "micMute") }
+        if micOn, micMute == nil { micMute = MicMuteEngine() }
         if !micOn, let engine = micMute {
             engine.shutdown()
             micMute = nil
@@ -481,7 +479,7 @@ final class AppServices {
 
     private func reconcileStatusServices() {
         let statsOn = Self.extensionEnabled(AppStorageKeys.MenuBar.systemStats)
-        if statsOn, systemStats == nil { systemStats = DownloadedHelperService(id: "systemStats") }
+        if statsOn, systemStats == nil { systemStats = SystemStatsStatusItem() }
         if !statsOn, let stats = systemStats {
             stats.shutdown()
             systemStats = nil
@@ -497,6 +495,7 @@ final class AppServices {
         lidAwake?.refreshFromSystem()
         lidAwake?.syncSettings()
         focusDim?.applySettings()
+        hinge?.applySettings()
         windowSweaters?.applySettings()
         presenter?.applySettings()
     }
