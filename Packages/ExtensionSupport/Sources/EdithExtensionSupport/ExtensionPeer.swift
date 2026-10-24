@@ -681,19 +681,6 @@ private final class ExtensionPeerConnection: @unchecked Sendable {
 @MainActor
 public final class ExtensionPeerServer {
     public typealias Execute = @MainActor @Sendable (UUID, String, Data) async throws -> Data
-    #if EDITH_FUNCTIONAL_FIXTURE
-    public struct FixtureInvocation: Codable, Sendable {
-        public let endpoint: String
-        public let source: ExtensionPeerProcess
-        public let receiver: ExtensionPeerProcess
-        public let token: UUID
-        public let command: String
-        public let payload: Data
-    }
-    public static var fixtureBeforeExecute: ((FixtureInvocation) async throws -> Void)?
-    public static var fixtureAfterExecute:
-        ((FixtureInvocation, Data?, String?) async throws -> Void)?
-    #endif
     private struct Job {
         let connection: ExtensionPeerConnection
         var task: Task<Void, Never>?
@@ -899,19 +886,6 @@ public final class ExtensionPeerServer {
         job.task = Task { [self, execute] in
             do {
                 try connection.authenticate()
-                #if EDITH_FUNCTIONAL_FIXTURE
-                guard let before = Self.fixtureBeforeExecute,
-                    let after = Self.fixtureAfterExecute,
-                    let receiver = ExtensionPeerProcess.read(getpid()), receiver.isCurrent
-                else { throw ExtensionPeerError.unavailable }
-                let invocation = FixtureInvocation(
-                    endpoint: self.endpoint.name, source: connection.source, receiver: receiver,
-                    token: request.token, command: request.command, payload: request.payload)
-                try await before(invocation)
-                try Task.checkCancellation()
-                try connection.authenticate()
-                guard receiver.isCurrent else { throw ExtensionPeerError.unavailable }
-                #endif
                 let outcome: Result<Data, Error>
                 do {
                     let payload = try await execute(request.token, request.command, request.payload)
@@ -922,17 +896,6 @@ public final class ExtensionPeerServer {
                     outcome = .success(payload)
                 } catch { outcome = .failure(error) }
                 try connection.authenticate()
-                #if EDITH_FUNCTIONAL_FIXTURE
-                guard receiver.isCurrent else { throw ExtensionPeerError.unavailable }
-                switch outcome {
-                case let .success(payload): try await after(invocation, payload, nil)
-                case let .failure(error):
-                    try await after(
-                        invocation, nil, String(error.localizedDescription.prefix(2_048)))
-                }
-                try connection.authenticate()
-                guard receiver.isCurrent else { throw ExtensionPeerError.unavailable }
-                #endif
                 self.complete(
                     token,
                     response: ExtensionPeerResponse(

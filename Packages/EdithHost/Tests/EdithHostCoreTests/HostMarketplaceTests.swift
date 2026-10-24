@@ -27,32 +27,6 @@ import HostWorkerFixtureSupport
         #expect(marketplace.sessions.enabledIDs.isEmpty)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.network.count == 0)
-        #expect(HostRemoteSession.extensionIDs.isEmpty)
-    }
-
-    @Test func failedCarrierVerificationPreventsPublicDiscoveryAndReleasesLease() async throws {
-        let fixture = try Fixture()
-        defer { fixture.clean() }
-        let package = fixture.package("1.0.0")
-        try fixture.store.commit([package])
-        let marketplace = try fixture.marketplace()
-        let manager = HostRemoteSessionManager(marketplace: marketplace)
-        var discovered = false
-        manager.discover = { _ in
-            discovered = true
-            return []
-        }
-        await #expect(throws: (any Error).self) {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        #expect(!discovered)
-        #expect(HostRemoteCarrierCheckIn.extensionIDs.isEmpty)
-        let lease = try PackageFileLock(url: fixture.store.leaseURL(for: package), exclusive: true)
-        lease.close()
-        #expect(marketplace.sessions.processIdentifiers.isEmpty)
-        #expect(await fixture.network.count == 0)
     }
 
     @Test func remoteFeatureAdmissionTracksTheCurrentWorkerAndPendingDisable() async throws {

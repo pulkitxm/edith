@@ -190,22 +190,6 @@ public struct WorkerFixtureEngineRequest: Equatable, Sendable {
         return admission
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    var platformRole: WorkerFixtureRole { expectedRole }
-
-    public func withPlatformFixture<Value>(
-        extensionID: String, expectedRole: WorkerFixtureRole,
-        _ factory: (WorkerFixtureAdmission) throws -> Value
-    ) throws -> Value {
-        let scope = WorkerFixtureEngineFactoryScope(
-            descriptor: descriptor, trust: trust, owner: extensionID, role: expectedRole,
-            uid: getuid())
-        return try scope.perform(requireCurrent: requireCurrent) {
-            try factory(WorkerFixtureAdmission.retaining(self))
-        }
-    }
-    #endif
-
     public func requireCurrent() throws {
         guard admissionOpen else { throw WorkerFixtureError.invalid }
         try requireAuthorityCurrent()

@@ -15,7 +15,6 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     ],
     targets: [
-        .target(name: "HostBootstrap"),
         .target(
             name: "EdithHostCore",
             dependencies: [
@@ -26,19 +25,15 @@ let package = Package(
         .executableTarget(
             name: "EdithHost",
             dependencies: [
-                "HostBootstrap", "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
+                "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ],
             resources: [.copy("Resources/MarketplaceArtwork.lzma")],
             linkerSettings: [
-                .unsafeFlags([
-                    "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain", "-Xlinker",
-                    "-application_extension",
-                ]),
                 .unsafeFlags(
                     ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
-                    .when(configuration: .release)),
+                    .when(configuration: .release))
             ]),
         .executableTarget(
             name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],

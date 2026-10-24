@@ -19,23 +19,9 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
     private var stopTask: Task<Void, Never>?
     private var inertFixture = false
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var engineFixture: WorkerFixtureEngineAdmission?
-    private var fixturePreferences: MusicUIPreferenceEngine?
-    private var admittedUI: [UUID: WorkerFixtureUIAdmission] = [:]
-    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureEngineAdmission?
-    #else
     private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
-    #endif
 
     override init() {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        fixtureAdmission = { input in
-            try WorkerFixtureEngineAdmission.current(
-                extensionID: "music", context: input,
-                roleBundle: Bundle(for: ExtensionRuntime.self))
-        }
-        #else
         fixtureAdmission = { input in
             try MusicWorker.resolveFixture(
                 admission: {
@@ -46,37 +32,18 @@ final class ExtensionRuntime: NSObject {
                 applicationIdentifier: ExtensionEnvironment.values[
                     "EDITH_APPLICATION_IDENTIFIER"])
         }
-        #endif
         super.init()
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    init(fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureEngineAdmission?) {
-        self.fixtureAdmission = fixtureAdmission
-        super.init()
-    }
-
-    #else
     init(fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?) {
         self.fixtureAdmission = fixtureAdmission
         super.init()
     }
-    #endif
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
-        #endif
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.worker != nil else {
                 throw ExtensionPeerError.unavailable
             }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            if let admission = self.engineFixture {
-                guard let token else { throw WorkerFixtureError.invalid }
-                return try self.executeFixturePreferences(
-                    command, payload: payload, token: token, admission: admission)
-            }
-            #endif
             guard !self.inertFixture else { throw ExtensionPeerError.unavailable }
             if command.hasPrefix("backup."), let backup = self.backup {
                 return try await backup.execute(command, payload: payload)
@@ -150,35 +117,6 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            #if EDITH_FUNCTIONAL_FIXTURE
-            do {
-                let fixture = try fixtureAdmission(input)
-                if let fixture {
-                    try fixture.requireCurrent()
-                    guard fixture.descriptor.owner == "music", fixture.descriptor.role == "app",
-                        Set(fixture.descriptor.operations) == [
-                            "music.ui.settings", "music.ui.action",
-                        ],
-                        let host = input["hostIdentifier"] as? String,
-                        host == Bundle.main.bundleIdentifier,
-                        let suite = input["defaultsSuite"] as? String,
-                        suite == host + ".extensions.music",
-                        suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
-                        worker == nil, let defaults = UserDefaults(suiteName: suite)
-                    else { throw WorkerFixtureError.invalid }
-                    try fixture.requireCurrent()
-                    worker = try fixture.withPlatformFixture(
-                        extensionID: "music", expectedRole: .app
-                    ) { namespace in
-                        try MusicWorker(admission: { namespace })
-                    }
-                    fixturePreferences = MusicUIPreferenceEngine(defaults: defaults)
-                    engineFixture = fixture
-                    inertFixture = true
-                    return ["ok": true] as NSDictionary
-                }
-            } catch { return ["ok": false, "error": error.localizedDescription] as NSDictionary }
-            #else
             do {
                 let fixture = try fixtureAdmission(input)
                 if let fixture {
@@ -187,7 +125,6 @@ final class ExtensionRuntime: NSObject {
                     return ["ok": true] as NSDictionary
                 }
             } catch { return ["ok": false, "error": error.localizedDescription] as NSDictionary }
-            #endif
             do {
                 guard
                     try WorkerFixtureAdmission.current(
@@ -231,43 +168,8 @@ final class ExtensionRuntime: NSObject {
             }
             TextEditingCommands.install()
         case "configureUI":
-            #if EDITH_FUNCTIONAL_FIXTURE
-            do {
-                let admission = try WorkerFixtureUIAdmission.current(
-                    extensionID: "music", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                try admission?.requireCurrent()
-                guard let admission else { return embeddedUI.configure(input) }
-                guard let value = input["presentationID"] as? String,
-                    let id = UUID(uuidString: value)
-                else { throw WorkerFixtureError.invalid }
-                let result = embeddedUI.configure(input) { [weak self] in
-                    guard let self, self.admittedUI[id] === admission else { return }
-                    self.admittedUI[id] = nil
-                }
-                if result["ok"] as? Bool == true { admittedUI[id] = admission }
-                return result
-            } catch { return ["ok": false] as NSDictionary }
-            #else
             return embeddedUI.configure(input)
-            #endif
         case "view":
-            #if EDITH_FUNCTIONAL_FIXTURE
-            do {
-                let intent =
-                    input["hostedFunctionalFixture"] != nil
-                    || (input["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.")
-                        == true
-                    || Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
-                    || ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
-                if intent {
-                    guard let value = input["presentationID"] as? String,
-                        let id = UUID(uuidString: value), let admission = admittedUI[id]
-                    else { throw WorkerFixtureError.invalid }
-                    try admission.requireCurrent()
-                }
-            } catch { return ["ok": false] as NSDictionary }
-            #endif
             guard let controller = embeddedUI.view(input) else {
                 return ["ok": false] as NSDictionary
             }
@@ -316,9 +218,6 @@ final class ExtensionRuntime: NSObject {
             await ownedNavigation?.stopAndWait()
             await ownedWorker?.shutdown()
             navigation = nil; backup = nil; worker = nil; surface = nil; uiService = nil
-            #if EDITH_FUNCTIONAL_FIXTURE
-            engineFixture = nil; fixturePreferences = nil; admittedUI.removeAll()
-            #endif
             if hadLiveEngine || hadUI {
                 TextEditingCommands.shutdown(); InputFocus.uninstall()
             }
@@ -326,32 +225,6 @@ final class ExtensionRuntime: NSObject {
         stopTask = task
         return task
     }
-
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private func executeFixturePreferences(
-        _ operation: String, payload: Data, token: UUID,
-        admission: WorkerFixtureEngineAdmission
-    ) throws -> Data {
-        guard let preferences = fixturePreferences,
-            ["music.ui.settings", "music.ui.action"].contains(operation)
-        else { throw ExtensionPeerError.unavailable }
-        let receipt = try admission.beginRequest(
-            token: token, operation: operation, payload: payload)
-        defer { admission.cancelRequest(receipt) }
-        try Task.checkCancellation()
-        let version =
-            Bundle(for: ExtensionRuntime.self).object(
-                forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let result = try preferences.executeFixture(
-            operation, payload: payload, version: version,
-            requireCurrent: admission.requireCurrent,
-            invalidateHostSlots: MusicUIPreferenceEngine.invalidateHostSlots)
-        try Task.checkCancellation()
-        try admission.completeRequest(receipt)
-        return result
-    }
-
-    #endif
 
 }
 

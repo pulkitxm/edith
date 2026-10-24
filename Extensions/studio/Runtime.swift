@@ -226,22 +226,6 @@ final class ExtensionRuntime: NSObject {
                 let suite = input["defaultsSuite"] as? String
             else { return ["ok": false] as NSDictionary }
             do {
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let engineAdmission = try WorkerFixtureEngineAdmission.current(
-                    extensionID: "studio", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                {
-                    guard model == nil,
-                        suite == (input["hostIdentifier"] as? String ?? "") + ".extensions.studio",
-                        suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
-                        let defaults = fixtureDefaults(suite)
-                    else { throw WorkerFixtureError.invalid }
-                    let tools = try StudioFixtureTools(engineAdmission: engineAdmission)
-                    model = tools.makeModel(defaults: defaults)
-                    fixture = tools
-                    return ["ok": true] as NSDictionary
-                }
-                #endif
                 let admission = try admitFixture(input)
                 guard
                     admission != nil

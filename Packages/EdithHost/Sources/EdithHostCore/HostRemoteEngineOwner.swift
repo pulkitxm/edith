@@ -23,28 +23,6 @@ final class HostRemoteEngineOwner {
         try validate()
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    init(
-        marketplace: HostMarketplace, configuration: HostRemoteConfiguration,
-        startingWorker: HostWorker, birth: ExtensionProcessIdentity
-    ) throws {
-        guard !configuration.uiOnly,
-            try marketplace.sessions.fixtureStartingWorker(
-                configuration: configuration.worker, birth: birth) === startingWorker,
-            marketplace.installed[configuration.package.id] == configuration.package,
-            !marketplace.pendingRemovalIDs.contains(configuration.package.id)
-        else { throw HostWorkerError.rejected }
-        self.marketplace = marketplace
-        self.configuration = configuration
-        endpoint = try Self.endpoint(marketplace: marketplace, configuration: configuration)
-        process = try HostRemoteKernelIdentity.read(birth.pid)
-        generation = marketplace.sessions.workerGenerations[configuration.package.id]
-        guard ExtensionProcessIdentity.read(birth.pid) == birth, process.isRunning else {
-            throw HostWorkerError.rejected
-        }
-    }
-    #endif
-
     private static func endpoint(
         marketplace: HostMarketplace, configuration: HostRemoteConfiguration
     ) throws -> ExtensionPeerEndpoint {

@@ -38,15 +38,9 @@ import WorkerFixtureTestSupport
         }
         @MainActor func admit(_ context: NSDictionary) throws -> KeepAwakeRuntime.FixtureAuthority?
         {
-            #if EDITH_FUNCTIONAL_FIXTURE
-            return try WorkerFixtureEngineAdmission.current(
-                extensionID: "keepAwake", context: context,
-                roleBundle: Bundle(for: KeepAwakeRuntime.self), expectedRole: .helper)
-            #else
             return try WorkerFixtureAdmission.current(
                 extensionID: "keepAwake", context: context,
                 roleBundle: Bundle(for: KeepAwakeRuntime.self))
-            #endif
         }
 
     }

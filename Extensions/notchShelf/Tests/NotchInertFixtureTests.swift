@@ -254,22 +254,6 @@ import WorkerFixtureSupport
     func runtime(
         _ admission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
     ) -> ExtensionRuntime {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        return ExtensionRuntime(
-            fixtureAdmission: admission,
-            contextSource: {
-                self.dependencies += 1
-                return nil
-            },
-            connectedDisplays: {
-                self.dependencies += 1
-                return [:]
-            },
-            createController: { _, _ in
-                self.dependencies += 1
-                preconditionFailure("Inert Runtime constructed a controller")
-            })
-        #else
         return ExtensionRuntime(
             admitOrdinaryContext: { context in
                 guard try admission(context) == nil else { throw WorkerFixtureError.invalid }
@@ -287,7 +271,6 @@ import WorkerFixtureSupport
                 self.dependencies += 1
                 preconditionFailure("Inert Runtime constructed a controller")
             })
-        #endif
     }
 }
 

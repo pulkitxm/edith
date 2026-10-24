@@ -11,11 +11,7 @@ import SwiftUI
 
 @MainActor
 final class ExtensionRuntime: NSObject {
-    #if EDITH_FUNCTIONAL_FIXTURE
-    typealias FixtureAuthority = WorkerFixtureEngineAdmission
-    #else
     typealias FixtureAuthority = WorkerFixtureAdmission
-    #endif
     private var service: ColorPickerStore?
     private var observer: NSObjectProtocol?
 
@@ -26,63 +22,33 @@ final class ExtensionRuntime: NSObject {
     private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var signedFixture: WorkerFixtureEngineAdmission?
-    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             request["hostedFunctionalFixture"] == nil
         else { completion(nil, "The functional fixture is unavailable."); return }
-        #endif
         let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let token else { throw ExtensionPeerError.invalidRequest }
             try Task.checkCancellation()
-            #if EDITH_FUNCTIONAL_FIXTURE
-            let admission = self.signedFixture
-            let admitted = try admission?.beginRequest(
-                token: token, operation: command, payload: payload)
-            do {
-                let data = try await self.executeCommand(command, payload: payload)
-                try Task.checkCancellation()
-                if let admitted { try admission?.completeRequest(admitted) }
-                return data
-            } catch {
-                if let admitted { admission?.cancelRequest(admitted) }
-                throw error
-            }
-            #else
             return try await self.executeCommand(command, payload: payload)
-            #endif
         }
     }
 
     private static func admitFixtureContext(_ input: NSDictionary) throws -> FixtureAuthority? {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        return try WorkerFixtureEngineAdmission.current(
-            extensionID: "colorPicker", context: input,
-            roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-        #else
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             input["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
         return try WorkerFixtureAdmission.current(
             extensionID: "colorPicker", context: input,
             roleBundle: Bundle(for: ExtensionRuntime.self))
-        #endif
     }
 
     private func checkFixtureCurrent() throws {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        try signedFixture?.requireCurrent()
-        #else
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
             throw WorkerFixtureError.invalid
         }
-        #endif
     }
 
     private func executeCommand(_ command: String, payload: Data) async throws -> Data {
@@ -233,7 +199,6 @@ final class ExtensionRuntime: NSObject {
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         if ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || input["hostedFunctionalFixture"] != nil
         {
@@ -244,7 +209,6 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
         }
-        #endif
         switch input["operation"] as? String {
         case "describe":
             let bundle = Bundle(for: ExtensionRuntime.self)
@@ -278,28 +242,12 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             do {
                 let verified = try Self.admitFixtureContext(input)
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let signedFixture {
-                    guard let verified, verified.descriptor == signedFixture.descriptor else {
-                        throw WorkerFixtureError.invalid
-                    }
-                    try signedFixture.requireCurrent()
-                }
-                #endif
                 guard let suite = input["defaultsSuite"] as? String,
                     suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
-                #if EDITH_FUNCTIONAL_FIXTURE
-                let admission = signedFixture ?? verified
-                signedFixture = admission
-                #else
                 let admission = verified
-                #endif
                 let construct: (WorkerFixtureAdmission?) throws -> ColorPickerStore = {
                     [self] namespace in
-                    #if EDITH_FUNCTIONAL_FIXTURE
-                    if let namespace { try namespace.requireCurrent() }
-                    #endif
                     if namespace == nil {
                         HotKeyRegistrar.configure(
                             ExtensionHotKeyBinding(
@@ -312,22 +260,8 @@ final class ExtensionRuntime: NSObject {
                     owner.registerHotKey()
                     return owner
                 }
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let admission {
-                    service = try admission.withPlatformFixture(
-                        extensionID: "colorPicker", expectedRole: .helper
-                    ) { namespace in
-                        let owner = try construct(namespace)
-                        fixture = namespace
-                        return owner
-                    }
-                } else {
-                    service = try construct(nil)
-                }
-                #else
                 service = try construct(admission)
                 fixture = admission
-                #endif
                 if observer == nil {
                     observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                         MainActor.assumeIsolated {

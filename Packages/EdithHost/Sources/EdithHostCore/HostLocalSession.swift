@@ -18,8 +18,6 @@ public protocol HostScenePresentation: AnyObject {
     func close() async throws
 }
 
-extension HostRemoteSceneHandle: HostScenePresentation {}
-
 @MainActor
 final class HostLocalSession {
     private struct Loaded {

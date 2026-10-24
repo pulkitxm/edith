@@ -33,9 +33,6 @@ final class ExtensionRuntime: NSObject {
     private var follow = SystemStatsFollow()
 
     private var fixture: WorkerFixtureAdmission?
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var engineAdmission: WorkerFixtureEngineAdmission?
-    #endif
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
@@ -181,24 +178,6 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "start":
             guard !draining else { return ["ok": false] as NSDictionary }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            do {
-                let admission = try WorkerFixtureEngineAdmission.current(
-                    extensionID: "systemStats", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-                engineAdmission = admission
-                if let admission {
-                    return try admission.withPlatformFixture(
-                        extensionID: "systemStats", expectedRole: .helper
-                    ) { namespace in
-                        fixture = namespace
-                        return startOwned(input)
-                    }
-                }
-                fixture = nil
-                return startOwned(input)
-            } catch { return ["ok": false] as NSDictionary }
-            #else
             do {
                 guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
                     input["hostedFunctionalFixture"] == nil
@@ -208,7 +187,6 @@ final class ExtensionRuntime: NSObject {
                     roleBundle: Bundle(for: ExtensionRuntime.self))
                 return startOwned(input)
             } catch { return ["ok": false] as NSDictionary }
-            #endif
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             if settingsDetail {
@@ -244,13 +222,6 @@ final class ExtensionRuntime: NSObject {
                 })
         case "synchronize":
             guard !draining else { return ["ok": false] as NSDictionary }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            if let engineAdmission {
-                do { try engineAdmission.requireCurrent() } catch {
-                    return ["ok": false] as NSDictionary
-                }
-            }
-            #endif
             break
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
@@ -296,25 +267,7 @@ final class ExtensionRuntime: NSObject {
         _ operation: String, payload: Data, token: String?,
         execute: () async throws -> Data
     ) async throws -> Data {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        guard let admission = engineAdmission else { return try await execute() }
-        guard let token, let identifier = UUID(uuidString: token) else {
-            throw WorkerFixtureError.invalid
-        }
-        let request = try admission.beginRequest(
-            token: identifier, operation: operation, payload: payload)
-        do {
-            let result = try await execute()
-            try Task.checkCancellation()
-            try admission.completeRequest(request)
-            return result
-        } catch {
-            admission.cancelRequest(request)
-            throw error
-        }
-        #else
         return try await execute()
-        #endif
     }
 
     private func retirePresentation() {

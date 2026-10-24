@@ -38,10 +38,6 @@ import SwiftUI
         let delegate = delegate
         let updater = updater
         do {
-            #if EDITH_GUI_FIXTURE
-            let loaded = try HostGUIFixture.make()
-            let identity = loaded.identity
-            #else
             let support = try FileManager.default.url(
                 for: .applicationSupportDirectory, in: .userDomainMask,
                 appropriateFor: nil, create: true)
@@ -59,7 +55,6 @@ import SwiftUI
             let loaded = try HostMarketplace.live(identity: identity)
             Task.detached(priority: .utility) { HostLegacyServices.retire(identity: identity) }
             if !identity.development { HostLoginItem.register() }
-            #endif
             let gateway = HostCLIGateway(marketplace: loaded)
             let core = try HostCoreCLIAdapter.make(
                 identity: identity, marketplace: loaded, updater: updater,
@@ -228,13 +223,7 @@ import SwiftUI
             detached = windows
             sectionWindows = windows
             windows.install()
-            delegate.stopWorkers = {
-                for pid in loaded.sessions.processIdentifiers.values where pid > 1 {
-                    kill(-pid, SIGKILL)
-                }
-                HostRemoteSession.killAllForQuit()
-                services.killForQuit()
-            }
+            delegate.stopWorkers = { services.killForQuit() }
             delegate.preventsQuit = { await loaded.sessions.preventsQuit() }
             delegate.shutdown = {
                 await interactions.cancelPending()

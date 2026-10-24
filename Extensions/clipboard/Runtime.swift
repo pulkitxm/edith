@@ -1,6 +1,3 @@
-#if SWIFT_PACKAGE && EDITH_FUNCTIONAL_FIXTURE
-import WorkerFixtureSupport
-#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionCommands
@@ -10,9 +7,6 @@ import SwiftUI
 
 @MainActor @objc(EdithClipboardExtensionRuntime)
 final class ExtensionRuntime: NSObject {
-    #if EDITH_FUNCTIONAL_FIXTURE
-    typealias FixtureAuthority = WorkerFixtureEngineAdmission
-    #endif
     private var worker: ClipboardWorker?
     private var presentation: ClipboardPresentation?
     private var uiConfigured = false
@@ -25,56 +19,24 @@ final class ExtensionRuntime: NSObject {
     private var resourceStop: Task<Void, Never>?
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
     private var commandsSuspended = false
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var signedFixture: WorkerFixtureEngineAdmission?
-    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             request["hostedFunctionalFixture"] == nil
         else { completion(nil, "The functional fixture is unavailable."); return }
-        #endif
         let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let token else { throw ExtensionPeerError.invalidRequest }
             try Task.checkCancellation()
-            #if EDITH_FUNCTIONAL_FIXTURE
-            let admission = self.signedFixture
-            let admitted = try admission?.beginRequest(
-                token: token, operation: command, payload: payload)
-            do {
-                let data = try await self.executeCommand(command, payload: payload)
-                try Task.checkCancellation()
-                if let admitted { try admission?.completeRequest(admitted) }
-                return data
-            } catch {
-                if let admitted { admission?.cancelRequest(admitted) }
-                throw error
-            }
-            #else
             return try await self.executeCommand(command, payload: payload)
-            #endif
         }
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private static func admitFixtureContext(_ input: NSDictionary) throws -> FixtureAuthority? {
-        try WorkerFixtureEngineAdmission.current(
-            extensionID: "clipboard", context: input,
-            roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-    }
-    #endif
-
     private func checkFixtureCurrent() throws {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        try signedFixture?.requireCurrent()
-        #else
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
             throw ExtensionPeerError.invalidRequest
         }
-        #endif
     }
 
     private func executeCommand(_ command: String, payload: Data) async throws -> Data {
@@ -176,7 +138,6 @@ final class ExtensionRuntime: NSObject {
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         if ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || input["hostedFunctionalFixture"] != nil
         {
@@ -187,7 +148,6 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
         }
-        #endif
         switch input["operation"] as? String {
         case "describe":
             let bundle = Bundle(for: ExtensionRuntime.self)
@@ -223,17 +183,6 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             do {
-                #if EDITH_FUNCTIONAL_FIXTURE
-                let verified = try Self.admitFixtureContext(input)
-                if let signedFixture {
-                    guard let verified, verified.descriptor == signedFixture.descriptor else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                    try signedFixture.requireCurrent()
-                }
-                let admission = signedFixture ?? verified
-                signedFixture = admission
-                #endif
                 guard let suite = input["defaultsSuite"] as? String,
                     suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
@@ -271,25 +220,9 @@ final class ExtensionRuntime: NSObject {
                         TextEditingCommands.install()
                     }
                 }
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let admission {
-                    try admission.withPlatformFixture(
-                        extensionID: "clipboard", expectedRole: .helper
-                    ) { namespace in
-                        try namespace.requireCurrent()
-                        try construct(true)
-                    }
-                } else {
-                    try construct(false)
-                }
-                #else
                 try construct(
                     ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
-                #endif
             } catch {
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if signedFixture != nil { _ = beginCommandDrain() }
-                #endif
                 return ["ok": false] as NSDictionary
             }
         case "view":

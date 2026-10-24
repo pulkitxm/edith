@@ -24,10 +24,7 @@ public final class HostExtensionSessions {
         @MainActor (HostWorkerNavigationRequest) async throws -> HostFolderChoiceResult = { _ in
             throw HostWorkerError.rejected
         }
-    @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
-        try await HostRemoteCarrierCheckIn.stop(extensionID: id)
-        try await HostRemoteSession.stopAll(extensionID: id)
-    }
+    @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { _ in }
     public private(set) var versions: [String: String] = [:]
     public private(set) var failures: Set<String> = []
     public private(set) var failureReasons: [String: String] = [:]
@@ -91,24 +88,6 @@ public final class HostExtensionSessions {
     public var workerGenerations: [String: UUID] {
         workers.filter { $0.value.processIdentifier != nil }.mapValues(\.generation)
     }
-
-    #if EDITH_FUNCTIONAL_FIXTURE
-    public func fixtureStartingWorker(
-        configuration: HostWorkerConfiguration, birth: ExtensionProcessIdentity
-    ) throws -> HostWorker {
-        let id = configuration.extensionID
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard states[id] == .starting, !activeIDs.contains(id),
-            !pendingDisableIDs.contains(id), !pendingRecoveryIDs.contains(id),
-            let worker = workers[id], !worker.ready, !worker.requiresRecovery,
-            !worker.configuration.recoveryOnly,
-            try encoder.encode(worker.configuration) == encoder.encode(configuration),
-            worker.processIdentifier == birth.pid, birth.isAlive
-        else { throw HostWorkerError.rejected }
-        return worker
-    }
-    #endif
 
     public func requestDisable(ids: Set<String>) {
         pendingDisableIDs.formUnion(ids.intersection(enabledIDs.union(workers.keys)))
@@ -427,9 +406,7 @@ public final class HostExtensionSessions {
     {
         var completed = true
         for id in Array(retryTasks.keys) { cancelRetry(id) }
-        let ids = Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
-            HostRemoteCarrierCheckIn.extensionIDs
-        ).union(pendingDisableIDs).union(pendingRecoveryIDs)
+        let ids = Set(workers.keys).union(pendingDisableIDs).union(pendingRecoveryIDs)
         if reason == .applicationQuit {
             let stops = ids.map { id in
                 Task {
@@ -449,8 +426,7 @@ public final class HostExtensionSessions {
                 }
             }
         }
-        return completed && workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
-            && HostRemoteCarrierCheckIn.extensionIDs.isEmpty
+        return completed && workers.isEmpty
     }
 
     private func save(_ ids: Set<String>) {

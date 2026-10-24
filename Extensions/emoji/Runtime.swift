@@ -17,37 +17,15 @@ final class ExtensionRuntime: NSObject {
     private var presentation: ControlPresentation?
 
     private var fixture: WorkerFixtureAdmission?
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var engineAdmission: WorkerFixtureEngineAdmission?
-    private var fixturePanelModel: EmojiPanelModel?
-    private var fixtureSelectionPhase: String?
-    #endif
     private let commands = ExtensionCommandRegistry()
     private var suspended = false
     private var suspension: Task<Void, Never>?
     private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let token = (request["token"] as? String).flatMap { UUID(uuidString: $0) }
-        let admission = engineAdmission
-        #endif
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self else { throw ExtensionPeerError.unavailable }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            guard let token, self.engineAdmission === admission else {
-                throw ExtensionPeerError.unavailable
-            }
-            let admitted = try admission?.beginRequest(
-                token: token, operation: command, payload: payload)
-            defer {
-                if let admitted { admission?.cancelRequest(admitted) }
-            }
-            #endif
             let reply = try await self.executeCommand(command, payload: payload)
-            #if EDITH_FUNCTIONAL_FIXTURE
-            if let admitted { try admission?.completeRequest(admitted) }
-            #endif
             return reply
         }
     }
@@ -83,23 +61,6 @@ final class ExtensionRuntime: NSObject {
                 self.registerHotKey()
                 IPC.post(IPC.Name.settingsChanged)
             case "emoji.ui.action":
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
-                    object["action"] as? String == "select"
-                {
-                    guard !suspended, fixture != nil, let engineAdmission,
-                        let model = fixturePanelModel, let service,
-                        fixtureSelectionPhase == nil
-                    else { throw ExtensionPeerError.unavailable }
-                    try engineAdmission.requireCurrent()
-                    let selection = try EmojiSurface.Selection.decode(
-                        payload, phase: engineAdmission.descriptor.phase)
-                    let reply = try EmojiSurface.select(
-                        selection, store: service, model: model, defaults: defaults)
-                    fixtureSelectionPhase = selection.phase
-                    return reply
-                }
-                #endif
                 let action = try JSONDecoder().decode(
                     ControlPresentationAction.self, from: payload)
                 guard action.value.isEmpty, let service = self.service else {
@@ -130,19 +91,12 @@ final class ExtensionRuntime: NSObject {
         let panel = fixture == nil ? EmojiPanel.shared : nil
         service?.shutdown()
         panel?.cancelPendingWork()
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let fixturePanelModel = fixturePanelModel
-        fixturePanelModel?.stop()
-        #endif
         if suspension == nil {
             let presentations = Array(retiredPresentations.values)
             suspension = Task { [self, service, panel, presentation] in
                 await commands.suspendAndWait()
                 await service?.drain()
                 await panel?.drain()
-                #if EDITH_FUNCTIONAL_FIXTURE
-                await fixturePanelModel?.stopAndWait()
-                #endif
                 await presentation?.stopAndWait()
                 for task in presentations { await task.value }
             }
@@ -167,9 +121,6 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func requireEngineCurrent() throws {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        try engineAdmission?.requireCurrent()
-        #endif
     }
 
     private func startService(_ input: NSDictionary) -> Bool {
@@ -182,13 +133,6 @@ final class ExtensionRuntime: NSObject {
         let store = EmojiStore(fixture: fixture)
         guard !store.catalog.emoji.isEmpty else { return false }
         service = store
-        #if EDITH_FUNCTIONAL_FIXTURE
-        if fixture != nil {
-            fixturePanelModel = EmojiPanelModel(
-                catalog: store.catalog, frequent: store.frequent, search: store.search)
-            fixtureSelectionPhase = nil
-        }
-        #endif
         if fixture == nil { EmojiPanel.shared.store = store }
         if fixture == nil {
             HotKeyRegistrar.configure(
@@ -271,25 +215,6 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
             do {
-                #if EDITH_FUNCTIONAL_FIXTURE
-                let admission = try WorkerFixtureEngineAdmission.current(
-                    extensionID: "emoji", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-                engineAdmission = admission
-                let started: Bool
-                if let admission {
-                    started = try admission.withPlatformFixture(
-                        extensionID: "emoji", expectedRole: .helper
-                    ) { namespace in
-                        fixture = namespace
-                        return startService(input)
-                    }
-                } else {
-                    fixture = nil
-                    started = startService(input)
-                }
-                return ["ok": started] as NSDictionary
-                #else
                 guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
                     input["hostedFunctionalFixture"] == nil
                 else { return ["ok": false] as NSDictionary }
@@ -297,7 +222,6 @@ final class ExtensionRuntime: NSObject {
                     extensionID: "emoji", context: input,
                     roleBundle: Bundle(for: ExtensionRuntime.self))
                 return ["ok": startService(input)] as NSDictionary
-                #endif
             } catch { return ["ok": false] as NSDictionary }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
@@ -331,10 +255,6 @@ final class ExtensionRuntime: NSObject {
             if fixture == nil { EmojiPanel.shared.hide(); EmojiPanel.shared.store = nil }
             service?.shutdown()
             service = nil
-            #if EDITH_FUNCTIONAL_FIXTURE
-            fixturePanelModel = nil
-            fixtureSelectionPhase = nil
-            #endif
             observers.forEach(IPC.stopObserving)
             observers.removeAll()
             HotKeyRegistrar.shutdown()

@@ -80,39 +80,7 @@ import Testing
         try kernel.add(1234, generation: "2.0")
         tracker.terminateCaptured(birth)
         #expect(kernel.signals.isEmpty)
-        #if EDITH_FUNCTIONAL_FIXTURE
-        #expect(tracker.observedBirths == [birth])
-        #expect(tracker.signalAttempts.isEmpty)
-        #endif
     }
-
-    #if EDITH_FUNCTIONAL_FIXTURE
-    @Test func observationRetainsLateBirthAndRecordsOnlyActualSignalAttempts() throws {
-        let kernel = Kernel()
-        try kernel.add(1234, generation: "1.0")
-        let leader = try #require(kernel.identities[1234])
-        var tracker = kernel.tracker()
-        try tracker.register(.init(pid: 1234, generation: "1.0", registered: true), owner: 42)
-        try kernel.add(1235, generation: "1.1", group: 1234)
-        let child = try #require(kernel.identities[1235])
-        tracker.refresh(owner: 42)
-        #expect(tracker.observedBirths.count == 2)
-        #expect(tracker.observedBirths.contains(leader))
-        #expect(tracker.observedBirths.contains(child))
-        #expect(tracker.signalAttempts.isEmpty)
-        kernel.onSignal = { _ in kernel.identities.removeAll() }
-        tracker.terminate(owner: 42)
-        tracker.refresh(owner: 42)
-        #expect(tracker.isEmpty)
-        #expect(tracker.observedBirths.count == 2)
-        #expect(tracker.observedBirths.contains(leader))
-        #expect(tracker.observedBirths.contains(child))
-        #expect(tracker.signalAttempts.count == 1)
-        #expect(tracker.signalAttempts.first?.target == -1234)
-        #expect([leader, child].contains(tracker.signalAttempts[0].witness))
-        #expect(kernel.signals == tracker.signalAttempts.map(\.target))
-    }
-    #endif
 
     @Test func lateUnobservedOrphanRetainsGroupWithoutAcquiringSignalAuthority() throws {
         let kernel = Kernel()

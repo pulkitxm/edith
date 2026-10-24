@@ -102,7 +102,7 @@ public final class ExtensionBundleRuntime {
             throw BundleCommandError.failed(
                 response["error"] as? String ?? "\(id) \(role.rawValue) refused to start")
         }
-        instance.active = true
+        instance.active = context["recoveryOnly"] as? Bool != true
     }
 
     public func synchronize(id: String, context: NSDictionary) throws {

@@ -1,153 +1,23 @@
 import AppKit
-@preconcurrency import ExtensionFoundation
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
 @MainActor
 public final class HostRemoteSessionManager {
-    #if EDITH_CLI_FIXTURE
-    public private(set) var fixtureIdentities: [[String: String]] = []
-    private var fixturePreferredIdentity: String?
-
-    public func fixturePrioritizeRetained(_ package: ExtensionPackage) async throws {
-        guard marketplace.identity.identifier.hasPrefix("com.pulkit.edith.tests.remote-"),
-            package.id == "sample",
-            try marketplace.packageStore.installedPackages().contains(package)
-        else { throw HostWorkerError.rejected }
-        let request = HostExtensionContentRequest(
-            extensionID: "sample", location: "settings", section: "extension")
-        let selected = try selectedConfiguration(for: request)
-        guard selected.package.version != package.version else { throw HostWorkerError.rejected }
-        let point = selected.worker.identifier + ".ExtensionUI"
-        let previous = Set(try await discover(point).map(\.id))
-        let worker = HostWorkerConfiguration(
-            identity: try selected.worker.identity(), extensionID: package.id,
-            version: package.version)
-        try await checkIn(
-            HostRemoteConfiguration(
-                session: UUID(), worker: worker, package: package, uiOnly: true), {})
-        let deadline = ContinuousClock.now + .seconds(2)
-        repeat {
-            let added = try await discover(point).filter {
-                !previous.contains($0.id)
-                    && $0.bundleIdentifier == selected.worker.identifier
-                        + ".extension.sample.worker"
-            }
-            if added.count == 1 { fixturePreferredIdentity = added[0].id; return }
-            try await Task.sleep(for: .milliseconds(20))
-        } while ContinuousClock.now < deadline
-        throw HostWorkerError.timedOut
-    }
-    #endif
-    #if EDITH_FUNCTIONAL_FIXTURE
-    public static var fixtureAdmitStartingReservation:
-        (
-            (HostRemoteConfiguration, HostRemoteKernelIdentity, HostExtensionContentRequest)
-                async throws -> Void
-        )?
-
-    public func fixturePrepareStartingWorker(
-        worker: HostWorker, birth: ExtensionProcessIdentity, request: HostExtensionContentRequest
-    ) async throws -> HostRemoteSession {
-        let id = request.extensionID
-        try request.validate(extensionID: id)
-        guard worker.configuration.extensionID == id,
-            try marketplace.sessions.fixtureStartingWorker(
-                configuration: worker.configuration, birth: birth) === worker,
-            marketplace.entries.contains(where: { $0.id == id }),
-            let package = marketplace.installed[id],
-            package.version == worker.configuration.version,
-            !marketplace.pendingRemovalIDs.contains(id), sessions[id] == nil, starting[id] == nil,
-            let admit = Self.fixtureAdmitStartingReservation
-        else { throw HostWorkerError.rejected }
-        let configuration = HostRemoteConfiguration(
-            session: UUID(), worker: worker.configuration, package: package, uiOnly: false)
-        let engine = try HostRemoteEngineOwner(
-            marketplace: marketplace, configuration: configuration, startingWorker: worker,
-            birth: birth)
-        let reservation = UUID()
-        let task = Task { [self] in
-            try await admit(configuration, engine.process, request)
-            try Task.checkCancellation()
-            guard
-                try marketplace.sessions.fixtureStartingWorker(
-                    configuration: configuration.worker, birth: birth) === worker,
-                marketplace.installed[id] == package, !marketplace.pendingRemovalIDs.contains(id)
-            else { throw HostWorkerError.rejected }
-            let session = try await createSession(configuration: configuration, engine: engine)
-            do {
-                _ = try await session.fixturePrepareNativePeer()
-                guard
-                    try marketplace.sessions.fixtureStartingWorker(
-                        configuration: configuration.worker, birth: birth) === worker,
-                    session.engineIdentity == engine.process, engine.process.isRunning,
-                    marketplace.installed[id] == package
-                else { throw HostWorkerError.rejected }
-                return session
-            } catch {
-                try? await session.stop()
-                throw error
-            }
-        }
-        starting[id] = Starting(token: reservation, task: task)
-        defer { finishStarting(id: id, token: reservation) }
-        return try await withTaskCancellationHandler {
-            let session = try await task.value
-            try Task.checkCancellation()
-            return session
-        } onCancel: {
-            task.cancel()
-        }
-    }
-    #endif
-
     public var detach: @MainActor (String) -> Void = { _ in }
     public var receive: @MainActor (String, HostRemoteEvent) -> Void = { _, _ in }
     private let marketplace: HostMarketplace
-    private var sessions: [String: HostRemoteSession] = [:]
-    private struct Starting {
-        let token: UUID
-        let task: Task<HostRemoteSession, any Error>
-    }
-    private var starting: [String: Starting] = [:]
-
-    private func finishStarting(id: String, token: UUID) {
-        guard starting[id]?.token == token else { return }
-        starting[id] = nil
-    }
-
     private var presentations: [UUID: any HostScenePresentation] = [:]
     private var localSessions: [String: HostLocalSession] = [:]
     private var terminalClients: [UUID: HostTerminalSceneClient] = [:]
     private var admissions: [String: Set<UUID>] = [:]
     private var pendingCleanup: [UUID: String] = [:]
     private var verifiedIdentities: [String: (package: ExtensionPackage, identity: String)] = [:]
-    var checkIn:
-        @MainActor (HostRemoteConfiguration, @escaping @MainActor () async throws -> Void)
-            async throws -> Void
-    var discover: @MainActor (String) async throws -> [AppExtensionIdentity] = { point in
-        try await Task.detached {
-            var iterator = try AppExtensionIdentity.matching(appExtensionPointIDs: point)
-                .makeAsyncIterator()
-            return await iterator.next() ?? []
-        }.value
-    }
-
     public init(marketplace: HostMarketplace) {
         self.marketplace = marketplace
-        checkIn = { configuration, beforeRegistration in
-            try await HostRemoteCarrierCheckIn.register(
-                configuration: configuration, store: marketplace.packageStore,
-                beforeRegistration: beforeRegistration)
-        }
         marketplace.sessions.willDisable = { [weak self] id in
-            if let self {
-                try await self.stop(extensionID: id)
-            } else {
-                try await HostRemoteCarrierCheckIn.stop(extensionID: id)
-                try await HostRemoteSession.stopAll(extensionID: id)
-            }
+            try await self?.stop(extensionID: id)
         }
     }
 
@@ -203,114 +73,6 @@ public final class HostRemoteSessionManager {
         let handle = try session.reserve(request)
         presentations[request.presentationID] = handle
         return handle
-    }
-
-    private func prepareRemoteScene(for request: HostExtensionContentRequest) async throws
-        -> HostRemoteSceneHandle
-    {
-        try Task.checkCancellation()
-        let configuration = try selectedConfiguration(for: request)
-        let id = request.extensionID
-        let engine =
-            configuration.uiOnly
-            ? nil
-            : try HostRemoteEngineOwner(
-                marketplace: marketplace, configuration: configuration)
-        let session: HostRemoteSession
-        if let current = sessions[id], current.configuration.package == configuration.package,
-            current.configuration.uiOnly == configuration.uiOnly, current.isAvailable,
-            current.engineIdentity == engine?.process
-        {
-            session = current
-        } else if let reservation = starting[id] {
-            session = try await reservation.task.value
-        } else {
-            if let current = sessions[id] { detach(id); try await current.stop() }
-            let reservation = UUID()
-            let task = Task { [self] in
-                try await createSession(configuration: configuration, engine: engine)
-            }
-            starting[id] = Starting(token: reservation, task: task)
-            defer { finishStarting(id: id, token: reservation) }
-            session = try await task.value
-        }
-        try Task.checkCancellation()
-        let current = try selectedConfiguration(for: request)
-        guard current.package == session.configuration.package,
-            current.uiOnly == session.configuration.uiOnly,
-            session.engineIdentity == engine?.process,
-            engine?.process.isRunning ?? true
-        else { try await session.stop(); throw HostWorkerError.rejected }
-        let handle = try await session.reserve(request)
-        presentations[request.presentationID] = handle
-        return handle
-    }
-
-    private func createSession(
-        configuration: HostRemoteConfiguration, engine: HostRemoteEngineOwner?
-    ) async throws -> HostRemoteSession {
-        let id = configuration.package.id
-        let point = configuration.worker.identifier + ".ExtensionUI"
-        let identifier = configuration.worker.identifier + ".extension." + id + ".worker"
-        var baseline: Set<String>?
-        try await checkIn(configuration) {
-            let identities = try await self.discover(point)
-            baseline = try HostRemoteIdentitySelection.ids(
-                identities.filter { $0.bundleIdentifier == identifier }.map(\.id))
-        }
-        try Task.checkCancellation()
-        guard let baseline else { throw HostWorkerError.rejected }
-        let identities = try await discover(point)
-        try Task.checkCancellation()
-        let matching = identities.filter { $0.bundleIdentifier == identifier }
-        #if EDITH_CLI_FIXTURE
-        fixtureIdentities = matching.prefix(64).map {
-            ["id": $0.id, "bundleIdentifier": $0.bundleIdentifier]
-        }
-        #endif
-        guard !matching.isEmpty else { throw HostRemoteAvailabilityError.approvalRequired }
-        let preferred = verifiedIdentities[id].flatMap {
-            $0.package == configuration.package ? $0.identity : nil
-        }
-        var selectedID = try HostRemoteIdentitySelection.select(
-            before: baseline, after: matching.map(\.id), verified: preferred)
-        #if EDITH_CLI_FIXTURE
-        if let fixturePreferredIdentity { selectedID = fixturePreferredIdentity }
-        #endif
-        guard let identity = matching.first(where: { $0.id == selectedID }) else {
-            throw HostWorkerError.rejected
-        }
-        let session = try await HostRemoteSession.start(
-            identity: identity, configuration: configuration,
-            store: marketplace.packageStore,
-            receive: { [weak self] event in self?.receive(id, event) },
-            engineIdentity: engine?.process,
-            admitEngine: { _ in
-                guard let engine else { return false }
-                return (try? engine.validate()) != nil
-            },
-            executeEngine: { request in
-                guard let engine else { throw HostWorkerError.rejected }
-                return try await engine.invoke(request)
-            })
-        if Task.isCancelled { try? await session.stop(); throw CancellationError() }
-        session.didAuthenticate = { [weak self] identity in
-            self?.verifiedIdentities[id] = (configuration.package, identity)
-        }
-        session.didStop = { [weak self, weak session] in
-            guard let self, let session, self.sessions[id] === session else { return }
-            self.sessions[id] = nil
-            self.marketplace.sessions.ambientPolicyCoordinator.release(owner: id)
-            self.detach(id)
-            self.terminalClients = self.terminalClients.filter {
-                self.presentations[$0.key]?.request.extensionID != id
-            }
-            self.presentations = self.presentations.filter {
-                $0.value.request.extensionID != id
-            }
-        }
-        sessions[id] = session
-        return session
     }
 
     public func validatePresented(_ request: HostExtensionContentRequest) throws {
@@ -497,18 +259,6 @@ public final class HostRemoteSessionManager {
         return result
     }
 
-    public func connectScene(
-        _ handle: HostRemoteSceneHandle, through connection: NSXPCConnection,
-        compact: Bool, visible: Bool, width: Double,
-        receive: @escaping @MainActor (HostRemoteEvent) -> Void
-    ) async throws {
-        try await ambientScene(handle, visible: visible) {
-            try await handle.connect(
-                through: connection, compact: compact, visible: visible,
-                width: width, receive: receive)
-        }
-    }
-
     public func presentScene(
         _ handle: HostLocalSceneHandle, compact: Bool, visible: Bool, width: Double
     ) async throws -> NSViewController {
@@ -608,11 +358,6 @@ public final class HostRemoteSessionManager {
     private func finishAdmission(id: String, token: UUID) {
         admissions[id]?.remove(token)
         if admissions[id]?.isEmpty == true { admissions[id] = nil }
-        if admissions[id] == nil,
-            !presentations.values.contains(where: { $0.request.extensionID == id })
-        {
-            starting[id]?.task.cancel()
-        }
     }
 
     private func stopUnused(extensionID: String) async throws {
@@ -623,24 +368,15 @@ public final class HostRemoteSessionManager {
             session.stop()
             localSessions[extensionID] = nil
         }
-        if let session = sessions[extensionID] { try await session.stop() }
     }
 
     public func stop(extensionID: String) async throws {
         marketplace.sessions.ambientPolicyCoordinator.release(owner: extensionID)
-        let reservation = starting[extensionID]
-        reservation?.task.cancel()
-        if let reservation {
-            _ = try? await reservation.task.value
-            finishStarting(id: extensionID, token: reservation.token)
-        }
         detach(extensionID)
         localSessions.removeValue(forKey: extensionID)?.stop()
         terminalClients = terminalClients.filter {
             presentations[$0.key]?.request.extensionID != extensionID
         }
-        try await HostRemoteCarrierCheckIn.stop(extensionID: extensionID)
-        try await HostRemoteSession.stopAll(extensionID: extensionID)
     }
 
     func selectedConfiguration(for request: HostExtensionContentRequest) throws

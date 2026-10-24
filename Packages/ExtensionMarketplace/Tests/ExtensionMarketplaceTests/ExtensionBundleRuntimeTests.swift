@@ -42,8 +42,10 @@ import Testing
         let archive = output.appendingPathComponent("keepAwake.zip")
         _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
             [package], repository: "pulkitxm/edith")
+        let suite = "marketplace-runtime-\(UUID().uuidString)"
         let runtime = ExtensionBundleRuntime(
             store: fixture.store, role: .helper, hostABI: package.hostABI,
+            environment: ["EDITH_SHARED_DEFAULTS_SUITE": suite, "EDITH_EXTENSION_ID": package.id],
             verify: { bundle in
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -54,7 +56,6 @@ import Testing
                     throw MarketplaceError.invalidSignature
                 }
             })
-        let suite = "marketplace-runtime-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(false, forKey: "keepAwakeEnabled")
@@ -109,17 +110,6 @@ import Testing
         #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
         #expect(defaults.bool(forKey: "preventSleep"))
         try runtime.stopAll()
-        let privileged = fixture.store.roleBundle(for: package, role: .privileged)
-        try FileManager.default.createDirectory(at: privileged, withIntermediateDirectories: true)
-        let privilegedRuntime = ExtensionBundleRuntime(
-            store: fixture.store, role: .helper, hostABI: package.hostABI,
-            packageVersion: package.version,
-            verify: ExtensionCodeSignature.verifyDevelopment)
-        #expect(throws: MarketplaceError.invalidBundle) {
-            try privilegedRuntime.start(
-                id: package.id, context: ["defaultsSuite": suite, "recoveryOnly": true])
-        }
-        #expect(try privilegedRuntime.snapshot(id: package.id) == nil)
     }
 
     @Test func anUninstalledExtensionCannotStart() {
@@ -299,7 +289,7 @@ struct MarketplaceRuntimeBuildFixture {
                 atPath: fixture.directory.appendingPathComponent("keepAwake.json").path))
     }
 
-    @Test func theHostMarketplaceGateRetainsAuthoritativeWorkerLifecycleCoverage() throws {
+    @Test func theHostMarketplaceGateRunsTheMarketplaceRuntime() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -309,7 +299,6 @@ struct MarketplaceRuntimeBuildFixture {
             makefile.components(separatedBy: "ci-marketplace-host: ci-host host\n").last)
         let commands = try #require(target.components(separatedBy: "\n\n").first)
         #expect(commands.contains("$(MAKE) ci-marketplace-runtime"))
-        #expect(commands.contains("$(MAKE) ci-extension-workers"))
     }
 
     @Test func aBuildFailureRetainsTheCompleteCommandAndDiagnostic() {

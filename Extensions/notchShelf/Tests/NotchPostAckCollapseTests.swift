@@ -14,22 +14,6 @@ struct NotchPostAckCollapseTests {
         defer { fixture.clean() }
         let otherPresentation = UUID()
         var owner: NotchShelfController?
-        #if EDITH_FUNCTIONAL_FIXTURE
-        let runtime = ExtensionRuntime(
-            fixtureAdmission: { _ in nil },
-            contextSource: { fixture.context },
-            connectedDisplays: {
-                [42: CGSize(width: 1280, height: 900), 43: CGSize(width: 1600, height: 1000)]
-            },
-            createController: { context, displays in
-                let controller = NotchShelfController(
-                    context: context, startsServices: false,
-                    root: fixture.root.appendingPathComponent("Shelf"), hostDisplays: displays,
-                    bluetoothPrivacyRequired: { false })
-                owner = controller
-                return controller
-            })
-        #else
         let runtime = ExtensionRuntime(
             admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context },
@@ -44,7 +28,6 @@ struct NotchPostAckCollapseTests {
                 owner = controller
                 return controller
             })
-        #endif
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         let started =
             runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary

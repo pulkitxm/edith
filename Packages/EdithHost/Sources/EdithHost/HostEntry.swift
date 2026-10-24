@@ -2,92 +2,20 @@ import AppKit
 import EdithHostCore
 import EdithExtensionUI
 import EdithExtensionSupport
-import ExtensionFoundation
-import ExtensionKit
-import HostBootstrap
 import SwiftUI
 
-@_cdecl("edith_host_dispatch")
-func dispatchHostEntry() {
-    let arguments = Array(CommandLine.arguments.dropFirst())
-    let explicitRole =
-        arguments.first.map {
-            $0.hasPrefix("--extension-") || $0.hasPrefix("--contained-extension-")
-                || $0 == "--cli-fixture"
-        } ?? false
-    if Bundle.main.bundleURL.pathExtension == "appex", !explicitRole,
-        ProcessInfo.processInfo.environment["EDITH_CLI"] != "1"
-    {
-        return
-    }
-    MainActor.assumeIsolated { HostEntry.runHost() }
-    exit(0)
-}
-
 @main
-struct HostEntry: AppExtension {
-    init() { edith_host_bootstrap_anchor() }
-
-    var configuration: AppExtensionSceneConfiguration {
-        HostRemoteApplication.shared.sceneConfiguration
-    }
+enum HostEntry {
+    @MainActor static func main() { runHost() }
 
     @MainActor static func runHost() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
         if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"
             || (!arguments.isEmpty && !arguments[0].hasPrefix("--extension-")
-                && !arguments[0].hasPrefix("--contained-extension-")
-                && arguments[0] != "--cli-fixture")
+                && !arguments[0].hasPrefix("--contained-extension-"))
         {
             HostCommandCLI.main(arguments: arguments)
-        }
-        #if EDITH_CLI_FIXTURE
-        if arguments.count == 2, arguments[0] == "--extension-remote-registration-fixture" {
-            do {
-                try HostRemoteFixture.run(
-                    directory: URL(fileURLWithPath: arguments[1]), registrationOnly: true)
-            } catch { exit(1) }
-            return
-        }
-        if arguments.count == 2, arguments[0] == "--extension-remote-fixture" {
-            do { try HostRemoteFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
-                exit(1)
-            }
-            return
-        }
-        if arguments == ["--extension-remote-fixture-engine"],
-            Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.remote-") == true
-        {
-            do { try HostRemoteFixtureEngine().run() } catch { exit(1) }
-            return
-        }
-        if arguments.count == 3, arguments[0] == "--extension-core-fixture",
-            ["normal", "owner-exit"].contains(arguments[2])
-        {
-            do {
-                try HostCoreFixture.run(
-                    directory: URL(fileURLWithPath: arguments[1]),
-                    orphan: arguments[2] == "owner-exit")
-            } catch { exit(1) }
-            return
-        }
-        if arguments.count == 2, arguments[0] == "--cli-fixture",
-            Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.cli-") == true
-        {
-            do { try HostCLIFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
-                exit(1)
-            }
-            return
-        }
-        #endif
-        if arguments == ["--extension-ui-carrier"] {
-            let application = NSApplication.shared
-            let delegate = HostUICarrierDelegate()
-            application.setActivationPolicy(.prohibited)
-            application.delegate = delegate
-            withExtendedLifetime(delegate) { application.run() }
-            return
         }
         do { if try HostContainedRole.run(arguments: arguments) { return } } catch {
             FileHandle.standardError.write(
@@ -135,13 +63,5 @@ struct HostEntry: AppExtension {
         }
         guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }
         HostApplication.main()
-    }
-}
-
-private final class HostUICarrierDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            NSApplication.shared.terminate(nil)
-        }
     }
 }

@@ -9,7 +9,7 @@ public struct HostRequirementPackageInspection: Sendable {
     private let systemVersion: ExtensionSystemVersion
     private let hostIdentifier: String
     private let requiredRoles: Set<String>
-    private let verify: @Sendable (ExtensionUICarrier, [URL]) throws -> Void
+    private let verify: @Sendable ([URL]) throws -> Void
 
     public init(
         store: ExtensionPackageStore, hostABI: String, architecture: String,
@@ -20,15 +20,13 @@ public struct HostRequirementPackageInspection: Sendable {
             store: store, hostABI: hostABI, architecture: architecture,
             systemVersion: systemVersion, hostIdentifier: hostIdentifier,
             requiredRoles: requiredRoles,
-            verify: { carrier, bundles in
+            verify: { bundles in
                 switch policy {
                 case let .publisher(team):
-                    try carrier.verify(teamIdentifier: team)
                     for bundle in bundles {
                         try ExtensionCodeSignature.verify(bundle, teamIdentifier: team)
                     }
                 case .development:
-                    try carrier.verifyDevelopment()
                     for bundle in bundles { try ExtensionCodeSignature.verifyDevelopment(bundle) }
                 }
             })
@@ -37,7 +35,7 @@ public struct HostRequirementPackageInspection: Sendable {
     init(
         store: ExtensionPackageStore, hostABI: String, architecture: String,
         systemVersion: ExtensionSystemVersion, hostIdentifier: String, requiredRoles: Set<String>,
-        verify: @escaping @Sendable (ExtensionUICarrier, [URL]) throws -> Void
+        verify: @escaping @Sendable ([URL]) throws -> Void
     ) {
         self.store = store; self.hostABI = hostABI; self.architecture = architecture
         self.requiredRoles = requiredRoles
@@ -63,12 +61,8 @@ public struct HostRequirementPackageInspection: Sendable {
                     architecture: architecture, systemVersion: systemVersion)
             else { return .incompatible }
             let payload = store.directory(for: package).appendingPathComponent(id)
-            let carrier = try ExtensionUICarrier(
-                payload: payload, package: package,
-                expectedHostIdentifier: hostIdentifier)
             let bundles = try FileManager.default.contentsOfDirectory(
-                at: carrier.payloadDirectory,
-                includingPropertiesForKeys: nil
+                at: payload, includingPropertiesForKeys: nil
             ).filter { $0.pathExtension == "bundle" }
             guard !requiredRoles.isEmpty,
                 requiredRoles.isSubset(of: ["app", "helper", "agent", "cli", "privileged"]),
@@ -87,17 +81,15 @@ public struct HostRequirementPackageInspection: Sendable {
                     FileManager.default.isExecutableFile(atPath: executable.path)
                 else { throw MarketplaceError.invalidBundle }
             }
-            let outerCode = try FileManager.default.contentsOfDirectory(
+            let applications = try FileManager.default.contentsOfDirectory(
                 at: payload, includingPropertiesForKeys: nil
-            ).filter { $0.pathExtension == "bundle" || $0.pathExtension == "app" }
+            ).filter { $0.pathExtension == "app" }
             let allowedApplications: Set<String> =
-                id == "virtualCamera"
-                ? ["ExtensionCarrier.app", "CameraCarrier.app"] : ["ExtensionCarrier.app"]
-            guard Set(outerCode.map(\.lastPathComponent)) == allowedApplications else {
+                id == "virtualCamera" ? ["CameraCarrier.app"] : []
+            guard Set(applications.map(\.lastPathComponent)) == allowedApplications else {
                 throw MarketplaceError.invalidBundle
             }
-            try verify(
-                carrier, bundles + outerCode.filter { $0.lastPathComponent == "CameraCarrier.app" })
+            try verify(bundles + applications)
             try Task.checkCancellation()
             return .installed(version: package.version, enabled: enabled, active: active)
         } catch is CancellationError { throw CancellationError() } catch {

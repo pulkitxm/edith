@@ -38,11 +38,7 @@ import Foundation
     }
 
     public static func currentEnvironment() -> [String: String] {
-        #if EDITH_CLI_FIXTURE
-        ProcessInfo.processInfo.environment
-        #else
         CLIToolEnvironment.sanitized()
-        #endif
     }
 
     private func tasks(

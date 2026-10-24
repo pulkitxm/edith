@@ -37,31 +37,11 @@ public struct HostCommandCLI: Sendable {
                     HostToolingCLI.bundledLauncher()
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
                 let tooling: HostToolingCLI
-                #if EDITH_CLI_FIXTURE
-                if identifier.hasPrefix("com.pulkit.edith.tests.cli-"),
-                    let fixtureHome = ProcessInfo.processInfo.environment["EDITH_CLI_FIXTURE_HOME"],
-                    fixtureHome.hasPrefix("/")
-                {
-                    let home = URL(fileURLWithPath: fixtureHome, isDirectory: true)
-                    tooling = HostToolingCLI(
-                        home: home, executable: executable,
-                        directory: home.appendingPathComponent("bin"),
-                        path: [home.appendingPathComponent("bin").path])
-                } else {
-                    tooling = HostToolingCLI(
-                        home: FileManager.default.homeDirectoryForCurrentUser,
-                        executable: executable,
-                        path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(
-                            separator: ":"
-                        ).map(String.init))
-                }
-                #else
                 tooling = HostToolingCLI(
                     home: FileManager.default.homeDirectoryForCurrentUser,
                     executable: executable,
                     path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":")
                         .map(String.init))
-                #endif
                 let cli = HostCommandCLI(
                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                         as? String ?? "development",

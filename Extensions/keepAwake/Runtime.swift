@@ -10,11 +10,7 @@ import SwiftUI
 @MainActor
 @objc(EdithKeepAwakeExtensionRuntime)
 final class KeepAwakeRuntime: NSObject {
-    #if EDITH_FUNCTIONAL_FIXTURE
-    typealias FixtureAuthority = WorkerFixtureEngineAdmission
-    #else
     typealias FixtureAuthority = WorkerFixtureAdmission
-    #endif
     private var store: KeepAwakeStore?
     private var defaults: UserDefaults?
     private var defaultsSuite: String?
@@ -43,63 +39,33 @@ final class KeepAwakeRuntime: NSObject {
     private var resourceStop: Task<Void, Never>?
     private var commandsSuspended = false
     private var presentationDrains: [UUID: Task<Void, Never>] = [:]
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var signedFixture: WorkerFixtureEngineAdmission?
-    #endif
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             request["hostedFunctionalFixture"] == nil
         else { completion(nil, "The functional fixture is unavailable."); return }
-        #endif
         let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let token else { throw ExtensionPeerError.invalidRequest }
             try Task.checkCancellation()
-            #if EDITH_FUNCTIONAL_FIXTURE
-            let admission = self.signedFixture
-            let admitted = try admission?.beginRequest(
-                token: token, operation: command, payload: payload)
-            do {
-                let data = try await self.executeCommand(command, payload: payload)
-                try Task.checkCancellation()
-                if let admitted { try admission?.completeRequest(admitted) }
-                return data
-            } catch {
-                if let admitted { admission?.cancelRequest(admitted) }
-                throw error
-            }
-            #else
             return try await self.executeCommand(command, payload: payload)
-            #endif
         }
     }
 
     private static func admitFixtureContext(_ input: NSDictionary) throws -> FixtureAuthority? {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        return try WorkerFixtureEngineAdmission.current(
-            extensionID: "keepAwake", context: input,
-            roleBundle: Bundle(for: KeepAwakeRuntime.self), expectedRole: .helper)
-        #else
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             input["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
         return try WorkerFixtureAdmission.current(
             extensionID: "keepAwake", context: input, roleBundle: Bundle(for: KeepAwakeRuntime.self)
         )
-        #endif
     }
 
     private func checkFixtureCurrent() throws {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        try signedFixture?.requireCurrent()
-        #else
         guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
             throw WorkerFixtureError.invalid
         }
-        #endif
     }
 
     private func executeCommand(_ command: String, payload: Data) async throws -> Data {
@@ -208,7 +174,6 @@ final class KeepAwakeRuntime: NSObject {
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
-        #if !EDITH_FUNCTIONAL_FIXTURE
         if ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || input["hostedFunctionalFixture"] != nil
         {
@@ -219,7 +184,6 @@ final class KeepAwakeRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
         }
-        #endif
         switch input["operation"] as? String {
         case "describe":
             return [
@@ -254,28 +218,17 @@ final class KeepAwakeRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             do {
                 let verified = try admitFixture(input)
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let signedFixture {
-                    guard let verified, verified.descriptor == signedFixture.descriptor else {
-                        throw WorkerFixtureError.invalid
-                    }
-                    try signedFixture.requireCurrent()
-                }
-                #endif
                 guard let suite = input["defaultsSuite"] as? String,
                     defaultsSuite == nil || defaultsSuite == suite
                 else { return ["ok": false] as NSDictionary }
-                #if EDITH_FUNCTIONAL_FIXTURE
-                let admission = signedFixture ?? verified
-                signedFixture = admission
-                #else
+                if input["recoveryOnly"] as? Bool == true {
+                    defaults = makeDefaults(suite)
+                    defaultsSuite = suite
+                    return ["ok": true] as NSDictionary
+                }
                 let admission = verified
-                #endif
                 let construct: (WorkerFixtureAdmission?) throws -> (UserDefaults, KeepAwakeStore) =
                     { [self] namespace in
-                        #if EDITH_FUNCTIONAL_FIXTURE
-                        if let namespace { try namespace.requireCurrent() }
-                        #endif
                         guard let values = makeDefaults(suite) else {
                             throw ExtensionPeerError.unavailable
                         }
@@ -289,17 +242,7 @@ final class KeepAwakeRuntime: NSObject {
                         return (values, owner)
                     }
                 let (values, owner): (UserDefaults, KeepAwakeStore)
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let admission {
-                    (values, owner) = try admission.withPlatformFixture(
-                        extensionID: "keepAwake", expectedRole: .helper
-                    ) { try construct($0) }
-                } else {
-                    (values, owner) = try construct(nil)
-                }
-                #else
                 (values, owner) = try construct(admission)
-                #endif
                 store = owner
                 defaults = values
                 defaultsSuite = suite

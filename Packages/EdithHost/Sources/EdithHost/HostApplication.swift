@@ -48,9 +48,6 @@ struct HostApplication: App {
                 .controlSize(UIScale.controlSize)
                 .disclosureGroupStyle(EdithDisclosureGroupStyle())
                 .themedControls()
-                #if EDITH_GUI_FIXTURE
-                .background { HostGUIVisibilityProbe() }
-                #endif
                 .task {
                     delegate.openMainWindow = { openWindow(id: "main") }
                     runtime.launch()

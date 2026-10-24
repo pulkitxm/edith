@@ -15,16 +15,6 @@ struct StudioFixtureTools: Sendable {
         try self.init(admission: admission, engineAdmission: nil, nativeExporter: nil)
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    @MainActor init(engineAdmission: WorkerFixtureEngineAdmission) throws {
-        try engineAdmission.requireCurrent()
-        self = try engineAdmission.withPlatformFixture(extensionID: "studio", expectedRole: .app) {
-            try Self.init(
-                admission: $0, engineAdmission: engineAdmission, nativeExporter: VideoExporter())
-        }
-    }
-    #endif
-
     private init(
         admission: WorkerFixtureAdmission, engineAdmission: WorkerFixtureEngineAdmission?,
         nativeExporter: VideoExporter?

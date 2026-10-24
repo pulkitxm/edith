@@ -43,14 +43,10 @@ import WorkerFixtureTestSupport
     @MainActor private func makeRuntime(
         _ input: Input, defaults: @escaping (String) -> UserDefaults?
     ) -> ExtensionRuntime {
-        #if EDITH_FUNCTIONAL_FIXTURE
-        return ExtensionRuntime(admitFixture: input.admit, fixtureDefaults: defaults)
-        #else
         return ExtensionRuntime(admitOrdinaryContext: { context in
             guard try input.admit(context) == nil else { throw WorkerFixtureError.invalid }
             return nil
         })
-        #endif
     }
 
     @MainActor @Test func originalRuntimeRejectsFunctionalContextBeforeModelConstruction() async {

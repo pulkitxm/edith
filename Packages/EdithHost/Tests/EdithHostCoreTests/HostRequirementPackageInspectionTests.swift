@@ -34,7 +34,7 @@ import Testing
         let fixture = try RequirementPackageFixture()
         defer { fixture.remove() }
         try fixture.writeState()
-        try fixture.makeCarrier()
+        try fixture.makePackage()
         if case .invalid = try fixture.inspector().inspect(
             id: "systemStats", enabled: false, active: false)
         {
@@ -57,19 +57,10 @@ import Testing
         }
     }
 
-    @Test func outerExecutablePayloadCannotBypassSealedRoleInspection() throws {
+    @Test func unownedApplicationsCannotJoinAnInspectedPackage() throws {
         let fixture = try RequirementPackageFixture()
         defer { fixture.remove() }
-        try fixture.writeState(); try fixture.makeCarrier(); try fixture.sign()
-        let outside = fixture.payload.appendingPathComponent("helper.bundle")
-        try FileManager.default.copyItem(at: fixture.role, to: outside)
-        if case .invalid = try fixture.inspector().inspect(
-            id: "systemStats", enabled: false, active: false)
-        {
-        } else {
-            Issue.record("Flat executable payload was accepted")
-        }
-        try FileManager.default.removeItem(at: outside)
+        try fixture.writeState(); try fixture.makePackage(); try fixture.sign()
         let auxiliary = fixture.payload.appendingPathComponent("CameraCarrier.app")
         try FileManager.default.createDirectory(at: auxiliary, withIntermediateDirectories: true)
         if case .invalid = try fixture.inspector().inspect(
@@ -80,16 +71,10 @@ import Testing
         }
     }
 
-    @Test func wrongHostOrRoleMetadataCannotBeInspectedAsCompatible() throws {
+    @Test func missingExpectedRolesCannotBeInspectedAsCompatible() throws {
         let fixture = try RequirementPackageFixture()
         defer { fixture.remove() }
-        try fixture.writeState(); try fixture.makeCarrier(); try fixture.sign()
-        if case .invalid = try fixture.inspector(host: "com.pulkit.edith.tests.other").inspect(
-            id: "systemStats", enabled: false, active: false)
-        {
-        } else {
-            Issue.record("Wrong host was accepted")
-        }
+        try fixture.writeState(); try fixture.makePackage(); try fixture.sign()
         if case .invalid = try fixture.inspector(roles: ["app"]).inspect(
             id: "systemStats", enabled: false, active: false)
         {
@@ -105,10 +90,7 @@ private struct RequirementPackageFixture {
     let package: ExtensionPackage
     var store: ExtensionPackageStore { .init(root: root) }
     var payload: URL { store.directory(for: package).appendingPathComponent(package.id) }
-    var carrier: URL { payload.appendingPathComponent("ExtensionCarrier.app") }
-    var worker: URL { carrier.appendingPathComponent("Contents/Extensions/ExtensionWorker.appex") }
-    var nested: URL { worker.appendingPathComponent("Contents/Resources/Payload/systemStats") }
-    var role: URL { nested.appendingPathComponent("helper.bundle") }
+    var role: URL { payload.appendingPathComponent("helper.bundle") }
     init() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "requirement-package-" + UUID().uuidString)
@@ -135,56 +117,29 @@ private struct RequirementPackageFixture {
         try JSONEncoder().encode([Self.package(abi: abi)]).write(
             to: root.appendingPathComponent("installed.json"))
     }
-    func makeCarrier() throws {
-        let shared: [String: Any] = [
-            "CFBundleExecutable": "Edith", "CFBundleShortVersionString": "1.0.0",
-            "CFBundleVersion": "1.0.0",
-            "EdithHostIdentifier": host, "EdithExtensionID": "systemStats",
-            "EdithExtensionVersion": "1.0.0",
-            "EdithHostABI": "edith-host-2",
-            "EdithHostExecutablePath": "/tmp/synthetic/Host.app/Contents/MacOS/Edith",
-            "EdithHostCodeRequirement": "identifier \"\(host)\"",
-            "EdithExecutableProvenance": String(repeating: "a", count: 64),
-            "EdithCarrierExecutableProvenance": String(repeating: "b", count: 64),
-            "EdithPayloadRelativePath": "Contents/Resources/Payload",
-        ]
-        var applicationInfo = shared;
-        applicationInfo["CFBundleIdentifier"] = host + ".extension.systemStats"
-        applicationInfo["CFBundlePackageType"] = "APPL"; applicationInfo["LSUIElement"] = true
-        var workerInfo = shared;
-        workerInfo["CFBundleIdentifier"] = host + ".extension.systemStats.worker"
-        workerInfo["CFBundlePackageType"] = "XPC!"
-        workerInfo["EXAppExtensionAttributes"] = [
-            "EXExtensionPointIdentifier": host + ".ExtensionUI"
-        ]
-        let roleInfo: [String: Any] = [
+    func makePackage() throws {
+        let info: [String: Any] = [
             "CFBundleExecutable": "fixture",
             "CFBundleIdentifier": "com.pulkit.edith.extensions.systemStats.helper",
             "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": "1.0.0",
             "CFBundleVersion": "1.0.0", "EdithHostABI": "edith-host-2",
         ]
-        for (bundle, info) in [(carrier, applicationInfo), (worker, workerInfo), (role, roleInfo)] {
-            let macos = bundle.appendingPathComponent("Contents/MacOS")
-            try FileManager.default.createDirectory(at: macos, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(
-                at: bundle.appendingPathComponent("Contents/Resources"),
-                withIntermediateDirectories: true)
-            try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
-                .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
-            try FileManager.default.copyItem(
-                at: URL(fileURLWithPath: "/usr/bin/true"),
-                to: macos.appendingPathComponent(info["CFBundleExecutable"] as! String))
-        }
+        let macos = role.appendingPathComponent("Contents/MacOS")
+        try FileManager.default.createDirectory(at: macos, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: role.appendingPathComponent("Contents/Resources"),
+            withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
+            .write(to: role.appendingPathComponent("Contents/Info.plist"))
+        try FileManager.default.copyItem(
+            at: URL(fileURLWithPath: "/usr/bin/true"), to: macos.appendingPathComponent("fixture"))
         try JSONEncoder().encode(ExtensionPayloadManifest(package: package)).write(
-            to: nested.appendingPathComponent("package.json"))
+            to: payload.appendingPathComponent("package.json"))
     }
     func sign() throws {
         let entitlements = root.appendingPathComponent("entitlements.plist")
         defer { try? FileManager.default.removeItem(at: entitlements) }
-        for (bundle, values) in [
-            (role, [String: Bool]()), (worker, ["com.apple.security.app-sandbox": true]),
-            (carrier, [:]),
-        ] {
+        for (bundle, values) in [(role, [String: Bool]())] {
             try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0)
                 .write(to: entitlements)
             let process = Process();

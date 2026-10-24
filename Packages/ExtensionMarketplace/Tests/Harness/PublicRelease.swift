@@ -177,15 +177,8 @@ extension MarketplaceHarness {
                 return copy
             },
             verify: { directory in
-                let manifest = try JSONDecoder().decode(
-                    ExtensionPayloadManifest.self,
-                    from: Data(contentsOf: directory.appendingPathComponent("package.json")))
-                let carrier = try ExtensionUICarrier(
-                    payload: directory, manifest: manifest,
-                    expectedHostIdentifier: "com.pulkit.edith")
-                try carrier.verify(teamIdentifier: request.teamIdentifier)
                 for role in ExtensionBundleRuntime.Role.allCases {
-                    let bundle = carrier.payloadDirectory.appendingPathComponent(
+                    let bundle = directory.appendingPathComponent(
                         "\(role.rawValue).bundle")
                     if FileManager.default.fileExists(atPath: bundle.path) {
                         try ExtensionCodeSignature.verify(

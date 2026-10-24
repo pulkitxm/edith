@@ -11,11 +11,6 @@ import SwiftUI
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var startRequested = false
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private var fixture: WorkerFixtureEngineAdmission?
-    private var fixtureContext: NSDictionary?
-    private var fixturePreferences: NotchFixturePreferences?
-    #endif
     private var fixtureRejected = false
     private var fixtureUI = false
     private var stopped = false
@@ -25,18 +20,12 @@ final class ExtensionRuntime: NSObject {
     private var shutdownTask: Task<Void, Never>?
     private var shutdownFinished = false
     private var shutdownCompletions: [() -> Void] = []
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
-    #endif
     private var fixtureActive = false
     private var controller: NotchShelfController?
     private struct UIScene {
         let client: ExtensionEngineClient?
         let settings: NotchSettingsModel?
         let chrome: NotchChromeClient?
-        #if EDITH_FUNCTIONAL_FIXTURE
-        var admission: WorkerFixtureUIAdmission? = nil
-        #endif
         let generation: UUID
     }
     private var uiScenes: [UUID: UIScene] = [:]
@@ -53,41 +42,6 @@ final class ExtensionRuntime: NSObject {
     private let createController:
         @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    init(
-        fixtureAdmission:
-            @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission? = {
-                try WorkerFixtureEngineAdmission.current(
-                    extensionID: "notchShelf", context: $0,
-                    roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
-            },
-        contextSource: @escaping @MainActor () -> SurfaceHostContext? = {
-            SurfaceHostContext.current
-        },
-        connectedDisplays: @escaping @MainActor () -> [UInt32: CGSize] = {
-            Dictionary(
-                uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
-                    guard
-                        let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                            as? UInt32
-                    else { return nil }
-                    return (id, screen.frame.size)
-                })
-        },
-        createController:
-            @escaping @MainActor (SurfaceHostContext, [NotchPanelDisplay]) -> NotchShelfController =
-            {
-                NotchShelfController(context: $0, hostDisplays: $1)
-            }
-    ) {
-        self.fixtureAdmission = fixtureAdmission
-        self.contextSource = contextSource
-        self.connectedDisplays = connectedDisplays
-        self.createController = createController
-        super.init()
-    }
-
-    #else
     private let admitOrdinaryContext: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
 
     init(
@@ -131,7 +85,6 @@ final class ExtensionRuntime: NSObject {
             roleBundle: Bundle(for: ExtensionRuntime.self))
     }
 
-    #endif
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         guard !stopped, !fixtureRejected else {
             completion(nil, ExtensionPeerError.unavailable.localizedDescription as NSString)
@@ -139,49 +92,6 @@ final class ExtensionRuntime: NSObject {
         }
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, !stopped, !fixtureRejected else { throw ExtensionPeerError.unavailable }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            if fixtureActive {
-                guard startRequested, let preferences = fixturePreferences,
-                    ["notch.settings.read", "notch.settings.write", "notchShelf.cli.catalog"]
-                        .contains(
-                            command)
-                else { throw ExtensionPeerError.unavailable }
-                do {
-                    guard let token = (request["token"] as? String).flatMap(UUID.init(uuidString:)),
-                        let fixture
-                    else { throw WorkerFixtureError.invalid }
-                    if command == "notchShelf.cli.catalog" {
-                        guard payload == Data("{}".utf8) else {
-                            throw ExtensionPeerError.invalidRequest
-                        }
-                    } else {
-                        try NotchFixturePreferences.validate(
-                            command, payload: payload, schema: NotchSettingsSchema.defaults,
-                            accepts: NotchSettingsSchema.accepts)
-                    }
-                    let ticket = try fixture.beginRequest(
-                        token: token, operation: command, payload: payload)
-                    defer { fixture.cancelRequest(ticket) }
-                    let response: Data
-                    if command == "notchShelf.cli.catalog" {
-                        try requireCurrentFixture()
-                        response = try NotchCLIProviderCatalog.encode(payload)
-                    } else {
-                        let values = try preferences.execute(command, payload: payload)
-                        let snapshot = NotchSettingsSnapshot(
-                            preferences: values, activeIDs: [], browserProfile: nil,
-                            bluetoothPrivacyRequired: false)
-                        try snapshot.validate()
-                        try requireCurrentFixture()
-                        response = try JSONEncoder().encode(snapshot)
-                    }
-                    try fixture.completeRequest(ticket)
-                    return response
-                } catch NotchFixturePreferencesError.invalid {
-                    throw ExtensionPeerError.invalidRequest
-                }
-            }
-            #endif
             if command == "notchShelf.cli.catalog" {
                 return try NotchCLIProviderCatalog.encode(payload)
             }
@@ -255,35 +165,6 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
-    #if EDITH_FUNCTIONAL_FIXTURE
-    private func requireCurrentFixture() throws {
-        guard !stopped, !fixtureRejected, let fixture else { throw WorkerFixtureError.invalid }
-        try fixture.requireCurrent()
-    }
-
-    private func invokeSettingsUI(
-        _ operation: String, payload: Data, presentation: UUID, generation: UUID,
-        client: ExtensionEngineClient, admission: WorkerFixtureUIAdmission
-    ) async throws -> Data {
-        guard !stopped, !fixtureRejected,
-            let scene = uiScenes[presentation], scene.generation == generation,
-            scene.client === client, scene.admission === admission
-        else { throw WorkerFixtureError.invalid }
-        try Task.checkCancellation()
-        try admission.requireCurrent()
-        try NotchFixturePreferences.validate(
-            operation, payload: payload, schema: NotchSettingsSchema.defaults,
-            accepts: NotchSettingsSchema.accepts)
-        let response = try await client.invoke(operation, payload: payload)
-        try Task.checkCancellation()
-        guard !stopped, !fixtureRejected,
-            uiScenes[presentation]?.generation == generation
-        else { throw WorkerFixtureError.invalid }
-        try admission.requireCurrent()
-        return response
-    }
-
-    #endif
     private func executePanel(_ command: String, payload: Data) async throws -> Data {
         guard !ExtensionHostRole.isInterfaceProcess,
             payload.count <= NotchPanelEngine.maximumBytes,
@@ -390,9 +271,6 @@ final class ExtensionRuntime: NSObject {
         startRequested = false
         stopped = true
         commands.suspend()
-        #if EDITH_FUNCTIONAL_FIXTURE
-        fixturePreferences?.stop()
-        #endif
         stopUI(preservingMetadata: true)
         let streams = cliStreams
         let browserCommands = browserStreams
@@ -442,9 +320,6 @@ final class ExtensionRuntime: NSObject {
             cliStreams = nil; browserStreams = nil
             NotchPresenterState.shared.privacy = nil
             ShelfThumbnails.clear()
-            #if EDITH_FUNCTIONAL_FIXTURE
-            fixture = nil; fixtureContext = nil; fixturePreferences = nil
-            #endif
             fixtureActive = false; fixtureUI = false
             shutdownFinished = true
             let completions = shutdownCompletions
@@ -496,21 +371,6 @@ final class ExtensionRuntime: NSObject {
             guard !stopped, !fixtureRejected, !fixtureActive else {
                 return ["ok": false] as NSDictionary
             }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            let admission: WorkerFixtureUIAdmission?
-            do {
-                admission = try WorkerFixtureUIAdmission.current(
-                    extensionID: "notchShelf", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                try admission?.requireCurrent()
-                if let admission {
-                    guard input["location"] as? String == "settings",
-                        admission.descriptor.rolePath.hasSuffix("/notchShelf/helper.bundle"),
-                        input["engineClient"] != nil
-                    else { throw WorkerFixtureError.invalid }
-                }
-            } catch { return ["ok": false] as NSDictionary }
-            #else
             do {
                 guard try admitOrdinaryContext(input) == nil else {
                     return ["ok": false] as NSDictionary
@@ -518,7 +378,6 @@ final class ExtensionRuntime: NSObject {
             } catch {
                 fixtureRejected = true; return ["ok": false] as NSDictionary
             }
-            #endif
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "notchShelf", input["tile"] == nil,
                 input["target"] == nil,
@@ -535,26 +394,10 @@ final class ExtensionRuntime: NSObject {
             var scene: UIScene
             if location == "settings" {
                 let model: NotchSettingsModel
-                #if EDITH_FUNCTIONAL_FIXTURE
-                if let admission, let client = configuration.engineClient {
-                    model = NotchSettingsModel(invoke: { [weak self] operation, payload in
-                        guard let self else { throw WorkerFixtureError.invalid }
-                        return try await self.invokeSettingsUI(
-                            operation, payload: payload, presentation: presentation,
-                            generation: generation, client: client, admission: admission)
-                    })
-                } else {
-                    model = NotchSettingsModel(client: configuration.engineClient)
-                }
-                #else
                 model = NotchSettingsModel(client: configuration.engineClient)
-                #endif
                 scene = UIScene(
                     client: configuration.engineClient, settings: model, chrome: nil,
                     generation: generation)
-                #if EDITH_FUNCTIONAL_FIXTURE
-                scene.admission = admission
-                #endif
             } else if location == "notch", let section = input["section"] as? String,
                 section.hasPrefix("panel."), let id = UInt32(section.dropFirst(6)),
                 section == "panel." + String(id), let client = configuration.engineClient
@@ -573,55 +416,12 @@ final class ExtensionRuntime: NSObject {
             }
             stopUI(presentation)
             uiScenes[presentation] = scene
-            #if EDITH_FUNCTIONAL_FIXTURE
-            fixtureUI = fixtureUI || admission != nil
-            #endif
             selectedPresentation = presentation
         case "stopUI":
             stopUI((input["presentationID"] as? String).flatMap(UUID.init(uuidString:)))
         case "start":
             guard !stopped, !fixtureRejected else { return ["ok": false] as NSDictionary }
             do {
-                #if EDITH_FUNCTIONAL_FIXTURE
-                let admitted = try fixtureAdmission(input)
-                if let admitted {
-                    guard admitted.descriptor.owner == "notchShelf",
-                        admitted.descriptor.role == "helper",
-                        controller == nil, panelEngine == nil, uiScenes.isEmpty
-                    else { throw WorkerFixtureError.invalid }
-                    if let fixture {
-                        guard fixture.descriptor == admitted.descriptor
-                        else { throw WorkerFixtureError.invalid }
-                    }
-                    fixture = admitted
-                    fixtureActive = true
-                    if fixturePreferences == nil {
-                        guard let suite = input["defaultsSuite"] as? String,
-                            let identifier = input["hostIdentifier"] as? String
-                        else { throw WorkerFixtureError.invalid }
-                        fixtureContext = input.copy() as? NSDictionary
-                        fixturePreferences = try NotchFixturePreferences(
-                            suite: suite,
-                            expectedSuite: identifier + ".extensions.notchShelf",
-                            schema: NotchSettingsSchema.defaults,
-                            isString: NotchSettingsSchema.isString,
-                            accepts: NotchSettingsSchema.accepts,
-                            requireCurrent: { [weak self] in
-                                guard let self else { throw WorkerFixtureError.invalid }
-                                try self.requireCurrentFixture()
-                            })
-                    } else {
-                        guard
-                            input["defaultsSuite"] as? String
-                                == fixtureContext?["defaultsSuite"] as? String
-                        else { throw WorkerFixtureError.invalid }
-                        try requireCurrentFixture()
-                    }
-                    startRequested = true
-                    return ["ok": true] as NSDictionary
-                }
-                guard !fixtureActive else { throw WorkerFixtureError.invalid }
-                #else
                 if try admitOrdinaryContext(input) != nil {
                     guard controller == nil, panelEngine == nil, uiScenes.isEmpty,
                         input["defaultsSuite"] as? String
@@ -632,7 +432,6 @@ final class ExtensionRuntime: NSObject {
                     return ["ok": true] as NSDictionary
                 }
                 guard !fixtureActive else { throw WorkerFixtureError.invalid }
-                #endif
             } catch {
                 fixtureRejected = true
                 startRequested = false
@@ -654,11 +453,6 @@ final class ExtensionRuntime: NSObject {
                     ?? selectedPresentation,
                 let scene = uiScenes[key]
             else { return ["ok": false] as NSDictionary }
-            #if EDITH_FUNCTIONAL_FIXTURE
-            do { try scene.admission?.requireCurrent() } catch {
-                return ["ok": false] as NSDictionary
-            }
-            #endif
             if let chrome = scene.chrome {
                 return NSHostingController(
                     rootView: ExtensionPageHost { NotchPanelPage(client: chrome) })

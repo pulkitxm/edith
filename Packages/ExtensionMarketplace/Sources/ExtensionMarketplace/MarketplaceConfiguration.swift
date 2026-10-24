@@ -3,7 +3,7 @@ import Foundation
 public enum MarketplaceConfiguration {
     public static let workerHostABI = "edith-host-3"
     public static let repository = "pulkitxm/edith"
-    public static let hostABI = "host-9938a67bfb395717970700fc"
+    public static let hostABI = "host-cba4688a70ebf4f881ae0198"
     public static let publicKey = Data(
         base64Encoded: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=")!
     public static let catalogTag = "extension-catalog-v1"
