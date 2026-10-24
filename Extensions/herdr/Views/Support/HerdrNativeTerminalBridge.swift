@@ -9,7 +9,7 @@ enum HerdrNativeTerminalBridge {
         let terminal = HerdrRawTerminal()
         try terminal.configure(mouse: specification.mouse, managesPresentation: false)
         defer { terminal.restore() }
-        if let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+        if let root = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
             let receipt = try JSONSerialization.data(withJSONObject: [
                 "pid": getpid(), "configured": true,
                 "group": getpgrp(), "foreground": tcgetpgrp(STDIN_FILENO),

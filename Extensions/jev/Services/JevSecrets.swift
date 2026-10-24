@@ -1,9 +1,10 @@
+import EdithExtensionSupport
 import Foundation
 import LocalAuthentication
 import Security
 
 enum JevKeyStores {
-    static func make(environment: [String: String] = ProcessInfo.processInfo.environment)
+    static func make(environment: [String: String] = ExtensionEnvironment.values)
         -> any JevKeyStore
     {
         if environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
@@ -37,7 +38,7 @@ struct FixtureJevKeyStore: JevKeyStore, @unchecked Sendable {
 struct KeychainJevKeyStore: JevKeyStore {
     static let account = "typesafe-api-key"
     static let service = service(
-        applicationIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+        applicationIdentifier: ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
             ?? "com.pulkit.edith.tests." + UUID().uuidString)
 
     static func service(applicationIdentifier: String) -> String {

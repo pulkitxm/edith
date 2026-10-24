@@ -5,7 +5,7 @@ public enum ExtensionData {
         .appendingPathComponent("edith-extension-\(UUID().uuidString)", isDirectory: true)
 
     public static var root: URL {
-        resolve(environment: ProcessInfo.processInfo.environment, fallback: temporaryRoot)
+        resolve(environment: ExtensionEnvironment.values, fallback: temporaryRoot)
     }
 
     public static let productionBases: [String: String] = [
@@ -50,7 +50,7 @@ public enum ExtensionData {
 
     public static func productionDirectory(
         _ relative: String, fallback: URL,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ExtensionEnvironment.values
     ) -> URL {
         guard environment["EDITH_APPLICATION_IDENTIFIER"] == "com.pulkit.edith",
             let path = environment["EDITH_EXTENSION_DATA_ROOT"], path.hasPrefix("/"),

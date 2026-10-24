@@ -362,7 +362,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             let change = try JSONDecoder().decode(CompanionPreferenceChange.self, from: payload)
             try CompanionUIPreferences.apply(change)
         case "companion.ui.openMedia":
-            guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
+            guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
                 throw ExtensionPeerError.invalidRequest
             }
             let id = try JSONDecoder().decode(String.self, from: payload)
@@ -508,7 +508,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             }
             let model = setupModel
             if action.action != "snapshot",
-                ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+                ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             {
                 throw ExtensionPeerError.invalidRequest
             }
@@ -541,7 +541,7 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             let action = try JSONDecoder().decode(CompanionCaptureAction.self, from: payload)
             let model = worker.workspace.capture
             guard action.note.utf8.count <= 131_072 else { throw ExtensionPeerError.invalidRequest }
-            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+            if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
                 !["snapshot", "discard", "deactivate"].contains(action.action)
             {
                 throw ExtensionPeerError.invalidRequest
@@ -560,14 +560,14 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
             return try encode(CompanionCaptureState(model))
         case "companion.ui.backend":
             let action = try JSONDecoder().decode(CompanionBackendAction.self, from: payload)
-            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+            if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
                 !["snapshot", "config", "import"].contains(action.action)
             {
                 throw ExtensionPeerError.invalidRequest
             }
             let model = worker.workspace.backend
             if action.action == "snapshot" {
-                if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
                     model.load()
                 }
             } else {

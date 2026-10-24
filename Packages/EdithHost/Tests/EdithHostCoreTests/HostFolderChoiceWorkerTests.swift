@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithHostCore
+import HostWorkerFixtureSupport
 
 @MainActor
 @Suite
@@ -22,11 +23,9 @@ struct HostFolderChoiceWorkerTests {
             ],
         ])
         let configuration = try JSONDecoder().decode(HostWorkerConfiguration.self, from: bytes)
-        let script = try #require(
-            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
         let worker = HostWorker(
-            configuration: configuration, executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, "folder-choice", output.path], requestTimeout: .seconds(3))
+            configuration: configuration, requestTimeout: .seconds(3),
+            engine: FixtureWorkerEngine.factory(mode: "folder-choice", record: output))
         var callbacks = 0
         worker.didRequestFolderChoice = { request in
             callbacks += 1

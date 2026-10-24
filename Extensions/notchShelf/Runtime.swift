@@ -123,7 +123,7 @@ final class ExtensionRuntime: NSObject {
     private static func admitOrdinaryContext(_ context: NSDictionary) throws
         -> WorkerFixtureAdmission?
     {
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             context["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
         return try WorkerFixtureAdmission.current(
@@ -625,7 +625,7 @@ final class ExtensionRuntime: NSObject {
                 if try admitOrdinaryContext(input) != nil {
                     guard controller == nil, panelEngine == nil, uiScenes.isEmpty,
                         input["defaultsSuite"] as? String
-                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                            == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                     else { throw WorkerFixtureError.invalid }
                     fixtureActive = true
                     startRequested = true
@@ -640,7 +640,7 @@ final class ExtensionRuntime: NSObject {
             }
             guard !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 let context = contextSource()
             else { return ["ok": false] as NSDictionary }
             startRequested = true

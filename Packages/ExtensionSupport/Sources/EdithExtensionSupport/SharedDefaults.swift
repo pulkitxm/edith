@@ -21,7 +21,7 @@ public enum SharedDefaults {
     public static let store: UserDefaults = {
         guard
             let suite = resolvedSuite(
-                environment: ProcessInfo.processInfo.environment,
+                environment: ExtensionEnvironment.values,
                 applicationIdentifier: Bundle.main.bundleIdentifier),
             let defaults = UserDefaults(suiteName: suite)
         else { return .standard }

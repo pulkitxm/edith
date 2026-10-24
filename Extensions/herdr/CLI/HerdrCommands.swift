@@ -186,8 +186,8 @@ struct HerdrAttachCommandCLI: AsyncParsableCommand {
         try await execute {
             let hosts = try await HerdrCLI.collect(machine)
             let agent = try HerdrCLI.matching(pane: pane, session: session, hosts: hosts)
-            let environment = ProcessInfo.processInfo.environment.keys.sorted().map {
-                "\($0)=\(ProcessInfo.processInfo.environment[$0] ?? "")"
+            let environment = ExtensionEnvironment.values.keys.sorted().map {
+                "\($0)=\(ExtensionEnvironment.values[$0] ?? "")"
             }
             let request: TerminalLaunchRequest
             if agent.machineIsLocal {

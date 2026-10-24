@@ -64,11 +64,11 @@ import Testing
         #expect(HostExtensionSettingsPolicy.canPresent(id: "keepAwake", active: false))
         #expect(HostExtensionSettingsPolicy.canPresent(id: "downloads", active: true))
         #expect(!HostExtensionSettingsPolicy.canPresent(id: "downloads", active: false))
-        for id in ["studio", "attention", "appMaintenance", "usage", "music", "jev"] {
+        for id in ["studio", "attention", "appMaintenance", "usage", "music", "jev", "calendar"] {
             #expect(HostExtensionSettingsPolicy.canPresent(id: id, active: true))
             #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: false))
         }
-        for id in ["calendar", "terminal", "database", "docs", "machines", "unknown"] {
+        for id in ["terminal", "database", "docs", "machines", "unknown"] {
             #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: true))
             #expect(!HostExtensionSettingsPolicy.canPresent(id: id, active: false))
         }
@@ -169,8 +169,7 @@ import Testing
                     Issue.record("Suite rendering cannot start workers")
                     return HostWorker(
                         configuration: .init(
-                            identity: identity, extensionID: package.id, version: package.version),
-                        executable: URL(fileURLWithPath: "/usr/bin/false"))
+                            identity: identity, extensionID: package.id, version: package.version))
                 })
         }
 

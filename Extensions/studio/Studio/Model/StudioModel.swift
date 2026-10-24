@@ -295,7 +295,7 @@ final class StudioModel {
         if let facade { facade.refresh(); return }
         if let paths { libraryWatchPaths = paths }
         let home =
-            ProcessInfo.processInfo.environment["EDITH_EXTENSION_DATA_ROOT"]
+            ExtensionEnvironment.values["EDITH_EXTENSION_DATA_ROOT"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? FileManager.default.homeDirectoryForCurrentUser
         var candidates =

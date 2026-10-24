@@ -2,7 +2,7 @@ import Foundation
 
 public enum CLIToolEnvironment {
     public static func sanitized(
-        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        processEnvironment: [String: String] = ExtensionEnvironment.values,
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> [String: String] {
@@ -24,7 +24,7 @@ public enum CLIToolEnvironment {
 
     public static func executable(
         named name: String,
-        processEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        processEnvironment: [String: String] = ExtensionEnvironment.values,
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> URL? {

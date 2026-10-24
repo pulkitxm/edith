@@ -137,7 +137,7 @@ public actor SSHConnection {
         let connectionID = controlSocketMode == .isolated ? UUID() : nil
         socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
         let home =
-            ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+            ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
                 URL(fileURLWithPath: $0)
             } ?? FileManager.default.homeDirectoryForCurrentUser
         let userKnownHosts = home.appendingPathComponent(".ssh/known_hosts").path

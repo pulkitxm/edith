@@ -36,10 +36,10 @@ enum AttentionPeer {
 
 enum AttentionCloudStorage {
     static var directory: URL {
-        if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
+        if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
             return AttentionPaths.root.appendingPathComponent("fixture-cloud", isDirectory: true)
         }
-        if let path = ProcessInfo.processInfo.environment["EDITH_ATTENTION_CLOUD_ROOT"],
+        if let path = ExtensionEnvironment.values["EDITH_ATTENTION_CLOUD_ROOT"],
             path.hasPrefix("/")
         {
             return URL(fileURLWithPath: path, isDirectory: true)
@@ -49,7 +49,7 @@ enum AttentionCloudStorage {
                 "Library/Mobile Documents/com~apple~CloudDocs/Edith/Attention", isDirectory: true)
     }
     static var available: Bool {
-        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
+        guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
             return false
         }
         let cloudDocs = directory.deletingLastPathComponent().deletingLastPathComponent()
@@ -76,7 +76,7 @@ enum AttentionMediaNotifications {
     static var state: String { namespace + ".musicState" }
     static var request: String { namespace + ".requestMusicState" }
     private static var namespace: String {
-        ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+        ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
             ?? "edith.attention.testing"
     }
     static func observe(_ name: String, _ action: @escaping ([AnyHashable: Any]) -> Void)

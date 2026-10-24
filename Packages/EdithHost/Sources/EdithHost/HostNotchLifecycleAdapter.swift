@@ -343,6 +343,7 @@ private final class HostNotchEnginePeer {
     private let version: String
     private let process: HostRemoteKernelIdentity
     private let endpoint: ExtensionPeerEndpoint
+    private let generation: UUID?
     private var attach: HostNotchPanelAttach?
     private var pending = 0
 
@@ -352,6 +353,7 @@ private final class HostNotchEnginePeer {
             throw HostWorkerError.rejected
         }
         process = try .read(pid)
+        generation = marketplace.sessions.workerGenerations["notchShelf"]
         endpoint = try .init(
             namespace: marketplace.identity.identifier, owner: "notchShelf",
             directory: marketplace.identity.root.appendingPathComponent("ExtensionState/Commands"))
@@ -413,6 +415,7 @@ private final class HostNotchEnginePeer {
         guard marketplace.installed["notchShelf"]?.version == version,
             marketplace.sessions.versions["notchShelf"] == version,
             marketplace.sessions.processIdentifiers["notchShelf"] == process.pid,
+            marketplace.sessions.workerGenerations["notchShelf"] == generation,
             process.isRunning,
             cleanup
                 || (marketplace.sessions.activeIDs.contains("notchShelf")

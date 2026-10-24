@@ -81,7 +81,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
 
     override convenience init() {
         self.init(
-            mediaControlsEnabled: ProcessInfo.processInfo.environment[
+            mediaControlsEnabled: ExtensionEnvironment.values[
                 "EDITH_EXTENSION_FIXTURE_HOME"] == nil)
     }
 

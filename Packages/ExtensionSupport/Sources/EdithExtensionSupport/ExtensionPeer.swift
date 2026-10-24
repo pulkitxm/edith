@@ -44,7 +44,7 @@ public struct ExtensionPeerEndpoint: Sendable {
     }
 
     public static func current(owner: String) -> Self? {
-        guard let namespace = ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+        guard let namespace = ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
         else { return nil }
         guard let channel = ExtensionSharedState.current else { return nil }
         return try? Self(

@@ -3,7 +3,7 @@ import Foundation
 
 public enum CodeStatsExecutionEnvironment {
     public static var fixtureHome: URL? {
-        guard let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
+        guard let path = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"],
             path.hasPrefix("/"), !path.utf8.contains(0)
         else { return nil }
         return URL(fileURLWithPath: path, isDirectory: true)

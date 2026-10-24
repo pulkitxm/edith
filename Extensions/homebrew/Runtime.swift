@@ -38,9 +38,9 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 let path = input["dataDirectory"] as? String,
-                let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_DATA_ROOT"],
+                let root = ExtensionEnvironment.values["EDITH_EXTENSION_DATA_ROOT"],
                 URL(fileURLWithPath: path).standardizedFileURL.path
                     == URL(fileURLWithPath: root).standardizedFileURL.path
             else { return ["ok": false] as NSDictionary }

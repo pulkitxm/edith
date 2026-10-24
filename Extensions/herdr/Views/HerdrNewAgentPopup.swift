@@ -78,7 +78,8 @@ struct HerdrNewAgentPopup: View {
             onEscape: {
                 if !model.back() { dismiss() }
                 fieldFocused = true
-            })
+            }
+        )
         .onAppear { fieldFocused = true }
         .onChange(of: model.step) { _, step in
             selectionIndex = 0

@@ -43,7 +43,7 @@ public struct AgentActivityHookInstaller: Sendable {
     private let executable: URL
 
     public init(
-        home: URL = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+        home: URL = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
             URL(fileURLWithPath: $0)
         } ?? FileManager.default.homeDirectoryForCurrentUser, executable: URL
     ) {

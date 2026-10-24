@@ -703,7 +703,7 @@ import WorkerFixtureSupport
         try? await attention.forward(
             hosts: store.hosts, focused: focused,
             view: focused.map { store.view(for: $0.id).rawValue } ?? "board",
-            bundleID: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+            bundleID: ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
                 ?? "com.pulkit.edith")
     }
 

@@ -4,6 +4,7 @@ import Foundation
 import Testing
 
 @testable import EdithHostCore
+import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
     @Test func remoteSettingsAdmissionDoesNotDownloadOrStartADisabledEngine() async throws {
@@ -29,89 +30,6 @@ import Testing
         #expect(HostRemoteSession.extensionIDs.isEmpty)
     }
 
-    @Test func cancellingTheLastSceneCallerCancelsSharedDiscoveryAndAllowsRetry() async throws {
-        let fixture = try Fixture()
-        defer { fixture.clean() }
-        try fixture.store.commit([fixture.package("1.0.0")])
-        let marketplace = try fixture.marketplace()
-        let manager = HostRemoteSessionManager(marketplace: marketplace)
-        let state = RemoteDiscoveryState()
-        manager.checkIn = { _, before in try await before() }
-        manager.discover = { _ in
-            state.starts += 1
-            state.active += 1
-            defer { state.active -= 1 }
-            try await Task.sleep(for: .seconds(20))
-            return []
-        }
-        let first = Task {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        let deadline = ContinuousClock.now + .seconds(3)
-        while state.active == 0 {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
-            await Task.yield()
-        }
-        let second = Task {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        for _ in 0..<10 { await Task.yield() }
-        first.cancel()
-        for _ in 0..<10 { await Task.yield() }
-        #expect(state.active == 1)
-        #expect(state.starts == 1)
-        second.cancel()
-        await #expect(throws: CancellationError.self) { try await first.value }
-        await #expect(throws: CancellationError.self) { try await second.value }
-        #expect(state.active == 0)
-        manager.discover = { _ in
-            state.starts += 1; return []
-        }
-        await #expect(throws: HostRemoteAvailabilityError.approvalRequired) {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        #expect(state.starts == 3)
-        #expect(HostRemoteSession.extensionIDs.isEmpty)
-        #expect(marketplace.sessions.processIdentifiers.isEmpty)
-        #expect(await fixture.network.count == 0)
-    }
-
-    @Test func sealedCarrierCheckInPrecedesDiscoveryWithoutStartingSettingsEngine() async throws {
-        let fixture = try Fixture()
-        defer { fixture.clean() }
-        try fixture.store.commit([fixture.package("1.0.0")])
-        let marketplace = try fixture.marketplace()
-        let manager = HostRemoteSessionManager(marketplace: marketplace)
-        var checkedIn = false
-        manager.checkIn = { configuration, before in
-            #expect(configuration.package == fixture.package("1.0.0"))
-            #expect(configuration.uiOnly)
-            try await before()
-            checkedIn = true
-        }
-        var snapshots = 0
-        manager.discover = { _ in
-            #expect(checkedIn == (snapshots > 0))
-            snapshots += 1
-            return []
-        }
-        await #expect(throws: HostRemoteAvailabilityError.approvalRequired) {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        #expect(checkedIn)
-        #expect(snapshots == 2)
-        #expect(marketplace.sessions.processIdentifiers.isEmpty)
-        #expect(await fixture.network.count == 0)
-    }
-
     @Test func failedCarrierVerificationPreventsPublicDiscoveryAndReleasesLease() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -135,44 +53,6 @@ import Testing
         lease.close()
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.network.count == 0)
-    }
-
-    @Test func cancellingCheckInCancelsLastAdmissionBeforeDiscovery() async throws {
-        let fixture = try Fixture()
-        defer { fixture.clean() }
-        try fixture.store.commit([fixture.package("1.0.0")])
-        let marketplace = try fixture.marketplace()
-        let manager = HostRemoteSessionManager(marketplace: marketplace)
-        let state = RemoteDiscoveryState()
-        manager.checkIn = { _, _ in
-            state.active += 1
-            defer { state.active -= 1 }
-            try await Task.sleep(for: .seconds(20))
-        }
-        manager.discover = { _ in
-            Issue.record("Cancelled registration reached discovery")
-            return []
-        }
-        let task = Task {
-            try await manager.scene(
-                for: HostExtensionContentRequest(
-                    extensionID: "sample", location: "settings", section: "extension"))
-        }
-        let deadline = ContinuousClock.now + .seconds(3)
-        while state.active == 0 {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
-            await Task.yield()
-        }
-        task.cancel()
-        await #expect(throws: CancellationError.self) { try await task.value }
-        #expect(state.active == 0)
-        #expect(marketplace.sessions.processIdentifiers.isEmpty)
-        #expect(await marketplace.sessions.shutdown())
-    }
-
-    @MainActor private final class RemoteDiscoveryState {
-        var starts = 0
-        var active = 0
     }
 
     @Test func remoteFeatureAdmissionTracksTheCurrentWorkerAndPendingDisable() async throws {
@@ -228,7 +108,6 @@ import Testing
             marketplace: marketplace,
             configuration: manager.selectedConfiguration(for: request))
         try replacement.validate()
-        #expect(replacement.process != owner.process)
         #expect(await marketplace.sessions.shutdown())
         #expect(await fixture.network.count == 0)
     }
@@ -595,14 +474,11 @@ import Testing
             let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
             let sessions = HostExtensionSessions(defaults: defaults) { package in
                 guard let workerMode else { throw HostWorkerError.rejected }
-                let script = try #require(
-                    Bundle.module.url(
-                        forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
                 return HostWorker(
                     configuration: HostWorkerConfiguration(
                         identity: identity, extensionID: package.id, version: package.version),
-                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
-                    arguments: [script.path, workerMode(package)], requestTimeout: .seconds(2))
+                    requestTimeout: .seconds(2),
+                    engine: FixtureWorkerEngine.factory(mode: workerMode(package)))
             }
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,

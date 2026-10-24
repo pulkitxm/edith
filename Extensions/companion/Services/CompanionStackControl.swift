@@ -216,7 +216,7 @@ public enum CompanionShell {
     }
 
     static var environment: [String: String] {
-        var environment = ProcessInfo.processInfo.environment
+        var environment = ExtensionEnvironment.values
         let path = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + path
         return environment.filter { !$0.key.hasPrefix("EDITH_EXTENSION_") }

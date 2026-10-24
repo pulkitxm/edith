@@ -7,7 +7,7 @@ public enum CompanionSource {
 
     public static func locate() -> URL? {
         var candidates: [String] = []
-        if let override = ProcessInfo.processInfo.environment[environmentKey] {
+        if let override = ExtensionEnvironment.values[environmentKey] {
             candidates.append(override)
         }
         let home = FileManager.default.homeDirectoryForCurrentUser.path

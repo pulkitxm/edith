@@ -133,19 +133,6 @@ struct HostEntry: AppExtension {
         if arguments == ["--extension-command"] {
             do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
         }
-        if arguments == ["--extension-core"] {
-            do { try HostCoreServiceRole.run() } catch { exit(1) }
-            return
-        }
-        if arguments == ["--extension-worker"] {
-            setenv("EDITH_EXTENSION_WORKER", "1", 1)
-            guard setpgid(0, 0) == 0 || getpgrp() == getpid() else { exit(1) }
-            do {
-                let worker = try HostWorkerApplication()
-                worker.run()
-            } catch { exit(1) }
-            return
-        }
         guard arguments.isEmpty else { HostCommandCLI.main(arguments: arguments) }
         HostApplication.main()
     }

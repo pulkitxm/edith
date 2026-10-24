@@ -13,7 +13,7 @@ enum CLIEnvironment {
     nonisolated(unsafe) static var sharedDefaults = SharedDefaults.store
     nonisolated(unsafe) static var standardDefaults = SharedDefaults.store
     nonisolated(unsafe) static var homeDirectory = URL(
-        fileURLWithPath: ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        fileURLWithPath: ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             ?? FileManager.default.homeDirectoryForCurrentUser.path)
     nonisolated(unsafe) static var executableNamed: @Sendable (String) -> URL? = {
         CLIToolEnvironment.executable(named: $0)

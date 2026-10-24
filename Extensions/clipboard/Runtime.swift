@@ -32,7 +32,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         #if !EDITH_FUNCTIONAL_FIXTURE
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             request["hostedFunctionalFixture"] == nil
         else { completion(nil, "The functional fixture is unavailable."); return }
         #endif
@@ -71,7 +71,7 @@ final class ExtensionRuntime: NSObject {
         #if EDITH_FUNCTIONAL_FIXTURE
         try signedFixture?.requireCurrent()
         #else
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
             throw ExtensionPeerError.invalidRequest
         }
         #endif
@@ -177,7 +177,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         #if !EDITH_FUNCTIONAL_FIXTURE
-        if ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+        if ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || input["hostedFunctionalFixture"] != nil
         {
             let allowed = [
@@ -235,7 +235,7 @@ final class ExtensionRuntime: NSObject {
                 signedFixture = admission
                 #endif
                 guard let suite = input["defaultsSuite"] as? String,
-                    suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                    suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
                 guard worker == nil else { return ["ok": true] as NSDictionary }
                 let construct: (Bool) throws -> Void = { [self] fixture in
@@ -284,7 +284,7 @@ final class ExtensionRuntime: NSObject {
                 }
                 #else
                 try construct(
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
+                    ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
                 #endif
             } catch {
                 #if EDITH_FUNCTIONAL_FIXTURE
@@ -313,7 +313,7 @@ final class ExtensionRuntime: NSObject {
                 })
         case "pick":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
+            guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
                 return ["ok": false] as NSDictionary
             }
             worker?.panel.show()

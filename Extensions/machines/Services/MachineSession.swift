@@ -1063,7 +1063,7 @@ public final class MachineSession {
         }
         if synthetic {
             return .success(
-                ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] ?? "/tmp")
+                ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] ?? "/tmp")
         }
 
         if isLocal { return .success(FileManager.default.homeDirectoryForCurrentUser.path) }

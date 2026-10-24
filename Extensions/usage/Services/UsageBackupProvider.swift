@@ -43,7 +43,7 @@ import IOKit.ps
             == kIOPMBatteryPowerKey
     }
 
-    static func live(environment: [String: String] = ProcessInfo.processInfo.environment) throws
+    static func live(environment: [String: String] = ExtensionEnvironment.values) throws
         -> UsageBackupProvider
     {
         guard let identifier = environment["EDITH_APPLICATION_IDENTIFIER"],

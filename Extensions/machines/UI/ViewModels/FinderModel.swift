@@ -1556,7 +1556,8 @@ extension FinderModel {
     ) async {
         guard let client = session.uiClient else { return }
         let requestedPath = path
-        let load = [.load, .places, .home, .search].contains(operation) ? listingLoad : mutationLoad
+        let load =
+            [.load, .places, .home, .search].contains(operation) ? listingLoad : mutationLoad
         let request = load.begin()
         let value = MachineFileRequest(
             viewID: remoteViewID, machineID: session.id, operation: operation,

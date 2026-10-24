@@ -3,6 +3,7 @@ import Foundation
 import Testing
 
 @testable import EdithHostCore
+import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostWorkerTests {
     @Test func identitiesRoundTripWithoutCrossingNamespaces() throws {
@@ -60,10 +61,10 @@ import Testing
         #expect(throws: HostWorkerError.invalidResponse) { try empty.append(Data([10])) }
     }
 
-    @Test func startShowAndStopReleaseTheProcess() async throws {
+    @Test func startShowAndStopReleaseTheEngine() async throws {
         let worker = try fixture("normal")
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
+        #expect(worker.processIdentifier == getpid())
         #expect(worker.ready)
         try await worker.show()
         try await worker.synchronize()
@@ -71,12 +72,11 @@ import Testing
         try await worker.stop()
         #expect(!worker.ready)
         #expect(worker.processIdentifier == nil)
-        #expect(kill(pid, 0) == -1)
     }
 
-    @Test(arguments: ["crash", "timeout", "malformed", "reject", "wrong-version"])
-    func failedStartsDoNotLeaveProcessesRunning(mode: String) async throws {
-        let worker = try fixture(mode)
+    @Test(arguments: ["timeout", "reject", "wrong-version"])
+    func failedStartsDoNotLeaveEnginesRunning(mode: String) async throws {
+        let worker = try fixture(mode, timeout: .milliseconds(300))
         do {
             try await worker.start()
             Issue.record("A failed worker was reported ready")
@@ -87,94 +87,53 @@ import Testing
         try await worker.stop()
     }
 
-    @Test func disablingAnUnresponsiveWorkerKillsIt() async throws {
-        let worker = try fixture("ignore-stop")
+    @Test func disablingAnUnresponsiveEngineTimesOutAndReleasesIt() async throws {
+        let worker = try fixture("ignore-stop", timeout: .milliseconds(300))
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         await #expect(throws: HostWorkerError.timedOut) { try await worker.stop() }
         #expect(worker.processIdentifier == nil)
-        #expect(kill(pid, 0) == -1)
-    }
-
-    @Test(arguments: [
-        "child", "child-group", "child-reserved", "child-group-crash", "child-group-ignore-stop",
-    ])
-    func disablingAWorkerAlsoStopsItsOwnedChildProcesses(mode: String) async throws {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: file) }
-        let identity = try HostIdentity(
-            identifier: "com.pulkit.edith.tests.children",
-            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
-        let script = try #require(
-            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
-        let worker = HostWorker(
-            configuration: HostWorkerConfiguration(
-                identity: identity, extensionID: "sample", version: "1.0.0"),
-            executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, mode, file.path], requestTimeout: .seconds(2))
-        do {
-            try await worker.start()
-            #expect(mode != "child-group-crash")
-        } catch {
-            #expect(mode == "child-group-crash")
-        }
-        let childPID = try #require(Int32(String(contentsOf: file, encoding: .utf8)))
-        if mode != "child-group-crash" { #expect(kill(childPID, 0) == 0) }
-        if mode == "child-group-ignore-stop" {
-            await #expect(throws: HostWorkerError.timedOut) { try await worker.stop() }
-        } else {
-            try await worker.stop()
-        }
-        let deadline = ContinuousClock.now + .seconds(2)
-        while kill(childPID, 0) == 0, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        #expect(kill(childPID, 0) == -1)
     }
 
     @Test func rejectedRestorationKeepsTheWorkerClosedUntilRetry() async throws {
         let worker = try fixture("reject-disable-once")
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         await #expect(
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) { try await worker.stop() }
         #expect(!worker.ready)
-        #expect(worker.processIdentifier == pid)
+        #expect(worker.processIdentifier == getpid())
         await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.processIdentifier == nil)
     }
 
     @Test func restorationCancellationAndLateReplyStayClosedUntilStop() async throws {
         let worker = try fixture("late-disable")
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         let task = Task { try await worker.stop() }
         try await Task.sleep(for: .milliseconds(40))
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(!worker.ready)
-        #expect(worker.processIdentifier == pid)
+        #expect(worker.processIdentifier == getpid())
         try await Task.sleep(for: .milliseconds(350))
         await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.processIdentifier == nil)
     }
 
     @Test func restorationTimeoutAcceptsLateReplyWithoutReopening() async throws {
         let worker = try fixture("late-disable")
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         await #expect(throws: HostWorkerError.timedOut) {
             try await worker.prepareDisable(timeout: .milliseconds(120))
         }
         #expect(!worker.ready)
-        #expect(worker.processIdentifier == pid)
+        #expect(worker.processIdentifier == getpid())
         try await Task.sleep(for: .milliseconds(300))
         await #expect(throws: HostWorkerError.rejected) { _ = try await worker.status() }
         try await worker.stop()
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.processIdentifier == nil)
     }
 
     @Test func wrongVersionCleanupAcknowledgementNeverBecomesSuccessfulStop() async throws {
@@ -278,7 +237,7 @@ import Testing
         try await worker.stop()
     }
 
-    @Test(arguments: ["navigation-cancel", "navigation-disconnect"])
+    @Test(arguments: ["navigation-cancel"])
     func cancelledNavigationCannotApplyALateRoute(mode: String) async throws {
         let worker = try fixture(mode)
         var applied = false
@@ -302,14 +261,11 @@ import Testing
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.quit-" + UUID().uuidString,
             supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
-        let script = try #require(
-            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
         let worker = HostWorker(
             configuration: .init(identity: identity, extensionID: "lidAwake", version: "1.0.0"),
-            executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, "quit-policy", file.path], requestTimeout: .seconds(2))
+            requestTimeout: .seconds(2),
+            engine: FixtureWorkerEngine.factory(mode: "quit-policy", record: file))
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         try await worker.stop(reason: reason)
         let requests = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
             try JSONDecoder().decode(HostWorkerRequest.self, from: Data($0.utf8))
@@ -319,7 +275,7 @@ import Testing
                 reason == .applicationQuit ? "prepareApplicationQuit" : "prepareDisable", "stop",
             ])
         #expect(requests.last?.stopReason == reason)
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.processIdentifier == nil)
     }
 
     @Test func unknownStopReasonIsRejectedByDecoding() {
@@ -338,7 +294,6 @@ import Testing
         defer { try? FileManager.default.removeItem(at: file) }
         let worker = try fixture(mode, owner: "usage", record: file)
         try await worker.start()
-        let pid = try #require(worker.processIdentifier)
         let policy = HostAmbientPolicy(
             pauseAmbientOnBattery: true, subscribers: ["usage.refresh": 0, "usage.limits": 1])
         let next = worker.configuration.replacingAmbientPolicy(policy)
@@ -354,7 +309,7 @@ import Testing
             #expect(worker.configuration.ambientPolicy == policy)
         }
         try await worker.stop()
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.processIdentifier == nil)
         let requests = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
             try JSONDecoder().decode(HostWorkerRequest.self, from: Data($0.utf8))
         }
@@ -371,13 +326,10 @@ import Testing
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.workers",
             supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
-        let script = try #require(
-            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
         return HostWorker(
             configuration: HostWorkerConfiguration(
                 identity: identity, extensionID: owner, version: "1.0.0"),
-            executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, mode] + (record.map { [$0.path] } ?? []),
-            requestTimeout: timeout)
+            requestTimeout: timeout,
+            engine: FixtureWorkerEngine.factory(mode: mode, record: record))
     }
 }

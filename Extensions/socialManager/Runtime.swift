@@ -57,7 +57,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "start":
             guard !suspended, let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             started = true
         case "configureUI":

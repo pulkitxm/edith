@@ -56,6 +56,7 @@ import Foundation
             marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.versions[id] == package.version,
             let pid = marketplace.sessions.processIdentifiers[id], kill(pid, 0) == 0,
+            let generation = marketplace.sessions.workerGenerations[id],
             let operation = request.operation
         else {
             if request.action == .terminal {
@@ -81,6 +82,7 @@ import Foundation
         try Task.checkCancellation()
         guard marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.processIdentifiers[id] == pid,
+            marketplace.sessions.workerGenerations[id] == generation,
             marketplace.sessions.versions[id] == package.version,
             marketplace.installed[id]?.version == package.version,
             result.count <= ExtensionPeerEndpoint.maximumPayloadBytes,

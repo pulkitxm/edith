@@ -48,7 +48,7 @@ final class BifrostStore: FeatureModule {
         self.init(
             store: SharedDefaults.store, indexStore: .shared,
             rateStore: .shared,
-            startServices: ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+            startServices: ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"]
                 != "1",
             fetchRates: { BifrostFixture.enabled ? nil : await BifrostRateFeed.fetch() },
             scan: {

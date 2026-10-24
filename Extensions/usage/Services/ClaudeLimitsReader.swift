@@ -189,7 +189,7 @@ public enum ClaudeLimitsReader {
     }
 
     static func resolveToken(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = ExtensionEnvironment.values,
         shell: () async -> [String: String]? = {
             UserShellEnvironment.shared.enable()
             await UserShellEnvironment.shared.refreshIfEnabled()

@@ -158,7 +158,10 @@ struct HostExtensionReview: View {
             }.padding(.horizontal, UIScale.pt(18)).padding(.vertical, UIScale.pt(12)).background(
                 .bar)
         }
-        .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(Self.idealHeight(for: entry.id)))
+        .frame(
+            width: PresentationMetrics.width(560),
+            height: PresentationMetrics.height(Self.idealHeight(for: entry.id))
+        )
         .tracksWindowVisibility()
         .interactiveDismissDisabled(busy)
         .onDisappear {

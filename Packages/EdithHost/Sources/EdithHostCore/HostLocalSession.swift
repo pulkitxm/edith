@@ -54,6 +54,8 @@ final class HostLocalSession {
             let lease = try marketplace.packageStore.lease(package)
             let runtimes = try Self.load(
                 package, store: marketplace.packageStore,
+                interface: marketplace.identity.root.appendingPathComponent(
+                    "ExtensionState/Interface", isDirectory: true),
                 development: marketplace.identity.development)
             if let previous = Self.loaded[package.id] { Self.superseded.append(previous) }
             Self.loaded[package.id] = Loaded(
@@ -73,10 +75,16 @@ final class HostLocalSession {
     }
 
     private static func load(
-        _ package: ExtensionPackage, store: ExtensionPackageStore, development: Bool
+        _ package: ExtensionPackage, store: ExtensionPackageStore, interface: URL,
+        development: Bool
     ) throws -> [ExtensionBundleRuntime] {
-        let payload = store.payloadDirectory(for: package)
-        let directory = payload.deletingLastPathComponent()
+        let directory = interface.appendingPathComponent(
+            "\(package.id)-\(package.version)-\(UUID().uuidString)", isDirectory: true)
+        let payload = directory.appendingPathComponent(package.id, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        try FileManager.default.copyItem(at: store.payloadDirectory(for: package), to: payload)
         let team = ExtensionCodeSignature.teamIdentifier()
         var runtimes: [ExtensionBundleRuntime] = []
         for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {

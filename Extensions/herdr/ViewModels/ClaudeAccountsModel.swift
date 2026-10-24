@@ -28,14 +28,14 @@ import Observation
     var hasConfiguredStore: Bool {
         suppliedDirectory != nil
             || (try? ClaudeAccountStorage.directory(
-                environment: ProcessInfo.processInfo.environment)) != nil
+                environment: ExtensionEnvironment.values)) != nil
     }
 
     var directory: URL {
         get throws {
             if let suppliedDirectory { return suppliedDirectory }
             return try ClaudeAccountStorage.directory(
-                environment: ProcessInfo.processInfo.environment)
+                environment: ExtensionEnvironment.values)
         }
     }
 
@@ -324,8 +324,7 @@ import Observation
                     throw ExtensionPeerError.invalidRequest
                 }
                 var environment = CLIToolEnvironment.sanitized()
-                if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
-                {
+                if let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
                     environment["HOME"] = fixture
                     environment["ZDOTDIR"] = fixture
                 }
@@ -359,7 +358,7 @@ import Observation
                     ])), accountID: id, ticket: ticket)
         }
         var environment = CLIToolEnvironment.sanitized()
-        if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+        if let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
             environment["HOME"] = fixture
             environment["ZDOTDIR"] = fixture
         }

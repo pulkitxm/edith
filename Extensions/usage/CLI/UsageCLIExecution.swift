@@ -117,7 +117,7 @@ import Foundation
     static func runStatusLine(_ command: String, input: Data) async throws -> Data {
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
-            arguments: ["-c", command], environment: ProcessInfo.processInfo.environment,
+            arguments: ["-c", command], environment: ExtensionEnvironment.values,
             currentDirectoryURL: try ExtensionCLIContext.resolvePath("."), timeout: 10,
             maximumOutputBytes: 65_536, standardInputData: input,
             discardsStandardError: true, terminatesProcessGroup: true)

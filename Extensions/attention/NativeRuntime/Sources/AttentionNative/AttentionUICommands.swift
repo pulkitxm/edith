@@ -11,7 +11,7 @@ import Foundation
     ) async throws -> Data {
         guard payload.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
-        if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+        if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
             [
                 "attention.ui.extension.install", "attention.ui.extension.open",
                 "attention.ui.token.copy",
@@ -71,7 +71,7 @@ import Foundation
             guard payload.count <= 1024 else { throw ExtensionPeerError.invalidRequest }
             let id = try AttentionPayload.decode(String.self, from: payload)
             guard !id.isEmpty, id.utf8.count <= 256 else { throw ExtensionPeerError.invalidRequest }
-            let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             let icon = fixture ? nil : await AttentionApplicationIcon.resolve(bundleID: id)
             let data = icon?.tiffRepresentation.flatMap {
                 NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])

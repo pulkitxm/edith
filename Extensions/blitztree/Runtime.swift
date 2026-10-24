@@ -97,7 +97,7 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = BlitzTreeModel() }
         case "configureUI":

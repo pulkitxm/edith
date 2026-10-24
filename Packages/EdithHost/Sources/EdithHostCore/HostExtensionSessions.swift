@@ -88,6 +88,9 @@ public final class HostExtensionSessions {
     public var processIdentifiers: [String: Int32] {
         workers.compactMapValues(\.processIdentifier)
     }
+    public var workerGenerations: [String: UUID] {
+        workers.filter { $0.value.processIdentifier != nil }.mapValues(\.generation)
+    }
 
     #if EDITH_FUNCTIONAL_FIXTURE
     public func fixtureStartingWorker(

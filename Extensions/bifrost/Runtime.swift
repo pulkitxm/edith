@@ -169,14 +169,14 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
             if worker == nil {
                 let created = BifrostWorker(); worker = created;
                 surface = BifrostSurface(store: created.store)
             }
-            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] != "1" {
+            if ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] != "1" {
                 TextEditingCommands.install()
             }
         case "view":

@@ -166,7 +166,8 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
             minimumSize: NSSize(width: target.minimumWidth, height: target.minimumHeight),
             chrome: HostWindowStyle(
                 tabbingIdentifier: nil,
-                autosaveName: target.location == "herdr.space" ? "EdithHerdrSpaceWindow" : "EdithHerdrAgentWindow"))
+                autosaveName: target.location == "herdr.space"
+                    ? "EdithHerdrSpaceWindow" : "EdithHerdrAgentWindow"))
     }
 
     func closeHerdrOwned(id: UUID) {

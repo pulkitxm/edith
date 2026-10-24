@@ -10,7 +10,7 @@ public enum DownloadsStorage {
         resolvedAudioDirectory(
             defaults: SharedDefaults.store,
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
-            environment: ProcessInfo.processInfo.environment, root: ExtensionData.root)
+            environment: ExtensionEnvironment.values, root: ExtensionData.root)
     }
 
     public static func resolvedAudioDirectory(

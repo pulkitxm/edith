@@ -41,10 +41,10 @@ public struct SkillInstaller: Sendable {
 
     public func install(
         skill: EdithSkill, agentIDs: [String],
-        home: URL = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+        home: URL = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
             URL(fileURLWithPath: $0)
         } ?? FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = ExtensionEnvironment.values,
         log: @escaping Log = { _ in }
     ) async throws {
         try Task.checkCancellation()

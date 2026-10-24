@@ -170,7 +170,7 @@ final class NotchShelfController {
             self.homeContentHeight = nil
             self.updatePanelFrames()
         }
-        if let namespace = ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"] {
+        if let namespace = ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"] {
             hostAlertObserver = DistributedNotificationCenter.default().addObserver(
                 forName: Notification.Name(namespace + ".notchAlert"), object: nil, queue: .main
             ) { [weak self] note in

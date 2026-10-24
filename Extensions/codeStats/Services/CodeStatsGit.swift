@@ -80,7 +80,7 @@ public struct CodeStatsGit: Sendable {
     }
 
     static func activeDeveloperDirectory() async -> String? {
-        if let configured = ProcessInfo.processInfo.environment["DEVELOPER_DIR"],
+        if let configured = ExtensionEnvironment.values["DEVELOPER_DIR"],
             !configured.isEmpty
         {
             return configured

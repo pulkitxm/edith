@@ -146,7 +146,8 @@ public struct FileInfoSummary: Equatable, Sendable {
         name = entry.name
         path = entry.path
         kind = entry.kindDescription
-        size = sizeOverride ?? (entry.isDirectory ? "\u{2014}" : ByteFormatter.string(entry.sizeBytes))
+        size =
+            sizeOverride ?? (entry.isDirectory ? "\u{2014}" : ByteFormatter.string(entry.sizeBytes))
         modified =
             entry.modified.map { $0.formatted(date: .long, time: .standard) } ?? "Unknown"
         permissions = FileInfoSummary.describe(mode: entry.mode)

@@ -25,7 +25,7 @@ struct VideoProject {
     }
 
     static var openScreenLibraryURL: URL {
-        if let fixture = ProcessInfo.processInfo.environment["EDITH_TEST_RUNTIME_ROOT"],
+        if let fixture = ExtensionEnvironment.values["EDITH_TEST_RUNTIME_ROOT"],
             !fixture.isEmpty
         {
             return URL(fileURLWithPath: fixture, isDirectory: true)

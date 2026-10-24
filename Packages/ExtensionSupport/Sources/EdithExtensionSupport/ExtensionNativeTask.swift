@@ -11,7 +11,7 @@ public enum ExtensionNativeTask {
 
     public static func registerChild(_ pid: Int32) throws {
         guard ExtensionCommandOwnership.isWorker else { return }
-        guard let owner = ProcessInfo.processInfo.environment["EDITH_EXTENSION_ID"],
+        guard let owner = ExtensionEnvironment.values["EDITH_EXTENSION_ID"],
             let endpoint = ExtensionPeerEndpoint.current(owner: owner)
         else { throw ExtensionPeerError.unavailable }
         let result = NativeRegistration()

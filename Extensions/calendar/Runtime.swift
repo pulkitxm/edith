@@ -175,7 +175,7 @@ final class ExtensionRuntime: NSObject {
             guard !stopping, !ExtensionHostRole.isInterfaceProcess,
                 uiPresentations.isEmpty,
                 let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             do {
                 let admission = try CalendarFixtureAdmission.current(input)
@@ -272,7 +272,7 @@ struct CalendarFixtureAdmission {
     static func current(_ context: NSDictionary) throws -> Self? {
         let role = Bundle(for: ExtensionRuntime.self)
         return try admit(
-            context: context, environment: ProcessInfo.processInfo.environment,
+            context: context, environment: ExtensionEnvironment.values,
             hostIdentifier: Bundle.main.bundleIdentifier, hostBundle: Bundle.main.bundleURL,
             roleBundle: role.bundleURL,
             roleIdentifier: role.bundleIdentifier,

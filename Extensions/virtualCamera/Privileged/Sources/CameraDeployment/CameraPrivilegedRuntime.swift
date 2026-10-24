@@ -14,7 +14,7 @@ final class CameraPrivilegedRuntime: NSObject {
     private var host: String { Bundle.main.bundleIdentifier ?? "" }
     private var fixture: Bool {
         getuid() != 0 && host.hasPrefix("com.pulkit.edith.tests.")
-            && ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            && ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
     private var journal: URL {
         bundle.bundleURL.deletingLastPathComponent().appendingPathComponent(
@@ -38,7 +38,7 @@ final class CameraPrivilegedRuntime: NSObject {
                     else { throw CocoaError(.coderReadCorrupt) }
                     if fixture {
                         guard
-                            let root = ProcessInfo.processInfo.environment[
+                            let root = ExtensionEnvironment.values[
                                 "EDITH_EXTENSION_FIXTURE_HOME"], source.hasPrefix(root + "/")
                         else { throw CocoaError(.fileReadNoPermission) }
                         result = ["path": source]

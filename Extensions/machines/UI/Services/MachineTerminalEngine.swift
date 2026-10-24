@@ -49,7 +49,7 @@ import GhosttyTerminal
                 MachinePTYLaunch(
                     executable: SSHConnection.executable.path, arguments: arguments,
                     environment: TerminalLaunchPlan.environment(
-                        base: ProcessInfo.processInfo.environment, shell: "/bin/zsh") + environment,
+                        base: ExtensionEnvironment.values, shell: "/bin/zsh") + environment,
                     currentDirectory: NSHomeDirectory(), startupCommand: nil)
             }
     ) {
@@ -72,7 +72,7 @@ import GhosttyTerminal
         throws -> MachinePTYLaunch
     {
         let environment = TerminalLaunchPlan.environment(
-            base: ProcessInfo.processInfo.environment, shell: "/bin/zsh")
+            base: ExtensionEnvironment.values, shell: "/bin/zsh")
         if let containerID = request.containerID {
             guard session.containers.contains(where: { $0.id == containerID }) else {
                 throw MachineUIError.invalidRequest

@@ -6,8 +6,10 @@ public enum ExtensionCommandOwnership {
         "edith.extension.registerProcessGroup")
     public static let releaseNotification = Notification.Name("edith.extension.releaseProcessGroup")
     public static var isWorker: Bool {
-        ProcessInfo.processInfo.environment["EDITH_EXTENSION_WORKER"] == "1"
+        ExtensionEnvironment["EDITH_EXTENSION_WORKER"] == "1"
     }
+
+    private static var owner: String { ExtensionEnvironment["EDITH_EXTENSION_ID"] ?? "" }
 
     public static func captureGroup(pid: Int32) throws -> ExtensionOwnedProcessGroup {
         guard let birth = ExtensionProcessIdentity.read(pid),
@@ -21,14 +23,15 @@ public enum ExtensionCommandOwnership {
         var accepted = false
         let accept: (Bool) -> Void = { accepted = $0 }
         NotificationCenter.default.post(
-            name: registerNotification, object: nil, userInfo: ["pid": pid, "accept": accept])
+            name: registerNotification, object: nil,
+            userInfo: ["pid": pid, "accept": accept, "owner": owner])
         guard accepted else { throw CocoaError(.executableLoad) }
     }
 
     public static func release(_ pid: Int32) {
         guard isWorker else { return }
         NotificationCenter.default.post(
-            name: releaseNotification, object: nil, userInfo: ["pid": pid])
+            name: releaseNotification, object: nil, userInfo: ["pid": pid, "owner": owner])
     }
 }
 

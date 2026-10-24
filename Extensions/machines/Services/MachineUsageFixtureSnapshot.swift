@@ -3,7 +3,7 @@ import EdithExtensionSupport
 import Foundation
 
 public enum MachineUsageFixtureSnapshot {
-    public static func load(environment: [String: String] = ProcessInfo.processInfo.environment)
+    public static func load(environment: [String: String] = ExtensionEnvironment.values)
         throws -> Data
     {
         guard let path = environment["EDITH_EXTENSION_FIXTURE_HOME"], !path.isEmpty else {

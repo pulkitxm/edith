@@ -9,6 +9,7 @@ import SwiftUI
 import Testing
 
 @testable import EdithHost
+import HostWorkerFixtureSupport
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
@@ -169,11 +170,14 @@ import Testing
             await fixture.marketplace.enable(id: id)
         }
         #expect(fixture.marketplace.sessions.activeIDs == ["keepAwake", "lidAwake", "clipboard"])
-        let old = fixture.marketplace.sessions.processIdentifiers
+        let old = Dictionary(
+            uniqueKeysWithValues: ["keepAwake", "lidAwake", "clipboard"].compactMap { id in
+                fixture.worker(id).map { (id, $0) }
+            })
         await selection.setEnabled(false, suite: suite)
         #expect(!selection.enabled(suite))
         #expect(fixture.marketplace.sessions.activeIDs == ["clipboard"])
-        #expect(fixture.marketplace.sessions.processIdentifiers["clipboard"] == old["clipboard"])
+        #expect(fixture.worker("clipboard") === old["clipboard"])
         #expect(
             fixture.defaults.stringArray(forKey: suite.defaultsKey + "Selections") == [
                 "keepAwake", "lidAwake",
@@ -184,16 +188,17 @@ import Testing
         #expect(fixture.marketplace.downloadedIDs == ["keepAwake", "lidAwake", "clipboard"])
         if rejectDisable {
             #expect(fixture.marketplace.sessions.pendingDisableIDs == ["lidAwake"])
-            #expect(fixture.marketplace.sessions.processIdentifiers["lidAwake"] == old["lidAwake"])
+            #expect(fixture.worker("lidAwake") === old["lidAwake"])
+            #expect(old["lidAwake"]?.isStopped == false)
         } else {
             #expect(fixture.marketplace.sessions.processIdentifiers.count == 1)
-            for id in ["keepAwake", "lidAwake"] { #expect(kill(try #require(old[id]), 0) == -1) }
+            for id in ["keepAwake", "lidAwake"] { #expect(try #require(old[id]).isStopped) }
         }
         await selection.setEnabled(true, suite: suite)
         #expect(selection.enabled(suite))
         #expect(fixture.marketplace.sessions.activeIDs == ["keepAwake", "lidAwake", "clipboard"])
         #expect(fixture.marketplace.sessions.pendingDisableIDs.isEmpty)
-        #expect(fixture.marketplace.sessions.processIdentifiers["keepAwake"] != old["keepAwake"])
+        #expect(fixture.worker("keepAwake") !== old["keepAwake"])
         if rejectDisable { #expect(await fixture.marketplace.sessions.shutdown() == false) }
         #expect(await fixture.marketplace.sessions.shutdown())
     }
@@ -1027,7 +1032,7 @@ import Testing
         let fixture = try SuiteFixture(rejectDisable: false)
         defer { fixture.clean() }
         await fixture.marketplace.enable(id: "keepAwake")
-        let pid = fixture.marketplace.sessions.processIdentifiers["keepAwake"]
+        let worker = fixture.worker("keepAwake")
         let restore = try enableAccessibility()
         defer { restore() }
         var opened: [String] = []
@@ -1046,7 +1051,7 @@ import Testing
         let button = try #require(find(host, label: "Open Keep Awake"))
         #expect((button as AnyObject).accessibilityPerformPress?() == true)
         #expect(opened == ["keepAwake"])
-        #expect(fixture.marketplace.sessions.processIdentifiers["keepAwake"] == pid)
+        #expect(fixture.worker("keepAwake") === worker)
         #expect(HostNavigationCatalog.route(extensionID: "usage")?.page == "dashboard")
         #expect(HostNavigationCatalog.route(extensionID: "system")?.page == "runningApps")
         #expect(HostNavigationCatalog.route(extensionID: "music")?.page == "music")
@@ -1126,10 +1131,17 @@ import Testing
         }
     }
 
+    @MainActor private final class SuiteWorkerRecords { var workers: [HostWorker] = [] }
+
     @MainActor private struct SuiteFixture {
         let directory: URL
         let marketplace: HostMarketplace
         let defaults: UserDefaults
+        let records = SuiteWorkerRecords()
+
+        func worker(_ id: String) -> HostWorker? {
+            records.workers.last { $0.configuration.extensionID == id }
+        }
 
         init(rejectDisable: Bool) throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -1159,19 +1171,17 @@ import Testing
                 packages.append(package)
             }
             try store.commit(packages)
-            let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("EdithHostCoreTests/Fixtures/worker.py")
+            let records = records
             let sessions = HostExtensionSessions(defaults: defaults) { package in
-                HostWorker(
+                let worker = HostWorker(
                     configuration: HostWorkerConfiguration(
                         identity: identity, extensionID: package.id, version: package.version),
-                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
-                    arguments: [
-                        script.path,
-                        rejectDisable && package.id == "lidAwake"
-                            ? "reject-disable-once" : "normal",
-                    ], requestTimeout: .seconds(2))
+                    requestTimeout: .seconds(2),
+                    engine: FixtureWorkerEngine.factory(
+                        mode: rejectDisable && package.id == "lidAwake"
+                            ? "reject-disable-once" : "normal"))
+                records.workers.append(worker)
+                return worker
             }
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
@@ -1258,14 +1268,11 @@ import Testing
             heldLease = lease
             let sessions = HostExtensionSessions(defaults: defaults) { package in
                 guard activeIDs.contains(package.id) else { throw HostWorkerError.rejected }
-                let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-                    .deletingLastPathComponent().appendingPathComponent(
-                        "EdithHostCoreTests/Fixtures/worker.py")
                 return HostWorker(
                     configuration: HostWorkerConfiguration(
                         identity: identity, extensionID: package.id, version: package.version),
-                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
-                    arguments: [script.path, "normal"], requestTimeout: .seconds(2))
+                    requestTimeout: .seconds(2), engine: FixtureWorkerEngine.factory(mode: "normal")
+                )
             }
             let entries = try HostIndex.bundled().filter {
                 fixtureID == nil || $0.id == fixtureID

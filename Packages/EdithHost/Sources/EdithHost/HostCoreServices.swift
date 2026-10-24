@@ -25,7 +25,6 @@ import SwiftUI
     @ObservationIgnored private var activeJob: String?
     @ObservationIgnored private var cliStopping = false
     @ObservationIgnored private var observation: Task<Void, Never>?
-    @ObservationIgnored private let executable: URL
     @ObservationIgnored private let panel: HostPanelService
     @ObservationIgnored private let settingsCapture: HostSettingsArchive
     @ObservationIgnored private var settingsScheduler: HostSettingsScheduler?
@@ -36,16 +35,14 @@ import SwiftUI
 
     init(
         identity: HostIdentity, marketplace: HostMarketplace,
-        executable: URL? = Bundle.main.executableURL, togglePanel: @escaping @MainActor () -> Void
+        togglePanel: @escaping @MainActor () -> Void
     ) throws {
-        guard let executable else { throw CocoaError(.fileNoSuchFile) }
         self.identity = identity
         self.marketplace = marketplace
         defaults = marketplace.surfaces.preferences
         cloudPreferences = try HostCloudPreferences(identity: identity, application: defaults)
         settingsCapture = try HostSettingsArchive(
             identity: identity, cloudDirectory: HostCoreCloud.directory(identity: identity))
-        self.executable = executable
         panel = HostPanelService(defaults: defaults, action: togglePanel)
         marketplace.sessions.ambientPackageSelected = { [weak marketplace] package in
             guard let marketplace else { return false }
@@ -85,7 +82,7 @@ import SwiftUI
             defaults.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool ?? true
                 ? .regular : .accessory)
         panelShortcutChanged()
-        let process = HostCoreProcess(identity: identity, executable: executable)
+        let process = HostCoreProcess(identity: identity)
         self.process = process
         do {
             update(try await process.start())
@@ -465,7 +462,7 @@ import SwiftUI
     }
 
     func cliRestart() async throws {
-        guard online, !cliStopping, let previous = process?.processIdentifier else {
+        guard online, !cliStopping, process?.processIdentifier != nil else {
             throw HostCoreCommandFailure(
                 "background agent", hint: "No owned core process is available to restart.")
         }
@@ -481,11 +478,11 @@ import SwiftUI
         cliStatusFlight?.cancel(); _ = try? await cliStatusFlight?.value; cliStatusFlight = nil
         await process?.stop()
         process = nil; snapshot = nil; cpuPercent = 0
-        let next = HostCoreProcess(identity: identity, executable: executable)
+        let next = HostCoreProcess(identity: identity)
         process = next
         do {
             update(try await next.start())
-            guard online, next.processIdentifier != previous else {
+            guard online, next.processIdentifier != nil else {
                 throw HostWorkerError.invalidResponse
             }
             try Task.checkCancellation()

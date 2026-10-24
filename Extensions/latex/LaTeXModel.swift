@@ -519,7 +519,7 @@ final class LaTeXModel {
         }
     }
     func deliverPDF(save: Bool) throws {
-        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
+        guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
             let project = selected
         else { throw ExtensionPeerError.invalidRequest }
         let bytes =

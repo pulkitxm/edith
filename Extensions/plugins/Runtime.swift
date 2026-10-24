@@ -53,7 +53,7 @@ final class ExtensionRuntime: NSObject {
     private static func admitOrdinaryContext(_ context: NSDictionary) throws
         -> WorkerFixtureAdmission?
     {
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             context["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
         return try WorkerFixtureAdmission.current(
@@ -338,7 +338,7 @@ final class ExtensionRuntime: NSObject {
                 guard
                     admission != nil
                         || suite
-                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                            == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
                 if model == nil {
                     if let admission {
@@ -378,7 +378,7 @@ final class ExtensionRuntime: NSObject {
                 }
                 #else
                 let admission = try admitOrdinaryContext(input)
-                guard suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                guard suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
                 if model == nil {
                     if let admission {

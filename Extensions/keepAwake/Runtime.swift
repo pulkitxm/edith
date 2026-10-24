@@ -50,7 +50,7 @@ final class KeepAwakeRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         #if !EDITH_FUNCTIONAL_FIXTURE
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             request["hostedFunctionalFixture"] == nil
         else { completion(nil, "The functional fixture is unavailable."); return }
         #endif
@@ -83,7 +83,7 @@ final class KeepAwakeRuntime: NSObject {
             extensionID: "keepAwake", context: input,
             roleBundle: Bundle(for: KeepAwakeRuntime.self), expectedRole: .helper)
         #else
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
             input["hostedFunctionalFixture"] == nil
         else { throw WorkerFixtureError.invalid }
         return try WorkerFixtureAdmission.current(
@@ -96,7 +96,7 @@ final class KeepAwakeRuntime: NSObject {
         #if EDITH_FUNCTIONAL_FIXTURE
         try signedFixture?.requireCurrent()
         #else
-        guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil else {
             throw WorkerFixtureError.invalid
         }
         #endif
@@ -209,7 +209,7 @@ final class KeepAwakeRuntime: NSObject {
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         #if !EDITH_FUNCTIONAL_FIXTURE
-        if ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+        if ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || input["hostedFunctionalFixture"] != nil
         {
             let allowed = [
@@ -237,7 +237,7 @@ final class KeepAwakeRuntime: NSObject {
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "keepAwake",
                 configuration.defaultsSuite
-                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             stopPresentation()
             presentation = ControlPresentation(client: configuration.engineClient)

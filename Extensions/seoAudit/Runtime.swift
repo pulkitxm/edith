@@ -19,7 +19,7 @@ final class ExtensionRuntime: NSObject {
     private var draining = false
     private var uiStops: [UUID: Task<Void, Never>] = [:]
     private var fixture: Bool {
-        ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -134,7 +134,7 @@ final class ExtensionRuntime: NSObject {
         case "stopUI": stopUI()
         case "start":
             guard !draining, let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard service == nil else { return ["ok": true] as NSDictionary }
             let root = ExtensionData.root.appendingPathComponent("SEOAudit", isDirectory: true)

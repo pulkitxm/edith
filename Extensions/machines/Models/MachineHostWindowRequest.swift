@@ -11,7 +11,9 @@ struct MachineHostWindowRequest: Codable, Equatable, Sendable {
 
     func validate() throws {
         guard path.map({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }) ?? true,
-            [title, subtitle].allSatisfy({ $0.map { $0.utf8.count <= 512 && !$0.utf8.contains(0) } ?? true }),
+            [title, subtitle].allSatisfy({
+                $0.map { $0.utf8.count <= 512 && !$0.utf8.contains(0) } ?? true
+            }),
             path == nil || kind == .files
         else { throw MachineUIError.invalidRequest }
     }

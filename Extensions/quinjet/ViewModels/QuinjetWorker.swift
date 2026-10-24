@@ -30,7 +30,7 @@ import Foundation
         previewExecutable: @escaping @MainActor () -> URL? = QuinjetExecutable.local,
         resolveRemote: @escaping @MainActor (UUID) async throws -> QuinjetRemote = QuinjetWorker
             .savedRemote,
-        automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        automaticActions: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil
     ) {
         self.defaults = defaults
@@ -254,7 +254,7 @@ import Foundation
                 let request = try QuinjetOperationExecution.launchRequest(
                     executableURL: executable, worktreePath: selection.1.path,
                     remote: project.remote, configuration: .default, managedByEdith: true,
-                    localHomeDirectory: ProcessInfo.processInfo.environment[
+                    localHomeDirectory: ExtensionEnvironment.values[
                         "EDITH_EXTENSION_FIXTURE_HOME"]
                         ?? FileManager.default.homeDirectoryForCurrentUser.path)
                 return try JSONSerialization.data(withJSONObject: [

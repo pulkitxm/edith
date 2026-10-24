@@ -1,21 +1,21 @@
 import EdithExtensionSupport
-import Darwin
 import ExtensionMarketplace
 import Foundation
 import Testing
 
 @testable import EdithHostCore
+import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostExtensionSessionTests {
     @Test func UIExitFailureKeepsTheEngineAndDisableIntentUntilRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
         try await fixture.sessions.enable(fixture.package("1.0.0"))
-        let pid = try #require(fixture.sessions.processIdentifiers["sample"])
+        let worker = try #require(fixture.worker("sample"))
         fixture.sessions.willDisable = { id in
             #expect(id == "sample")
             #expect(fixture.sessions.states[id] == .stopping)
-            #expect(kill(pid, 0) == 0)
+            #expect(!worker.isStopped)
             throw HostWorkerError.stillRunning
         }
         await #expect(throws: HostWorkerError.stillRunning) {
@@ -23,16 +23,16 @@ import Testing
         }
         #expect(fixture.sessions.pendingDisableIDs == ["sample"])
         #expect(fixture.sessions.enabledIDs == ["sample"])
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
-        #expect(kill(pid, 0) == 0)
+        #expect(fixture.worker("sample") === worker)
+        #expect(!worker.isStopped)
         var detached = false
         fixture.sessions.willDisable = { _ in
-            #expect(kill(pid, 0) == 0)
+            #expect(!worker.isStopped)
             detached = true
         }
         try await fixture.sessions.disable(id: "sample")
         #expect(detached)
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.isStopped)
         #expect(fixture.sessions.pendingDisableIDs.isEmpty)
         #expect(fixture.sessions.enabledIDs.isEmpty)
     }
@@ -44,17 +44,10 @@ import Testing
             "sample": fixture.package("1.0.0"), "other": fixture.package("1.0.0", id: "other"),
         ]
         for package in packages.values { try await fixture.sessions.enable(package) }
-        let pids = Array(fixture.sessions.processIdentifiers.values)
         fixture.sessions.requestDisable(ids: ["sample", "other", "not-installed"])
         #expect(fixture.sessions.pendingDisableIDs == ["sample", "other"])
         #expect(fixture.sessions.activeIDs.isEmpty)
         #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
-        for pid in pids { #expect(kill(pid, SIGKILL) == 0) }
-        let deadline = ContinuousClock.now + .seconds(3)
-        while pids.contains(where: { kill($0, 0) == 0 }) {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
-            try await Task.sleep(for: .milliseconds(10))
-        }
         let restarted = try Fixture(suite: fixture.suite, mode: "require-recovery")
         #expect(restarted.sessions.pendingDisableIDs == ["sample", "other"])
         await restarted.sessions.restore(packages: packages)
@@ -81,9 +74,9 @@ import Testing
         defer { fixture.clean() }
         let package = fixture.package("1.0.0")
         try await fixture.sessions.enable(package)
-        let pid = try #require(fixture.sessions.processIdentifiers[package.id])
+        let worker = try #require(fixture.worker(package.id))
         await fixture.sessions.shutdown()
-        #expect(kill(pid, 0) == -1)
+        #expect(worker.isStopped)
         #expect(fixture.sessions.enabledIDs == [package.id])
         await fixture.sessions.restore(packages: [package.id: package])
         #expect(fixture.sessions.states[package.id] == .active)
@@ -100,12 +93,14 @@ import Testing
         let other = fixture.package("1.0.0", id: "other")
         try await fixture.sessions.enable(first)
         try await fixture.sessions.enable(other)
-        let oldPID = try #require(fixture.sessions.processIdentifiers[first.id])
-        let otherPID = fixture.sessions.processIdentifiers[other.id]
+        let oldWorker = try #require(fixture.worker(first.id))
+        let otherWorker = try #require(fixture.worker(other.id))
         try await fixture.sessions.applyUpdate(fixture.package("1.1.0"))
         #expect(fixture.sessions.versions[first.id] == "1.1.0")
-        #expect(kill(oldPID, 0) == -1)
-        #expect(fixture.sessions.processIdentifiers[other.id] == otherPID)
+        #expect(oldWorker.isStopped)
+        #expect(fixture.worker(first.id) !== oldWorker)
+        #expect(fixture.worker(other.id) === otherWorker)
+        #expect(!otherWorker.isStopped)
         await fixture.sessions.shutdown()
     }
 
@@ -126,7 +121,7 @@ import Testing
         let fixture = try Fixture(rejectDisable: true)
         defer { fixture.clean() }
         try await fixture.sessions.enable(fixture.package("1.0.0"))
-        let pid = fixture.sessions.processIdentifiers["sample"]
+        let worker = fixture.worker("sample")
         await #expect(
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) { try await fixture.sessions.disable(id: "sample") }
@@ -135,7 +130,7 @@ import Testing
         #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
         #expect(fixture.sessions.activeIDs.isEmpty)
         #expect(fixture.sessions.states["sample"] == .failed)
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.worker("sample") === worker)
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
         try await fixture.sessions.disable(id: "sample")
         #expect(fixture.sessions.enabledIDs.isEmpty)
@@ -146,12 +141,12 @@ import Testing
         let fixture = try Fixture(rejectDisable: true)
         defer { fixture.clean() }
         try await fixture.sessions.enable(fixture.package("1.0.0"))
-        let pid = fixture.sessions.processIdentifiers["sample"]
+        let worker = fixture.worker("sample")
         await #expect(
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) { try await fixture.sessions.applyUpdate(fixture.package("1.1.0")) }
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.worker("sample") === worker)
         #expect(fixture.sessions.enabledIDs == ["sample"])
         #expect(await fixture.sessions.shutdown())
     }
@@ -160,11 +155,11 @@ import Testing
         let fixture = try Fixture(rejectDisable: true)
         defer { fixture.clean() }
         try await fixture.sessions.enable(fixture.package("1.0.0"))
-        let pid = fixture.sessions.processIdentifiers["sample"]
+        let worker = fixture.worker("sample")
         #expect(await fixture.sessions.shutdown() == false)
         #expect(fixture.sessions.states["sample"] == .failed)
         #expect(fixture.sessions.enabledIDs == ["sample"])
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.worker("sample") === worker)
         #expect(await fixture.sessions.shutdown())
         #expect(fixture.sessions.processIdentifiers.isEmpty)
     }
@@ -210,13 +205,6 @@ import Testing
         ) {
             try await original.sessions.disable(id: "sample")
         }
-        let originalPID = try #require(original.sessions.processIdentifiers["sample"])
-        #expect(kill(originalPID, SIGKILL) == 0)
-        let deadline = ContinuousClock.now + .seconds(3)
-        while kill(originalPID, 0) == 0 {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
-            try await Task.sleep(for: .milliseconds(10))
-        }
         let restarted = try Fixture(suite: original.suite, mode: "require-recovery")
         #expect(restarted.sessions.pendingDisableIDs == ["sample"])
         #expect(restarted.sessions.activeIDs.isEmpty)
@@ -225,8 +213,6 @@ import Testing
         #expect(restarted.sessions.enabledIDs.isEmpty)
         #expect(restarted.sessions.processIdentifiers.isEmpty)
         #expect(restarted.sessions.states["sample"] == .disabled)
-        #expect(!(await original.sessions.shutdown()))
-        #expect(original.sessions.pendingDisableIDs == ["sample"])
         #expect(await original.sessions.shutdown())
         #expect(original.sessions.pendingDisableIDs.isEmpty)
     }
@@ -272,12 +258,12 @@ import Testing
         ) {
             try await fixture.sessions.disable(id: "sample")
         }
-        let pid = fixture.sessions.processIdentifiers["sample"]
+        let worker = fixture.worker("sample")
         try await fixture.sessions.enable(fixture.package("1.0.0"))
         #expect(fixture.sessions.pendingDisableIDs.isEmpty)
         #expect(fixture.sessions.activeIDs == ["sample"])
-        #expect(fixture.sessions.processIdentifiers["sample"] != pid)
-        #expect(kill(try #require(pid), 0) == -1)
+        #expect(fixture.worker("sample") !== worker)
+        #expect(try #require(worker).isStopped)
         #expect(await fixture.sessions.shutdown() == false)
         #expect(await fixture.sessions.shutdown())
     }
@@ -291,9 +277,9 @@ import Testing
         ) {
             try await fixture.sessions.disable(id: "sample")
         }
-        let pid = fixture.sessions.processIdentifiers["sample"]
+        let worker = fixture.worker("sample")
         try await fixture.sessions.applyUpdate(fixture.package("1.1.0"))
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.worker("sample") === worker)
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
         #expect(fixture.sessions.pendingDisableIDs == ["sample"])
         #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
@@ -345,10 +331,10 @@ import Testing
         fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
         let restarted = try Fixture(rejectDisable: true, suite: fixture.suite)
         await restarted.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
-        let recoveryPID = try #require(restarted.sessions.processIdentifiers["sample"])
+        let recoveryWorker = try #require(restarted.worker("sample"))
         try await restarted.sessions.enable(fixture.package("1.0.0"))
-        #expect(kill(recoveryPID, 0) == -1)
-        #expect(restarted.sessions.processIdentifiers["sample"] != recoveryPID)
+        #expect(recoveryWorker.isStopped)
+        #expect(restarted.worker("sample") !== recoveryWorker)
         #expect(restarted.sessions.pendingDisableIDs.isEmpty)
         #expect(restarted.sessions.activeIDs == ["sample"])
         #expect(await restarted.sessions.shutdown() == false)
@@ -382,7 +368,7 @@ import Testing
         let fixture = try Fixture(mode: "reject-disable-always")
         defer { fixture.clean() }
         try await fixture.sessions.enable(fixture.package("1.0.0"))
-        let pid = try #require(fixture.sessions.processIdentifiers["sample"])
+        let worker = try #require(fixture.worker("sample"))
         await #expect(
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) {
@@ -395,13 +381,8 @@ import Testing
         }
         #expect(fixture.sessions.pendingDisableIDs == ["sample"])
         #expect(fixture.sessions.activeIDs.isEmpty)
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
-        #expect(kill(pid, SIGKILL) == 0)
-        let deadline = ContinuousClock.now + .seconds(3)
-        while kill(pid, 0) == 0 {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        #expect(fixture.worker("sample") === worker)
+        #expect(!worker.isStopped)
     }
 
     @Test func manualEnableFromFreshPendingSessionFinishesRecoveryBeforeNormalStartup() async throws
@@ -490,9 +471,6 @@ import Testing
         ) throws {
             suite = existingSuite ?? "com.pulkit.edith.tests.sessions.\(UUID().uuidString)"
             defaults = try #require(UserDefaults(suiteName: suite))
-            let script = try #require(
-                Bundle.module.url(
-                    forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
             let identity = try HostIdentity(
                 identifier: "com.pulkit.edith.tests.sessions",
                 supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
@@ -502,18 +480,20 @@ import Testing
                 let worker = HostWorker(
                     configuration: HostWorkerConfiguration(
                         identity: identity, extensionID: package.id, version: package.version),
-                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
-                    arguments: [
-                        script.path,
-                        failingWorkers.contains(records.workers.count)
+                    requestTimeout: .seconds(2),
+                    engine: FixtureWorkerEngine.factory(
+                        mode: failingWorkers.contains(records.workers.count)
                             ? "reject"
                             : mode
-                            ?? (package.version == rejectVersion
-                                ? "reject" : rejectDisable ? "reject-disable-once" : "normal"),
-                    ], requestTimeout: .seconds(2))
+                                ?? (package.version == rejectVersion
+                                    ? "reject" : rejectDisable ? "reject-disable-once" : "normal")))
                 records.workers.append(worker)
                 return worker
             }
+        }
+
+        func worker(_ id: String) -> HostWorker? {
+            records.workers.last { $0.configuration.extensionID == id }
         }
 
         func package(_ version: String, id: String = "sample") -> ExtensionPackage {

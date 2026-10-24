@@ -52,7 +52,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     public init(
         shell: URL = UserShellEnvironment.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
+        baseEnvironment: [String: String] = ExtensionEnvironment.values,
         now: @escaping @Sendable () -> Date = { Date() },
         capture: @escaping Capture = { shell, home, base in
             await UserShellEnvironment.captureLoginEnvironment(
@@ -129,7 +129,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     }
 
     public static func userEnvironment(
-        process: [String: String] = ProcessInfo.processInfo.environment,
+        process: [String: String] = ExtensionEnvironment.values,
         shell: [String: String]? = shared.current()
     ) -> [String: String] {
         var environment = process

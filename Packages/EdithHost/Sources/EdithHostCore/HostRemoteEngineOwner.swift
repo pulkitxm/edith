@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class HostRemoteEngineOwner {
     let process: HostRemoteKernelIdentity
+    private let generation: UUID?
     private let marketplace: HostMarketplace
     private let configuration: HostRemoteConfiguration
     private let endpoint: ExtensionPeerEndpoint
@@ -18,6 +19,7 @@ final class HostRemoteEngineOwner {
         self.configuration = configuration
         endpoint = try Self.endpoint(marketplace: marketplace, configuration: configuration)
         process = try HostRemoteKernelIdentity.read(pid)
+        generation = marketplace.sessions.workerGenerations[configuration.package.id]
         try validate()
     }
 
@@ -36,6 +38,7 @@ final class HostRemoteEngineOwner {
         self.configuration = configuration
         endpoint = try Self.endpoint(marketplace: marketplace, configuration: configuration)
         process = try HostRemoteKernelIdentity.read(birth.pid)
+        generation = marketplace.sessions.workerGenerations[configuration.package.id]
         guard ExtensionProcessIdentity.read(birth.pid) == birth, process.isRunning else {
             throw HostWorkerError.rejected
         }
@@ -64,6 +67,7 @@ final class HostRemoteEngineOwner {
             marketplace.installed[id] == configuration.package,
             marketplace.sessions.versions[id] == configuration.package.version,
             marketplace.sessions.processIdentifiers[id] == process.pid,
+            marketplace.sessions.workerGenerations[id] == generation,
             strict ? process.isRunning : process.isAlive
         else { throw HostWorkerError.rejected }
     }

@@ -6,9 +6,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "EdithHost", targets: ["EdithHost"]),
-        .executable(name: "EdithExtensionCarrier", targets: ["EdithExtensionCarrier"]),
-        .executable(name: "HostLifecycleHarness", targets: ["HostLifecycleHarness"]),
-        .executable(name: "HostCommandHarness", targets: ["HostCommandHarness"]),
         .executable(name: "HostNativeTaskHarness", targets: ["HostNativeTaskHarness"]),
     ],
     dependencies: [
@@ -19,13 +16,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "HostBootstrap"),
-        .executableTarget(
-            name: "EdithExtensionCarrier",
-            linkerSettings: [
-                .unsafeFlags(
-                    ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
-                    .when(configuration: .release))
-            ]),
         .target(
             name: "EdithHostCore",
             dependencies: [
@@ -50,55 +40,25 @@ let package = Package(
                     ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
                     .when(configuration: .release)),
             ]),
-        .target(
-            name: "WorkerLifecycleFixtureSupport", path: "Tests/LifecycleHarness",
-            exclude: [
-                "AgentActivityFixture.swift",
-                "AudioMixerFixture.swift",
-                "CalendarFixture.swift",
-                "CameraFixture.swift",
-                "CodeStatsFixture.swift",
-                "CompanionFixture.swift",
-                "DatabaseFixture.swift",
-                "Harness.swift",
-                "HerdrFixture.swift",
-                "MachinesFixture.swift",
-                "NotchFixture.swift",
-                "QuinjetFixture.swift",
-                "QuinjetLifecycleFixture.swift",
-                "StudioFixture.swift",
-                "SurfaceActionRejection.swift",
-                "SystemFixture.swift",
-                "TerminalLifecycleFixture.swift",
-                "UsageFixture.swift",
-                "UsageLauncherFixture.swift",
-            ],
-            sources: ["WorkerLifecycleFixture.swift"]),
-        .executableTarget(
-            name: "HostLifecycleHarness",
-            dependencies: ["EdithHostCore", "WorkerLifecycleFixtureSupport"],
-            path: "Tests/LifecycleHarness", exclude: ["WorkerLifecycleFixture.swift"]),
-        .executableTarget(
-            name: "HostCommandHarness",
-            dependencies: ["EdithHostCore", "WorkerLifecycleFixtureSupport"],
-            path: "Tests/CommandHarness"),
         .executableTarget(
             name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],
             path: "Tests/NativeTaskHarness"),
         .target(
             name: "HostAccessibilityFixtureSupport", path: "Tests/HostAccessibilityFixtureSupport"),
+        .target(
+            name: "HostWorkerFixtureSupport", dependencies: ["EdithHostCore"],
+            path: "Tests/HostWorkerFixtureSupport"),
         .testTarget(
             name: "EdithHostCoreTests",
-            dependencies: ["EdithHostCore", "HostAccessibilityFixtureSupport"],
+            dependencies: [
+                "EdithHostCore", "HostAccessibilityFixtureSupport", "HostWorkerFixtureSupport",
+            ],
             resources: [.copy("Fixtures")]),
         .testTarget(
             name: "EdithHostUITests",
             dependencies: [
-                "EdithHost", "WorkerLifecycleFixtureSupport", "HostAccessibilityFixtureSupport",
+                "EdithHost", "HostAccessibilityFixtureSupport", "HostWorkerFixtureSupport",
             ]),
-        .testTarget(
-            name: "HostLifecycleHarnessTests",
-            dependencies: ["HostLifecycleHarness", "WorkerLifecycleFixtureSupport"]),
         .testTarget(
             name: "HostCommandFixtureTests",
             dependencies: [.product(name: "EdithExtensionSupport", package: "ExtensionSupport")],

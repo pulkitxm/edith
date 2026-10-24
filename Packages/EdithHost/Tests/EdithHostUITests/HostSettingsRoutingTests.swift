@@ -194,8 +194,7 @@ import Testing
                     Issue.record("Settings routing cannot start workers")
                     return HostWorker(
                         configuration: .init(
-                            identity: identity, extensionID: package.id, version: package.version),
-                        executable: URL(fileURLWithPath: "/usr/bin/false"))
+                            identity: identity, extensionID: package.id, version: package.version))
                 })
         }
 

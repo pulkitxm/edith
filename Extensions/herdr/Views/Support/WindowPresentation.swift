@@ -5,7 +5,7 @@ import EdithExtensionSupport
 public enum WindowPresentation {
     public static func makeKeyAndOrderFront(
         _ window: NSWindow,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil,
         perform: ((NSWindow) -> Void)? = nil
     ) {
@@ -19,7 +19,7 @@ public enum WindowPresentation {
 
     public static func orderFront(
         _ window: NSWindow,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil,
         perform: ((NSWindow) -> Void)? = nil
     ) {
@@ -34,7 +34,7 @@ public enum WindowPresentation {
     public static func orderFrontRegardless(
         _ window: NSWindow?,
         makeKey: Bool = false,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil,
         perform: ((NSWindow) -> Void)? = nil
     ) {
@@ -49,7 +49,7 @@ public enum WindowPresentation {
 
     public static func orderBelow(
         _ window: NSWindow, windowNumber: Int,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil
     ) {
         guard !suppressed else { return }
@@ -58,7 +58,7 @@ public enum WindowPresentation {
 
     public static func makeKey(
         _ window: NSWindow?,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil
     ) {
         guard let window, !suppressed else { return }
@@ -67,7 +67,7 @@ public enum WindowPresentation {
 
     public static func activate(
         ignoringOtherApps: Bool = true,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil,
         perform: (() -> Void)? = nil
     ) {
@@ -88,7 +88,7 @@ public enum WindowPresentation {
 
     public static func runModal(
         _ alert: NSAlert,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil
     ) -> NSApplication.ModalResponse {
         guard !suppressed else { return .abort }
@@ -97,7 +97,7 @@ public enum WindowPresentation {
 
     public static func beginSheet(
         _ alert: NSAlert, on window: NSWindow,
-        suppressed: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+        suppressed: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
             != nil,
         completion: @escaping (NSApplication.ModalResponse) -> Void
     ) {
@@ -130,14 +130,14 @@ public enum WindowPresentation {
 public enum AppLaunchConfiguration {
     public static func make() -> NSWorkspace.OpenConfiguration {
         let configuration = NSWorkspace.OpenConfiguration()
-        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
+        guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
             return configuration
         }
         configuration.activates = false
         configuration.hides = true
-        var environment = ProcessInfo.processInfo.environment
+        var environment = ExtensionEnvironment.values
         environment["EDITH_EXTENSION_FIXTURE_HOME"] =
-            ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+            ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
         configuration.environment = environment
         return configuration
     }

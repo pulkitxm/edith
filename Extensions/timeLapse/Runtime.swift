@@ -154,7 +154,7 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !draining, #available(macOS 15.0, *),
                 let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else {
                 return ["ok": false] as NSDictionary
             }
@@ -249,12 +249,12 @@ public func createExtension() -> UnsafeMutableRawPointer? {
 
 private enum TimeLapseExportIntent {
     static func functional(_ context: NSDictionary) -> Bool {
-        ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] != nil
+        ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] != nil
             || context["hostedFunctionalFixture"] != nil
     }
 
     static func present(_ context: NSDictionary) -> Bool {
-        let environment = ProcessInfo.processInfo.environment
+        let environment = ExtensionEnvironment.values
         return functional(context)
             || environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
             || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.") == true

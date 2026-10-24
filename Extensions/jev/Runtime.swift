@@ -29,7 +29,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if commands == nil {
                 let commands = JevCommands()

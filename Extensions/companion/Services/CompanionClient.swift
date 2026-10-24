@@ -454,7 +454,7 @@ public struct CompanionClient: Sendable {
     }
 
     public static func hasConfiguredEndpointOrDeployment(
-        environmentEndpoint: String? = ProcessInfo.processInfo.environment[
+        environmentEndpoint: String? = ExtensionEnvironment.values[
             "EDITH_COMPANION_URL"],
         savedEndpoint: String? = SharedDefaults.store.object(
             forKey: AppStorageKeys.Companion.endpoint) as? String,
@@ -496,7 +496,7 @@ public struct CompanionClient: Sendable {
 
     private static func resolveEndpoint() -> URL {
         endpoint(
-            environmentEndpoint: ProcessInfo.processInfo.environment[
+            environmentEndpoint: ExtensionEnvironment.values[
                 "EDITH_COMPANION_URL"],
             savedEndpoint: SharedDefaults.store.string(
                 forKey: AppStorageKeys.Companion.endpoint),

@@ -151,9 +151,9 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "start":
             guard !draining, worker == nil, let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 let host = input["hostIdentifier"] as? String,
-                host == ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
+                host == ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"],
                 SurfaceHostContext.current != nil, let defaults = UserDefaults(suiteName: suite)
             else { return ["ok": false] as NSDictionary }
             do { worker = try CameraAppWorker(defaults: defaults, host: host) } catch {
@@ -332,7 +332,7 @@ enum CameraCarrierLaunchEnvironment {
             fileURLWithPath: "/Applications/Edith Extensions/" + host + ".cameraCarrier.app")
         fixture =
             host.hasPrefix("com.pulkit.edith.tests.")
-            && ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            && ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let source = self.source, fixture = self.fixture
         fixtureHardware = fixture ? CameraOBSFixtureHardware() : nil
         let hardware = fixtureHardware
@@ -369,7 +369,7 @@ enum CameraCarrierLaunchEnvironment {
                 process.standardInput = Pipe(); process.standardOutput = Pipe()
                 process.standardError = fixture ? FileHandle.standardError : FileHandle.nullDevice
                 process.environment = try CameraCarrierLaunchEnvironment.make(
-                    inherited: ProcessInfo.processInfo.environment,
+                    inherited: ExtensionEnvironment.values,
                     fixture: fixture, selectedSource: source, carrier: carrier)
                 try process.run()
                 return process
@@ -411,7 +411,7 @@ enum CameraCarrierLaunchEnvironment {
         ui = CameraUICommands(engine: engine, model: model, defaults: defaults)
         draining =
             defaults.bool(forKey: Self.pendingKey)
-            || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
+            || ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
         if !draining {
             engine.start(); actions.install(engine: engine)
             installHotKey()

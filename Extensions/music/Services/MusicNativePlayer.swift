@@ -27,12 +27,12 @@ public final class MusicNativePlayer: @unchecked Sendable {
     }
 
     public static var applicationIdentity: String {
-        ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             ?? Bundle.main.bundleIdentifier ?? "com.pulkit.edith.development"
     }
     public static var keychainService: String {
         MusicCredentialIdentity.service(
-            applicationIdentifier: ProcessInfo.processInfo.environment[
+            applicationIdentifier: ExtensionEnvironment.values[
                 "EDITH_APPLICATION_IDENTIFIER"],
             isolatedIdentity: applicationIdentity)
     }

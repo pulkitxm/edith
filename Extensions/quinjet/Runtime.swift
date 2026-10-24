@@ -142,7 +142,7 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !draining, uiLocation == nil, !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard worker == nil else { return ["ok": true] as NSDictionary }
             let created = QuinjetWorker()
@@ -191,11 +191,11 @@ public func createExtension() -> UnsafeMutableRawPointer? {
 public func runNativeTask(_ bytes: UnsafePointer<UInt8>?, _ count: Int32) -> Int32 {
     guard let bytes, count > 0, count <= 65_536 else { return 1 }
     do {
-        if let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+        if let root = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
             let receipt = try JSONSerialization.data(withJSONObject: [
                 "pid": getpid(), "parent": getppid(), "group": getpgrp(),
                 "owner": Int32(
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_NATIVE_PARENT"] ?? "")
+                    ExtensionEnvironment.values["EDITH_EXTENSION_NATIVE_PARENT"] ?? "")
                     ?? 0,
                 "inputTerminal": isatty(STDIN_FILENO), "bytes": count,
             ])

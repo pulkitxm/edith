@@ -23,10 +23,10 @@ public struct AgentSessionEnvironment: Sendable {
 
     public static func live() -> AgentSessionEnvironment {
         AgentSessionEnvironment(
-            home: ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+            home: ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
                 URL(fileURLWithPath: $0)
             } ?? FileManager.default.homeDirectoryForCurrentUser,
-            variables: ProcessInfo.processInfo.environment,
+            variables: ExtensionEnvironment.values,
             herdr: { arguments in
                 guard let executable = HerdrCollector.executable() else { return nil }
                 let request = CLICommandRequest(

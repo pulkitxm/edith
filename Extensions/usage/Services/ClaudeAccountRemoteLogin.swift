@@ -12,7 +12,7 @@ enum ClaudeAccountRemoteLogin {
 
     static func token(
         account: ClaudeAccount,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = ExtensionEnvironment.values,
         currentPeer: @Sendable () async -> UsageMachinesPeer? = {
             await UsageMachinesPeer.current()
         }

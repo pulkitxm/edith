@@ -51,7 +51,7 @@ enum BifrostSystemRunner {
     private static func runAppleScript(_ source: String) async -> Bool {
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", source],
-            environment: ProcessInfo.processInfo.environment, timeout: 20,
+            environment: ExtensionEnvironment.values, timeout: 20,
             maximumOutputBytes: 64 << 10, terminatesProcessGroup: true)
         return (try? await CLICommandRunner.run(request, onLine: { _ in }).terminationStatus) == 0
     }
@@ -72,7 +72,7 @@ enum BifrostSystemRunner {
     private static func quitEverything() -> Bool {
         let keep: Set<String> = [
             "com.apple.finder", Bundle.main.bundleIdentifier ?? "",
-            ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"] ?? "",
+            ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"] ?? "",
         ]
         var quit = false
         for application in NSWorkspace.shared.runningApplications {

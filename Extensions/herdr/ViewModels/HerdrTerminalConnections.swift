@@ -16,7 +16,7 @@ struct HerdrDiffSessionState: Codable {
         }
         if target.machineID == Machine.localID {
             var environment = CLIToolEnvironment.sanitized()
-            if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+            if let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
                 environment["HOME"] = fixture
                 environment["ZDOTDIR"] = fixture
                 environment["HISTFILE"] = "/dev/null"

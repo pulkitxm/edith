@@ -115,7 +115,7 @@ final class ExtensionRuntime: NSObject {
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "windowSweaters",
                 configuration.defaultsSuite
-                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
@@ -147,7 +147,7 @@ final class ExtensionRuntime: NSObject {
             } catch { return ["ok": false] as NSDictionary }
             #else
             do {
-                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
                     input["hostedFunctionalFixture"] == nil
                 else { throw WorkerFixtureError.invalid }
                 fixture = try WorkerFixtureAdmission.current(
@@ -192,7 +192,7 @@ final class ExtensionRuntime: NSObject {
         guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
         else { return ["ok": false] as NSDictionary }
         guard let suite = input["defaultsSuite"] as? String,
-            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
         else { return ["ok": false] as NSDictionary }
         SharedDefaults.store.set(true, forKey: SweaterState.enabledKey)
         if service == nil { service = SweaterEngine(fixture: fixture) }

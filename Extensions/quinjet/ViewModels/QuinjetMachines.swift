@@ -89,7 +89,7 @@ import Observation
         do {
             if isLocal {
                 return .success(
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+                    ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"]
                         ?? FileManager.default.homeDirectoryForCurrentUser.path)
             }
             guard let connectionRef else { throw ExtensionPeerError.unavailable }

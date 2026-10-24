@@ -47,6 +47,21 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public func identity() throws -> HostIdentity {
         try HostIdentity(identifier: identifier, supportDirectory: supportDirectory)
     }
+
+    public func extensionEnvironment() throws -> [String: String] {
+        let identity = try identity()
+        return [
+            "EDITH_APPLICATION_IDENTIFIER": identity.identifier,
+            "EDITH_SHARED_DEFAULTS_SUITE": identity.extensionDefaultsSuite(extensionID),
+            "EDITH_EXTENSION_DATA_ROOT": identity.extensionDirectory(extensionID).path,
+            "EDITH_SURFACE_DEFAULTS_SUITE": identity.applicationDefaultsSuite,
+            "EDITH_EXTENSION_ID": extensionID,
+            "EDITH_EXTENSION_STATE_ROOT": identity.root.appendingPathComponent("ExtensionState")
+                .path,
+            "EDITH_EXTENSION_WORKER": "1",
+            "EDITH_EXTENSION_RECOVERY_ONLY": recoveryOnly ? "1" : "",
+        ]
+    }
 }
 
 public enum HostWorkerSynchronization: String, Sendable {

@@ -21,7 +21,7 @@ public enum BifrostCommandExecution {
             try Task.checkCancellation()
             let request = CLICommandRequest(
                 executableURL: executable, arguments: arguments,
-                environment: environment ?? ProcessInfo.processInfo.environment,
+                environment: environment ?? ExtensionEnvironment.values,
                 timeout: timeout, maximumOutputBytes: 256 << 20, terminatesProcessGroup: true)
             let result = try await CLICommandRunner.run(request, onLine: { _ in })
             try Task.checkCancellation()

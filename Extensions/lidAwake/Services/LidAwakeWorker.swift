@@ -12,12 +12,12 @@ import Foundation
 
     init(
         defaults: UserDefaults = SharedDefaults.store, engine: LidAwakeEngine? = nil,
-        recoveryOnly: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+        recoveryOnly: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"]
             == "1"
     ) {
         self.defaults = defaults; self.recoveryOnly = recoveryOnly
         if !recoveryOnly { defaults.set(true, forKey: LidAwakeState.enabledKey) }
-        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let applySystemState: (@MainActor @Sendable (Bool) async -> LidAwakeOutcome)?
         let systemStateReader: @Sendable () async throws -> Bool
         if fixture {

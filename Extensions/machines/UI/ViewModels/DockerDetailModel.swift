@@ -803,10 +803,13 @@ struct DockerContainerDetail: View {
                 value: live.memUsedBytes.map { ByteFormatter.string($0) } ?? "\u{2014}",
                 history: model.memHistory, color: DashSkin.sage)
             HStack(spacing: UIScale.pt(20)) {
-                statItem("Network in", live.netRxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
-                statItem("Network out", live.netTxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
                 statItem(
-                    "Memory limit", live.memLimitBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
+                    "Network in", live.netRxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
+                statItem(
+                    "Network out", live.netTxBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
+                statItem(
+                    "Memory limit",
+                    live.memLimitBytes.map { ByteFormatter.string($0) } ?? "\u{2014}")
             }
             Spacer(minLength: 0)
         }

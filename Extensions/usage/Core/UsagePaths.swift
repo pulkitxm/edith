@@ -12,7 +12,7 @@ public enum MachineRegistry {
     public static var machinesFile: URL {
         let root = ExtensionData.root
         if root.lastPathComponent == "Edith",
-            ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+            ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
                 == "com.pulkit.edith"
         {
             return root.appendingPathComponent("machines/machines.json")

@@ -141,7 +141,7 @@ final class ExtensionRuntime: NSObject {
         guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
         else { return false }
         guard let suite = input["defaultsSuite"] as? String,
-            suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
         else { return false }
         if fixture == nil {
             HotKeyRegistrar.configure(
@@ -186,7 +186,7 @@ final class ExtensionRuntime: NSObject {
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "keystrokeHighlight",
                 configuration.defaultsSuite
-                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             retirePresentation()
             presentation = ControlPresentation(client: configuration.engineClient)
@@ -219,7 +219,7 @@ final class ExtensionRuntime: NSObject {
                 }
                 return ["ok": started] as NSDictionary
                 #else
-                guard ProcessInfo.processInfo.environment["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
                     input["hostedFunctionalFixture"] == nil
                 else { return ["ok": false] as NSDictionary }
                 fixture = try WorkerFixtureAdmission.current(

@@ -7,7 +7,7 @@ public enum DataRoot {
 
 public enum AppBuildIdentity {
     public static var application: String {
-        ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+        ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
             ?? "org.example.camera.tests"
     }
     public static var developmentSlot: String? {

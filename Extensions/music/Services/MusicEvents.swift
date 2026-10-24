@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 public enum MusicEvents {
@@ -16,7 +17,7 @@ public enum MusicEvents {
     }
 
     private static var distributedNamespace: String? {
-        ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+        ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"]
     }
 
     private static let distributedRequestBridge: NSObjectProtocol? = {

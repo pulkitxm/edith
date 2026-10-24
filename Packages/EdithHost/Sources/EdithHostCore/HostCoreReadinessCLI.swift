@@ -37,7 +37,7 @@ public struct HostCoreReadinessCLIBackend {
         try args.require(
             words: ["verify", "setup"].contains(command) ? 1...1 : 0...1, flags: flags)
         let entries = backend.entries()
-        guard entries.count <= 40, Set(entries.map(\.id)).count == entries.count else {
+        guard entries.count <= 128, Set(entries.map(\.id)).count == entries.count else {
             throw HostCLIError.rejected("Invalid extension readiness registry.")
         }
         let selected: [HostCoreReadinessCLIBackend.Entry]

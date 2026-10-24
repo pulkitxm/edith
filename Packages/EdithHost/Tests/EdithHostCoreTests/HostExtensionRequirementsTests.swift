@@ -7,8 +7,8 @@ import Testing
 @Suite @MainActor struct HostExtensionRequirementsTests {
     @Test func exactOriginalInventoryAndExtractedOwnersStayDistinct() throws {
         let entries = HostExtensionRequirementCatalog.entries
-        #expect(entries.count == 40)
-        #expect(Set(entries.map(\.id)).count == 40)
+        #expect(entries.count == 41)
+        #expect(Set(entries.map(\.id)).count == 41)
         #expect(
             Set(entries.filter { $0.original == nil }.map(\.id)) == [
                 "jev", "docs", "terminal", "machines",

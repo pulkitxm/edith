@@ -51,7 +51,7 @@ extension BifrostPanel: BifrostWorkerPanel {}
 
     init(
         fixture: Bool = BifrostFixture.enabled,
-        recoveryOnly: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+        recoveryOnly: Bool = ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"]
             == "1",
         panel: BifrostWorkerPanelOwnership? = nil,
         seedFixture: (() -> Void)? = nil,

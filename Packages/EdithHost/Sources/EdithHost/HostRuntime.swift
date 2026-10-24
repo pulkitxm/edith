@@ -49,6 +49,13 @@ import SwiftUI
                 identifier: Bundle.main.bundleIdentifier
                     ?? "com.pulkit.edith.dev.extension-host-rebuild",
                 supportDirectory: support)
+            setenv("EDITH_APPLICATION_IDENTIFIER", identity.identifier, 1)
+            setenv("EDITH_SURFACE_DEFAULTS_SUITE", identity.applicationDefaultsSuite, 1)
+            setenv(
+                "EDITH_EXTENSION_STATE_ROOT",
+                identity.root.appendingPathComponent("ExtensionState").path, 1)
+            try? FileManager.default.removeItem(
+                at: identity.root.appendingPathComponent("ExtensionState/Interface"))
             let loaded = try HostMarketplace.live(identity: identity)
             Task.detached(priority: .utility) { HostLegacyServices.retire(identity: identity) }
             if !identity.development { HostLoginItem.register() }

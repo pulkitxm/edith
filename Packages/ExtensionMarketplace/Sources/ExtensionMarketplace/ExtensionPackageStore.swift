@@ -16,12 +16,7 @@ public struct ExtensionPackageStore: Sendable {
     }
 
     public func payloadDirectory(for package: ExtensionPackage) -> URL {
-        let payload = directory(for: package).appendingPathComponent(package.id)
-        let carrier = payload.appendingPathComponent("ExtensionCarrier.app")
-        guard FileManager.default.fileExists(atPath: carrier.path) else { return payload }
-        return carrier.appendingPathComponent(
-            "Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload"
-        ).appendingPathComponent(package.id)
+        directory(for: package).appendingPathComponent(package.id)
     }
 
     public func roleBundle(

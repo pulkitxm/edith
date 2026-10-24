@@ -71,7 +71,7 @@ final class MachinesModel {
         let machine = isLocal ? localMachine : store.machine(id: id)
         let session = MachineSession(
             machine: machine ?? Machine.missing(id: id), local: isLocal,
-            synthetic: ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+            synthetic: ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
             uiClient: uiClient)
         sessions[id] = session
         return session

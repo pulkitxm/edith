@@ -233,7 +233,7 @@ final class ExtensionRuntime: NSObject {
                 {
                     guard model == nil,
                         suite == (input["hostIdentifier"] as? String ?? "") + ".extensions.studio",
-                        suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                        suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                         let defaults = fixtureDefaults(suite)
                     else { throw WorkerFixtureError.invalid }
                     let tools = try StudioFixtureTools(engineAdmission: engineAdmission)
@@ -246,7 +246,7 @@ final class ExtensionRuntime: NSObject {
                 guard
                     admission != nil
                         || suite
-                            == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                            == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
                 else { return ["ok": false] as NSDictionary }
                 if model == nil {
                     if let admission {
@@ -277,7 +277,7 @@ final class ExtensionRuntime: NSObject {
             guard !stopping, let configuration = uiConfiguration(input),
                 configuration.extensionID == "studio", !configuration.uiOnly,
                 configuration.defaultsSuite
-                    == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 let client = configuration.engineClient, model == nil,
                 let route = StudioUIScene.Route(context: input),
                 uiScenes.count < 16 || uiScenes[client.presentationID] != nil

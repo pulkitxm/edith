@@ -11,7 +11,7 @@ final class DownloadsWorker {
     private(set) var stopped = false
 
     init(queue: DownloadWorker? = nil, start: Bool = true) {
-        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         self.queue =
             queue
             ?? DownloadWorker(
@@ -21,7 +21,7 @@ final class DownloadsWorker {
                 },
                 completed: {
                     guard !fixture,
-                        let namespace = ProcessInfo.processInfo.environment[
+                        let namespace = ExtensionEnvironment.values[
                             "EDITH_APPLICATION_IDENTIFIER"]
                     else { return }
                     DistributedNotificationCenter.default().postNotificationName(

@@ -281,14 +281,14 @@ import Testing
             fixture.starts == 0 && fixture.permissionReads == 0 && fixture.permissionRequests == 0)
     }
 
-    @Test func expectedRolesMatchCurrent39ManifestAndExplicitPathsAreValidated() throws {
+    @Test func expectedRolesMatchCurrentManifestAndExplicitPathsAreValidated() throws {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 { root.deleteLastPathComponent() }
         let rows = try #require(
             try JSONSerialization.jsonObject(
                 with: Data(contentsOf: root.appendingPathComponent("Extensions/manifest.json")))
                 as? [[String: Any]])
-        #expect(rows.count == 40 && HostRequirementsCLIAdapter.packagedRoles.count == 40)
+        #expect(rows.count == 41 && HostRequirementsCLIAdapter.packagedRoles.count == 41)
         for row in rows {
             let id = try #require(row["id"] as? String)
             let roles = try #require(row["roles"] as? [String: Any])

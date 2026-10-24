@@ -16,7 +16,7 @@ public enum MusicStorage {
     public static var dataDir: URL { ExtensionData.root }
 
     public static var downloadQueueFile: URL {
-        resolvedDownloadQueueFile(environment: ProcessInfo.processInfo.environment)
+        resolvedDownloadQueueFile(environment: ExtensionEnvironment.values)
     }
 
     public static func resolvedDownloadQueueFile(environment: [String: String]) -> URL {

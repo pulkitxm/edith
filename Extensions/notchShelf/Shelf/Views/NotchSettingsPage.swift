@@ -42,7 +42,8 @@ struct NotchSettingsPage: View {
                 ).settingsCaption()
             }
             Section {
-                preference("Open when dragging near the notch", AppStorageKeys.Notch.shelfOpenOnDrag)
+                preference(
+                    "Open when dragging near the notch", AppStorageKeys.Notch.shelfOpenOnDrag)
                 Text("The island slides out mid-drag so you can drop without clicking first.")
                     .settingsCaption()
                 preference("Open on hover", AppStorageKeys.Notch.shelfOpenOnHover)

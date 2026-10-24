@@ -16,7 +16,7 @@ public struct ExtensionSharedState: Sendable {
     }
 
     public static var current: Self? {
-        let environment = ProcessInfo.processInfo.environment
+        let environment = ExtensionEnvironment.values
         guard let path = environment["EDITH_EXTENSION_STATE_ROOT"], path.hasPrefix("/"),
             !path.utf8.contains(0), let namespace = environment["EDITH_APPLICATION_IDENTIFIER"],
             let owner = environment["EDITH_EXTENSION_ID"], validOwner(owner)

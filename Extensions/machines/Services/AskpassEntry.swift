@@ -24,7 +24,7 @@ public enum AskpassEntry {
 
     public static func runIfRequested(
         arguments: [String] = ProcessInfo.processInfo.arguments,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ExtensionEnvironment.values
     ) -> Bool {
         guard let account = environment[accountVariable], !account.isEmpty else { return false }
         let prompt = arguments.dropFirst().first ?? ""

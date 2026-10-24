@@ -7,7 +7,7 @@ typealias NotchTab = SurfaceNotchTab
 @MainActor
 enum NotchWorkerPresentation {
     static var isTesting: Bool {
-        ProcessInfo.processInfo.environment["EDITH_BACKGROUND_TESTING"] == "1"
+        ExtensionEnvironment.values["EDITH_BACKGROUND_TESTING"] == "1"
     }
 
     static func orderFrontRegardless(_ window: NSWindow) {

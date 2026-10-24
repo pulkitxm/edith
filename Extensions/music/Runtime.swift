@@ -43,7 +43,7 @@ final class ExtensionRuntime: NSObject {
                         extensionID: "music", context: input,
                         roleBundle: Bundle(for: ExtensionRuntime.self))
                 },
-                applicationIdentifier: ProcessInfo.processInfo.environment[
+                applicationIdentifier: ExtensionEnvironment.values[
                     "EDITH_APPLICATION_IDENTIFIER"])
         }
         #endif
@@ -163,7 +163,7 @@ final class ExtensionRuntime: NSObject {
                         host == Bundle.main.bundleIdentifier,
                         let suite = input["defaultsSuite"] as? String,
                         suite == host + ".extensions.music",
-                        suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                        suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                         worker == nil, let defaults = UserDefaults(suiteName: suite)
                     else { throw WorkerFixtureError.invalid }
                     try fixture.requireCurrent()
@@ -197,7 +197,7 @@ final class ExtensionRuntime: NSObject {
             } catch { return ["ok": false] as NSDictionary }
             guard !ExtensionHostRole.isInterfaceProcess,
                 let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
             if navigation == nil {
@@ -259,7 +259,7 @@ final class ExtensionRuntime: NSObject {
                     || (input["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.")
                         == true
                     || Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
-                    || ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+                    || ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
                 if intent {
                     guard let value = input["presentationID"] as? String,
                         let id = UUID(uuidString: value), let admission = admittedUI[id]

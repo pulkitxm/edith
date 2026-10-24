@@ -43,7 +43,7 @@ public struct QuinjetManagedOSC: Sendable {
 final class QuinjetManagedOSCRelay {
     private var parser = QuinjetManagedOSC()
     func append(_ bytes: Data) {
-        guard let tab = ProcessInfo.processInfo.environment["EDITH_QUINJET_TAB_ID"],
+        guard let tab = ExtensionEnvironment.values["EDITH_QUINJET_TAB_ID"],
             UUID(uuidString: tab) != nil,
             let endpoint = ExtensionPeerEndpoint.current(owner: "quinjet")
         else { return }

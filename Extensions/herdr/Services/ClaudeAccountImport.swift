@@ -17,7 +17,7 @@ extension ClaudeAccount {
     public static func currentCLIEnvironment(
         shell: URL = UserShellEnvironment.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        base: [String: String] = ProcessInfo.processInfo.environment
+        base: [String: String] = ExtensionEnvironment.values
     ) async throws -> [String: String] {
         var environment = base
         for name in inheritedAuthenticationVariables { environment.removeValue(forKey: name) }
@@ -160,7 +160,7 @@ enum ClaudeAccountImport {
     }
 
     static func remoteProfileExpression(
-        accountID: UUID, environment: [String: String] = ProcessInfo.processInfo.environment
+        accountID: UUID, environment: [String: String] = ExtensionEnvironment.values
     ) throws -> String {
         guard let identifier = environment["EDITH_APPLICATION_IDENTIFIER"],
             identifier == "com.pulkit.edith"
@@ -174,7 +174,7 @@ enum ClaudeAccountImport {
     }
 
     static func remoteScopeValidation(
-        accountID: UUID, environment: [String: String] = ProcessInfo.processInfo.environment
+        accountID: UUID, environment: [String: String] = ExtensionEnvironment.values
     ) throws -> String {
         _ = try remoteProfileExpression(accountID: accountID, environment: environment)
         let identifier = environment["EDITH_APPLICATION_IDENTIFIER"]!

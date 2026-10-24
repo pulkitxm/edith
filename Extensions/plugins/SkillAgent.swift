@@ -57,10 +57,10 @@ public struct SkillAgent: Codable, Identifiable, Equatable, Sendable {
 
 public enum SkillAgentCatalog {
     public static func detected(
-        home: URL = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+        home: URL = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
             URL(fileURLWithPath: $0)
         } ?? FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment[
+        environment: [String: String] = ExtensionEnvironment.values[
             "EDITH_EXTENSION_FIXTURE_HOME"] == nil ? UserShellEnvironment.userEnvironment() : [:],
         exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> [SkillAgent] {

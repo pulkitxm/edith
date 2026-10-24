@@ -3,12 +3,12 @@ import Foundation
 
 public enum ExtensionNativeTaskAuthorization {
     public static func request(parent: Int32) throws -> Data {
-        guard let owner = ProcessInfo.processInfo.environment["EDITH_EXTENSION_ID"],
+        guard let owner = ExtensionEnvironment.values["EDITH_EXTENSION_ID"],
             let endpoint = ExtensionPeerEndpoint.current(owner: owner)
         else {
             throw ExtensionPeerError.unavailable
         }
-        guard let token = ProcessInfo.processInfo.environment["EDITH_EXTENSION_NATIVE_TOKEN"],
+        guard let token = ExtensionEnvironment.values["EDITH_EXTENSION_NATIVE_TOKEN"],
             token.utf8.count == 72
         else { throw ExtensionPeerError.unavailable }
         return try request(endpoint: endpoint, parent: parent, token: token)

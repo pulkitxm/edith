@@ -43,7 +43,7 @@ public enum ClaudeStatusLine {
     static let thenFlag = " --then "
 
     public static func settingsURL(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
+        environment: [String: String] = ExtensionEnvironment.values,
         home: URL = UsageExecutionEnvironment.home
     ) -> URL {
         if let fixture = UsageExecutionEnvironment.fixtureHome(environment: environment) {

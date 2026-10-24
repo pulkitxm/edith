@@ -12,11 +12,11 @@ public enum MachineSecrets {
     private static let fixtureLock = NSLock()
     nonisolated(unsafe) private static var fixtureValues: [String: String] = [:]
     private static var isFixture: Bool {
-        ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
     public static let service = MachineCredentialIdentity.service(
-        applicationIdentifier: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
-        defaultsSuite: ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        applicationIdentifier: ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"],
+        defaultsSuite: ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"])
 
     public static func account(machineID: UUID, kind: MachineSecretKind) -> String {
         "\(machineID.uuidString).\(kind.rawValue)"

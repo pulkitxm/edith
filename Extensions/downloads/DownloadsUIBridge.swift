@@ -40,7 +40,7 @@ struct DownloadsUIAction: Codable {
         -> Data
     {
         guard !worker.stopped, payload.count <= 8192 else { throw ExtensionPeerError.unavailable }
-        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+        let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         switch command {
         case "downloads.ui.configuration":
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
@@ -78,7 +78,7 @@ struct DownloadsUIAction: Codable {
                 guard let directory = action.directory, directory.isFileURL else {
                     throw ExtensionPeerError.invalidRequest
                 }
-                if let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+                if let path = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] {
                     let root = URL(fileURLWithPath: path).standardizedFileURL
                         .resolvingSymlinksInPath()
                     let chosen = directory.standardizedFileURL.resolvingSymlinksInPath()

@@ -60,7 +60,7 @@ final class LidAwakePrivilegedRuntime: NSObject {
     private func makeController() throws -> LidAwakePrivilegedController {
         if let controller { return controller }
         if getuid() != 0 {
-            guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
+            guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
                 throw CocoaError(.fileWriteNoPermission)
             }
             let created = LidAwakePrivilegedController(

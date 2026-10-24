@@ -45,6 +45,7 @@ public final class ExtensionBundleRuntime {
     public let architecture: String
     private let packageVersion: String?
     private let verify: (URL) throws -> Void
+    private let environment: [String: String]
     private let readOnlyPackage: (package: ExtensionPackage, directory: URL)?
     private var loaded: [String: Loaded] = [:]
     private var rendererCallbacks = RendererCallbacks()
@@ -53,20 +54,23 @@ public final class ExtensionBundleRuntime {
 
     public init(
         store: ExtensionPackageStore, role: Role, hostABI: String, architecture: String = "arm64",
-        packageVersion: String? = nil, verify: @escaping (URL) throws -> Void
+        packageVersion: String? = nil, environment: [String: String] = [:],
+        verify: @escaping (URL) throws -> Void
     ) {
         self.store = store
         self.role = role
         self.hostABI = hostABI
         self.architecture = architecture
         self.packageVersion = packageVersion
+        self.environment = environment
         self.verify = verify
         readOnlyPackage = nil
     }
 
     public init(
         readOnlyPackage package: ExtensionPackage, directory: URL, role: Role,
-        hostABI: String, verify: @escaping (URL) throws -> Void
+        hostABI: String, environment: [String: String] = [:],
+        verify: @escaping (URL) throws -> Void
     ) throws {
         guard [.app, .helper, .agent].contains(role), package.hostABI == hostABI,
             package.architecture == "arm64",
@@ -78,6 +82,7 @@ public final class ExtensionBundleRuntime {
         self.hostABI = hostABI
         architecture = package.architecture
         packageVersion = package.version
+        self.environment = environment
         self.verify = verify
         readOnlyPackage = (package, directory.resolvingSymlinksInPath())
     }
@@ -94,7 +99,8 @@ public final class ExtensionBundleRuntime {
         let response = try execute(instance, operation: "start", context: context)
         guard response["ok"] as? Bool == true else {
             _ = try? execute(instance, operation: "stop", context: [:])
-            throw MarketplaceError.invalidBundle
+            throw BundleCommandError.failed(
+                response["error"] as? String ?? "\(id) \(role.rawValue) refused to start")
         }
         instance.active = true
     }
@@ -525,6 +531,7 @@ public final class ExtensionBundleRuntime {
         }
         retainedImages.append((bundle, handle, lease))
         failedLoads.insert(id)
+        if !environment.isEmpty { configureEnvironment(bundle: bundle, handle: handle) }
         guard let entrypoint = dlsym(handle, "edith_extension_create") else {
             throw MarketplaceError.invalidBundle
         }
@@ -558,6 +565,36 @@ public final class ExtensionBundleRuntime {
         failedLoads.remove(id)
         loaded[id] = instance
         return instance
+    }
+
+    private func configureEnvironment(bundle: Bundle, handle: UnsafeMutableRawPointer) {
+        typealias Configure = @convention(c) (UnsafeRawPointer) -> Void
+        var handles = [handle]
+        let directory = bundle.privateFrameworksURL
+        let frameworks =
+            directory.flatMap {
+                try? FileManager.default.contentsOfDirectory(
+                    at: $0, includingPropertiesForKeys: nil)
+            } ?? []
+        for item in frameworks {
+            let binary =
+                item.pathExtension == "framework"
+                ? Bundle(url: item)?.executableURL : item.pathExtension == "dylib" ? item : nil
+            guard let binary, let native = dlopen(binary.path, RTLD_NOW | RTLD_NOLOAD) else {
+                continue
+            }
+            handles.append(native)
+        }
+        let values = environment as NSDictionary
+        withExtendedLifetime(values) {
+            for image in handles {
+                guard let symbol = dlsym(image, "edith_extension_configure_environment") else {
+                    continue
+                }
+                unsafeBitCast(symbol, to: Configure.self)(
+                    UnsafeRawPointer(Unmanaged.passUnretained(values).toOpaque()))
+            }
+        }
     }
 
     private func execute(_ instance: Loaded, operation: String, context: NSDictionary) throws

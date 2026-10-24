@@ -75,7 +75,7 @@ final class MusicWorker {
                         return try WorkerFixtureAdmission.current(
                             extensionID: "music", context: context, roleBundle: roleBundle)
                     },
-                    applicationIdentifier: ProcessInfo.processInfo.environment[
+                    applicationIdentifier: ExtensionEnvironment.values[
                         "EDITH_APPLICATION_IDENTIFIER"])
             },
             makeLiveResources: {

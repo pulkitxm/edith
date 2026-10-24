@@ -174,14 +174,14 @@ final class ExtensionRuntime: NSObject {
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard session == nil else { return ["ok": true] as NSDictionary }
             cliStreams = try? ExtensionCLIStreams(owner: "database")
             DatabaseWorkerClient.start(
                 root: ExtensionData.root,
                 keychainService: DatabaseKeychainSecretStore.service(
-                    applicationIdentifier: ProcessInfo.processInfo.environment[
+                    applicationIdentifier: ExtensionEnvironment.values[
                         "EDITH_APPLICATION_IDENTIFIER"] ?? "edith.extension.fixture",
                     isolatedSuffix: "database.secrets"))
             DatabasePrivacy.start()

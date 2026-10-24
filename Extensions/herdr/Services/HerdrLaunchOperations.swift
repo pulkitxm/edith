@@ -63,7 +63,7 @@ public enum HerdrLaunchOperations {
                 + "; mkdir -p \"$folder\" && chmod 700 \"$folder\" && printf '%s' \"$folder\"",
             timeout: 15)
         try Task.checkCancellation()
-        guard let namespace = ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
+        guard let namespace = ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"],
             prepared.succeeded, prepared.stdout.count <= 8192,
             prepared.stdoutText.hasSuffix(
                 "/.local/share/edith/" + namespace + "/accounts/" + account.id.uuidString),

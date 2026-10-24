@@ -4,7 +4,7 @@ import Foundation
 
 @MainActor enum CleanerCLIEnvironment {
     static var home: URL {
-        if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
+        if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
             return ExtensionData.root
         }
         return FileManager.default.homeDirectoryForCurrentUser

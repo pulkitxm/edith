@@ -2937,7 +2937,9 @@ final class HerdrStore {
         guard uiClient != nil else { return HerdrSearchModel(usage: usage) }
         var ranker: HerdrSessionRanker?
         if uiJevConfigured {
-            ranker = { [self] (query: String, candidates: [AgentSearchCandidate]) async throws -> [String]? in
+            ranker = {
+                [self] (query: String, candidates: [AgentSearchCandidate]) async throws -> [String]?
+                in
                 let data = try await self.requestUI(
                     "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
                 return try JSONDecoder().decode([String]?.self, from: data)
