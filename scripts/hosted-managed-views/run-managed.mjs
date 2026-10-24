@@ -13,7 +13,11 @@ import {
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { extensionFingerprint } from "../extension-release-plan.mjs";
-import { managedChunkOwners, validateManagedChunkResults } from "./chunks.mjs";
+import {
+  managedChunkOwners,
+  managedChunkSize,
+  validateManagedChunkResults,
+} from "./chunks.mjs";
 import { loadManagedViewReview } from "./contract.mjs";
 import {
   admitManagedExecution,

@@ -103,6 +103,9 @@ public enum HostAppLinksCLI {
             owner: "focusDim", id: "extensions", title: "Extensions guide",
             path: "docs/cli/extensions/README.md"),
         .init(
+            owner: "hinge", id: "extensions", title: "Extensions guide",
+            path: "docs/cli/extensions/README.md"),
+        .init(
             owner: "windowSweaters", id: "guide", title: "Window Sweaters guide",
             path: "docs/window-sweaters.md"),
         .init(

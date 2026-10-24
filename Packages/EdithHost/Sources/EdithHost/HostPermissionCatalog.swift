@@ -72,7 +72,7 @@ extension HostExtension {
         switch id {
         case "calendar": [.calendar]
         case "virtualCamera": [.camera]
-        case "focusDim", "presenter", "colorPicker", "timeLapse": [.screenRecording]
+        case "focusDim", "hinge", "presenter", "colorPicker", "timeLapse": [.screenRecording]
         case "keystrokeHighlight": [.inputMonitoring]
         default: []
         }

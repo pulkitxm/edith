@@ -4,7 +4,8 @@ import Testing
 
 @Suite struct WorkerFixtureAdmissionTests {
     @Test(arguments: [
-        "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji", "presenter",
+        "focusDim", "hinge", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+        "presenter",
         "keystrokeHighlight", "music", "plugins", "studio", "keepAwake", "notchShelf",
         "usage", "herdr", "machines", "attention", "companion", "codeStats",
     ])
@@ -24,7 +25,8 @@ import Testing
     }
 
     @Test(arguments: [
-        "music", "plugins", "studio", "focusDim", "micMute", "systemStats", "windowSweaters",
+        "music", "plugins", "studio", "focusDim", "hinge", "micMute", "systemStats",
+        "windowSweaters",
         "colorPicker", "emoji",
         "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
         "usage", "herdr", "machines", "attention", "companion", "codeStats",

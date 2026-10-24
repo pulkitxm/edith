@@ -20,7 +20,8 @@ import Testing
         #expect(
             WorkerLifecycleFixture.inertIDs
                 == Set([
-                    "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+                    "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight",
+                    "presenter",
                     "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
                     "keepAwake", "notchShelf", "usage", "herdr", "machines", "attention",
                     "companion", "codeStats",

@@ -20,7 +20,7 @@ public struct WorkerFixtureUIProcess: Codable, Equatable, Sendable {
 
 public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
     static let owners: Set<String> = [
-        "keepAwake", "audioMixer", "focusDim", "windowSweaters", "micMute",
+        "keepAwake", "audioMixer", "focusDim", "hinge", "windowSweaters", "micMute",
         "keystrokeHighlight", "presenter", "colorPicker", "systemStats", "emoji",
         "homebrew", "calendar", "jev", "system", "timeLapse", "cleaner", "appMaintenance",
         "blitztree", "plugins", "notchShelf", "clipboard", "music", "docs", "latex",
@@ -29,7 +29,7 @@ public struct WorkerFixtureUIContract: Codable, Equatable, Sendable {
         "quinjet", "database", "socialManager",
     ]
     static let helperOwners: Set<String> = [
-        "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+        "focusDim", "hinge", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
         "presenter", "keystrokeHighlight", "keepAwake", "notchShelf", "clipboard",
     ]
     public let schema: Int

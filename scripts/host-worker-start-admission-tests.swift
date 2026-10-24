@@ -44,7 +44,7 @@ struct HostWorkerStartAdmissionTests {
             let package = identity.appendingPathComponent(
                 "Extensions/" + owner + "/1/arm64/1.0.0/" + owner)
             let helperOwners: Set<String> = [
-                "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+                "focusDim", "hinge", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
                 "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
             ]
             let name = helperOwners.contains(owner) ? "helper" : "app"

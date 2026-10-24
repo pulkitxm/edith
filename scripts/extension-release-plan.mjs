@@ -441,6 +441,7 @@ export const validationExtensionIDs = [
   "keepAwake",
   "audioMixer",
   "focusDim",
+  "hinge",
   "windowSweaters",
   "micMute",
   "keystrokeHighlight",

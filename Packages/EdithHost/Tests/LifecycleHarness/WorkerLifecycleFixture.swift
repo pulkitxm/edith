@@ -8,13 +8,14 @@ public enum WorkerLifecycleFixtureError: Error {
 
 public struct WorkerLifecycleFixture {
     static let inertIDs: Set<String> = [
-        "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+        "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
         "keepAwake", "notchShelf",
         "usage", "herdr", "machines", "attention", "companion", "codeStats",
     ]
     static let supportedIDs: Set<String> = [
-        "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter", "colorPicker",
+        "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+        "colorPicker",
         "systemStats", "emoji", "music", "plugins", "studio",
         "keepAwake", "audioMixer", "homebrew", "calendar", "jev", "system", "timeLapse",
         "cleaner", "appMaintenance", "blitztree", "notchShelf", "clipboard", "docs",

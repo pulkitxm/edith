@@ -142,7 +142,7 @@ test("all39 metadata remains validated while release fingerprints select only Ke
   });
   for (const changed of [
     definitions.slice(1),
-    [...definitions.slice(0, 38), definitions[0]],
+    [...definitions.slice(0, 39), definitions[0]],
     definitions.map((row, index) =>
       index ? row : { ...row, dependencies: ["owner1"] },
     ),

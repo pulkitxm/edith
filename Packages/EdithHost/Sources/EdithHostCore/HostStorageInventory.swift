@@ -46,10 +46,37 @@ public struct HostStorageCategory: Sendable, Identifiable {
     }
 }
 
+public struct HostStorageItem: Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let symbolName: String
+    public let extensionID: String?
+    public let roots: [URL]
+    public let scopeIDs: [String]
+
+    public func bytes(in measurement: HostStorageMeasurement) -> HostStorageBytes {
+        measurement.sum(scopeIDs)
+    }
+}
+
+public struct HostStorageUsage: Identifiable, Sendable {
+    public let item: HostStorageItem
+    public let bytes: HostStorageBytes
+    public var id: String { item.id }
+}
+
+public struct HostStorageEntry: Identifiable, Sendable {
+    public let url: URL
+    public let isDirectory: Bool
+    public let bytes: HostStorageBytes
+    public var id: String { url.path }
+}
+
 public struct HostStorageInventory: Sendable {
     public let scopes: [HostStorageScope]
     public let extensions: [HostStorageExtension]
     public let categories: [HostStorageCategory]
+    public let items: [HostStorageItem]
     public let appVersion: String?
     public let hostABI: String
 
@@ -90,8 +117,11 @@ public struct HostStorageInventory: Sendable {
                         identity.applicationDefaultsSuite + ".plist")))
         }
         let known = Dictionary(uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.title) })
+        let symbols = Dictionary(
+            uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.symbolName) })
         let ids = Set(known.keys).union(marketplace.installedVersions.keys).sorted()
         var extensions: [HostStorageExtension] = []
+        var packageKeys: [String: [String]] = [:]
         for id in ids {
             guard ExtensionPackage.validComponent(id) else { throw MarketplaceError.invalidCatalog }
             scopes.append(.init(id: "data:" + id, root: identity.extensionDirectory(id)))
@@ -139,6 +169,7 @@ public struct HostStorageInventory: Sendable {
                 let executableIDs = layout.executableScopeIDs
                 let frameworkIDs = layout.frameworkScopeIDs
                 scopes.append(contentsOf: layout.scopes)
+                packageKeys[id, default: []].append(key)
                 let selected = marketplace.installed[id] == package
                 let running =
                     marketplace.sessions.versions[id] == package.version
@@ -199,7 +230,7 @@ public struct HostStorageInventory: Sendable {
         self.extensions = extensions
         self.appVersion = appVersion
         hostABI = HostContract.compatibility
-        categories = [
+        let categories: [HostStorageCategory] = [
             .init(id: "app", title: "Edith app bundle", scopeIDs: ["app"]),
             .init(
                 id: "packages", title: "Extension packages, including retained versions",
@@ -224,6 +255,122 @@ public struct HostStorageInventory: Sendable {
                 scopeIDs: ["host-data", "logs", "host-preferences"]
                     + (identity.development ? [] : ["shared-preferences", "preserved-logs"])),
         ]
+        self.categories = categories
+        let scopeRoots = Dictionary(uniqueKeysWithValues: data.scopes.map { ($0.id, $0.root) })
+        func item(
+            _ id: String, _ title: String, _ symbolName: String, extensionID: String? = nil,
+            scopeIDs: [String], rootIDs: [String]? = nil
+        ) -> HostStorageItem {
+            HostStorageItem(
+                id: id, title: title, symbolName: symbolName, extensionID: extensionID,
+                roots: (rootIDs ?? scopeIDs).compactMap { scopeRoots[$0] }, scopeIDs: scopeIDs)
+        }
+        func category(_ id: String) -> HostStorageCategory? {
+            categories.first { $0.id == id }
+        }
+        let extensionItems = extensions.map { entry in
+            item(
+                entry.id, entry.title, symbols[entry.id] ?? "puzzlepiece.extension",
+                extensionID: entry.id,
+                scopeIDs: entry.versions.flatMap(\.scopeIDs) + entry.dataScopeIDs,
+                rootIDs: (packageKeys[entry.id] ?? []) + entry.dataScopeIDs)
+        }
+        let general: [HostStorageItem] = [
+            category("app").map { item("app", "Edith app", "app", scopeIDs: $0.scopeIDs) },
+            category("shared-extension-data").map {
+                item(
+                    "shared-extension-data", "Shared extension data", "square.on.square",
+                    scopeIDs: $0.scopeIDs)
+            },
+            category("selected-music-directory").map {
+                item(
+                    "selected-music-directory", "Music folder outside Edith", "music.note.list",
+                    scopeIDs: $0.scopeIDs)
+            },
+            category("cache").map {
+                item("cache", "Caches and downloads", "archivebox", scopeIDs: $0.scopeIDs)
+            },
+            category("host-data").map {
+                item("host-data", "Logs and other app data", "gearshape", scopeIDs: $0.scopeIDs)
+            },
+        ].compactMap { $0 }
+        items = (extensionItems + general).filter { !$0.scopeIDs.isEmpty }
+    }
+
+    public func usage(in measurement: HostStorageMeasurement) -> [HostStorageUsage] {
+        items.map { HostStorageUsage(item: $0, bytes: $0.bytes(in: measurement)) }
+            .filter { $0.bytes.allocated > 0 || !$0.bytes.complete }
+            .sorted {
+                $0.bytes.allocated != $1.bytes.allocated
+                    ? $0.bytes.allocated > $1.bytes.allocated : $0.item.title < $1.item.title
+            }
+    }
+
+    public func contents(
+        of item: HostStorageItem, limit: Int = 8,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) throws -> [HostStorageEntry] {
+        let own = Set(item.scopeIDs)
+        let tops = item.roots.map(\.path).filter { root in
+            !item.roots.contains { $0.path != root && Self.contains($0.path, root) }
+        }
+        let foreign = Set(
+            scopes.filter { scope in
+                !own.contains(scope.id)
+                    && tops.contains { $0 != scope.root.path && Self.contains($0, scope.root.path) }
+            }.map(\.root.path))
+        var paths: Set<String> = []
+        for root in tops {
+            paths.formUnion(Self.listing(root).filter { !foreign.contains($0) })
+        }
+        let entries = paths.sorted()
+        let measurement = try HostStorageAccounting.scan(
+            scopes: entries.enumerated().map {
+                HostStorageScope(id: "entry:\($0.offset)", root: URL(fileURLWithPath: $0.element))
+            }
+                + foreign.sorted().enumerated().map {
+                    HostStorageScope(
+                        id: "foreign:\($0.offset)", root: URL(fileURLWithPath: $0.element))
+                },
+            isCancelled: isCancelled)
+        return Array(
+            entries.enumerated().map { index, path in
+                var isDirectory: ObjCBool = false
+                _ = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+                return HostStorageEntry(
+                    url: URL(fileURLWithPath: path), isDirectory: isDirectory.boolValue,
+                    bytes: measurement.bytes["entry:\(index)"] ?? HostStorageBytes())
+            }
+            .filter { $0.bytes.allocated > 0 }
+            .sorted {
+                ($0.bytes.allocated, $0.bytes.logical, $1.url.path)
+                    > ($1.bytes.allocated, $1.bytes.logical, $0.url.path)
+            }
+            .prefix(limit))
+    }
+
+    private static func listing(_ path: String) -> [String] {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
+            return []
+        }
+        guard isDirectory.boolValue,
+            let names = try? FileManager.default.contentsOfDirectory(atPath: path)
+        else { return [path] }
+        let children = names.map { (path as NSString).appendingPathComponent($0) }
+        if children.count == 1, let only = children.first {
+            var onlyIsDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: only, isDirectory: &onlyIsDirectory),
+                onlyIsDirectory.boolValue
+            {
+                return listing(only)
+            }
+        }
+        return children
+    }
+
+    private static func contains(_ root: String, _ path: String) -> Bool {
+        path == root || path.hasPrefix(root == "/" ? "/" : root + "/")
     }
 }
 

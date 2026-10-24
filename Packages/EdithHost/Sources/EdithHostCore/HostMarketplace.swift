@@ -194,6 +194,7 @@ public final class HostMarketplace {
 
     private static let preferencesResetOnDisable: [String: [String]] = [
         "focusDim": ["focusDimActive", "focusDimEnabled"],
+        "hinge": ["hingeActive", "hingeEnabled"],
         "keystrokeHighlight": ["keystrokeHighlightActive", "keystrokeHighlightEnabled"],
     ]
 

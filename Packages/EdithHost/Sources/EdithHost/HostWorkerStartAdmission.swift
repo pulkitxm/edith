@@ -7,10 +7,10 @@ enum HostWorkerStartAdmission {
     enum Failure: Error { case rejected }
 
     static let fixtureOwners: Set<String> = [
-        "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter", "colorPicker",
-        "systemStats", "emoji", "music", "plugins", "studio", "keepAwake", "audioMixer", "homebrew",
-        "calendar", "jev", "system", "timeLapse", "cleaner", "appMaintenance", "blitztree",
-        "notchShelf",
+        "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+        "colorPicker", "systemStats", "emoji", "music", "plugins", "studio", "keepAwake",
+        "audioMixer", "homebrew", "calendar", "jev", "system", "timeLapse", "cleaner",
+        "appMaintenance", "blitztree", "notchShelf",
         "clipboard", "docs", "latex", "companion", "terminal", "usage", "bifrost", "lidAwake",
         "attention",
         "machines", "downloads", "seoAudit", "virtualCamera", "codeStats", "herdr", "quinjet",
@@ -137,7 +137,8 @@ enum HostWorkerStartAdmission {
                 values["version"] as? String == version, values["hostABI"] as? String == hostABI
             else { throw Failure.rejected }
             let strictOwners: Set<String> = [
-                "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+                "focusDim", "hinge", "micMute", "systemStats", "windowSweaters", "colorPicker",
+                "emoji",
                 "presenter", "keystrokeHighlight", "keepAwake", "notchShelf", "music", "plugins",
                 "studio", "usage", "herdr", "machines", "attention", "companion", "codeStats",
             ]

@@ -86,7 +86,7 @@ public struct WorkerFixtureAdmission: Sendable {
         else { return nil }
         let prefix = "com.pulkit.edith.tests.worker-"
         let helperIDs: Set<String> = [
-            "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker",
+            "focusDim", "hinge", "micMute", "systemStats", "windowSweaters", "colorPicker",
             "emoji", "presenter", "keystrokeHighlight", "keepAwake", "notchShelf",
         ]
         let appIDs: Set<String> = [

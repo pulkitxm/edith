@@ -35,7 +35,7 @@ import Testing
     }
 
     @Test(arguments: [
-        "colorPicker", "emoji", "focusDim", "keepAwake", "keystrokeHighlight", "micMute",
+        "colorPicker", "emoji", "focusDim", "hinge", "keepAwake", "keystrokeHighlight", "micMute",
         "presenter", "systemStats", "windowSweaters",
     ])
     func installedPreferenceFormsRemainAvailableWithoutStartingAnEngine(id: String) throws {

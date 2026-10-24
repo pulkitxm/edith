@@ -20,6 +20,7 @@ function policyFixture() {
   const helpers = new Set([
     "keepAwake",
     "focusDim",
+    "hinge",
     "windowSweaters",
     "micMute",
     "keystrokeHighlight",

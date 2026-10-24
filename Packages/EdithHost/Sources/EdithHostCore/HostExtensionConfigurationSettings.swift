@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import Foundation
 
 enum HostExtensionConfigurationSettings {
-    static let all: [HostCLISetting] = micMute + focusDim + windowSweaters
+    static let all: [HostCLISetting] = micMute + focusDim + hinge + windowSweaters
 
     private static let micMute: [HostCLISetting] = [
         .init(
@@ -53,6 +53,42 @@ enum HostExtensionConfigurationSettings {
         .init(
             AppStorageKeys.FocusDim.hotKeyLabel, .string, group: "focusdim",
             summary: "Printable label for the focus dim shortcut."),
+    ]
+
+    private static let hinge: [HostCLISetting] = [
+        .init(
+            "hingeActive", .bool, group: "hinge", summary: "Hinge fold on right now.",
+            fallback: .bool(false)),
+        .init(
+            "hingeEnabled", .bool, group: "hinge",
+            summary: "Hinge extension: fold the desktop as the MacBook lid closes.",
+            fallback: .bool(false)),
+        .init(
+            "hingeOpenAngle", .number, group: "hinge",
+            summary: "Lid angle, in degrees, that counts as fully open.",
+            fallback: .number(100)),
+        .init(
+            "hingeEffectStrength", .number, group: "hinge",
+            summary: "Fold strength from 0.25 to 1.", fallback: .number(1)),
+        .init(
+            "hingeSideFill", .string, group: "hinge",
+            summary: "What fills the sides of the fold.", allowed: ["blur", "black"],
+            fallback: .string("blur")),
+        .init(
+            "hingeCropsTop", .bool, group: "hinge",
+            summary: "Crop the top of the desktop as it folds.", fallback: .bool(true)),
+        .init(
+            "hingeBlursByDistance", .bool, group: "hinge",
+            summary: "Blur the fold more as it moves away.", fallback: .bool(true)),
+        .init(
+            "hingeHotKeyCode", .int, group: "hinge",
+            summary: "Virtual key code of the Hinge shortcut."),
+        .init(
+            "hingeHotKeyMods", .int, group: "hinge",
+            summary: "Carbon modifier mask of the Hinge shortcut."),
+        .init(
+            "hingeHotKeyLabel", .string, group: "hinge",
+            summary: "Printable label for the Hinge shortcut."),
     ]
 
     private static let windowSweaters: [HostCLISetting] = [

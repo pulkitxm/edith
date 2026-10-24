@@ -143,6 +143,10 @@ struct HostShortcutsPane: View {
             shortcutRow(
                 "Focus dim", subtitle: "Toggles background-window dimming",
                 keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
+        case .hinge:
+            shortcutRow(
+                "Hinge", subtitle: "Turns the desktop fold on or off",
+                keyPrefix: "hingeHotKey", defaultLabel: "⌃⌥H")
         case .presenter:
             shortcutRow(
                 "Presenter mode", subtitle: "Forces presenter blur on or off",
@@ -164,8 +168,8 @@ struct HostShortcutsPane: View {
 }
 
 enum HostExtensionShortcut: String, CaseIterable {
-    case bifrost, clipboard, emoji, micMute, focusDim, presenter, colorPicker, keystrokeHighlight,
-        virtualCamera
+    case bifrost, clipboard, emoji, micMute, focusDim, hinge, presenter, colorPicker,
+        keystrokeHighlight, virtualCamera
     var prefix: String {
         switch self {
         case .micMute: "micHotKey"

@@ -17,7 +17,7 @@ struct HostedManagedViewRoute: Codable, Equatable {
     let factoryOverlay: Bool
 
     static let owners: Set<String> = [
-        "keepAwake", "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+        "keepAwake", "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "jev", "audioMixer", "music", "homebrew", "calendar",
         "system", "timeLapse", "cleaner", "appMaintenance", "plugins", "blitztree", "notchShelf",
         "clipboard", "docs", "latex", "companion", "terminal", "usage", "bifrost", "lidAwake",
@@ -25,7 +25,7 @@ struct HostedManagedViewRoute: Codable, Equatable {
         "herdr", "quinjet", "database", "socialManager",
     ]
     static let settingsOwners: Set<String> = [
-        "keepAwake", "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
+        "keepAwake", "focusDim", "hinge", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "jev", "notchShelf", "bifrost", "lidAwake",
     ]
 

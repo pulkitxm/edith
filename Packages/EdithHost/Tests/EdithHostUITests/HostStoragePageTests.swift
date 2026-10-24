@@ -141,13 +141,69 @@ struct HostStoragePageTests {
         #expect(await gate.cancelled == 2)
     }
 
-    @Test func unknownSizesNeverPresentAsKnownSavings() {
-        var unknown = HostStorageBytes()
-        unknown.complete = false
-        #expect(HostStorageSizeLine.value(unknown).hasPrefix("Unknown"))
-        unknown.exists = true
-        #expect(HostStorageSizeLine.value(unknown).hasPrefix("Partial"))
-        #expect(!HostStorageSizeLine.value(unknown).contains("saved"))
+    @Test func incompleteSizesReadAsLowerBounds() {
+        var known = HostStorageBytes()
+        known.logical = 2048
+        known.allocated = 4096
+        #expect(HostStorageFormat.size(known) == "4 KB")
+        known.complete = false
+        #expect(HostStorageFormat.size(known) == "At least 4 KB")
+        #expect(HostStorageFormat.share(5, of: 1000) == "under 1%")
+        #expect(HostStorageFormat.share(500, of: 1000) == "50%")
+    }
+
+    @Test func usageItemsPartitionTheTotalAndRankLargestFirst() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let inventory = try fixture.inventory()
+        let measurement = try HostStorageAccounting.scan(scopes: inventory.scopes)
+        #expect(
+            inventory.items.reduce(Int64(0)) { $0 + $1.bytes(in: measurement).allocated }
+                == measurement.total.allocated)
+        #expect(
+            inventory.items.reduce(Int64(0)) { $0 + $1.bytes(in: measurement).logical }
+                == measurement.total.logical)
+        let usage = inventory.usage(in: measurement)
+        #expect(
+            usage.map(\.bytes.allocated) == usage.map(\.bytes.allocated).sorted(by: >))
+        let sample = try #require(usage.first { $0.id == "sample" })
+        #expect(sample.item.extensionID == "sample")
+        #expect(sample.bytes.logical == 15250)
+        #expect(usage.allSatisfy { $0.bytes.allocated > 0 || !$0.bytes.complete })
+        #expect(inventory.items.allSatisfy { !$0.symbolName.isEmpty && !$0.scopeIDs.isEmpty })
+        #expect(Set(inventory.items.map(\.id)).count == inventory.items.count)
+    }
+
+    @Test func togglingCollapsesAndRefreshReloadsOpenContents() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let model = HostStoragePageModel()
+        await model.refresh(inventory: try fixture.inventory())
+        let cache = try #require(model.inventory?.items.first { $0.id == "cache" })
+        model.toggle(cache)
+        #expect(model.expanded == ["cache"])
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.first?.url.lastPathComponent == "synthetic-archive.zip")
+        try Data(repeating: 65, count: 9000).write(
+            to: fixture.marketplace.identity.root.appendingPathComponent("Caches/huge.bin"))
+        await model.refresh(inventory: try fixture.inventory())
+        while model.contents["cache"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.contents["cache"]?.first?.url.lastPathComponent == "huge.bin")
+        model.toggle(cache)
+        #expect(model.expanded.isEmpty)
+    }
+
+    @Test func extensionContentsListPackagesAndUserData() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let model = HostStoragePageModel()
+        await model.refresh(inventory: try fixture.inventory())
+        let sample = try #require(model.inventory?.items.first { $0.id == "sample" })
+        model.toggle(sample)
+        while model.contents["sample"] == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let names = try #require(model.contents["sample"]).map { $0.url.lastPathComponent }
+        #expect(names.contains("synthetic-record"))
+        #expect(names.count >= 2)
     }
 
     @Test func storageRendersInTheOriginalScaffoldAtCompactRegularZoomAndBothSchemes() async throws
@@ -159,7 +215,9 @@ struct HostStoragePageTests {
         await model.refresh(inventory: try fixture.inventory())
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
-        let updater = HostUpdater(startingUpdater: false)
+        let sample = try #require(model.inventory?.items.first { $0.id == "sample" })
+        model.toggle(sample)
+        while model.contents["sample"] == nil { try await Task.sleep(for: .milliseconds(10)) }
         for (name, width, zoom, scheme) in [
             ("regular-light", 1100.0, 1.0, ColorScheme.light),
             ("regular-dark", 1100.0, 1.0, ColorScheme.dark),
@@ -171,7 +229,7 @@ struct HostStoragePageTests {
             UIScale.apply(zoom)
             let host = NSHostingView(
                 rootView: HostStoragePage(
-                    marketplace: fixture.marketplace, updater: updater, appBundle: fixture.app,
+                    marketplace: fixture.marketplace, appBundle: fixture.app,
                     appVersion: "1.2.3", model: model
                 )
                 .environment(\.compactLayout, width < UIScale.pt(720))

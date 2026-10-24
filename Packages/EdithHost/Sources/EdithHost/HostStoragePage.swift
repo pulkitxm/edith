@@ -5,22 +5,21 @@ import SwiftUI
 
 struct HostStoragePage: View {
     let marketplace: HostMarketplace
-    let updater: HostUpdater
     var appBundle: URL = Bundle.main.bundleURL
     var appVersion: String? =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     @State private var model = HostStoragePageModel()
     @State private var revision = 0
+    @State private var showsSmallItems = false
 
     init(
-        marketplace: HostMarketplace, updater: HostUpdater,
+        marketplace: HostMarketplace,
         appBundle: URL = Bundle.main.bundleURL,
         appVersion: String? = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
             as? String,
         model: HostStoragePageModel = HostStoragePageModel()
     ) {
         self.marketplace = marketplace
-        self.updater = updater
         self.appBundle = appBundle
         self.appVersion = appVersion
         _model = State(initialValue: model)
@@ -40,36 +39,22 @@ struct HostStoragePage: View {
             }.sorted()
     }
 
+    private var busy: Bool { marketplace.operationID != nil || model.removingID != nil }
+
     var body: some View {
-        PageScaffold(width: .fluid, pinnedHeader: true) {
-            PageHeader("Storage") {
-                Button(model.load.isRunning ? "Restart scan" : "Refresh") { revision += 1 }
-                    .buttonStyle(.edith(.secondary))
-                    .disabled(marketplace.operationID != nil || model.removingID != nil)
-            } accessory: {
-                Text("Actual files on this Mac, with download sizes shown separately.")
-                    .font(.edithText(.callout)).foregroundStyle(.secondary)
-            }
-        } content: {
+        PageScaffold(width: .fluid, header: {}) {
             PageLoading(
                 state: model.load.state, message: "Refresh to measure storage.", layout: .list,
                 retry: { revision += 1 }
             ) {
                 if let inventory = model.inventory, let measurement = model.measurement {
-                    summary(inventory, measurement)
-                    packages(inventory, measurement)
-                }
-            }
-            if model.load.isRunning {
-                HStack {
-                    LoadingIndicator()
+                    let usage = inventory.usage(in: measurement)
+                    summary(measurement, usage)
+                    breakdown(inventory, measurement, usage)
                     Text(
-                        model.measurement == nil
-                            ? "Scanning known storage roots"
-                            : "Refreshing, previous measurements remain visible"
+                        "Edith \(inventory.appVersion ?? "version unknown") · Measured \(measurement.collectedAt.formatted(date: .omitted, time: .shortened))"
                     )
-                    .font(.edithText(.caption))
-                    Button("Cancel scan") { model.cancelScan() }.buttonStyle(.edith(.secondary))
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
             if let message = model.removalError ?? model.load.errorMessage {
@@ -97,192 +82,104 @@ struct HostStoragePage: View {
         .navigationTitle("Storage")
     }
 
-    private func summary(_ inventory: HostStorageInventory, _ measurement: HostStorageMeasurement)
+    private func summary(_ measurement: HostStorageMeasurement, _ usage: [HostStorageUsage])
         -> some View
     {
-        PageCard(title: "Measured storage") {
-            HostStorageSizeLine(title: "Total across known roots", bytes: measurement.total)
-            HostStorageDistribution(categories: inventory.categories, measurement: measurement)
-            ForEach(inventory.categories) { category in
-                HostStorageSizeLine(title: category.title, bytes: category.bytes(in: measurement))
+        PageCard {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Edith is using")
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                    Text(HostStorageFormat.size(measurement.total))
+                        .font(.edithText(.largeTitle).weight(.semibold)).monospacedDigit()
+                }
+                Spacer(minLength: UIScale.pt(8))
+                if model.load.isRunning {
+                    LoadingIndicator()
+                    Button("Cancel") { model.cancelScan() }.buttonStyle(.edith(.secondary))
+                } else {
+                    Button("Refresh") { revision += 1 }
+                        .buttonStyle(.edith(.secondary)).disabled(busy)
+                }
             }
-            Text(
-                "Logical bytes are file contents. Allocated bytes are filesystem blocks, including directories. Hard links count once across categories, assigned to the first path in sorted traversal. APFS clones, compression and shared extents can make exclusive physical disk usage differ."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            Text(
-                "Measured \(measurement.collectedAt.formatted(date: .abbreviated, time: .shortened)). Files may change while scanning. Symbolic link targets and storage outside the known app and extension roots are excluded."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            HostStorageBar(usage: usage, total: measurement.total.allocated)
+            if let largest = usage.first, measurement.total.allocated > 0 {
+                Text(
+                    "Largest: \(largest.item.title), \(HostStorageFormat.share(largest.bytes.allocated, of: measurement.total.allocated))"
+                )
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
+            }
+            if !measurement.total.complete {
+                Text("Some files could not be read, so the real total may be higher.")
+                    .font(.edithText(.caption)).foregroundStyle(.orange)
+            }
             ForEach(measurement.issues, id: \.self) {
                 Text($0).font(.edithText(.caption)).foregroundStyle(.orange)
             }
-            Divider()
-            Text(
-                "Edith \(inventory.appVersion ?? "version unknown") · Package ABI \(inventory.hostABI) · macOS 14 or later"
-            )
-            .font(.edithText(.callout))
-            Text(
-                updater.updateReady.map {
-                    "App update ready: \($0). App updates replace the app bundle; extension package updates download separately."
-                }
-                    ?? "App update availability: \(updater.available ? "check Settings > Updates" : "unknown in this build"). App and extension versions update separately."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .contain)
     }
 
-    private func packages(_ inventory: HostStorageInventory, _ measurement: HostStorageMeasurement)
-        -> some View
-    {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            PageSectionHeader(
-                "Optional extensions",
-                subtitle:
-                    "\(inventory.extensions.count) extensions. Disabling keeps downloads on disk. Removal keeps user data."
-            )
-            ForEach(inventory.extensions) { entry in
-                PageCard(title: entry.title) {
-                    HostStorageSizeLine(
-                        title: "Installed packages, all versions",
-                        bytes: entry.packageBytes(in: measurement))
-                    HostStorageSizeLine(
-                        title: "Owned extension user data",
-                        bytes: measurement.sum(entry.dataScopeIDs))
-                    if !entry.sharedDataScopeIDs.isEmpty {
-                        HostStorageSizeLine(
-                            title: "Shared user data, counted once in the total",
-                            bytes: measurement.sum(entry.sharedDataScopeIDs))
-                    }
-                    Text(
-                        entry.compressedDownloadBytes.map {
-                            "Signed catalog compressed download: \(HostStorageSizeLine.format($0)) · version \(entry.catalogVersion ?? "unknown")"
-                        }
-                            ?? "Signed catalog compressed download: unknown. No compatible verified catalog entry is loaded."
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    if entry.versions.isEmpty {
-                        Text("Not downloaded").font(.edithText(.callout)).foregroundStyle(
-                            .secondary)
-                    }
-                    ForEach(entry.versions) { version in
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            Text("\(version.package.version) · \(version.state)").font(
-                                .edithText(.callout))
-                            Text(
-                                "\(version.compatible ? "Compatible with this app" : "Incompatible with this app") · ABI \(version.package.hostABI) · \(version.package.architecture) · macOS \(version.package.minimumSystemVersion.description)+"
-                            )
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
-                            HostStorageSizeLine(
-                                title: "Version total", bytes: version.bytes(in: measurement))
-                            HostStorageSizeLine(
-                                title: version.package.id == "virtualCamera"
-                                    ? "Included executables, with CameraCarrier copy"
-                                    : "Included carrier, worker and role executables",
-                                bytes: measurement.sum(version.executableScopeIDs))
-                            HostStorageSizeLine(
-                                title: version.package.id == "virtualCamera"
-                                    ? "Included frameworks, with CameraCarrier copies"
-                                    : "Included carrier, worker and role frameworks",
-                                bytes: measurement.sum(version.frameworkScopeIDs))
-                        }
-                    }
-                    if !entry.versions.isEmpty || marketplace.pendingRemovalIDs.contains(entry.id) {
-                        Text(
-                            "Removal targets all package versions above. Their logical bytes are measured file contents; allocated blocks may be shared. User data, shared files and selected music folders are retained. Refresh shows the actual remaining storage."
-                        )
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                        HStack {
-                            if marketplace.pendingRemovalIDs.contains(entry.id) {
-                                Text("Pending removal, still on disk until released").font(
-                                    .edithText(.caption)
-                                ).foregroundStyle(.orange)
-                            }
-                            Button(
-                                model.removingID == entry.id ? "Removing" : "Remove packages",
-                                role: .destructive
-                            ) {
-                                Task {
-                                    await model.remove(id: entry.id, marketplace: marketplace)
-                                    revision += 1
-                                }
-                            }
-                            .buttonStyle(.edith(.secondary))
-                            .disabled(
-                                model.removingID != nil || marketplace.operationID != nil
-                                    || marketplace.installedVersions[entry.id]?.isEmpty != false
-                            )
-                            .accessibilityLabel("Remove \(entry.title) packages, keep user data")
+    private func breakdown(
+        _ inventory: HostStorageInventory, _ measurement: HostStorageMeasurement,
+        _ usage: [HostStorageUsage]
+    ) -> some View {
+        let total = measurement.total.allocated
+        let top = usage.prefix(HostStorageFormat.visibleRows)
+        let rest = usage.dropFirst(HostStorageFormat.visibleRows)
+        return PageCard(title: "What is using space") {
+            VStack(spacing: 0) {
+                ForEach(Array(top.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 { Divider() }
+                    row(
+                        entry, inventory, measurement, total: total,
+                        color: HostStorageBar.color(at: index))
+                }
+                if !rest.isEmpty {
+                    Divider()
+                    Button(
+                        showsSmallItems
+                            ? "Hide smaller items"
+                            : "Show \(rest.count) smaller items · \(HostStorageFormat.size(rest.reduce(into: HostStorageBytes()) { $0.include($1.bytes) }))"
+                    ) { showsSmallItems.toggle() }
+                    .buttonStyle(.edith(.borderless))
+                    .padding(.vertical, UIScale.pt(6))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if showsSmallItems {
+                        ForEach(Array(rest)) { entry in
+                            Divider()
+                            row(
+                                entry, inventory, measurement, total: total,
+                                color: HostStorageBar.otherColor)
                         }
                     }
                 }
             }
         }
     }
-}
 
-struct HostStorageSizeLine: View {
-    let title: String
-    let bytes: HostStorageBytes
-    @Environment(\.compactLayout) private var compact
-
-    static func format(_ value: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
-    }
-
-    static func value(_ bytes: HostStorageBytes) -> String {
-        let prefix = bytes.complete ? "" : bytes.exists ? "Partial: " : "Unknown: measured "
-        return "\(prefix)\(format(bytes.logical)) logical · \(format(bytes.allocated)) allocated"
-    }
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                Spacer(minLength: UIScale.pt(16))
-                Text(Self.value(bytes)).monospacedDigit().foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(title)
-                Text(Self.value(bytes)).monospacedDigit().foregroundStyle(.secondary)
-            }
-        }
-        .font(.edithText(compact ? .caption : .callout))
-        .accessibilityElement(children: .combine)
-    }
-}
-
-struct HostStorageDistribution: View {
-    let categories: [HostStorageCategory]
-    let measurement: HostStorageMeasurement
-    private let colors: [Color] = [.accentColor, .blue, .green, .orange, .purple]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Text(
-                "Distribution of measured allocated bytes\(measurement.total.complete ? "" : " (partial)")"
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                        let bytes = category.bytes(in: measurement).allocated
-                        if bytes > 0 {
-                            Rectangle().fill(colors[index % colors.count])
-                                .frame(
-                                    width: geometry.size.width * Double(bytes)
-                                        / Double(max(1, measurement.total.allocated)))
-                        }
+    private func row(
+        _ usage: HostStorageUsage, _ inventory: HostStorageInventory,
+        _ measurement: HostStorageMeasurement, total: Int64, color: Color
+    ) -> some View {
+        let entry = inventory.extensions.first { $0.id == usage.item.extensionID }
+        return HostStorageRow(
+            usage: usage, total: total, color: color,
+            expanded: model.expanded.contains(usage.id),
+            contents: model.contents[usage.id],
+            toggle: { model.toggle(usage.item) }
+        ) {
+            if let entry {
+                HostStoragePackageDetails(
+                    entry: entry, measurement: measurement,
+                    pendingRemoval: marketplace.pendingRemovalIDs.contains(entry.id),
+                    removing: model.removingID == entry.id,
+                    canRemove: !busy && marketplace.installedVersions[entry.id]?.isEmpty == false
+                ) {
+                    Task {
+                        await model.remove(id: entry.id, marketplace: marketplace)
+                        revision += 1
                     }
-                }
-            }
-            .frame(height: UIScale.pt(14)).clipShape(RoundedRectangle(cornerRadius: UIScale.pt(4)))
-            .accessibilityLabel("Storage distribution. Category sizes are listed below.")
-            ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
-                HStack(spacing: UIScale.pt(6)) {
-                    Circle().fill(colors[index % colors.count]).frame(
-                        width: UIScale.pt(7), height: UIScale.pt(7))
-                    Text(category.title).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
         }

@@ -152,7 +152,7 @@ enum HostNavigationCatalog {
         ],
         "desk": [
             "bifrost", "clipboard", "colorPicker", "emoji", "keystrokeHighlight", "focusDim",
-            "presenter", "windowSweaters",
+            "hinge", "presenter", "windowSweaters",
         ],
         "media": [
             "studio", "latex", "socialManager", "timeLapse", "downloads", "music", "calendar",

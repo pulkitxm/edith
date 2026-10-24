@@ -185,7 +185,7 @@ public struct HostedFunctionalActionContext: Codable, Equatable, Sendable {
     }
 
     public static let owners: Set<String> = [
-        "keepAwake", "audioMixer", "focusDim", "windowSweaters", "micMute",
+        "keepAwake", "audioMixer", "focusDim", "hinge", "windowSweaters", "micMute",
         "keystrokeHighlight", "presenter", "colorPicker", "systemStats", "emoji",
         "homebrew", "calendar", "jev", "system", "timeLapse", "cleaner", "appMaintenance",
         "blitztree", "plugins", "notchShelf", "clipboard", "music", "docs", "latex",

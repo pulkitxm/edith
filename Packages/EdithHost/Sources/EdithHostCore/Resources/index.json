@@ -120,6 +120,12 @@
     "category": "desk"
   },
   {
+    "id": "hinge",
+    "title": "Hinge",
+    "symbolName": "laptopcomputer.and.arrow.down",
+    "category": "desk"
+  },
+  {
     "id": "windowSweaters",
     "title": "Window Sweaters",
     "symbolName": "square.dashed",

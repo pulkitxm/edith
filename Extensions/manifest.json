@@ -110,6 +110,45 @@
     "sameExecutableWorker": true
   },
   {
+    "id": "hinge",
+    "version": "1.0.0",
+    "hostABI": "edith-host-2",
+    "minimumSystemVersion": "14.0.0",
+    "roles": {
+      "helper": [
+        "Extensions/hinge/Helper/Services/DesktopRenderer.swift",
+        "Extensions/hinge/Helper/Services/FoldShader.swift",
+        "Extensions/hinge/Helper/Services/HingeEngine.swift",
+        "Extensions/hinge/Helper/Services/LidSensor.swift",
+        "Extensions/hinge/Helper/Services/LiveDesktop.swift",
+        "Extensions/hinge/Models/HingeState.swift",
+        "Extensions/hinge/Models/LidMotion.swift",
+        "Extensions/hinge/Presentation.swift",
+        "Extensions/hinge/Runtime.swift",
+        "Extensions/hinge/Surface.swift",
+        "Extensions/hinge/Views/HingeRows.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/hinge"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-system-version.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-contained-host-runtime.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
+  },
+  {
     "id": "windowSweaters",
     "version": "1.0.0",
     "hostABI": "edith-host-2",

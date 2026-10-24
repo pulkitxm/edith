@@ -97,7 +97,7 @@ function fixture() {
   const nativeRun = sourceRun(13, ".github/workflows/extensions.yml");
   const fingerprints = Object.fromEntries([
     ["keepAwake", "4".repeat(64)],
-    ...Array.from({ length: 38 }, (_, index) => [
+    ...Array.from({ length: 39 }, (_, index) => [
       `owner${index}`,
       "b".repeat(64),
     ]),

@@ -92,6 +92,7 @@ public enum HotKeyRegistrar {
 public enum HotKeyCatalog {
     public static let emoji = "emoji"
     public static let focusDim = "focusDim"
+    public static let hinge = "hinge"
     public static let colorPicker = "colorPicker"
     public static let micMute = "micMute"
     public static let presenter = "presenter"

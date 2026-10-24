@@ -30,6 +30,22 @@ let package = Package(
             ],
             path: "focusDim/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "HingeExtension",
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
+            path: "hinge", exclude: ["Tests", "Runtime.swift", "LICENSE"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "HingeExtensionTests",
+            dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                "HingeExtension",
+            ],
+            path: "hinge/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "WindowSweatersExtension",
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),

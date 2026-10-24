@@ -60,6 +60,7 @@ enum HostMarketplaceCatalog {
         "colorPicker": "System loupe on a hotkey, sampled color to your clipboard.",
         "keystrokeHighlight": "Show each key press on screen for polished demos.",
         "focusDim": "Dims everything behind your active app.",
+        "hinge": "Folds the desktop as the MacBook lid closes.",
         "windowSweaters": "Knitted borders around your windows, in each app's own colours.",
         "presenter": "Blurs sensitive numbers while sharing your screen.",
         "studio": "Edit, convert, compress and combine images, PDFs, video and audio.",

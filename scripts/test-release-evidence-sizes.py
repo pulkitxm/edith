@@ -241,7 +241,7 @@ class SignedCompositionSizeTests(unittest.TestCase):
         self.assertEqual(len(result['links']), 40)
         self.assertEqual(result['currentPublicationTag'], 'extension-evidence/' + 'b' * 40 + '/300-2')
         self.assertEqual({row['lineage']['sourceCommit'] for row in result['links']}, {'a' * 40})
-        self.assertEqual(result['originalArchiveBytes'], 44 * len(b'original synthetic archive bytes'))
+        self.assertEqual(result['originalArchiveBytes'], 45 * len(b'original synthetic archive bytes'))
         self.assertEqual(result['compositionBytes'], self.composition.stat().st_size)
         self.assertEqual(result['totalEvidenceBytes'], sum(path.stat().st_size for path in self.directory.rglob('*') if path.is_file()))
         self.assertEqual(result['signedLinkBytes'], sum(path.stat().st_size for path in self.links.iterdir()))
@@ -251,7 +251,7 @@ class SignedCompositionSizeTests(unittest.TestCase):
         self.generate('current')
         result = self.measure()
         self.assertEqual(len(result['releases']), 1)
-        self.assertEqual(result['originalArchiveBytes'], 41 * len(b'original synthetic archive bytes'))
+        self.assertEqual(result['originalArchiveBytes'], 42 * len(b'original synthetic archive bytes'))
         self.assertEqual(result['totalEvidenceBytes'], sum(path.stat().st_size for path in self.current_release.iterdir()))
 
     def test_actual_historical_and_current_composition_bytes_are_both_counted(self):
@@ -372,8 +372,8 @@ class ZeroPlanCompositionSizeTests(unittest.TestCase):
         measured = self.measure()
         self.assertEqual(len(measured['links']), 40)
         self.assertEqual(len(measured['releases']), 2)
-        self.assertEqual(len(measured['closedAssetInventory']), 46)
-        self.assertEqual(measured['originalArchiveBytes'], 43 * len(b'original synthetic archive bytes'))
+        self.assertEqual(len(measured['closedAssetInventory']), 47)
+        self.assertEqual(measured['originalArchiveBytes'], 44 * len(b'original synthetic archive bytes'))
         self.assertEqual(measured['totalEvidenceBytes'], sum(p.stat().st_size for p in self.directory.rglob('*') if p.is_file()))
         self.assertEqual(measured['signedLinkBytes'], sum(p.stat().st_size for p in self.links.iterdir()))
         self.assertEqual({r['lineage']['sourceCommit'] for r in measured['links']}, {'a' * 40})

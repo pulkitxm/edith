@@ -325,7 +325,7 @@ function currentNativeFacts() {
     plannedIDs: [record.id],
     fingerprints: {
       ...Object.fromEntries(
-        Array.from({ length: 38 }, (_, i) => [`owner${i}`, "b".repeat(64)]),
+        Array.from({ length: 39 }, (_, i) => [`owner${i}`, "b".repeat(64)]),
       ),
       keepAwake: record.sourceFingerprint,
     },

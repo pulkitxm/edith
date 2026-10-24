@@ -4,6 +4,7 @@ export const functionalActionOwners = Object.freeze([
   "keepAwake",
   "audioMixer",
   "focusDim",
+  "hinge",
   "windowSweaters",
   "micMute",
   "keystrokeHighlight",
@@ -47,6 +48,7 @@ export const functionalActionBatches = Object.freeze({
   controls: Object.freeze([
     "keepAwake",
     "focusDim",
+    "hinge",
     "windowSweaters",
     "micMute",
     "keystrokeHighlight",

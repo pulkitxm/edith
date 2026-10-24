@@ -22,6 +22,7 @@ enum HostLegacyMigration {
         "downloads": "downloadsEnabled",
         "emoji": "emojiEnabled",
         "focusDim": "focusDimEnabled",
+        "hinge": "hingeEnabled",
         "herdr": "tabHerdrEnabled",
         "homebrew": "homebrewEnabled",
         "keepAwake": "keepAwakeEnabled",

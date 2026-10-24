@@ -69,6 +69,28 @@
       ]
     },
     {
+      "id": "hinge",
+      "location": "settings",
+      "section": "hinge",
+      "visible": false,
+      "uiOnly": false,
+      "minimumOS": "14.0",
+      "factoryOverlay": false,
+      "scope": "original-view-creation-close-reopen-disable",
+      "functionalActionsValidated": false,
+      "effects": "ControlPresentation observes owned UI defaults and namespaced settings IPC only. Readonly control snapshot allowed; pending-write coalescing requires a preference edit. No utility action or settings mutation is exercised by this view lifecycle scope.",
+      "sources": [
+        {
+          "path": "Extensions/hinge/Runtime.swift",
+          "sha256": "4f398ba7c69b55226f0c0f00b9b2d24558b74bcc2167834a2cf96444425641ec"
+        },
+        {
+          "path": "Extensions/hinge/Presentation.swift",
+          "sha256": "58522eed9b1eaaa7869a9d16559c3a713c965ba1a1b04c66afe8d07a1a6ad702"
+        }
+      ]
+    },
+    {
       "id": "windowSweaters",
       "location": "settings",
       "section": "windowSweaters",

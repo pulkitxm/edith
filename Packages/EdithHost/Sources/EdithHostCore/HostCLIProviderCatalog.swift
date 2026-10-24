@@ -275,7 +275,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             "config", "app", "permissions", "guide", "schema", "version", "status", "install",
             "uninstall", "completions", "extensions", "agent",
         ],
-        "keepAwake": [], "focusDim": [], "windowSweaters": [], "keystrokeHighlight": [],
+        "keepAwake": [], "focusDim": [], "hinge": [], "windowSweaters": [], "keystrokeHighlight": [],
         "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [], "socialManager": [],
         "calendar": ["calendar"], "music": ["music"], "usage": ["usage"],
         "machines": ["machines"], "herdr": ["herdr"], "quinjet": ["quinjet"],

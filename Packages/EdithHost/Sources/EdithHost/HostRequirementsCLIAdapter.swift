@@ -237,6 +237,7 @@ import Foundation
         "keepAwake": ["helper"],
         "audioMixer": ["app"],
         "focusDim": ["helper"],
+        "hinge": ["helper"],
         "windowSweaters": ["helper"],
         "micMute": ["helper"],
         "keystrokeHighlight": ["helper"],

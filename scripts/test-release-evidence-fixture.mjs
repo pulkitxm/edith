@@ -48,7 +48,7 @@ if (mode === "resign") {
   const ids = [
     "first",
     "second",
-    ...Array.from({ length: 37 }, (_, index) => `synthetic${index}`),
+    ...Array.from({ length: 38 }, (_, index) => `synthetic${index}`),
   ];
   const fingerprints = Object.fromEntries(
     ids.map((id) => [id, "f".repeat(64)]),

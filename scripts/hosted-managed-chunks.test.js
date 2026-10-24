@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   aggregateManagedChunks,
   managedChunkOwners,
+  managedChunkSize,
   selectManagedArtifactRows,
   validateManagedChunkResults,
 } from "./hosted-managed-views/chunks.mjs";

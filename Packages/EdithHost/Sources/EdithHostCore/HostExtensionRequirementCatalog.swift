@@ -46,6 +46,14 @@ public enum HostExtensionRequirementCatalog {
             setupInstruction:
                 "A stored dim intensity, animation duration, or display mode is invalid."),
         .init(
+            id: "hinge", title: "Hinge",
+            original: .init(
+                requiredTools: [], optionalTools: [], requiredPermissions: ["screenRecording"],
+                optionalPermissions: [], requiredCapabilities: ["lidFold"],
+                optionalCapabilities: ["globalShortcuts"], toolRule: .all, requiresHelper: true),
+            dependencies: [],
+            setupInstruction: "A stored open angle, strength, or side fill is invalid."),
+        .init(
             id: "windowSweaters", title: "Window Sweaters",
             original: .init(
                 requiredTools: [], optionalTools: [], requiredPermissions: [],

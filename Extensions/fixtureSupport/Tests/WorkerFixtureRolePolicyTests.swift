@@ -17,7 +17,7 @@ struct WorkerFixtureRolePolicyTests {
                 $0["id"] as! String
             })
         #expect(actualHelpers == WorkerFixtureUIContract.helperOwners)
-        #expect(actualHelpers.count == 11)
+        #expect(actualHelpers.count == 12)
         #expect(Set(entries.map { $0["id"] as! String }) == WorkerFixtureUIContract.owners)
         for entry in entries {
             let owner = entry["id"] as! String

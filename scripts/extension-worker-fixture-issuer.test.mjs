@@ -56,8 +56,8 @@ test("all39 declared workers are admitted before any fixture build", () => {
   );
 });
 
-test("all nineteen strict inert owners and conditional owners remain selectable", () => {
-  assert.equal(inertFixtureWorkers.size, 19);
+test("all twenty strict inert owners and conditional owners remain selectable", () => {
+  assert.equal(inertFixtureWorkers.size, 20);
   for (const worker of workers)
     assert.deepEqual(validateWorkerFixtureSelection(definitions, [worker.id]), [
       worker,

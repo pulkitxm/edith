@@ -20,6 +20,7 @@ import { lifecycleHarnessSignalFailure } from "./lifecycle-harness-diagnostics.m
 
 export const inertFixtureWorkers = new Set([
   "focusDim",
+  "hinge",
   "windowSweaters",
   "micMute",
   "keystrokeHighlight",
@@ -42,6 +43,7 @@ export const inertFixtureWorkers = new Set([
 
 export const supportedFixtureWorkers = new Set([
   "focusDim",
+  "hinge",
   "windowSweaters",
   "micMute",
   "keystrokeHighlight",
