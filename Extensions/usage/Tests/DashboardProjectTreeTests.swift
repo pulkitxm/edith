@@ -694,6 +694,7 @@ import Testing
         #expect(DashFmt.duration(3_600_000) == "1h")
         #expect(DashFmt.duration(3_660_000) == "1h 1m")
         #expect(DashFmt.duration(7_200_000) == "2h")
+        #expect(DashFmt.duration(93_600_000) == "1d 2h")
     }
 
     @Test func dateShort() {

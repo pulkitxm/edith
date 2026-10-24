@@ -541,7 +541,7 @@ private struct LimitWindowChipsRow: View {
         HStack {
             Text(title)
             Spacer()
-            ForEach(MenuBarLimits.slots(for: provider), id: \.self) { slot in
+            ForEach(MenuBarLimits.menuBarSlots(for: provider), id: \.self) { slot in
                 Toggle(slot.settingsLabel(for: provider), isOn: binding(for: slot))
                     .toggleStyle(.button)
             }
@@ -555,7 +555,7 @@ private struct LimitWindowChipsRow: View {
                 var current = Set(MenuBarLimits.parseSelection(raw, provider: provider))
                 if on { current.insert(slot) } else { current.remove(slot) }
                 raw = MenuBarLimits.encodeSelection(
-                    MenuBarLimits.slots(for: provider).filter(current.contains))
+                    MenuBarLimits.menuBarSlots(for: provider).filter(current.contains))
             })
     }
 }

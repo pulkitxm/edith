@@ -584,8 +584,9 @@ public enum UsageHistory {
             out.append(contentsOf: bytes)
         }
         if let object = value as? [String: Any] {
-            append(2, object.count)
-            for key in object.keys.sorted() {
+            let keys = object.keys.filter { $0 != "attribution" }.sorted()
+            append(2, keys.count)
+            for key in keys {
                 appendString(key)
                 guard let item = object[key], appendIdentity(of: item, field: key, to: &out)
                 else { return false }

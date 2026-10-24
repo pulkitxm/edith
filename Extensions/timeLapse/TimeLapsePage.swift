@@ -465,7 +465,9 @@ struct TimeLapseControls: View {
 
     private func duration(_ seconds: Double) -> String {
         let seconds = max(0, Int(seconds))
-        return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
+        let clock = String(
+            format: "%02d:%02d:%02d", seconds % 86_400 / 3600, seconds / 60 % 60, seconds % 60)
+        return seconds >= 86_400 ? "\(seconds / 86_400)d \(clock)" : clock
     }
 
     private func export(_ recording: TimeLapseRecording) {

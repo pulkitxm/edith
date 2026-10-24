@@ -248,6 +248,9 @@ final class LimitsStatusItem {
             case .missing:
                 value = "\u{2013}"
                 color = dimColor
+            case .credits(let balance):
+                value = MenuBarLimits.creditsBalance(balance)
+                color = subColor ?? NSColor.labelColor
             case .percent(let percent):
                 value = "\(percent)"
                 color =
@@ -313,6 +316,11 @@ final class LimitsStatusItem {
             out.append(
                 NSAttributedString(
                     string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .credits(let balance):
+            out.append(
+                NSAttributedString(
+                    string: MenuBarLimits.creditsBalance(balance),
+                    attributes: [.font: font, .foregroundColor: subColor ?? NSColor.labelColor]))
         case .percent(let percent):
             let tint =
                 segment.window.map {
@@ -568,10 +576,26 @@ struct LimitsMenuPanel: View {
                                 }
                             }
                         }
-                        ScrollView {
-                            ClaudeAccountLimitsView(accounts: store.claudeAccounts, compact: true)
+                        ForEach(store.claudeAccounts) { account in
+                            Text("\(provider.label) · \(account.name)")
+                                .font(.edithText(.headline)).lineLimit(1)
+                            ForEach(
+                                MenuBarLimits.slots(for: provider).filter { slot in
+                                    slot != .fable || account.limits.fable != nil
+                                }, id: \.self
+                            ) { slot in
+                                let window = account.limits.window(for: slot)
+                                StatusProgressRow(
+                                    title: slot.title(for: provider),
+                                    percent: window.map { Double($0.shownPercent) },
+                                    resetsAt: window?.resetsAt)
+                            }
+                            if let error = account.limits.error {
+                                Text(error).font(.edithText(.caption))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
-                        .frame(maxHeight: UIScale.pt(store.claudeAccounts.count <= 2 ? 340 : 420))
                     } else {
                         let limits = store.limits(for: provider)
                         Text(provider.label).font(.edithText(.headline))
@@ -581,8 +605,18 @@ struct LimitsMenuPanel: View {
                         ForEach(slots, id: \.self) { slot in
                             let window = limits.window(for: slot)
                             StatusProgressRow(
-                                title: slot.title(for: provider), percent: window?.percent,
+                                title: slot.title(for: provider),
+                                percent: window.map { Double($0.shownPercent) },
                                 resetsAt: window?.resetsAt)
+                        }
+                        if let credits = limits.credits {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(LimitWindowSlot.credits.title(for: provider))
+                                Spacer(minLength: 8)
+                                Text("\(MenuBarLimits.creditsBalance(credits)) remaining")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

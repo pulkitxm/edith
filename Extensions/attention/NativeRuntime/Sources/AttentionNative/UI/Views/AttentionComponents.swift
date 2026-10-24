@@ -25,12 +25,7 @@ enum AttentionPalette {
 
 enum AttentionFormat {
     static func duration(_ value: TimeInterval) -> String {
-        let seconds = max(0, Int(value.rounded()))
-        let hours = seconds / 3_600
-        let minutes = seconds % 3_600 / 60
-        if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
-        if minutes > 0 { return "\(minutes)m" }
-        return "\(seconds)s"
+        CompactDuration.detailed(value.rounded(), showsSeconds: false)
     }
 
     static func clock(_ value: TimeInterval) -> String {

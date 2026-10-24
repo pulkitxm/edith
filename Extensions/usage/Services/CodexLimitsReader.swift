@@ -32,9 +32,14 @@ enum CodexLimitsReader {
         let resetsAt: Double?
     }
 
+    struct Credits: Decodable {
+        let balance: String?
+    }
+
     struct Snapshot: Decodable {
         let primary: Window?
         let secondary: Window?
+        let credits: Credits?
     }
 
     struct Result: Decodable {
@@ -174,9 +179,11 @@ enum CodexLimitsReader {
                     resetsAt: window.resetsAt.map(Date.init(timeIntervalSince1970:)))
             )
         }.sorted { $0.duration < $1.duration }
+        let balance = snapshot.credits?.balance.flatMap(Double.init)
         return ProviderLimits(
             provider: .codex,
             session: mapped.first { $0.duration < 7 * 24 * 60 }?.value,
-            week: mapped.last { $0.duration >= 7 * 24 * 60 }?.value)
+            week: mapped.last { $0.duration >= 7 * 24 * 60 }?.value,
+            credits: balance.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil })
     }
 }

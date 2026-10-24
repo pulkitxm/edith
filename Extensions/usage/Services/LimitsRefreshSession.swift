@@ -59,7 +59,8 @@ public actor LimitsRefreshSession {
                 LimitsTopicSnapshot(
                     refreshedAt: latest.refreshedAt, providers: paused,
                     failure: paused.compactMap(\.error).first,
-                    claudeAccounts: providers.contains(.claude) ? latest.claudeAccounts : []))
+                    claudeAccounts: providers.contains(.claude) ? latest.claudeAccounts : [],
+                    claudeUsesAccounts: providers.contains(.claude) && latest.claudeUsesAccounts))
         }
         let id = UUID()
         activeID = id

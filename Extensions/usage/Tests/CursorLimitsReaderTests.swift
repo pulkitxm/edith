@@ -21,6 +21,29 @@ import Testing
         #expect(limits.week?.resetsAt == limits.session?.resetsAt)
     }
 
+    @Test func includedSpendDoesNotReplaceTheModelPools() throws {
+        let data = Data(
+            """
+            {
+              "billingCycleEnd": "1794904589000",
+              "planUsage": {
+                "includedSpend": 7900,
+                "totalSpend": 7900,
+                "limit": 40000,
+                "autoPercentUsed": 0.355,
+                "apiPercentUsed": 27.336,
+                "totalPercentUsed": 2.43
+              }
+            }
+            """.utf8)
+        let limits = try CursorLimitsReader.limits(json: data)
+        #expect(limits.session?.percent == 0.355)
+        #expect(limits.week?.percent == 27.336)
+        #expect(limits.session?.shownPercent == 1)
+        #expect(limits.week?.shownPercent == 27)
+        #expect(limits.session?.resetsAt == limits.week?.resetsAt)
+    }
+
     @Test func aMissingCursorModelsPoolStaysEmpty() throws {
         let data = Data(
             """

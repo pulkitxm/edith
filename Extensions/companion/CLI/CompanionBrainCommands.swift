@@ -1764,8 +1764,7 @@ struct CompanionBaselinesCommand: AsyncParsableCommand {
                     ]))
                 return
             }
-            let hours = outcome.audioSeconds / 3600
-            CLIOut.out("\(String(format: "%.1f", hours)) hours of audio recorded")
+            CLIOut.out("\(CompactDuration.detailed(outcome.audioSeconds)) of audio recorded")
             if outcome.coldStart {
                 CLIOut.out(
                     "still cold: deviations stay suppressed until about 20 hours, "

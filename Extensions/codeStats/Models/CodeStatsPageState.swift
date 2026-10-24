@@ -167,10 +167,7 @@ enum CodeStatsProgressMath {
     }
 
     static func duration(_ interval: TimeInterval) -> String {
-        let seconds = Int(interval.rounded())
-        if seconds < 60 { return "\(seconds)s" }
-        if seconds < 3_600 { return "\(seconds / 60)m \(seconds % 60)s" }
-        return "\(seconds / 3_600)h \(seconds % 3_600 / 60)m"
+        CompactDuration.detailed(interval.rounded())
     }
 }
 

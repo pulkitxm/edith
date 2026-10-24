@@ -1117,13 +1117,8 @@ enum DashFmt {
     static func pct(_ v: Double) -> String { String(format: "%.1f%%", v * 100) }
     static func duration(_ ms: Double) -> String {
         guard ms > 0 else { return "-" }
-        let s = Int((ms / 1000).rounded())
-        if s < 60 { return "\(s)s" }
-        let m = Int((Double(s) / 60).rounded())
-        if m < 60 { return "\(m)m" }
-        let h = m / 60
-        let rem = m % 60
-        return rem > 0 ? "\(h)h \(rem)m" : "\(h)h"
+        let s = (ms / 1000).rounded()
+        return CompactDuration.detailed(s < 60 ? s : (s / 60).rounded() * 60)
     }
     static func dateShort(_ ymd: String) -> String {
         let parts = ymd.split(separator: "-")

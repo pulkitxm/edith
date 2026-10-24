@@ -60,6 +60,7 @@ extension LimitsHistory.Latest {
         case .session: session
         case .week: week
         case .fable: fable
+        case .credits: nil
         }
     }
 }

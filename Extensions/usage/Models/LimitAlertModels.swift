@@ -44,6 +44,7 @@ public struct LimitAlertTarget: Hashable, Codable, Sendable {
         case (_, .session): "\(provider.label) 5h"
         case (_, .week): "\(provider.label) weekly"
         case (_, .fable): "\(provider.label) Fable weekly"
+        case (_, .credits): "\(provider.label) credits"
         }
     }
 }

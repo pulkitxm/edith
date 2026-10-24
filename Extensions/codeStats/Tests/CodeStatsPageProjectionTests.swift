@@ -104,5 +104,6 @@ import Testing
         #expect(CodeStatsProgressMath.duration(42) == "42s")
         #expect(CodeStatsProgressMath.duration(185) == "3m 5s")
         #expect(CodeStatsProgressMath.duration(7_380) == "2h 3m")
+        #expect(CodeStatsProgressMath.duration(97_380) == "1d 3h")
     }
 }

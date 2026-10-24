@@ -82,10 +82,7 @@ enum TimeLapseSurface {
 
     private static func duration(_ seconds: Double) -> String {
         guard seconds.isFinite else { return "Unavailable" }
-        let bounded = Int(min(31_536_000, max(0, seconds)))
-        return bounded >= 3600
-            ? "\(bounded / 3600)h \(bounded % 3600 / 60)m"
-            : "\(bounded / 60)m \(bounded % 60)s"
+        return CompactDuration.detailed(min(31_536_000, seconds))
     }
 
     private static func sourceDescription(_ recorder: TimeLapseRecorder) -> String {

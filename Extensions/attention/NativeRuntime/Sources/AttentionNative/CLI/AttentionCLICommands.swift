@@ -279,12 +279,7 @@ enum AttentionCLI {
     }
 
     static func clock(_ duration: TimeInterval) -> String {
-        let seconds = max(0, Int(duration.rounded()))
-        let hours = seconds / 3_600
-        let minutes = seconds % 3_600 / 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        if minutes == 0, seconds > 0 { return "\(seconds)s" }
-        return "\(minutes)m"
+        CompactDuration.detailed(duration.rounded(), showsSeconds: false)
     }
 
     static func save(settings: AttentionSettings) throws {

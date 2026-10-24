@@ -74,6 +74,11 @@ public final class UsageWorkerController {
         self.collect = collect
         self.fetchLimits = fetchLimits
         self.projectLimits = projectLimits
+        latestLimits = LimitsSnapshotCache.load(url: limitsSnapshotURL)
+    }
+
+    private var limitsSnapshotURL: URL {
+        dataDirectory.appendingPathComponent("limits-snapshot.json")
     }
 
     @discardableResult
@@ -167,6 +172,9 @@ public final class UsageWorkerController {
             let result = await fetch(limitsSession)
             guard !Task.isCancelled, let self, !self.stopped else { return }
             self.latestLimits = result
+            if result.failure != "Cancelled" {
+                try? LimitsSnapshotCache.save(result, url: self.limitsSnapshotURL)
+            }
             self.limitsTask = nil
             self.finishLimitsWaiters()
             UsageEvents.post(UsageEvents.limitsUpdated)

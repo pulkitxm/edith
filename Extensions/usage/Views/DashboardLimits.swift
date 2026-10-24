@@ -53,7 +53,8 @@ struct RateLimitsDialsView: View {
                     providers: await LimitsHistory.loadLatestProviders(),
                     current: await UsageWorkerOperations.controller?.latestLimits)
             }) { summary in
-                let latest = summary.providers
+                var latest = summary.providers
+                if summary.current?.claudeUsesAccounts == true { latest[.claude] = nil }
                 latestProviders = latest
                 latestLimits = summary.current
                 let found = LimitProvider.allCases.filter {
@@ -126,6 +127,12 @@ struct RateLimitsDialsView: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if let credits = credits(for: selected) {
+                    Text(creditsText(credits))
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if let point {
                     Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
                         .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
@@ -189,7 +196,24 @@ struct RateLimitsDialsView: View {
         } else {
             SurfaceFittedGrid(count: providers.count, minimum: 240) {
                 ForEach(providers) { provider in
-                    if let latest = latestProviders[provider] {
+                    if provider == .claude, let accounts = latestLimits?.claudeAccounts,
+                        !accounts.isEmpty
+                    {
+                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                ProviderLogoView(provider).frame(
+                                    width: UIScale.pt(14), height: UIScale.pt(14))
+                                Text(provider.label).font(.edithText(.headline))
+                            }
+                            ClaudeAccountLimitsView(accounts: accounts, compact: true)
+                                .presenterCover(UsagePresenterState.shared.hides("Usage"))
+                        }
+                        .padding(UIScale.pt(presentation?.tile.dense == true ? 8 : 12))
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .background(
+                            Color.secondary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                    } else if let latest = latestProviders[provider] {
                         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                             HStack(spacing: UIScale.pt(6)) {
                                 ProviderLogoView(provider).frame(
@@ -225,6 +249,10 @@ struct RateLimitsDialsView: View {
                                 quotaRow("Additional models", window: fable)
                             }
                             if presentation?.tile.showDetails != false {
+                                if let credits = credits(for: provider) {
+                                    Text(creditsText(credits)).font(.edithText(.caption))
+                                        .foregroundStyle(.secondary)
+                                }
                                 if let extra = latest.grok?.extraLine,
                                     presentation?.tile.shows("account") != false
                                 {
@@ -250,12 +278,20 @@ struct RateLimitsDialsView: View {
         }
     }
 
+    private func credits(for provider: LimitProvider) -> Double? {
+        latestLimits?.providers.first { $0.provider == provider }?.credits
+    }
+
+    private func creditsText(_ credits: Double) -> String {
+        "\(MenuBarLimits.creditsBalance(credits)) credits remaining"
+    }
+
     private func quotaRow(_ label: String, window: LimitWindow) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack {
                 Text(label).font(.edithText(.caption))
                 Spacer(minLength: 0)
-                Text("\(Int(window.percent))% used").font(.edithText(.caption)).monospacedDigit()
+                Text("\(window.shownPercent)% used").font(.edithText(.caption)).monospacedDigit()
             }
             GeometryReader { proxy in
                 Capsule().fill(Color.secondary.opacity(0.15))
@@ -270,7 +306,7 @@ struct RateLimitsDialsView: View {
             if presentation?.tile.showDetails != false {
                 HStack {
                     if presentation?.tile.shows("remaining") != false {
-                        Text("\(max(0, 100 - Int(window.percent)))% remaining")
+                        Text("\(max(0, 100 - window.shownPercent))% remaining")
                     }
                     Spacer(minLength: 0)
                     if let reset = window.resetsAt, presentation?.tile.shows("resets") != false {

@@ -109,7 +109,8 @@ enum UsageConfigCatalog {
             fallback: .string("session,week,fable")),
         UsageSettingDefinition(
             AppStorageKeys.MenuBar.codexWindows, .string, group: "menubar",
-            summary: "Codex windows shown in the menu bar, comma-separated (session, week).",
+            summary: "Codex windows shown in the menu bar, comma-separated"
+                + " (session, week, credits).",
             fallback: .string("session,week")),
         UsageSettingDefinition(
             AppStorageKeys.MenuBar.cursorWindows, .string, group: "menubar",
