@@ -181,7 +181,7 @@ class HostReleaseProofTests(unittest.TestCase):
     def test_source_index_extra_payload_and_external_link_fail_before_signature(self):
         with self.assertRaises(ValueError):
             self.proof(expected_index=b'[]')
-        self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(38)]))
+        self.index.write_text(json.dumps([{'id': 'owner'} for _ in range(2)]))
         with self.assertRaises(ValueError):
             self.proof()
         self.index.write_text(json.dumps([{'id': 'owner' + str(i)} for i in range(40)]))

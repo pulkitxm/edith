@@ -328,7 +328,14 @@ enum PDFCompression {
         try StudioPDF.rebuild(
             document, to: url,
             pageSetup: { context in
-                for filter in filters { _ = filter.apply(to: context) }
+                for filter in filters {
+                    guard filter.apply(to: context) else {
+                        throw StudioError.failed("The PDF compression filter could not be applied.")
+                    }
+                }
+            },
+            pageTeardown: { context in
+                for filter in filters.reversed() { filter.remove(from: context) }
             }, adjust: grayscale ? grayAnnotation : nil, progress: progress)
     }
 
@@ -342,7 +349,12 @@ enum PDFCompression {
             return
         }
         try StudioPDF.rebuild(
-            document, to: url, pageSetup: { context in _ = filter.apply(to: context) },
+            document, to: url,
+            pageSetup: { context in
+                guard filter.apply(to: context) else {
+                    throw StudioError.failed("The PDF grayscale filter could not be applied.")
+                }
+            }, pageTeardown: { context in filter.remove(from: context) },
             adjust: grayAnnotation, progress: progress)
     }
 

@@ -119,6 +119,28 @@ import Testing
         #expect(document.page(at: 1)?.rotation == 90)
     }
 
+    @Test func repeatedCompressionAndGrayscaleKeepTheirColorTransformsIndependent() async throws {
+        let space = try Workspace()
+        let source = try structured(space, photos: true)
+        let original = try #require(PDFDocument(url: source))
+        for _ in 0..<3 {
+            for level in ["low", "recommended"] {
+                _ = try await space.audited(
+                    "pdf.compress", [source], ["level": .text(level)],
+                    environment: space.withoutEngines)
+            }
+            let result = try await space.audited("pdf.grayscale", [source])
+            let document = try result.document()
+            #expect(sizes(document) == sizes(original))
+            #expect(AuditPDF.texts(document) == AuditPDF.texts(original))
+            #expect(AuditPDF.linkTargets(document, page: 0) == [2])
+            for index in 0..<document.pageCount {
+                let page = try #require(document.page(at: index))
+                #expect(AuditInk.coloredPixels(try AuditInk.render(page)) == 0)
+            }
+        }
+    }
+
     func scanned(_ geometry: AuditGeometry) -> AuditPage {
         geometry.page { page in
             let size = page.layoutSize
