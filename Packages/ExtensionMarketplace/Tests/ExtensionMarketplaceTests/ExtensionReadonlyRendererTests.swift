@@ -4,6 +4,94 @@ import Testing
 @testable import ExtensionMarketplace
 
 @Suite @MainActor struct ExtensionReadonlyRendererTests {
+    @Test func separatePresentationsKeepIndependentRuntimeObjectsWhenAnotherCloses() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("renderer-isolation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bundle = directory.appendingPathComponent("herdr/app.bundle/Contents")
+        let binaries = bundle.appendingPathComponent("MacOS")
+        try FileManager.default.createDirectory(at: binaries, withIntermediateDirectories: true)
+        let executable = binaries.appendingPathComponent("Renderer")
+        let source = directory.appendingPathComponent("Renderer.swift")
+        try """
+        import AppKit
+        import Foundation
+        @MainActor final class Renderer: NSObject {
+            private var title: String?
+            @objc func execute(_ input: NSDictionary) -> NSObject {
+                switch input["operation"] as? String {
+                case "describe":
+                    return ["id": "herdr", "version": "1.0.0", "hostABI": "synthetic-abi",
+                            "role": "app"] as NSDictionary
+                case "configureUI":
+                    title = input["presentationID"] as? String
+                    return ["ok": title != nil] as NSDictionary
+                case "view":
+                    let controller = NSViewController()
+                    controller.title = title
+                    return controller
+                case "stopUI":
+                    title = nil
+                    return ["ok": true] as NSDictionary
+                default: return ["ok": false] as NSDictionary
+                }
+            }
+        }
+        @_cdecl("edith_extension_create")
+        public func createRenderer() -> UnsafeMutableRawPointer? {
+            MainActor.assumeIsolated { Unmanaged.passRetained(Renderer()).toOpaque() }
+        }
+        """.write(to: source, atomically: true, encoding: .utf8)
+        let information: [String: Any] = [
+            "CFBundleIdentifier": "com.pulkit.edith.extensions.herdr.app",
+            "CFBundleExecutable": "Renderer", "CFBundlePackageType": "BNDL",
+            "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "synthetic-abi",
+        ]
+        try PropertyListSerialization.data(
+            fromPropertyList: information, format: .xml, options: 0
+        ).write(to: bundle.appendingPathComponent("Info.plist"))
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        compiler.arguments = [
+            "swiftc", "-emit-library", "-module-name", "ScopedRendererFixture",
+            source.path, "-o", executable.path,
+        ]
+        try compiler.run()
+        compiler.waitUntilExit()
+        try #require(compiler.terminationStatus == 0)
+        let signer = Process()
+        signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        signer.arguments = ["--force", "--sign", "-", bundle.deletingLastPathComponent().path]
+        try signer.run()
+        signer.waitUntilExit()
+        try #require(signer.terminationStatus == 0)
+        let package = ExtensionPackage(
+            id: "herdr", version: "1.0.0", hostABI: "synthetic-abi",
+            downloadURL: URL(string: "https://synthetic.invalid/herdr.zip")!,
+            sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+        let prototype = try ExtensionBundleRuntime(
+            readOnlyPackage: package, directory: directory, role: .app,
+            hostABI: package.hostABI, verify: ExtensionCodeSignature.verifyDevelopment)
+        let first = try prototype.makeRenderer()
+        let second = try prototype.makeRenderer()
+        let firstID = UUID()
+        let secondID = UUID()
+        for (runtime, id) in [(first, firstID), (second, secondID)] {
+            let response = try runtime.response(
+                id: package.id, operation: "configureUI",
+                context: configuration(package.id, "main", id))
+            #expect(response["ok"] as? Bool == true)
+        }
+        #expect(try first.viewController(id: package.id, context: [:])?.title == firstID.uuidString)
+        #expect(
+            try second.viewController(id: package.id, context: [:])?.title == secondID.uuidString)
+        _ = try first.response(id: package.id, operation: "stopUI")
+        #expect(try first.viewController(id: package.id, context: [:])?.title == nil)
+        #expect(
+            try second.viewController(id: package.id, context: [:])?.title == secondID.uuidString)
+        _ = try second.response(id: package.id, operation: "stopUI")
+    }
+
     @Test func actualReadonlyRuntimeRejectsUnconfiguredCallbacksStartAndNativeTasksBeforeLoading()
         throws
     {

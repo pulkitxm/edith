@@ -110,7 +110,7 @@ final class HostLocalSession {
             !configuration.uiOnly || (request.location == "settings" && request.surface == nil)
         else { throw HostWorkerError.rejected }
         try request.validate(extensionID: configuration.package.id)
-        let handle = HostLocalSceneHandle(session: self, request: request)
+        let handle = try HostLocalSceneHandle(session: self, request: request)
         handles[request.presentationID] = handle
         return handle
     }
@@ -119,10 +119,9 @@ final class HostLocalSession {
         guard let handle = handles.removeValue(forKey: presentationID) else { return }
         handle.detach()
         terminalRenderer.release(presentationID)
-        for runtime in runtimes {
+        for runtime in handle.runtimes {
             _ = try? runtime.response(
-                id: configuration.package.id, operation: "releaseUI",
-                context: ["presentationID": presentationID.uuidString])
+                id: configuration.package.id, operation: "stopUI")
         }
     }
 
@@ -186,6 +185,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
     public var engineIdentity: HostRemoteKernelIdentity? { session.engineIdentity }
     public var isPresented: Bool { content != nil && !closed }
     private let session: HostLocalSession
+    fileprivate let runtimes: [ExtensionBundleRuntime]
     private var content: ExtensionBundlePresentation?
     private(set) var runtime: ExtensionBundleRuntime?
     private var bridge: HostLocalEngineBridge?
@@ -194,9 +194,10 @@ public final class HostLocalSceneHandle: HostScenePresentation {
         !["main", "settings", "music.detail", "machines.window"].contains(request.location)
     }
 
-    fileprivate init(session: HostLocalSession, request: HostExtensionContentRequest) {
+    fileprivate init(session: HostLocalSession, request: HostExtensionContentRequest) throws {
         self.session = session
         self.request = request
+        runtimes = try session.runtimes.map { try $0.makeRenderer() }
     }
 
     func present(compact: Bool, visible: Bool, width: Double) throws -> NSViewController {
@@ -206,7 +207,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
             try HostLocalEngineBridge(engine: $0, presentationID: request.presentationID)
         }
         let input = try session.context(for: request, bridge: bridge)
-        for runtime in session.runtimes {
+        for runtime in runtimes {
             let response = try runtime.response(id: id, operation: "configureUI", context: input)
             guard response["ok"] as? Bool == true else { continue }
             if let result = try runtime.presentation(
@@ -245,6 +246,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
         guard !closed, let runtime else { return }
         try await runtime.preparePresentationToClose(
             id: session.configuration.package.id, presentationID: request.presentationID)
+        try await runtime.prepareRemoteUIToStopAll()
     }
 
     public func close() async throws {

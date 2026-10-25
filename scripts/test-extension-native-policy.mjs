@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
+import { workerHostABI } from "./extension-host-abi.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "extension-native-policy-"));
 try {
@@ -54,7 +55,7 @@ import Foundation
     id: "mock",
     version: "1.0.0",
     contractVersion: 1,
-    hostABI: "edith-host-3",
+    hostABI: workerHostABI,
     minimumSystemVersion: "14.0.0",
     roles: {
       app: ["Extensions/mock/Runtime.swift"],

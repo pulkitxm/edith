@@ -2,7 +2,7 @@
   {
     "id": "keepAwake",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -36,7 +36,7 @@
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.4.0",
     "roles": {
       "app": [
@@ -73,7 +73,7 @@
   {
     "id": "focusDim",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -106,7 +106,7 @@
   {
     "id": "hinge",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -143,7 +143,7 @@
   {
     "id": "windowSweaters",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -191,7 +191,7 @@
   {
     "id": "micMute",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -224,7 +224,7 @@
   {
     "id": "keystrokeHighlight",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -258,7 +258,7 @@
   {
     "id": "presenter",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -306,7 +306,7 @@
   {
     "id": "colorPicker",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -347,7 +347,7 @@
       "ci-extension-system-stats"
     ],
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -387,7 +387,7 @@
   {
     "id": "emoji",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -436,7 +436,7 @@
   {
     "id": "homebrew",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -475,7 +475,7 @@
   {
     "id": "calendar",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -526,7 +526,7 @@
   {
     "id": "jev",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -571,7 +571,7 @@
   {
     "id": "system",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -611,7 +611,7 @@
   {
     "id": "timeLapse",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "15.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -651,7 +651,7 @@
   {
     "id": "cleaner",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -692,7 +692,7 @@
   {
     "id": "appMaintenance",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -735,7 +735,7 @@
   {
     "id": "blitztree",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -776,7 +776,7 @@
       "ci-extension-plugins-native"
     ],
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "supportProduct": [
@@ -855,7 +855,7 @@
   {
     "id": "notchShelf",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "helper": [
@@ -959,7 +959,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "supportProduct": "EdithExtensionCommands",
     "inputs": [
       "Extensions/clipboard"
@@ -1034,7 +1034,7 @@
   {
     "id": "music",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -1175,7 +1175,7 @@
       "ci-extension-docs-native"
     ],
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1237,7 +1237,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "supportProduct": [
       "EdithExtensionArchive",
       "EdithExtensionCommands"
@@ -1301,7 +1301,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "supportProduct": "EdithExtensionCommands",
     "inputs": [
       "Extensions/companion"
@@ -1386,7 +1386,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "supportProduct": "EdithExtensionUI",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -1447,7 +1447,7 @@
   {
     "id": "studio",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1760,7 +1760,7 @@
   {
     "id": "usage",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1952,7 +1952,7 @@
   {
     "id": "bifrost",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2036,7 +2036,7 @@
   {
     "id": "lidAwake",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2093,7 +2093,7 @@
   {
     "id": "attention",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -2226,7 +2226,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -2430,7 +2430,7 @@
   {
     "id": "downloads",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -2479,7 +2479,7 @@
       "ci-extension-seo-audit-native"
     ],
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2531,7 +2531,7 @@
   {
     "id": "virtualCamera",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2661,7 +2661,7 @@
       "ci-extension-code-stats-native"
     ],
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [
@@ -2752,7 +2752,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "supportProduct": [
       "EdithExtensionDocuments",
@@ -3022,7 +3022,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "supportProduct": [
       "EdithExtensionDocuments",
@@ -3138,7 +3138,7 @@
   {
     "id": "database",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
@@ -3252,7 +3252,7 @@
   {
     "id": "socialManager",
     "version": "1.0.0",
-    "hostABI": "edith-host-3",
+    "hostABI": "edith-host-4",
     "minimumSystemVersion": "14.0.0",
     "roles": {
       "app": [

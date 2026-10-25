@@ -87,6 +87,13 @@ public final class ExtensionBundleRuntime {
         readOnlyPackage = (package, directory.resolvingSymlinksInPath())
     }
 
+    public func makeRenderer() throws -> ExtensionBundleRuntime {
+        guard let selected = readOnlyPackage else { throw MarketplaceError.invalidBundle }
+        return try ExtensionBundleRuntime(
+            readOnlyPackage: selected.package, directory: selected.directory, role: role,
+            hostABI: hostABI, environment: environment, verify: verify)
+    }
+
     public func start(id: String, context: NSDictionary) throws {
         guard readOnlyPackage == nil else { throw MarketplaceError.invalidBundle }
         let instance = try load(id: id)
