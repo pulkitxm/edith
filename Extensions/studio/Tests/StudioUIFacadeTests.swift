@@ -125,6 +125,7 @@ import Testing
         remote.add([image])
         try await waitUntil { remote.notice == "Added synthetic.png" || remote.message != nil }
         #expect(remote.notice == "Added synthetic.png" && remote.message == nil)
+        try await waitUntil { remote.files.count == 1 }
         engine.message = "Synthetic engine failure"
         facade.refresh()
         try await waitUntil { remote.message == "Synthetic engine failure" }
