@@ -206,7 +206,9 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
         let model = uiModel
         let settings = settingsModel
         settings?.stop()

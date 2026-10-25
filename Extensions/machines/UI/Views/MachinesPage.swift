@@ -11,7 +11,13 @@ extension EnvironmentValues {
 }
 
 struct MachinesPage: View {
-    @State private var model = MachinesModel.shared
+    @State private var model: MachinesModel
+    private let workspace: WorkspaceModel
+
+    init(model: MachinesModel? = nil, workspace: WorkspaceModel? = nil) {
+        _model = State(initialValue: model ?? .shared)
+        self.workspace = workspace ?? .shared
+    }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @AppStorage(MachineSettingsKeys.tab, store: SharedDefaults.store) private var storedTab =
@@ -129,7 +135,8 @@ struct MachinesPage: View {
                                 model.selection = machine.id
                             },
                             onDetach: {
-                                MachineWindow.open(machineID: machine.id, title: machine.name)
+                                MachineWindow.open(
+                                    machineID: machine.id, title: machine.name, model: model)
                             },
                             onEdit: { editingMachine = machine },
                             onRemove: { confirmRemoval = machine }
@@ -188,7 +195,7 @@ struct MachinesPage: View {
                 model.selection = id
             }
         } else if mode == .workspace {
-            WorkspaceView(machines: model)
+            WorkspaceView(machines: model, model: workspace)
         } else if let session = model.selectedSession() {
             MachineDetailView(
                 session: session, model: model,

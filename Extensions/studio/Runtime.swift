@@ -273,7 +273,11 @@ final class ExtensionRuntime: NSObject {
                 let hadUI = !uiScenes.isEmpty
                 for scene in uiScenes.values { retire(scene) }
                 uiScenes.removeAll()
-                if hadUI { TextEditingCommands.shutdown() }
+                if hadUI {
+                    ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                        TextEditingCommands.shutdown()
+                    }
+                }
                 return ["ok": true] as NSDictionary
             }
             guard let value = input["presentationID"] as? String,
@@ -281,7 +285,9 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             retire(scene)
             if !uiScenes.values.contains(where: { $0.route == .main }) {
-                TextEditingCommands.shutdown()
+                ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                    TextEditingCommands.shutdown()
+                }
             }
         case "view":
             guard let value = input["presentationID"] as? String,
@@ -343,7 +349,11 @@ final class ExtensionRuntime: NSObject {
         navigation?.invalidate()
         navigation = nil
         VideoEditorOpenBridge.shared.present = {}
-        if hadEngine || hadUI { TextEditingCommands.shutdown() }
+        if hadEngine || hadUI {
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
+        }
         let task = Task {
             for scene in closingScenes { await scene.value }
             await ownedStreams?.stopAndWait()

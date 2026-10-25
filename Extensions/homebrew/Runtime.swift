@@ -50,7 +50,9 @@ final class ExtensionRuntime: NSObject {
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            TextEditingCommands.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
             if let model = uiModel {
                 if model.isMutating {
                     client.invalidate()
@@ -86,7 +88,9 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func releasePresentation() {
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
         guard let model = uiModel, !model.isMutating else { return }
         model.cancelDiscovery()
         uiClient?.invalidate()
@@ -94,7 +98,9 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
         uiModel?.shutdown()
         uiModel = nil
         uiClient?.invalidate()

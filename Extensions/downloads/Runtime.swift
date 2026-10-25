@@ -180,7 +180,9 @@ final class ExtensionRuntime: NSObject {
                 uiRetirements[id] = nil
             }
         }
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
     }
 }
 

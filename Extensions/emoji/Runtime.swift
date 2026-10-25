@@ -258,7 +258,9 @@ final class ExtensionRuntime: NSObject {
             observers.forEach(IPC.stopObserving)
             observers.removeAll()
             HotKeyRegistrar.shutdown()
-            TextEditingCommands.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
         case "status": return ["ok": true, "running": service != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

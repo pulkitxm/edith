@@ -16,6 +16,7 @@ import Testing
         try """
         import AppKit
         import Foundation
+        import ObjectiveC
         @MainActor final class Renderer: NSObject {
             private var title: String?
             @objc func execute(_ input: NSDictionary) -> NSObject {
@@ -25,7 +26,9 @@ import Testing
                             "role": "app"] as NSDictionary
                 case "configureUI":
                     title = input["presentationID"] as? String
-                    return ["ok": title != nil] as NSDictionary
+                    let key = unsafeBitCast(NSSelectorFromString("edithExtensionUIOwnership"), to: UnsafeRawPointer.self)
+                    let bound = objc_getAssociatedObject(self, key) as? NSObject
+                    return ["ok": title != nil, "ownershipBound": bound === input["hostUIOwnership"] as? NSObject] as NSDictionary
                 case "view":
                     let controller = NSViewController()
                     controller.title = title
@@ -72,8 +75,8 @@ import Testing
         let prototype = try ExtensionBundleRuntime(
             readOnlyPackage: package, directory: directory, role: .app,
             hostABI: package.hostABI, verify: ExtensionCodeSignature.verifyDevelopment)
-        let first = try prototype.makeRenderer()
-        let second = try prototype.makeRenderer()
+        let first = try prototype.makeRenderer(ownership: NSObject())
+        let second = try prototype.makeRenderer(ownership: NSObject())
         let firstID = UUID()
         let secondID = UUID()
         for (runtime, id) in [(first, firstID), (second, secondID)] {
@@ -81,6 +84,7 @@ import Testing
                 id: package.id, operation: "configureUI",
                 context: configuration(package.id, "main", id))
             #expect(response["ok"] as? Bool == true)
+            #expect(response["ownershipBound"] as? Bool == true)
         }
         #expect(try first.viewController(id: package.id, context: [:])?.title == firstID.uuidString)
         #expect(

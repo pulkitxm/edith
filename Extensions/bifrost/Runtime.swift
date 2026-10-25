@@ -123,7 +123,9 @@ final class ExtensionRuntime: NSObject {
             await owner?.drain()
             await streams?.stopAndWait()
             while activeCalls > 0 { await Task.yield() }
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }; InputFocus.uninstall()
         }
         resourceStop = task
         return task
@@ -138,7 +140,8 @@ final class ExtensionRuntime: NSObject {
             await owner.stopAndWait()
             owner.shutdown()
         }
-        uiContext = nil; BifrostUIContext.current = nil
+        uiContext = nil
+        if BifrostUIContext.current === owner { BifrostUIContext.current = nil }
         engineClient?.invalidate(); engineClient = nil
     }
 
@@ -165,7 +168,9 @@ final class ExtensionRuntime: NSObject {
             TextEditingCommands.install()
         case "stopUI":
             retireUI()
-            TextEditingCommands.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             guard !stopped, let suite = input["defaultsSuite"] as? String,

@@ -12,6 +12,7 @@ final class SEOSnapshotCache: @unchecked Sendable {
     private var generation = 0
     private var stopped = false
     private var remote: (@Sendable (URL) async throws -> Data?)?
+    private var remoteOwners: [(UUID, @Sendable (URL) async throws -> Data?)] = []
 
     init(
         root: URL = ExtensionData.root.appendingPathComponent("SEOAudit"),
@@ -28,16 +29,30 @@ final class SEOSnapshotCache: @unchecked Sendable {
         }
     }
 
-    func configureRemote(_ read: @escaping @Sendable (URL) async throws -> Data?) {
+    func configureRemote(
+        owner: UUID = UUID(), _ read: @escaping @Sendable (URL) async throws -> Data?
+    ) {
         lock.withLock {
+            remoteOwners.removeAll { $0.0 == owner }
+            remoteOwners.append((owner, read))
             generation += 1; stopped = false; remote = read; network = nil;
+            memory.removeAllObjects()
+        }
+    }
+
+    func releaseRemote(_ owner: UUID) {
+        lock.withLock {
+            remoteOwners.removeAll { $0.0 == owner }
+            remote = remoteOwners.last?.1
+            generation += 1
             memory.removeAllObjects()
         }
     }
 
     func shutdown() {
         lock.withLock {
-            stopped = true; generation += 1; network = nil; remote = nil; memory.removeAllObjects()
+            stopped = true; generation += 1; network = nil; remote = nil; remoteOwners = [];
+            memory.removeAllObjects()
         }
     }
 

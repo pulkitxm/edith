@@ -188,8 +188,10 @@ final class ExtensionRuntime: NSObject {
 
     private func finishUIStop() {
         guard presentations.isEmpty, uiStops.isEmpty else { return }
-        GhosttyRuntime.shared.shutdown()
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "ghostty") { GhosttyRuntime.shared.shutdown() }
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
     }
 
     private func stopEngine() {

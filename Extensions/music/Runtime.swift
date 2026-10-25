@@ -219,7 +219,9 @@ final class ExtensionRuntime: NSObject {
             await ownedWorker?.shutdown()
             navigation = nil; backup = nil; worker = nil; surface = nil; uiService = nil
             if hadLiveEngine || hadUI {
-                TextEditingCommands.shutdown(); InputFocus.uninstall()
+                ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                    TextEditingCommands.shutdown()
+                }; InputFocus.uninstall()
             }
         }
         stopTask = task

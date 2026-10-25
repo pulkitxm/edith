@@ -15,6 +15,8 @@ final class ExtensionRuntime: NSObject {
     ])
     private let settingsChanged: @MainActor () -> Void
     private var worker: CompanionWorker?
+    private let uiBridgeOwner = UUID()
+    private var uiBridge: CompanionUIBridge?
     private var uiWorkspace: CompanionWorkspaceSession?
     private var uiEngine: CompanionUIEngine?
     private var engineClient: ExtensionEngineClient?
@@ -84,7 +86,7 @@ final class ExtensionRuntime: NSObject {
         let originalWorker = worker
         let engine = uiEngine
         let workspace = uiWorkspace
-        let bridge = CompanionTransport.shared.remoteBridge
+        let bridge = uiBridge
         let streams = cliStreams
         commandsSuspended = true
         _ = commands.suspend()
@@ -115,7 +117,7 @@ final class ExtensionRuntime: NSObject {
 
     private func retireUI() {
         let workspace = uiWorkspace
-        let bridge = CompanionTransport.shared.remoteBridge
+        let bridge = uiBridge
         guard workspace != nil || bridge != nil else { return }
         workspace?.cancelPendingCommands()
         bridge?.stop()
@@ -127,7 +129,8 @@ final class ExtensionRuntime: NSObject {
             workspace?.shutdown()
         }
         uiWorkspace = nil
-        CompanionTransport.shared.configureRemote(nil)
+        CompanionTransport.shared.releaseRemote(uiBridgeOwner)
+        uiBridge = nil
         engineClient?.invalidate(); engineClient = nil
     }
 
@@ -156,7 +159,9 @@ final class ExtensionRuntime: NSObject {
             await engine?.shutdown()
             await owner?.shutdown()
             workspace?.shutdown()
-            TextEditingCommands.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
         }
         resourceStop = task
         return task
@@ -179,14 +184,17 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             engineClient = client
             let bridge = CompanionUIBridge(client: client)
-            CompanionTransport.shared.configureRemote(bridge)
+            uiBridge = bridge
+            CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner)
             uiWorkspace = CompanionWorkspaceSession(
                 privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
                 remote: bridge)
             TextEditingCommands.install()
         case "stopUI":
             retireUI()
-            TextEditingCommands.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
         case "start":
             guard !commandsSuspended else { return ["ok": false] as NSDictionary }
             let fixture: Bool

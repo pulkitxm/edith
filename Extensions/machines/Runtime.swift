@@ -23,6 +23,8 @@ final class ExtensionRuntime: NSObject {
     private var uiEngine: MachineUIEngine?
     private var windowNavigation: MachineHostWindowNavigationClient?
     private var uiClient: MachineUIClient?
+    private var uiMachines: MachinesModel?
+    private var uiWorkspace: WorkspaceModel?
     private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
         MachineHealthLifecycle.jobID: .init(ambient: 300)
     ])
@@ -160,13 +162,25 @@ final class ExtensionRuntime: NSObject {
 
     private func retireUI() {
         guard let facade = uiClient else { return }
-        MachinePrivacy.shared.shutdown()
-        TextEditingCommands.shutdown()
-        MachineWindowCommands.shared.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "machinePrivacy") {
+            MachinePrivacy.shared.shutdown()
+        }
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
+        ExtensionUIResources.cleanup(of: self, key: "machineWindows") {
+            MachineWindowCommands.shared.shutdown()
+        }
+        let machines = uiMachines, workspace = uiWorkspace
+        uiMachines = nil; uiWorkspace = nil
+        if let machines { MachineUIPresentations.release(machines) }
+        workspace?.stopPaneActions()
         facade.cancelPendingWork()
         let id = UUID()
         uiRetirements[id] = Task { [self, facade] in
             await facade.drain()
+            await workspace?.shutdown()
+            await machines?.shutdown()
             facade.shutdown()
             uiRetirements[id] = nil
         }
@@ -193,7 +207,9 @@ final class ExtensionRuntime: NSObject {
             let model = MachinesModel(uiClient: facade)
             MachinesModel.shared = model
             let workspace = WorkspaceModel(machines: model)
+            uiMachines = model; uiWorkspace = workspace
             WorkspaceModel.shared = workspace
+            MachineUIPresentations.register(model, workspace: workspace)
             facade.receive = { [weak model, weak workspace] state in
                 model?.applyUIState(state)
                 workspace?.applyUIState(state.workspaces)
@@ -221,11 +237,15 @@ final class ExtensionRuntime: NSObject {
                 "focused": facade.terminalUI.focused,
             ] as NSDictionary
         case "stopUI":
-            WorkspaceModel.shared.stopPaneActions()
-            MachineProcessModels.reset()
+            ExtensionUIResources.cleanup(of: self, key: "paneActions") {
+                WorkspaceModel.shared.stopPaneActions()
+                MachineProcessModels.reset()
+            }
             retireUI()
-            FinderUndoBridge.shutdown()
-            PaneViewStore.shared.shutdown()
+            ExtensionUIResources.cleanup(of: self, key: "paneViews") {
+                FinderUndoBridge.shutdown()
+                PaneViewStore.shared.shutdown()
+            }
             return ["ok": true] as NSDictionary
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
@@ -436,7 +456,9 @@ final class ExtensionRuntime: NSObject {
                 running = true
             }
         case "view":
-            guard uiClient != nil else { return ["ok": false] as NSDictionary }
+            guard uiClient != nil, let model = uiMachines, let workspace = uiWorkspace else {
+                return ["ok": false] as NSDictionary
+            }
             if input["location"] as? String == "machines.window" {
                 guard let target = input["target"] as? NSDictionary,
                     let bytes = try? JSONSerialization.data(withJSONObject: target),
@@ -446,15 +468,17 @@ final class ExtensionRuntime: NSObject {
                 else { return ["ok": false] as NSDictionary }
                 return NSHostingController(
                     rootView: ExtensionPageHost {
-                        MachinesHostWindowPage(request: request)
+                        MachinesHostWindowPage(request: request, model: model)
                             .environment(\.machineConnectionsEnabled, true)
                             .environment(\.terminalLaunchEnabled, true)
                     })
             }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    MachinesPage().environment(\.machineConnectionsEnabled, true)
-                        .environment(\.terminalLaunchEnabled, true)
+                    MachinesPage(model: model, workspace: workspace).environment(
+                        \.machineConnectionsEnabled, true
+                    )
+                    .environment(\.terminalLaunchEnabled, true)
                 })
         case "synchronize":
             do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
@@ -495,8 +519,12 @@ final class ExtensionRuntime: NSObject {
         await MachinesModel.shared.shutdown()
         await transport?.shutdown()
         transport = nil; peer = nil; surface = nil
-        MachinePrivacy.shared.shutdown()
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "machinePrivacy") {
+            MachinePrivacy.shared.shutdown()
+        }
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
     }
 
 }
@@ -507,4 +535,28 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
+}
+
+@MainActor
+private enum MachineUIPresentations {
+    private struct Models {
+        weak var machines: MachinesModel?
+        weak var workspace: WorkspaceModel?
+    }
+    private static var active: [Models] = []
+
+    static func register(_ machines: MachinesModel, workspace: WorkspaceModel) {
+        active.removeAll { $0.machines == nil || $0.machines === machines }
+        active.append(Models(machines: machines, workspace: workspace))
+    }
+
+    static func release(_ machines: MachinesModel) {
+        active.removeAll { $0.machines == nil || $0.machines === machines }
+        if let remaining = active.last, let model = remaining.machines,
+            let workspace = remaining.workspace
+        {
+            MachinesModel.shared = model
+            WorkspaceModel.shared = workspace
+        }
+    }
 }

@@ -11,9 +11,23 @@ final class CompanionTransport: @unchecked Sendable {
     private var closed = false
     private var remote: CompanionUIBridge?
     private var remoteOnly = false
-    func configureRemote(_ value: CompanionUIBridge?) {
+    private var remoteOwners: [(UUID, CompanionUIBridge)] = []
+    func configureRemote(_ value: CompanionUIBridge?, owner: UUID = UUID()) {
         lock.withLock {
+            if let value {
+                remoteOwners.removeAll { $0.0 == owner }
+                remoteOwners.append((owner, value))
+            } else {
+                remoteOwners = []
+            }
             remote = value; remoteOnly = true; closed = value == nil
+        }
+    }
+    func releaseRemote(_ owner: UUID) {
+        lock.withLock {
+            remoteOwners.removeAll { $0.0 == owner }
+            remote = remoteOwners.last?.1
+            closed = remote == nil
         }
     }
     var remoteBridge: CompanionUIBridge? { lock.withLock { remote } }

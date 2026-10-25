@@ -9,6 +9,8 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var service: SEOAuditService?
     private var uiService: SEOAuditService?
+    private var uiModel: SEOAuditModel?
+    private let snapshotOwner = UUID()
     private var uiEngine: SEOAuditUIEngine?
     private var engineClient: ExtensionEngineClient?
     private var operations: SEOAuditCommands?
@@ -127,8 +129,10 @@ final class ExtensionRuntime: NSObject {
             let bridge = SEOAuditUIBridge(client: client)
             let service = SEOAuditService(remote: bridge)
             uiService = service
-            SEOAuditModel.shared = SEOAuditModel(service: service)
-            SEOSnapshotCache.shared.configureRemote {
+            let model = SEOAuditModel(service: service)
+            uiModel = model
+            SEOAuditModel.shared = model
+            SEOSnapshotCache.shared.configureRemote(owner: snapshotOwner) {
                 try await bridge.call("image", url: $0, as: Data?.self)
             }
         case "stopUI": stopUI()
@@ -151,11 +155,13 @@ final class ExtensionRuntime: NSObject {
             SEOSnapshotCache.shared.configure(root: root, network: network)
             startup = Task { await SEOAuditModel.shared.refreshProjects() }
         case "view":
-            guard uiService != nil else { return ["ok": false] as NSDictionary }
+            guard uiService != nil, let model = uiModel else {
+                return ["ok": false] as NSDictionary
+            }
             let automatic = !fixture
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    SEOAuditPage().environment(\.automaticViewActionsEnabled, automatic)
+                    SEOAuditPage(model: model).environment(\.automaticViewActionsEnabled, automatic)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop": prepareToStop(completion: {})
@@ -166,17 +172,21 @@ final class ExtensionRuntime: NSObject {
     }
     private func stopUI() {
         let client = engineClient; engineClient = nil
-        let service = uiService, model = SEOAuditModel.shared
+        let service = uiService, model = uiModel
+        uiModel = nil
+        SEOSnapshotCache.shared.releaseRemote(snapshotOwner)
         service?.beginSuspension()
-        model.shutdown()
-        SEOSnapshotCache.shared.shutdown()
+        model?.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "seoSnapshots") {
+            SEOSnapshotCache.shared.shutdown()
+        }
         uiService = nil
         if service != nil {
             let id = UUID()
             uiStops[id] = Task { [self, service, model, client] in
                 defer { client?.invalidate(); uiStops[id] = nil }
                 await service?.shutdown()
-                await model.drain()
+                await model?.drain()
             }
         }
         if service == nil { client?.invalidate() }

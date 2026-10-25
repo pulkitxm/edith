@@ -4,7 +4,7 @@ import EdithExtensionUI
 import Foundation
 import SwiftUI
 
-@MainActor final class MusicEmbeddedRuntime {
+@MainActor final class MusicEmbeddedRuntime: NSObject {
     private(set) var configured = false
     private var presentations: [UUID: MusicEmbeddedPresentation] = [:]
     private var closing: [UUID: MusicEmbeddedPresentation] = [:]
@@ -27,6 +27,9 @@ import SwiftUI
                 context: input, client: configuration.engineClient,
                 uiOnly: configuration.uiOnly, version: version)
         else { return ["ok": false] }
+        if let ownership = input["hostUIOwnership"] as? NSObject {
+            ExtensionUIResources.bind(ownership, to: self)
+        }
         return install(scene, id: id, onRetired: onRetired) ? ["ok": true] : ["ok": false]
     }
 
@@ -77,9 +80,18 @@ import SwiftUI
         } catch { return error.localizedDescription }
         presentations[id] = nil
         scene.beginShutdown()
-        if scene.isMain { EmbeddedMusicVideoSession.stopAll() }
+        if scene.isMain {
+            ExtensionUIResources.cleanup(of: self, key: "musicVideo") {
+                EmbeddedMusicVideoSession.stopAll()
+            }
+        }
         if presentations.isEmpty {
-            EmbeddedMusicVideoSession.stopAll(); EmbeddedMusicBrowserSession.stopAll()
+            ExtensionUIResources.cleanup(of: self, key: "musicVideo") {
+                EmbeddedMusicVideoSession.stopAll()
+            }
+            ExtensionUIResources.cleanup(of: self, key: "musicBrowser") {
+                EmbeddedMusicBrowserSession.stopAll()
+            }
         }
         await retire(scene, id: id, drainAuxiliary: true).value
         configured = !presentations.isEmpty
@@ -87,7 +99,11 @@ import SwiftUI
     }
 
     func suspendCommands() {
-        if hasRemoteWork { EmbeddedMusicRemote.shared.suspendCommands() }
+        if hasRemoteWork {
+            ExtensionUIResources.cleanup(of: self, key: "musicRemoteSuspension") {
+                EmbeddedMusicRemote.shared.suspendCommands()
+            }
+        }
         for scene in presentations.values { scene.suspendCommands() }
         for scene in closing.values { scene.suspendCommands() }
         for scene in retired.values { scene.suspendCommands() }
@@ -99,7 +115,9 @@ import SwiftUI
         let tasks = Array(closingTasks.values)
         for scene in scenes { await scene.suspendCommandsAndWait() }
         for task in tasks { await task.value }
-        if hasRemoteWork { await EmbeddedMusicRemote.shared.suspendCommandsAndWait() }
+        if hasRemoteWork, ExtensionUIResources.canDrainSharedResources(of: self) {
+            await EmbeddedMusicRemote.shared.suspendCommandsAndWait()
+        }
     }
 
     func stop() {
@@ -112,7 +130,9 @@ import SwiftUI
     func stopAndWait() async {
         stopping = true
         suspendCommands()
-        let remote = hasRemoteWork ? EmbeddedMusicRemote.shared : nil
+        let remote =
+            hasRemoteWork && ExtensionUIResources.canDrainSharedResources(of: self)
+            ? EmbeddedMusicRemote.shared : nil
         stop()
         let tasks = Array(closingTasks.values)
         for task in tasks { await task.value }
@@ -130,7 +150,7 @@ import SwiftUI
         let onRetired = retirement.removeValue(forKey: ObjectIdentifier(scene))
         let task = Task { [weak self] in
             defer { self?.closing[id] = nil; self?.closingTasks[id] = nil; self?.retired[id] = nil }
-            if drainAuxiliary {
+            if drainAuxiliary, let self, ExtensionUIResources.canDrainSharedResources(of: self) {
                 await EmbeddedMusicVideoSession.drainAll()
                 await EmbeddedMusicBrowserSession.drainAll()
             }
