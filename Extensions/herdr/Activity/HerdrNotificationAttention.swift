@@ -1,0 +1,155 @@
+import AppKit
+import EdithExtensionSupport
+import Foundation
+
+struct AttentionCheck: Equatable, Sendable {
+    var agent: HerdrAgent
+    var hostID: String
+    var event: HerdrAttentionEvent
+    var fingerprint: UInt64?
+}
+
+struct AttentionOutcome: Equatable, Sendable {
+    var agentID: String
+    var hostID: String
+    var fingerprint: UInt64?
+    var notification: HerdrNotification?
+    var state: HerdrAttentionState?
+    var status: HerdrAgentStatus
+    var sequence: Int?
+    var openRequest: HerdrOpenRequest?
+}
+
+public struct HerdrNotificationAttention: Sendable {
+    public typealias Inspect =
+        @Sendable ([HerdrAttentionProbe]) async -> [String: HerdrAttentionEvidence]
+
+    public static let kinds = ["blocked", "finished", "error", "stuck"]
+    static let concurrencyLimit = 4
+
+    var inspect: Inspect
+    var decider: @Sendable () async -> JevDeciding?
+    var appIsRunning: @Sendable () -> Bool
+
+    public init(
+        inspect: @escaping Inspect,
+        decider: @escaping @Sendable () async -> JevDeciding?,
+        appIsRunning: @escaping @Sendable () -> Bool
+    ) {
+        self.inspect = inspect
+        self.decider = decider
+        self.appIsRunning = appIsRunning
+    }
+
+    public static func identifier(kind: String, agentID: String) -> String {
+        "session.\(kind).\(agentID)"
+    }
+
+    func resolve(_ checks: [AttentionCheck], settings: HerdrAttentionSettings) async
+        -> [AttentionOutcome]
+    {
+        let decider = await decider()
+        let hosts = Array(Dictionary(grouping: checks, by: \.hostID).values)
+        return await withTaskGroup(of: [AttentionOutcome].self) { group in
+            let limit = Self.concurrencyLimit
+            var outcomes: [AttentionOutcome] = []
+            for (offset, hostChecks) in hosts.enumerated() {
+                if offset >= limit, let finished = await group.next() {
+                    outcomes += finished
+                }
+                group.addTask {
+                    await resolve(hostChecks, settings: settings, decider: decider)
+                }
+            }
+            for await finished in group { outcomes += finished }
+            return outcomes
+        }
+    }
+
+    private func resolve(
+        _ hostChecks: [AttentionCheck], settings: HerdrAttentionSettings,
+        decider: JevDeciding?
+    ) async -> [AttentionOutcome] {
+        let probes = hostChecks.map { check in
+            HerdrAttentionProbe(
+                agent: check.agent,
+                countChanges: check.event == .finished && (settings.finished || settings.openDiff),
+                readsExplain: check.event != .blocked)
+        }
+        let evidence = await inspect(probes)
+        let verdicts = await withTaskGroup(of: (Int, HerdrAttentionVerdict).self) { group in
+            let limit = Self.concurrencyLimit
+            var verdicts: [Int: HerdrAttentionVerdict] = [:]
+            for (index, check) in hostChecks.enumerated() {
+                if index >= limit, let (finished, verdict) = await group.next() {
+                    verdicts[finished] = verdict
+                }
+                let item = evidence[check.agent.id] ?? HerdrAttentionEvidence()
+                let stalled =
+                    check.fingerprint != nil && item.screen?.fingerprint == check.fingerprint
+                    ? settings.stuckMinutes : nil
+                let verdict = HerdrAttentionClassifier.verdict(
+                    event: check.event, evidence: item, stalledMinutes: stalled)
+                guard let decider, item.screen != nil else {
+                    group.addTask { (index, verdict) }
+                    continue
+                }
+                group.addTask {
+                    let refined = await HerdrAttentionClassifier.refine(
+                        verdict, agent: check.agent, event: check.event, evidence: item,
+                        decider: decider)
+                    return (index, refined)
+                }
+            }
+            for await (index, verdict) in group { verdicts[index] = verdict }
+            return verdicts
+        }
+        return hostChecks.enumerated().map { index, check in
+            AttentionOutcome(
+                agentID: check.agent.id, hostID: check.hostID,
+                fingerprint: evidence[check.agent.id]?.screen?.fingerprint,
+                notification: verdicts[index].flatMap {
+                    notification(for: check, verdict: $0, settings: settings)
+                }, state: verdicts[index]?.state, status: check.agent.status,
+                sequence: check.agent.stateSequence,
+                openRequest: verdicts[index].flatMap { verdict in
+                    guard verdict.state == .done, verdict.readyForReview,
+                        settings.openDiff, appIsRunning()
+                    else { return nil }
+                    return HerdrOpenRequest(
+                        agentID: check.agent.id, hostID: check.hostID, view: .diff)
+                })
+        }
+    }
+
+    func notification(
+        for check: AttentionCheck, verdict: HerdrAttentionVerdict,
+        settings: HerdrAttentionSettings
+    ) -> HerdrNotification? {
+        guard verdict.interrupt else { return nil }
+        let agent = check.agent
+        let (kind, title, enabled): (String, String, Bool) =
+            switch verdict.state {
+            case .permissionPrompt: ("blocked", "needs approval", settings.blocked)
+            case .waitingInput: ("blocked", "needs an answer", settings.blocked)
+            case .done: ("finished", "finished", settings.finished)
+            case .error: ("error", "hit an error", settings.errors)
+            case .looping: ("stuck", "looks stuck", settings.stuck)
+            case .working: ("", "", false)
+            }
+        let ready = verdict.state == .done && verdict.readyForReview
+        let request = HerdrOpenRequest(
+            agentID: agent.id, hostID: check.hostID, view: ready ? .diff : .agent)
+        var reason = verdict.reason
+        if ready, !(settings.openDiff && appIsRunning()) {
+            reason += ", click to review"
+        }
+        guard enabled else { return nil }
+        let task = agent.title.isEmpty ? agent.session : agent.title
+        let place = agent.workspace.isEmpty ? "" : " in \(agent.workspace)"
+        return HerdrNotification(
+            identifier: Self.identifier(kind: kind, agentID: agent.id),
+            title: "\(agent.kind) \(title)",
+            body: "\(task)\(place) on \(agent.machineName): \(reason)", action: request)
+    }
+}

@@ -60,8 +60,7 @@ library entry. Removing an entry only removes its pointer from the library.
 
 ```sh
 ed extensions enable latex
-ed app reveal latex
-ed tools install tectonic
+ed invoke latex latex.projects --json '{}'
 ```
 
 ## Editor assets
@@ -76,13 +75,14 @@ editor assets.
 
 ## Command line
 
-Use `ed latex ls --json` to discover projects and `ed latex read PROJECT --json`
-to read source with a revision token. `write` accepts raw UTF-8 stdin; `edit`
-accepts checked literal replacements as JSON stdin. Both preview first and
-apply with `--yes`, saving and compiling locally or submitting a GitHub PR.
-`compile`, `preview`, `review`, `merge`, and `remove` complete the same flow.
-See the [CLI reference](cli/latex/README.md). The Edith LaTeX Edit plugin skill
-teaches this workflow and can be installed from Plugins or `ed skills install`.
+Enable LaTeX and keep Edith running before reading the active worker's project library:
+
+```sh
+ed invoke latex latex.projects --json '{}'
+ed invoke latex latex.editorStatus --json '{}'
+```
+
+The worker also supports loading an existing project and reading its current document with a revision token. Editing, compiling, reviewing, and merging remain in the editor UI. Install Tectonic through the extension's tool controls. See the [public invocation reference](cli/invoke/README.md). The Edith LaTeX Edit plugin skill can be installed from Plugins.
 
 ## Preview
 

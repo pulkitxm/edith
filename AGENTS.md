@@ -3,7 +3,18 @@
 GitHub Actions runs the checks and cuts the release. Workflows live in
 `.github/workflows/`, and Dependabot in `.github/dependabot.yml`. A pull
 request runs the checks. A push to `main` runs them again, and a product
-change on `main` publishes the next release.
+change on `main` publishes the next release. Extension packages and the
+signed catalog publish from the Extensions workflow on the same push.
+
+## Local checks
+
+`make ci-local` runs the same lanes GitHub would run for the current branch,
+using `scripts/ci-test-plan.mjs` against `origin/main`. Lanes run in parallel
+(`CI_LOCAL=--jobs=N`), lanes that share a Swift package never overlap, and
+each lane logs to `local/ci-logs/<lane>.log`. Add `--builds` for development
+package builds, `--lanes=a,b` to rerun specific lanes, and `--list` to print
+the plan. GitHub-only lanes run their local variants. Use it to catch failures
+before pushing.
 
 ## Shared screen UI
 
@@ -73,10 +84,16 @@ run at once next to the installed Edith without touching it or each other.
   is the only way to replace it; a Release build left in `dist/` is never opened
   and refuses to start there.
 
-See `docs/background-agent.md` for how the identities, agent loading and
-LaunchServices cleanup work.
-
 ## Make resource gate
+
+For the account SDK, use `make ci-extension-accounts-local` with
+`EDITH_LOCAL_CI_ROOT` set to the external volume containing this checkout and
+`EDITH_MAKE_GATE_DIR` set to the shared resource-gate directory on that volume.
+The target copies the exact account sources and tests into a dependency-free
+package, keeps compiler caches in `local/account-contracts`, and uses fresh
+private HOME, temporary storage, configuration, and account state for each run.
+It uses one compiler job and opens no application windows. Run
+`python3 -B scripts/test-account-sdk-local.test.py` for its isolation contracts.
 
 Heavy `make` targets share one machine-wide budget: app builds, Ghostty,
 Swift and Cargo test builds, security scans, and the JS tool targets. A

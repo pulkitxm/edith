@@ -1,0 +1,262 @@
+import Foundation
+import Testing
+@testable import EdithExtensionSupport
+
+private actor CommandCleanupGate {
+    private var waiter: CheckedContinuation<Void, Never>?
+    private(set) var entered = false
+    func pause() async {
+        entered = true
+        await withCheckedContinuation { waiter = $0 }
+    }
+    func release() { waiter?.resume(); waiter = nil }
+}
+
+@MainActor @Suite struct ExtensionCommandRegistryTests {
+    @Test func acceptsMoreThanEightConcurrentCommandsAndAnswersReadsWhileSlowOnesRun()
+        async throws
+    {
+        let registry = ExtensionCommandRegistry()
+        let slow = 12
+        var held = 0
+        for _ in 0..<slow {
+            registry.invoke(
+                ["token": UUID().uuidString, "command": "slow", "payload": Data("{}".utf8)],
+                completion: { _, _ in }
+            ) { _, payload in
+                try await Task.sleep(for: .seconds(30))
+                return payload
+            }
+            held += 1
+        }
+        var answered = 0
+        for _ in 0..<12 {
+            let reply = await withCheckedContinuation { continuation in
+                registry.invoke(
+                    ["token": UUID().uuidString, "command": "read", "payload": Data("{}".utf8)],
+                    completion: { payload, message in continuation.resume(returning: payload) }
+                ) { _, payload in payload }
+            }
+            if (reply as Data?) == Data("{}".utf8) { answered += 1 }
+        }
+        #expect(held == slow)
+        #expect(answered == 12)
+        await registry.shutdownAndWait()
+    }
+
+    @Test(arguments: [false, true])
+    func shutdownAwaitsCancelledCommandCleanup(cancelFirst: Bool) async throws {
+        let registry = ExtensionCommandRegistry()
+        let gate = CommandCleanupGate()
+        let token = UUID().uuidString
+        var entered = false
+        var completed = 0
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                #expect(data == nil)
+                #expect(error != nil)
+                completed += 1
+            }
+        ) { _, _ in
+            entered = true
+            do { try await Task.sleep(for: .seconds(30)) } catch { await gate.pause(); throw error }
+            return Data()
+        }
+        for _ in 0..<100 where !entered { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(entered)
+        if cancelFirst { registry.cancel(token) }
+        var stopped = false
+        let shutdown = Task {
+            await registry.shutdownAndWait(); stopped = true
+        }
+        for _ in 0..<100 {
+            if await gate.entered { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(await gate.entered)
+        #expect(!stopped)
+        #expect(completed == 1)
+        await gate.release()
+        await shutdown.value
+        #expect(stopped)
+        #expect(completed == 1)
+        var ranAfterStop = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                #expect(data == nil)
+                #expect(error != nil)
+            }
+        ) { _, _ in
+            ranAfterStop = true; return Data()
+        }
+        #expect(!ranAfterStop)
+    }
+    @Test func cancelledCommandsRetainAdmissionUntilTheirCleanupFinishes() async throws {
+        let registry = ExtensionCommandRegistry()
+        let limit = ExtensionPeerEndpoint.maximumConcurrentCommands
+        let gates = (0..<limit).map { _ in CommandCleanupGate() }
+        let tokens = (0..<limit).map { _ in UUID().uuidString }
+        for (token, gate) in zip(tokens, gates) {
+            registry.invoke(
+                ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+                completion: { _, _ in }
+            ) { _, _ in
+                await gate.pause()
+                return Data()
+            }
+        }
+        for gate in gates {
+            for _ in 0..<100 {
+                if await gate.entered { break }
+                try await Task.sleep(for: .milliseconds(2))
+            }
+            #expect(await gate.entered)
+        }
+        for token in tokens { registry.cancel(token) }
+        var rejected = 0
+        var unexpected = false
+        for token in [tokens[0], UUID().uuidString] {
+            registry.invoke(
+                ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+                completion: { data, error in
+                    #expect(data == nil)
+                    #expect(error != nil)
+                    rejected += 1
+                }
+            ) { _, _ in
+                unexpected = true
+                return Data()
+            }
+        }
+        #expect(rejected == 2)
+        #expect(!unexpected)
+        for gate in gates { await gate.release() }
+        await registry.shutdownAndWait()
+        #expect(!unexpected)
+    }
+
+    @Test func suspensionJoinsActualOwnerAfterCallerCancellationAndAllowsSafeRetry() async throws {
+        let registry = ExtensionCommandRegistry()
+        let gate = CommandCleanupGate()
+        let token = UUID().uuidString
+        var callerCompleted = false
+        var ownerExited = false
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { _, _ in callerCompleted = true }
+        ) { _, _ in
+            await gate.pause()
+            ownerExited = true
+            return Data()
+        }
+        while !(await gate.entered) { await Task.yield() }
+        registry.cancel(token)
+        #expect(callerCompleted)
+        #expect(!ownerExited)
+        let suspension = registry.suspend()
+        #expect(!registry.resume(suspension))
+        var drained = false
+        let drain = Task {
+            await registry.suspendAndWait(); drained = true
+        }
+        await Task.yield()
+        #expect(!drained)
+        var admitted = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in #expect(data == nil && error != nil) }
+        ) { _, _ in
+            admitted = true; return Data()
+        }
+        #expect(!admitted)
+        await gate.release()
+        await drain.value
+        #expect(ownerExited)
+        #expect(registry.resume(suspension))
+        let next = registry.suspend()
+        #expect(next != suspension)
+        #expect(!registry.resume(suspension))
+        #expect(registry.resume(next))
+        var result: Data?
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                result = data as Data?; #expect(error == nil)
+            }
+        ) { _, _ in Data("original-result".utf8) }
+        while result == nil { await Task.yield() }
+        #expect(result == Data("original-result".utf8))
+        let final = registry.suspend()
+        await registry.shutdownAndWait()
+        #expect(!registry.resume(final))
+    }
+
+    @Test func naturalAdmissionJoinPreservesActualOwnerResultWithoutCancellation() async throws {
+        let registry = ExtensionCommandRegistry()
+        var gate: CheckedContinuation<Void, Never>?
+        var wasCancelled = false
+        var result: Data?
+        var joined = false
+        let token = UUID().uuidString
+        registry.invoke(
+            ["token": token, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in
+                result = data as Data?; #expect(error == nil)
+            }
+        ) { _, _ in
+            await withCheckedContinuation { gate = $0 }
+            wasCancelled = Task.isCancelled
+            return Data("owned-result".utf8)
+        }
+        defer { gate?.resume() }
+        let ready = ContinuousClock.now + .seconds(2)
+        while gate == nil, ContinuousClock.now < ready { await Task.yield() }
+        try #require(gate != nil)
+        let suspension = registry.closeAdmission()
+        let drain = Task {
+            await registry.closeAdmissionAndWait(); joined = true
+        }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(!joined && result == nil)
+        #expect(!registry.resume(suspension))
+        var rejected = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { data, error in rejected = data == nil && error != nil }
+        ) { _, _ in
+            Issue.record("Closed admission executed new work"); return Data()
+        }
+        #expect(rejected)
+        gate?.resume()
+        gate = nil
+        let finished = ContinuousClock.now + .seconds(2)
+        while !joined, ContinuousClock.now < finished { await Task.yield() }
+        try #require(joined)
+        await drain.value
+        #expect(!wasCancelled)
+        #expect(result == Data("owned-result".utf8))
+        #expect(registry.resume(suspension))
+    }
+
+    @Test func callerCompletionCannotResumeBeforeActualRegistryTaskReturn() async throws {
+        let registry = ExtensionCommandRegistry()
+        var suspension: UUID?
+        var completed = false
+        var resumedEarly = false
+        registry.invoke(
+            ["token": UUID().uuidString, "command": "fixture", "payload": Data()] as NSDictionary,
+            completion: { _, _ in
+                if let suspension { resumedEarly = registry.resume(suspension) }
+                completed = true
+            }
+        ) { _, _ in Data("owned-result".utf8) }
+        suspension = registry.closeAdmission()
+        await registry.closeAdmissionAndWait()
+        #expect(completed)
+        #expect(!resumedEarly)
+        #expect(registry.resume(try #require(suspension)))
+    }
+
+}

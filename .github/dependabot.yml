@@ -2,7 +2,7 @@ version: 2
 
 updates:
   - package-ecosystem: swift
-    directory: /Packages/Edith
+    directory: /Packages/EdithHost
     schedule:
       interval: weekly
       day: monday
@@ -29,7 +29,7 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 
-  - package-ecosystem: npm
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly

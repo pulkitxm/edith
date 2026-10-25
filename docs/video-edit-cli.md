@@ -14,16 +14,13 @@ diagnostics are retained separately as `native-render-*.log` in the matching
 application's Logs directory. They do not replace structured command errors or
 alter delivery results.
 
-See [native editor performance](./video-editor-performance.md) for measured
-MacBook resource usage, preview limits and the opt-in benchmark.
-
 Transitions support `none`, `fade`, `flash`, `blur` and `zoom` through the public
 `transition` operation. Blur fade and zoom fade ease a native Core Image blur or
 centered magnification through black at the existing cut. Their duration uses
 output seconds and is bounded by the neighboring clips. They preserve every
 cut frame, project duration and source range, and scale to the preview canvas.
 
-Output-clock caption commands are documented in `docs/cli/studio/captions.md`.
+Output-clock caption commands are documented in the current Studio worker operation reference.
 They accept exact output frames or marker IDs and retain their timing after visual edits.
 Their targeted mutations save the input project with revision checks and support `--dry-run`.
 

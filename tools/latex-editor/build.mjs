@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = new URL(".", import.meta.url);
-const directory = new URL("../../Packages/Edith/Sources/EdithKit/LaTeXEditor/", root);
+const directory = new URL("../../Extensions/latex/Resources/", root);
 const result = await build({
   absWorkingDir: fileURLToPath(root),
   entryPoints: ["src/editor.js", "src/review.js"],

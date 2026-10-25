@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import ExtensionMarketplace
 
 public struct OOXMLPackage {
     public var parts: [(path: String, data: Data)] = []

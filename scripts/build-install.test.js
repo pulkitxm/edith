@@ -1,14 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -114,108 +105,16 @@ describe("build install lifecycle", () => {
     }
   });
 
-  test("builds database executables separately and stops before packaging on failure", () => {
-    const phase = script.slice(
-      script.indexOf("for BUILD_SCHEME in "),
-      script.indexOf("\n\nBUILT="),
-    );
-    const scheme = readFileSync(
-      resolve("edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme"),
-      "utf8",
-    );
-    expect(scheme).not.toContain('BlueprintIdentifier = "edithd"');
-    expect(scheme).not.toContain('BlueprintIdentifier = "edith-database"');
-    for (const [name, product] of [
-      ["EdithAgentRuntime", "edithd"],
-      ["EdithDatabaseRuntime", "edith-database"],
-    ]) {
-      const runtime = readFileSync(
-        resolve(`edth.xcodeproj/xcshareddata/xcschemes/${name}.xcscheme`),
-        "utf8",
-      );
-      const roots = [
-        ...runtime.matchAll(/BlueprintIdentifier\s*=\s*"([^"]+)"/g),
-      ].map((match) => match[1]);
-      expect(roots).toEqual(["9E41503E3A9738BFE160D1F8", product]);
-    }
-    for (const failure of ["", "EdithAgentRuntime", "EdithDatabaseRuntime"]) {
-      const result = Bun.spawnSync(
-        [
-          "bash",
-          "-c",
-          `set -euo pipefail
-CONFIG=Release
-DERIVED=fixture
-SIGN_IDENTITY=-
-TEAM_ID=fixture
-XCODE_BUILD_SETTINGS=(ARCHS=arm64)
-xcodebuild() {
-  while [ "$1" != -scheme ]; do shift; done
-  printf '%s\\n' "$2"
-  [ "$2" != "$FAILURE" ]
-}
-${phase}`,
-        ],
-        {
-          env: { ...process.env, FAILURE: failure },
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
-      const builds = new TextDecoder().decode(result.stdout).trim().split("\n");
-      expect(builds).toEqual(
-        failure === "EdithAgentRuntime"
-          ? ["EdithAgentRuntime"]
-          : failure === "EdithDatabaseRuntime"
-            ? ["EdithAgentRuntime", "EdithDatabaseRuntime"]
-            : ["EdithAgentRuntime", "EdithDatabaseRuntime", "EdithMain"],
-      );
-      expect(result.exitCode).toBe(failure ? 1 : 0);
-    }
-  });
-
-  test("routes CLI names through the application executable", () => {
-    const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
-    const install = script.indexOf(
-      'install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"',
-    );
-
-    expect(removal).toBeGreaterThan(-1);
-    expect(install).toBeGreaterThan(removal);
-    expect(script).toContain(
-      'ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"',
-    );
+  test("uses the host for CLI and workers without another feature executable", () => {
+    const packaging = readFileSync("scripts/package-shipping-host.py", "utf8");
+    expect(script).toContain("node scripts/build-minimal-host.mjs");
+    expect(script).not.toContain("EdithDatabaseRuntime");
+    expect(script).not.toContain("edith-music-player");
+    expect(packaging).toContain("symlink_to('../Resources/ed-launcher')");
     expect(launcher).toContain(
       'EDITH_CLI=1 exec "$edith_launcher_directory/../MacOS/Edith" "$@"',
     );
-    expect(script).not.toContain('ln -sfn ed "$APP/Contents/MacOS/edith"');
     expect(script).not.toContain('sign_tool "$APP/Contents/MacOS/ed"');
-  });
-
-  test("removes unused executable architectures from every bundle", () => {
-    expect(script).toContain('lipo "$binary" -thin arm64');
-    expect(script).toContain('mv "$binary.arm64" "$binary"');
-  });
-
-  test("signs nested runtime libraries before their bundles", () => {
-    const runtimeSigning = script.indexOf(
-      'for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do',
-    );
-    const helperSigning = script.indexOf('sign "$HELPER"');
-    const appSigning = script.indexOf('sign "$APP"');
-
-    expect(runtimeSigning).toBeGreaterThan(-1);
-    expect(helperSigning).toBeGreaterThan(runtimeSigning);
-    expect(appSigning).toBeGreaterThan(helperSigning);
-  });
-
-  test("shares resources with the nested login item", () => {
-    expect(script).toContain(
-      'ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"',
-    );
-    expect(script).toContain(
-      '"$HELPER/Contents/Resources/Edith_EdithKit.bundle"',
-    );
   });
 
   test.skipIf(process.platform !== "darwin")(
@@ -236,75 +135,6 @@ ${phase}`,
     35000,
   );
 
-  test.skipIf(process.platform !== "darwin")(
-    "signs the embedded helper after removing copied AppleDouble files",
-    () => {
-      const directory = mkdtempSync(resolve(tmpdir(), "edith-bundle-fixture-"));
-      try {
-        const source = resolve(directory, "EdithHelper.app/Contents");
-        mkdirSync(resolve(source, "MacOS"), { recursive: true });
-        copyFileSync("/bin/sleep", resolve(source, "MacOS/EdithHelper"));
-        writeFileSync(resolve(source, "MacOS/._Edith"), "fixture metadata");
-        chmodSync(resolve(source, "MacOS/._Edith"), 0o755);
-        writeFileSync(
-          resolve(source, "Info.plist"),
-          `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>local.fixture.helper</string>
-<key>CFBundleExecutable</key><string>EdithHelper</string>
-<key>CFBundlePackageType</key><string>APPL</string>
-</dict></plist>`,
-        );
-        const extraction = Bun.spawnSync(
-          [
-            "plutil",
-            "-extract",
-            "objects.894E33B83968A6646E7A6B4F.shellScript",
-            "raw",
-            "edth.xcodeproj/project.pbxproj",
-          ],
-          { stdout: "pipe", stderr: "pipe" },
-        );
-        expect(extraction.exitCode).toBe(0);
-        const phase = new TextDecoder()
-          .decode(extraction.stdout)
-          .replace(
-            "/usr/libexec/PlistBuddy",
-            'cp /bin/sleep "$DEST/Contents/MacOS/._Edith"\n/usr/libexec/PlistBuddy',
-          );
-        const environment = {
-          ...process.env,
-          TARGET_BUILD_DIR: directory,
-          BUILT_PRODUCTS_DIR: directory,
-          WRAPPER_NAME: "Fixture.app",
-          EXPANDED_CODE_SIGN_IDENTITY: "-",
-        };
-        const result = Bun.spawnSync(["bash", "-c", phase], {
-          env: environment,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        expect(new TextDecoder().decode(result.stderr)).not.toContain("failed");
-        expect(result.exitCode).toBe(0);
-        const helper = resolve(
-          directory,
-          "Fixture.app/Contents/Library/LoginItems/Edith.app",
-        );
-        expect(existsSync(resolve(helper, "Contents/MacOS/._Edith"))).toBe(
-          false,
-        );
-        expect(existsSync(resolve(source, "MacOS/._Edith"))).toBe(true);
-        const verification = Bun.spawnSync(
-          ["codesign", "--verify", "--strict", helper],
-          { stdout: "pipe", stderr: "pipe" },
-        );
-        expect(verification.exitCode).toBe(0);
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    },
-  );
-
   test("launches the installed bundle as a new application instance", () => {
     expect(script).toContain('open -n "/Applications/Edith.app"');
   });
@@ -323,7 +153,8 @@ ${phase}`,
       expect(result.exitCode).toBe(0);
       expect(new TextDecoder().decode(result.stdout).trim()).toBe(slot);
     }
-    expect(script).toContain('XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")');
+    expect(script).toContain('SLOT="$(scripts/dev-slots.sh claim)"');
+    expect(script).toContain('PACKAGE_ARGUMENTS+=(--slot "$SLOT")');
   });
 
   test("never launches a production copy outside /Applications", () => {

@@ -33,6 +33,9 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
+| `ed extensions install <id>` | Downloads and verifies an extension, leaving it disabled |
+| `ed extensions update <id>` | Updates an installed extension |
+| `ed extensions remove <id>` | Removes an installed extension and keeps its data |
 | `ed extensions status [id]` | Summarises readiness for one extension or all thirty-three |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
@@ -182,6 +185,9 @@ fails with the full list of ids rather than guessing.
 ## Commands
 
 - [`ed extensions ls`](./ls.md)
+- [`ed extensions install`](./install.md)
+- [`ed extensions update`](./update.md)
+- [`ed extensions remove`](./remove.md)
 - [`ed extensions enable`](./enable.md)
 - [`ed extensions disable`](./disable.md)
 - [`ed extensions info`](./info.md)

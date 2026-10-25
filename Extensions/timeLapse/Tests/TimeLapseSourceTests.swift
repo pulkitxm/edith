@@ -1,0 +1,258 @@
+import AppKit
+import EdithExtensionSupport
+import ScreenCaptureKit
+import Testing
+
+@testable import TimeLapseExtension
+
+@Suite struct TimeLapseSourceTests {
+    @Test func meetingSelectionReplacesThePreviousSource() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [99], windows: [1], systemAudio: false)
+        selection.toggle(2, maximumCount: 1)
+        #expect(selection.windows == [2])
+        selection.systemAudio = false
+        selection.toggle(2, maximumCount: 1)
+        #expect(selection.windows.isEmpty)
+        #expect(!selection.systemAudio)
+        selection.mode = "displays"
+        selection.toggle(100, maximumCount: 1)
+        #expect(selection.displays == [100])
+    }
+
+    @Test(arguments: [
+        (CGSize(width: 3840, height: 2160), 320, 180),
+        (CGSize(width: 1000, height: 2000), 90, 180),
+        (CGSize(width: 120, height: 80), 120, 80),
+        (CGSize.zero, 2, 2),
+        (CGSize(width: Double.nan, height: 100), 2, 2),
+    ])
+    func thumbnailsPreserveAspectRatioWithinSmallBounds(
+        size: CGSize, width: Int, height: Int
+    ) {
+        let result = TimeLapseSources.thumbnailSize(size)
+        #expect(result.width == width)
+        #expect(result.height == height)
+    }
+
+    @Test func thumbnailCapturesRunOneAtATime() async {
+        let loader = TimeLapseThumbnailLoader()
+        let probe = ThumbnailProbe()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    _ = await loader.load {
+                        await probe.start()
+                        try? await Task.sleep(for: .milliseconds(5))
+                        await probe.finish()
+                        return nil
+                    }
+                }
+            }
+        }
+        #expect(await probe.calls == 20)
+        #expect(await probe.maximumActive == 1)
+    }
+
+    @Test(arguments: 0..<20)
+    func canceledThumbnailRequestsDoNotCaptureAndQueueCanResume(attempt: Int) async {
+        let loader = TimeLapseThumbnailLoader()
+        let probe = ThumbnailProbe()
+        let started = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        let first = Task {
+            await loader.load {
+                started.continuation.yield(())
+                var iterator = release.stream.makeAsyncIterator()
+                _ = await iterator.next()
+                return nil
+            }
+        }
+        var iterator = started.stream.makeAsyncIterator()
+        _ = await iterator.next()
+        let canceled = Task {
+            await loader.load {
+                await probe.start()
+                return nil
+            }
+        }
+        canceled.cancel()
+        release.continuation.yield(())
+        _ = await first.value
+        _ = await canceled.value
+        #expect(await probe.calls == 0)
+        _ = await loader.load {
+            await probe.start()
+            return nil
+        }
+        #expect(await probe.calls == 1)
+    }
+
+    @Test func disablingCancelsActiveAndQueuedThumbnails() async {
+        let loader = TimeLapseThumbnailLoader()
+        let started = AsyncStream<Void>.makeStream()
+        let probe = ThumbnailProbe()
+        let active = Task {
+            await loader.load {
+                started.continuation.yield(())
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                    Issue.record("The active thumbnail was not cancelled.")
+                } catch {}
+                return nil
+            }
+        }
+        var iterator = started.stream.makeAsyncIterator()
+        _ = await iterator.next()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    _ = await loader.load {
+                        await probe.start()
+                        return nil
+                    }
+                }
+            }
+            await loader.shutdown()
+        }
+        _ = await active.value
+        _ = await loader.load {
+            await probe.start()
+            return nil
+        }
+        #expect(await probe.calls == 0)
+    }
+
+    @Test func selectionPreservesEachSourceTypeAndEnforcesTheLimit() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [99], windows: [], systemAudio: false)
+        for id in UInt32(1)...20 { selection.toggle(id) }
+        #expect(selection.windows == Set(UInt32(1)...16))
+        selection.toggle(5)
+        selection.toggle(20)
+        #expect(selection.windows.count == 16)
+        #expect(selection.windows.contains(20))
+        #expect(!selection.windows.contains(5))
+        selection.mode = "displays"
+        #expect(selection.selected == [99])
+        selection.toggle(100)
+        #expect(selection.displays == [99, 100])
+        #expect(selection.windows.count == 16)
+    }
+
+    @Test func refreshingSourcesRemovesMissingSelections() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [1, 2], windows: [3, 4], systemAudio: true)
+        selection.reconcile(displays: [2], windows: [4])
+        #expect(selection.displays == [2])
+        #expect(selection.windows == [4])
+        selection.reconcile(displays: [], windows: [])
+        #expect(selection.selected.isEmpty)
+    }
+
+    @Test @MainActor func choosingWindowsAutomaticallyEnablesAppAudioAndCanBeMuted() {
+        guard #available(macOS 15.0, *) else { return }
+        let recorder = TimeLapseRecorder()
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [], windows: [], systemAudio: false)
+        selection.toggle(7)
+        #expect(selection.systemAudio)
+        #expect(!recorder.settings.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.settings.systemAudio)
+        #expect(recorder.microphone.isEmpty)
+        selection.systemAudio = false
+        selection.apply(to: recorder)
+        #expect(!recorder.settings.systemAudio)
+        selection.toggle(8)
+        #expect(selection.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.selectedWindows == [7, 8])
+        #expect(recorder.settings.systemAudio)
+    }
+
+    @Test func removingWindowsOrRejectedSelectionsDoNotEnableAudio() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [], windows: Set(UInt32(1)...16), systemAudio: false)
+        selection.toggle(17)
+        #expect(!selection.systemAudio)
+        #expect(selection.windows.count == 16)
+        selection.toggle(1)
+        #expect(!selection.systemAudio)
+        selection.mode = "displays"
+        selection.toggle(99)
+        #expect(!selection.systemAudio)
+    }
+
+    @Test func returningToWindowSelectionAutomaticallyRestoresAppAudio() {
+        var selection = TimeLapseSourceSelection(
+            mode: "displays", displays: [1], windows: [7], systemAudio: false)
+        selection.mode = "windows"
+        #expect(selection.systemAudio)
+        selection.systemAudio = false
+        selection.reconcile(displays: [1], windows: [7])
+        #expect(!selection.systemAudio)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_TEST_NATIVE_CAPTURE"] == "1"))
+    @MainActor func nativeWindowAudioIncludesOnlySelectedAppsOnce() async throws {
+        guard #available(macOS 15.2, *) else { return }
+        _ = TestWindowHost.application
+        let windows = (0..<2).map { index in
+            let window = TestWindowHost.window(
+                contentRect: CGRect(x: 100 + index * 340, y: 100, width: 320, height: 180))
+            window.title = "Synthetic audio source \(index + 1)"
+            window.orderFrontRegardless()
+            return window
+        }
+        defer { windows.forEach { $0.orderOut(nil) } }
+        try await Task.sleep(for: .milliseconds(350))
+        let sources = try await TimeLapseSources.load()
+        let ids = Set(windows.map { CGWindowID($0.windowNumber) })
+        var settings = TimeLapseSettings()
+        settings.systemAudio = true
+        for chosen in [Set([try #require(ids.first)]), ids] {
+            let plan = try await sources.plan(
+                mode: "windows", displays: [], windows: chosen, settings: settings)
+            #expect(plan.filters.count == chosen.count)
+            #expect(plan.audioFilter.includedApplications.map(\.processID) == [getpid()])
+        }
+        await #expect(throws: TimeLapseError.self) {
+            try await sources.plan(mode: "windows", displays: [], windows: [0], settings: settings)
+        }
+    }
+
+    @Test @MainActor func draftChangesAreAppliedOnlyWhenConfirmed() {
+        guard #available(macOS 15.0, *) else { return }
+        let recorder = TimeLapseRecorder()
+        recorder.selectedDisplays = [1]
+        var selection = TimeLapseSourceSelection(
+            mode: recorder.sourceMode, displays: recorder.selectedDisplays,
+            windows: recorder.selectedWindows, systemAudio: recorder.settings.systemAudio)
+        selection.mode = "windows"
+        selection.toggle(7)
+        selection.systemAudio = true
+        #expect(recorder.sourceMode == "displays")
+        #expect(recorder.selectedWindows.isEmpty)
+        #expect(!recorder.settings.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.sourceMode == "windows")
+        #expect(recorder.selectedDisplays == [1])
+        #expect(recorder.selectedWindows == [7])
+        #expect(recorder.settings.systemAudio)
+    }
+}
+
+private actor ThumbnailProbe {
+    private(set) var calls = 0
+    private(set) var maximumActive = 0
+    private var active = 0
+
+    func start() {
+        calls += 1
+        active += 1
+        maximumActive = max(maximumActive, active)
+    }
+
+    func finish() { active -= 1 }
+}

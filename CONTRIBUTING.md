@@ -18,18 +18,17 @@ documentation, tests, and code all help.
 ```bash
 ./build.sh
 ./build.sh --release --install
-cd Packages/Edith && ./test.sh
-cd Packages/Edith && ./test.sh --list-batches
-cd Packages/Edith && ./test.sh --batch clipboard
+make ci-host
+make ci-extension-support
+make ci-extension-<id>
 ```
 
 Default builds are development builds. Each worktree builds its own app,
 `com.pulkit.edith.dev.<slot>`, displayed as `Edith (<slot>)`, where the slot is the
 worktree folder name without the `edith-` prefix (`main` for the primary checkout).
-Its menu helper, background agent, settings, and data under `Edith Dev/<slot>` belong
-to that worktree alone, so several branches run side by side without touching each
-other or the installed app. Quitting a development build stops its agent and menu
-helper. `./build.sh --teardown` deletes the current worktree's slot, including its
+Its settings and data under `Edith Dev/<slot>` belong to that worktree alone, so
+several branches run side by side without touching each other or the installed
+app. `./build.sh --teardown` deletes the current worktree's slot, including its
 preferences and permission grants; `./build.sh --gc` does the same for slots whose
 worktree is gone. `--branch` and `--pr` select the source without enabling
 installation. `make install` and `make reinstall` build a Release configuration
@@ -40,79 +39,45 @@ a temporary keychain when needed and removes that keychain after the build.
 Developer ID signing remains the default. Local development signing requires
 `EDITH_RELEASE_ALLOW_DEV_SIGNING=1` in the signing configuration.
 
-App builds also need stable Rust and Cargo. `build.sh` builds the native Spotify
-player in `apps/music-player`, embeds it at `Contents/MacOS/edith-music-player`,
-and signs it with the app. Run `cargo test --locked` and
-`cargo clippy --locked --all-targets -- -D warnings` in that directory when
-changing playback commands or account handling.
+Needs Xcode, not just Command Line Tools. `build.sh` runs
+`scripts/build-minimal-host.mjs`, which builds the `Packages/EdithHost` SwiftPM
+package into a small host app, then `scripts/package-shipping-host.py`, which
+embeds Sparkle, the `ed` launcher and the resources in `Resources`, and signs the
+bundle into `dist/Edith.app`. Features are not part of the host. Each one is an
+extension under `Extensions/<id>` that is built and released as its own package
+with `bun scripts/build-extension-package.mjs <id>`, and `make extension-dev
+EXTENSION=<id>` builds one for development.
 
-Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
-is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
-scheme, which builds and embeds `EdithHelper` (the always-on menu bar
-companion, nested at `Contents/Library/LoginItems` and shipped as
-`Edith.app`) and the `ed` CLI executable (`Contents/MacOS`). The same scheme
-builds `edithd`, the headless background agent, and `EdithLidAwakeHelper`, so
-every executable shares one compiled module graph. `build.sh` places the agent
-at `Contents/MacOS/edithd` with its LaunchAgent property list in
-`Contents/Library/LaunchAgents`, and the signed privileged helper with its
-launchd property list alongside. A development bundle's property list names the
-agent by absolute path, and the app loads it with `launchctl bootstrap` instead of
-registering a login item.
-
-All Swift code lives in one SwiftPM package, `Packages/Edith`. The Xcode
-targets are folder-synchronized onto `Packages/Edith/Sources/*`, so a file
-dropped into a target's directory builds with no project file to edit, and
-`swift build` and `swift test` work on the same sources without Xcode. Use
-`./test.sh` rather than `swift test`; it adds the search paths for the
-Testing framework that ships with Command Line Tools.
-
-`build.sh` re-signs the bundle after `xcodebuild` rather than leaving Xcode's
-signature in place. Xcode writes a designated requirement that names the
-exact leaf certificate, so re-issuing or swapping that certificate (Apple
-Development to Developer ID, say) stops it matching and macOS drops every TCC
+The signature is applied by `package-shipping-host.py` rather than left to a
+build tool. A designated requirement that names the exact leaf certificate
+stops matching when the certificate is re-issued, and macOS then drops every TCC
 grant the app had: Screen Recording, Accessibility, Calendar. Pinning the
-requirement to bundle id plus team id instead survives all of that. The
-identity is `EDITH_SIGN_IDENTITY`, else the first available Developer ID
-Application, self-signed `Edith Dev`, or Apple Development certificate, else
-ad-hoc. Ad-hoc signatures change on every rebuild, which is what resets those
-grants, so for day-to-day work create a self-signed certificate once through
-Keychain Access, Certificate Assistant, Create a Certificate, named
-"Edith Dev", Identity Type "Self Signed Root", Certificate Type
-"Code Signing".
+requirement to bundle id plus team id instead survives that. The identity is
+`EDITH_SIGN_IDENTITY`, else the first available Developer ID Application,
+self-signed `Edith Dev`, or Apple Development certificate, else ad-hoc. Ad-hoc
+signatures change on every rebuild, which is what resets those grants, so for
+day-to-day work create a self-signed certificate once through Keychain Access,
+Certificate Assistant, Create a Certificate, named "Edith Dev", Identity Type
+"Self Signed Root", Certificate Type "Code Signing".
 
-Before it signs a `--release` build, `build.sh` strips the binaries in `dist`,
-because a plain `xcodebuild build` never strips. A `--release` build also skips
-debug info and dSYM generation: no release pipeline kept the dSYMs, and emitting
-DWARF only to strip it cost compile time on every build.
-
-`build.sh` passes `ARCHS=arm64` to every target. The Release configuration pins
-it for the app targets, but Swift package targets do not inherit project
-settings, so without the override Xcode compiled every package twice, once for
-an x86_64 slice that was thinned away before shipping.
-
-It also deletes the `Frameworks` directory Xcode embeds inside the nested
-`Edith Files.app`. That app links Sparkle through the outer bundle, its rpath is
-`@executable_path/../../../../../Frameworks`, and `make verify-bundle` asserts
-both that exactly one `Sparkle.framework` ships and that the path the rpath
-resolves to exists.
-
-The main source tree is organized by role after the feature-folder restructure:
+The source tree is organized by package:
 
 | Path | Responsibility |
 | --- | --- |
-| `Packages/Edith/Sources/Edith/Core` | App lifecycle, navigation and windows for the main app. |
-| `Packages/Edith/Sources/Edith/Features` | Main-app screens, grouped by feature and then model, view model, view or service. |
-| `Packages/Edith/Sources/Edith/Shared` | Main-app views shared by more than one feature. |
-| `Packages/Edith/Sources/EdithHelper/Core` | Lifecycle, navigation and panel control for the menu bar companion. |
-| `Packages/Edith/Sources/EdithHelper/Features` | Always-on macOS integrations and their menu bar UI. |
-| `Packages/Edith/Sources/EdithKit/Core` | Shared macOS defaults, IPC, paths, processes, resources and update support. |
-| `Packages/Edith/Sources/EdithKit/Features` | Reusable macOS domain models and services. |
-| `Packages/Edith/Sources/EdithCore` | Shared extension registry and platform capability models. |
+| `Packages/EdithHost` | The host app: lifecycle, navigation, Home, Notch, Extensions, Storage and Settings pages, and the extension loader. |
+| `Packages/ExtensionMarketplace` | Catalog, package verification, installation and compatibility rules shared by the host and the release tooling. |
+| `Packages/ExtensionSupport` | Libraries that extensions link: commands, files, accounts, documents, archives and shared UI. |
+| `Packages/EdithStudio` | The Studio media engine. |
+| `Packages/EdithDocsWorker` | The bundled `ed` reference. |
+| `Extensions/<id>` | One extension: its runtime, views, CLI commands and tests. `Extensions/manifest.json` lists them all. |
 
 The app icon is drawn in `Resources/AppIcon.svg`. `make icon` renders it with
-Chrome into `Packages/Edith/Sources/Edith/Resources/appicon.png` and derives the
-checked-in `AppIcon.icns`, the helper's `MenuBar.png`, the share-card icon, the
-site icons and the promo video logo from that. Run it after changing the SVG.
+Chrome and derives the checked-in `AppIcon.icns`, the site icons and the promo
+video logo from that. Run it after changing the SVG.
+
+The Spotify player in `apps/music-player` is a Rust crate. Run
+`cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings`
+in that directory when changing playback commands or account handling.
 
 ### Companion backend
 
@@ -124,6 +89,7 @@ Metal, GPU or CPU Compose overlay from the host it probes.
 For backend-only work, install stable Rust with Clippy and use:
 
 ```bash
+make prepare-pdf-extract
 cd apps/companion
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
@@ -149,15 +115,14 @@ job.
 | `make ci-duplicate-keys` | Fails when a `UserDefaults`/`SharedDefaults` key is spelled out as a raw string literal in more than one Swift file instead of going through one shared constant. |
 | `make ci-lint` | Biome format and lint for `scripts/` and `apps/site`. |
 | `make ci-scripts` | The `bun test` suite for `scripts/`. |
-| `make ci-scripts-batch BATCH=<name>` | One scripts test batch from `scripts/test-batches.json`. |
-| `make ci-performance` | Validates the checked performance audit and deterministic helper benchmark fixture. |
 | `make ci-promo` | `npm ci` and type check for the Remotion promo video. |
-| `make ci-swift-lint` | `swift format lint --strict` over `Sources`, `Tests` and `Package.swift`. |
-| `make ci-swift-build` | One `xcodebuild` of the `EdithMain` scheme, which builds all four Xcode targets and runs the privileged-helper SwiftPM embed phase. |
-| `make ci-swift-test` | The Swift test suite, through `Packages/Edith/test.sh`. |
-| `make ci-swift-test-batch BATCH=<name>` | One Swift package test batch. `./test.sh --list-batches` prints the names. |
-| `make ci-studio-batch BATCH=<name>` | One EdithStudio test batch. |
-| `make ci-swift-check` | The three above as one on-demand local target. |
+| `make ci-swift-lint` | `swift format lint --strict` over the host, marketplace, support, docs worker and extension sources. |
+| `make ci-swift-build` | A full release `build.sh` followed by `make verify-bundle`. |
+| `make ci-host` | Format, build and test `Packages/EdithHost`. |
+| `make ci-extension-support` | Format and test `Packages/ExtensionSupport` and the shared `Extensions` package. |
+| `make ci-studio` | The EdithStudio test suite. |
+| `make ci-swift-test` | The host, marketplace, extension support and docs worker tests. |
+| `make ci-swift-check` | Lint, build and test as one on-demand local target. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
 
@@ -171,20 +136,6 @@ and `make wiki`.
 
 This repo is kept comment-free and CI enforces it. Run `bun run strip-comments`
 if one slips in. Write names and structure that do not need prose.
-
-### Adding a user-visible operation
-
-Add the domain operation and its `UserOperationDescriptor` before wiring a UI
-control. Register it in `UserOperationCatalog` with a UI placement and a
-parseable example invocation. If the operation is intentionally command-line
-only, give the registration a concrete reason instead. Add the parser command,
-its `CommandTree` leaf and its CLI reference page in the same change.
-
-Do not register focus, scrolling, folding, local filtering, modal visibility or
-mouse capture as operations. These are presentation-only state. New kinds of
-presentation-only state belong in `UserInterfaceActionCatalog.presentationOnly`
-with a reason. Run the `CLIParityTests` suite to verify parser and completion
-coverage before running the full Swift checks.
 
 ## Pull Requests
 

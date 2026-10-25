@@ -30,4 +30,6 @@ apps/promo-video/out/
 apps/companion/target/
 apps/music-player/target/
 vendor/
-Packages/Edith/vendor/
+
+apps/companion/pdf-extract/*
+!apps/companion/pdf-extract/Cargo.toml

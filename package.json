@@ -6,15 +6,14 @@
     "check-comments": "bun scripts/strip-comments.mjs --check",
     "check-secrets": "bun scripts/check-secrets.mjs",
     "check-duplicate-keys": "bun scripts/check-duplicate-keys.mjs",
-    "check-performance": "bun scripts/check-performance-audit.mjs",
     "wiki": "bun scripts/sync-wiki.mjs",
     "selftest": "bun scripts/strip-comments.mjs --selftest",
     "lint": "biome check .",
     "test": "bun test ./scripts"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.4",
-    "@biomejs/biome": "2.5.10",
+    "@babel/parser": "8.0.7",
+    "@biomejs/biome": "2.5.15",
     "emojibase": "17.0.0",
     "emojibase-data": "17.0.0"
   }

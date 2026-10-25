@@ -58,7 +58,7 @@ environment settings such as `CODEX_HOME`, `CLAUDE_CONFIG_DIR` and
 the shared `~/.agents/skills` directory for universal agents. Open a newly
 installed agent once so its configuration folder exists, then reopen the sheet.
 
-Skill sources live in [`Packages/Edith/skills`](../Packages/Edith/skills).
+Skill sources live in [`skills`](../skills).
 They are fetched at runtime, so skill updates do not require a new app build or
 a clone of the repository. Each folder uses the standard SKILL.md format
 accepted by the [Skills installer](https://github.com/vercel-labs/skills).

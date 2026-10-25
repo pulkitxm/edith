@@ -66,7 +66,7 @@ Development builds do not download. `build.sh` builds `edith-database` and insta
 
 ## Release
 
-The existing release workflow (`.github/workflows/ci.yml` and `scripts/release-local.sh`) builds the pack with the app, signs it with the same identity and hardened runtime, notarizes it, and uploads a versioned zip plus checksum as release assets. The pack version matches the app version. A dry run of the local release script packages the asset without publishing.
+The existing release workflow (`.github/workflows/ci.yml`) builds the pack with the app, signs it with the same identity and hardened runtime, notarizes it, and uploads a versioned zip plus checksum as release assets. The pack version matches the app version. A dry run of the local release script packages the asset without publishing.
 
 ## Pull request stack
 

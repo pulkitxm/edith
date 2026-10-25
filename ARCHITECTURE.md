@@ -2,130 +2,66 @@
 
 ## Design Goals
 
-Edith is a native macOS control center whose background work stays small,
-observable, and optional. One process owns collection, features declare where
-they run rather than discovering it, shared state crosses explicit boundaries,
-and sensitive data remains on hosts chosen by the user.
+Edith is a native macOS control center built as a small host app plus optional
+extensions. The host stays small and observable, each feature is an extension
+that is downloaded only when the user wants it, shared state crosses explicit
+boundaries, and sensitive data remains on hosts chosen by the user.
 
 ## Repository Layout
 
 | Path | Responsibility |
 | --- | --- |
-| `Packages/Edith/Sources/Edith` | Main application lifecycle, navigation, windows, and feature screens. |
-| `Packages/Edith/Sources/EdithAgent` | Background agent internals: XPC hub, job scheduler, SQLite store, collectors. |
-| `Packages/Edith/Sources/edithd` | Headless background agent executable. |
-| `Packages/Edith/Sources/EdithHelper` | Always-on menu bar companion and system integrations. |
-| `Packages/Edith/Sources/EdithKit` | Shared macOS models, services, defaults, agent protocol, paths, and update support. |
-| `Packages/Edith/Sources/EdithCore` | Platform-neutral suite, ability, and capability models. |
-| `Packages/Edith/Sources/EdithCLI` | Command tree, configuration, remote operations, and machine-readable output. |
-| `Packages/Edith/Sources/EdithDocs` | Bundled `ed` reference parsing, search, and Docs Ask ranking, linked only by the app and CLI so the helper and agent skip the Markdown parser. |
-| `Packages/Edith/Sources/EdithLidAwakeHelper` | Privileged lid-awake helper executable. |
-| `Packages/EdithStudio` | Studio's media engine: data-driven PDF, image, video, audio, document, web, archive and on-device AI tools, the job runner, and the PDF and image editing models. A standalone package so its suites build and run in seconds; the app and `ed` link it. |
+| `Packages/EdithHost` | The host app: lifecycle, windows, navigation, Home, Notch, Extensions, Storage and Settings pages, permissions, updates, the `ed` command gateway and the extension loader. |
+| `Packages/ExtensionMarketplace` | Signed catalog, package download and verification, installation state, leases and compatibility rules, shared by the host and the release tooling. |
+| `Packages/ExtensionSupport` | Libraries that extensions link: commands, files, accounts, documents, archives and the shared UI kit. |
+| `Packages/EdithStudio` | Studio's media engine: data-driven PDF, image, video, audio, document, web, archive and on-device AI tools, the job runner, and the PDF and image editing models. A standalone package so its suites build and run in seconds. |
+| `Packages/EdithDocsWorker` | Bundled `ed` reference parsing, search and Docs Ask ranking. |
+| `Extensions/<id>` | One extension: runtime, views, CLI commands, tests and native code. `Extensions/manifest.json` lists every extension with its version, roles, inputs and dependencies. |
+| `skills` | Agent skills that the Plugins extension fetches from GitHub at runtime. |
 | `apps/companion` | Optional Rust service for private memory, retrieval, and media processing. |
+| `apps/music-player` | Rust Spotify playback engine used by the Music extension. |
 | `apps/site` | Static product and policy website deployed through GitHub Pages. |
 | `apps/promo-video` | Remotion source for release and announcement media. |
-| `Resources` | Application property lists, launchd configuration, and packaged artwork. |
+| `Resources` | Application property lists, entitlements, the `ed` launcher and packaged artwork. |
+| `scripts` | Build, packaging, release and policy tooling. |
 
-## Processes
+## Host and extensions
 
-Four processes, each with one reason to exist.
+The host is the only app a user installs. It ships the shell, the marketplace,
+Settings, Storage and the Home and Notch layout controls. Every other feature
+is an extension. A downloaded extension is `<id>/package.json` plus one
+`<role>.bundle` per role, loaded in process by the host. The only separate
+processes are short-lived native task and CLI children, the virtual camera
+system extension carrier, the lid-awake helper, and the `ed` launcher.
 
-`edithd` is a LaunchAgent, not a daemon: it needs the user's home, Keychain,
-SSH and iCloud container. `Resources/com.pulkit.edith.agent.plist` ships in
-`Contents/Library/LaunchAgents`, the app registers it with
-`SMAppService.agent(plistName:)`, and launchd starts it on demand through its
-Mach service and keeps it alive while the Login Items entry is enabled. It runs
-a Foundation run loop with an `NSXPCListener` and no AppKit UI. It owns
-collection and long jobs.
+Extensions are built against the host contract in `Packages/ExtensionSupport`
+and `Packages/ExtensionMarketplace`. `scripts/extension-host-abi.mjs` computes
+the contract identifier from those sources, and the host refuses to load a
+package built for a different one. An extension never links the host.
 
-Only `/Applications/Edith.app` runs these production registrations. Each
-worktree's development build is a separate app, `com.pulkit.edith.dev.<slot>`,
-whose agent the app loads with `launchctl bootstrap` and unloads on quit, so
-development builds never share a label, Mach service, login item or data folder
-with each other or with the installed app. `docs/background-agent.md` has the
-details.
+## Marketplace
 
-Edith Bar is the login item helper. It keeps only what needs a WindowServer
-session or a TCC grant: the clipboard tap, keystroke highlight, focus dim, the
-presenter, the microphone, the notch, playback and EventKit. It publishes into
-the agent rather than owning shared state.
-
-The Edith window, the `ed` executable and `ed database mcp` are thin XPC
-clients of the same operation catalog.
-
-The privileged lid-awake helper is unchanged: a `pmset`-only LaunchDaemon.
-
-**Placement rule.** A job lives in the agent unless it needs a WindowServer
-session or a TCC grant. The agent never asks for a permission.
-
-## The agent
-
-`JobScheduler` is an actor. Each job declares an id, a trigger (timer, file
-system, subscription, queue), an ambient cadence that runs with no window open,
-a live cadence that applies while an XPC subscriber holds its topic, and a
-power policy. Subscribing to a topic raises the cadence; dropping the last
-subscriber lowers it. A job whose ability is off reports `disabled` rather than
-running. While Low Power Mode is on or the Mac reports serious thermal
-pressure, ambient cadences stretch threefold; live cadences are unchanged.
-
-launchd starts the agent, Edith Bar and the app with a minimal environment, so
-each captures the user's login shell environment once (`$SHELL -l -i -c` around
-`env -0`) and refreshes it in the background when a zsh, bash, fish or
-`/etc/paths` file changes or after an hour. Child processes get the shell's
-PATH first plus any exported variable they do not already set, so tools and
-exports from the user's rc files work without restarting Edith. Session,
-locale, SSH agent, dynamic loader and provider API key variables stay as
-launchd set them.
-
-The XPC hub listens on `com.pulkit.edith.agent`. Peers are authenticated with
-`NSXPCListener.setConnectionCodeSigningRequirement`, built from the agent's own
-team identifier and falling back to identity alone for ad-hoc builds. Every
-connection handshakes a protocol version first and a mismatched peer is refused
-with a relaunch hint.
-
-`perform(operation:payload:)` is the only RPC verb. Operations are
-`UserOperationID` values from `UserOperationCatalog`, and the agent registers a
-handler for each id it declares in `AgentOperationCatalog`. Clients refuse an
-unserved operation before it reaches the wire.
-
-One GRDB SQLite database, `edith.sqlite`, in WAL mode, with the agent as sole
-writer. UI processes never open it; they receive typed Codable snapshots and
-topic pushes over XPC. Migrations are forward-only and numbered through
-`DatabaseMigrator`; the file is copied to `edith.sqlite.pre-<build>` before a
-migration runs, copies older than thirty days are pruned, and a store written
-by a newer schema is refused rather than downgraded.
-
-## Suites and abilities
-
-The registry has two levels. A **suite** is what you enable. An **ability** is a
-toggle inside it that declares its host (`agent`, `bar`, `window`), its
-permissions, its tools and the abilities it requires.
-
-Core is always on: Home, Fleet (this Mac plus SSH machines, files, Docker,
-terminal), Extensions, Settings, the agent, `ed` and MCP. Six suites hold the
-rest: Agents, Maintenance, System, Desk, Media, Data.
-
-Enablement is layered. `isSelected` reads the raw defaults key, `isEnabled`
-also requires the suite and every declared requirement. Enabling an ability
-turns its suite on and pulls in what it requires; disabling one clears its
-dependents. Turning a suite off remembers which abilities were on so turning it
-back on restores them.
-
-The sidebar and every suite landing page are generated from that table. Adding
-an ability is a registry entry, not a new switch statement.
+Each extension is released as its own ZIP with JSON metadata and a detached
+checksum. A signed catalog points to the immutable release assets. The host
+verifies the publisher, package identity, archive boundaries, checksum, ABI,
+architecture and minimum macOS version before loading code, and keeps the
+previous version usable if a replacement fails. Release planning fingerprints
+each extension's inputs, so a change rebuilds only the affected extensions and
+their dependents. `docs/extension-marketplace.md` describes the user-facing
+behavior.
 
 ## Studio
 
-Studio is a Media ability hosted in the Edith window. Its engine lives in
-`Packages/EdithStudio` and has no dependency on the rest of Edith. Every tool is
-a `StudioTool` value: an id, the kinds of file it accepts, whether it runs per
-file or combines files, typed options that the app renders as a form and `ed
-studio run --set key=value` parses, the engines it needs, and a perform closure.
-`StudioRunner` validates inputs and settings, runs each unit in a private
-staging folder, then moves results next to the originals, into Downloads or into
-a chosen folder under a name that never overwrites an existing file. Editors
-(image, PDF, video) and the PDF compare view are tools with an editor style
-instead of a perform closure. Workflows chain runnable tools into one tool.
+Studio is an extension whose engine lives in `Packages/EdithStudio` and has no
+dependency on the rest of Edith. Every tool is a `StudioTool` value: an id, the
+kinds of file it accepts, whether it runs per file or combines files, typed
+options that the app renders as a form and `ed studio run --set key=value`
+parses, the engines it needs, and a perform closure. `StudioRunner` validates
+inputs and settings, runs each unit in a private staging folder, then moves
+results next to the originals, into Downloads or into a chosen folder under a
+name that never overwrites an existing file. Editors (image, PDF, video) and the
+PDF compare view are tools with an editor style instead of a perform closure.
+Workflows chain runnable tools into one tool.
 
 PDF and image tools use PDFKit, Core Graphics, ImageIO, Core Image and Vision.
 Video and audio tools use FFmpeg, and four PDF tools use qpdf; both are optional
@@ -136,92 +72,51 @@ file leaves the Mac.
 
 ## Data
 
-One data root, `~/Library/Application Support/Edith/`: the store, `machines/`,
-`clipboard/`, `seo/`, `settings.json` and music unless another folder is
-chosen. `DataRoot` names each location once. A development build keeps its data,
-caches and logs under `Edith Dev/<slot>` instead, and can point the whole root
-elsewhere with the `EDITH_DATA_ROOT` environment variable; there is no setting
-for it, so it cannot travel in a backup.
+One data root, `~/Library/Application Support/Edith/`, holds the host's state and
+each extension's owned data. Removing an extension retains its user data. A
+development build keeps its data, caches and logs under `Edith Dev/<slot>`
+instead, and can point the whole root elsewhere with the `EDITH_DATA_ROOT`
+environment variable.
 
-Caches live in `~/Library/Caches/Edith/`, including `Runtime/` for SSH
-ControlMaster sockets. They are regenerable and never synced. Logs live in
-`~/Library/Logs/Edith/` and are pruned after seven days.
+Caches live in `~/Library/Caches/Edith/`. They are regenerable and never synced.
+Logs live in `~/Library/Logs/Edith/`.
 
-`BackupCatalog` states what leaves this Mac: nine data classes, each with
-whether it always syncs, opts in or never leaves, how it merges on restore, and
-how long it is kept. Machines and database connections sync without their
-secrets, which stay in the Keychain and are re-entered per Mac. The agent runs
-one backup scheduler: change-driven with a sixty second debounce plus a daily
-JSONL snapshot per synced table.
-
-## Application Boundaries
-
-The main app presents long-lived settings and fleet views. The menu bar
-companion owns integrations that need a session or a grant. Both read shared
-defaults and subscribe to the agent rather than reaching into each other's UI
-state.
+## Command line
 
 The `ed` executable exposes domain operations for scripts and automation. The
-installer links it under the `ed` and `edith` names. Read commands provide
-JSON, logs use standard error, and exit codes carry success or failure.
-Remote-machine operations execute through SSH using the user's configured host
-and credentials.
-
-### User operation parity
-
-Actionable UI behavior enters `UserOperationCatalog` as a
-`RegisteredUserOperation`. Each registration owns one shared operation
-descriptor and declares either its UI placements with parseable example
-arguments, or a specific reason it is command-line only. The catalog derives
-the UI action registry from those registrations, so the UI inventory, operation
-identity and CLI route cannot drift into separate sources of truth.
-
-`CLIParityTests` resolves every registered route through the argument parser and
-the completion tree. It also keeps the remaining unshared UI inventory visible
-until an exact operation, UI surface and example invocation move behind a typed
-placement. Focus, scrolling, folding, local filtering, modal visibility and
-mouse capture are recorded separately as presentation-only state and do not
-need CLI commands.
-
-### Command tree
-
-`CommandTree` derives its structure from `EdRoot`'s `CommandConfiguration`:
-names, abstracts, aliases, nesting and `shouldDisplay`. Only what the argument
-parser cannot express stays declarative, keyed by command path: option value
-kinds, positional kinds, destructive policy and passthrough rules. A test keeps
-that table free of stale keys.
+installer links it under the `ed` and `edith` names, and it connects to the
+running Edith app. Read commands provide JSON, logs use standard error, and exit
+codes carry success or failure. Extensions contribute their own command groups,
+and the reference pages in `docs/cli` are bundled into `Packages/EdithDocsWorker`
+by `scripts/generate-cli-docs-bundle.mjs`. Remote-machine operations execute
+through SSH using the user's configured host and credentials.
 
 ## Companion Boundary
 
-Companion is optional and deployed separately. The macOS app packages runtime
-files, selects a host-specific Compose profile, and communicates with the API
-through a loopback endpoint or SSH tunnel. The agent owns the forward while the
-Memory ability is on, so `ed companion` and the Memory MCP tools work with the
-window closed. PostgreSQL stores structured memory, Redis coordinates transient
-work, and configured model services perform local embedding, speech, vision,
-and reranking. A reasoning provider receives context only when the user
-configures and selects it.
+Companion is optional and deployed separately. The Companion extension packages
+runtime files, selects a host-specific Compose profile, and communicates with the
+API through a loopback endpoint or SSH tunnel. PostgreSQL stores structured
+memory, Redis coordinates transient work, and configured model services perform
+local embedding, speech, vision, and reranking. A reasoning provider receives
+context only when the user configures and selects it.
 
 ## Distribution
 
-Xcode assembles the main application, menu bar companion, CLI executable and
-alias, background agent, privileged helper, resources, and Sparkle framework
-into one bundle. `make verify-bundle` asserts the layout, including the agent
-binary, its LaunchAgent plist and its code-signing identifier. Release
-automation signs the bundle, optionally notarizes it, creates a DMG and signed
-appcast, publishes a GitHub Release, and mirrors the Homebrew cask. GitHub
-Pages deploys `apps/site` independently.
-
-Surviving an update: on first launch of a new build the app compares its
-version to the `installedBuild` stamp, re-registers the agent and restarts it,
-because replacing the binary leaves the old agent running. The agent then
-copies the store and runs migrations.
+`build.sh` runs `scripts/build-minimal-host.mjs` to build `Packages/EdithHost`
+and `scripts/package-shipping-host.py` to assemble, sign and verify the bundle
+with Sparkle and the `ed` launcher. `make verify-bundle` asserts the layout and
+code-signing identifiers. GitHub Actions publishes releases: a push to `main`
+that changes the host runs `.github/workflows/ci.yml`, which builds and signs
+the app, creates the DMG and signed appcast, publishes a GitHub Release, and
+mirrors the Homebrew cask. The same push runs `.github/workflows/extensions.yml`,
+which builds, signs and publishes the changed extension packages and the next
+signed catalog. GitHub Pages deploys `apps/site` independently.
 
 ## Trust Boundaries
 
-The primary boundaries are user-approved macOS permissions, the agent's XPC
-service, local files and pasteboard contents, SSH hosts, the Companion network
-endpoint, provider credentials, and the signed update channel. Changes that
-cross one of these boundaries should document the data flow, minimize retained
-data, fail closed, and include focused tests for authorization, parsing, and
-error handling.
+The primary boundaries are user-approved macOS permissions, downloaded extension
+packages and the signed catalog, local files and pasteboard contents, SSH hosts,
+the Companion network endpoint, provider credentials, and the signed update
+channel. Changes that cross one of these boundaries should document the data
+flow, minimize retained data, fail closed, and include focused tests for
+authorization, parsing, and error handling.

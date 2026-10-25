@@ -1,0 +1,48 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+struct LazyChartCard<Content: View>: View {
+    let title: String
+    var note: String? = nil
+    let dark: Bool
+    var placeholderHeight: CGFloat = UIScale.pt(224)
+    @ViewBuilder var content: () -> Content
+    @State private var loaded = false
+
+    var body: some View {
+        PageCard(title: title, note: note) {
+            Group {
+                if loaded {
+                    content()
+                } else {
+                    SkeletonGroup {
+                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                            HStack(alignment: .bottom, spacing: UIScale.pt(6)) {
+                                ForEach(0..<12, id: \.self) { index in
+                                    SkeletonBlock(
+                                        height: CGFloat(32 + index % 5 * 22),
+                                        corner: 3)
+                                }
+                            }
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                            HStack {
+                                SkeletonBlock(width: 58, height: 8)
+                                Spacer()
+                                SkeletonBlock(width: 58, height: 8)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: placeholderHeight)
+                    .accessibilityLabel("Loading \(title)")
+                }
+            }
+        }
+        .task {
+            guard !loaded else { return }
+            await Task.yield()
+            loaded = true
+        }
+    }
+}

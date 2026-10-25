@@ -1,0 +1,795 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index 518af3ff2..15573aed7 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -505,6 +505,15 @@ typedef enum {
+   GHOSTTY_SURFACE_CONTEXT_SPLIT = 2,
+ } ghostty_surface_context_e;
+
++typedef void (*ghostty_external_write_cb)(void*, const uint8_t*, size_t);
++typedef void (*ghostty_external_resize_cb)(void*, uint16_t, uint16_t, uint32_t, uint32_t);
++
++typedef struct {
++  void* userdata;
++  ghostty_external_write_cb write_cb;
++  ghostty_external_resize_cb resize_cb;
++} ghostty_external_io_s;
++
+ typedef struct {
+   ghostty_platform_e platform_tag;
+   ghostty_platform_u platform;
+@@ -518,6 +527,7 @@ typedef struct {
+   const char* initial_input;
+   bool wait_after_command;
+   ghostty_surface_context_e context;
++  const ghostty_external_io_s* external_io;
+ } ghostty_surface_config_s;
+
+ typedef struct {
+@@ -1181,6 +1191,9 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
+ GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
+ GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
+ GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
++GHOSTTY_API bool ghostty_surface_external_output(ghostty_surface_t, const uint8_t*, size_t);
++GHOSTTY_API bool ghostty_surface_external_set_termios(ghostty_surface_t, bool, bool);
++GHOSTTY_API bool ghostty_surface_external_exit(ghostty_surface_t);
+ GHOSTTY_API void ghostty_surface_set_size(ghostty_surface_t, uint32_t, uint32_t);
+ GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
+ GHOSTTY_API uint64_t ghostty_surface_foreground_pid(ghostty_surface_t);
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 8eddc14c8..33bc3d6e5 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -639,37 +639,40 @@ pub fn init(
+     // This separate block ({}) is important because our errdefers must
+     // be scoped here to be valid.
+     {
+-        var env = rt_surface.defaultTermioEnv() catch |err| env: {
+-            // If an error occurs, we don't want to block surface startup.
+-            log.warn("error getting env map for surface err={}", .{err});
+-            break :env global.environMap() catch std.process.Environ.Map.init(alloc);
+-        };
+-        errdefer env.deinit();
++        const external = if (comptime @hasDecl(@TypeOf(rt_surface.*), "externalIO")) rt_surface.externalIO() else null;
++        var io_backend: termio.Backend = if (external) |options|
++            .{ .external = try termio.External.init(options) }
++        else exec: {
++            var env = rt_surface.defaultTermioEnv() catch |err| env: {
++                log.warn("error getting env map for surface err={}", .{err});
++                break :env global.environMap() catch std.process.Environ.Map.init(alloc);
++            };
++            errdefer env.deinit();
+
+-        // don't leak GHOSTTY_LOG to any subprocesses
+-        _ = env.orderedRemove("GHOSTTY_LOG");
++            _ = env.orderedRemove("GHOSTTY_LOG");
+
+-        var buf: [18]u8 = undefined;
+-        try env.put(
+-            "GHOSTTY_SURFACE_ID",
+-            std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
+-        );
++            var buf: [18]u8 = undefined;
++            try env.put(
++                "GHOSTTY_SURFACE_ID",
++                std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
++            );
+
+-        // Initialize our IO backend
+-        var io_exec = try termio.Exec.init(alloc, .{
+-            .command = command,
+-            .env = env,
+-            .env_override = config.env,
+-            .shell_integration = config.@"shell-integration",
+-            .shell_integration_features = config.@"shell-integration-features",
+-            .cursor_blink = config.@"cursor-style-blink",
+-            .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
+-            .resources_dir = global.resourcesDir().host(),
+-            .term = config.term,
+-            .rt_pre_exec_info = .init(config),
+-            .rt_post_fork_info = .init(config),
+-        });
+-        errdefer io_exec.deinit();
++            const io_exec = try termio.Exec.init(alloc, .{
++                .command = command,
++                .env = env,
++                .env_override = config.env,
++                .shell_integration = config.@"shell-integration",
++                .shell_integration_features = config.@"shell-integration-features",
++                .cursor_blink = config.@"cursor-style-blink",
++                .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
++                .resources_dir = global.resourcesDir().host(),
++                .term = config.term,
++                .rt_pre_exec_info = .init(config),
++                .rt_post_fork_info = .init(config),
++            });
++            break :exec .{ .exec = io_exec };
++        };
++        errdefer io_backend.deinit();
+
+         // Initialize our IO mailbox
+         var io_mailbox = try termio.Mailbox.initSPSC(alloc);
+@@ -679,7 +682,7 @@ pub fn init(
+             .size = size,
+             .full_config = config,
+             .config = try termio.Termio.DerivedConfig.init(alloc, config),
+-            .backend = .{ .exec = io_exec },
++            .backend = io_backend,
+             .mailbox = io_mailbox,
+             .renderer_state = &self.renderer_state,
+             .renderer_wakeup = render_thread.wakeup,
+@@ -1338,6 +1341,7 @@ fn childExitedAbnormally(
+     // Build up our command for the error message
+     const command = try std.mem.join(alloc, " ", switch (self.io.backend) {
+         .exec => |*exec| exec.subprocess.args,
++        .external => &.{},
+     });
+     const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
+
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index 525bc856d..06adc8f83 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -454,6 +454,8 @@ pub const Surface = struct {
+     cursor_pos: apprt.CursorPos,
+     inspector: ?*Inspector = null,
+
++    external_io: ?@import("../termio.zig").External.Options = null,
++
+     /// The current title of the surface. The embedded apprt saves this so
+     /// that getTitle works without the implementer needing to save it.
+     title: ?[:0]const u8 = null,
+@@ -499,6 +501,8 @@ pub const Surface = struct {
+
+         /// Context for the new surface
+         context: apprt.surface.NewSurfaceContext = .window,
++
++        external_io: ?*const @import("../termio.zig").External.Options = null,
+     };
+
+     pub fn init(self: *Surface, app: *App, opts: Options) !void {
+@@ -506,6 +510,7 @@ pub const Surface = struct {
+             .app = app,
+             .platform = try .init(opts.platform_tag, opts.platform),
+             .userdata = opts.userdata,
++            .external_io = if (opts.external_io) |io| io.* else null,
+             .core_surface = undefined,
+             .content_scale = .{
+                 .x = @floatCast(opts.scale_factor),
+@@ -667,6 +672,10 @@ pub const Surface = struct {
+         }
+     }
+
++    pub fn externalIO(self: *const Surface) ?@import("../termio.zig").External.Options {
++        return self.external_io;
++    }
++
+     pub fn core(self: *Surface) *CoreSurface {
+         return &self.core_surface;
+     }
+@@ -1953,6 +1962,35 @@ pub const CAPI = struct {
+
+     /// Update the size of a surface. This will trigger resize notifications
+     /// to the pty and the renderer.
++    export fn ghostty_surface_external_output(surface: *Surface, data: ?[*]const u8, len: usize) bool {
++        const io = &surface.core_surface.io;
++        if (io.backend != .external or io.backend.external.stopped.load(.acquire)) return false;
++        if (len == 0) return true;
++        const bytes = data orelse return false;
++        io.processOutput(bytes[0..len]);
++        return true;
++    }
++
++    export fn ghostty_surface_external_set_termios(surface: *Surface, canonical: bool, echo: bool) bool {
++        const core_surface = &surface.core_surface;
++        if (core_surface.io.backend != .external or core_surface.io.backend.external.stopped.load(.acquire)) return false;
++        core_surface.handleMessage(.{ .password_input = canonical and !echo }) catch return false;
++        return true;
++    }
++
++    export fn ghostty_surface_external_exit(surface: *Surface) bool {
++        const core_surface = &surface.core_surface;
++        if (core_surface.io.backend != .external) return false;
++        core_surface.io.backend.external.stop();
++        core_surface.child_exited = true;
++        core_surface.handleMessage(.{ .password_input = false }) catch {};
++        core_surface.renderer_state.mutex.lockUncancelable(global.io());
++        defer core_surface.renderer_state.mutex.unlock(global.io());
++        core_surface.io.terminal.modes.set(.cursor_visible, false);
++        core_surface.renderer_thread.wakeup.notify() catch {};
++        return true;
++    }
++
+     export fn ghostty_surface_set_size(surface: *Surface, w: u32, h: u32) void {
+         surface.updateSize(w, h);
+     }
+diff --git a/src/termio.zig b/src/termio.zig
+index b16885109..f0dab45bb 100644
+--- a/src/termio.zig
++++ b/src/termio.zig
+@@ -23,6 +23,7 @@ const message = @import("termio/message.zig");
+ pub const backend = @import("termio/backend.zig");
+ pub const mailbox = @import("termio/mailbox.zig");
+ pub const Exec = @import("termio/Exec.zig");
++pub const External = @import("termio/External.zig");
+ pub const Options = @import("termio/Options.zig");
+ pub const Termio = @import("termio/Termio.zig");
+ pub const Thread = @import("termio/Thread.zig");
+diff --git a/src/termio/Termio.zig b/src/termio/Termio.zig
+index 7d9fd45ff..7efc47144 100644
+--- a/src/termio/Termio.zig
++++ b/src/termio/Termio.zig
+@@ -303,7 +303,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
+         .enquiry_response = opts.config.enquiry_response,
+     };
+
+-    const thread_enter_state = try ThreadEnterState.create(
++    const thread_enter_state = if (backend == .external) null else try ThreadEnterState.create(
+         alloc,
+         opts.full_config,
+     );
+diff --git a/src/termio/backend.zig b/src/termio/backend.zig
+index c29009acb..4398a6a88 100644
+--- a/src/termio/backend.zig
++++ b/src/termio/backend.zig
+@@ -11,28 +11,32 @@ const ProcessInfo = @import("../pty.zig").ProcessInfo;
+ const WRITE_REQ_PREALLOC = std.math.pow(usize, 2, 5);
+
+ /// The kinds of backends.
+-pub const Kind = enum { exec };
++pub const Kind = enum { exec, external };
+
+ /// Configuration for the various backend types.
+ pub const Config = union(Kind) {
+     /// Exec uses posix exec to run a command with a pty.
+     exec: termio.Exec.Config,
++    external: termio.External.Options,
+ };
+
+ /// Backend implementations. A backend is responsible for owning the pty
+ /// behavior and providing read/write capabilities.
+ pub const Backend = union(Kind) {
+     exec: termio.Exec,
++    external: termio.External,
+
+     pub fn deinit(self: *Backend) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(),
++            .external => {},
+         }
+     }
+
+     pub fn initTerminal(self: *Backend, t: *terminal.Terminal) void {
+         switch (self.*) {
+             .exec => |*exec| exec.initTerminal(t),
++            .external => {},
+         }
+     }
+
+@@ -44,12 +48,17 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.threadEnter(alloc, io, td),
++            .external => |*external| {
++                td.backend = .{ .external = {} };
++                external.resize(io.size.grid(), io.size.terminal());
++            },
+         }
+     }
+
+     pub fn threadExit(self: *Backend, td: *termio.Termio.ThreadData) void {
+         switch (self.*) {
+             .exec => |*exec| exec.threadExit(td),
++            .external => {},
+         }
+     }
+
+@@ -60,6 +69,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.focusGained(td, focused),
++            .external => {},
+         }
+     }
+
+@@ -70,6 +80,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.resize(grid_size, screen_size),
++            .external => |*external| external.resize(grid_size, screen_size),
+         }
+     }
+
+@@ -82,6 +93,7 @@ pub const Backend = union(Kind) {
+     ) !void {
+         switch (self.*) {
+             .exec => |*exec| try exec.queueWrite(alloc, td, data, linefeed),
++            .external => |*external| external.queueWrite(data, linefeed),
+         }
+     }
+
+@@ -99,6 +111,7 @@ pub const Backend = union(Kind) {
+                 exit_code,
+                 runtime_ms,
+             ),
++            .external => {},
+         }
+     }
+
+@@ -108,6 +121,7 @@ pub const Backend = union(Kind) {
+     pub fn getProcessInfo(self: *Backend, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
+         return switch (self.*) {
+             .exec => |*exec| exec.getProcessInfo(info),
++            .external => null,
+         };
+     }
+ };
+@@ -115,10 +129,12 @@ pub const Backend = union(Kind) {
+ /// Termio thread data. See termio.ThreadData for docs.
+ pub const ThreadData = union(Kind) {
+     exec: termio.Exec.ThreadData,
++    external: void,
+
+     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
+         switch (self.*) {
+             .exec => |*exec| exec.deinit(alloc),
++            .external => {},
+         }
+     }
+
+diff --git a/vendor/ghostty/src/termio/External.zig b/src/termio/External.zig
+new file mode 100644
+index 00000000..58edd07b
+--- /dev/null
++++ b/src/termio/External.zig
+@@ -0,0 +1,50 @@
++const std = @import("std");
++const global = @import("../global.zig");
++const renderer = @import("../renderer.zig");
++const External = @This();
++
++pub const Options = extern struct {
++    userdata: ?*anyopaque = null,
++    write: ?*const fn (?*anyopaque, [*]const u8, usize) callconv(.c) void = null,
++    resize: ?*const fn (?*anyopaque, u16, u16, u32, u32) callconv(.c) void = null,
++};
++
++options: Options,
++callback_mutex: std.Io.Mutex = .init,
++stopped: std.atomic.Value(bool) = .init(false),
++
++pub fn init(options: Options) !External {
++    if (options.write == null or options.resize == null) return error.InvalidExternalIO;
++    return .{ .options = options };
++}
++
++pub fn stop(self: *External) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
++    self.stopped.store(true, .release);
++}
++
++pub fn resize(self: *External, grid: renderer.GridSize, screen: renderer.ScreenSize) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
++    if (self.stopped.load(.acquire)) return;
++    self.options.resize.?(self.options.userdata, grid.columns, grid.rows, screen.width, screen.height);
++}
++
++pub fn queueWrite(self: *External, data: []const u8, linefeed: bool) void {
++    self.callback_mutex.lockUncancelable(global.io());
++    defer self.callback_mutex.unlock(global.io());
++    if (self.stopped.load(.acquire) or data.len == 0) return;
++    if (!linefeed) {
++        self.options.write.?(self.options.userdata, data.ptr, data.len);
++        return;
++    }
++    var start: usize = 0;
++    for (data, 0..) |byte, index| {
++        if (byte != '\r') continue;
++        if (index > start) self.options.write.?(self.options.userdata, data[start..index].ptr, index - start);
++        self.options.write.?(self.options.userdata, "\r\n", 2);
++        start = index + 1;
++    }
++    if (start < data.len) self.options.write.?(self.options.userdata, data[start..].ptr, data.len - start);
++}
+diff --git a/vendor/ghostty/tests/external_io.m b/tests/external_io.m
+new file mode 100644
+index 00000000..f0873b84
+--- /dev/null
++++ b/tests/external_io.m
+@@ -0,0 +1,394 @@
++#import <AppKit/AppKit.h>
++#import <ghostty.h>
++#import <IOSurface/IOSurface.h>
++#import <QuartzCore/QuartzCore.h>
++#include <dlfcn.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <pthread.h>
++#include <signal.h>
++#include <spawn.h>
++#include <stdatomic.h>
++#include <stdio.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/wait.h>
++#include <unistd.h>
++#include <util.h>
++
++static atomic_bool auditing;
++static atomic_uint process_calls;
++static atomic_uint pty_calls;
++static atomic_bool hold_input;
++static atomic_bool input_entered;
++static atomic_bool release_input;
++static atomic_bool input_finished;
++static pid_t engine_pid = -1;
++static int engine_fd = -1;
++static pthread_mutex_t capture_lock = PTHREAD_MUTEX_INITIALIZER;
++static uint8_t input_bytes[65536];
++static size_t input_count;
++static uint16_t resized_columns;
++static uint16_t resized_rows;
++static uint32_t resize_count;
++static bool closed_alive;
++static uint32_t close_count;
++static uint32_t secure_input_count;
++static ghostty_action_secure_input_e secure_input_action;
++
++static void require(bool passed, const char *message) {
++    if (passed) return;
++    fprintf(stderr, "failed: %s\n", message);
++    if (engine_pid > 0) {
++        kill(engine_pid, SIGKILL);
++        waitpid(engine_pid, NULL, 0);
++    }
++    exit(1);
++}
++
++pid_t fork(void) {
++    if (atomic_load(&auditing)) {
++        atomic_fetch_add(&process_calls, 1);
++        errno = EPERM;
++        return -1;
++    }
++    pid_t (*original)(void) = dlsym(RTLD_NEXT, "fork");
++    return original();
++}
++
++int posix_spawn(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions,
++                         const posix_spawnattr_t *attributes, char *const argv[], char *const env[]) {
++    if (atomic_load(&auditing)) {
++        atomic_fetch_add(&process_calls, 1);
++        return EPERM;
++    }
++    int (*original)(pid_t *, const char *, const posix_spawn_file_actions_t *,
++                    const posix_spawnattr_t *, char *const[], char *const[]) = dlsym(RTLD_NEXT, "posix_spawn");
++    return original(pid, path, actions, attributes, argv, env);
++}
++
++int posix_spawnp(pid_t *pid, const char *path, const posix_spawn_file_actions_t *actions,
++                          const posix_spawnattr_t *attributes, char *const argv[], char *const env[]) {
++    if (atomic_load(&auditing)) {
++        atomic_fetch_add(&process_calls, 1);
++        return EPERM;
++    }
++    int (*original)(pid_t *, const char *, const posix_spawn_file_actions_t *,
++                    const posix_spawnattr_t *, char *const[], char *const[]) = dlsym(RTLD_NEXT, "posix_spawnp");
++    return original(pid, path, actions, attributes, argv, env);
++}
++
++int openpty(int *master, int *slave, char *name, struct termios *attributes,
++                           struct winsize *size) {
++    if (atomic_load(&auditing)) {
++        atomic_fetch_add(&pty_calls, 1);
++        errno = EPERM;
++        return -1;
++    }
++    int (*original)(int *, int *, char *, struct termios *, struct winsize *) = dlsym(RTLD_NEXT, "openpty");
++    return original(master, slave, name, attributes, size);
++}
++
++static void wakeup(void *context) {}
++static bool action(ghostty_app_t app, ghostty_target_s target, ghostty_action_s value) {
++    if (value.tag != GHOSTTY_ACTION_SECURE_INPUT) return false;
++    secure_input_count++;
++    secure_input_action = value.action.secure_input;
++    return true;
++}
++static ghostty_clipboard_read_result_e read_clipboard(void *context, ghostty_clipboard_e clipboard,
++                                                      void *state, const char *const *mimes,
++                                                      size_t count, bool list) {
++    return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE;
++}
++static void confirm_clipboard(void *context, const ghostty_clipboard_confirm_s *confirmation,
++                              void *state, ghostty_clipboard_request_e request) {}
++static void write_clipboard(void *context, ghostty_clipboard_e clipboard,
++                            const ghostty_clipboard_content_s *contents, size_t count, bool confirm) {}
++static void close_surface(void *context, bool alive) {
++    close_count++;
++    closed_alive = alive;
++}
++
++static void send_input(void *context, const uint8_t *bytes, size_t count) {
++    require(context == &input_count, "input userdata retained by value");
++    pthread_mutex_lock(&capture_lock);
++    require(count <= sizeof(input_bytes) - input_count, "input capture bounded");
++    memcpy(input_bytes + input_count, bytes, count);
++    input_count += count;
++    if (engine_fd >= 0) require(write(engine_fd, bytes, count) == count, "engine input write");
++    pthread_mutex_unlock(&capture_lock);
++    if (atomic_load(&hold_input)) {
++        atomic_store(&input_entered, true);
++        while (!atomic_load(&release_input)) usleep(1000);
++        atomic_store(&input_finished, true);
++    }
++}
++
++static void *release_pending_input(void *context) {
++    usleep(50000);
++    atomic_store(&release_input, true);
++    return NULL;
++}
++
++static void resize_engine(void *context, uint16_t columns, uint16_t rows, uint32_t width, uint32_t height) {
++    require(context == &input_count, "resize userdata retained by value");
++    pthread_mutex_lock(&capture_lock);
++    resized_columns = columns;
++    resized_rows = rows;
++    resize_count++;
++    if (engine_fd >= 0) {
++        struct winsize size = {.ws_col = columns, .ws_row = rows, .ws_xpixel = width, .ws_ypixel = height};
++        require(ioctl(engine_fd, TIOCSWINSZ, &size) == 0, "engine resize ioctl");
++    }
++    pthread_mutex_unlock(&capture_lock);
++}
++
++static NSString *surface_text(ghostty_surface_t surface) {
++    ghostty_selection_s selection = {
++        .top_left = {.tag = GHOSTTY_POINT_SCREEN, .coord = GHOSTTY_POINT_COORD_TOP_LEFT},
++        .bottom_right = {.tag = GHOSTTY_POINT_SCREEN, .coord = GHOSTTY_POINT_COORD_BOTTOM_RIGHT},
++    };
++    ghostty_text_s text = {0};
++    require(ghostty_surface_read_text(surface, selection, &text), "native screen text extraction");
++    NSString *value = [[NSString alloc] initWithBytes:text.text length:text.text_len encoding:NSUTF8StringEncoding];
++    ghostty_surface_free_text(surface, &text);
++    return value;
++}
++
++static void drain(ghostty_app_t app, ghostty_surface_t surface, unsigned iterations) {
++    for (unsigned index = 0; index < iterations; index++) {
++        uint8_t bytes[4096];
++        ssize_t count;
++        while (engine_fd >= 0 && (count = read(engine_fd, bytes, sizeof(bytes))) > 0) {
++            require(ghostty_surface_external_output(surface, bytes, count), "VT output accepted");
++        }
++        ghostty_app_tick(app);
++        usleep(10000);
++    }
++}
++
++static void wait_for_text(ghostty_app_t app, ghostty_surface_t surface, NSString *expected) {
++    for (unsigned attempt = 0; attempt < 300; attempt++) {
++        drain(app, surface, 1);
++        if ([surface_text(surface) containsString:expected]) return;
++    }
++    fprintf(stderr, "screen: %s\n", surface_text(surface).UTF8String);
++    require(false, "expected PTY output reached native VT parser");
++}
++
++int main(int argc, char **argv) {
++    @autoreleasepool {
++        int slave;
++        struct winsize initial_size = {.ws_col = 80, .ws_row = 24};
++        require(openpty(&engine_fd, &slave, NULL, NULL, &initial_size) == 0, "owned synthetic PTY");
++        struct termios attributes;
++        require(tcgetattr(slave, &attributes) == 0, "synthetic PTY attributes");
++        attributes.c_lflag &= ~ECHO;
++        require(tcsetattr(slave, TCSANOW, &attributes) == 0, "synthetic PTY echo disabled");
++        engine_pid = fork();
++        require(engine_pid >= 0, "owned synthetic engine child");
++        if (engine_pid == 0) {
++            alarm(15);
++            setsid();
++            ioctl(slave, TIOCSCTTY, 0);
++            dup2(slave, STDIN_FILENO);
++            dup2(slave, STDOUT_FILENO);
++            dup2(slave, STDERR_FILENO);
++            close(engine_fd);
++            close(slave);
++            execl("/bin/sh", "sh", "-c",
++                  "printf '\\033[2J\\033[H\\033[31mrenderer-fixture\\033[0m\\r\\n'; "
++                  "IFS= read -r line; printf 'input:%s\\r\\n' \"$line\"; stty size; "
++                  "printf '\\033[?1049halt-screen\\033[?1049l'; exit 7", NULL);
++            _exit(127);
++        }
++        close(slave);
++        require(fcntl(engine_fd, F_SETFL, O_NONBLOCK) == 0, "synthetic PTY nonblocking");
++        atomic_store(&auditing, true);
++        require(fork() == -1 && errno == EPERM, "process audit interposition active");
++        int denied_master, denied_slave;
++        require(openpty(&denied_master, &denied_slave, NULL, NULL, NULL) == -1 && errno == EPERM,
++                "PTY audit interposition active");
++        atomic_store(&process_calls, 0);
++        atomic_store(&pty_calls, 0);
++        [NSApplication sharedApplication];
++        [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
++        require(ghostty_init(argc, argv) == 0, "pinned libghostty initialization");
++        ghostty_config_t config = ghostty_config_new();
++        require(config != NULL, "native config creation");
++        ghostty_config_finalize(config);
++        ghostty_runtime_config_s runtime = {
++            .wakeup_cb = wakeup, .action_cb = action, .read_clipboard_cb = read_clipboard,
++            .confirm_read_clipboard_cb = confirm_clipboard, .write_clipboard_cb = write_clipboard,
++            .close_surface_cb = close_surface,
++        };
++        ghostty_app_t app = ghostty_app_new(&runtime, config);
++        require(app != NULL, "native app creation");
++        NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
++        ghostty_external_io_s io = {.userdata = &input_count, .write_cb = send_input, .resize_cb = resize_engine};
++        ghostty_surface_config_s options = ghostty_surface_config_new();
++        options.platform_tag = GHOSTTY_PLATFORM_MACOS;
++        options.platform.macos.nsview = (__bridge void *)view;
++        options.command = "/usr/bin/false";
++        ghostty_external_io_s invalid_io = {.userdata = &input_count, .resize_cb = resize_engine};
++        options.external_io = &invalid_io;
++        require(ghostty_surface_new(app, &options) == NULL, "missing input callback rejected without process fallback");
++        invalid_io.write_cb = send_input;
++        invalid_io.resize_cb = NULL;
++        require(ghostty_surface_new(app, &options) == NULL, "missing resize callback rejected without process fallback");
++        options.external_io = &io;
++        ghostty_surface_t surface = ghostty_surface_new(app, &options);
++        require(surface != NULL, "process-free native surface creation");
++        require(ghostty_surface_external_output(surface, NULL, 0), "empty output accepted");
++        require(!ghostty_surface_external_output(surface, NULL, 1), "invalid output buffer rejected");
++        io.userdata = NULL;
++        io.write_cb = NULL;
++        io.resize_cb = NULL;
++        [view setFrameSize:NSMakeSize(640, 400)];
++        ghostty_surface_set_size(surface, 640, 400);
++        drain(app, surface, 10);
++        require(ghostty_surface_foreground_pid(surface) == 0, "renderer owns no foreground process");
++        ghostty_string_s tty = ghostty_surface_tty_name(surface);
++        require(tty.len == 0, "renderer owns no tty");
++        ghostty_string_free(tty);
++        wait_for_text(app, surface, @"renderer-fixture");
++        ghostty_surface_size_s size = ghostty_surface_size(surface);
++        pthread_mutex_lock(&capture_lock);
++        require(resize_count > 0 && resized_columns == size.columns && resized_rows == size.rows,
++                "native dimensions reach engine resize callback");
++        pthread_mutex_unlock(&capture_lock);
++        require(size.columns > 0 && size.rows > 0, "native font grid dimensions");
++        require(tcgetattr(engine_fd, &attributes) == 0, "owning engine termios snapshot");
++        require(ghostty_surface_external_set_termios(surface, (attributes.c_lflag & ICANON) != 0,
++                                                    (attributes.c_lflag & ECHO) != 0), "engine termios mode projected");
++        require(secure_input_count == 1 && secure_input_action == GHOSTTY_SECURE_INPUT_ON,
++                "original password input heuristic delivers secure input action");
++        require(ghostty_surface_external_set_termios(surface, true, false) && secure_input_count == 1,
++                "unchanged password input mode emits no redundant action");
++        require(ghostty_surface_external_set_termios(surface, false, false), "engine raw mode projected");
++        require(secure_input_count == 2 && secure_input_action == GHOSTTY_SECURE_INPUT_OFF,
++                "original raw mode releases secure input action");
++        ghostty_surface_request_close(surface);
++        require(close_count == 1, "user close delivered to owner");
++        ghostty_surface_text(surface, "synthetic-input\r", strlen("synthetic-input\r"));
++        wait_for_text(app, surface, @"input:synthetic-input");
++        wait_for_text(app, surface, [NSString stringWithFormat:@"%u %u", size.rows, size.columns]);
++        int status;
++        require(waitpid(engine_pid, &status, 0) == engine_pid, "owned engine exit reaped");
++        engine_pid = -1;
++        require(WIFEXITED(status) && WEXITSTATUS(status) == 7, "synthetic engine exact exit preserved");
++        drain(app, surface, 10);
++        close(engine_fd);
++        pthread_mutex_lock(&capture_lock);
++        engine_fd = -1;
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        require(![surface_text(surface) containsString:@"alt-screen"], "alternate screen restored");
++        const uint8_t output[] = "\033[2J\033[H\033[38;2;0;255;0mVT-state \xE2\x98\x83\033[0m\033[3;4H\033[6n";
++        for (size_t index = 0; index < sizeof(output) - 1; index++) {
++            require(ghostty_surface_external_output(surface, output + index, 1), "split VT sequence accepted");
++        }
++        drain(app, surface, 10);
++        require([surface_text(surface) containsString:@"VT-state"], "split VT cursor and SGR parsed");
++        require([surface_text(surface) containsString:@"\u2603"], "split UTF8 output preserved by native parser");
++        ghostty_surface_draw(surface);
++        IOSurfaceRef frame = (__bridge IOSurfaceRef)view.layer.contents;
++        require(frame != NULL && CFGetTypeID(frame) == IOSurfaceGetTypeID(), "native Metal IOSurface rendered offscreen");
++        require(IOSurfaceGetWidth(frame) == 640 && IOSurfaceGetHeight(frame) == 400, "offscreen renderer dimensions");
++        require(IOSurfaceLock(frame, kIOSurfaceLockReadOnly, NULL) == kIOReturnSuccess, "offscreen pixels accessible");
++        const uint8_t *pixels = IOSurfaceGetBaseAddress(frame);
++        size_t stride = IOSurfaceGetBytesPerRow(frame);
++        size_t green_pixels = 0;
++        for (size_t row = 0; row < IOSurfaceGetHeight(frame); row++) {
++            for (size_t column = 0; column < IOSurfaceGetWidth(frame); column++) {
++                const uint8_t *pixel = pixels + row * stride + column * 4;
++                if (pixel[1] > pixel[0] + 20 && pixel[1] > pixel[2] + 20) green_pixels++;
++            }
++        }
++        IOSurfaceUnlock(frame, kIOSurfaceLockReadOnly, NULL);
++        require(green_pixels > 10, "original Metal renderer draws SGR green glyph pixels");
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 6 && memcmp(input_bytes, "\033[3;4R", 6) == 0, "VT DSR reply delivered to engine");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        ghostty_surface_text(surface, "user-bytes", strlen("user-bytes"));
++        drain(app, surface, 10);
++        require(![surface_text(surface) containsString:@"user-bytes"], "input is not terminal output");
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 10 && memcmp(input_bytes, "user-bytes", 10) == 0, "input callback exact bytes");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        pthread_mutex_lock(&capture_lock);
++        uint32_t resize_count_at_exit = resize_count;
++        pthread_mutex_unlock(&capture_lock);
++        const uint8_t linefeed_mode[] = "\033[20h";
++        require(ghostty_surface_external_output(surface, linefeed_mode, sizeof(linefeed_mode) - 1), "VT linefeed mode accepted");
++        ghostty_surface_text(surface, "a\rb", 3);
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 4 && memcmp(input_bytes, "a\r\nb", 4) == 0, "original linefeed input encoding");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        ghostty_input_key_s key = {.action = GHOSTTY_ACTION_PRESS, .mods = GHOSTTY_MODS_CTRL,
++                                  .keycode = 0, .unshifted_codepoint = 'a'};
++        require(ghostty_surface_key(surface, key), "original control key accepted");
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 1 && input_bytes[0] == 1, "original control key encoding");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        const uint8_t mouse_mode[] = "\033[?1000h\033[?1006h";
++        require(ghostty_surface_external_output(surface, mouse_mode, sizeof(mouse_mode) - 1), "VT mouse modes accepted");
++        ghostty_surface_mouse_pos(surface, 20, 20, 0);
++        require(ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, 0), "original mouse press accepted");
++        require(ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, 0), "original mouse release accepted");
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count > 12 && memcmp(input_bytes, "\033[<0;", 5) == 0 && input_bytes[input_count - 1] == 'm', "original SGR mouse protocol encoded");
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        require(ghostty_surface_external_set_termios(surface, true, false), "password state restored before exit");
++        require(secure_input_count == 3 && secure_input_action == GHOSTTY_SECURE_INPUT_ON,
++                "secure input balanced before engine exit");
++        atomic_store(&hold_input, true);
++        ghostty_surface_text(surface, "x", 1);
++        for (unsigned attempt = 0; attempt < 300 && !atomic_load(&input_entered); attempt++) usleep(10000);
++        require(atomic_load(&input_entered), "callback in flight before engine exit");
++        pthread_t releaser;
++        require(pthread_create(&releaser, NULL, release_pending_input, NULL) == 0, "owned callback release thread");
++        require(ghostty_surface_external_exit(surface), "engine-driven exit accepted");
++        require(atomic_load(&input_finished), "engine exit waits for in-flight callback completion");
++        require(pthread_join(releaser, NULL) == 0, "owned callback release thread joined");
++        atomic_store(&hold_input, false);
++        pthread_mutex_lock(&capture_lock);
++        input_count = 0;
++        pthread_mutex_unlock(&capture_lock);
++        require(ghostty_surface_process_exited(surface), "native lifecycle marked exited");
++        require(secure_input_count == 4 && secure_input_action == GHOSTTY_SECURE_INPUT_OFF,
++                "engine exit releases original secure input state");
++        require(!ghostty_surface_external_set_termios(surface, true, false) && secure_input_count == 4,
++                "stale engine mode update rejected after exit");
++        require(!ghostty_surface_external_output(surface, output, sizeof(output) - 1), "stale output rejected");
++        require(!ghostty_surface_needs_confirm_quit(surface), "exited surface needs no process confirmation");
++        ghostty_surface_text(surface, "ignored", 7);
++        ghostty_surface_set_size(surface, 800, 600);
++        drain(app, surface, 10);
++        pthread_mutex_lock(&capture_lock);
++        require(input_count == 0, "exit suppresses queued input callbacks");
++        require(resize_count == resize_count_at_exit, "exit suppresses resize callbacks");
++        pthread_mutex_unlock(&capture_lock);
++        ghostty_surface_request_close(surface);
++        require(close_count >= 2 && !closed_alive, "exited close reaches owner without live process");
++        ghostty_surface_free(surface);
++        ghostty_app_free(app);
++        ghostty_config_free(config);
++        atomic_store(&auditing, false);
++        require(NSApp.windows.count == 0, "no visible or hidden windows created");
++        require(atomic_load(&process_calls) == 0 && atomic_load(&pty_calls) == 0,
++                "UI lifetime made zero child-process or PTY creation calls");
++        puts("external IO: native Metal glyphs, real PTY input/resize, split VT, alternate screen, DSR, control/mouse/linefeed input, callback ownership, termios password actions, exit barrier and process audit passed");
++        puts("renderer process creation calls: 0; renderer PTY creation calls: 0; visible windows: 0");
++    }
++    return 0;
++}

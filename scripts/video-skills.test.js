@@ -2,11 +2,8 @@ import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = "Packages/Edith/skills";
-const catalog = readFileSync(
-  "Packages/Edith/Sources/EdithKit/Features/Skills/Models/SkillCatalog.swift",
-  "utf8",
-);
+const root = "skills";
+const catalog = readFileSync("Extensions/plugins/SkillCatalog.swift", "utf8");
 const ids = [...catalog.matchAll(/id: "(edith-[a-z-]+)"/g)].map(
   (match) => match[1],
 );

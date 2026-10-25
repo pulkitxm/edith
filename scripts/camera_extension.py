@@ -194,15 +194,19 @@ PROJECT = """// !$*UTF8*$!
 def write_project(directory, application, team):
     project = os.path.join(directory, 'EdithProfiles.xcodeproj')
     os.makedirs(project, exist_ok=True)
-    camera = application + SUFFIX
+    base = application.removesuffix('.cameraCarrier')
+    camera = base + SUFFIX
     with open(os.path.join(project, 'project.pbxproj'), 'w') as handle:
         handle.write(PROJECT.format(team=team, application=application, camera=camera))
     for name in ('App.swift', 'Camera.swift'):
         with open(os.path.join(directory, name), 'w') as handle:
             handle.write('@main\nenum ProfileMain {\n    static func main() {}\n}\n')
     app = app_entitlements(application, team)
-    write(os.path.join(directory, 'App.entitlements'), {INSTALL_ENTITLEMENT: app[INSTALL_ENTITLEMENT]})
-    write(os.path.join(directory, 'Camera.entitlements'), extension_entitlements(application, team))
+    carrier_entitlements = {INSTALL_ENTITLEMENT: app[INSTALL_ENTITLEMENT]}
+    if application.endswith('.cameraCarrier'):
+        carrier_entitlements['com.apple.security.application-groups'] = [f'{team}.{camera}']
+    write(os.path.join(directory, 'App.entitlements'), carrier_entitlements)
+    write(os.path.join(directory, 'Camera.entitlements'), extension_entitlements(base, team))
     return project
 
 

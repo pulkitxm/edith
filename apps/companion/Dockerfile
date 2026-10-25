@@ -2,9 +2,11 @@ FROM rust:1.99-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev python3
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock prepare-pdf-extract.py ./
+COPY pdf-extract/Cargo.toml pdf-extract/
+RUN python3 -B prepare-pdf-extract.py
 COPY src ./src
 COPY migrations ./migrations
 COPY personas ./personas

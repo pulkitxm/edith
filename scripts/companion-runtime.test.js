@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(
-  "Packages/Edith/Sources/EdithKit/Features/Companion/Models/CompanionRuntimeFiles.swift",
+  "Extensions/companion/Models/CompanionRuntimeFiles.swift",
   "utf8",
 );
 
