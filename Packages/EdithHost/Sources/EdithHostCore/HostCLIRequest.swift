@@ -38,16 +38,18 @@ public struct HostCLIRequest: Sendable, Equatable {
     public let timeout: Double
     public let raw: Bool
     public static let maximumPayload = ExtensionPeerEndpoint.maximumPayloadBytes
+    public static let maximumTimeout: Double = 1800
 
     public init(
         action: Action, id: String? = nil, operation: String? = nil,
-        payload: Data = Data("{}".utf8), timeout: Double = 30, raw: Bool = false
+        payload: Data = Data("{}".utf8), timeout: Double? = nil, raw: Bool = false
     ) throws {
         self.action = action
         self.id = id
         self.operation = operation
         self.payload = payload
-        self.timeout = timeout
+        self.timeout =
+            timeout ?? (action == .install || action == .update ? Self.maximumTimeout : 30)
         self.raw = raw
         try validate()
     }
@@ -87,7 +89,8 @@ public struct HostCLIRequest: Sendable, Equatable {
     }
 
     public func validate() throws {
-        guard timeout.isFinite, (1...120).contains(timeout), payload.count <= Self.maximumPayload,
+        guard timeout.isFinite, (1...Self.maximumTimeout).contains(timeout),
+            payload.count <= Self.maximumPayload,
             (try? JSONSerialization.jsonObject(with: payload, options: .fragmentsAllowed)) != nil
         else { throw HostCLIError.usage("Invalid JSON payload or command limit.") }
         guard !raw || action == .invoke else {
@@ -137,7 +140,8 @@ public enum HostCLICommand: Equatable {
         Results are JSON. Use --json - to read an invoke payload from stdin.
         Edith must already be running. Invoke requires a compatible, enabled worker.
         Commands never open the app or enable a worker implicitly.
-        Timeout: 1 to 120 seconds, default 30. Payload limit: 8 MiB.
+        Timeout: 1 to 1800 seconds, default 30; install and update default to 1800.
+        Payload limit: 8 MiB.
         """
 
     public static func parse(

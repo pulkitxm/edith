@@ -29,6 +29,31 @@ import Testing
         }
         #expect(throws: HostCLIError.self) { try HostCLICommand.parse(["machines", "ls"]) }
     }
+    @Test func downloadsAndLongOperationsUseTheEngineDeadline() throws {
+        for action in ["install", "update"] {
+            guard
+                case .request(let request) = try HostCLICommand.parse([
+                    "extensions", action, "studio", "--json",
+                ])
+            else { Issue.record("The download was not parsed"); return }
+            #expect(request.timeout == 1800)
+            #expect(try HostCLIRequest.decoded(request.encoded()) == request)
+        }
+        #expect(try HostCLIRequest(action: .info, id: "studio").timeout == 30)
+        guard
+            case .request(let request) = try HostCLICommand.parse([
+                "invoke", "herdr", "herdr.file.download", "--timeout", "1800",
+            ])
+        else { Issue.record("The long operation was not parsed"); return }
+        #expect(request.timeout == 1800)
+        #expect(try HostCLIRequest.decoded(request.encoded()) == request)
+        for timeout in [0, -1, 1801, Double.infinity, Double.nan] {
+            #expect(throws: HostCLIError.self) {
+                try HostCLIRequest(action: .install, id: "studio", timeout: timeout)
+            }
+        }
+    }
+
     @Test func invokeReadsBoundedJSONAndRejectsPrivateOperations() throws {
         guard
             case .request(let request) = try HostCLICommand.parse(
@@ -41,7 +66,7 @@ import Testing
         #expect(request.payload == Data("{\"synthetic\":true}".utf8))
         for args in [
             ["invoke", "sample", "extension.native.authorize"],
-            ["invoke", "../sample", "echo"], ["invoke", "sample", "echo", "--timeout", "121"],
+            ["invoke", "../sample", "echo"], ["invoke", "sample", "echo", "--timeout", "1801"],
             ["invoke", "sample", "echo", "--json", "invalid"],
             ["invoke", "sample", "echo", "--json", "{}", "--json", "{}"],
         ] { #expect(throws: HostCLIError.self) { try HostCLICommand.parse(args) } }
@@ -55,7 +80,7 @@ import Testing
         let request = try HostCLIRequest(action: .ls)
         var object = try #require(
             JSONSerialization.jsonObject(with: request.encoded()) as? [String: Any])
-        object["timeout"] = 999
+        object["timeout"] = 1801
         #expect(throws: HostCLIError.self) {
             try HostCLIRequest.decoded(JSONSerialization.data(withJSONObject: object))
         }

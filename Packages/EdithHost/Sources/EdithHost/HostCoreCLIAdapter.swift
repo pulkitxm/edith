@@ -142,7 +142,11 @@ import Foundation
                         && ["exec", "cancel"].contains(route.last ?? "")
                     || route.starts(with: ["agent", "schedule"])
                         && ["add", "rm", "enable", "disable", "run"].contains(route.last ?? ""),
-                timeout: route == ["extensions", "setup"] ? 120 : 30,
+                timeout: route == ["extensions", "setup"]
+                    ? 120
+                    : route.first == "extensions"
+                        && ["install", "update"].contains(route.last ?? "")
+                        ? HostCLIRequest.maximumTimeout : 30,
                 jsonOutput: route.first != "schema" && route.first != "guide"
                     && route.first != "completions")
         }
