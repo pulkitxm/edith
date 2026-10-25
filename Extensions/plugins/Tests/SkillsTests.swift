@@ -81,14 +81,14 @@ import EdithExtensionSupport
             ])
         #expect(
             skill.sourceURL.absoluteString
-                == "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/edith-remote-work/SKILL.md"
+                == "https://raw.githubusercontent.com/pulkitxm/edith/main/skills/edith-remote-work/SKILL.md"
         )
     }
 
     @MainActor @Test func bundledCatalogDocumentsLoadForPreviewWithoutInstallation() async throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("../Packages/Edith/skills")
+            .appendingPathComponent("../skills")
         let cache = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: cache) }
         let store = SkillDocumentStore(cacheDirectory: cache) { url in
@@ -118,7 +118,7 @@ import EdithExtensionSupport
         #expect(arguments.contains(skill.packageURL.absoluteString))
         #expect(
             skill.packageURL.path
-                == "/pulkitxm/edith/tree/main/Packages/Edith/skills/edith-remote-work")
+                == "/pulkitxm/edith/tree/main/skills/edith-remote-work")
         #expect(!arguments.contains("*"))
         #expect(throws: SkillsError.self) {
             try SkillInstaller.arguments(skill: skill, agentIDs: [])
