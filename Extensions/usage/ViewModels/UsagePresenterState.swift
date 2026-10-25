@@ -27,25 +27,15 @@ final class UsagePresenterState {
         }
         return privacy?.values ?? [:]
     }
-    var active: Bool {
-        if let client = client ?? UsageUIClient.current,
-            client.stopped || client.presentationValues == nil
-        {
-            return true
-        }
-        return values["active"] == "1"
+    private var closed: Bool {
+        guard let client = client ?? UsageUIClient.current else { return false }
+        return client.stopped || client.presentationValues == nil
     }
+    var active: Bool { closed || values["active"] == "1" }
     var money: Bool { values["blurMoney"].map { $0 != "0" } ?? true }
-    var usage: Bool {
-        if let client = client ?? UsageUIClient.current,
-            client.stopped || client.presentationValues == nil
-        {
-            return true
-        }
-        return values["blurUsage"].map { $0 != "0" } ?? false
-    }
+    var usage: Bool { closed || values["blurUsage"].map { $0 != "0" } ?? false }
     func hides(_ category: String) -> Bool {
-        active && (values["blur" + category].map { $0 != "0" } ?? (category != "Usage"))
+        closed || (active && (values["blur" + category].map { $0 != "0" } ?? (category != "Usage")))
     }
     func shutdown() { privacy?.shutdown() }
 }

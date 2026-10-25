@@ -68,7 +68,7 @@ import Foundation
     id: "mock",
     version: "1.0.0",
     contractVersion: 1,
-    hostABI: "edith-host-1",
+    hostABI: "edith-host-3",
     minimumSystemVersion: "14.0.0",
     roles: {
       app: ["Extensions/mock/Runtime.swift"],
@@ -92,22 +92,15 @@ import Foundation
   });
   const payload = join(root, "unpacked");
   execFileSync("ditto", ["-xk", join(root, "output/mock.zip"), payload]);
-  const carrier = join(payload, "mock/ExtensionCarrier.app");
-  const roles = join(
-    carrier,
-    "Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/mock",
-  );
+  const roles = join(payload, "mock");
   const app = join(roles, "app.bundle");
   const helper = join(roles, "helper.bundle");
-  for (const role of ["app", "helper"]) {
-    try {
-      await access(join(payload, `mock/${role}.bundle`));
-      throw new Error("A role payload remained outside the UI worker");
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
+  try {
+    await access(join(roles, "ExtensionCarrier.app"));
+    throw new Error("A package still carries a UI carrier");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
   }
-  execFileSync("codesign", ["--verify", "--strict", "--deep", carrier]);
   await access(join(app, "Contents/Frameworks/libFixtureNative.dylib"));
   try {
     await access(join(helper, "Contents/Frameworks/libFixtureNative.dylib"));

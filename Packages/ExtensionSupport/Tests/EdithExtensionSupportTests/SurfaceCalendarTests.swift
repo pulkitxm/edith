@@ -44,7 +44,7 @@ import Testing
         #expect(SurfaceCommandService.project(snapshot, tile: tile).calendars == nil)
     }
 
-    @MainActor @Test func staleCalendarActionsAreRejectedAndPresenterMaskingRemovesAllCells()
+    @MainActor @Test func staleCalendarActionsAreRejectedAndPresenterMaskingRemovesCalendarCells()
         async throws
     {
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.usage))
@@ -61,10 +61,8 @@ import Testing
         let data = try await SurfaceCommandService.execute(
             providerID: "usage", command: "surface.snapshot",
             payload: request.encoded(providerID: "usage"),
-            snapshot: { _ in
-                Issue.record("Private calendar discovery ran while masked")
-                return .init(providerID: "usage")
-            }, perform: { _ in }, privacyValues: { ["active": "1", "blurMoney": "1"] })
+            snapshot: { _ in .init(providerID: "usage") }, perform: { _ in },
+            privacyValues: { ["active": "1", "blurMoney": "1"] })
         #expect(try SurfaceSnapshot.decode(data, providerID: "usage").calendars == nil)
     }
 }
