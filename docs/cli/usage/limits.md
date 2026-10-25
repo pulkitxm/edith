@@ -10,7 +10,7 @@ ed usage limits [--refresh] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--refresh` | flag | off | Ask the background agent to poll providers again and wait up to 20 seconds before reading the file. Fails when `edithd` is not running |
+| `--refresh` | flag | off | Ask the background agent to poll providers again and wait up to 20 seconds before reading the file. Fails when Edith's background services is not running |
 | `--json` | flag | off | Emit JSON on stdout |
 
 ## `--json` shape
@@ -112,7 +112,7 @@ once the reset moment has passed.
 
 `--refresh` asks the background agent to poll the providers again, which for
 Claude includes fetching its usage API with the selected OAuth credential, and waits up
-to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
+to 20 seconds for `limitsUpdated` before reading the file. Fails when Edith's background services
 is not running: exit 4 with `refreshing the rate limits needs the background
 agent`, hinted with `run ed agent restart or enable the background agent in
 Settings`. The completion signal reports that the poll finished, including

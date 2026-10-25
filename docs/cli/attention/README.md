@@ -7,7 +7,7 @@ the guided Attention screen in Edith.
 
 The background agent owns both native application collection and the browser
 listener. Closing the dashboard or quitting the menu bar app leaves Attention
-tracking active while `edithd` is enabled. Turn off Attention tracking in its
+tracking active while Edith's background services is enabled. Turn off Attention tracking in its
 settings to stop collection. Window titles require Accessibility permission for
 the collecting process; application duration does not.
 

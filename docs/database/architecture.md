@@ -2,20 +2,18 @@
 
 ## Boundary and dependency direction
 
-Database is split into a client library and a driver library. The application, CLI, and MCP entry point depend on `EdithDatabase`. That library holds models, command contracts, the broker client, and saved-connection persistence. It depends on `EdithCore` and does not depend on SwiftUI, ArgumentParser, `EdithKit`, or the database drivers. `EdithKit` does not depend on it, so Edith Bar and the background agent never link the drivers. The executables install the database readiness probe into `EdithKit` at launch.
+Database ships as a downloadable marketplace extension. Its package contains `DatabaseCore` for models, typed commands, saved connections, and security contracts; `DatabaseEngine` for the executor and database adapters; and `DatabaseMCP` for the MCP entry point.
 
-`EdithDatabaseDrivers` holds the adapters, the executor, and the broker process. The client talks to that process over the socket described in [delivery](delivery.md). The driver library depends on the client and on the product drivers. The main app does not link it once the pack executable is separate.
+Edith loads the verified package into its app process when Database is enabled. Interface presentations send typed commands through their app-owned engine bridge. `DatabaseWorkerClient` dispatches those commands to the in-process `DatabaseEngine`. The host app and its CLI do not bundle database drivers. See [delivery](delivery.md) for installation and lifecycle behavior.
 
 ```text
 Database views       ed database commands       MCP tools
        |                      |                     |
-       +----------- EdithDatabase client ----------+
+       +------------ typed commands ----------------+
                               |
-                    Unix socket, signed peer
+                    app-owned Database engine
                               |
-                         broker process
-                              |
-                   DatabaseCommandExecutor
+                         DatabaseExecutor
                               |
           validation, policy, capabilities, history
                               |

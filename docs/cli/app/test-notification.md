@@ -15,7 +15,8 @@ ed app test-notification [--json]
 ```json
 {
   "action": "test-notification",
-  "requested": true
+  "requested": true,
+  "status": "Delivered"
 }
 ```
 
@@ -26,12 +27,10 @@ ed app test-notification
 ed app test-notification --json
 ```
 
-Without `--json` it prints `test-notification requested`. It needs the menu bar
-helper and exits 4 otherwise. The notification is sent by the Agent Usage
-notifier, so it needs the `usage` extension on as well as the helper running;
-with that extension off, nothing is sent and `ed` still exits 0. The helper
-discards the notifier's own answer, so a notification blocked in System Settings
-is silent here too: `ed permissions request notifications` is the fix.
+The app sends the notification and reports a status such as `Delivered`,
+`Permission not granted`, or a System Settings or Focus diagnosis. The command
+requires the matching app to be running. Notification delivery belongs to the
+app and is available without downloading the Usage extension.
 
 ## Where to go next
 

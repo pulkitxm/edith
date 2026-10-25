@@ -155,7 +155,7 @@ import Testing
             HostCLIJSON.self, from: Data(try await app.execute(["ls", "--json"]).stdout.utf8))
         #expect(actions.array?.count == 7)
         #expect(actions.array?.first?.object?["action"] == .string("clean-keys"))
-        #expect(actions.array?.first?.object?["needs"] == .string("menuBar"))
+        #expect(actions.array?.first?.object?["needs"] == .string("app"))
         #expect(try await app.execute(["quit", "--json"]).exitCode == 0 && calls.isEmpty)
         #expect(try await app.execute(["relaunch", "--json"]).exitCode == 0 && calls.isEmpty)
         let completePreview = try await app.execute(["quit", "--completely", "--json"])

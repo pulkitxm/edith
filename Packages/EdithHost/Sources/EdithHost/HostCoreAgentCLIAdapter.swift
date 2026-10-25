@@ -10,7 +10,7 @@ import Foundation
                 throw HostCoreCommandFailure(
                     "background agent",
                     hint:
-                        "The owned same-executable core process is not running. Restart this Edith app installation."
+                        "The app-owned core runtime is not running. Restart this Edith app installation."
                 )
             }
             return service

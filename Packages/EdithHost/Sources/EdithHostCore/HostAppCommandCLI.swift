@@ -209,13 +209,13 @@ import Foundation
     ]
     private static let destructive: Set<String> = ["quit", "relaunch", "clear-updates"]
     private static let oneShotActions = [
-        ("clean-keys", "Lock the keyboard for cleaning.", "menuBar"),
-        ("test-notification", "Send a test notification.", "menuBar"),
-        ("open", "Open the Edith panel.", "menuBar"),
-        ("quit", "Quit the Edith main app.", "mainApp"),
-        ("check-updates", "Check for an Edith update.", "mainApp"),
-        ("reveal", "Reveal an Edith section.", "mainApp"),
-        ("snapshot", "Capture Edith windows as images.", "mainApp"),
+        ("clean-keys", "Lock the keyboard for cleaning.", "app"),
+        ("test-notification", "Send a test notification.", "app"),
+        ("open", "Open the Edith panel.", "app"),
+        ("quit", "Close Edith windows.", "app"),
+        ("check-updates", "Check for an Edith update.", "app"),
+        ("reveal", "Reveal an Edith section.", "app"),
+        ("snapshot", "Capture Edith windows as images.", "app"),
     ]
 }
 

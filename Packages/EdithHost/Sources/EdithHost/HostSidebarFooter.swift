@@ -331,7 +331,7 @@ struct HostAgentStatusBar: View {
             HStack(spacing: UIScale.pt(7)) {
                 Circle().fill(online ? DashSkin.sage : Color.orange).frame(
                     width: UIScale.pt(6), height: UIScale.pt(6))
-                Text("edithd").font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(
+                Text("background").font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(
                     .secondary)
                 Text(summary).font(DashSkin.mono(10)).foregroundStyle(.tertiary).lineLimit(1)
                     .truncationMode(.tail)

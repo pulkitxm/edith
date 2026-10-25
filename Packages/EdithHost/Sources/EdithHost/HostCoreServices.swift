@@ -464,7 +464,7 @@ import SwiftUI
     func cliRestart() async throws {
         guard online, !cliStopping, process?.processIdentifier != nil else {
             throw HostCoreCommandFailure(
-                "background agent", hint: "No owned core process is available to restart.")
+                "background agent", hint: "No app-owned core runtime is available to restart.")
         }
         cliStopping = true
         observation?.cancel(); await observation?.value; observation = nil
