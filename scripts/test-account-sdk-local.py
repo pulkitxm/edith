@@ -22,7 +22,7 @@ DRIVERS = OWNERSHIP.DRIVERS
 OUTPUT_BOUND = 16_777_216
 GROUPS = {
     "Sources/EdithExtensionAccounts": ["ClaudeAccount.swift", "ClaudeAccountStorage.swift", "ClaudeAccountSessions.swift", "ClaudeSavedLogin.swift", "OwnedAccountFiles.swift"],
-    "Tests/EdithExtensionAccountsTests": ["AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportSessionTests.swift", "AccountSupportStorageTests.swift"],
+    "Tests/EdithExtensionAccountsTests": ["AccountSupportCompatibilityTests.swift", "AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportSessionTests.swift", "AccountSupportStorageTests.swift"],
 }
 MANIFEST = """// swift-tools-version:6.0
 import PackageDescription

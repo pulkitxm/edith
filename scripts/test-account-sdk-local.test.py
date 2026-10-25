@@ -16,7 +16,7 @@ HELPER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HELPER)
 INVENTORY = {
     "Sources/EdithExtensionAccounts": ["ClaudeAccount.swift", "ClaudeAccountStorage.swift", "ClaudeAccountSessions.swift", "ClaudeSavedLogin.swift", "OwnedAccountFiles.swift"],
-    "Tests/EdithExtensionAccountsTests": ["AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportSessionTests.swift", "AccountSupportStorageTests.swift"],
+    "Tests/EdithExtensionAccountsTests": ["AccountSupportCompatibilityTests.swift", "AccountSupportModelTests.swift", "AccountSupportSavedLoginTests.swift", "AccountSupportSessionTests.swift", "AccountSupportStorageTests.swift"],
 }
 
 
@@ -93,7 +93,7 @@ class AccountSDKLocalGuardTests(unittest.TestCase):
         files = sorted(path.relative_to(self.package).as_posix() for path in self.package.rglob("*") if path.is_file())
         self.assertEqual(files, sorted(["Package.swift", *self.bytes]))
         self.assertEqual(set(digests), set(self.bytes))
-        self.assertEqual(count, 4)
+        self.assertEqual(count, 5)
         for name, data in self.bytes.items():
             self.assertEqual((self.package / name).read_bytes(), data)
             self.assertEqual(digests[name], hashlib.sha256(data).hexdigest())

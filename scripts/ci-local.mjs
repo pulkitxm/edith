@@ -66,7 +66,7 @@ function changedPaths(base) {
       .filter(Boolean);
   return [
     ...new Set([
-      ...listed(["diff", "--name-only", mergeBase]),
+      ...listed(["diff", "--name-only", "--no-renames", mergeBase]),
       ...listed(["ls-files", "--others", "--exclude-standard"]),
     ]),
   ];
