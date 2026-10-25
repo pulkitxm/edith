@@ -15,6 +15,19 @@ const checkTargets = [
   "ci-docs",
 ];
 
+const ghosttyPackage = "Extensions/terminal/Native";
+const localTargets = {
+  "ci-extension-accounts": "ci-extension-accounts-local",
+  "ci-extension-herdr-accounts": "ci-extension-herdr-accounts-local",
+  "ci-extension-usage-accounts": "ci-extension-usage-accounts-local",
+  "ci-extension-keep-awake": "ci-extension-keep-awake-compile",
+};
+
+export function localCIRoot(checkout) {
+  const volume = checkout.match(/^\/Volumes\/[^/]+/);
+  return volume ? volume[0] : "/";
+}
+
 export function parseArguments(argv) {
   const options = {
     all: false,
@@ -62,8 +75,19 @@ function changedPaths(base) {
 export function planLocalJobs(plan, options, definitions) {
   const jobs = [];
   if (options.checks) jobs.push({ lane: "checks", make: checkTargets });
+  const ghostty = new Set(
+    plan.include
+      .filter((entry) => entry.ghostty)
+      .map((entry) => entry.extension),
+  );
   for (const entry of plan.include)
-    jobs.push({ lane: entry.lane, make: entry.targets.split(" ") });
+    jobs.push({
+      lane: entry.lane,
+      make: entry.targets
+        .split(" ")
+        .map((target) => localTargets[target] ?? target),
+      shared: entry.ghostty ? [ghosttyPackage] : [],
+    });
   if (options.builds) {
     const extensions = plan.include
       .map((entry) => entry.extension)
@@ -79,6 +103,7 @@ export function planLocalJobs(plan, options, definitions) {
           "--development",
         ],
         needsHost: Boolean(definition?.systemExtensionCarrier),
+        shared: ghostty.has(id) ? [ghosttyPackage] : [],
       });
     }
   }
@@ -163,6 +188,7 @@ async function main() {
   environment.EXTENSION_SWIFT_JOBS ??= "4";
   environment.DEVELOPER_DIR ??= "/Applications/Xcode.app/Contents/Developer";
   environment.EXTENSION_CONTAINING_HOST_APP ??= "local/minimal-host/Edith.app";
+  environment.EDITH_LOCAL_CI_ROOT ??= localCIRoot(root);
   if (jobs.some((job) => job.needsHost)) {
     console.log("building the host for camera packages");
     const host = await run(
@@ -179,7 +205,10 @@ async function main() {
   console.log(
     `running ${jobs.length} lanes, ${options.jobs} at a time; logs in local/ci-logs`,
   );
-  for (const job of jobs) job.packages = packagePaths(job, environment);
+  for (const job of jobs)
+    job.packages = [
+      ...new Set([...packagePaths(job, environment), ...job.shared]),
+    ];
   const queue = [...jobs];
   const results = [];
   const busy = new Set();
