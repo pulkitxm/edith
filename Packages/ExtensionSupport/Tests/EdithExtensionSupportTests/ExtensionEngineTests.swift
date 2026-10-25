@@ -43,9 +43,9 @@ struct ExtensionEngineTests {
             #expect(error.localizedDescription == "git is not installed")
         }
         bridge.mode = "echo"
-        #expect(try await client.invoke("sample.authors", timeout: 600) == Data("{}".utf8))
+        #expect(try await client.invoke("sample.authors", timeout: 1800) == Data("{}".utf8))
         await #expect(throws: ExtensionEngineError.rejected) {
-            try await client.invoke("sample.authors", timeout: 601)
+            try await client.invoke("sample.authors", timeout: 1801)
         }
     }
 

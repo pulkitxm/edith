@@ -35,7 +35,7 @@ public struct ExtensionEngineRequest: Codable, Sendable {
     }
 
     public func validate() throws {
-        guard timeout.isFinite, timeout > 0, timeout <= 600,
+        guard timeout.isFinite, timeout > 0, timeout <= 1800,
             !operation.isEmpty, operation.utf8.count <= 128,
             operation.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0)

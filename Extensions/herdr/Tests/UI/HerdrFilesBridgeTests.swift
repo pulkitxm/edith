@@ -111,4 +111,71 @@ import Testing
             _ = try await host.execute("herdr.ui.files", payload: JSONEncoder().encode(request))
         }
     }
+
+    @Test func fileWindowsUseHostAdmissionWithoutDetachingTheAgent() async throws {
+        let store = HerdrStore(defaults: HerdrUIDefaults(), machinesProvider: { [] })
+        let windows = HerdrSpaceSessions(store: store)
+        let location = HerdrFilesWindowLocation(machine: .local, path: "/tmp/synthetic folder")
+        let target = try location.encoded()
+        #expect(try location.encoded() == target)
+        let descriptor = try windows.present(["kind": "files", "id": target])
+        #expect(descriptor.location == "herdr.files")
+        #expect(descriptor.target == target)
+        #expect(!descriptor.presented)
+        #expect(store.sessions.isEmpty && store.detachedIDs.isEmpty)
+        try windows.admit(descriptor.token)
+        #expect(try windows.present(["kind": "files", "id": target]).presented)
+        #expect(windows.presentations.count == 1)
+        try await windows.closeAndWait(descriptor.token)
+        #expect(windows.presentations.isEmpty)
+    }
+
+    @Test func fileWindowsRejectUnknownMachinesAndMalformedPaths() throws {
+        let windows = HerdrSpaceSessions(
+            store: HerdrStore(defaults: HerdrUIDefaults(), machinesProvider: { [] }))
+        let unknown = Machine(name: "Synthetic", host: "synthetic.invalid")
+        let target = try HerdrFilesWindowLocation(machine: unknown, path: "/tmp").encoded()
+        #expect(throws: (any Error).self) {
+            try windows.present(["kind": "files", "id": target])
+        }
+        for path in ["", "bad\u{0}path", String(repeating: "x", count: 4097)] {
+            #expect(throws: (any Error).self) {
+                try HerdrFilesWindowLocation(machine: .local, path: path).encoded()
+            }
+        }
+        #expect(windows.presentations.isEmpty)
+    }
+
+    @Test func remoteMachineRecordsReachTheRenderingStoreThroughTheEngine() async throws {
+        defer { MachineRegistry.shutdown(); HerdrWorkOwnership.enable() }
+        let id = UUID()
+        try await MachineRegistry.refresh { _, _, _ in
+            try JSONSerialization.data(withJSONObject: [
+                "machines": [
+                    ["id": id.uuidString, "name": "Synthetic", "sshTarget": "synthetic.invalid"]
+                ]
+            ])
+        }
+        let machine = try #require(MachineRegistry.machines().first)
+        let defaults = HerdrUIDefaults()
+        let worker = HerdrWorker(
+            store: HerdrStore(defaults: defaults), defaults: defaults, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let state = try #require(try client.state(await client.perform("herdr.ui.read")))
+        #expect(state.machines == [machine])
+        MachineRegistry.shutdown()
+        let ui = HerdrStore(uiClient: client)
+        ui.adoptUI(state)
+        let agent = HerdrAgent.make(
+            machineID: id.uuidString, machineName: machine.name, machineIsLocal: false,
+            sshTarget: machine.sshTarget, session: "synthetic", pane: "one", kind: "Terminal",
+            status: .working, title: "Synthetic", workspace: "Synthetic", cwd: "/srv/synthetic")
+        let tab = ui.makeTab(for: agent)
+        #expect(tab.machine == machine)
+        tab.files.prepare(directory: agent.cwd, isLocal: false, machine: tab.machine)
+        #expect(tab.files.finder?.session.id == id)
+        tab.files.discard()
+        await ui.shutdown()
+        await worker.shutdown()
+    }
 }

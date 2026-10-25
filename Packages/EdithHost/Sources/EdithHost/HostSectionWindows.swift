@@ -159,15 +159,18 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     ) -> NSWindow {
         let page = HostNavigationPage(
             id: "herdr.window." + id.uuidString,
-            title: target.title, symbol: "terminal", extensionID: "herdr")
+            title: target.title, symbol: target.location == "herdr.files" ? "folder" : "terminal",
+            extensionID: "herdr")
         return create(
             page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
             contentSize: NSSize(width: target.width, height: target.height),
             minimumSize: NSSize(width: target.minimumWidth, height: target.minimumHeight),
             chrome: HostWindowStyle(
                 tabbingIdentifier: nil,
-                autosaveName: target.location == "herdr.space"
-                    ? "EdithHerdrSpaceWindow" : "EdithHerdrAgentWindow"))
+                autosaveName: target.location == "herdr.files"
+                    ? "EdithHerdrFilesWindow"
+                    : target.location == "herdr.space"
+                        ? "EdithHerdrSpaceWindow" : "EdithHerdrAgentWindow"))
     }
 
     func closeHerdrOwned(id: UUID) {

@@ -191,7 +191,10 @@ public final class HostLocalSceneHandle: HostScenePresentation {
     private var bridge: HostLocalEngineBridge?
     private var closed = false
     private var intrinsic: Bool {
-        !["main", "settings", "music.detail", "machines.window"].contains(request.location)
+        ![
+            "main", "settings", "music.detail", "machines.window", "herdr.agent", "herdr.space",
+            "herdr.files",
+        ].contains(request.location)
     }
 
     fileprivate init(session: HostLocalSession, request: HostExtensionContentRequest) throws {

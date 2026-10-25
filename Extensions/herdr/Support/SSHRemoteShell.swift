@@ -25,17 +25,17 @@ extension SSHConnection: RemoteShellConnection {
         if platform == .windows {
             let copy =
                 maximumBytes == .max
-                ? "$input.CopyTo($output)"
+                ? "$sourceStream.CopyTo($output)"
                 : "$buffer=New-Object byte[] 131072; $remaining=[long]\(maximumBytes + 1); "
                     + "while($remaining -gt 0) { "
-                    + "$count=$input.Read($buffer,0,[int][Math]::Min($remaining,$buffer.Length)); "
+                    + "$count=$sourceStream.Read($buffer,0,[int][Math]::Min($remaining,$buffer.Length)); "
                     + "if($count -eq 0) { break }; $output.Write($buffer,0,$count); "
                     + "$remaining-=$count }"
             return PowerShell.userCommand(
                 "$path=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("
-                    + "\(PowerShell.literal(path))); $input=[IO.File]::OpenRead($path); "
+                    + "\(PowerShell.literal(path))); $sourceStream=[IO.File]::OpenRead($path); "
                     + "try { $output=[Console]::OpenStandardOutput(); \(copy); $output.Flush() } "
-                    + "finally { $input.Dispose() }")
+                    + "finally { $sourceStream.Dispose() }")
         }
         let quoted = POSIXQuote.quote(path)
         return maximumBytes == .max

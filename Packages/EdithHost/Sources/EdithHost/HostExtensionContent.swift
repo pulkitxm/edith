@@ -2,7 +2,6 @@ import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithHostCore
-@preconcurrency import ExtensionKit
 import SwiftUI
 
 typealias HostExtensionContentRequest = EdithHostCore.HostExtensionContentRequest

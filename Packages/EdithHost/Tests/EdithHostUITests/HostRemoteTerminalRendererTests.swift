@@ -1,5 +1,4 @@
 import AppKit
-@preconcurrency import ExtensionKit
 import Foundation
 import Testing
 import EdithHostCore
@@ -27,10 +26,8 @@ import EdithHostCore
             let request = HostExtensionContentRequest(
                 extensionID: owner, location: location, section: owner, herdrWindow: target)
             var calls = 0
-            let remote = EXHostViewController()
-            #expect(remote.configuration == nil)
             let controller = HostRemoteViewController(
-                request: request, remote: remote,
+                request: request,
                 terminalUI: .init(
                     update: { _ in
                         calls += 1; return true
@@ -39,14 +36,19 @@ import EdithHostCore
                         calls += 1;
                         return .init(presentationID: request.presentationID, focused: false)
                     }),
-                connect: { _, _, _ in calls += 1 }, update: { _ in calls += 1 })
+                present: { _ in
+                    calls += 1
+                    let content = NSViewController()
+                    content.view = NSView()
+                    return content
+                }, update: { _ in calls += 1 })
             _ = controller.view
             #expect(controller.view.window == nil && !controller.connected)
             #expect((controller.terminalInput != nil) == HostTerminalUIRequest.accepts(request))
             #expect(!controller.consumeTerminalTabKey(characters: "t", modifiers: .command))
             controller.detach()
             #expect(controller.detached && calls == 0)
-            #expect(remote.configuration == nil && controller.children.isEmpty)
+            #expect(controller.children.isEmpty)
         }
     }
 

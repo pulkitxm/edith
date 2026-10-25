@@ -78,8 +78,15 @@ struct HerdrUIState: Codable {
     let attention: HerdrAttentionSettings
     let discovery: Bool
     var jevConfigured: Bool?
+    var machines: [Machine] = []
 
     func validate() throws {
+        guard machines.count <= 1024, Set(machines.map(\.id)).count == machines.count,
+            machines.allSatisfy({
+                !$0.name.isEmpty && $0.name.utf8.count <= 512
+                    && MachineRegistry.validTarget($0.sshTarget)
+            })
+        else { throw ExtensionPeerError.invalidRequest }
         guard owner == "herdr", sequence > 0, hosts.count <= 1025,
             Set(hosts.map(\.id)).count == hosts.count,
             hosts.reduce(0, { $0 + $1.agents.count }) <= 4096,
@@ -98,7 +105,7 @@ struct HerdrUIState: Codable {
             presentations.count <= 64, Set(presentations.map(\.token)).count == presentations.count,
             presentations.allSatisfy({
                 $0.owner == "herdr" && $0.version == 1
-                    && ["herdr.agent", "herdr.space"].contains($0.location)
+                    && ["herdr.agent", "herdr.space", "herdr.files"].contains($0.location)
             })
         else { throw ExtensionPeerError.invalidRequest }
         for presentation in presentations { try presentation.validate() }
@@ -192,7 +199,7 @@ final class HerdrUIDefaults: UserDefaults {
             try await client.invoke(
                 operation, payload: payload,
                 timeout: HerdrFilesHost.operations.contains(operation)
-                    && operation != HerdrFilesBridge.progressOperation ? 600 : 30)
+                    && operation != HerdrFilesBridge.progressOperation ? 1800 : 30)
         }
     }
 
@@ -604,7 +611,7 @@ final class HerdrUIDefaults: UserDefaults {
             activitySettings: worker.activity.settings,
             attention: HerdrAttentionSettings(defaults: store.uiDefaults),
             discovery: worker.activity.discoversTerminals,
-            jevConfigured: worker.searchDecider() != nil)
+            jevConfigured: worker.searchDecider() != nil, machines: MachineRegistry.machines())
         try value.validate()
         let data = try JSONEncoder().encode(value)
         guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }

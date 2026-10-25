@@ -127,4 +127,18 @@ import Testing
     private static func session() -> HerdrFilesSession {
         HerdrFilesSession { HerdrStore.directFilesSession(for: $0) }
     }
+
+    @Test func openingAFolderInANewWindowPreservesItsOwningMachine() throws {
+        var opened: (Machine, String)?
+        let files = HerdrFilesSession(
+            machineSession: { HerdrStore.directFilesSession(for: $0) },
+            openWindow: { opened = ($0, $1) })
+        let machine = Machine(name: "Synthetic", host: "synthetic.invalid")
+        files.prepare(directory: "/srv", isLocal: false, machine: machine)
+        let open = try #require(files.finder?.openInNewWindow)
+        open("/srv/selected")
+        #expect(opened?.0 == machine)
+        #expect(opened?.1 == "/srv/selected")
+        files.discard()
+    }
 }

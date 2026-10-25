@@ -22,12 +22,15 @@ struct HerdrUIPresentation: Codable, Equatable {
     let presented: Bool
 
     func validate() throws {
-        guard version == 1, owner == "herdr", ["herdr.agent", "herdr.space"].contains(location),
-            !target.isEmpty, target.utf8.count <= 4096, !target.utf8.contains(0),
+        guard version == 1, owner == "herdr",
+            ["herdr.agent", "herdr.space", "herdr.files"].contains(location),
+            !target.isEmpty, target.utf8.count <= (location == "herdr.files" ? 8192 : 4096),
+            !target.utf8.contains(0),
             title.utf8.count <= 4096, !title.utf8.contains(0),
             (1...4096).contains(width), (1...4096).contains(height),
             (1...width).contains(minimumWidth), (1...height).contains(minimumHeight)
         else { throw ExtensionPeerError.invalidRequest }
+        if location == "herdr.files" { _ = try HerdrFilesWindowLocation.decode(target) }
     }
 
     func matches(location: String, target: String, token: UUID) -> Bool {
@@ -59,8 +62,9 @@ struct HerdrUIPresentation: Codable, Equatable {
     init(store: HerdrStore) { self.store = store }
 
     func present(_ object: [String: Any]) throws -> HerdrUIPresentation {
-        guard !stopped, let kind = object["kind"] as? String, ["agent", "space"].contains(kind),
-            let id = object["id"] as? String, id.utf8.count <= 4096,
+        guard !stopped, let kind = object["kind"] as? String,
+            ["agent", "space", "files"].contains(kind),
+            let id = object["id"] as? String, id.utf8.count <= (kind == "files" ? 8192 : 4096),
             Set(object.keys).isSubset(of: ["kind", "id", "agentIDs"])
         else { throw ExtensionPeerError.invalidRequest }
         if let supplied = object["agentIDs"] {
@@ -75,7 +79,14 @@ struct HerdrUIPresentation: Codable, Equatable {
         guard entries.count < 64 else { throw ExtensionPeerError.unavailable }
         let title: String
         let model: HerdrSpaceWindowModel?
-        if kind == "space" {
+        if kind == "files" {
+            let location = try HerdrFilesWindowLocation.decode(id)
+            guard
+                location.machine == .local || MachineRegistry.machines().contains(location.machine)
+            else { throw ExtensionPeerError.invalidRequest }
+            title = "\((location.path as NSString).lastPathComponent) · \(location.machine.name)"
+            model = nil
+        } else if kind == "space" {
             guard let original = HerdrAgentSpace.group(store.agents).first(where: { $0.id == id })
             else {
                 throw ExtensionPeerError.invalidRequest

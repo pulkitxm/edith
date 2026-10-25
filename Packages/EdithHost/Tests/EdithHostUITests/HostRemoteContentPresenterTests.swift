@@ -1,6 +1,5 @@
 import AppKit
 import EdithHostCore
-@preconcurrency import ExtensionKit
 import Testing
 
 @testable import EdithHost
@@ -11,15 +10,13 @@ struct HostRemoteContentPresenterTests {
     @Test func connectedSceneUpdateFailureCannotPassFinalWindowAdmission() async throws {
         let controller = HostRemoteViewController(
             request: .init(extensionID: "terminal", location: "main"),
-            remote: EXHostViewController(), connect: { _, _, _ in },
+            present: { _ in self.content() },
             update: { _ in throw HostWorkerError.rejected })
         let window = TestWindowHost.window(contentRect: .init(x: 0, y: 0, width: 880, height: 640))
         window.isReleasedWhenClosed = false
         window.contentViewController = controller
         defer { controller.detach(); window.close() }
         controller.apply(compact: false, visible: true, width: 880)
-        try controller.activate(
-            through: NSXPCConnection(serviceName: "com.pulkit.edith.tests.remote"))
         await settle { controller.failure != nil }
         #expect(controller.connected && controller.failure != nil)
         await #expect(throws: HostWorkerError.rejected) {
@@ -39,11 +36,12 @@ struct HostRemoteContentPresenterTests {
             extensionID: "music", location: "music.footer", section: "music", presentationID: UUID()
         )
         let controller = HostRemoteViewController(
-            request: request, remote: EXHostViewController(),
-            connect: { _, state, _ in
+            request: request,
+            present: { state in
                 connections += 1
                 states.append(state)
                 await activation.wait()
+                return self.content()
             },
             update: { state in
                 states.append(state)
@@ -51,15 +49,12 @@ struct HostRemoteContentPresenterTests {
             })
         defer { activation.release(); update.release(); controller.detach() }
         controller.apply(compact: true, visible: true, width: 380)
-        try controller.activate(
-            through: NSXPCConnection(serviceName: "com.pulkit.edith.tests.remote"))
+        _ = controller.view
         await settle { activation.waiting }
         #expect(connections == 1)
         #expect(states == [HostRemoteViewState(compact: true, visible: true, width: 380)])
-        #expect(throws: (any Error).self) {
-            try controller.activate(
-                through: NSXPCConnection(serviceName: "com.pulkit.edith.tests.remote"))
-        }
+        _ = controller.view
+        #expect(connections == 1)
         controller.apply(compact: false, visible: true, width: 880)
         activation.release()
         await settle { update.waiting }
@@ -91,13 +86,12 @@ struct HostRemoteContentPresenterTests {
         let controller = HostRemoteViewController(
             request: HostExtensionContentRequest(
                 extensionID: "calendar", location: "main", section: "calendar",
-                presentationID: UUID()), remote: EXHostViewController(),
-            connect: { _, _, receive in
+                presentationID: UUID()),
+            present: { _ in
                 await gate.wait()
-                receive(HostRemoteEvent(kind: "height", presentationID: UUID(), height: 200))
+                return self.content()
             }, update: { _ in updates += 1 })
-        try controller.activate(
-            through: NSXPCConnection(serviceName: "com.pulkit.edith.tests.remote"))
+        _ = controller.view
         await settle { gate.waiting }
         controller.detach()
         gate.release()
@@ -114,12 +108,13 @@ struct HostRemoteContentPresenterTests {
         let presentation = UUID()
         for location in [
             "main", "settings", "music.detail", "home", "music.footer", "sidebar.utility",
+            "herdr.agent", "herdr.space", "herdr.files",
         ] {
             let controller = HostRemoteViewController(
                 request: HostExtensionContentRequest(
                     extensionID: "music", location: location, section: "music",
-                    presentationID: presentation), remote: EXHostViewController(),
-                connect: { _, _, _ in }, update: { _ in })
+                    presentationID: presentation),
+                present: { _ in self.content() }, update: { _ in })
             let window = TestWindowHost.window(
                 contentRect: NSRect(x: 0, y: 0, width: 560, height: 400))
             window.isReleasedWhenClosed = false
@@ -136,7 +131,9 @@ struct HostRemoteContentPresenterTests {
             #expect(controller.contentHeight == nil)
             controller.receive(
                 HostRemoteEvent(kind: "height", presentationID: presentation, height: 120))
-            let intrinsic = !["main", "settings", "music.detail"].contains(location)
+            let intrinsic = ![
+                "main", "settings", "music.detail", "herdr.agent", "herdr.space", "herdr.files",
+            ].contains(location)
             #expect(controller.contentHeight == (intrinsic ? 120 : nil))
             #expect(
                 controller.view.intrinsicContentSize.height
@@ -167,6 +164,12 @@ struct HostRemoteContentPresenterTests {
             try? await Task.sleep(for: .milliseconds(1))
         }
         #expect(condition())
+    }
+
+    private func content() -> NSViewController {
+        let controller = NSViewController()
+        controller.view = NSView(frame: .init(x: 0, y: 0, width: 880, height: 640))
+        return controller
     }
 }
 

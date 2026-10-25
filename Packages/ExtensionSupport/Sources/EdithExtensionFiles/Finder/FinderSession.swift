@@ -58,7 +58,7 @@ public struct FinderSessionRequest: Codable, Sendable {
 
     public func validate() throws {
         guard text.utf8.count <= 65_536, !text.utf8.contains(0), timeout.isFinite, timeout > 0,
-            timeout <= 600
+            timeout <= 1800
         else { throw MachineUIError.invalidRequest }
     }
 }
