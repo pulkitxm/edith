@@ -5,7 +5,7 @@ import Testing
 
 @testable import EdithStudio
 
-@Suite struct PDFAuditOptimizeTests {
+@Suite(.serialized) struct PDFAuditOptimizeTests {
     func structured(_ space: Workspace, photos: Bool) throws -> URL {
         let url = space.url("structured.pdf")
         var first = AuditPage.titled("Photo report")

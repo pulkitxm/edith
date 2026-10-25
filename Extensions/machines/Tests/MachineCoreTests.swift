@@ -1090,8 +1090,15 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = ["-n", "-c", command]
+            process.standardInput = FileHandle.nullDevice
+            let exited = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in exited.signal() }
             try process.run()
-            process.waitUntilExit()
+            guard exited.wait(timeout: .now() + 30) == .success else {
+                process.terminate()
+                Issue.record("Shell syntax check did not finish: \(command)")
+                continue
+            }
             #expect(process.terminationStatus == 0)
         }
     }
