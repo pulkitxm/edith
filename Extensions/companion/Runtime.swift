@@ -182,10 +182,13 @@ final class ExtensionRuntime: NSObject {
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "companion", let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            engineClient = client
             let bridge = CompanionUIBridge(client: client)
+            guard CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner) else {
+                client.invalidate()
+                return ["ok": false] as NSDictionary
+            }
+            engineClient = client
             uiBridge = bridge
-            CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner)
             uiWorkspace = CompanionWorkspaceSession(
                 privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
                 remote: bridge)
