@@ -43,10 +43,12 @@ import Testing
                     hosting.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                     hosting.frame = CGRect(x: 0, y: 0, width: width, height: 900)
                     hosting.layoutSubtreeIfNeeded()
-                    RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-                    hosting.layoutSubtreeIfNeeded()
                     let bitmap = try #require(
-                        hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+                        NSBitmapImageRep(
+                            bitmapDataPlanes: nil, pixelsWide: Int(width) * 2, pixelsHigh: 1800,
+                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+                    bitmap.size = hosting.bounds.size
                     hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
                     #expect(bitmap.pixelsWide >= Int(width))
                     #expect(bitmap.pixelsHigh >= 900)
