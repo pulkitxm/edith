@@ -151,14 +151,12 @@ test("a pull request is compared against its base, not its last push", () => {
 test("every change area covers its repository inputs", () => {
   const cases = {
     swift: [
-      "Packages/Edith/Sources/Edith/App.swift",
+      "Packages/EdithHost/Sources/EdithHost/App.swift",
       "Packages/EdithDocsWorker/Sources/EdithDocsWorker/DocsLibrary.swift",
       "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
       "Packages/EdithDocsWorker/Tests/EdithDocsWorkerTests/DocsTests.swift",
       "Packages/EdithDocsWorker/Package.swift",
       "Resources/Info.plist",
-      "edth.xcodeproj/project.pbxproj",
-      "scripts/test-swift-test-isolation.py",
       "build.sh",
       "Makefile",
       ".swift-format",
@@ -166,7 +164,7 @@ test("every change area covers its repository inputs", () => {
     docs: ["docs/cli/README.md"],
     workflows: [
       ".github/workflows/ci.yml",
-      ".github/actions/cache-swift/action.yml",
+      ".github/actions/cache-host/action.yml",
     ],
     promo: ["apps/promo-video/src/Promo.tsx"],
     site: ["apps/site/index.html"],
@@ -179,18 +177,8 @@ test("every change area covers its repository inputs", () => {
       "bun.lock",
       "biome.json",
     ],
-    performance: [
-      "Packages/Edith/Sources/Edith/App.swift",
-      "Packages/Edith/Tests/EdithTests/PerformanceTraceTests.swift",
-      "performance/audit.json",
-      "scripts/check-performance-audit.mjs",
-      "scripts/check-performance-audit.test.js",
-      "scripts/bench-helper.sh",
-      "scripts/bench-helper.test.js",
-      "Makefile",
-    ],
     source: [
-      "Packages/Edith/Sources/Edith/App.swift",
+      "Packages/EdithHost/Sources/EdithHost/App.swift",
       "apps/companion/compose.yaml",
       "apps/promo-video/src/Promo.tsx",
       "apps/site/styles.css",
@@ -253,20 +241,6 @@ test("documentation changes run focused documentation tests", () => {
   expect(ciWorkflow).toContain("run: make ci-docs");
 });
 
-test("performance inputs run structural contracts against the compared revision", () => {
-  expect(ciWorkflow).toContain("area performance '");
-  expect(ciWorkflow).toContain(
-    "needs.changes.outputs.performance == 'true' || needs.changes.outputs.workflows == 'true'",
-  );
-  expect(ciWorkflow).toContain("PERFORMANCE_BASE:");
-  expect(ciWorkflow).toContain("run: make ci-performance");
-  const checks = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  checks:"),
-    ciWorkflow.indexOf("\n  promo-video:"),
-  );
-  expect(checks).toContain("fetch-depth: 0");
-});
-
 test("pull requests build the release app that main releases rebuild", () => {
   const swiftBuild = ciWorkflow.slice(
     ciWorkflow.indexOf("\n  swift-build:"),
@@ -308,7 +282,6 @@ test("Swift lanes exercise only independent host and extension packages", () => 
     },
     { lane: "native-music", targets: "ci-music-native" },
   ]);
-  expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
   expect(JSON.stringify(job)).not.toContain("make ghostty");
   const tests = job.steps.find((step) => step.name === "Tests");
   expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
@@ -351,7 +324,7 @@ test("a cold Machines target prepares its native renderer before Swift tests", (
   try {
     script(
       "bash",
-      'test "$1" = scripts/build-ghostty.sh\ntest "$2" = --extension-only\nmkdir -p Extensions/terminal/Native/vendor\n: > Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" renderer >> events',
+      'test "$1" = scripts/build-ghostty.sh\ntest "$#" = 1\nmkdir -p Extensions/terminal/Native/vendor\n: > Extensions/terminal/Native/vendor/prepared\nprintf "%s\\n" renderer >> events',
     );
     script(
       "python3",
@@ -427,7 +400,6 @@ test("host build consumers use the narrow host cache", () => {
     step.uses?.startsWith("actions/cache@"),
   );
   expect(products.with.path).toBe("Packages/EdithHost/.build");
-  expect(products.with.key).not.toContain("Packages/Edith/");
   expect(products.with.key).not.toContain("EdithExtensionDocuments");
 });
 
@@ -443,11 +415,8 @@ test("Swift jobs restore commit times from full history before reusing builds", 
     const checkout = steps.find((step) =>
       step.uses?.startsWith("actions/checkout@"),
     );
-    const cache = steps.findIndex((step) =>
-      [
-        "./.github/actions/cache-swift",
-        "./.github/actions/cache-host",
-      ].includes(step.uses),
+    const cache = steps.findIndex(
+      (step) => step.uses === "./.github/actions/cache-host",
     );
     expect(checkout.with["fetch-depth"], name).toBe(0);
     expect(steps.indexOf(checkout), name).toBeLessThan(cache);

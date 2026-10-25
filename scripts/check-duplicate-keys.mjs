@@ -32,11 +32,7 @@ export function scanFiles(files) {
 }
 
 export function isShippingSource(path) {
-  return (
-    path.endsWith(".swift") &&
-    !path.startsWith("Packages/Edith/") &&
-    !/(^|\/)(Tests|Vendor|vendor)\//.test(path)
-  );
+  return path.endsWith(".swift") && !/(^|\/)(Tests|Vendor|vendor)\//.test(path);
 }
 
 function main() {

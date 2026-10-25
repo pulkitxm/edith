@@ -123,9 +123,6 @@ run at once next to the installed Edith without touching it or each other.
   is the only way to replace it; a Release build left in `dist/` is never opened
   and refuses to start there.
 
-See `docs/background-agent.md` for how the identities, agent loading and
-LaunchServices cleanup work.
-
 ## Make resource gate
 
 For the account SDK, use `make ci-extension-accounts-local` with

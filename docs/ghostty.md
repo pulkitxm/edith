@@ -6,11 +6,13 @@ Ghostty's own macOS app uses.
 ## Building
 
 ```bash
-make ghostty
+make ghostty-extension
 ```
 
-That clones Ghostty into `vendor/ghostty`, checks out the pinned commit and
-builds `vendor/GhosttyKit.xcframework`. The directory is ignored by git.
+That clones Ghostty into `vendor/ghostty`, checks out the pinned commit, builds
+`GhosttyKit.xcframework` and copies it with the shell integration and terminfo
+resources into `Extensions/terminal/Native/vendor`. Both directories are ignored
+by git.
 
 ## What is pinned, and why
 
@@ -49,27 +51,3 @@ settings from `command`, `env_vars` and `working_directory`, which is what
 | xcframework | 129 MB |
 | zipped | 32 MB |
 | contribution to a linked binary | ~19 MB |
-
-## Shared terminal surfaces
-
-`Edith/Shared/Terminal` owns `TerminalSessionHolder`, `TerminalPane`, both native
-renderer adapters, and the SwiftTerm fallback view. Machine tabs, machine and
-session splits, standalone terminal windows, the Command-J panel, embedded Quinjet,
-and container shells all mount `TerminalPane`. Their wrappers own launch requests,
-connection status, and layout rather than terminal input handling.
-
-Font size comes from the shared terminal preference for both renderers. Native
-responder callbacks report pane focus without placing tap recognizers over terminal
-content. Hidden surfaces suspend rendering and cancel pending focus requests while
-retaining their process and view for the next presentation.
-
-Session attachments and Command-J use the same terminal bridge mouse preference,
-which defaults to clicks and drags. Wheel input goes through the bridge scroll
-protocol. Plain clicks and drags reach terminal programs, including Quinjet.
-An agent session selects and copies on a drag, and a click without a drag still
-reaches the agent. Hold Shift to select text in any other surface when a
-program captures the mouse. Shift keeps selecting even if that program asks to
-capture Shift too. Ghostty copies completed selections and supports Command-C,
-Command-V, link activation, and context menus through the same native view in
-every surface. The optional Scroll only setting filters pointer input in both
-kinds of bridge attachment.

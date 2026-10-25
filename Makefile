@@ -54,12 +54,7 @@ define PREPARE_ARGUMENT_PARSER
 endef
 
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
-PKG := Packages/Edith
 STUDIO_PKG := Packages/EdithStudio
-SIGN_OVERRIDES := CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=
-XCODEBUILD := xcodebuild -project edth.xcodeproj -derivedDataPath build -quiet \
-	-destination 'platform=macOS,arch=arm64' \
-	-onlyUsePackageVersionsFromResolvedFile COMPILER_INDEX_STORE_ENABLE=NO
 
 SELECTED_DEV_DIR := $(shell xcode-select -p 2>/dev/null)
 ifneq ($(wildcard $(SELECTED_DEV_DIR)/usr/bin/xcodebuild),)
@@ -69,15 +64,15 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift
 
 ci-all:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-browser ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-swift
 
 release:
 	./scripts/release-local.sh
@@ -88,20 +83,16 @@ release-dry:
 site-dev:
 	cd apps/site && python3 -m http.server 8000
 
-approve-package-plugins:
-	python3 scripts/approve-package-plugins.py
-
 cli:
 	./build.sh --no-open
 
 icon:
 	@set -eu; \
 	CHROME="$${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"; \
-	ARTWORK="$(PKG)/Sources/Edith/Resources/appicon.png"; \
-	rm -f "$$ARTWORK"; \
+	ARTWORK="$$(mktemp -d)/appicon.png"; \
 	"$$CHROME" --headless --disable-gpu --hide-scrollbars --allow-file-access-from-files \
 	  --force-color-profile=srgb --default-background-color=00000000 --window-size=1024,1024 \
-	  --screenshot="$(CURDIR)/$$ARTWORK" "file://$(CURDIR)/Resources/AppIcon.svg" >/dev/null 2>&1; \
+	  --screenshot="$$ARTWORK" "file://$(CURDIR)/Resources/AppIcon.svg" >/dev/null 2>&1; \
 	test -s "$$ARTWORK"; \
 	rm -rf AppIcon.iconset && mkdir AppIcon.iconset; \
 	for s in 16 32 128 256 512; do \
@@ -110,14 +101,11 @@ icon:
 	done; \
 	iconutil -c icns AppIcon.iconset -o Resources/AppIcon.icns; \
 	rm -rf AppIcon.iconset; \
-	sips -z 128 128 "$$ARTWORK" --out $(PKG)/Sources/EdithKit/Resources/share-icon.png >/dev/null; \
-	cp "$$ARTWORK" $(PKG)/Sources/EdithHelper/MenuBar.png; \
-	sips -c 942 942 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null; \
-	sips -z 80 80 $(PKG)/Sources/EdithHelper/MenuBar.png >/dev/null; \
 	cp "$$ARTWORK" apps/site/app-icon.png; \
 	cp "$$ARTWORK" apps/promo-video/public/logo.png; \
 	sips -z 512 512 "$$ARTWORK" --out apps/site/app-icon-512.png >/dev/null; \
-	sips -z 180 180 "$$ARTWORK" --out apps/site/favicon-180.png >/dev/null
+	sips -z 180 180 "$$ARTWORK" --out apps/site/favicon-180.png >/dev/null; \
+	rm -rf "$$(dirname "$$ARTWORK")"
 
 wiki:
 	bun scripts/sync-wiki.mjs
@@ -153,18 +141,6 @@ ci-host-abi:
 
 ci-scripts: ci-host-invocation ci-host-abi
 	bun test ./scripts --path-ignore-patterns '**/._*'
-
-ci-scripts-batch: ci-host-abi
-	@test -n "$(BATCH)" || { echo "set BATCH to a scripts test batch" >&2; exit 1; }
-	@set -eu; \
-	  paths="$$(python3 scripts/test-batches.py script-paths "$(BATCH)")"; \
-	  bun test $$paths
-
-
-ci-performance:
-	bun scripts/check-performance-audit.mjs
-	bun scripts/check-database-size.mjs
-	./scripts/bench-helper.sh --fixture scripts/fixtures/bench-helper.samples >/dev/null
 
 bench-cli:
 	bun scripts/bench-cli.mjs
@@ -448,24 +424,8 @@ ci-marketplace-host: ci-host host
 	$(MAKE) ci-extension-support ci-extension-docs
 	$(MAKE) ci-comments
 
-ci-swift-test-batch:
-	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }
-	cd $(PKG) && ./test.sh --batch "$(BATCH)"
-
 ci-studio:
 	cd $(STUDIO_PKG) && swift test --no-parallel
-
-ci-studio-batch:
-	@test -n "$(BATCH)" || { echo "set BATCH to a studio test batch" >&2; exit 1; }
-	@set -eu; \
-	  spec="$$(python3 scripts/test-batches.py studio-args "$(BATCH)")"; \
-	  flag="$$(printf '%s\n' "$$spec" | sed -n '1p')"; \
-	  pattern="$$(printf '%s\n' "$$spec" | sed -n '2p')"; \
-	  cd $(STUDIO_PKG) && swift test --no-parallel "$$flag" "$$pattern"
-
-ci-browser:
-	plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoadsInWebContent raw Resources/HelperInfo.plist | grep -qx true
-	cd $(PKG) && ./test.sh --filter '^EdithTests\.(NotchBrowser|Browser|Chrome|LocalStorageSeed|Social)'
 
 ci-swift-check: ci-swift-lint ci-swift-build ci-swift-test
 
@@ -491,9 +451,6 @@ shipping-fixture:
 shipping-appcast-fixture:
 	python3 scripts/test-host-appcast.py local/shipping-fixture/Edith.app Packages/EdithHost/.build/artifacts/sparkle/Sparkle/bin
 
-
-ghostty:
-	bash scripts/build-ghostty.sh
 
 build:
 	./build.sh $(FLAGS)
@@ -563,10 +520,9 @@ ci-semgrep:
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
-	  --skip-dirs Packages/Edith/.build --skip-dirs Packages/EdithStudio/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
+	  --skip-dirs Packages/EdithStudio/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
-	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs $(PKG)/Vendor/GhosttyKit.xcframework \
-	  --skip-dirs $(PKG)/Vendor/GhosttyResources --skip-dirs extras .
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone \ --skip-dirs extras .
 
 prepare-pdf-extract:
 	python3 -B apps/companion/prepare-pdf-extract.py
@@ -602,7 +558,7 @@ ci-tools:
 
 .PHONY: ghostty-extension ci-extension-terminal
 ghostty-extension:
-	bash scripts/build-ghostty.sh --extension-only
+	bash scripts/build-ghostty.sh
 
 ci-extension-terminal: ghostty-extension
 	swift format lint --strict --parallel --recursive Extensions/terminal

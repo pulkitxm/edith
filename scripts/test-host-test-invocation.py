@@ -95,11 +95,10 @@ class HostTestInvocationTests(unittest.TestCase):
         prerequisites = {
             target: next(row for row in make.splitlines()
                          if row.startswith(target + ":")).partition(":")[2].split()
-            for target in ["ci-scripts", "ci-scripts-batch"]
+            for target in ["ci-scripts"]
         }
         self.assertIn("ci-host-invocation", prerequisites["ci-scripts"])
         self.assertIn("ci-host-abi", prerequisites["ci-scripts"])
-        self.assertIn("ci-host-abi", prerequisites["ci-scripts-batch"])
         self.assertIn("ci-host-abi:\n\tbun scripts/extension-host-abi.mjs --check\n", make)
         self.assertIn("ci-host-invocation:\n\tpython3 -B scripts/test-host-test-invocation.py\n", make)
         self.assertEqual(len(recipe), 4)

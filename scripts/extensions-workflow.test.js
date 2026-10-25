@@ -157,7 +157,6 @@ test("every extension passes native package checks before release signing", () =
   expect(guard).toBeGreaterThan(-1);
   expect(build.steps[guard].run).toContain("contractVersion!==1");
   expect(build.steps[guard].run).toContain("surfaceContractVersion!==1");
-  expect(build.steps[guard].run).toContain("usesHostFramework");
   expect(guard).toBeLessThan(suites);
   expect(suites).toBeLessThan(signing);
   expect(signing).toBeLessThan(bundle);

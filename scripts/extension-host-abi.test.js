@@ -16,29 +16,13 @@ import { hostABI, workerHostABI, writeHostABI } from "./extension-host-abi.mjs";
 async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "extension-host-contract-"));
   try {
-    for (const module of [
-      "EdithCore",
-      "EdithDatabase",
-      "EdithKit",
-      "EdithShared",
-      "EdithCameraSupport",
-      "EdithLidAwakeSupport",
-    ])
-      await mkdir(join(root, "Packages/Edith/Sources", module), {
-        recursive: true,
-      });
     for (const directory of [
       "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
       "Extensions",
       "scripts",
     ])
       await mkdir(join(root, directory), { recursive: true });
-    for (const path of [
-      "Packages/Edith/Package.swift",
-      "Packages/ExtensionMarketplace/Package.swift",
-      "scripts/link-shared-framework.py",
-      "scripts/extension-host-build.mjs",
-    ])
+    for (const path of ["Packages/ExtensionMarketplace/Package.swift"])
       await writeFile(join(root, path), path);
     const configuration = join(
       root,
@@ -63,7 +47,10 @@ test("build preparation updates every package to the actual merged host source",
   await fixture(async ({ root, configuration, manifest }) => {
     const previous = await writeHostABI(root);
     await writeFile(
-      join(root, "Packages/Edith/Sources/EdithKit/Merged.swift"),
+      join(
+        root,
+        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Merged.swift",
+      ),
       "public struct Merged {}\n",
     );
     const merged = await writeHostABI(root);
@@ -122,7 +109,10 @@ test("isolated worker contracts survive unrelated legacy feature changes", async
     );
     const previous = await writeHostABI(root);
     await writeFile(
-      join(root, "Packages/Edith/Sources/EdithKit/Merged.swift"),
+      join(
+        root,
+        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Merged.swift",
+      ),
       "changed legacy feature",
     );
     const next = await writeHostABI(root);
@@ -141,30 +131,6 @@ test("build preparation refuses a missing host declaration", async () => {
     await expect(writeHostABI(root)).rejects.toThrow(
       "Missing host ABI declaration",
     );
-  });
-});
-
-test("database interfaces invalidate legacy bundles without changing the worker contract", async () => {
-  await fixture(async ({ root, manifest }) => {
-    await writeFile(
-      manifest,
-      JSON.stringify([
-        { id: "isolated", contractVersion: 1, hostABI: "stale" },
-        { id: "legacy", hostABI: "stale" },
-      ]),
-    );
-    const previous = await writeHostABI(root);
-    await writeFile(
-      join(root, "Packages/Edith/Sources/EdithDatabase/Surface.swift"),
-      "changed database interface",
-    );
-    const next = await writeHostABI(root);
-    expect(next).not.toBe(previous);
-    expect(
-      JSON.parse(await readFile(manifest, "utf8")).map(
-        (entry) => entry.hostABI,
-      ),
-    ).toEqual([workerHostABI, next]);
   });
 });
 
@@ -208,7 +174,10 @@ test.each(["legacy source", "worker source", "worker manifest"])(
       await writeHostABI(root);
       if (stale === "legacy source")
         await writeFile(
-          join(root, "Packages/Edith/Sources/EdithKit/Changed.swift"),
+          join(
+            root,
+            "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Changed.swift",
+          ),
           "changed legacy interface",
         );
       else if (stale === "worker source")

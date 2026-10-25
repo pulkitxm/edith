@@ -241,7 +241,6 @@ test("host test lanes exclude optional terminal dependencies", () => {
   const tests = job.steps.find((step) => step.name === "Tests");
   expect(job["timeout-minutes"]).toBeGreaterThan(tests["timeout-minutes"]);
   expect(JSON.stringify(job)).not.toContain("make ghostty");
-  expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
   expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
   expect(tests.run).toContain(`make "\${targets[@]}"`);
 });

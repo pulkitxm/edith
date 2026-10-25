@@ -77,7 +77,6 @@ test("actual and both deployed Dockerfiles prepare identical pinned sources", ()
   );
   for (const path of [
     "Extensions/companion/Models/CompanionRuntimeFiles.swift",
-    "Packages/Edith/Sources/EdithKit/Features/Companion/Models/CompanionRuntimeFiles.swift",
   ]) {
     expect(embeddedDocker(path)).toBe(docker);
   }
