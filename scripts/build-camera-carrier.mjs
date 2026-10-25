@@ -115,7 +115,10 @@ export async function buildCameraCarrier({
   )
     throw new Error("Camera carrier build inputs are incomplete");
   if (development) {
-    if (!hostIdentifier.startsWith("com.pulkit.edith.tests."))
+    if (
+      !hostIdentifier.startsWith("com.pulkit.edith.tests.") &&
+      !hostIdentifier.startsWith("com.pulkit.edith.dev.")
+    )
       throw new Error(
         "Unsigned camera carriers are restricted to synthetic fixtures",
       );
