@@ -74,7 +74,8 @@ function changedPaths(base) {
 
 export function planLocalJobs(plan, options, definitions) {
   const jobs = [];
-  if (options.checks) jobs.push({ lane: "checks", make: checkTargets });
+  if (options.checks)
+    jobs.push({ lane: "checks", make: checkTargets, shared: [] });
   const ghostty = new Set(
     plan.include
       .filter((entry) => entry.ghostty)
