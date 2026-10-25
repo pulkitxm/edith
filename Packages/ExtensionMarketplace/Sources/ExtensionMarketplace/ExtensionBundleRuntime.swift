@@ -226,6 +226,7 @@ public final class ExtensionBundleRuntime {
     {
         if let selected = readOnlyPackage {
             guard id == selected.package.id else { throw MarketplaceError.invalidBundle }
+            if operation == "stopUI", loaded[id] == nil { return ["ok": true] }
             return try rendererCallbacks.response(
                 id: id, role: role, operation: operation, context: context,
                 execute: {

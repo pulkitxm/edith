@@ -123,6 +123,7 @@ import Testing
         #expect(throws: MarketplaceError.invalidBundle) {
             try runtime.nativeTask(id: "herdr", payload: Data([1]))
         }
+        #expect(try runtime.response(id: "herdr", operation: "stopUI")["ok"] as? Bool == true)
         #expect(verifications == 0 && !FileManager.default.fileExists(atPath: directory.path))
         #expect(try runtime.snapshot(id: "herdr") == nil)
     }
