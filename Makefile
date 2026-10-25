@@ -79,6 +79,13 @@ ci-all:
 	bun install --frozen-lockfile
 	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-browser ci-swift
 
+.PHONY: ci-local ci-local-all
+ci-local:
+	bun scripts/ci-local.mjs $(CI_LOCAL)
+
+ci-local-all:
+	bun scripts/ci-local.mjs --all --builds $(CI_LOCAL)
+
 release:
 	./scripts/release-local.sh
 
