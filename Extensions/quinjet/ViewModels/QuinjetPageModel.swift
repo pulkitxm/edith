@@ -129,7 +129,10 @@ final class QuinjetPageModel {
         await performRead(.ui("quinjet.ui.read", nil)) { [self] in
             guard let uiClient, !stopped else { return }
             do {
-                if let state = try await uiClient.state("quinjet.ui.read") { try adoptUI(state) }
+                if let state = try await uiClient.state("quinjet.ui.read") {
+                    try Task.checkCancellation()
+                    try adoptUI(state)
+                }
             } catch is CancellationError {} catch { projectError = error.localizedDescription }
         }
     }
@@ -711,10 +714,15 @@ final class QuinjetPageModel {
         }
         let previous = reads[key]
         previous?.cancel()
-        await previous?.value
-        guard !stopped, !draining, readEpochs[key] == epoch, !Task.isCancelled else { return }
         let task = Task { await operation() }
-        reads[key] = task
+        reads[key] = Task {
+            await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            await previous?.value
+        }
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
