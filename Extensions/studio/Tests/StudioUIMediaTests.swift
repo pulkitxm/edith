@@ -18,7 +18,7 @@ import Testing
         for frame in 0..<192000 {
             let click = frame >= 12000 && frame < 168000 && (frame - 12000) % 24000 < 240
             let value: Float = click ? Float(sin(Double(frame) * 0.35)) * 0.8 : 0
-            channels[0][frame] = value; channels[1][frame] = -value
+            channels[0][frame] = value; channels[1][frame] = value
         }
         try AVAudioFile(forWriting: url, settings: format.settings).write(from: buffer)
         let original = try Data(contentsOf: url)
