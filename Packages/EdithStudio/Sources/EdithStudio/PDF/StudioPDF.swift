@@ -322,7 +322,8 @@ public enum StudioPDF {
     public static func rebuild(
         _ document: PDFDocument, to url: URL, pages selected: Set<Int>? = nil,
         keepAnnotations: Bool = true, auxiliaryInfo: [CFString: Any] = [:],
-        pageSetup: ((CGContext) -> Void)? = nil,
+        pageSetup: ((CGContext) throws -> Void)? = nil,
+        pageTeardown: ((CGContext) -> Void)? = nil,
         under: ((PageCanvas) throws -> Void)? = nil, over: ((PageCanvas) throws -> Void)? = nil,
         adjust: ((PDFAnnotation) -> Void)? = nil, progress: ((Double) -> Void)? = nil
     ) throws {
@@ -341,7 +342,11 @@ public enum StudioPDF {
             rotations.append(rotation)
             var mediaBox = CGRect(origin: .zero, size: box.size)
             context.beginPage(mediaBox: &mediaBox)
-            pageSetup?(context)
+            defer {
+                pageTeardown?(context)
+                context.endPage()
+            }
+            try pageSetup?(context)
             let applies = selected?.contains(index) ?? true
             let display = displaySize(page)
             let toPage = pageFromDisplay(size: box.size, rotation: rotation)
@@ -362,7 +367,6 @@ public enum StudioPDF {
                 try over(PageCanvas(context: context, size: display, index: index, count: count))
                 context.restoreGState()
             }
-            context.endPage()
             progress?(Double(index + 1) / Double(max(count, 1)) * 0.9)
         }
         context.closePDF()
