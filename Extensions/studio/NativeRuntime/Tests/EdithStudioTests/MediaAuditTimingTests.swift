@@ -146,10 +146,13 @@ import Testing
         let quiet = try await MediaAudit.silences(url, minimum: 0.2)
         #expect(near(quiet.first?.end, 0.5, 0.05), "\(quiet)")
         #expect(near(quiet.last?.start, 1, 0.05), "\(quiet)")
+        let grayPerFrame: Double = 6.0 * 255.0 / 219.0
         let first = try await MediaAudit.frame(url, at: 0, in: space)
-        #expect(abs(Double(first.centerGray) / (6 * 255 / 219) - 29.97) < 0.3)
+        let firstFrame: Double = Double(first.centerGray) / grayPerFrame
+        #expect(abs(firstFrame - 29.97) < 0.3)
         let last = try await MediaAudit.lastFrame(url, in: space)
-        #expect(Double(last.centerGray) / (6 * 255 / 219) < 0.3)
+        let lastFrame: Double = Double(last.centerGray) / grayPerFrame
+        #expect(lastFrame < 0.3)
     }
 
     @Test func mergeKeepsEveryClipInOrderAndInSync() async throws {
