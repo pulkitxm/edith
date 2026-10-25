@@ -185,15 +185,19 @@ if [ "$RELEASE" = 1 ]; then
   "$LSREGISTER" -u "$APP" 2>/dev/null || true
 fi
 
+if [ -n "$SLOT" ]; then
+  scripts/dev-slots.sh stop
+fi
+
 if [ "$INSTALL" = 1 ]; then
   python3 scripts/install_app.py "$APP" "/Applications/Edith.app"
   [ "$NO_OPEN" = 1 ] || open -n "/Applications/Edith.app"
 elif [ "$RELEASE" = 1 ]; then
   echo "built $APP; Edith only runs from /Applications, install it with --release --install"
-elif [ "$BACKGROUND" = 1 ]; then
-  scripts/dev-slots.sh stop
-  open -g -j -F --env EDITH_BACKGROUND_TESTING=1 "$APP"
 elif [ "$NO_OPEN" != 1 ]; then
-  scripts/dev-slots.sh stop
-  open "$APP"
+  if [ "$BACKGROUND" = 1 ]; then
+    open -g -j -F --env EDITH_BACKGROUND_TESTING=1 "$APP"
+  else
+    open "$APP"
+  fi
 fi

@@ -78,6 +78,55 @@ class HostPackagingArgumentsTests(unittest.TestCase):
         )
         self.assertEqual(actual[-3:], [b"--identity", b"-", b"--release"])
 
+    def test_finished_build_stops_only_its_dev_slot_and_honors_no_open(self):
+        block = SOURCE[SOURCE.index('if [ -n "$SLOT" ]; then'):]
+        for release, no_open, background, install in itertools.product(("0", "1"), repeat=4):
+            if release == "0" and install == "1":
+                continue
+            with self.subTest(release=release, no_open=no_open, background=background, install=install):
+                with tempfile.TemporaryDirectory(prefix="host-launch-modes-") as directory:
+                    root = pathlib.Path(directory)
+                    (root / "scripts").mkdir()
+                    stopper = root / "scripts/dev-slots.sh"
+                    stopper.write_text('#!/bin/sh\nprintf "stop:%s\\n" "$*" >> "$OUTPUT"\n')
+                    stopper.chmod(0o755)
+                    output = root / "events"
+                    values = {
+                        "SLOT": "fixture slot" if release == "0" else "",
+                        "RELEASE": release,
+                        "NO_OPEN": no_open,
+                        "BACKGROUND": background,
+                        "INSTALL": install,
+                        "APP": "dist/Edith.app",
+                    }
+                    assignments = "\n".join(f"{name}={shlex.quote(value)}" for name, value in values.items())
+                    script = (
+                        "set -euo pipefail\n" + assignments + "\n"
+                        'open() { printf "open:%s\\n" "$*" >> "$OUTPUT"; }\n'
+                        'python3() { printf "install:%s\\n" "$*" >> "$OUTPUT"; }\n'
+                        + block
+                    )
+                    subprocess.run(
+                        ["/bin/bash", "--noprofile", "--norc", "-c", script],
+                        cwd=root,
+                        env={"PATH": "/usr/bin:/bin", "OUTPUT": str(output)},
+                        capture_output=True,
+                        check=True,
+                        timeout=5,
+                    )
+                    actual = output.read_text().splitlines() if output.exists() else []
+                    expected = ["stop:stop"] if release == "0" else []
+                    if install == "1":
+                        expected.append("install:scripts/install_app.py dist/Edith.app /Applications/Edith.app")
+                        if no_open == "0":
+                            expected.append("open:-n /Applications/Edith.app")
+                    elif release == "0" and no_open == "0":
+                        expected.append(
+                            "open:-g -j -F --env EDITH_BACKGROUND_TESTING=1 dist/Edith.app"
+                            if background == "1" else "open:dist/Edith.app"
+                        )
+                    self.assertEqual(actual, expected)
+
     def test_branch_dispatch_preserves_all_flag_combinations(self):
         block = source_block('    BUILD_ARGUMENTS=("$ROOT/build.sh")', "  fi\nfi\n")
         options = (
