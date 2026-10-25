@@ -19,6 +19,7 @@
     "typescript": "7.0.2"
   },
   "overrides": {
-    "fast-uri": "^3.1.8"
+    "fast-uri": "^3.1.8",
+    "zod": "4.6.6"
   }
 }

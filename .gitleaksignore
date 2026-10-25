@@ -3,3 +3,6 @@ c008f7391facae0ac852f8c1cc84247085e0d25a:apps/macos/Sources/EdithKit/Core/Device
 0c76e41ddacb8e839eff00f38035cfb4262e10fa:scripts/signing-keychain.sh:generic-api-key:3
 e3d281c755315c7260f296f52eaa956a8e2de27c:scripts/signing-keychain.sh:generic-api-key:3
 c90313b5c9777346d8a30c5eca0174120cb172c0:scripts/signing-keychain.sh:generic-api-key:3
+72d5eae9e7f0ceb9ea95a25382642d0ea17feb85:scripts/test-hosted-public-release.py:generic-api-key:162
+e2e672a425e24a516d8f916a57bc555592722ce4:docs/extension-host-rebuild-size-report.json:generic-api-key:1821
+e2e672a425e24a516d8f916a57bc555592722ce4:docs/extension-size-report.json:generic-api-key:517
