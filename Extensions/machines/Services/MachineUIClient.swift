@@ -1,8 +1,8 @@
 import EdithExtensionSupport
 import Foundation
 
-@MainActor public final class MachineUIClient {
-    private let client: ExtensionEngineClient
+@MainActor public final class MachineUIClient: FinderBridgeTransport {
+    fileprivate let client: ExtensionEngineClient
     let terminalUI: MachineTerminalUIPresentation
     private var generation = 0
     private var stopped = false
@@ -60,7 +60,8 @@ import Foundation
         client.invalidate()
     }
 
-    private func owned<Value>(_ work: @escaping @MainActor () async throws -> Value) async throws
+    fileprivate func owned<Value>(_ work: @escaping @MainActor () async throws -> Value)
+        async throws
         -> Value
     {
         guard !stopped else { throw MachineUIError.unavailable }
@@ -79,7 +80,7 @@ import Foundation
         }
     }
 
-    private func cleanup<Request: Encodable>(_ operation: String, value: Request) async {
+    fileprivate func cleanup<Request: Encodable>(_ operation: String, value: Request) async {
         let id = UUID()
         let task = Task { [self] in
             let _: Bool? = try? await request(operation, value: value, draining: true)
@@ -118,159 +119,10 @@ import Foundation
         receive(state)
     }
 
-    func materialize(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64) async throws
-        -> URL
-    {
-        try await owned { [self] in
-            try await materializeOwned(
-                entry: entry, machineID: machineID, maximumBytes: maximumBytes)
-        }
-    }
-
-    private func materializeOwned(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64)
-        async throws -> URL
-    {
-        let handle: MachinePreviewHandle = try await job(
-            "machines.ui.preview",
-            value: MachinePreviewRequest(
-                operation: .prepare, machineID: machineID, entry: entry, maximumBytes: maximumBytes)
-        )
-        guard handle.count <= UInt64(maximumBytes), !handle.name.contains("/"),
-            !handle.name.contains("\\"), !handle.name.utf8.contains(0)
-        else { throw MachineUIError.invalidRequest }
-        let directory = ExtensionData.root.appendingPathComponent("ui-previews")
-            .appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let destination = directory.appendingPathComponent(handle.name)
-        FileManager.default.createFile(atPath: destination.path, contents: Data())
-        let output = try FileHandle(forWritingTo: destination)
-        do {
-            var offset: UInt64 = 0
-            while true {
-                try Task.checkCancellation()
-                let chunk: MachinePreviewChunk = try await request(
-                    "machines.ui.preview",
-                    value: MachinePreviewRequest(
-                        operation: .read, machineID: machineID, id: handle.id, offset: offset))
-                guard chunk.offset == offset, chunk.bytes.count <= 65_536,
-                    UInt64(chunk.bytes.count) <= handle.count - offset,
-                    !chunk.bytes.isEmpty || chunk.complete
-                else { throw MachineUIError.invalidRequest }
-                try output.write(contentsOf: chunk.bytes)
-                offset += UInt64(chunk.bytes.count)
-                if chunk.complete {
-                    guard offset == handle.count else { throw MachineUIError.invalidRequest }
-                    break
-                }
-            }
-            try output.close()
-            return destination
-        } catch {
-            try? output.close()
-            try? FileManager.default.removeItem(at: directory)
-            await cleanup(
-                "machines.ui.preview",
-                value: MachinePreviewRequest(operation: .close, machineID: machineID, id: handle.id)
-            )
-            throw error
-        }
-    }
-
-    func materializeDirectory(entry: RemoteFileEntry, machineID: UUID) async throws -> URL {
-        try await owned { [self] in
-            try await materializeDirectoryOwned(entry: entry, machineID: machineID)
-        }
-    }
-
-    private func materializeDirectoryOwned(entry: RemoteFileEntry, machineID: UUID) async throws
-        -> URL
-    {
-        let handle: MachineDirectoryExportHandle = try await job(
-            "machines.ui.export",
-            value: MachineDirectoryExportRequest(
-                operation: .prepare, machineID: machineID, entry: entry))
-        guard MachineDirectoryExportRequest.validPath(handle.name), !handle.name.contains("/"),
-            handle.items.count <= 8192, Set(handle.items.map(\.path)).count == handle.items.count,
-            handle.items.allSatisfy({
-                MachineDirectoryExportRequest.validPath($0.path)
-                    && ($0.path == handle.name || $0.path.hasPrefix(handle.name + "/"))
-            }),
-            handle.count <= UInt64(RemoteFileOperationExecution.cacheLimitBytes),
-            handle.items.reduce(
-                UInt64(0),
-                { $0 + min($1.count, UInt64(RemoteFileOperationExecution.cacheLimitBytes) + 1) })
-                == handle.count
-        else { throw MachineUIError.invalidRequest }
-        let root = ExtensionData.root.appendingPathComponent("ui-previews").appendingPathComponent(
-            UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let close = MachineDirectoryExportRequest(
-            operation: .close, machineID: machineID, id: handle.id)
-        do {
-            for item in handle.items where item.kind != .symlink {
-                try Task.checkCancellation()
-                let url = root.appendingPathComponent(item.path)
-                if item.kind == .directory {
-                    try FileManager.default.createDirectory(
-                        at: url, withIntermediateDirectories: false);
-                    continue
-                }
-                guard item.kind == .file else { throw MachineUIError.invalidRequest }
-                FileManager.default.createFile(atPath: url.path, contents: Data())
-                let file = try FileHandle(forWritingTo: url)
-                do {
-                    var offset: UInt64 = 0
-                    while true {
-                        let chunk: MachinePreviewChunk = try await request(
-                            "machines.ui.export",
-                            value: MachineDirectoryExportRequest(
-                                operation: .read, machineID: machineID, id: handle.id,
-                                path: item.path, offset: offset))
-                        guard chunk.offset == offset, chunk.bytes.count <= 65536,
-                            UInt64(chunk.bytes.count) <= item.count - offset,
-                            !chunk.bytes.isEmpty || chunk.complete
-                        else { throw MachineUIError.stale }
-                        try file.write(contentsOf: chunk.bytes); offset += UInt64(chunk.bytes.count)
-                        if chunk.complete {
-                            guard offset == item.count else { throw MachineUIError.stale }; break
-                        }
-                    }
-                    try file.close()
-                    if let modified = item.modified {
-                        try FileManager.default.setAttributes(
-                            [.modificationDate: modified], ofItemAtPath: url.path)
-                    }
-                } catch { try? file.close(); throw error }
-            }
-            for item in handle.items where item.kind == .symlink {
-                guard let target = item.linkTarget, target.utf8.count <= 4096,
-                    !target.utf8.contains(0)
-                else { throw MachineUIError.invalidRequest }
-                try FileManager.default.createSymbolicLink(
-                    atPath: root.appendingPathComponent(item.path).path, withDestinationPath: target
-                )
-            }
-            let _: Bool = try await request("machines.ui.export", value: close)
-            return root.appendingPathComponent(handle.name)
-        } catch {
-            try? FileManager.default.removeItem(at: root)
-            await cleanup("machines.ui.export", value: close)
-            throw error
-        }
-    }
-
     func openWindow(_ value: MachineHostWindowRequest) async throws {
         var value = value; value.presentationID = client.presentationID
         try value.validate()
         let _: Bool = try await job("machines.ui.openWindow", value: value)
-    }
-
-    func files(
-        _ value: MachineFileRequest, progress: @escaping (FileOperationProgress?) -> Void = { _ in }
-    ) async throws -> MachineFileState {
-        var value = value; value.presentationID = client.presentationID
-        try value.validate()
-        return try await job("machines.ui.files", value: value, progress: progress)
     }
 
     func logs(_ value: MachineLogRequest) async throws -> MachineLogFrame {
@@ -353,7 +205,7 @@ import Foundation
         }
     }
 
-    private func job<Request: Encodable, Reply: Decodable>(
+    fileprivate func job<Request: Encodable, Reply: Decodable>(
         _ operation: String, value: Request,
         progress: @escaping (FileOperationProgress?) -> Void = { _ in }
     ) async throws -> Reply {
@@ -395,7 +247,7 @@ import Foundation
         }
     }
 
-    private func request<Request: Encodable, Reply: Decodable>(
+    fileprivate func request<Request: Encodable, Reply: Decodable>(
         _ operation: String, value: Request, draining: Bool = false
     ) async throws -> Reply {
         guard !stopped || draining else { throw MachineUIError.unavailable }
@@ -517,5 +369,34 @@ struct MachineTerminalUIEvent: Codable {
         holders.values.compactMap { $0.holder }.filter {
             $0.started && $0.presented && $0.ghosttyView?.hasInputFocus == true
         }
+    }
+}
+
+extension MachineUIClient {
+    public var bridgePresentationID: UUID { client.presentationID }
+    public var filesOperation: String { "machines.ui.files" }
+    public var previewOperation: String { "machines.ui.preview" }
+    public var exportOperation: String { "machines.ui.export" }
+
+    public func bridgeOwned<Value>(_ work: @escaping @MainActor () async throws -> Value)
+        async throws -> Value
+    {
+        try await owned(work)
+    }
+
+    public func bridgeJob<Request: Encodable, Reply: Decodable>(
+        _ operation: String, value: Request, progress: @escaping (FileOperationProgress?) -> Void
+    ) async throws -> Reply {
+        try await job(operation, value: value, progress: progress)
+    }
+
+    public func bridgeRequest<Request: Encodable, Reply: Decodable>(
+        _ operation: String, value: Request
+    ) async throws -> Reply {
+        try await request(operation, value: value)
+    }
+
+    public func bridgeCleanup<Request: Encodable>(_ operation: String, value: Request) async {
+        await cleanup(operation, value: value)
     }
 }

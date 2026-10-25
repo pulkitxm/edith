@@ -13,6 +13,7 @@ let package = Package(
             name: "EdithExtensionCommands", type: .static, targets: ["EdithExtensionCommands"]),
         .library(
             name: "EdithExtensionDocuments", type: .static, targets: ["EdithExtensionDocuments"]),
+        .library(name: "EdithExtensionFiles", type: .static, targets: ["EdithExtensionFiles"]),
         .library(name: "EdithExtensionArchive", type: .static, targets: ["EdithExtensionArchive"]),
     ],
     dependencies: [
@@ -49,6 +50,13 @@ let package = Package(
         .target(
             name: "EdithExtensionDocuments", dependencies: ["EdithExtensionUI"],
             resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "EdithExtensionFiles",
+            dependencies: ["EdithExtensionUI", "EdithExtensionDocuments"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "EdithExtensionFilesTests", dependencies: ["EdithExtensionFiles"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "EdithExtensionDocumentsTests", dependencies: ["EdithExtensionDocuments"],
             swiftSettings: [.swiftLanguageMode(.v5)]),

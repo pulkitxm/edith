@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithExtensionFiles
 @testable import MachinesExtension
 
 @Suite @MainActor struct MachineLogEngineTests {

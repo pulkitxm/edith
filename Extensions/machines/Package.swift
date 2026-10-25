@@ -14,6 +14,7 @@ let package = Package(
             name: "MachinesExtension",
             dependencies: [
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionFiles", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),

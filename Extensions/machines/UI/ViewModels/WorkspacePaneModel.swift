@@ -21,7 +21,7 @@ final class PaneViewStore {
     func finder(for tabID: UUID, session: MachineSession) -> FinderModel {
         let key = Key(tab: tabID, machine: session.id)
         if let existing = finders[key] { return existing }
-        let model = FinderModel(session: session)
+        let model = FinderModel.machine(session: session)
         finders[key] = model
         return model
     }
@@ -94,7 +94,7 @@ struct PaneContentView: View {
                 onFocus: onFocus, hostTabAction: hostTabAction, hostPaneAction: hostPaneAction,
                 holder: PaneViewStore.shared.terminal(for: tabID, session: session))
         case .files:
-            FinderPane(model: PaneViewStore.shared.finder(for: tabID, session: session))
+            MachineFinderPane(model: PaneViewStore.shared.finder(for: tabID, session: session))
         case .tools: MachineToolsTab(session: session, model: machines)
         }
     }

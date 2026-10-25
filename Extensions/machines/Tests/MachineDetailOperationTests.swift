@@ -1,3 +1,4 @@
+@testable import EdithExtensionFiles
 @testable import MachinesExtension
 import EdithExtensionSupport
 import Foundation

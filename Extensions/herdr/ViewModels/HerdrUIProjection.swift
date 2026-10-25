@@ -188,7 +188,12 @@ final class HerdrUIDefaults: UserDefaults {
     init(invoke: @escaping Invoke) { requests = OwnedEngineRequests(invoke: invoke) }
 
     convenience init(client: ExtensionEngineClient) {
-        self.init { operation, payload in try await client.invoke(operation, payload: payload) }
+        self.init { operation, payload in
+            try await client.invoke(
+                operation, payload: payload,
+                timeout: HerdrFilesHost.operations.contains(operation)
+                    && operation != HerdrFilesBridge.progressOperation ? 600 : 30)
+        }
     }
 
     func perform(_ operation: String, object: [String: Any] = [:]) async throws -> Data {
@@ -197,8 +202,11 @@ final class HerdrUIDefaults: UserDefaults {
         return try await perform(operation, payload: payload)
     }
 
-    func perform(_ operation: String, payload: Data) async throws -> Data {
-        guard !stopped, pending.count < 520, payload.count <= 131072,
+    func perform(
+        _ operation: String, payload: Data, payloadLimit: Int = 131072,
+        replyLimit: Int = 1_048_576
+    ) async throws -> Data {
+        guard !stopped, pending.count < 520, payload.count <= payloadLimit,
             operation.hasPrefix("herdr.") || operation.hasPrefix("activity.")
         else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
@@ -213,7 +221,7 @@ final class HerdrUIDefaults: UserDefaults {
         }
         try Task.checkCancellation()
         guard !stopped, !task.isCancelled else { throw CancellationError() }
-        guard result.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+        guard result.count <= replyLimit else { throw ExtensionPeerError.invalidRequest }
         return result
     }
 
@@ -256,12 +264,6 @@ final class HerdrUIDefaults: UserDefaults {
     private var searchHits: [String: [String: AgentSearchHit]] = [:]
 
     init(worker: HerdrWorker) { self.worker = worker }
-
-    private static func filesMachine(_ object: [String: Any]) -> Machine? {
-        guard let id = object["machineID"] as? String else { return nil }
-        if id == Machine.localID.uuidString { return Machine.local }
-        return MachineRegistry.machines().first { $0.id.uuidString == id }
-    }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {
         guard !worker.isStopped, payload.count <= 131072,
@@ -456,19 +458,6 @@ final class HerdrUIDefaults: UserDefaults {
             try await store.launchNewAgent(
                 kind: kind, host: host, existingSpace: workspace, newSpaceLabel: label,
                 openBeside: beside.boolValue, accountID: object["accountID"] as? String)
-        case "herdr.ui.files.home":
-            guard Set(object.keys) == ["machineID"], let machine = Self.filesMachine(object)
-            else { throw ExtensionPeerError.invalidRequest }
-            return try JSONEncoder().encode(
-                HerdrFilesHomeReply(path: try await HerdrFilesListing.home(on: machine)))
-        case "herdr.ui.files.list":
-            guard Set(object.keys) == ["machineID", "path"],
-                let machine = Self.filesMachine(object),
-                let path = object["path"] as? String, !path.isEmpty, path.utf8.count <= 4096,
-                !path.utf8.contains(0)
-            else { throw ExtensionPeerError.invalidRequest }
-            return try JSONEncoder().encode(
-                HerdrFilesListReply(entries: try await HerdrFilesListing.list(path, on: machine)))
         case "herdr.ui.search":
             guard Set(object.keys) == ["query", "machineID", "agentIDs"],
                 let query = object["query"] as? String, query.utf8.count <= 4096,

@@ -84,10 +84,6 @@ public struct MachineUIAction: Codable, Sendable {
     }
 }
 
-public enum MachineUIError: Error, Equatable {
-    case invalidRequest, unavailable, stale
-}
-
 public struct MachineUIMutation: Codable, Sendable {
     public var operation: MachineMutationOperation
     public var machine: Machine
@@ -97,11 +93,6 @@ public struct MachineUIMutation: Codable, Sendable {
 public struct MachineUIReply: Codable, Sendable {
     public let value: Data?
     public let error: String?
-}
-
-public struct MachineUIFailure: LocalizedError, Sendable {
-    public let message: String
-    public var errorDescription: String? { message }
 }
 
 public struct MachineUIConfigurationState: Codable, Sendable {

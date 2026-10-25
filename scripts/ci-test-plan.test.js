@@ -210,6 +210,19 @@ test("shared support changes select consumers while commands stay outside the em
   ).toEqual([{ lane: "feature-models", targets: "ci-extension-support" }]);
 });
 
+test("file browsing support changes select its declared consumers", () => {
+  const files = planSwiftTests([
+    "Packages/ExtensionSupport/Sources/EdithExtensionFiles/Finder/FinderModel.swift",
+  ]).include;
+  expect(files[0]).toEqual({
+    lane: "feature-models",
+    targets: "ci-extension-support",
+  });
+  const owners = files.slice(1).map((lane) => lane.extension);
+  for (const owner of ["machines", "herdr"]) expect(owners).toContain(owner);
+  expect(owners).toEqual(declaredSupportConsumers("EdithExtensionFiles"));
+});
+
 test("Docs and native Music select their actual owning checks", () => {
   const docs = planSwiftTests(["Extensions/docs/Runtime.swift"]).include;
   expect(

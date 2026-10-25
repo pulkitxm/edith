@@ -1,16 +1,13 @@
 import AppKit
+import EdithExtensionFiles
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-private struct MachineViewPresentedKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
 extension EnvironmentValues {
     var machineViewPresented: Bool {
-        get { self[MachineViewPresentedKey.self] }
-        set { self[MachineViewPresentedKey.self] = newValue }
+        get { finderPresented }
+        set { finderPresented = newValue }
     }
 }
 

@@ -964,27 +964,28 @@ final class HerdrStore {
             agent: agent, machine: machine(for: agent), view: resolved,
             holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
             files: HerdrFilesSession { [weak self] machine in
-                self?.filesSource(for: machine) ?? .direct(on: machine)
+                self?.filesSession(for: machine) ?? Self.directFilesSession(for: machine)
             },
             split: HerdrSplitCompanionState(agentID: agent.id, defaults: defaults))
     }
 
-    private func filesSource(for machine: Machine) -> HerdrFilesSource {
-        guard uiClient != nil else { return .direct(on: machine) }
-        let machineID = machine.id.uuidString
-        return HerdrFilesSource(
-            home: { [weak self] in
-                guard let self else { throw ExtensionPeerError.unavailable }
-                let data = try await self.requestUI(
-                    "herdr.ui.files.home", object: ["machineID": machineID])
-                return try JSONDecoder().decode(HerdrFilesHomeReply.self, from: data).path
-            },
-            list: { [weak self] path in
-                guard let self else { throw ExtensionPeerError.unavailable }
-                let data = try await self.requestUI(
-                    "herdr.ui.files.list", object: ["machineID": machineID, "path": path])
-                return try JSONDecoder().decode(HerdrFilesListReply.self, from: data).entries
-            })
+    private func filesSession(for machine: Machine) -> any FinderSession {
+        guard let uiClient, let presentation = uiPresentationID else {
+            return Self.directFilesSession(for: machine)
+        }
+        return DirectFinderSession(
+            id: machine.id, name: machine.name, isLocal: machine.id == Machine.localID,
+            remoteClient: HerdrFilesBridge(client: uiClient, presentationID: presentation))
+    }
+
+    static func directFilesSession(for machine: Machine) -> DirectFinderSession {
+        guard machine.id != Machine.localID else {
+            return DirectFinderSession(id: machine.id, name: machine.name, isLocal: true)
+        }
+        let connection = SSHConnection(machine: machine, controlSocketMode: .shared)
+        return DirectFinderSession(
+            id: machine.id, name: machine.name, isLocal: false, connection: connection,
+            connector: { try await connection.connect() })
     }
 
     func detachedTab(for agent: HerdrAgent) -> HerdrOpenTab {
@@ -1003,7 +1004,7 @@ final class HerdrStore {
         detachedTabs[id]?.holder.stop()
         detachedTabs[id]?.holder.fileLinks = nil
         detachedTabs[id]?.quinjet.stop()
-        detachedTabs[id]?.files.stop()
+        detachedTabs[id]?.files.discard()
         detachedTabs.removeValue(forKey: id)
     }
 
@@ -1831,7 +1832,7 @@ final class HerdrStore {
         agentStartupMessages.removeValue(forKey: id)
         unconfirmedAgentKinds.removeValue(forKey: id)
         sessions[index].quinjet.stop()
-        sessions[index].files.stop()
+        sessions[index].files.discard()
         sessions[index].holder.fileLinks = nil
         sessions.remove(at: index)
         detachFromLayout(id)

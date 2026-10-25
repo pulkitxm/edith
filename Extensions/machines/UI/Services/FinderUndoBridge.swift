@@ -9,14 +9,14 @@ enum FinderUndoBridge {
     private static var observer: NSObjectProtocol?
 
     static func register(_ model: FinderModel) {
-        models[model.session.machine.id, default: [:]][ObjectIdentifier(model)] = model
+        models[model.session.id, default: [:]][ObjectIdentifier(model)] = model
         start()
     }
 
     static func forget(_ model: FinderModel) {
-        models[model.session.machine.id]?.removeValue(forKey: ObjectIdentifier(model))
-        if models[model.session.machine.id]?.isEmpty == true {
-            models.removeValue(forKey: model.session.machine.id)
+        models[model.session.id]?.removeValue(forKey: ObjectIdentifier(model))
+        if models[model.session.id]?.isEmpty == true {
+            models.removeValue(forKey: model.session.id)
         }
     }
 

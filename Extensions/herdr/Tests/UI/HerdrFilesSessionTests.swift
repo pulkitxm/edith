@@ -4,74 +4,71 @@ import Foundation
 import Testing
 
 @MainActor
-private final class ListingLog {
-    var paths: [String] = []
-}
-
-@MainActor
 @Suite struct HerdrFilesSessionTests {
     @Test func aLocalAgentBrowsesThisMacFromItsWorkingDirectory() {
         let files = Self.session()
         files.prepare(directory: " /Users/me/project \n", isLocal: true, machine: nil)
         #expect(files.errorMessage == nil)
-        #expect(files.browser?.machine.id == Machine.localID)
-        #expect(files.browser?.isLocal == true)
-        #expect(files.browser?.path == "/Users/me/project")
-        files.stop()
+        #expect(files.finder?.session.id == Machine.localID)
+        #expect(files.finder?.session.isLocal == true)
+        #expect(files.finder?.path == "/Users/me/project")
+        files.discard()
     }
 
     @Test func aRemoteAgentBrowsesItsOwnMachine() {
         let machine = Machine(name: "tuf", host: "tuf.example")
         let files = Self.session()
         files.prepare(directory: "/home/me/repo", isLocal: false, machine: machine)
-        #expect(files.browser?.machine.id == machine.id)
-        #expect(files.browser?.isLocal == false)
-        #expect(files.browser?.path == "/home/me/repo")
-        files.stop()
+        #expect(files.finder?.session.id == machine.id)
+        #expect(files.finder?.session.isLocal == false)
+        #expect(files.finder?.path == "/home/me/repo")
+        files.discard()
     }
 
     @Test func anAgentWithoutADirectoryStartsAtHome() {
         let remote = Self.session()
         remote.prepare(
             directory: "  ", isLocal: false, machine: Machine(name: "tuf", host: "tuf.example"))
-        #expect(remote.browser?.path == "~")
+        #expect(remote.finder?.path == "~")
         let local = Self.session()
         local.prepare(directory: "", isLocal: true, machine: nil)
-        #expect(local.browser?.path == FileManager.default.homeDirectoryForCurrentUser.path)
+        #expect(local.finder?.path == FileManager.default.homeDirectoryForCurrentUser.path)
+        remote.discard()
+        local.discard()
     }
 
     @Test func aRemoteAgentWhoseMachineIsGoneExplainsWhy() {
         let files = Self.session()
         files.prepare(directory: "/srv", isLocal: false, machine: nil)
-        #expect(files.browser == nil)
+        #expect(files.finder == nil)
         #expect(files.errorMessage == HerdrQuinjetError.machineUnavailable.localizedDescription)
     }
 
-    @Test func preparingAgainKeepsTheBrowserAndFollowsANewWorkingDirectory() {
+    @Test func preparingAgainKeepsTheFinderAndFollowsANewWorkingDirectory() {
         let machine = Machine(name: "tuf", host: "tuf.example")
         let files = Self.session()
         files.prepare(directory: "/srv/a", isLocal: false, machine: machine)
-        let first = files.browser
-        files.browser?.navigate(to: "/srv/a/sub")
+        let first = files.finder
+        files.finder?.navigate(to: "/srv/a/sub")
         files.prepare(directory: "/srv/a", isLocal: false, machine: machine)
-        #expect(files.browser === first)
-        #expect(files.browser?.path == "/srv/a/sub")
+        #expect(files.finder === first)
+        #expect(files.finder?.path == "/srv/a/sub")
         files.prepare(directory: "/srv/b", isLocal: false, machine: machine)
-        #expect(files.browser === first)
-        #expect(files.browser?.path == "/srv/b")
-        #expect(files.browser?.canGoBack == true)
-        files.stop()
+        #expect(files.finder === first)
+        #expect(files.finder?.path == "/srv/b")
+        #expect(files.finder?.canGoBack == true)
+        files.discard()
     }
 
-    @Test func movingToAnotherMachineStartsAFreshBrowser() {
+    @Test func movingToAnotherMachineStartsAFreshFinder() {
         let files = Self.session()
         files.prepare(directory: "/srv", isLocal: false, machine: Machine(name: "a", host: "a"))
-        let first = files.browser
+        let first = files.finder
         let other = Machine(name: "b", host: "b")
         files.prepare(directory: "/srv", isLocal: false, machine: other)
-        #expect(files.browser !== first)
-        #expect(files.browser?.machine.id == other.id)
-        files.stop()
+        #expect(files.finder !== first)
+        #expect(files.finder?.session.id == other.id)
+        files.discard()
     }
 
     @Test func aLocalAgentRevealsAFileInsideItsFolder() async throws {
@@ -81,23 +78,23 @@ private final class ListingLog {
         try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try Data().write(to: sources.appendingPathComponent("App.swift"))
-        let files = HerdrFilesSession { .direct(on: $0) }
+        let files = Self.session()
 
         let entry = try #require(
             await files.locate(
                 sources.appendingPathComponent("App.swift").path, directory: root.path,
                 isLocal: true, machine: nil))
-        #expect(files.browser?.path == root.path)
+        #expect(files.finder?.path == root.path)
         await files.reveal(entry)
 
-        #expect(files.browser?.path == sources.path)
-        #expect(files.browser?.selection == [entry.path])
-        #expect(files.browser?.scrollTarget == entry.path)
+        #expect(files.finder?.path == sources.path)
+        #expect(files.finder?.selection == [entry.path])
+        #expect(files.finder?.scrollTarget == entry.path)
         #expect(
             await files.locate(
                 sources.appendingPathComponent("Missing.swift").path, directory: root.path,
                 isLocal: true, machine: nil) == nil)
-        files.stop()
+        files.discard()
     }
 
     @Test func aPathPrintedFromARepoInsideTheAgentFolderIsFoundThere() async throws {
@@ -113,7 +110,7 @@ private final class ListingLog {
             try FileManager.default.setAttributes(
                 [.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: file.path)
         }
-        let files = HerdrFilesSession { .direct(on: $0) }
+        let files = Self.session()
 
         let entry = try #require(
             await files.locate(
@@ -124,91 +121,10 @@ private final class ListingLog {
             await files.locate(
                 root.appendingPathComponent("Packages/Kit/Missing.swift").path,
                 directory: root.path, isLocal: true, machine: nil) == nil)
-        files.stop()
+        files.discard()
     }
 
-    @Test func aRemoteSearchStaysInsideTheAgentFolder() async {
-        let machine = Machine(name: "tuf", host: "tuf.example")
-        let tree: [String: [RemoteFileEntry]] = [
-            "/srv": [
-                RemoteFileEntry(name: "api", path: "/srv/api", kind: .directory, sizeBytes: 0),
-                RemoteFileEntry(
-                    name: ".cache", path: "/srv/.cache", kind: .directory, sizeBytes: 0),
-            ],
-            "/srv/api": [
-                RemoteFileEntry(name: "src", path: "/srv/api/src", kind: .directory, sizeBytes: 0)
-            ],
-            "/srv/api/src": [
-                RemoteFileEntry(
-                    name: "main.rs", path: "/srv/api/src/main.rs", kind: .file, sizeBytes: 1)
-            ],
-        ]
-        let log = ListingLog()
-        let files = Self.session(tree: tree, log: log)
-        files.prepare(directory: "/srv", isLocal: false, machine: machine)
-        let browser = files.browser
-
-        #expect(
-            await browser?.locate("/srv/src/main.rs", under: "/srv")?.path
-                == "/srv/api/src/main.rs")
-        #expect(await browser?.locate("/srv/src/main.rs") == nil)
-        #expect(await browser?.locate("/etc/src/main.rs", under: "/srv") == nil)
-        #expect(!log.paths.contains("/srv/.cache"))
-        files.stop()
-    }
-
-    @Test func aRemoteFileIsFoundThroughItsMachineListing() async throws {
-        let machine = Machine(name: "tuf", host: "tuf.example")
-        let tree: [String: [RemoteFileEntry]] = [
-            "/srv/repo/src": [
-                RemoteFileEntry(
-                    name: "main.rs", path: "/srv/repo/src/main.rs", kind: .file, sizeBytes: 1)
-            ]
-        ]
-        let files = Self.session(tree: tree)
-        files.prepare(directory: "/srv/repo", isLocal: false, machine: machine)
-        let browser = try #require(files.browser)
-
-        #expect(await browser.locate("/srv/repo/src/other.rs") == nil)
-        #expect(await browser.locate("/srv/repo/src/ma…")?.path == "/srv/repo/src/main.rs")
-        #expect(await browser.locate("/srv/repo/src/zz…") == nil)
-        let entry = try #require(await browser.locate("/srv/repo/src/main.rs"))
-        #expect(browser.path == "/srv/repo")
-        await browser.reveal(entry: entry)
-
-        #expect(browser.path == "/srv/repo/src")
-        #expect(browser.selection == ["/srv/repo/src/main.rs"])
-        #expect(browser.scrollTarget == "/srv/repo/src/main.rs")
-        files.stop()
-    }
-
-    @Test func aHiddenFileIsShownWhenItIsRevealed() async throws {
-        let machine = Machine(name: "tuf", host: "tuf.example")
-        let hidden = RemoteFileEntry(
-            name: ".env", path: "/srv/repo/.env", kind: .file, sizeBytes: 1)
-        let files = Self.session(tree: ["/srv/repo": [hidden]])
-        files.prepare(directory: "/srv/repo", isLocal: false, machine: machine)
-        let browser = try #require(files.browser)
-
-        #expect(!browser.showHidden)
-        await browser.reveal(entry: hidden)
-
-        #expect(browser.showHidden)
-        #expect(browser.visibleEntries.map(\.path) == ["/srv/repo/.env"])
-        #expect(browser.selection == ["/srv/repo/.env"])
-        files.stop()
-    }
-
-    private static func session(
-        tree: [String: [RemoteFileEntry]] = [:], log: ListingLog? = nil
-    ) -> HerdrFilesSession {
-        HerdrFilesSession { _ in
-            HerdrFilesSource(
-                home: { "/home/me" },
-                list: { path in
-                    log?.paths.append(path)
-                    return tree[path] ?? []
-                })
-        }
+    private static func session() -> HerdrFilesSession {
+        HerdrFilesSession { HerdrStore.directFilesSession(for: $0) }
     }
 }

@@ -88,6 +88,27 @@ test("document imports also get private extension module names", () => {
   ).toBe("import EdithExtensionDocuments_plugins_app\n");
 });
 
+test("file browsing support builds on documents and gets private module names", () => {
+  expect(supportProducts("EdithExtensionFiles")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionDocuments",
+    "EdithExtensionFiles",
+  ]);
+  expect(supportSourceInputs("EdithExtensionFiles")).toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionFiles",
+  );
+  expect(supportSourceInputs("EdithExtensionDocuments")).not.toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionFiles",
+  );
+  expect(
+    rewriteSupportImports(
+      "@_exported import EdithExtensionFiles\n",
+      supportModules("machines_app"),
+    ),
+  ).toBe("@_exported import EdithExtensionFiles_machines_app\n");
+});
+
 test("archive support stays separate from document rendering", () => {
   expect(supportProducts("EdithExtensionArchive")).toEqual([
     "EdithExtensionSupport",

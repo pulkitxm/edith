@@ -2,6 +2,7 @@ import EdithExtensionSupport
 import Foundation
 import Testing
 
+@testable import EdithExtensionFiles
 @testable import MachinesExtension
 
 @Suite(.serialized) @MainActor struct MachineWorkspacePaneTests {

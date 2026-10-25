@@ -1,15 +1,12 @@
+import EdithExtensionFiles
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-private struct MachineConnectionsEnabledKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
 extension EnvironmentValues {
     var machineConnectionsEnabled: Bool {
-        get { self[MachineConnectionsEnabledKey.self] }
-        set { self[MachineConnectionsEnabledKey.self] = newValue }
+        get { finderConnectionsEnabled }
+        set { finderConnectionsEnabled = newValue }
     }
 }
 

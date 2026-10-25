@@ -381,15 +381,15 @@ struct HerdrSessionView: View {
     private var filesPane: some View {
         ZStack {
             DashSkin.paper(dark)
-            if let browser = tab.files.browser {
-                HerdrFilesPane(
-                    browser: browser, autoFocus: tab.view == .files,
+            if let finder = tab.files.finder {
+                FinderPane(
+                    model: finder, autoFocus: tab.view == .files,
                     onFocus: {
                         splitTerminalFocus = .files
                         onFocus?()
                     }
                 )
-                .id(ObjectIdentifier(browser))
+                .id(ObjectIdentifier(finder))
             } else if let message = tab.files.errorMessage {
                 Text(message)
                     .font(.system(size: UIScale.pt(13)))

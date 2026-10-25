@@ -11,6 +11,7 @@ let package = Package(
             name: "HerdrUI",
             dependencies: [
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionFiles", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionAccounts", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),

@@ -60,6 +60,7 @@ import WorkerFixtureSupport
         files: activity.hookFiles, installer: activityInstaller)
     lazy var spaces = HerdrSpaceSessions(store: store)
     private lazy var uiEngine = HerdrUIEngine(worker: self)
+    private lazy var filesHost = HerdrFilesHost()
     private var maintenance: Task<Void, Never>?
 
     private static func openOriginalGuide() throws {
@@ -325,6 +326,9 @@ import WorkerFixtureSupport
         }
         if command.hasPrefix("herdr.ui.hook.") {
             return try await uiHookPlans.execute(command, payload: payload)
+        }
+        if HerdrFilesHost.operations.contains(command) {
+            return try await filesHost.execute(command, payload: payload)
         }
         if command.hasPrefix("herdr.ui.") {
             return try await uiEngine.execute(command, payload: payload)
@@ -673,6 +677,7 @@ import WorkerFixtureSupport
         spaces.stopAll()
         await spaces.drainPendingRetirements()
         uiHookPlans.shutdown()
+        await filesHost.shutdown()
         await catalogs.shutdown()
         for selection in shells.values { await selection.holder.stopAndWait() }
         shells.removeAll()

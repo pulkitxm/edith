@@ -19,6 +19,7 @@ export function supportModules(scope) {
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
+      "EdithExtensionFiles",
       "EdithExtensionArchive",
       "EdithExtensionAccounts",
       "EdithExtensionCommands",
@@ -31,7 +32,7 @@ export function supportModules(scope) {
 
 export function rewriteSupportImports(source, modules) {
   return source.replace(
-    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive|EdithExtensionCommands|EdithExtensionAccounts|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
+    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionFiles|EdithExtensionArchive|EdithExtensionCommands|EdithExtensionAccounts|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
     (_, prefix, name) => `${prefix}${modules[name]}`,
   );
 }
@@ -56,6 +57,12 @@ export function supportProducts(product) {
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
+    ],
+    EdithExtensionFiles: [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+      "EdithExtensionFiles",
     ],
     EdithExtensionArchive: [
       "EdithExtensionSupport",
@@ -198,6 +205,10 @@ export function buildExtensionSupport(
       `.target(name: "${documents}", dependencies: ["${ui}"], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   }
+  if (selected.includes("EdithExtensionFiles"))
+    targets.push(
+      `.target(name: "${modules.EdithExtensionFiles}", dependencies: ["${ui}", "${modules.EdithExtensionDocuments}"], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
   if (selected.includes("EdithExtensionAccounts"))
     targets.push(
       `.target(name: "${modules.EdithExtensionAccounts}", dependencies: ["${core}"], swiftSettings: [.swiftLanguageMode(.v5)])`,

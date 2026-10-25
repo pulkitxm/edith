@@ -1,8 +1,11 @@
-import Foundation
+import EdithExtensionFiles
 import EdithExtensionSupport
+import Foundation
 
 public enum MachinePaths {
-    nonisolated(unsafe) public static var root: URL = ExtensionData.root
+    nonisolated(unsafe) public static var root: URL = ExtensionData.root {
+        didSet { FileCachePaths.root = root }
+    }
 
     public static var dir: URL {
         root

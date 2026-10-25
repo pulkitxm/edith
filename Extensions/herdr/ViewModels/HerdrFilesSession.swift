@@ -1,3 +1,4 @@
+import EdithExtensionFiles
 import EdithExtensionSupport
 import Foundation
 import Observation
@@ -5,20 +6,20 @@ import Observation
 @MainActor
 @Observable
 final class HerdrFilesSession {
-    private(set) var browser: HerdrFilesBrowser?
+    private(set) var finder: FinderModel?
     private(set) var errorMessage: String?
 
-    private let source: @MainActor (Machine) -> HerdrFilesSource
+    private let machineSession: @MainActor (Machine) -> any FinderSession
     private var startDirectory: String?
 
-    init(source: @escaping @MainActor (Machine) -> HerdrFilesSource) {
-        self.source = source
+    init(machineSession: @escaping @MainActor (Machine) -> any FinderSession) {
+        self.machineSession = machineSession
     }
 
     func prepare(directory: String, isLocal: Bool, machine: Machine?) {
         guard let machine = isLocal ? Machine.local : machine else {
             stop()
-            browser = nil
+            finder = nil
             startDirectory = nil
             errorMessage = HerdrQuinjetError.machineUnavailable.localizedDescription
             return
@@ -26,29 +27,37 @@ final class HerdrFilesSession {
         errorMessage = nil
         let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
         let start = trimmed.isEmpty ? nil : trimmed
-        guard let browser, browser.machine.id == machine.id else {
-            browser?.stopLoading()
-            browser = HerdrFilesBrowser(machine: machine, path: start, source: source(machine))
+        guard let finder, finder.session.id == machine.id else {
+            discard()
+            let session = machineSession(machine)
+            let model = FinderModel(session: session, path: start)
+            (session as? DirectFinderSession)?.opener = { [weak model] in model?.open($0) }
+            finder = model
             startDirectory = start
             return
         }
         guard let start, start != startDirectory else { return }
         startDirectory = start
-        browser.navigate(to: start)
+        finder.navigate(to: start)
     }
 
     func locate(
         _ target: String, directory: String, isLocal: Bool, machine: Machine?
     ) async -> RemoteFileEntry? {
         prepare(directory: directory, isLocal: isLocal, machine: machine)
-        return await browser?.locate(target, under: directory)
+        return await finder?.locate(target, under: directory)
     }
 
     func reveal(_ entry: RemoteFileEntry) async {
-        await browser?.reveal(entry: entry)
+        await finder?.reveal(entry: entry)
     }
 
     func stop() {
-        browser?.stopLoading()
+        finder?.stopLoading()
+    }
+
+    func discard() {
+        finder?.stopLoading()
+        finder?.releaseRemote()
     }
 }

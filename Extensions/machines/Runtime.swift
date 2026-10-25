@@ -307,12 +307,18 @@ final class ExtensionRuntime: NSObject {
                         }
                         return await health.refresh()
                     })
-                let files = MachineFilesEngine(session: { id in
-                    guard MachinesModel.shared.knows(id) else {
-                        throw MachineUIError.invalidRequest
-                    }
-                    return MachinesModel.shared.session(for: id)
-                })
+                let files = MachineFilesEngine(
+                    session: { id in
+                        guard MachinesModel.shared.knows(id) else {
+                            throw MachineUIError.invalidRequest
+                        }
+                        return MachinesModel.shared.session(for: id)
+                    },
+                    makeModel: { session, path in
+                        FinderModel(
+                            session: session, path: path,
+                            peerSession: { MachinesModel.shared.sessions[$0] })
+                    }, onRelease: { FinderUndoBridge.forget($0) })
                 filesEngine = files
                 let previews = MachinePreviewEngine(session: { id in
                     guard MachinesModel.shared.knows(id) else {
