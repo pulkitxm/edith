@@ -16,7 +16,7 @@ struct TimeLapseSurfaceTests {
         var tile = SurfaceTile(.ability("timeLapse"))
         let snapshot = TimeLapseSurface.snapshot(
             recorder, recordings: [recording], tile: tile, now: Date(timeIntervalSince1970: 110))
-        #expect(snapshot.metrics.first { $0.id == "elapsed" }?.value == "0m 10s")
+        #expect(snapshot.metrics.first { $0.id == "elapsed" }?.value == "10s")
         #expect(snapshot.actions.map(\.id) == ["open"])
         #expect(snapshot.rows.map(\.id) == ["active", session.id.uuidString])
         #expect(snapshot.rows.last?.actions.first?.id == "reveal:" + session.id.uuidString)

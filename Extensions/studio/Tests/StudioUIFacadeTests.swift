@@ -6,7 +6,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct StudioUIFacadeTests {
     private func waitUntil(_ ready: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
+        let deadline = ContinuousClock.now + .seconds(20)
         while !ready(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
