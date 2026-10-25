@@ -332,8 +332,7 @@ import EdithExtensionUI
         _ = try await view.callAsyncJavaScript(
             "window.edithEditor.command('focus'); document.execCommand('insertText', false, 'Draft ')",
             arguments: [:], in: nil, contentWorld: .page)
-        try await Task.sleep(for: .milliseconds(200))
-        #expect(text.hasPrefix("Draft "))
+        try await waitUntil { text.hasPrefix("Draft ") }
         let column = controls.column
         window.contentView = nil
         first = nil
@@ -345,8 +344,7 @@ import EdithExtensionUI
         #expect(controls.column == column)
         #expect(controls.canUndo)
         controls.undo()
-        try await Task.sleep(for: .milliseconds(200))
-        #expect(text == Self.sample)
+        try await waitUntil { text == Self.sample }
     }
 
     @Test func longSourceScrollsInsideItsWorkspace() async throws {
