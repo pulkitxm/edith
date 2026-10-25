@@ -28,14 +28,14 @@ const expectedActions = new Map([
   ["aquasecurity/trivy-action", "ed142fd0673e97e23eac54620cfb913e5ce36c25"],
   [
     "github/codeql-action/upload-sarif",
-    "6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee",
+    "9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
   ],
   ["gitleaks/gitleaks-action", "e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e"],
   ["lycheeverse/lychee-action", "e7477775783ea5526144ba13e8db5eec57747ce8"],
   ["ossf/scorecard-action", "fa7117db83c52d787ae5a89f350999701505d78e"],
   ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
   ["pascalgn/size-label-action", "56b489b027932ec0cf60438a1a5f1a19c8fc71ff"],
-  ["taiki-e/install-action", "8cca0918f8471c33515202b73f56ab27f2bed283"],
+  ["taiki-e/install-action", "a4d3f3f761dcd95cce1b72cb61cb6d1963438177"],
 ]);
 
 const workflows = readdirSync(".github/workflows")
