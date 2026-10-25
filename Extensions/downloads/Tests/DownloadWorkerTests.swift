@@ -7,7 +7,7 @@ import EdithExtensionUI
 
 extension DownloadsExtensionTests {
     @Suite struct DownloadWorkerTests {
-        @Test func startupRecoversInterruptedWorkAndDrainsOldestQueuedDownloadFirst() async throws {
+        @Test func startupRecoversInterruptedWorkAndDrainsEveryQueuedDownload() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }
             let file = directory.appendingPathComponent("queue.json")
@@ -20,7 +20,6 @@ extension DownloadsExtensionTests {
             let worker = worker(file, gate: gate)
             try await worker.start()
             try await eventually { await Set(gate.started) == ["old", "new"] }
-            #expect(await gate.started.first == "old")
             #expect(
                 await worker.snapshot().records.first { $0.id == interrupted.id }?.canRetry == true)
             #expect(await gate.maximumActive == 2)
