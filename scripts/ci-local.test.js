@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseArguments, planLocalJobs } from "./ci-local.mjs";
+import { parseArguments, planLocalJobs, sharedPackages } from "./ci-local.mjs";
 
 const plan = {
   include: [
@@ -61,4 +61,17 @@ test("selected lanes rerun only those lanes and reject unknown names", () => {
     planLocalJobs(plan, parseArguments(["--lanes=missing"]), definitions),
   ).toThrow("Unknown lanes: missing");
   expect(() => parseArguments(["--jobs=0"])).toThrow();
+});
+
+test("lanes that share a Swift package directory are detected from the make recipe", () => {
+  const recipe = [
+    "swift test --package-path Extensions --build-system native",
+    'swift test --package-path "Extensions/studio/NativeRuntime/" --no-parallel',
+    "swift test --package-path=Packages/ExtensionSupport",
+  ].join("\n");
+  expect(sharedPackages(recipe)).toEqual([
+    "Extensions",
+    "Extensions/studio/NativeRuntime",
+    "Packages/ExtensionSupport",
+  ]);
 });

@@ -93,6 +93,29 @@ export function planLocalJobs(plan, options, definitions) {
   return selected;
 }
 
+export function sharedPackages(recipe) {
+  const paths = new Set();
+  for (const match of recipe.matchAll(/--package-path[= ]+"?([^\s"]+)/g))
+    paths.add(match[1].replace(/\/+$/, ""));
+  return [...paths];
+}
+
+function packagePaths(job, environment) {
+  if (job.command) return [`Extensions/${job.command[2]}`];
+  try {
+    return sharedPackages(
+      execFileSync("make", ["-n", ...job.make], {
+        cwd: root,
+        env: environment,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    );
+  } catch {
+    return [];
+  }
+}
+
 function run(job, logDirectory, environment) {
   const command = job.command ?? ["make", ...job.make];
   const log = resolve(logDirectory, `${job.lane}.log`);
@@ -156,12 +179,33 @@ async function main() {
   console.log(
     `running ${jobs.length} lanes, ${options.jobs} at a time; logs in local/ci-logs`,
   );
+  for (const job of jobs) job.packages = packagePaths(job, environment);
   const queue = [...jobs];
   const results = [];
+  const busy = new Set();
+  let wake = () => {};
   const worker = async () => {
     while (queue.length > 0) {
-      const job = queue.shift();
+      const index = queue.findIndex((job) =>
+        job.packages.every((path) => !busy.has(path)),
+      );
+      if (index < 0) {
+        await new Promise((resume) => {
+          const previous = wake;
+          wake = () => {
+            previous();
+            resume();
+          };
+        });
+        continue;
+      }
+      const [job] = queue.splice(index, 1);
+      for (const path of job.packages) busy.add(path);
       const result = await run(job, logDirectory, environment);
+      for (const path of job.packages) busy.delete(path);
+      const release = wake;
+      wake = () => {};
+      release();
       results.push(result);
       console.log(
         `${result.ok ? "pass" : "FAIL"} ${result.lane} ${result.seconds}s${result.ok ? "" : ` (${result.log})`}`,
