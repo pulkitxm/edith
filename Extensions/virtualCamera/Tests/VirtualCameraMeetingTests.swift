@@ -21,6 +21,17 @@ struct VirtualCameraMeetingTests {
         #expect(try Self.loudness(of: url) > 0.05)
     }
 
+    @Test func audioArrivingBeforeTheFirstVideoFrameIsPreserved() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meeting-audio-first-\(UUID()).mp4")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await Self.writeTone(to: url, videoDelayed: true)
+        let asset = AVURLAsset(url: url)
+        #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+        #expect(try Self.loudness(of: url) > 0.05)
+    }
+
     @Test func recordsTheSoundOfAVideoSource() async throws {
         let source = FileManager.default.temporaryDirectory.appendingPathComponent(
             "meeting-source-\(UUID()).mp4")
@@ -64,7 +75,7 @@ struct VirtualCameraMeetingTests {
         #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
     }
 
-    private static func writeTone(to url: URL) async throws {
+    private static func writeTone(to url: URL, videoDelayed: Bool = false) async throws {
         let pool = try #require(VirtualCameraPipeline.makePool(width: 320, height: 180))
         var raw: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pool, &raw)
@@ -84,9 +95,12 @@ struct VirtualCameraMeetingTests {
                         0.2 * sin(Float(index * 1600 + sample) * 2 * .pi * 440 / 48000)
                 }
             }
-            try writer.append(frame, at: Double(index) / 30)
+            if !videoDelayed { try writer.append(frame, at: Double(index) / 30) }
             try writer.appendAudio(pcm, at: Double(index) / 30)
             try await Task.sleep(for: .milliseconds(33))
+        }
+        if videoDelayed {
+            for index in 0..<30 { try writer.append(frame, at: Double(index) / 30) }
         }
         _ = try await withCheckedThrowingContinuation { continuation in
             writer.finish { continuation.resume(with: $0) }
