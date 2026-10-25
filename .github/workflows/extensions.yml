@@ -56,7 +56,7 @@ name: Extensions
         required: true
         default: false
       validation_sha:
-        description: Validate all 40 extensions at this exact source SHA without publishing
+        description: Validate every extension at this exact source SHA without publishing
         type: string
         required: false
         default: ""
