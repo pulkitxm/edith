@@ -182,6 +182,10 @@ extension NotchShelfController {
         return providers
     }
 
+    static func glancePrivacyWidget(_ id: String) -> SurfaceWidget {
+        id == "calendar" ? .ability(id) : glanceWidget(id)
+    }
+
     static func glanceWidget(_ id: String) -> SurfaceWidget {
         switch id {
         case "herdr": .agents
@@ -231,7 +235,7 @@ extension NotchShelfController {
     }
 
     private func glanceFacts(_ id: String) -> [String: Double]? {
-        guard activeIDs.contains(id), !privacy.hides(Self.glanceWidget(id)),
+        guard activeIDs.contains(id), !privacy.hides(Self.glancePrivacyWidget(id)),
             let snapshot = surfaceSnapshots[id]
         else { return nil }
         return snapshot.facts ?? [:]

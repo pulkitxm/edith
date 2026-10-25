@@ -38,8 +38,7 @@ public final class SurfacePrivacyState {
         let categories: [String]
         switch widget {
         case .music: categories = ["Music"]
-        case .calendar: categories = ["Calendar"]
-        case .activity: categories = []
+        case .calendar, .activity: categories = []
         case .usage, .limits, .codeStats: categories = ["Usage"]
         case .agents: categories = ["Agents"]
         case .focus: categories = ["Attention"]
