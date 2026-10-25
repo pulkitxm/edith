@@ -105,11 +105,12 @@ context only when the user configures and selects it.
 `build.sh` runs `scripts/build-minimal-host.mjs` to build `Packages/EdithHost`
 and `scripts/package-shipping-host.py` to assemble, sign and verify the bundle
 with Sparkle and the `ed` launcher. `make verify-bundle` asserts the layout and
-code-signing identifiers. Releases are published locally by
-`scripts/release-local.sh`: it plans, builds, signs and publishes the changed
-extension packages and the next signed catalog, then builds the app, creates the
-DMG and signed appcast, publishes a GitHub Release, and mirrors the Homebrew
-cask. GitHub Pages deploys `apps/site` independently.
+code-signing identifiers. GitHub Actions publishes releases: a push to `main`
+that changes the host runs `.github/workflows/ci.yml`, which builds and signs
+the app, creates the DMG and signed appcast, publishes a GitHub Release, and
+mirrors the Homebrew cask. The same push runs `.github/workflows/extensions.yml`,
+which builds, signs and publishes the changed extension packages and the next
+signed catalog. GitHub Pages deploys `apps/site` independently.
 
 ## Trust Boundaries
 

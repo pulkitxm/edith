@@ -200,17 +200,11 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("main pushes never release on GitHub because releases publish locally", () => {
-  const releaseBuildJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  version:"),
-    ciWorkflow.indexOf("\n  dmg:"),
+test("a main push releases when the host area changed", () => {
+  const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
+  expect(releaseBuildJob).toContain(
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.host == 'true')",
   );
-  const condition = releaseBuildJob.slice(
-    releaseBuildJob.indexOf("if: >-"),
-    releaseBuildJob.indexOf("runs-on:"),
-  );
-  expect(condition).not.toContain("github.event_name == 'push'");
-  expect(condition).toContain("github.event_name == 'workflow_dispatch'");
   expect(ciWorkflow).not.toContain("release_artifact");
   expect(ciWorkflow).not.toContain("release-artifact-changed.sh");
 });
@@ -257,12 +251,7 @@ test("pull requests build the release app that main releases rebuild", () => {
     ciWorkflow.indexOf("\n  version:"),
     ciWorkflow.indexOf("\n  dmg:"),
   );
-  expect(
-    releaseBuild.slice(
-      releaseBuild.indexOf("if: >-"),
-      releaseBuild.indexOf("runs-on:"),
-    ),
-  ).not.toContain("github.event_name == 'push'");
+  expect(releaseBuild).toContain("&& ((github.event_name == 'push'");
   expect(releaseBuild).not.toContain("needs.swift-build");
 });
 

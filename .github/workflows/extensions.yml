@@ -23,6 +23,31 @@ name: Extensions
       - scripts/package-shipping-host.py
       - scripts/verify_shipping_host.py
       - scripts/host_build_metadata.py
+  push:
+    branches:
+      - main
+    paths:
+      - Extensions/**
+      - Packages/ExtensionMarketplace/**
+      - Packages/EdithHost/**
+      - Packages/ExtensionSupport/**
+      - Packages/EdithDocsWorker/**
+      - docs/cli/**
+      - scripts/generate-cli-docs-bundle.mjs
+      - scripts/*extension*
+      - scripts/release-asset-*
+      - scripts/release-lookup.*
+      - scripts/build-minimal-host.mjs
+      - scripts/build-contained-host-runtime.mjs
+      - scripts/build-camera-carrier.mjs
+      - scripts/build-ghostty.sh
+      - scripts/patches/ghostty-external-io.patch
+      - apps/music-player/**
+      - .github/actions/cache-host/**
+      - .github/workflows/extensions.yml
+      - scripts/package-shipping-host.py
+      - scripts/verify_shipping_host.py
+      - scripts/host_build_metadata.py
   workflow_dispatch:
     inputs:
       publish:
