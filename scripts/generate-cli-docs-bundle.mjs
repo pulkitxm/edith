@@ -4,7 +4,6 @@ import { join, relative, sep } from "node:path";
 
 export const docsRoot = "docs/cli";
 export const bundlePaths = [
-  "Packages/Edith/Sources/EdithKit/Resources/cli-docs.json",
   "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
 ];
 

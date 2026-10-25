@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 
 const source = readFileSync(
-  "Packages/Edith/Sources/EdithKit/ChromeExtension/service-worker.js",
+  "Extensions/attention/NativeRuntime/Sources/AttentionNative/Resources/ChromeExtension/service-worker.js",
   "utf8",
 );
 
@@ -417,17 +417,15 @@ test("an empty queue cannot report a stopped daemon as connected", async () => {
 test("the app announces the same extension version the manifest ships", () => {
   const manifest = JSON.parse(
     readFileSync(
-      "Packages/Edith/Sources/EdithKit/ChromeExtension/manifest.json",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/Resources/ChromeExtension/manifest.json",
       "utf8",
     ),
   );
   const installer = readFileSync(
-    "Packages/Edith/Sources/EdithKit/Features/Attention/Services/AttentionExtensionInstaller.swift",
+    "Extensions/attention/NativeRuntime/Sources/AttentionNative/Core/Services/AttentionExtensionInstaller.swift",
     "utf8",
   );
-  expect(installer).toContain(
-    `public static let version = "${manifest.version}"`,
-  );
+  expect(installer).toContain(`static let version = "${manifest.version}"`);
 });
 
 test("a payload Edith rejects as malformed is dropped instead of blocking the queue", async () => {
@@ -577,7 +575,7 @@ function contentFixture() {
   let publish;
   runInContext(
     readFileSync(
-      "Packages/Edith/Sources/EdithKit/ChromeExtension/content.js",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/Resources/ChromeExtension/content.js",
       "utf8",
     ),
     createContext({

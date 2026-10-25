@@ -157,7 +157,7 @@ describe("verified native cache", () => {
         };
         const unchanged = spawnSync(
           "bash",
-          ["scripts/build-ghostty.sh", "--extension-only"],
+          ["scripts/build-ghostty.sh"],
           options,
         );
         expect(unchanged.status).toBe(0);
@@ -169,7 +169,7 @@ describe("verified native cache", () => {
         await writeFile(patch, `${await readFile(patch, "utf8")}\n`);
         const changed = spawnSync(
           "bash",
-          ["scripts/build-ghostty.sh", "--extension-only"],
+          ["scripts/build-ghostty.sh"],
           options,
         );
         expect(changed.status).toBe(23);

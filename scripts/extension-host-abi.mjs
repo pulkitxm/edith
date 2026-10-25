@@ -20,22 +20,8 @@ export async function hostABI(root = process.cwd()) {
         files.push(child);
     }
   }
-  for (const module of [
-    "EdithCore",
-    "EdithDatabase",
-    "EdithKit",
-    "EdithShared",
-    "EdithCameraSupport",
-    "EdithLidAwakeSupport",
-  ])
-    await visit(`Packages/Edith/Sources/${module}`);
   await visit("Packages/ExtensionMarketplace/Sources/ExtensionMarketplace");
-  files.push(
-    "Packages/Edith/Package.swift",
-    "Packages/ExtensionMarketplace/Package.swift",
-    "scripts/link-shared-framework.py",
-    "scripts/extension-host-build.mjs",
-  );
+  files.push("Packages/ExtensionMarketplace/Package.swift");
   const hash = createHash("sha256");
   for (const file of files.sort()) {
     const bytes = await readFile(resolve(root, file));

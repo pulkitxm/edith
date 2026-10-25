@@ -1,7 +1,7 @@
 # LaTeX editor
 
 This package builds Edith's offline CodeMirror editor. The committed bundle and
-license notices ship in `Packages/Edith/Sources/EdithKit/LaTeXEditor`.
+license notices ship in `Extensions/latex/Resources`.
 
 ```sh
 bun install --frozen-lockfile

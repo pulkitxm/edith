@@ -5,7 +5,7 @@ import {
   scanFiles,
 } from "./check-duplicate-keys.mjs";
 
-test("checks independent shipping modules without unbuilt monolithic source copies", () => {
+test("checks independent shipping modules and skips tests and vendored sources", () => {
   for (const path of [
     "Packages/EdithHost/Sources/EdithHostCore/HostIdentity.swift",
     "Packages/ExtensionSupport/Sources/EdithExtensionSupport/Defaults.swift",
@@ -14,7 +14,6 @@ test("checks independent shipping modules without unbuilt monolithic source copi
   ])
     expect(isShippingSource(path)).toBe(true);
   for (const path of [
-    "Packages/Edith/Sources/Edith/Features/Dashboard/DashboardModel.swift",
     "Extensions/usage/Tests/DefaultsTests.swift",
     "Extensions/studio/NativeRuntime/vendor/Source.swift",
     "Packages/ExtensionSupport/Vendor/Source.swift",

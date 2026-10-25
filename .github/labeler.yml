@@ -1,6 +1,6 @@
 swift:
   - changed-files:
-      - any-glob-to-any-file: ["Packages/Edith/**", "Resources/**", "edth.xcodeproj/**"]
+      - any-glob-to-any-file: ["Packages/EdithHost/**", "Packages/ExtensionSupport/**", "Packages/ExtensionMarketplace/**", "Extensions/**", "Resources/**"]
 companion:
   - changed-files:
       - any-glob-to-any-file: ["apps/companion/**"]
@@ -18,7 +18,7 @@ ci:
       - any-glob-to-any-file: [".github/**", "Makefile"]
 cli:
   - changed-files:
-      - any-glob-to-any-file: ["Packages/Edith/Sources/EdithCLI/**", "docs/cli/**"]
+      - any-glob-to-any-file: ["docs/cli/**"]
 dependencies:
   - changed-files:
       - any-glob-to-any-file:

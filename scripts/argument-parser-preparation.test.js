@@ -50,26 +50,6 @@ test.each([
   },
 );
 
-function testArguments(argumentsList) {
-  const source = readFileSync("Packages/Edith/test.sh", "utf8");
-  const start = source.indexOf("parser_scratch=()");
-  const end = source.indexOf('DEV="$(xcode-select -p)"', start);
-  expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
-  const block = source.slice(start, end);
-  return execFileSync(
-    "bash",
-    [
-      "-c",
-      'set -eu; fail_isolation() { exit 2; }; python3() { printf "[%s]\\n" "$@"; }; ' +
-        block,
-      "argument-forwarding",
-      ...argumentsList,
-    ],
-    { encoding: "utf8" },
-  );
-}
-
 test.each([
   ["ci-extension-usage-native", "usage", "swift test --package-path ."],
   ["ci-extension-studio", "studio", "bun test.mjs"],
@@ -115,25 +95,4 @@ test("preparation pure tests are defined only inside the existing resource gate 
     source.lastIndexOf("\nendif\n"),
   );
   expect(source.match(/^ci-argument-parser-source:/gm)).toHaveLength(1);
-});
-
-test("direct test entry forwards the actual scratch option without consuming compiler arguments", () => {
-  expect(
-    testArguments(["--filter", "SyntheticSuite", "--jobs", "1"]),
-  ).not.toContain("scratch-path");
-  for (const argumentsList of [
-    ["--scratch-path", "local/parser-tests", "--filter", "SyntheticSuite"],
-    [
-      "--filter",
-      "SyntheticSuite",
-      "--scratch-path=local/parser-tests",
-      "--jobs",
-      "1",
-    ],
-  ]) {
-    const output = testArguments(argumentsList);
-    expect(output).toContain("[--scratch-path]\n[local/parser-tests]");
-    expect(output).toContain("[../../scripts/prepare-argument-parser.py]");
-  }
-  expect(() => testArguments(["--scratch-path"])).toThrow();
 });

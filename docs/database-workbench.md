@@ -6,7 +6,7 @@ component split and viewport-oriented rendering take design inspiration from
 
 ## Ownership
 
-The implementation lives under `Packages/Edith/Sources/Edith/Features/Database`.
+The implementation lives under `Extensions/database`.
 
 - `DatabaseWorkbenchView` owns the connection state, object navigator, and tab strip.
 - `DatabaseWorkbenchTabView` owns the Browse, Query, and Structure surfaces.
@@ -39,11 +39,7 @@ never truncated for reuse, and history is discarded with its tab.
 
 ## Regression checks
 
-`make ci-performance` checks the performance contracts and database source-size
-budgets. New database UI components are limited to 700 lines; explicit budgets
-for older large components prevent further growth.
-
-`Packages/Edith/test.sh --batch database-ui` covers native pagination and cell
+`make ci-extension-database` covers native pagination and cell
 reuse, full-value editing, bounded caches and previews, query history, schema
 ownership, tab retention, and workbench rendering in light and dark appearances.
 The large-value preview benchmark prints timings rather than enforcing a
@@ -52,5 +48,5 @@ asserted deterministically.
 
 To capture the actual workbench with synthetic fixtures, set
 `EDITH_DATABASE_WORKBENCH_EVIDENCE_DIR` to a private temporary directory and run
-the `finishedWorkbenchModesRenderWithSyntheticData` test through `test.sh`.
+the `finishedWorkbenchModesRenderWithSyntheticData` test through `swift test --package-path Extensions/database`.
 The fixture supplies mock database responses and captures only its own window.

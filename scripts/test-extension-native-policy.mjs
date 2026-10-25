@@ -18,25 +18,11 @@ try {
     await mkdir(resolve(file, ".."), { recursive: true });
     await writeFile(file, source);
   };
-  for (const module of [
-    "EdithCore",
-    "EdithDatabase",
-    "EdithKit",
-    "EdithShared",
-    "EdithCameraSupport",
-    "EdithLidAwakeSupport",
-  ])
-    await mkdir(join(root, "Packages/Edith/Sources", module), {
-      recursive: true,
-    });
-  await put("Packages/Edith/Package.swift", "");
   await put("Packages/ExtensionMarketplace/Package.swift", "");
   await put(
     "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
     'public enum MarketplaceConfiguration { public static let hostABI = "fixture" }',
   );
-  await put("scripts/link-shared-framework.py", "");
-  await put("scripts/extension-host-build.mjs", "");
   await put(
     "Extensions/mock/Native/Package.swift",
     `// swift-tools-version:6.0

@@ -8,17 +8,13 @@ ZIG_VERSION="0.16.0"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 vendor="$root/vendor"
 src="$vendor/ghostty"
-out="$root/Packages/Edith/vendor/GhosttyKit.xcframework"
-resources_out="$root/Packages/Edith/vendor/GhosttyResources"
 extension_vendor="$root/Extensions/terminal/Native/vendor"
 patch="$root/scripts/patches/ghostty-external-io.patch"
 run_tests=false
-extension_only=false
 for argument in "$@"; do
   case "$argument" in
     --test-external-io) run_tests=true ;;
-    --extension-only) extension_only=true ;;
-    *) echo "usage: $0 [--test-external-io] [--extension-only]" >&2; exit 1 ;;
+    *) echo "usage: $0 [--test-external-io]" >&2; exit 1 ;;
   esac
 done
 
@@ -122,18 +118,6 @@ if [ "$run_tests" = true ]; then
   env HOME="$fixture" XDG_CONFIG_HOME="$fixture/config" \
     XDG_CACHE_HOME="$fixture/cache" GHOSTTY_RESOURCES_DIR="$extension_vendor/GhosttyResources/ghostty" \
     "$test_binary"
-fi
-
-if [ "$extension_only" = false ]; then
-  mkdir -p "$(dirname "$out")"
-  if ! diff -qr "$extension_vendor/GhosttyKit.xcframework" "$out" >/dev/null 2>&1; then
-    rm -rf "$out"
-    cp -R "$extension_vendor/GhosttyKit.xcframework" "$out"
-  fi
-  if ! diff -qr "$extension_vendor/GhosttyResources" "$resources_out" >/dev/null 2>&1; then
-    rm -rf "$resources_out"
-    cp -R "$extension_vendor/GhosttyResources" "$resources_out"
-  fi
 fi
 
 echo "Verified Ghostty native library and resources ready at $extension_vendor"

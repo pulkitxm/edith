@@ -653,16 +653,12 @@ consequential lines in the file, for reasons in section 15.
 **`uninstall quit:`** lists the current and retired bundle identifiers, as covered
 in section 8. They are not guesses: `com.pulkit.edith` is `Resources/Info.plist`,
 `com.pulkit.edith.helper.v2` is `Resources/HelperInfo.plist`, and
-`com.pulkit.edith.files` is the Files helper, named in
-`Packages/Edith/Sources/EdithKit/Core/AppIdentity/MainApp.swift` and used by
-`Packages/Edith/Sources/EdithCLI/AppBridge.swift`.
+`com.pulkit.edith.files` is the Files helper from earlier releases.
 
 **`zap trash:`** covers the eight locations Edith writes outside its bundle. The
-support directory and cache come from
-`Packages/Edith/Sources/EdithCore/AppDirectories.swift`
-(`~/Library/Application Support/Edith`, `~/Library/Caches/Edith`). The three
-preference domains are the three bundles plus the shared suite from
-`Packages/Edith/Sources/EdithKit/Core/Defaults/SharedDefaults.swift`
+support directory and cache are
+`~/Library/Application Support/Edith` and `~/Library/Caches/Edith`. The three
+preference domains are the three bundles plus the shared suite
 (`com.pulkit.edith.shared`). `HTTPStorages`, the Sparkle cache under
 `com.pulkit.edith`, and saved application state are the standard macOS-side
 leftovers any Cocoa app accumulates.
@@ -1074,9 +1070,9 @@ about which claims are tested and which are structural.
 - The tap repository clones and contains `Casks/edith.rb`, which is exactly what
   `ensure_installed!` does during an install.
 - The bundle identifiers in `uninstall quit:` match `Resources/Info.plist`,
-  `Resources/HelperInfo.plist`, `MainApp.swift` and `AppBridge.swift`.
-- The zap paths match `EdithCore/AppDirectories.swift` and
-  `EdithKit/Core/Defaults/SharedDefaults.swift`.
+  and `Resources/HelperInfo.plist`.
+- The zap paths are the support directory, cache and preference domains
+  listed in section 11.
 - `ed` is the only regular CLI executable, asserted by `make verify-bundle`
   together with both installed names' targets, signatures, and behavior.
 - Homebrew's name resolution rules, quoted in sections 4 and 5, from

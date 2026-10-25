@@ -9,13 +9,6 @@ name: Extensions
       - Packages/EdithDocsWorker/**
       - docs/cli/**
       - scripts/generate-cli-docs-bundle.mjs
-      - Packages/Edith/Sources/EdithKit/**
-      - Packages/Edith/Sources/EdithCore/**
-      - Packages/Edith/Sources/EdithShared/**
-      - Packages/Edith/Sources/EdithCameraSupport/**
-      - Packages/Edith/Sources/EdithLidAwakeSupport/**
-      - Packages/Edith/Package.swift
-      - scripts/link-shared-framework.py
       - scripts/*extension*
       - scripts/release-asset-*
       - scripts/release-lookup.*
@@ -184,7 +177,7 @@ jobs:
         env:
           EXTENSION_ID: "${{ matrix.id }}"
         run: |
-          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extensions can ship")'
+          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1) throw new Error("Only native extensions can ship")'
       - name: Identify optional native prerequisites
         id: native
         env:

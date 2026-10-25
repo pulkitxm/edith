@@ -1,4 +1,4 @@
-# <img src="Packages/Edith/Sources/Edith/Resources/appicon.png" width="30" align="top" alt=""> Edith
+# <img src="Resources/AppIcon.svg" width="30" align="top" alt=""> Edith
 
 > Even Dead, I'm The Hero
 

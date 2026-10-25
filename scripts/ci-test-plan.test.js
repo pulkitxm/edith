@@ -896,7 +896,7 @@ test("default full and shipping checks retain every original workflow lane", () 
     ).toEqual(planSwiftTests(paths, options));
   }
   expect(
-    planSwiftTests([".github/actions/cache-swift/action.yml"], { ciWorkflow }),
+    planSwiftTests([".github/actions/cache-host/action.yml"], { ciWorkflow }),
   ).toEqual(planSwiftTests([], { all: true }));
   expect(
     planSwiftTests([".github/workflows/new-native.yml"], { ciWorkflow }),

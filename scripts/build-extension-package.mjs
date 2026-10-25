@@ -19,7 +19,6 @@ import {
 } from "./build-extension-support.mjs";
 import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
-import { buildHostInterfaces } from "./extension-host-build.mjs";
 import {
   extensionFingerprint,
   extensionReleaseTag,
@@ -355,10 +354,6 @@ export async function buildExtensionPackage({
     });
   }
   const nativePolicy = nativeRolePolicy(definition);
-  if (definition.contractVersion === 1 && definition.usesHostFramework)
-    throw new Error(
-      "Worker extensions must not depend on the legacy host framework",
-    );
   const developer =
     environment.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
   const releaseVersion = version ?? definition.version;
@@ -375,9 +370,6 @@ export async function buildExtensionPackage({
   await mkdir(staging, { recursive: true });
   const payload = resolve(staging, id);
   await mkdir(payload);
-  const hostProducts = definition.usesHostFramework
-    ? (environment.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
-    : undefined;
   if (definition.nativePackage) {
     prepareNativeSupport(root, definition, (supportRoot, product, scope) =>
       buildExtensionSupport(supportRoot, product, scope, environment),
@@ -666,17 +658,6 @@ export async function buildExtensionPackage({
               "-dead_strip",
             ]
           : []),
-        ...(hostProducts
-          ? [
-              "-swift-version",
-              "5",
-              "-I",
-              resolve(hostProducts, "Modules"),
-              "-L",
-              hostProducts,
-              "-lEdithShared",
-            ]
-          : []),
         ...nativeFlags,
         ...nativeTaskLinkerFlags(definition, role),
         ...presentationLinkerFlags(supportProduct),
@@ -710,22 +691,6 @@ export async function buildExtensionPackage({
         stdio: "inherit",
       },
     );
-    if (hostProducts) {
-      const dependencies = run("otool", ["-L", executable], {
-        encoding: "utf8",
-      });
-      const shared = dependencies
-        .split("\n")
-        .map((line) => line.trim().split(" ")[0])
-        .find((path) => path.endsWith("/libEdithShared.dylib"));
-      if (!shared) throw new Error("Missing host framework linkage");
-      run("install_name_tool", [
-        "-change",
-        shared,
-        "@rpath/EdithShared.framework/Versions/A/EdithShared",
-        executable,
-      ]);
-    }
     const info = {
       CFBundleIdentifier: `com.pulkit.edith.extensions.${id}.${role}`,
       CFBundleName: id,

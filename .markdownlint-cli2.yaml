@@ -16,7 +16,6 @@ globs:
   - "**/*.md"
 
 ignores:
-  - Packages/Edith/Vendor/**
   - Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Resources/Highlighter-LICENSE.md
   - "**/.build/**"
   - .wiki-build/**

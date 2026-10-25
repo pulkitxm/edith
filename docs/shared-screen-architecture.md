@@ -2,8 +2,8 @@
 
 ## Ownership
 
-`EdithKit/UI` owns generic state, motion, surfaces, controls, and presentation.
-`Edith/Shared/Views` owns page composition and app-window lifecycle integration.
+`Packages/ExtensionSupport/Sources/EdithExtensionUI` owns generic state, motion,
+surfaces, controls, page composition, and presentation.
 Feature code supplies data, actions, and domain-specific content to these APIs.
 
 ## Destination and module map

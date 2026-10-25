@@ -497,10 +497,7 @@ describe("independent extension releases", () => {
 
   test("unrelated app and documentation changes publish no extension", () => {
     expect(
-      planExtensionBuilds(definitions, [
-        "README.md",
-        "Packages/Edith/Sources/Edith/Features/Home/HomePage.swift",
-      ]),
+      planExtensionBuilds(definitions, ["README.md", "apps/site/index.html"]),
     ).toEqual([]);
   });
 
