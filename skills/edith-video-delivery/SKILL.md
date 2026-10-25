@@ -42,7 +42,7 @@ Read [full-quality delivery](references/full-quality-delivery.md) before choosin
 output settings. Read local `references/` files if the full skill folder is
 attached. The Plugins preview and copy contain only `SKILL.md`; for a Markdown-only
 attachment, fetch each referenced path from GitHub repository `pulkitxm/edith`,
-branch `main`, beneath `Packages/Edith/skills/edith-video-delivery/`. If fetching
+branch `main`, beneath `skills/edith-video-delivery/`. If fetching
 fails, use installed help and report the unavailable guidance rather than guessing.
 
 Extract resolution, aspect ratio, exact rational frame rate, duration, container,

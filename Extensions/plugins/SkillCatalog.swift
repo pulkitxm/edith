@@ -11,14 +11,14 @@ public struct EdithSkill: Identifiable, Equatable, Sendable {
     public var sourceURL: URL {
         URL(
             string:
-                "https://raw.githubusercontent.com/pulkitxm/edith/main/Packages/Edith/skills/\(id)/SKILL.md"
+                "https://raw.githubusercontent.com/pulkitxm/edith/main/skills/\(id)/SKILL.md"
         )!
     }
 
     public var packageURL: URL {
         URL(
             string:
-                "https://github.com/pulkitxm/edith/tree/main/Packages/Edith/skills/\(id)"
+                "https://github.com/pulkitxm/edith/tree/main/skills/\(id)"
         )!
     }
 

@@ -59,7 +59,7 @@ files when the full skill folder is available. The Plugins preview and copy cont
 only `SKILL.md`; for a Markdown-only attachment, fetch each referenced path from
 GitHub repository
 `pulkitxm/edith`, branch `main`, beneath
-`Packages/Edith/skills/edith-video-edit/`. If a blueprint is unavailable, report
+`skills/edith-video-edit/`. If a blueprint is unavailable, report
 that limitation and use installed help rather than guessing its contract.
 
 Keep originals unchanged. Import their paths into the native project rather than
