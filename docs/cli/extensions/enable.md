@@ -8,4 +8,4 @@ Start a compatible installed extension in the running app session.
 ed extensions enable <id> [--json]
 ```
 
-Download the extension first. Explicit enable can recover an extension with a pending disable, using the same controls as the app UI. A failed start returns an error and does not report a running worker.
+Download the extension first. Explicit enable can recover an extension with a pending disable, using the same controls as the app UI. A failed start returns an error and does not report an active extension.

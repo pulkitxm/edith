@@ -496,7 +496,9 @@ import HostWorkerFixtureSupport
         defer { restore() }
         let host = NSHostingView(
             rootView: HostWorkspace(
-                marketplace: fixture.marketplace, defaults: fixture.marketplace.surfaces.preferences
+                marketplace: fixture.marketplace,
+                defaults: fixture.marketplace.surfaces.preferences,
+                modifierFlags: { [] }
             ).environment(\.automaticViewActionsEnabled, false).environment(
                 \.surfaceSampleContent, true))
         host.frame = CGRect(x: 0, y: 0, width: width, height: 850)
@@ -562,9 +564,11 @@ import HostWorkerFixtureSupport
         let detached = try #require(sections.open("home"))
         let restore = try enableAccessibility()
         defer { restore() }
+        var modifiers: NSEvent.ModifierFlags = []
         let host = NSHostingView(
             rootView: HostWorkspace(
-                marketplace: fixture.marketplace, sectionWindows: sections, defaults: defaults
+                marketplace: fixture.marketplace, sectionWindows: sections, defaults: defaults,
+                modifierFlags: { modifiers }
             )
             .environment(\.automaticViewActionsEnabled, false)
             .environment(\.surfaceSampleContent, true))
@@ -588,6 +592,13 @@ import HostWorkerFixtureSupport
         #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "home")
         #expect(sections.openDestinations.isEmpty)
         #expect(focused.count == presentations)
+        defaults.set("extensions", forKey: AppStorageKeys.General.mainWindowSection)
+        modifiers = .command
+        #expect((home as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "extensions")
+        #expect(sections.openDestinations == ["home"])
+        #expect(focused.count == presentations + 1)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
@@ -648,9 +659,11 @@ import HostWorkerFixtureSupport
             HostSurfaceEditorRequest(target: .notch, tileID: "previous-notch-tile").save(
                 to: preferences)
             let host = NSHostingView(
-                rootView: HostWorkspace(marketplace: fixture.marketplace, defaults: preferences)
-                    .environment(\.automaticViewActionsEnabled, false)
-                    .environment(\.surfaceSampleContent, true))
+                rootView: HostWorkspace(
+                    marketplace: fixture.marketplace, defaults: preferences, modifierFlags: { [] }
+                )
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.surfaceSampleContent, true))
             host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host

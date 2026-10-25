@@ -61,16 +61,14 @@ run at once next to the installed Edith without touching it or each other.
   without the `edith-` prefix (`main` for the primary checkout). Use
   `./build.sh --no-open` to build without launching.
   `./build.sh --background` builds the same way, then launches that development build hidden so its windows stay off-screen.
-- Each slot has its own background agent (`com.pulkit.edith.dev.<slot>.agent`),
-  menu bar helper, preferences, keychain items and data under
+- Each slot runs one app process with its own menu bar, preferences, keychain items and data under
   `~/Library/Application Support/Edith Dev/<slot>`, with caches and logs under
   the matching `Caches` and `Logs` folders. A new slot starts empty and asks for
   macOS permissions again.
 - Talk to a development build with its own CLI,
   `dist/Edith.app/Contents/MacOS/ed`. The `ed` on your `PATH` is the installed
-  app's CLI and reaches the installed agent.
-- The app loads its agent with `launchctl bootstrap` when it opens and unloads
-  it, along with its menu bar helper, when it quits. Development builds never
+  app's CLI and reaches the installed app.
+- The app owns the core services and extension engines in process. Development builds never
   register login items or the lid-awake daemon, so never register or restart the
   production labels (`com.pulkit.edith.agent`, `com.pulkit.edith.helper.v2`,
   `com.pulkit.edith.lidawake.v2`) from a development build or by hand.

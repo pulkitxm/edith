@@ -54,6 +54,7 @@ struct HostWorkspace: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let navigationDefaults: UserDefaults
+    private let modifierFlags: @MainActor () -> NSEvent.ModifierFlags
     init(
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
         updater: HostUpdater? = nil, showWelcome: (() -> Void)? = nil,
@@ -62,7 +63,8 @@ struct HostWorkspace: View {
         coreOnline: Bool = false, coreSummary: String = "Not running",
         sectionWindows: HostSectionWindows? = nil, windowNavigation: HostWindowNavigation? = nil,
         musicSlots: HostMusicSlots? = nil,
-        defaults: UserDefaults = SharedDefaults.store
+        defaults: UserDefaults = SharedDefaults.store,
+        modifierFlags: @escaping @MainActor () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
     ) {
         self.marketplace = marketplace
         self.updater = updater ?? HostUpdater(startingUpdater: false)
@@ -72,6 +74,7 @@ struct HostWorkspace: View {
         self.presenter = presenter; self.sectionWindows = sectionWindows
         self.windowNavigation = windowNavigation; self.musicSlots = musicSlots
         navigationDefaults = defaults
+        self.modifierFlags = modifierFlags
         _selection = AppStorage(
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
         _settings = AppStorage(
@@ -376,7 +379,7 @@ struct HostWorkspace: View {
             (expanded(page) ? "Collapse " : "Expand ") + page.title + " abilities"
         return ZStack(alignment: .trailing) {
             Button {
-                if let detach, NSEvent.modifierFlags.contains(.command) {
+                if let detach, modifierFlags().contains(.command) {
                     detach()
                 } else if expandable, destination.id == page.id {
                     toggle(page)
@@ -445,7 +448,7 @@ struct HostWorkspace: View {
     {
         Button {
             chooseSection(section, parent: parent)
-            if NSEvent.modifierFlags.contains(.command), let sectionWindows {
+            if modifierFlags().contains(.command), let sectionWindows {
                 _ = sectionWindows.open(parent.id)
             } else {
                 select(parent.id)

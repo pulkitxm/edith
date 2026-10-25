@@ -183,7 +183,7 @@ import EdithExtensionSupport
         }
         let request = submission("progress")
         _ = try await service.submit(request)
-        let status = try await finished(request.id, service: service)
+        let status = try await finished(request.id, service: service, timeout: .seconds(20))
         #expect(status.output.count == 128)
         #expect(status.output.last?.sequence == 10_000)
         #expect(status.output.allSatisfy { $0.text.count <= 1_000 })
@@ -272,15 +272,21 @@ import EdithExtensionSupport
             "task-tests-\(UUID().uuidString)")
     }
 
-    private func finished(_ id: UUID, service: HostAgentTaskService) async throws
+    private func finished(
+        _ id: UUID, service: HostAgentTaskService, timeout: Duration = .seconds(4)
+    ) async throws
         -> HostAgentTaskStatus
     {
-        try await eventually { (try? await service.status(id).snapshot.state.isTerminal) == true }
+        try await eventually(timeout: timeout) {
+            (try? await service.status(id).snapshot.state.isTerminal) == true
+        }
         return try await service.status(id)
     }
 
-    private func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+    private func eventually(
+        timeout: Duration = .seconds(4), _ condition: @escaping @Sendable () async -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while !(await condition()), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }

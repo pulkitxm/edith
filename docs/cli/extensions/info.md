@@ -8,4 +8,4 @@ Inspect one indexed extension.
 ed extensions info <id> [--json]
 ```
 
-The JSON object contains the same state fields as `ls`. A remembered enabled setting does not imply that a compatible worker is running. An unknown identifier returns exit code 1.
+The JSON object contains the same state fields as `ls`. A remembered enabled setting does not imply that a compatible extension is active. An unknown identifier returns exit code 1.
