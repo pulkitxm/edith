@@ -208,8 +208,7 @@ struct HostEmbeddedController: NSViewControllerRepresentable {
     let visible: Bool
     func makeNSViewController(context: Context) -> NSViewController { controller }
     func updateNSViewController(_ controller: NSViewController, context: Context) {
-        (controller as? HostRemoteViewController)?.apply(
-            compact: compact, visible: visible, width: controller.view.bounds.width)
+        (controller as? HostRemoteViewController)?.apply(compact: compact, visible: visible)
     }
     func sizeThatFits(
         _ proposal: ProposedViewSize, nsViewController controller: NSViewController,

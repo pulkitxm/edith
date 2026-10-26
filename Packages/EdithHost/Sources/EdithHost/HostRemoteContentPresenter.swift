@@ -283,9 +283,10 @@ final class HostRemoteViewController: NSViewController {
             "herdr.files",
         ].contains(request.location)
     }
-    func apply(compact: Bool, visible: Bool, width: Double) {
+    func apply(compact: Bool, visible: Bool, width: Double? = nil) {
         guard !detached else { return }
-        let next = HostRemoteViewState(compact: compact, visible: visible, width: width)
+        let next = HostRemoteViewState(
+            compact: compact, visible: visible, width: width ?? state.width)
         guard next != state else { return }
         state = next
         terminalInput?.stateChanged()

@@ -7,6 +7,31 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostRemoteContentPresenterTests {
+    @Test func appearanceUpdatesPreserveTheWidthOwnedByLayout() async {
+        var states: [HostRemoteViewState] = []
+        let controller = HostRemoteViewController(
+            request: .init(extensionID: "usage", location: "home"),
+            present: { state in
+                states.append(state)
+                return self.content()
+            }, update: { states.append($0) })
+        defer { controller.detach() }
+        controller.apply(compact: false, visible: true, width: 440.5)
+        controller.view.frame.size.width = 441
+        await settle { controller.connected }
+        controller.apply(compact: true, visible: false)
+        await settle { states.last?.visible == false }
+        #expect(controller.state.width == 440.5)
+        #expect(states.last == HostRemoteViewState(compact: true, visible: false, width: 440.5))
+        let count = states.count
+        for _ in 0..<10 { controller.apply(compact: true, visible: false) }
+        await Task.yield()
+        #expect(states.count == count)
+        controller.apply(compact: true, visible: true, width: 380)
+        await settle { states.last?.width == 380 }
+        #expect(controller.state.width == 380)
+    }
+
     @Test func connectedSceneUpdateFailureCannotPassFinalWindowAdmission() async throws {
         let controller = HostRemoteViewController(
             request: .init(extensionID: "terminal", location: "main"),
