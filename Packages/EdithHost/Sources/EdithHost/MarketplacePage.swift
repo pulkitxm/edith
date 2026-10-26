@@ -48,7 +48,7 @@ struct MarketplacePage: View {
         PageWorkspace {
             PageHeader("Extensions") {
                 Button("Check for Updates") { Task { await marketplace.checkForUpdates() } }
-                    .buttonStyle(.edith(.secondary)).disabled(busy)
+                    .buttonStyle(.edith(.secondary)).disabled(busy || marketplace.refreshingCatalog)
             } accessory: {
                 SearchField(placeholder: "Search extensions", text: $search, typeAhead: true)
                     .accessibilityLabel("Find extensions")

@@ -7,6 +7,31 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func installedExtensionsRemainUsableDuringASharedSlowCatalogRefresh() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        await fixture.network.block()
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let first = Task { await marketplace.checkForUpdates() }
+        while await fixture.network.count == 0 { await Task.yield() }
+        let second = Task { await marketplace.checkForUpdates() }
+        #expect(marketplace.refreshingCatalog)
+        #expect(marketplace.operationID == nil)
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        await marketplace.disable(id: "sample")
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        await fixture.network.release()
+        await first.value
+        await second.value
+        #expect(await fixture.network.count == 1)
+        #expect(!marketplace.refreshingCatalog)
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func remoteSettingsAdmissionDoesNotDownloadOrStartADisabledEngine() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -414,9 +439,18 @@ import HostWorkerFixtureSupport
     private actor Network {
         private(set) var count = 0
         private var data: Data?
+        private var blocked = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
         func set(data: Data) { self.data = data }
-        func fetch() throws -> Data {
+        func block() { blocked = true }
+        func release() {
+            blocked = false
+            for waiter in waiters { waiter.resume() }
+            waiters.removeAll()
+        }
+        func fetch() async throws -> Data {
             count += 1
+            if blocked { await withCheckedContinuation { waiters.append($0) } }
             guard let data else { throw MarketplaceError.downloadFailed }
             return data
         }

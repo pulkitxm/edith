@@ -115,7 +115,7 @@ struct HostExtensionReview: View {
                                     )
                                     .font(.edithText(.callout))
                                     Button("Refresh") { refresh() }.buttonStyle(.edith(.secondary))
-                                        .disabled(busy)
+                                        .disabled(busy || marketplace.refreshingCatalog)
                                 } else {
                                     Button("Download") { download() }
                                         .buttonStyle(.edith(.primary)).disabled(busy)
