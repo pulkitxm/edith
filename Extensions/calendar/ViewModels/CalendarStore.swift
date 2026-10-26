@@ -280,6 +280,7 @@ public final class CalendarStore: FeatureModule {
 
     private func publish(_ next: [CalendarEventPayload], persist: Bool) {
         guard !stopped else { return }
+        let next = CalendarDayEvents.uniqueOccurrences(next)
         agendaKnown = true
         events = next
         groupedDays = CalendarDayEvents.groupedByDay(next)

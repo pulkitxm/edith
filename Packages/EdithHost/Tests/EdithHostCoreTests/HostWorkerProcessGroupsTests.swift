@@ -15,7 +15,7 @@ import Testing
         var unreadable = Set<Int32>()
         var scanFailed = false
 
-        func tracker(maximum: Int = 128) -> HostWorkerProcessGroups {
+        func tracker(maximum: Int = 128, owner: Int32 = 42) -> HostWorkerProcessGroups {
             HostWorkerProcessGroups(
                 maximumGroups: maximum,
                 read: { self.identities[$0] },
@@ -35,7 +35,7 @@ import Testing
                 signal: {
                     self.signals.append($0); self.onSignal?($0)
                 },
-                descendant: { self.owned.contains($0) && $1 == 42 },
+                descendant: { self.owned.contains($0) && $1 == owner },
                 descendants: { _ in [] },
                 exists: { self.identities[$0] != nil || self.unreadable.contains($0) })
         }
@@ -49,6 +49,23 @@ import Testing
             groups[pid] = group ?? pid
             owned.insert(pid)
         }
+    }
+
+    @Test func inheritedHostGroupNeverCapturesTheHostOrSiblingProcesses() throws {
+        let kernel = Kernel()
+        let owner = getpgrp()
+        try kernel.add(getpid(), generation: "1.0", group: owner)
+        try kernel.add(1_000_001, generation: "2.0", group: owner)
+        try kernel.add(1_000_002, generation: "3.0", group: owner)
+        var tracker = kernel.tracker(owner: owner)
+        try tracker.register(
+            .init(pid: 1_000_001, generation: "2.0", registered: true), owner: owner)
+        tracker.refresh(owner: owner)
+        tracker.terminate(owner: owner)
+        #expect(kernel.signals == [1_000_001])
+        kernel.identities[1_000_001] = nil
+        tracker.refresh(owner: owner)
+        #expect(tracker.isEmpty)
     }
 
     @Test func groupSignalPrecedesImmediateWitnessExitAndReachesLateChild() throws {

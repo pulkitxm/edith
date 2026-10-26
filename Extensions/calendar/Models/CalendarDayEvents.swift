@@ -39,6 +39,19 @@ public enum CalendarDayEvents {
         }
     }
 
+    static func uniqueOccurrences(_ events: [CalendarEventPayload]) -> [CalendarEventPayload] {
+        let counts = Dictionary(grouping: events, by: \.id).mapValues(\.count)
+        var seen = Set<String>()
+        return events.compactMap { event in
+            var next = event
+            if counts[event.id, default: 0] > 1 {
+                next.id = CalendarEventPayload.occurrenceID(
+                    identifier: event.id, calendarID: event.calendarID, start: event.start)
+            }
+            return seen.insert(next.id).inserted ? next : nil
+        }
+    }
+
     public static func sorted(_ events: [CalendarEventPayload]) -> [CalendarEventPayload] {
         events.sorted { a, b in
             if a.isAllDay != b.isAllDay { return a.isAllDay }

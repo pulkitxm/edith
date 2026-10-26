@@ -92,7 +92,9 @@ struct HostWorkerProcessGroups {
             throw HostWorkerError.invalidResponse
         }
         let ownership = Ownership(
-            leader: identity, witnesses: [identity] + members(currentGroup),
+            leader: identity,
+            witnesses: [identity]
+                + (currentGroup == getpgrp() ? descendants(identity.pid) : members(currentGroup)),
             processGroups: currentGroup != getpgrp() ? [currentGroup] : [])
         if resource.pid == owner {
             worker = Ownership(
@@ -162,8 +164,9 @@ struct HostWorkerProcessGroups {
     }
 
     private mutating func sendSignal(_ target: Int32, witness: ExtensionProcessIdentity) {
-        guard read(witness.pid) == witness,
-            target > 0 || group(witness.pid) == -target
+        guard witness.pid != getpid(), target != getpid(), target != -getpgrp(),
+            read(witness.pid) == witness,
+            target > 1 || (target < -1 && group(witness.pid) == -target)
         else { return }
         signal(target)
     }

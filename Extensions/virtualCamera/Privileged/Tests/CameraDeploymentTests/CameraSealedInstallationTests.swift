@@ -45,7 +45,7 @@ import Testing
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
                 "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "1.0.0",
                 "EdithContainedRole": "cameraCarrier", "EdithContainedExtensionID": "virtualCamera",
-                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-2",
+                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-4",
                 "EdithExecutableProvenance": String(repeating: "a", count: 64),
                 "EdithCameraTransport": obs ? "obs" : "native",
             ])
@@ -55,7 +55,7 @@ import Testing
             try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
                 .write(to: source.appendingPathComponent("Contents/Info.plist"))
         }
-        func installer(hostABI: String = "edith-host-2") throws -> CameraSealedInstallation {
+        func installer(hostABI: String = "edith-host-4") throws -> CameraSealedInstallation {
             try CameraSealedInstallation(
                 configuration: .init(
                     hostIdentifier: host, version: "1.0.0", hostABI: hostABI,
@@ -141,7 +141,7 @@ import Testing
             JSONSerialization.jsonObject(with: Data(contentsOf: receipt)) as? [String: String])
         #expect(values["originalHostSHA256"] == String(repeating: "a", count: 64))
         #expect(values["executableSHA256"]?.count == 64)
-        #expect(values["hostABI"] == "edith-host-2")
+        #expect(values["hostABI"] == "edith-host-4")
         let reused = try installer.installCarrier(source: fixture.source, providerExited: false)
         #expect(reused.path == installed.path)
         let modes =

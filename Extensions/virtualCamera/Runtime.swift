@@ -222,19 +222,12 @@ struct CameraSelectedPackageLayout {
             roleBundle.bundleIdentifier == "com.pulkit.edith.extensions.virtualCamera.app",
             let version = roleBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String, !version.isEmpty, version.utf8.count <= 80,
-            roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-2"
+            roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-4"
         else { throw ExtensionPeerError.invalidRequest }
-        let suffix = [
-            "ExtensionCarrier.app", "Contents", "Extensions", "ExtensionWorker.appex",
-            "Contents", "Resources", "Payload", "virtualCamera", "app.bundle",
-        ]
-        var package = role
-        for component in suffix.reversed() {
-            guard package.lastPathComponent == component else {
-                throw ExtensionPeerError.invalidRequest
-            }
-            package.deleteLastPathComponent()
-        }
+        guard role.lastPathComponent == "app.bundle",
+            role.deletingLastPathComponent().lastPathComponent == "virtualCamera"
+        else { throw ExtensionPeerError.invalidRequest }
+        let package = role.deletingLastPathComponent()
         let manifestURL = role.deletingLastPathComponent().appendingPathComponent("package.json")
         let attributes = try FileManager.default.attributesOfItem(atPath: manifestURL.path)
         guard package.lastPathComponent == "virtualCamera", package.path != "/",
@@ -245,7 +238,7 @@ struct CameraSelectedPackageLayout {
                 with: Data(contentsOf: manifestURL)) as? [String: Any],
             manifest["id"] as? String == "virtualCamera",
             manifest["version"] as? String == version,
-            manifest["hostABI"] as? String == "edith-host-2",
+            manifest["hostABI"] as? String == "edith-host-4",
             manifest["architecture"] as? String == "arm64"
         else { throw ExtensionPeerError.invalidRequest }
         let carrier = package.appendingPathComponent("CameraCarrier.app")
@@ -267,14 +260,14 @@ struct CameraSelectedPackageLayout {
                 == "cameraCarrier",
             carrierBundle.object(forInfoDictionaryKey: "EdithHostIdentifier") as? String
                 == hostIdentifier,
-            carrierBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-2",
+            carrierBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-4",
             let privilegedBundle = Bundle(url: privileged),
             privilegedBundle.bundleIdentifier
                 == "com.pulkit.edith.extensions.virtualCamera.privileged",
             privilegedBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 == version,
             privilegedBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
-                == "edith-host-2"
+                == "edith-host-4"
         else { throw ExtensionPeerError.invalidRequest }
         self.carrier = carrier
         self.privileged = privileged

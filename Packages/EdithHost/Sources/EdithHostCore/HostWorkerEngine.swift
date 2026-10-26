@@ -299,14 +299,14 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
             id: package.id, token: token, command: command, payload: payload)
     }
 
-    private func observe(owner: String) {
+    func observe(owner: String) {
         let channel = channel
         for (name, registered) in [
             (ExtensionCommandOwnership.registerNotification, true),
             (ExtensionCommandOwnership.releaseNotification, false),
         ] {
             observers.append(
-                NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) {
+                NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
                     notification in
                     guard notification.userInfo?["owner"] as? String == owner else { return }
                     nonisolated(unsafe) let accept =

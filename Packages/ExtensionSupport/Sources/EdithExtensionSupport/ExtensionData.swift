@@ -11,7 +11,7 @@ public enum ExtensionData {
     public static let productionBases: [String: String] = [
         "usage": "", "herdr": "", "clipboard": "", "attention": "", "studio": "",
         "notchShelf": "", "latex": "", "calendar": "", "appMaintenance": "", "music": "",
-        "seoAudit": "", "machines": "machines", "codeStats": "code-stats",
+        "seoAudit": "", "socialManager": "", "machines": "machines", "codeStats": "code-stats",
         "virtualCamera": "virtual-camera", "companion": "", "database": "database",
         "timeLapse": "", "downloads": "data", "homebrew": "", "plugins": "",
     ]
@@ -19,7 +19,8 @@ public enum ExtensionData {
     public static let productionLeaves: [String: [String]] = [
         "usage": ["data", "Snapshots/home-usage.json", "notifications.json"],
         "herdr": ["herdr", "provider-hook-ownership.json"],
-        "clipboard": ["clipboard"], "attention": ["attention"], "studio": ["studio"],
+        "clipboard": ["clipboard"], "attention": ["attention"],
+        "socialManager": ["social-manager"], "studio": ["studio"],
         "notchShelf": ["Shelf", "notch-browser"], "latex": ["latex"],
         "calendar": ["Snapshots/calendar-agenda.json"],
         "appMaintenance": ["app-update-center.json", "app-maintenance-snapshot.json"],

@@ -215,6 +215,17 @@ struct ExtensionEngineTests {
                 defaultsSuite: suite) == nil)
     }
 
+    @Test @MainActor func inProcessViewsNeverChangeTheEngineProcessRole() throws {
+        let previous = ExtensionHostRole.isInterfaceProcess
+        let context: NSDictionary = [
+            "inProcess": true, "remoteUI": true, "hostIdentifier": "synthetic.host",
+            "extensionID": "sample", "defaultsSuite": "synthetic.host.extension.sample.worker",
+            "presentationID": UUID().uuidString, "uiOnly": true, "location": "settings",
+        ]
+        _ = try #require(ExtensionUIConfiguration(context: context))
+        #expect(ExtensionHostRole.isInterfaceProcess == previous)
+    }
+
     private func wait(_ condition: () -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(3)
         while !condition() {

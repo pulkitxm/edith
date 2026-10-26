@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import EventKit
 import Foundation
 
@@ -105,7 +106,11 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
 
     public init(event: EKEvent) {
         let coordinate = event.structuredLocation?.geoLocation?.coordinate
-        id = event.eventIdentifier ?? event.calendarItemExternalIdentifier ?? UUID().uuidString
+        let identifier =
+            event.eventIdentifier ?? event.calendarItemExternalIdentifier ?? UUID().uuidString
+        id = Self.occurrenceID(
+            identifier: identifier, calendarID: event.calendar?.calendarIdentifier ?? "unknown",
+            start: event.startDate)
         title = event.title ?? "Untitled"
         calendar = event.calendar?.title ?? ""
         calendarID = event.calendar?.calendarIdentifier ?? "unknown"
@@ -126,6 +131,12 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
         availability = Self.availability(event.availability)
         timeZone = event.timeZone?.identifier
         hasAlarms = !(event.alarms?.isEmpty ?? true)
+    }
+
+    static func occurrenceID(identifier: String, calendarID: String, start: Date) -> String {
+        let fields = [calendarID, identifier, String(start.timeIntervalSince1970.bitPattern)]
+        let identity = fields.map { "\($0.utf8.count):\($0)" }.joined()
+        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func color(_ cgColor: CGColor?) -> CalendarColorPayload? {
