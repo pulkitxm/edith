@@ -43,7 +43,7 @@ export function isTransientFailure(error) {
   if (error instanceof SyntaxError) return true;
   const text = failureText(error);
   if (/\bHTTP 4(?!29)[0-9]{2}\b/.test(text)) return false;
-  return /\bHTTP (?:429|5[0-9]{2})\b|\b(?:429|5[0-9]{2}) (?:Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b|unexpected end of JSON input|Unexpected end of JSON|Pukbot workflow failed|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|connection reset|TLS handshake timeout|i\/o timeout/i.test(
+  return /\bHTTP (?:429|5[0-9]{2})\b|\b(?:429|5[0-9]{2}) (?:Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b|unexpected end of JSON input|Unexpected end of JSON|Pukbot workflow failed|could not find the dispatched Pukbot workflow run|GitHub rejected the Pukbot workflow dispatch|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|connection reset|TLS handshake timeout|i\/o timeout/i.test(
     text,
   );
 }
