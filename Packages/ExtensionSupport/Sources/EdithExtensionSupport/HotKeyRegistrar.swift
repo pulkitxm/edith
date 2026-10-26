@@ -67,25 +67,28 @@ public enum HotKeyRegistrar {
         InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, _ in
-                guard let event else { return noErr }
+                guard let event else { return OSStatus(eventNotHandledErr) }
                 var hotKeyID = EventHotKeyID()
                 guard
                     GetEventParameter(
                         event, EventParamName(kEventParamDirectObject),
                         EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size,
-                        nil, &hotKeyID) == noErr
-                else { return noErr }
-                MainActor.assumeIsolated {
+                        nil, &hotKeyID) == noErr,
+                    hotKeyID.signature == OSType(0x4544_4954)
+                else { return OSStatus(eventNotHandledErr) }
+                let handled = MainActor.assumeIsolated {
                     HotKeyRegistrar.dispatch(hotKeyID.id)
                 }
-                return noErr
+                return handled ? noErr : OSStatus(eventNotHandledErr)
             }, 1, &eventType, nil, &handler)
     }
 
-    private static func dispatch(_ carbonID: UInt32) {
-        if let binding = bindings.values.first(where: { $0.carbonID == carbonID }) {
-            actions[binding.id]?()
-        }
+    private static func dispatch(_ carbonID: UInt32) -> Bool {
+        guard let binding = bindings.values.first(where: { $0.carbonID == carbonID }),
+            let action = actions[binding.id]
+        else { return false }
+        action()
+        return true
     }
 }
 
