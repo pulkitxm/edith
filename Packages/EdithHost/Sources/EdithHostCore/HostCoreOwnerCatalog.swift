@@ -114,38 +114,51 @@ public struct HostCoreOwnerRegistry: Sendable {
     public let states: [HostCLIProviderState]
     public let providers: [Provider]
     public let issues: [String: String]
+    let agentIssues: [String: String]
     private let invoke: HostCLIProviderRegistry.Invoke
 
     public static func load(invoke: @escaping HostCLIProviderRegistry.Invoke) async throws -> Self {
         let states = try await HostCLIProviderRegistry.states(invoke: invoke)
         var providers: [Provider] = []
         var issues: [String: String] = [:]
+        var agentIssues: [String: String] = [:]
         let selected = states.filter {
             $0.available && HostCLIProviderCatalog.declaresCommands($0.id)
         }
-        await withTaskGroup(of: (HostCLIProviderState, HostCoreOwnerCatalog?, String?).self) {
+        await withTaskGroup(of: (HostCLIProviderState, HostCoreOwnerCatalog?, String?, Bool).self) {
             group in
             var iterator = selected.makeIterator()
             func add(_ state: HostCLIProviderState) {
                 group.addTask {
+                    var advertisesAgent = false
                     do {
                         try Task.checkCancellation()
                         let data = try await invoke(
                             HostCLIRequest(
                                 action: .invoke, id: state.id,
                                 operation: state.id + ".cli.catalog", timeout: 2))
-                        return (state, try HostCoreOwnerCatalog.decode(data, owner: state.id), nil)
-                    } catch { return (state, nil, error.localizedDescription) }
+                        if let document = try? JSONDecoder().decode(HostCLIJSON.self, from: data),
+                            let agent = document.object?["coreOwner"]?.object?["agent"],
+                            agent != .null
+                        {
+                            advertisesAgent = true
+                        }
+                        return (
+                            state, try HostCoreOwnerCatalog.decode(data, owner: state.id), nil,
+                            advertisesAgent
+                        )
+                    } catch { return (state, nil, error.localizedDescription, advertisesAgent) }
                 }
             }
             for _ in 0..<8 { if let state = iterator.next() { add(state) } }
-            for await (state, catalog, error) in group {
+            for await (state, catalog, error, advertisesAgent) in group {
                 if let catalog, let pid = state.processIdentifier,
                     let identity = ExtensionProcessIdentity.read(pid), identity.isAlive
                 {
                     providers.append(Provider(state: state, catalog: catalog, identity: identity))
                 } else {
                     issues[state.id] = error ?? "The owner has not supplied its typed core hooks."
+                    if advertisesAgent { agentIssues[state.id] = issues[state.id] }
                 }
                 if let state = iterator.next() { add(state) }
             }
@@ -156,9 +169,13 @@ public struct HostCoreOwnerRegistry: Sendable {
             if current.contains(provider.state) { return false }
             issues[provider.state.id] = "The owner changed during discovery."; return true
         }
+        agentIssues = agentIssues.filter { id, _ in
+            guard let state = states.first(where: { $0.id == id }) else { return false }
+            return current.contains(state)
+        }
         return Self(
             states: current, providers: providers.sorted { $0.state.id < $1.state.id },
-            issues: issues, invoke: invoke)
+            issues: issues, agentIssues: agentIssues, invoke: invoke)
     }
 
     public func validateCurrent(_ provider: Provider) async throws {
