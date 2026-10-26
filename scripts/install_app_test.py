@@ -210,6 +210,18 @@ class InstallerTests(unittest.TestCase):
         _, identity = self.spawn(installed / install_app.EXECUTABLES[0], environment=environment)
         self.assertFalse(self.native.is_background(identity))
 
+    def test_first_install_accepts_single_host_executable(self):
+        source = self.bundle('Build.app', 'new')
+        (source / 'Contents/MacOS/edithd').unlink()
+        shutil.rmtree(source / 'Contents/Library')
+        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(source)],
+                       check=True, capture_output=True, timeout=10)
+        installed = self.directory / 'Edith.app'
+        install_app.install(source, installed)
+        install_app.verify_bundle(installed)
+        self.assertEqual(list((installed / 'Contents/MacOS').iterdir()),
+                         [installed / 'Contents/MacOS/Edith'])
+
     def test_first_install_publishes_verified_bundle(self):
         source = self.bundle('Build.app', 'new')
         installed = self.directory / 'Edith.app'

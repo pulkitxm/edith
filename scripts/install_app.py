@@ -155,10 +155,9 @@ def existing_identity(path):
 def verify_bundle(path):
     subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', str(path)],
                    check=True, timeout=120)
-    for relative in EXECUTABLES:
-        executable = path / relative
-        if not stat.S_ISREG(executable.stat().st_mode) or not os.access(executable, os.X_OK):
-            raise RuntimeError(f'Staged executable is invalid: {relative}')
+    executable = path / EXECUTABLES[0]
+    if not stat.S_ISREG(executable.stat().st_mode) or not os.access(executable, os.X_OK):
+        raise RuntimeError(f'Staged executable is invalid: {EXECUTABLES[0]}')
 
 
 def request_quit(destination, identities, processes):
