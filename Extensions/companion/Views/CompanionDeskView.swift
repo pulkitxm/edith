@@ -6,6 +6,10 @@ import SwiftUI
 @MainActor
 @Observable
 final class CompanionDeskModel: CompanionRefreshable {
+    let transport: CompanionTransport
+
+    init(transport: CompanionTransport = .shared) { self.transport = transport }
+
     private let commandTasks = CompanionTaskOwner()
     func cancelPendingCommands() { commandTasks.cancel() }
     func cancelAndWait() async { await commandTasks.drain() }
@@ -24,7 +28,7 @@ final class CompanionDeskModel: CompanionRefreshable {
     var draft = ""
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     var resolvedPredictions: [CompanionPrediction] {

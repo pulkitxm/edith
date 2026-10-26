@@ -1,6 +1,6 @@
 # Extension marketplace
 
-Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Its 40 optional extensions download separately from GitHub Releases. Each extension loads in process into the single Edith app; users do not install a separate executable.
+Edith ships the app shell, marketplace, settings and Home and Notch layout controls. Optional extensions download separately from GitHub Releases. Each extension loads in process into the single Edith app; users do not install a separate executable.
 
 ## Choose a workflow
 
@@ -22,7 +22,7 @@ Downloads are verified before they replace installed state. An active version ke
 
 ## Disable, remove and inspect storage
 
-Disabling unloads an extension's code and stops its native tasks, commands and registered descendants. It keeps the downloaded package on disk. Pending cleanup remains visible until exit is confirmed. Removing first disables the extension, then removes its package files when they are no longer in use. Removal retains extension user data, including agentic usage history.
+Disabling stops an extension's work, native tasks, commands and registered descendants. Swift code remains mapped until Edith quits, and package versions still in use remain on disk. Each window and card owns its own interface state, so opening or closing another presentation does not reset it. Shared interface services stay alive while another window or card uses the same package image. Closing a scene cancels its own requests; shared teardown waits for the final presentation. Pending cleanup remains visible until work has drained. Removing first disables the extension, then removes its package files when they are no longer in use. Removal retains extension user data, including agentic usage history.
 
 Storage shows actual file measurements separately from signed catalog download estimates. It includes the app, package versions, packaged frameworks, owned user data, retained storage and known caches or deployment copies. Removal is available per extension. Files awaiting removal continue to count.
 

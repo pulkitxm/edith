@@ -122,12 +122,15 @@ final class CompanionCaptureModel {
     private var captureActive = false
     @ObservationIgnored private nonisolated(unsafe) var outboxObserver: NSObjectProtocol?
 
+    let transport: CompanionTransport
+
     init(
         remote: CompanionUIBridge? = nil,
         recordingFactory: @escaping @MainActor () throws -> CompanionRecordingResources = {
             CompanionRecordingResources()
-        }, observeOutbox: Bool = true
+        }, observeOutbox: Bool = true, transport: CompanionTransport = .shared
     ) {
+        self.transport = transport
         self.remote = remote
         self.recordingFactory = recordingFactory
         guard remote == nil, observeOutbox else { return }
@@ -174,7 +177,7 @@ final class CompanionCaptureModel {
     }
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     func toggleRecording() async {

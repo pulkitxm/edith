@@ -43,6 +43,7 @@ public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
             [
                 "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
                 "music.sidebar", "music.detail", "machines.window", "herdr.agent", "herdr.space",
+                "herdr.files",
             ].contains(location),
             section.map({ !$0.isEmpty && $0.utf8.count <= 128 && !$0.utf8.contains(0) }) ?? true
         else { throw HostWorkerError.rejected }

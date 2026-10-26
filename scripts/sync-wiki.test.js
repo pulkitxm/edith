@@ -195,7 +195,7 @@ test("the sidebar gives every group a direct or collapsible row", () => {
 test("home lists each group with its commands on one line", () => {
   const home = buildPages().get("Home.md");
   expect(home).toContain(
-    "- [Extensions](CLI-Extensions): [Ls](CLI-Extensions-Ls), [Install](CLI-Extensions-Install)",
+    "- [Extensions](CLI-Extensions): [Ls](CLI-Extensions-Ls), [Info](CLI-Extensions-Info), [Install](CLI-Extensions-Install)",
   );
 });
 

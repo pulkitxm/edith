@@ -120,7 +120,10 @@ final class ExtensionRuntime: NSObject {
             await commands.shutdownAndWait()
             await backupOwner?.shutdown()
             await owner?.shutdown()
-            HotKeyRegistrar.shutdown(); TextEditingCommands.shutdown(); ClipboardThumbnail.clear()
+            HotKeyRegistrar.shutdown();
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }; ClipboardThumbnail.clear()
         }
         resourceStop = task
         return task

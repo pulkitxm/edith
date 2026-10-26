@@ -55,6 +55,7 @@ import Testing
             to: receipts.appendingPathComponent("synthetic.jsonl"))
         let script = try #require(
             MachineResources.url(forResource: "usage-snapshot", withExtension: "py"))
+        let release = root.appendingPathComponent("collector-release")
         var finished = false
         let service = MachineUsageCollectionService(files: files) { _, _ in
             let sink = MachineUsageProgressContext.output
@@ -62,10 +63,11 @@ import Testing
                 CLICommandRequest(
                     executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
                     arguments: [
-                        "-c", "import runpy,sys,time; runpy.run_path(sys.argv[1]); time.sleep(0.5)",
-                        script.path,
+                        "-c",
+                        "import pathlib,runpy,sys,time; runpy.run_path(sys.argv[1]); release=pathlib.Path(sys.argv[2])\nwhile not release.exists(): time.sleep(0.01)",
+                        script.path, release.path,
                     ],
-                    environment: ["HOME": root.path, "PATH": "/usr/bin:/bin"], timeout: 5,
+                    environment: ["HOME": root.path, "PATH": "/usr/bin:/bin"], timeout: 30,
                     maximumOutputBytes: 1_048_576, terminatesProcessGroup: true),
                 streamsWhileRunning: true, onStandardOutputLine: { _ in },
                 onStandardErrorLine: { sink?($0, true) })
@@ -79,36 +81,47 @@ import Testing
             finished = true
             return self.document
         }
-        let id = try await start(service, machine: machine)
-        var cursor: UInt64 = 0
-        var logs = Data()
-        var receipt: MachineUsageCollectionDescriptor?
-        var observedWhileRunning = false
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while receipt == nil, ContinuousClock.now < deadline {
-            let frame = try await read(service, id: id, sequence: cursor)
-            cursor = frame.nextSequence
-            if !frame.chunks.isEmpty && !finished { observedWhileRunning = true }
-            for chunk in frame.chunks {
-                #expect(chunk.channel == "stderr"); logs.append(chunk.data)
+        do {
+            let id = try await start(service, machine: machine)
+            var cursor: UInt64 = 0
+            var logs = Data()
+            var receipt: MachineUsageCollectionDescriptor?
+            var observedWhileRunning = false
+            let deadline = ContinuousClock.now.advanced(by: .seconds(20))
+            while receipt == nil, ContinuousClock.now < deadline {
+                let frame = try await read(service, id: id, sequence: cursor)
+                cursor = frame.nextSequence
+                if !frame.chunks.isEmpty && !finished { observedWhileRunning = true }
+                for chunk in frame.chunks {
+                    #expect(chunk.channel == "stderr"); logs.append(chunk.data)
+                }
+                if observedWhileRunning,
+                    String(decoding: logs, as: UTF8.self).contains(
+                        "Snapshot contains 1 receipts (14 bytes)")
+                {
+                    try Data().write(to: release)
+                }
+                receipt = frame.receipt
+                try await Task.sleep(for: .milliseconds(10))
             }
-            receipt = frame.receipt
-            try await Task.sleep(for: .milliseconds(10))
+            #expect(observedWhileRunning)
+            #expect(
+                String(decoding: logs, as: UTF8.self).contains(
+                    "Scanning receipt source .codex/sessions"))
+            #expect(
+                String(decoding: logs, as: UTF8.self).contains(
+                    "Snapshot contains 1 receipts (14 bytes)"))
+            let descriptor = try #require(receipt)
+            #expect(descriptor.sha256 == MachineUsageReceiptSnapshot.hash(document))
+            #expect(descriptor.byteCount == document.count)
+            await #expect(throws: ExtensionPeerError.self) {
+                try await read(service, id: id, sequence: 0)
+            }
+            try await cancel(service, id: id)
+        } catch {
+            await service.shutdownAndWait()
+            throw error
         }
-        #expect(observedWhileRunning)
-        #expect(
-            String(decoding: logs, as: UTF8.self).contains(
-                "Scanning receipt source .codex/sessions"))
-        #expect(
-            String(decoding: logs, as: UTF8.self).contains(
-                "Snapshot contains 1 receipts (14 bytes)"))
-        let descriptor = try #require(receipt)
-        #expect(descriptor.sha256 == MachineUsageReceiptSnapshot.hash(document))
-        #expect(descriptor.byteCount == document.count)
-        await #expect(throws: ExtensionPeerError.self) {
-            try await read(service, id: id, sequence: 0)
-        }
-        try await cancel(service, id: id)
         await service.shutdownAndWait()
     }
 

@@ -8,19 +8,19 @@ struct CompanionLibraryReads: Sendable {
     var signals: @Sendable (String) async throws -> [CompanionSignal] = { _ in [] }
     var media: @Sendable (String) async throws -> Data? = { _ in nil }
 
-    static var live: Self {
-        Self(
-            episodes: { try await client.episodes(limit: 60) },
+    static func live(transport: CompanionTransport) -> Self {
+        let client: @Sendable () -> CompanionClient = {
+            CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
+        }
+        return Self(
+            episodes: { try await client().episodes(limit: 60) },
             episode: { id in
                 try await CompanionChatLibraryOperationExecution.episode(id: id) {
-                    try await client.episodeDetail(id: $0)
+                    try await client().episodeDetail(id: $0)
                 }
             },
-            signals: { (try? await client.signals(episodeId: $0)) ?? [] },
-            media: { try await client.media(episodeId: $0).0 })
+            signals: { (try? await client().signals(episodeId: $0)) ?? [] },
+            media: { try await client().media(episodeId: $0).0 })
     }
 
-    private static var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
-    }
 }

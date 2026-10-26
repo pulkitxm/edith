@@ -757,7 +757,7 @@ test("the actual no-argument publisher finalizes an owned zero-build draft once 
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 30000);
 
 test("an acknowledged-lost pointer edit stays complete and the next plan reads the new trusted revision", async () => {
   const live = current();

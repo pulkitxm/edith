@@ -51,26 +51,13 @@ Without `--json` it prints the outcome alone, `upToDate`, or the outcome and the
 version, `updateFound 0.0.28`, and with `--no-wait` and no answer it prints
 `update check requested`.
 
-Sparkle lives in the main window, so this exits 4 with `check-updates needs the
-Edith main window to be open` when only the menu bar is running. The wait is 60
-seconds; after the first second `ed` prints `waiting for Edith to answer...` on
-stderr, which keeps stdout to the one JSON document.
+The updater belongs to the running Edith app and remains available when its
+window is closed. The command is unavailable in development installations that
+do not provide a production updater. A waiting request checks for a recorded
+result for up to 60 seconds and fails if no result arrives.
 
-Silence at the end of those 60 seconds is exit 4, not a false success. `ed`
-diagnoses which kind of silence it was: `Edith is not running, so it cannot
-answer for the update check` when the helper is gone, and otherwise `Edith did
-not answer for the update check in time`, with the hint that the running app may
-predate this command. Two ordinary situations produce that second message: a
-build whose Sparkle updater never started does not listen for the request at
-all, and a check that is already in flight is dropped rather than queued.
-
-`--no-wait` never fails that way. It still waits 0.1 seconds and still reports a
-reply that lands inside it, but a silent app is reported as
-`"finished": false` and exit 0, which makes it the right form for a script that
-only wants the check kicked off.
-
-Whatever the outcome, the app records the check in its own log, so
-`ed app updates` shows it afterwards even when `ed` gave up waiting.
+`--no-wait` requests the check and returns `"finished": false` immediately. Use
+`ed app updates` to inspect the result later.
 
 ## Where to go next
 

@@ -59,10 +59,13 @@ public final class VirtualCameraRecorder {
     }
 
     public func appendAudio(_ buffer: AVAudioPCMBuffer, at time: TimeInterval) throws {
-        guard let audioInput, let firstTime, time >= firstTime, buffer.frameLength > 0 else {
-            return
-        }
+        guard let audioInput, buffer.frameLength > 0 else { return }
         guard writer.status == .writing else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
+        if firstTime == nil {
+            firstTime = time
+            writer.startSession(atSourceTime: .zero)
+        }
+        guard let firstTime, time >= firstTime else { return }
         guard audioInput.isReadyForMoreMediaData else { return }
         let timestamp = CMTime(seconds: time - firstTime, preferredTimescale: 48000)
         guard !lastAudioTime.isValid || timestamp > lastAudioTime else { return }
@@ -93,7 +96,7 @@ public final class VirtualCameraRecorder {
             completion(.failure(writer.error ?? CocoaError(.fileWriteUnknown)))
             return
         }
-        guard firstTime != nil else {
+        guard lastTime.isValid else {
             writer.cancelWriting()
             completion(
                 .failure(

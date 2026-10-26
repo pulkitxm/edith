@@ -313,6 +313,10 @@ final class HerdrStore {
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let workspacePresenter: @MainActor () -> Void
     private let machinesProvider: () -> [Machine]
+    private var uiMachines: [Machine] = []
+    private var availableMachines: [Machine] {
+        uiClient == nil ? machinesProvider() : uiMachines
+    }
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
     private var restoringDefaults = true
@@ -657,7 +661,7 @@ final class HerdrStore {
             return
         }
         guard watchTask == nil else { return }
-        expectedHostCount = machinesProvider().count + 1
+        expectedHostCount = availableMachines.count + 1
         if hosts.isEmpty { settling = true }
         watchGeneration += 1
         let generation = watchGeneration
@@ -870,7 +874,7 @@ final class HerdrStore {
         for snapshot in snapshots { incoming.insert(snapshot.id) }
         var configured: Set<String> = [HerdrHostSnapshot.localID]
         var order = [HerdrHostSnapshot.localID: 0]
-        for (index, machine) in machinesProvider().enumerated() {
+        for (index, machine) in availableMachines.enumerated() {
             let id = machine.id.uuidString
             configured.insert(id)
             order[id] = index + 1
@@ -963,9 +967,7 @@ final class HerdrStore {
         return HerdrOpenTab(
             agent: agent, machine: machine(for: agent), view: resolved,
             holder: TerminalSessionHolder(), quinjet: HerdrQuinjetSession(),
-            files: HerdrFilesSession { [weak self] machine in
-                self?.filesSession(for: machine) ?? Self.directFilesSession(for: machine)
-            },
+            files: makeFilesSession(),
             split: HerdrSplitCompanionState(agentID: agent.id, defaults: defaults))
     }
 
@@ -976,6 +978,20 @@ final class HerdrStore {
         return DirectFinderSession(
             id: machine.id, name: machine.name, isLocal: machine.id == Machine.localID,
             remoteClient: HerdrFilesBridge(client: uiClient, presentationID: presentation))
+    }
+
+    func makeFilesSession() -> HerdrFilesSession {
+        HerdrFilesSession(
+            machineSession: { [weak self] machine in
+                self?.filesSession(for: machine) ?? Self.directFilesSession(for: machine)
+            },
+            openWindow: { [weak self] machine, path in
+                do {
+                    let target = try HerdrFilesWindowLocation(machine: machine, path: path)
+                        .encoded()
+                    self?.requestPresentation(kind: "files", id: target)
+                } catch { self?.uiError = error.localizedDescription }
+            })
     }
 
     static func directFilesSession(for machine: Machine) -> DirectFinderSession {
@@ -1011,7 +1027,7 @@ final class HerdrStore {
     private func machine(for agent: HerdrAgent) -> Machine? {
         agent.machineIsLocal
             ? nil
-            : machinesProvider().first { $0.id.uuidString == agent.machineID }
+            : availableMachines.first { $0.id.uuidString == agent.machineID }
     }
 
     func session(_ agentID: String) -> HerdrOpenTab? {
@@ -2253,7 +2269,7 @@ final class HerdrStore {
     }
 
     func machine(for host: HerdrHostSnapshot) -> Machine? {
-        host.isLocal ? nil : machinesProvider().first { $0.id.uuidString == host.id }
+        host.isLocal ? nil : availableMachines.first { $0.id.uuidString == host.id }
     }
 
     func dismissAgentStartupMessage(_ id: String) {
@@ -2696,6 +2712,7 @@ final class HerdrStore {
     func adoptUI(_ state: HerdrUIState) {
         adoptingUI = true
         defer { adoptingUI = false }
+        uiMachines = state.machines
         uiBaseline = state.layout
         uiJevConfigured = state.jevConfigured ?? false
         uiOpenedAgents = state.openedAgents

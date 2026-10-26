@@ -144,8 +144,8 @@ struct CompanionPage: View {
             guard !Task.isCancelled else { return }
             if !checkedSetup {
                 checkedSetup = true
-                if CompanionTransport.shared.remoteBridge != nil { await backend.refreshSnapshot() }
-                if (CompanionTransport.shared.remoteBridge != nil
+                if workspace.transport.remoteBridge != nil { await backend.refreshSnapshot() }
+                if (workspace.transport.remoteBridge != nil
                     ? backend.deployment : CompanionDeploymentStore.load()) == nil, !home.reachable,
                     !setupDeclined
                 {
@@ -331,7 +331,8 @@ struct CompanionPage: View {
     private func openSetup() {
         setupDeclined = false
         let model = CompanionSetupModel(
-            remote: CompanionTransport.shared.remoteBridge,
+            remote: workspace.transport.remoteBridge,
+            transport: workspace.transport,
             onFinish: { finished in
                 if !finished { setupDeclined = true }
                 setupModel = nil

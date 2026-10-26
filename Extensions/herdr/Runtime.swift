@@ -174,8 +174,11 @@ final class ExtensionRuntime: NSObject {
         case "configureUI":
             guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
             guard worker == nil, let location = input["location"] as? String,
-                ["main", "settings", "notch", "herdr.agent", "herdr.agent.controls", "herdr.space"]
-                    .contains(location),
+                [
+                    "main", "settings", "notch", "herdr.agent", "herdr.agent.controls",
+                    "herdr.space", "herdr.files",
+                ]
+                .contains(location),
                 let configuration = ExtensionUIConfiguration(context: input),
                 let origin = input["presentationID"] as? String,
                 let presentationID = UUID(uuidString: origin),
@@ -188,7 +191,8 @@ final class ExtensionRuntime: NSObject {
             }
             if location.hasPrefix("herdr.") {
                 guard let target = input["target"] as? String, !target.isEmpty,
-                    target.utf8.count <= 4096, !target.utf8.contains(0),
+                    target.utf8.count <= (location == "herdr.files" ? 8192 : 4096),
+                    !target.utf8.contains(0),
                     let raw = input["herdrPresentationToken"] as? String,
                     UUID(uuidString: raw) != nil
                 else { return ["ok": false] as NSDictionary }

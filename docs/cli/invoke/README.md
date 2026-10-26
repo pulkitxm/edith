@@ -15,7 +15,7 @@ The default payload is `{}`. The output is exactly the worker's JSON response. `
 
 Install and enable the extension first. An incompatible, disabled, stopped, stale, or unknown worker returns an error. Private `extension.*` host operations are rejected. If the worker or its selected version changes during the request, the result is rejected.
 
-`--timeout` accepts 1 to 120 seconds; the default is 30 seconds. Provider hooks can pipe their JSON event to an extension-owned operation and receive the worker's provider-native JSON response. Closing the input without valid JSON, exceeding the payload limit, disconnecting, or reaching the timeout ends the request. See [conventions](../conventions.md) for limits and exit codes.
+`--timeout` accepts 1 to 1800 seconds; the default is 30 seconds. Provider hooks can pipe their JSON event to an extension-owned operation and receive the worker's provider-native JSON response. Closing the input without valid JSON, exceeding the payload limit, disconnecting, or reaching the timeout ends the request. See [conventions](../conventions.md) for limits and exit codes.
 
 ## Usage status lines
 

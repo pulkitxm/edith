@@ -9,3 +9,5 @@ ed extensions update <id> [--json]
 ```
 
 The extension must already be installed. A disabled extension remains disabled. An enabled extension switches workers using the same prepare, stop, verify, and rollback rules as the marketplace UI. A failed update retains the selected working version.
+
+The command allows up to 30 minutes for downloading and verification. Disconnecting or cancelling the command cancels its owned work.

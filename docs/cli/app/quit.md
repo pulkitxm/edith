@@ -1,6 +1,6 @@
 # `ed app quit`
 
-Quits the Edith main window and leaves the menu bar running.
+Close Edith's windows, or quit the entire app with `--completely`.
 
 ```
 ed app quit [--completely] [--yes] [--json]
@@ -8,45 +8,25 @@ ed app quit [--completely] [--yes] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--completely` | flag | off | Also quit the menu bar app. This is Quit Edith in the status item. |
-| `--yes` | flag | off | Send the quit request. Without it, print the plan only. |
+| `--completely` | flag | off | Quit the app process, menu bar, core services, and extension engines. |
+| `--yes` | flag | off | Apply the action; otherwise print a preview. |
 | `--json` | flag | off | Emit JSON on stdout. |
 
-Without `--yes`, `--json` describes the safe preview:
-
-```json
-{
-  "action": "quit",
-  "applied": false,
-  "changed": false,
-  "completely": false,
-  "requested": false,
-  "targets": ["com.pulkit.edith"]
-}
-```
-
-With `--yes`, `applied`, `changed`, and `requested` are `true`.
+Without `--completely`, the menu bar and enabled background work stay in the
+same app process after its windows close. `ed app open` shows the window again.
+The menu bar's Quit Edith item quits the whole application.
 
 Examples:
 
 ```
 ed app quit
 ed app quit --yes
-ed app quit --completely --yes
-ed app quit --yes --json
+ed app quit --completely --yes --json
 ```
 
-Without `--yes` it prints the main app bundle id and leaves both processes
-untouched. With `--yes` and without `--json` it prints `quit requested`. The
-confirmed action is guarded on the main window rather than the helper, because
-there is nothing to quit otherwise: with the window closed it exits 4 with
-`quit needs the Edith main window to be open`, hint `open Edith from the menu
-bar, then retry`.
-
-It quits less than the menu bar's own Quit item does. The menu item posts the
-same request and then terminates the helper as well; `ed app quit --yes` posts
-only the request, so the menu bar app survives and `ed app open` brings the
-window back.
+A preview reports `applied: false`, `changed: false`, and
+`requiresConfirmation: true`. An applied request reports that it was accepted;
+the command reply can arrive before the application finishes closing.
 
 ## Where to go next
 

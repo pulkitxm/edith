@@ -61,7 +61,7 @@ extension CompanionClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await CompanionTransport.shared.data(for: request)
+            (data, response) = try await self.transport.data(for: request)
         } catch {
             throw CompanionClientError.unreachable(error.localizedDescription)
         }

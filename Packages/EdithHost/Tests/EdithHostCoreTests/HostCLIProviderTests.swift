@@ -63,6 +63,25 @@ import Testing
         #expect(await fixture.actions().allSatisfy { $0 == .ls || $0 == .invoke })
     }
 
+    @Test func longProviderDeadlinesReachTheOwnedRequest() async throws {
+        let fixture = ProviderFixture(timeout: 1800)
+        let registry = try await HostCLIProviderRegistry.load(invoke: {
+            try await fixture.invoke($0)
+        })
+        let result = try await registry.execute(
+            ["music", "ls"], invoke: { try await fixture.invoke($0) })
+        #expect(result.exitCode == 130)
+        #expect(await fixture.commandTimeout() == 1800)
+        let invalid = HostCLIProviderCatalog(
+            owner: "music",
+            commands: [
+                .init(
+                    route: ["music", "ls"], operation: "music.cli", summary: "Read tracks",
+                    timeout: 1801)
+            ])
+        #expect(throws: HostCLIError.self) { try invalid.validate(owner: "music") }
+    }
+
     @Test func disableDuringExecutionDiscardsStaleReply() async throws {
         let fixture = ProviderFixture(disableOnExecution: true)
         let registry = try await HostCLIProviderRegistry.load(invoke: {
@@ -154,15 +173,21 @@ private actor ProviderFixture {
     private var available: Bool
     private let disableOnExecution: Bool
     private let cancelCatalog: Bool
+    private let timeout: Double
     private var requests: [HostCLIRequest] = []
     private var lastArguments: [String] = []
 
-    init(available: Bool = true, disableOnExecution: Bool = false, cancelCatalog: Bool = false) {
+    init(
+        available: Bool = true, disableOnExecution: Bool = false, cancelCatalog: Bool = false,
+        timeout: Double = 30
+    ) {
         self.available = available; self.disableOnExecution = disableOnExecution;
         self.cancelCatalog = cancelCatalog
+        self.timeout = timeout
     }
     func actions() -> [HostCLIRequest.Action] { requests.map(\.action) }
     func arguments() -> [String] { lastArguments }
+    func commandTimeout() -> Double? { requests.last { $0.operation == "music.cli" }?.timeout }
     func invoke(_ request: HostCLIRequest) throws -> Data {
         requests.append(request)
         if request.action == .ls {
@@ -182,7 +207,8 @@ private actor ProviderFixture {
                     owner: "music",
                     commands: [
                         .init(
-                            route: ["music", "ls"], operation: "music.cli", summary: "Read tracks")
+                            route: ["music", "ls"], operation: "music.cli", summary: "Read tracks",
+                            timeout: timeout)
                     ]))
         }
         #expect(request.id == "music" && request.operation == "music.cli")

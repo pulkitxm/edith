@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import ObjectiveC
 
 @MainActor
 public final class ExtensionBundleRuntime {
@@ -48,6 +49,7 @@ public final class ExtensionBundleRuntime {
     private let environment: [String: String]
     private let readOnlyPackage: (package: ExtensionPackage, directory: URL)?
     private var loaded: [String: Loaded] = [:]
+    private var uiOwnership: NSObject?
     private var rendererCallbacks = RendererCallbacks()
     private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock?)] = []
     private var failedLoads = Set<String>()
@@ -85,6 +87,15 @@ public final class ExtensionBundleRuntime {
         self.environment = environment
         self.verify = verify
         readOnlyPackage = (package, directory.resolvingSymlinksInPath())
+    }
+
+    public func makeRenderer(ownership: NSObject? = nil) throws -> ExtensionBundleRuntime {
+        guard let selected = readOnlyPackage else { throw MarketplaceError.invalidBundle }
+        let renderer = try ExtensionBundleRuntime(
+            readOnlyPackage: selected.package, directory: selected.directory, role: role,
+            hostABI: hostABI, environment: environment, verify: verify)
+        renderer.uiOwnership = ownership
+        return renderer
     }
 
     public func start(id: String, context: NSDictionary) throws {
@@ -215,6 +226,7 @@ public final class ExtensionBundleRuntime {
     {
         if let selected = readOnlyPackage {
             guard id == selected.package.id else { throw MarketplaceError.invalidBundle }
+            if operation == "stopUI", loaded[id] == nil { return ["ok": true] }
             return try rendererCallbacks.response(
                 id: id, role: role, operation: operation, context: context,
                 execute: {
@@ -327,6 +339,12 @@ public final class ExtensionBundleRuntime {
 
     public func viewController(id: String, context: NSDictionary) throws -> NSViewController? {
         let instance = try load(id: id)
+        if let uiOwnership {
+            let key = unsafeBitCast(
+                NSSelectorFromString("edithExtensionUIOwnership"), to: UnsafeRawPointer.self)
+            objc_setAssociatedObject(
+                instance.object, key, uiOwnership, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
         let input = NSMutableDictionary(dictionary: context)
         input["operation"] = "view"
         return instance.object.perform(NSSelectorFromString("execute:"), with: input)?
@@ -600,7 +618,14 @@ public final class ExtensionBundleRuntime {
     private func execute(_ instance: Loaded, operation: String, context: NSDictionary) throws
         -> NSDictionary
     {
+        if let uiOwnership {
+            let key = unsafeBitCast(
+                NSSelectorFromString("edithExtensionUIOwnership"), to: UnsafeRawPointer.self)
+            objc_setAssociatedObject(
+                instance.object, key, uiOwnership, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
         let input = NSMutableDictionary(dictionary: context)
+        if let uiOwnership { input["hostUIOwnership"] = uiOwnership }
         input["operation"] = operation
         guard
             let result = instance.object.perform(NSSelectorFromString("execute:"), with: input)?

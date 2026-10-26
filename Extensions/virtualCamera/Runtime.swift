@@ -192,7 +192,9 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
-        TextEditingCommands.shutdown()
+        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
         let client = uiClient; uiClient = nil
         let model = uiModel
         model?.beginSuspension()

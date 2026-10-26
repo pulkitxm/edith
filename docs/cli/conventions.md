@@ -544,7 +544,7 @@ Failures emit a JSON object containing `error` and `exitCode` on stderr. Failed 
 | 3 | This Edith installation has no authenticated running app session |
 | 4 | The request timed out and was cancelled |
 
-Invocation payloads are limited to 512 KiB. Read stdin with `--json -`; stdin must finish within five seconds. Invocation timeouts range from 1 to 120 seconds, with a default of 30 seconds. Results are limited to 8 MiB. The app admits at most eight command connections. An incomplete request expires after five seconds.
+Invocation payloads are limited to 8 MiB. Read stdin with `--json -`; stdin must finish within five seconds. Invocation timeouts range from 1 to 1800 seconds, with a default of 30 seconds. Install and update allow up to 30 minutes for downloading and verification. Results are limited to 8 MiB. The app admits at most eight command connections. An incomplete request expires after five seconds.
 
 The gateway authenticates both processes using the kernel peer identity, the same user ID, the exact app executable path, and the current executable code hash. Each app installation owns a private socket and an exclusive lease. Caller-supplied paths, process IDs, executable names, and private host operations cannot grant access.
 

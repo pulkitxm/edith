@@ -1,20 +1,18 @@
 # `ed agent status`
 
-Reads the background agent's live state over XPC.
+Read the live state of the matching app's background services.
 
 ```
 ed agent status [--json]
 ```
 
-The table shows the Login Items registration state, the agent's build, its
-process id, uptime, resident memory, CPU share since launch, how many
-subscribers hold a topic, the store path and the store's schema version. JSON
-adds `protocolVersion`, which both sides check on every connection.
+The table includes state, build, process id, uptime, resident memory, CPU share,
+subscriber count, store path, and schema version. The process id is Edith's own
+app process. JSON also includes the service protocol version.
 
-The command exits 4 when the agent is not running or refuses the connection.
-The agent accepts connections only from code signed with Edith's own team
-identifier, so a peer built with a different identity is rejected before any
-message is read.
+The command uses Edith's authenticated local CLI channel. It exits 4 when the
+matching app or its core services are unavailable. Development builds have
+separate command endpoints and stores.
 
 ## Where to go next
 

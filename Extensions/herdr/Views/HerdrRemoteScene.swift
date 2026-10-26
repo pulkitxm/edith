@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionFiles
 import EdithExtensionUI
 import SwiftUI
 
@@ -34,6 +35,10 @@ struct HerdrRemoteScene: View {
                 HerdrDetachedView(store: store, agentID: target, launchEnabled: true)
             } else if location == "herdr.agent.controls", store.detachedTab(id: target) != nil {
                 HerdrTitlebarViewPicker(store: store, agentID: target)
+            } else if location == "herdr.files",
+                let location = try? HerdrFilesWindowLocation.decode(target)
+            {
+                HerdrFilesWindowView(store: store, location: location)
             } else {
                 PageLoading(
                     state: store.inventoryReady ? .error : .loading,
@@ -45,7 +50,7 @@ struct HerdrRemoteScene: View {
         }
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
         .onAppear {
-            keyMonitor.active = automaticActions
+            keyMonitor.active = automaticActions && location != "herdr.files"
             keyMonitor.install(store: store) { [location, target] store, event, window in
                 if location == "herdr.space",
                     store.performSpaceKey(
@@ -63,9 +68,39 @@ struct HerdrRemoteScene: View {
             keyMonitor.active = false
             keyMonitor.remove()
         }
-        .onChange(of: automaticActions) { keyMonitor.active = automaticActions }
+        .onChange(of: automaticActions) {
+            keyMonitor.active = automaticActions && location != "herdr.files"
+        }
         .task(id: automaticActions) {
             if automaticActions { await store.watch() } else { store.stopWatching() }
         }
+    }
+}
+
+private struct HerdrFilesWindowView: View {
+    let location: HerdrFilesWindowLocation
+    @State private var files: HerdrFilesSession
+
+    init(store: HerdrStore, location: HerdrFilesWindowLocation) {
+        self.location = location
+        _files = State(wrappedValue: store.makeFilesSession())
+    }
+
+    var body: some View {
+        Group {
+            if let finder = files.finder {
+                FinderPane(model: finder)
+            } else {
+                PageLoading(state: .loading, title: "Loading files", layout: .editor) {
+                    EmptyView()
+                }
+            }
+        }
+        .task {
+            files.prepare(
+                directory: location.path, isLocal: location.machine.id == Machine.localID,
+                machine: location.machine)
+        }
+        .onDisappear { files.discard() }
     }
 }

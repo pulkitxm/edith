@@ -8,6 +8,23 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostHerdrWindowsTests {
+    @Test func filesWindowsKeepTheirOwningPresentationAndDrainBeforeClosing() async throws {
+        let fixture = HerdrWindowsFixture()
+        defer { fixture.owner.close() }
+        fixture.location = "herdr.files"
+        let service = fixture.service()
+        try await service.open(fixture.request())
+        let content = try #require(fixture.loaded.first)
+        #expect(content.extensionID == "herdr" && content.location == "herdr.files")
+        try content.validate(extensionID: "herdr")
+        #expect(fixture.admitted && service.pendingCount == 1)
+        try await service.stop()
+        #expect(fixture.released == [content.presentationID])
+        #expect(fixture.closed == [fixture.token])
+        #expect(fixture.lifecycle.suffix(2) == ["release", "herdr.ui.presentation.close"])
+        #expect(fixture.created.allSatisfy { !$0.isVisible })
+    }
+
     @Test func exactNativeCloseReleasesOnlyItsScopedSceneAndReopeningCreatesNewWindow() async throws
     {
         let fixture = HerdrWindowsFixture()
@@ -164,6 +181,7 @@ private final class HerdrWindowsFixture {
     let owner = TestWindowHost.window(contentRect: .zero)
     let sourcePresentation = UUID()
     var token = UUID()
+    var location = "herdr.agent"
     var admitted = false
     var closeFails = false
     var closed: [UUID] = []
@@ -188,7 +206,7 @@ private final class HerdrWindowsFixture {
             presentationID: sourcePresentation,
             herdrWindow: try HostHerdrWindowTarget.decode(
                 JSONSerialization.data(withJSONObject: [
-                    "version": 1, "owner": "herdr", "location": "herdr.agent",
+                    "version": 1, "owner": "herdr", "location": location,
                     "target": "synthetic-agent",
                     "token": token.uuidString, "title": "Synthetic session", "width": 1000,
                     "height": 640,

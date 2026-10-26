@@ -554,7 +554,7 @@ test("validation preserves all native package and global gates while withholding
   expect(workflow.permissions).toEqual({ contents: "read" });
   expect(workflow.on.workflow_dispatch.inputs.validation_sha).toEqual({
     description:
-      "Validate all 40 extensions at this exact source SHA without publishing",
+      "Validate every extension at this exact source SHA without publishing",
     type: "string",
     required: false,
     default: "",

@@ -433,9 +433,15 @@ public struct CompanionClient: Sendable {
     public static let longRequestTimeout: TimeInterval = 300
 
     public let baseURL: URL
+    let transport: CompanionTransport
 
     public init(baseURL: URL) {
+        self.init(baseURL: baseURL, transport: .shared)
+    }
+
+    init(baseURL: URL, transport: CompanionTransport) {
         self.baseURL = baseURL
+        self.transport = transport
     }
 
     public static func endpoint(override: String?) -> URL {
@@ -902,7 +908,7 @@ public struct CompanionClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await CompanionTransport.shared.data(for: request)
+            (data, response) = try await self.transport.data(for: request)
         } catch {
             throw CompanionClientError.unreachable(error.localizedDescription)
         }

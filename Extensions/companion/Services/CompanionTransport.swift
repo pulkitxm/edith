@@ -9,11 +9,29 @@ final class CompanionTransport: @unchecked Sendable {
     private var currentRetirement: CompanionSessionRetirement?
     private var retiring: CompanionSessionRetirement?
     private var closed = false
+    private var closing = false
     private var remote: CompanionUIBridge?
     private var remoteOnly = false
-    func configureRemote(_ value: CompanionUIBridge?) {
+    private var remoteOwners: [(UUID, CompanionUIBridge)] = []
+    @discardableResult
+    func configureRemote(_ value: CompanionUIBridge?, owner: UUID = UUID()) -> Bool {
         lock.withLock {
+            if let value {
+                guard !closing, producers.reopen() else { return false }
+                remoteOwners.removeAll { $0.0 == owner }
+                remoteOwners.append((owner, value))
+            } else {
+                remoteOwners = []
+            }
             remote = value; remoteOnly = true; closed = value == nil
+            return true
+        }
+    }
+    func releaseRemote(_ owner: UUID) {
+        lock.withLock {
+            remoteOwners.removeAll { $0.0 == owner }
+            remote = remoteOwners.last?.1
+            closed = remote == nil
         }
     }
     var remoteBridge: CompanionUIBridge? { lock.withLock { remote } }
@@ -57,17 +75,25 @@ final class CompanionTransport: @unchecked Sendable {
         try await producers.perform { [self] in try await session.bytes(for: request) }
     }
 
-    func open() { lock.withLock { if retiring == nil { closed = false } } }
+    @discardableResult
+    func open() -> Bool {
+        lock.withLock {
+            guard !closing, retiring == nil, producers.reopen() else { return false }
+            closed = false
+            return true
+        }
+    }
 
     func close() {
-        producers.cancel()
         let session = lock.withLock { () -> URLSession? in
             closed = true
+            closing = true
             if let currentRetirement { retiring = currentRetirement }
             currentRetirement = nil
             defer { current = nil }
             return current
         }
+        producers.cancel()
         session?.invalidateAndCancel()
     }
 
@@ -76,7 +102,10 @@ final class CompanionTransport: @unchecked Sendable {
         let active = lock.withLock { retiring }
         await active?.wait()
         await producers.drain()
-        lock.withLock { if retiring === active { retiring = nil } }
+        lock.withLock {
+            if retiring === active { retiring = nil }
+            closing = false
+        }
     }
 }
 
@@ -132,6 +161,14 @@ final class CompanionTransportTaskOwner: @unchecked Sendable {
     private let lock = NSLock()
     private var tasks: [UUID: Entry] = [:]
     private var closed = false
+
+    func reopen() -> Bool {
+        lock.withLock {
+            guard !closed || tasks.isEmpty else { return false }
+            closed = false
+            return true
+        }
+    }
 
     func launch(_ work: @escaping @Sendable () async -> Void) -> Task<Void, Never>? {
         lock.withLock {

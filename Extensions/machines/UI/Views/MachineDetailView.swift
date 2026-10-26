@@ -168,7 +168,12 @@ struct ConnectionPill: View {
 struct MachineWindowView: View {
     let machineID: UUID
     @State private var router = WindowRouter()
-    @State private var model = MachinesModel.shared
+    @State private var model: MachinesModel
+
+    init(machineID: UUID, model: MachinesModel? = nil) {
+        self.machineID = machineID
+        _model = State(initialValue: model ?? .shared)
+    }
     @State private var tab = MachineTab.overview
     @Environment(\.colorScheme) private var scheme
 
@@ -207,9 +212,10 @@ struct MachineWindowView: View {
 
 @MainActor
 enum MachineWindow {
-    static func open(machineID: UUID, title: String) {
-        guard let client = MachinesModel.shared.uiClient else {
-            MachinesModel.shared.operationError = "The owning app window bridge is unavailable."
+    static func open(machineID: UUID, title: String, model: MachinesModel? = nil) {
+        let model = model ?? .shared
+        guard let client = model.uiClient else {
+            model.operationError = "The owning app window bridge is unavailable."
             return
         }
         client.enqueue {

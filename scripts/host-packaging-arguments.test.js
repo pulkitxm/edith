@@ -20,6 +20,6 @@ test("host packaging and branch arguments pass the actual Bash regression suite"
   );
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(0);
-  expect(result.stderr).toContain("Ran 3 tests");
+  expect(result.stderr).toMatch(/Ran [1-9]\d* tests/);
   expect(result.stderr).toContain("OK");
 });

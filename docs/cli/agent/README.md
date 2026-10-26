@@ -1,16 +1,12 @@
 # `ed agent`
 
-`ed agent` inspects and controls `edithd`, the headless background agent Edith
-registers as a LaunchAgent. The agent owns collection and long jobs: usage and
-limits, session discovery, machine health and metrics, update discovery, the
-cleaner estimate, the download queue, Memory health, site audits and the iCloud
-backup scheduler. It runs with no windows and never asks for a permission.
+`ed agent` inspects Edith's app-owned background services and job queue. They
+run in the same process as the window, menu bar, and downloaded extension
+engines. Jobs and subscriptions belong to this Edith installation.
 
-launchd starts the agent on demand through its Mach service,
-`com.pulkit.edith.agent`, and keeps it alive while its Login Items entry is
-enabled. The app registers it with `SMAppService` on launch; macOS may hold the
-registration in Login Items and Extensions until you approve it, which is what
-`awaitingApproval` means.
+Closing the window keeps enabled background work running. Quitting the whole
+app stops it. The production app's Login Item controls whether Edith starts at
+login; there is no separate background-agent LaunchAgent to register.
 
 Every job declares a trigger, an ambient cadence that runs with no window open,
 a live cadence that applies while something is subscribed to its topic, and a
@@ -23,7 +19,7 @@ power policy. `ed agent jobs` prints that table as the agent currently sees it.
 | [`ed agent status`](./status.md) | Registration state, build, uptime, memory, CPU and store schema |
 | [`ed agent activity`](./activity.md) | Observed coding sessions and pending permission requests |
 | [`ed agent jobs`](./jobs.md) | The live job table with triggers, cadences and subscribers |
-| [`ed agent restart`](./restart.md) | Stop the agent so launchd starts it again |
+| [`ed agent restart`](./restart.md) | Restart the app-owned core services |
 | [`ed agent logs`](./logs.md) | Recent agent log lines from the unified log |
 | [`ed agent events`](./events.md) | Retained structured runtime events and task IDs |
 | [`ed agent run`](./jobs.md) | Queue a registered recurring job immediately |
@@ -33,5 +29,5 @@ power policy. `ed agent jobs` prints that table as the agent currently sees it.
 
 ## Where to go next
 
-- [`ed app`](../app/README.md), for the window and the menu bar helper
+- [`ed app`](../app/README.md), for the app window and menu bar
 - [All `ed` commands](../README.md)

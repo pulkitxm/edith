@@ -5,6 +5,10 @@ import Observation
 @MainActor
 @Observable
 final class CompanionHomeModel: CompanionRefreshable {
+    let transport: CompanionTransport
+
+    init(transport: CompanionTransport = .shared) { self.transport = transport }
+
     private let commandTasks = CompanionTaskOwner()
     func cancelPendingCommands() { commandTasks.cancel() }
     func cancelAndWait() async { await commandTasks.drain() }
@@ -18,7 +22,7 @@ final class CompanionHomeModel: CompanionRefreshable {
     var hasAttemptedRefresh: Bool { loading.state != .loading && loading.state != .cancelled }
 
     var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     var blocking: [CompanionCheck] {

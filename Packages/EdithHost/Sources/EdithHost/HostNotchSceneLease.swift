@@ -1,6 +1,5 @@
 import AppKit
 import EdithHostCore
-@preconcurrency import ExtensionKit
 
 @MainActor
 final class HostNotchSceneLease {

@@ -167,7 +167,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
                 command.readsInput != true || acceptsInput == true,
                 !command.summary.isEmpty, command.summary.utf8.count <= 4096,
                 !command.summary.utf8.contains(0), command.timeout.isFinite,
-                (1...120).contains(command.timeout)
+                (1...HostCLIRequest.maximumTimeout).contains(command.timeout)
             else { throw HostCLIError.rejected("Invalid extension command route.") }
             if owner == "systemStats" {
                 guard command.route.count >= 2,

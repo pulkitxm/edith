@@ -31,8 +31,11 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private var searchTask: Task<Void, Never>?
     private let reads: CompanionLibraryReads
 
-    init(reads: CompanionLibraryReads = .live) {
-        self.reads = reads
+    let transport: CompanionTransport
+
+    init(reads: CompanionLibraryReads? = nil, transport: CompanionTransport = .shared) {
+        self.transport = transport
+        self.reads = reads ?? .live(transport: transport)
     }
 
     func cancelPendingCommands() {
@@ -48,7 +51,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     }
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     func refresh() async {
@@ -149,7 +152,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private func openExternallyWork() async {
         guard let detail else { return }
         do {
-            if let remote = CompanionTransport.shared.remoteBridge {
+            if let remote = transport.remoteBridge {
                 _ = try await remote.invoke(
                     "companion.ui.openMedia", JSONEncoder().encode(detail.id))
                 return

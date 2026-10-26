@@ -51,7 +51,9 @@ final class ExtensionRuntime: NSObject {
     func suspendCommands(completion: @escaping () -> Void) {
         commands.suspend()
         suspended = true
-        DocsCopyResetWork.beginSuspension()
+        ExtensionUIResources.cleanup(of: self, key: "copyReset") {
+            DocsCopyResetWork.beginSuspension()
+        }
         let browser = browser
         let uiBrowsers = uiPresentations.values.map(\.browser)
         let streams = cliStreams
@@ -62,7 +64,9 @@ final class ExtensionRuntime: NSObject {
             let retired = Array(uiRetirements.values)
             suspension = Task { [self, browser, uiBrowsers, streams] in
                 await commands.suspendAndWait()
-                await DocsCopyResetWork.drain()
+                if ExtensionUIResources.canDrainSharedResources(of: self) {
+                    await DocsCopyResetWork.drain()
+                }
                 await browser?.drain()
                 for uiBrowser in uiBrowsers { await uiBrowser.drain() }
                 await streams?.stopAndWait()
@@ -122,7 +126,9 @@ final class ExtensionRuntime: NSObject {
                 DocsBrowser(remote: DocsUIBridge(client: client)), client
             )
         case "stopUI":
-            DocsCopyResetWork.beginSuspension()
+            ExtensionUIResources.cleanup(of: self, key: "copyReset") {
+                DocsCopyResetWork.beginSuspension()
+            }
             let retired = uiPresentations.values
             uiPresentations = [:]
             for presentation in retired {
@@ -131,7 +137,9 @@ final class ExtensionRuntime: NSObject {
                 let id = UUID()
                 uiRetirements[id] = Task { [self, browser] in
                     await browser.drain()
-                    await DocsCopyResetWork.drain()
+                    if ExtensionUIResources.canDrainSharedResources(of: self) {
+                        await DocsCopyResetWork.drain()
+                    }
                     browser.shutdown()
                     uiRetirements[id] = nil
                 }

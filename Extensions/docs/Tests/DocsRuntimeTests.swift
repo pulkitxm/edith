@@ -1,4 +1,5 @@
 import EdithExtensionCommands
+import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import DocsExtension
@@ -17,6 +18,21 @@ import Testing
         #expect(status?["running"] as? Bool == false)
     }
 
+    @Test func closingOnePresentationDoesNotSuspendAnotherPresentationsCopyFeedback() async {
+        DocsCopyResetWork.beginSuspension()
+        await DocsCopyResetWork.drain()
+        DocsCopyResetWork.enable()
+        let runtime = ExtensionRuntime()
+        let lease = DocsSharedResourceLease()
+        ExtensionUIResources.bind(lease, to: runtime)
+        _ = runtime.execute(["operation": "stopUI"])
+        #expect(DocsCopyResetWork.schedule(UUID(), reset: {}))
+        lease.finish()
+        #expect(!DocsCopyResetWork.schedule(UUID(), reset: {}))
+        await DocsCopyResetWork.drain()
+        DocsCopyResetWork.enable()
+    }
+
     @Test func answersTheCLICatalogWithoutTheBuiltInHelpCommand() throws {
         let data = try ExtensionCLICatalog.data(
             DocsCommandGroup.self, owner: "docs", payload: Data("{}".utf8), streaming: true)
@@ -33,4 +49,19 @@ import Testing
         }
         #expect(!names.contains("help"))
     }
+}
+
+@MainActor
+private final class DocsSharedResourceLease: NSObject {
+    private var pending: (@convention(block) () -> Void)?
+
+    @objc(scheduleSharedCleanup:operation:)
+    func scheduleSharedCleanup(_ key: NSString, operation: @escaping @convention(block) () -> Void)
+    {
+        pending = operation
+    }
+
+    @objc func canStopSharedResources() -> Bool { false }
+
+    func finish() { pending?(); pending = nil }
 }

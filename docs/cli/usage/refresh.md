@@ -75,7 +75,7 @@ ed usage refresh && ed usage summary --range today
 ## Behaviour
 
 This is the only verb in the group that changes anything. `ed` asks the
-background agent (`edithd`) to re-collect usage; the agent runs the same
+background agent (Edith's background services) to re-collect usage; the agent runs the same
 pipeline EdithKit uses, so the CLI and dashboard stay aligned without the menu
 bar app doing the work in-process.
 

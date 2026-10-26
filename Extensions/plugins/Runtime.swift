@@ -123,7 +123,11 @@ final class ExtensionRuntime: NSObject {
             for owner in suspendedUIModels { await owner.shutdown() }
             await commands.shutdownAndWait()
             if ordinaryModel { SkillBrand.shutdown() }
-            if ordinaryModel || !suspendedUIModels.isEmpty { TextEditingCommands.shutdown() }
+            if ordinaryModel || !suspendedUIModels.isEmpty {
+                ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                    TextEditingCommands.shutdown()
+                }
+            }
             suspendedUIModels.removeAll()
             model = nil; surface = nil; cliStreams = nil
             fixtureActive = false
@@ -153,7 +157,11 @@ final class ExtensionRuntime: NSObject {
                 uiDrains[id] = nil
             }
         }
-        if hadUI, !preservingMetadata { TextEditingCommands.shutdown() }
+        if hadUI, !preservingMetadata {
+            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+                TextEditingCommands.shutdown()
+            }
+        }
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {

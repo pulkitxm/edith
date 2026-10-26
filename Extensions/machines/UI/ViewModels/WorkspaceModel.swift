@@ -318,7 +318,7 @@ final class WorkspaceModel {
 
 struct WorkspaceView: View {
     let machines: MachinesModel
-    @State private var model = WorkspaceModel.shared
+    @State private var model: WorkspaceModel
     @State private var renameTarget: WorkspaceLayout?
     @State private var renameText = ""
     @State private var removeTarget: WorkspaceLayout?
@@ -327,8 +327,9 @@ struct WorkspaceView: View {
 
     private var dark: Bool { scheme == .dark }
 
-    init(machines: MachinesModel) {
+    init(machines: MachinesModel, model: WorkspaceModel? = nil) {
         self.machines = machines
+        _model = State(initialValue: model ?? .shared)
     }
 
     var body: some View {

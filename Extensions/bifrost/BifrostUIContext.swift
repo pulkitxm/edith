@@ -11,7 +11,23 @@ struct BifrostUISettings: Codable {
 struct BifrostUIChange: Codable { let key: String; let value: String }
 
 @MainActor @Observable final class BifrostUIContext {
-    static var current: BifrostUIContext?
+    private static var active: [WeakContext] = []
+    private struct WeakContext { weak var value: BifrostUIContext? }
+    static var current: BifrostUIContext? {
+        get {
+            active.removeAll { $0.value == nil || $0.value?.stopped == true }
+            return active.last?.value
+        }
+        set {
+            active.removeAll { $0.value == nil || $0.value?.stopped == true }
+            if let newValue {
+                active.removeAll { $0.value === newValue }
+                active.append(WeakContext(value: newValue))
+            } else {
+                active = []
+            }
+        }
+    }
     private(set) var index: BifrostIndex?
     private(set) var loaded = false
     private(set) var error: String?

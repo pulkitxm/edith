@@ -32,6 +32,31 @@ import Testing
         #expect(await cache.image(for: file) == nil)
     }
 
+    @Test func closingEitherRemoteOwnerLeavesTheOtherSnapshotReaderUsable() async throws {
+        let cache = SEOSnapshotCache()
+        let first = UUID(), second = UUID()
+        let calls = SnapshotReaderCalls()
+        let url = try #require(URL(string: "https://synthetic.invalid/snapshot.png"))
+        cache.configureRemote(owner: first) { _ in
+            await calls.record("first"); return nil
+        }
+        cache.configureRemote(owner: second) { _ in
+            await calls.record("second"); return nil
+        }
+        _ = await cache.image(for: url)
+        cache.releaseRemote(second)
+        _ = await cache.image(for: url)
+        cache.configureRemote(owner: second) { _ in
+            await calls.record("second"); return nil
+        }
+        cache.releaseRemote(first)
+        _ = await cache.image(for: url)
+        cache.releaseRemote(second)
+        _ = await cache.image(for: url)
+        #expect(await calls.values == ["second", "first", "second"])
+        cache.shutdown()
+    }
+
     @Test func corruptImagesAndOversizedBodiesNeverDecode() {
         #expect(SEOSnapshotCache.decode(Data([1, 2, 3, 4])) == nil)
         #expect(SEOSnapshotCache.decode(Data(count: 25 * 1_024 * 1_024 + 1)) == nil)
@@ -45,4 +70,9 @@ import Testing
         #expect(await task.value == nil)
         cache.shutdown()
     }
+}
+
+private actor SnapshotReaderCalls {
+    private(set) var values: [String] = []
+    func record(_ value: String) { values.append(value) }
 }
