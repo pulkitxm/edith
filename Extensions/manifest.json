@@ -72,7 +72,7 @@
   },
   {
     "id": "focusDim",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "roles": {
@@ -105,7 +105,7 @@
   },
   {
     "id": "hinge",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "roles": {
@@ -190,7 +190,7 @@
   },
   {
     "id": "micMute",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "roles": {
@@ -223,7 +223,7 @@
   },
   {
     "id": "keystrokeHighlight",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "roles": {
@@ -257,7 +257,7 @@
   },
   {
     "id": "presenter",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
@@ -305,7 +305,7 @@
   },
   {
     "id": "colorPicker",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "roles": {
@@ -386,7 +386,7 @@
   },
   {
     "id": "emoji",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
@@ -956,7 +956,7 @@
     "testTargets": [
       "ci-extension-clipboard-native"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-5",
@@ -1952,7 +1952,7 @@
   },
   {
     "id": "bifrost",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,
@@ -2532,7 +2532,7 @@
   },
   {
     "id": "virtualCamera",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "hostABI": "edith-host-5",
     "minimumSystemVersion": "14.0.0",
     "contractVersion": 1,

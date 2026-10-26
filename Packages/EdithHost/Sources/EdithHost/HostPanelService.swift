@@ -22,7 +22,7 @@ import Foundation
         let result = InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, context in
-                guard let event, let context else { return noErr }
+                guard let event, let context else { return OSStatus(eventNotHandledErr) }
                 var key = EventHotKeyID()
                 guard
                     GetEventParameter(
@@ -30,7 +30,7 @@ import Foundation
                         EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size,
                         nil, &key) == noErr,
                     key.signature == OSType(0x4544_4350), key.id == 1
-                else { return noErr }
+                else { return OSStatus(eventNotHandledErr) }
                 MainActor.assumeIsolated {
                     Unmanaged<HostPanelService>.fromOpaque(context).takeUnretainedValue().action()
                 }

@@ -71,6 +71,7 @@ public enum InputFocus {
 
     public static func takesKeysDirectly(_ responder: NSResponder?) -> Bool {
         responder is DirectKeyboardInputResponder || responder is WKWebView
+            || (responder as? NSView)?.identifier == ShortcutKeyCapture.identifier
     }
 
     private static func editingTextView(in window: NSWindow) -> NSTextView? {
