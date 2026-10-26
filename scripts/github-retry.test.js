@@ -292,3 +292,22 @@ test("an upload with a lost dispatch acknowledgement confirms the existing asset
   expect(result).toBe("pukbot");
   expect(mutations).toBe(1);
 });
+
+test("GitHub connection timeouts retry reads without changing the request", () => {
+  let calls = 0;
+  const failure = Object.assign(new Error("Command failed: gh api"), {
+    stderr:
+      'Get "https://api.github.com/repos/synthetic/fixture": dial tcp 192.0.2.1:443: connect: operation timed out',
+  });
+  expect(isTransientFailure(failure)).toBe(true);
+  const result = withGitHubRetrySync(
+    () => {
+      calls++;
+      if (calls === 1) throw failure;
+      return "verified response";
+    },
+    { sleep: () => {} },
+  );
+  expect(result).toBe("verified response");
+  expect(calls).toBe(2);
+});
