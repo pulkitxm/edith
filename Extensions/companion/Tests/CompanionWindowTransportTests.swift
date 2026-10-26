@@ -77,6 +77,7 @@ struct CompanionWindowTransportTests {
             ExtensionEngineClient(bridge: channel, presentationID: presentation))
         let runtime = ExtensionRuntime(fixtureAdmission: { _ in nil })
         let workspace = try #require(runtime.configureUI(client: client))
+        #expect(CompanionTransport.shared.remoteBridge == nil)
         let request = Task {
             try await workspace.transport.data(
                 for: URLRequest(

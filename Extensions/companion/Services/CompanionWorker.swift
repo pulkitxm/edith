@@ -127,7 +127,6 @@ final class CompanionWorker {
         if CompanionBackgroundOperation.monitor === monitor {
             CompanionBackgroundOperation.monitor = nil
         }
-        transport.close()
         await monitor.stop()
     }
 

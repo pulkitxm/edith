@@ -55,6 +55,7 @@ struct HostApplication: App {
                 }
             }
             .tracksWindowVisibility()
+            .toolbar(.hidden, for: .windowToolbar)
             .frame(minWidth: 540, minHeight: 400)
             .onAppear {
                 UIScale.apply(zoom); applyAppearance(appearance)
@@ -72,6 +73,7 @@ struct HostApplication: App {
                 }
             }
         }
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .appTermination) {
                 Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")

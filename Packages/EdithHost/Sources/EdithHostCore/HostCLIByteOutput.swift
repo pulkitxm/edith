@@ -5,6 +5,7 @@ public final class HostCLIByteOutput: @unchecked Sendable {
     private let output: Int32
     private let wakeRead: Int32
     private let wakeWrite: Int32
+    private let pollOutput: Bool
     private let state = NSLock()
     private let writer = NSLock()
     private var stopped = false
@@ -16,6 +17,13 @@ public final class HostCLIByteOutput: @unchecked Sendable {
             if copy >= 0 { Darwin.close(copy) }
             throw HostCLIError.rejected("Could not open command output.")
         }
+        var metadata = stat()
+        guard fstat(copy, &metadata) == 0 else {
+            for fd in [copy, wake[0], wake[1]] { Darwin.close(fd) }
+            throw HostCLIError.rejected("Could not inspect command output.")
+        }
+        let type = metadata.st_mode & S_IFMT
+        pollOutput = type == S_IFIFO || type == S_IFSOCK || isatty(copy) != 0
         for fd in [copy, wake[0], wake[1]] { _ = fcntl(fd, F_SETFD, FD_CLOEXEC) }
         _ = fcntl(wake[1], F_SETFL, O_NONBLOCK)
         _ = signal(SIGPIPE, SIG_IGN)
@@ -56,19 +64,21 @@ public final class HostCLIByteOutput: @unchecked Sendable {
                 while offset < bytes.count {
                     try checkCancellation()
                     guard ContinuousClock.now < deadline else { throw HostCLIError.timedOut }
-                    var events = [
-                        pollfd(fd: output, events: Int16(POLLOUT), revents: 0),
-                        pollfd(fd: wakeRead, events: Int16(POLLIN), revents: 0),
-                    ]
-                    let result = poll(&events, 2, 100)
-                    if result < 0, errno == EINTR { continue }
-                    guard result >= 0 else {
-                        throw HostCLIError.rejected("Command output poll failed.")
-                    }
-                    try checkCancellation()
-                    if result == 0 { continue }
-                    guard events[0].revents & Int16(POLLNVAL | POLLERR | POLLHUP) == 0 else {
-                        throw HostCLIError.rejected("Command output closed.")
+                    if pollOutput {
+                        var events = [
+                            pollfd(fd: output, events: Int16(POLLOUT), revents: 0),
+                            pollfd(fd: wakeRead, events: Int16(POLLIN), revents: 0),
+                        ]
+                        let result = poll(&events, 2, 100)
+                        if result < 0, errno == EINTR { continue }
+                        guard result >= 0 else {
+                            throw HostCLIError.rejected("Command output poll failed.")
+                        }
+                        try checkCancellation()
+                        if result == 0 { continue }
+                        guard events[0].revents & Int16(POLLNVAL | POLLERR | POLLHUP) == 0 else {
+                            throw HostCLIError.rejected("Command output closed.")
+                        }
                     }
                     let count = Darwin.write(
                         output, bytes.baseAddress!.advanced(by: offset),

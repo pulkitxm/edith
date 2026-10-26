@@ -28,6 +28,33 @@ public struct HostRemoteConfiguration: Codable, Sendable {
         else { throw HostWorkerError.rejected }
         _ = try worker.identity()
     }
+
+    @MainActor func uiContext(for request: HostExtensionContentRequest, engineClient: NSObject?)
+        throws
+        -> NSMutableDictionary
+    {
+        let input = NSMutableDictionary(dictionary: [
+            "remoteUI": true, "inProcess": true, "uiOnly": uiOnly,
+            "location": request.location,
+            "presentationID": request.presentationID.uuidString,
+            "defaultsSuite": try worker.identity().extensionDefaultsSuite(package.id),
+            "hostIdentifier": worker.identifier, "extensionID": package.id,
+        ])
+        if let engineClient { input["engineClient"] = engineClient }
+        input["section"] = request.section
+        if let target = request.machinesWindow {
+            input["target"] = try target.context(presentationID: request.presentationID)
+        }
+        if let target = request.herdrWindow {
+            input["target"] = target.target
+            input["herdrPresentationToken"] = target.token.uuidString
+        }
+        if let surface = request.surface {
+            input["tile"] = try JSONEncoder().encode(surface.tile)
+            input["target"] = surface.target.rawValue
+        }
+        return input
+    }
 }
 
 public struct HostRemoteSceneDescriptor: Codable, Equatable, Sendable {

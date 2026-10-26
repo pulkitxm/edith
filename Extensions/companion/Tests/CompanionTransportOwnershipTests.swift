@@ -5,6 +5,16 @@ import Testing
 
 @MainActor
 struct CompanionTransportOwnershipTests {
+    @Test func replacingAStoppedWorkerReopensItsEngineTransport() async throws {
+        let transport = CompanionTransport()
+        let first = CompanionWorker(transport: transport)
+        await first.shutdown()
+        let replacement = CompanionWorker(transport: transport)
+        #expect(!transport.isClosed)
+        #expect(try await transport.producers.perform { "ready" } == "ready")
+        await replacement.shutdown()
+    }
+
     @Test func closingEitherWindowPreservesTheOtherRemoteConnection() async throws {
         let transport = CompanionTransport()
         let firstID = UUID(), secondID = UUID()

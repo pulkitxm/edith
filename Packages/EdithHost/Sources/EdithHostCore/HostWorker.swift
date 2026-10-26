@@ -63,6 +63,7 @@ public final class HostWorker {
     private var running = false
     private var launched = false
     private var busy = false
+    private var requestWaiters: [CheckedContinuation<Void, Never>] = []
     private var navigation: [UUID: NavigationPending] = [:]
     private var preparation: (operation: String, response: HostWorkerResponse?)?
     private var ownedProcessGroups = HostWorkerProcessGroups()
@@ -202,6 +203,10 @@ public final class HostWorker {
         guard running else { return }
         ready = false
         cancelNavigation(acknowledge: true)
+        if busy {
+            await withCheckedContinuation { requestWaiters.append($0) }
+            try Task.checkCancellation()
+        }
         if let preparation, let response = preparation.response, response.ok {
             guard preparation.operation == operation else { throw HostWorkerError.rejected }
             return
@@ -238,7 +243,12 @@ public final class HostWorker {
         guard running, let engine else { throw HostWorkerError.exited }
         guard !busy else { throw HostWorkerError.rejected }
         busy = true
-        defer { busy = false }
+        defer {
+            busy = false
+            let waiters = requestWaiters
+            requestWaiters = []
+            for waiter in waiters { waiter.resume() }
+        }
         let limit = timeout ?? requestTimeout
         let outcome = HostWorkerOutcome()
         let response = try await withTaskCancellationHandler {
@@ -254,7 +264,14 @@ public final class HostWorker {
             Task { @MainActor in outcome.finish(.failure(CancellationError())) }
         }
         guard response.token == request.token else { throw HostWorkerError.invalidResponse }
-        guard response.ok || acceptsFailure else { throw HostWorkerError.rejected }
+        guard response.ok || acceptsFailure else {
+            if request.operation == "start", let message = response.message,
+                !message.isEmpty, message.count <= 1024
+            {
+                throw HostWorkerError.startRejected(message)
+            }
+            throw HostWorkerError.rejected
+        }
         return response
     }
 

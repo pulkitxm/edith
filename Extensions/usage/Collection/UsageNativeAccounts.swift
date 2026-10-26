@@ -1,4 +1,5 @@
 import EdithExtensionAccounts
+import EdithExtensionSupport
 import Foundation
 
 struct UsageNativeAccounts: Sendable {
@@ -15,7 +16,7 @@ struct UsageNativeAccounts: Sendable {
     }
 
     static func load(
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ExtensionEnvironment.values
     ) async -> Self {
         guard let directory = try? ClaudeAccountStorage.directory(environment: environment) else {
             return .init()

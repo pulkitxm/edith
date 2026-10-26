@@ -15,7 +15,8 @@ public struct ExtensionUIConfiguration {
             else { return nil }
             self.init(
                 context: context, hostIdentifier: host, extensionID: id,
-                defaultsSuite: host + ".extension." + id + ".worker")
+                defaultsSuite: host == "com.pulkit.edith"
+                    ? host + ".shared" : host + ".extensions." + id)
             return
         }
         let bundle = Bundle.main
@@ -29,11 +30,16 @@ public struct ExtensionUIConfiguration {
 
     init?(context: NSDictionary, hostIdentifier: String, extensionID: String, defaultsSuite: String)
     {
+        let expectedSuite =
+            context["inProcess"] as? Bool == true
+            ? (hostIdentifier == "com.pulkit.edith"
+                ? hostIdentifier + ".shared" : hostIdentifier + ".extensions." + extensionID)
+            : hostIdentifier + ".extension." + extensionID + ".worker"
         guard context["remoteUI"] as? Bool == true,
             context["hostIdentifier"] as? String == hostIdentifier,
             context["extensionID"] as? String == extensionID,
             context["defaultsSuite"] as? String == defaultsSuite,
-            defaultsSuite == hostIdentifier + ".extension." + extensionID + ".worker",
+            defaultsSuite == expectedSuite,
             let uiOnly = context["uiOnly"] as? Bool,
             let value = context["presentationID"] as? String,
             let presentation = UUID(uuidString: value)

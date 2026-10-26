@@ -219,11 +219,28 @@ struct ExtensionEngineTests {
         let previous = ExtensionHostRole.isInterfaceProcess
         let context: NSDictionary = [
             "inProcess": true, "remoteUI": true, "hostIdentifier": "synthetic.host",
-            "extensionID": "sample", "defaultsSuite": "synthetic.host.extension.sample.worker",
+            "extensionID": "sample", "defaultsSuite": "synthetic.host.extensions.sample",
             "presentationID": UUID().uuidString, "uiOnly": true, "location": "settings",
         ]
         _ = try #require(ExtensionUIConfiguration(context: context))
         #expect(ExtensionHostRole.isInterfaceProcess == previous)
+    }
+
+    @Test(arguments: ["com.pulkit.edith", "com.pulkit.edith.dev.synthetic"])
+    func inProcessSettingsUseTheOwnersPreferencesAndRejectForeignNamespaces(host: String) throws {
+        let suite = host == "com.pulkit.edith" ? host + ".shared" : host + ".extensions.sample"
+        let context = NSMutableDictionary(dictionary: [
+            "inProcess": true, "remoteUI": true, "hostIdentifier": host, "extensionID": "sample",
+            "defaultsSuite": suite, "presentationID": UUID().uuidString,
+            "uiOnly": true, "location": "settings",
+        ])
+        let configuration = try #require(ExtensionUIConfiguration(context: context))
+        #expect(configuration.defaultsSuite == suite)
+        #expect(configuration.engineClient == nil)
+        for foreign in [host + ".extension.sample.worker", host + ".extensions.other"] {
+            context["defaultsSuite"] = foreign
+            #expect(ExtensionUIConfiguration(context: context) == nil)
+        }
     }
 
     private func wait(_ condition: () -> Bool) async throws {

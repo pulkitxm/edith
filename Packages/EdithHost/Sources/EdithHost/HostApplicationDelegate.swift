@@ -106,6 +106,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         InputFocus.install()
+        TextEditingCommands.install()
         ScrollForwarding.install()
         dropToAccessoryWhenWindowless()
         if launchesRuntime { runtime.launch() }

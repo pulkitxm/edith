@@ -39,7 +39,6 @@ final class HostLocalSession {
     let configuration: HostRemoteConfiguration
     let engine: HostRemoteEngineOwner?
     let peer: HostRemoteProcessIdentity?
-    let hostIdentifier: String
     let runtimes: [ExtensionBundleRuntime]
     fileprivate let resources: HostUIResourceOwners
     private var handles: [UUID: HostLocalSceneHandle] = [:]
@@ -61,8 +60,6 @@ final class HostLocalSession {
             let lease = try marketplace.packageStore.lease(package)
             let runtimes = try Self.load(
                 package, store: marketplace.packageStore,
-                interface: marketplace.identity.root.appendingPathComponent(
-                    "ExtensionState/Interface", isDirectory: true),
                 development: marketplace.identity.development,
                 environment: try configuration.worker.extensionEnvironment())
             if let previous = Self.loaded[package.id] { Self.superseded.append(previous) }
@@ -73,7 +70,6 @@ final class HostLocalSession {
         }
         self.configuration = configuration
         self.engine = engine
-        hostIdentifier = marketplace.identity.identifier
         peer = Self.currentHostIdentity()
     }
 
@@ -84,16 +80,11 @@ final class HostLocalSession {
     }
 
     private static func load(
-        _ package: ExtensionPackage, store: ExtensionPackageStore, interface: URL,
+        _ package: ExtensionPackage, store: ExtensionPackageStore,
         development: Bool, environment: [String: String]
     ) throws -> [ExtensionBundleRuntime] {
-        let directory = interface.appendingPathComponent(
-            "\(package.id)-\(package.version)-\(UUID().uuidString)", isDirectory: true)
-        let payload = directory.appendingPathComponent(package.id, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        try FileManager.default.copyItem(at: store.payloadDirectory(for: package), to: payload)
+        let directory = store.directory(for: package)
+        let payload = store.payloadDirectory(for: package)
         let team = ExtensionCodeSignature.teamIdentifier()
         var runtimes: [ExtensionBundleRuntime] = []
         for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
@@ -134,7 +125,8 @@ final class HostLocalSession {
         terminalRenderer.release(presentationID)
         for runtime in handle.runtimes {
             _ = try? runtime.response(
-                id: configuration.package.id, operation: "stopUI")
+                id: configuration.package.id, operation: "stopUI",
+                context: ["presentationID": presentationID.uuidString])
         }
     }
 
@@ -162,32 +154,6 @@ final class HostLocalSession {
         }
     }
 
-    func context(for request: HostExtensionContentRequest, bridge: HostLocalEngineBridge?) throws
-        -> NSMutableDictionary
-    {
-        let id = configuration.package.id
-        let input = NSMutableDictionary(dictionary: [
-            "remoteUI": true, "inProcess": true, "uiOnly": configuration.uiOnly,
-            "location": request.location,
-            "presentationID": request.presentationID.uuidString,
-            "defaultsSuite": hostIdentifier + ".extension." + id + ".worker",
-            "hostIdentifier": hostIdentifier, "extensionID": id,
-        ])
-        if let bridge { input["engineClient"] = bridge }
-        input["section"] = request.section
-        if let target = request.machinesWindow {
-            input["target"] = try target.context(presentationID: request.presentationID)
-        }
-        if let target = request.herdrWindow {
-            input["target"] = target.target
-            input["herdrPresentationToken"] = target.token.uuidString
-        }
-        if let surface = request.surface {
-            input["tile"] = try JSONEncoder().encode(surface.tile)
-            input["target"] = surface.target.rawValue
-        }
-        return input
-    }
 }
 
 @MainActor
@@ -203,6 +169,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
     private(set) var runtime: ExtensionBundleRuntime?
     private var bridge: HostLocalEngineBridge?
     private var closed = false
+    private var closePreparation: Task<Void, any Error>?
     private var intrinsic: Bool {
         ![
             "main", "settings", "music.detail", "machines.window", "herdr.agent", "herdr.space",
@@ -226,7 +193,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
         let bridge = try session.engine.map {
             try HostLocalEngineBridge(engine: $0, presentationID: request.presentationID)
         }
-        let input = try session.context(for: request, bridge: bridge)
+        let input = try session.configuration.uiContext(for: request, engineClient: bridge)
         for runtime in runtimes {
             let response = try runtime.response(id: id, operation: "configureUI", context: input)
             guard response["ok"] as? Bool == true else { continue }
@@ -264,11 +231,24 @@ public final class HostLocalSceneHandle: HostScenePresentation {
 
     public func prepareToClose() async throws {
         guard !closed, let runtime else { return }
-        try await runtime.preparePresentationToClose(
-            id: session.configuration.package.id, presentationID: request.presentationID)
-        if session.resources.beginExclusiveClose(request.presentationID) {
-            defer { session.resources.endExclusiveClose(request.presentationID) }
-            try await runtime.prepareRemoteUIToStopAll()
+        if let closePreparation {
+            try await closePreparation.value
+            return
+        }
+        let preparation = Task {
+            let exclusive = session.resources.beginExclusiveClose(request.presentationID)
+            defer {
+                if exclusive { session.resources.endExclusiveClose(request.presentationID) }
+            }
+            try await runtime.preparePresentationToClose(
+                id: session.configuration.package.id, presentationID: request.presentationID)
+        }
+        closePreparation = preparation
+        do {
+            try await preparation.value
+        } catch {
+            closePreparation = nil
+            throw error
         }
     }
 

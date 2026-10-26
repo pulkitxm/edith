@@ -31,11 +31,11 @@ import Testing
                 [
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.app",
                     "CFBundleExecutable": "Runtime", "CFBundleShortVersionString": "1.0.0",
-                    "EdithHostABI": "edith-host-4",
+                    "EdithHostABI": "edith-host-5",
                 ])
             var carrierInfo = [
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
-                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "edith-host-4",
+                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "edith-host-5",
                 "EdithHostIdentifier": host, "EdithContainedExtensionID": "virtualCamera",
                 "EdithContainedRole": "cameraCarrier",
             ]
@@ -47,10 +47,10 @@ import Testing
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.privileged",
                     "CFBundleExecutable": "Runtime",
                     "CFBundleShortVersionString": privilegedVersion,
-                    "EdithHostABI": "edith-host-4",
+                    "EdithHostABI": "edith-host-5",
                 ])
             try JSONSerialization.data(withJSONObject: [
-                "id": "virtualCamera", "version": manifestVersion, "hostABI": "edith-host-4",
+                "id": "virtualCamera", "version": manifestVersion, "hostABI": "edith-host-5",
                 "architecture": "arm64", "dependencies": [],
             ]).write(to: role.deletingLastPathComponent().appendingPathComponent("package.json"))
         }

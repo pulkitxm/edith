@@ -18,6 +18,7 @@ public final class HostMarketplace {
     public private(set) var pendingRemovalIDs: Set<String> = []
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operationID: String?
+    public private(set) var refreshingCatalog = false
     public private(set) var error: String?
     public private(set) var offline = false
     public private(set) var progress = 0.0
@@ -28,12 +29,14 @@ public final class HostMarketplace {
         }
     }
     static let lastCatalogRefreshKey = "lastCatalogRefresh"
+    static let lastCatalogCompatibilityKey = "lastCatalogCompatibility"
     static let catalogRefreshInterval: TimeInterval = 8 * 60 * 60
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let store: ExtensionPackageStore
     @ObservationIgnored private let catalogClient: ExtensionCatalogClient
     @ObservationIgnored private let installer: ExtensionPackageInstaller
     @ObservationIgnored private var catalog: ExtensionCatalog?
+    @ObservationIgnored private var catalogRefresh: Task<Void, Never>?
 
     public init(
         identity: HostIdentity,
@@ -128,6 +131,8 @@ public final class HostMarketplace {
 
     public func refreshCatalogIfStale(now: Date = Date()) async {
         if catalog != nil,
+            preferences.string(forKey: Self.lastCatalogCompatibilityKey)
+                == HostContract.compatibility,
             let refreshed = preferences.object(forKey: Self.lastCatalogRefreshKey) as? Date,
             now.timeIntervalSince(refreshed) < Self.catalogRefreshInterval
         {
@@ -146,7 +151,9 @@ public final class HostMarketplace {
         }
         if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
             now.timeIntervalSince(checked) < Self.catalogRefreshInterval,
-            preferences.string(forKey: "lastAutomaticExtensionCheckHostBuild") == hostBuild
+            preferences.string(forKey: "lastAutomaticExtensionCheckHostBuild") == hostBuild,
+            preferences.string(forKey: "lastAutomaticExtensionCheckHostABI")
+                == HostContract.compatibility
         {
             return
         }
@@ -160,6 +167,7 @@ public final class HostMarketplace {
         guard !failed else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
+        preferences.set(HostContract.compatibility, forKey: "lastAutomaticExtensionCheckHostABI")
     }
 
     public func enable(id: String) async {
@@ -172,7 +180,8 @@ public final class HostMarketplace {
                 sessions.pendingDisableIDs.contains(id)
                 ? (error as? HostWorkerError)?.disableMessage
                     ?? "Cleanup is pending. Retry disable after finishing macOS approval."
-                : "The extension could not start. Try enabling it again."
+                : sessions.failureReasons[id]
+                    ?? "The extension could not start. Try enabling it again."
         }
     }
 
@@ -220,18 +229,34 @@ public final class HostMarketplace {
     }
 
     public func checkForUpdates(now: Date = Date()) async {
-        guard operationID == nil else { return }
-        operationID = "catalog"
-        error = nil
-        defer { operationID = nil }
-        do {
-            let result = try await catalogClient.refresh()
-            offline = result.offline
-            apply(result.catalog)
-            if !result.offline { preferences.set(now, forKey: Self.lastCatalogRefreshKey) }
-        } catch {
-            self.error = "Extension downloads are unavailable. Check your connection and try again."
+        if let catalogRefresh {
+            await catalogRefresh.value
+            return
         }
+        guard operationID == nil else { return }
+        refreshingCatalog = true
+        error = nil
+        let refresh = Task { @MainActor in
+            do {
+                let result = try await catalogClient.refresh()
+                offline = result.offline
+                apply(result.catalog)
+                if !result.offline {
+                    preferences.set(now, forKey: Self.lastCatalogRefreshKey)
+                    preferences.set(
+                        HostContract.compatibility, forKey: Self.lastCatalogCompatibilityKey)
+                }
+            } catch {
+                if self.error == nil {
+                    self.error =
+                        "Extension downloads are unavailable. Check your connection and try again."
+                }
+            }
+        }
+        catalogRefresh = refresh
+        await refresh.value
+        catalogRefresh = nil
+        refreshingCatalog = false
     }
 
     public func download(id: String, expectedPackage: ExtensionPackage? = nil) async {

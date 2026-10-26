@@ -7,6 +7,95 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func aNewProtocolRefreshesTheCatalogEvenWhenThePreviousCheckIsRecent() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let now = Date()
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(now, forKey: HostMarketplace.lastCatalogRefreshKey)
+        defaults.set("previous-protocol", forKey: HostMarketplace.lastCatalogCompatibilityKey)
+        try fixture.envelope(packages: [fixture.package("1.0.0", abi: "previous-protocol")])
+            .write(to: fixture.cache)
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [fixture.package("1.1.0")], revision: 2))
+        let marketplace = try fixture.marketplace()
+        await marketplace.loadCachedCatalog()
+        #expect(marketplace.available.isEmpty)
+        await marketplace.refreshCatalogIfStale(now: now)
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.available["sample"]?.hostABI == HostContract.compatibility)
+        await marketplace.refreshCatalogIfStale(now: now.addingTimeInterval(60))
+        #expect(await fixture.network.count == 1)
+    }
+
+    @Test func aNewProtocolChecksInstalledUpdatesWithoutWaitingForTheNextScheduledCheck()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let now = Date()
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(now, forKey: "lastAutomaticExtensionCheck")
+        defaults.set("same-build", forKey: "lastAutomaticExtensionCheckHostBuild")
+        defaults.set("previous-protocol", forKey: "lastAutomaticExtensionCheckHostABI")
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.updateInstalledIfDue(now: now, hostBuild: "same-build")
+        #expect(await fixture.network.count == 1)
+        await marketplace.updateInstalledIfDue(
+            now: now.addingTimeInterval(60), hostBuild: "same-build")
+        #expect(await fixture.network.count == 1)
+    }
+
+    @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        var attempts = 0
+        let marketplace = try fixture.marketplace { _ in
+            attempts += 1
+            return attempts == 1 ? "reject-start-with-reason" : "normal"
+        }
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.error == "Screen Recording permission is required.")
+        #expect(marketplace.sessions.states["sample"] == .failed)
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        #expect(marketplace.installed["sample"] == fixture.package("1.0.0"))
+        #expect(marketplace.operationID == nil)
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.error == nil)
+        #expect(marketplace.sessions.failureReasons["sample"] == nil)
+        #expect(await fixture.network.count == 0)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func installedExtensionsRemainUsableDuringASharedSlowCatalogRefresh() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        await fixture.network.block()
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let first = Task { await marketplace.checkForUpdates() }
+        while await fixture.network.count == 0 { await Task.yield() }
+        let second = Task { await marketplace.checkForUpdates() }
+        #expect(marketplace.refreshingCatalog)
+        #expect(marketplace.operationID == nil)
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        await marketplace.disable(id: "sample")
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        await fixture.network.release()
+        await first.value
+        await second.value
+        #expect(await fixture.network.count == 1)
+        #expect(!marketplace.refreshingCatalog)
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func remoteSettingsAdmissionDoesNotDownloadOrStartADisabledEngine() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -414,9 +503,18 @@ import HostWorkerFixtureSupport
     private actor Network {
         private(set) var count = 0
         private var data: Data?
+        private var blocked = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
         func set(data: Data) { self.data = data }
-        func fetch() throws -> Data {
+        func block() { blocked = true }
+        func release() {
+            blocked = false
+            for waiter in waiters { waiter.resume() }
+            waiters.removeAll()
+        }
+        func fetch() async throws -> Data {
             count += 1
+            if blocked { await withCheckedContinuation { waiters.append($0) } }
             guard let data else { throw MarketplaceError.downloadFailed }
             return data
         }

@@ -184,9 +184,7 @@ final class UsageNativeCloud {
                 kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne,
                 kSecUseAuthenticationContext as String: context,
             ]
-            var found: CFTypeRef?
-            if SecItemCopyMatching(query as CFDictionary, &found) == errSecSuccess,
-                let data = found as? Data,
+            if let data = UsageKeychain.read(query),
                 data.count <= 1_048_576
             {
                 credentials = try UsageNativeJSON.object(data)

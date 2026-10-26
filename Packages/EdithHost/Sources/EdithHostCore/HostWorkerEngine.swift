@@ -68,7 +68,11 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
                 }
                 return HostWorkerResponse(
                     token: request.token, ok: false,
-                    message: "The extension could not complete this action.")
+                    message: request.operation == "start"
+                        ? String(
+                            ((error as? LocalizedError)?.errorDescription
+                                ?? "The extension could not finish starting.").prefix(1024))
+                        : "The extension could not complete this action.")
             }
         }
     }

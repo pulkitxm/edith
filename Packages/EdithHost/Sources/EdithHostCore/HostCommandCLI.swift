@@ -588,7 +588,9 @@ public struct HostCommandCLI: Sendable {
     static func liveInputForCommand(
         _ arguments: [String], invoke: @escaping HostCLIProviderRegistry.Invoke
     ) async throws -> Bool {
-        guard let first = arguments.first, !Self.coreCommands.contains(first) else { return false }
+        guard let first = arguments.first, first != "--version",
+            !Self.coreCommands.contains(first)
+        else { return false }
         let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
         try Task.checkCancellation()
         if let alias = registry?.providers.first(where: {
@@ -632,7 +634,7 @@ public struct HostCommandCLI: Sendable {
             return Data()
         }
         var declaredInput = false
-        if isatty(descriptor) == 0, let command = arguments.first,
+        if isatty(descriptor) == 0, let command = arguments.first, command != "--version",
             !Self.coreCommands.contains(command)
         {
             let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)

@@ -111,7 +111,9 @@ public enum LimitsCollector {
         return await collectConfigured(
             providers: enabledProviders(defaults: defaults), force: force,
             refreshSession: refreshSession, announce: announce,
-            accountDirectory: { try ClaudeAccountStorage.directory() },
+            accountDirectory: {
+                try ClaudeAccountStorage.directory(environment: ExtensionEnvironment.values)
+            },
             loadAccounts: { try await ClaudeAccountStorage(directory: $0).load().accounts }
         ) { provider in
             switch provider {

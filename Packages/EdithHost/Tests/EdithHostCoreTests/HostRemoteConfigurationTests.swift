@@ -1,9 +1,34 @@
 import ExtensionMarketplace
+import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import EdithHostCore
 
 struct HostRemoteConfigurationTests {
+    @Test(arguments: ["com.pulkit.edith", "com.pulkit.edith.dev.synthetic"])
+    @MainActor func realHostContextAndRendererEnvironmentUseTheSamePreferences(identifier: String)
+        throws
+    {
+        let identity = try HostIdentity(
+            identifier: identifier, supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let worker = HostWorkerConfiguration(
+            identity: identity, extensionID: "sample", version: "1.0.0")
+        let package = ExtensionPackage(
+            id: "sample", version: "1.0.0", hostABI: HostContract.compatibility,
+            downloadURL: URL(string: "https://example.invalid/sample.zip")!,
+            sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+        let configuration = HostRemoteConfiguration(
+            session: UUID(), worker: worker, package: package, uiOnly: true)
+        let request = HostExtensionContentRequest(
+            extensionID: "sample", location: "settings", section: "extension")
+        let context = try configuration.uiContext(for: request, engineClient: nil)
+        let view = try #require(ExtensionUIConfiguration(context: context))
+        let environment = try worker.extensionEnvironment()
+        #expect(view.defaultsSuite == environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        #expect(context["presentationID"] as? String == request.presentationID.uuidString)
+        #expect(view.uiOnly && view.engineClient == nil)
+    }
+
     @Test func aSealedPackageAndHostMustMatchBeforeUIConfiguration() throws {
         let identifier = "com.pulkit.edith.tests.remote-configuration-\(UUID().uuidString)"
         let identity = try HostIdentity(
