@@ -4,27 +4,52 @@ import Foundation
 
 @MainActor
 final class CompanionWorkspaceSession {
-    let home = CompanionHomeModel()
-    let chat = CompanionChatModel()
+    let home: CompanionHomeModel
+    let chat: CompanionChatModel
     let capture: CompanionCaptureModel
-    let library = CompanionLibraryModel()
-    let mind = CompanionMindModel()
-    let desk = CompanionDeskModel()
+    let library: CompanionLibraryModel
+    let mind: CompanionMindModel
+    let desk: CompanionDeskModel
     let backend: CompanionBackendModel
-    let settings = CompanionSettingsModel()
+    let settings: CompanionSettingsModel
     let privacy: SurfacePrivacyState?
     let preferences: CompanionUIPreferences?
     private(set) var isStopped = false
+    let transport: CompanionTransport
+    private let ownsTransport: Bool
 
-    init(privacy: SurfacePrivacyState? = nil, remote: CompanionUIBridge? = nil) {
+    init(
+        privacy: SurfacePrivacyState? = nil, remote: CompanionUIBridge? = nil,
+        transport: CompanionTransport? = nil
+    ) {
+        let scope: CompanionTransport
+        if let transport {
+            scope = transport
+            ownsTransport = false
+        } else if let remote {
+            scope = CompanionTransport()
+            scope.configureRemote(remote)
+            ownsTransport = true
+        } else {
+            scope = .shared
+            ownsTransport = false
+        }
+        self.transport = scope
         self.privacy = privacy
         preferences = remote.map(CompanionUIPreferences.init)
-        capture = CompanionCaptureModel(remote: remote)
+        home = CompanionHomeModel(transport: scope)
+        chat = CompanionChatModel(transport: scope)
+        library = CompanionLibraryModel(transport: scope)
+        mind = CompanionMindModel(transport: scope)
+        desk = CompanionDeskModel(transport: scope)
+        settings = CompanionSettingsModel(transport: scope)
+        capture = CompanionCaptureModel(remote: remote, transport: scope)
         backend = CompanionBackendModel(remote: remote)
     }
 
     func cancelPendingCommands() {
         isStopped = true
+        if ownsTransport { transport.close() }
         preferences?.shutdown()
         home.cancelPendingCommands()
         mind.cancelPendingCommands()
@@ -47,6 +72,7 @@ final class CompanionWorkspaceSession {
         await chat.cancelAndWait()
         await capture.cancelAndWait()
         await backend.cancelAndWait()
+        if ownsTransport { await transport.closeAndWait() }
     }
 
     func shutdown() {
@@ -57,7 +83,6 @@ final class CompanionWorkspaceSession {
         chat.stop()
         capture.shutdown()
         backend.shutdown()
-        CompanionGeneration.stopAll()
         privacy?.shutdown()
     }
 

@@ -21,16 +21,19 @@ final class CompanionWorker {
     init(
         monitor: CompanionMonitor? = nil, transport: CompanionTransport = .shared,
         privacy: SurfacePrivacyState? = nil,
-        client: @escaping @MainActor () -> CompanionClient = {
-            CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
-        }
+        client: (@MainActor () -> CompanionClient)? = nil
     ) {
         self.monitor = monitor ?? CompanionMonitor()
         self.transport = transport
-        self.client = client
+        self.client =
+            client ?? {
+                CompanionClient(
+                    baseURL: CompanionClient.endpoint(override: nil), transport: transport)
+            }
         workspace = CompanionWorkspaceSession(
             privacy: privacy
-                ?? ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) })
+                ?? ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
+            transport: transport)
         transport.open()
         CompanionBackgroundOperation.monitor = self.monitor
     }

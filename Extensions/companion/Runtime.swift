@@ -115,23 +115,58 @@ final class ExtensionRuntime: NSObject {
         return task
     }
 
-    private func retireUI() {
+    @discardableResult
+    private func retireUI() -> Task<Void, Never>? {
         let workspace = uiWorkspace
         let bridge = uiBridge
-        guard workspace != nil || bridge != nil else { return }
+        let client = engineClient
+        guard workspace != nil || bridge != nil || client != nil else { return nil }
         workspace?.cancelPendingCommands()
         bridge?.stop()
         let id = UUID()
-        uiDrains[id] = Task { [self, workspace, bridge] in
+        let drain = Task { [self, workspace, bridge, client] in
             defer { uiDrains[id] = nil }
             await workspace?.cancelAndWait()
             await bridge?.stopAndWait()
             workspace?.shutdown()
+            client?.invalidate()
         }
+        uiDrains[id] = drain
         uiWorkspace = nil
         CompanionTransport.shared.releaseRemote(uiBridgeOwner)
         uiBridge = nil
-        engineClient?.invalidate(); engineClient = nil
+        engineClient = nil
+        return drain
+    }
+
+    @objc(prepareUIToClose:completion:)
+    func prepareUIToClose(_ value: NSString, completion: @escaping (NSString?) -> Void) {
+        guard let id = UUID(uuidString: value as String),
+            engineClient == nil || engineClient?.presentationID == id
+        else { completion("Invalid Companion presentation."); return }
+        let drain = retireUI()
+        Task { [self] in
+            await drain?.value
+            while let task = uiDrains.values.first { await task.value }
+            withExtendedLifetime(self) { completion(nil) }
+        }
+    }
+
+    func configureUI(client: ExtensionEngineClient) -> CompanionWorkspaceSession? {
+        guard !commandsSuspended, uiDrains.count < 8, engineClient == nil else { return nil }
+        let bridge = CompanionUIBridge(client: client)
+        guard CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner) else {
+            client.invalidate()
+            return nil
+        }
+        let workspace = CompanionWorkspaceSession(
+            privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
+            remote: bridge)
+        engineClient = client
+        uiBridge = bridge
+        uiWorkspace = workspace
+        TextEditingCommands.install()
+        return workspace
     }
 
     @objc(prepareToStopWithCompletion:)
@@ -178,21 +213,10 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard !commandsSuspended, uiDrains.count < 8, engineClient == nil,
-                let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "companion", let client = configuration.engineClient
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "companion", let client = configuration.engineClient,
+                configureUI(client: client) != nil
             else { return ["ok": false] as NSDictionary }
-            let bridge = CompanionUIBridge(client: client)
-            guard CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner) else {
-                client.invalidate()
-                return ["ok": false] as NSDictionary
-            }
-            engineClient = client
-            uiBridge = bridge
-            uiWorkspace = CompanionWorkspaceSession(
-                privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
-                remote: bridge)
-            TextEditingCommands.install()
         case "stopUI":
             retireUI()
             ExtensionUIResources.cleanup(of: self, key: "textEditing") {

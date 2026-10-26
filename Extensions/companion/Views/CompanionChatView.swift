@@ -29,6 +29,10 @@ enum CompanionGeneration {
 @MainActor
 @Observable
 final class CompanionChatModel {
+    let transport: CompanionTransport
+
+    init(transport: CompanionTransport = .shared) { self.transport = transport }
+
     struct DisplayMessage: Identifiable, Equatable {
         let id: String
         let role: String
@@ -67,7 +71,7 @@ final class CompanionChatModel {
     private var streamTask: Task<Void, Never>?
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     func loadPersonas() async {

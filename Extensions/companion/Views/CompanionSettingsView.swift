@@ -8,6 +8,10 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class CompanionSettingsModel {
+    let transport: CompanionTransport
+
+    init(transport: CompanionTransport = .shared) { self.transport = transport }
+
     private let commandTasks = CompanionTaskOwner()
     func cancelPendingCommands() { commandTasks.cancel() }
     func cancelAndWait() async { await commandTasks.drain() }
@@ -46,7 +50,7 @@ final class CompanionSettingsModel {
     private(set) var dangerStatusIsError = false
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     private var operations: CompanionSettingsOperationExecution {

@@ -6,6 +6,10 @@ import SwiftUI
 @MainActor
 @Observable
 final class CompanionMindModel: CompanionRefreshable {
+    let transport: CompanionTransport
+
+    init(transport: CompanionTransport = .shared) { self.transport = transport }
+
     private let commandTasks = CompanionTaskOwner()
     func cancelPendingCommands() { commandTasks.cancel() }
     func cancelAndWait() async { await commandTasks.drain() }
@@ -23,7 +27,7 @@ final class CompanionMindModel: CompanionRefreshable {
     private(set) var error: String?
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     func refresh() async {
@@ -163,7 +167,9 @@ struct CompanionMindScreen: View {
             }
         }
         .edithSheet(item: $detail) { detail in
-            MindDetailSheet(detail: detail, dark: dark, openEpisode: openEpisode) {
+            MindDetailSheet(
+                detail: detail, transport: model.transport, dark: dark, openEpisode: openEpisode
+            ) {
                 self.detail = nil
             }
         }
@@ -477,6 +483,7 @@ struct MindChip: View {
 
 private struct MindDetailSheet: View {
     let detail: MindDetail
+    let transport: CompanionTransport
     let dark: Bool
     let openEpisode: (String) -> Void
     let close: () -> Void
@@ -486,7 +493,7 @@ private struct MindDetailSheet: View {
     @Environment(\.companionGeneration) private var generation
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     private var contextIds: [String] {
@@ -498,7 +505,7 @@ private struct MindDetailSheet: View {
     }
 
     private func loadRefs() async {
-        _ = try? await CompanionTransport.shared.producers.perform { await loadRefsWork() }
+        _ = try? await transport.producers.perform { await loadRefsWork() }
     }
 
     @MainActor private func loadRefsWork() async {

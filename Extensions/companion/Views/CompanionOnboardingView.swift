@@ -57,7 +57,13 @@ final class CompanionSetupModel: Identifiable {
     private let commandTasks = CompanionTaskOwner()
     private var remoteTask: Task<Void, Never>?
 
-    init(remote: CompanionUIBridge? = nil, onFinish: @escaping (Bool) -> Void) {
+    let transport: CompanionTransport
+
+    init(
+        remote: CompanionUIBridge? = nil, transport: CompanionTransport = .shared,
+        onFinish: @escaping (Bool) -> Void
+    ) {
+        self.transport = transport
         self.remote = remote
         self.onFinish = onFinish
     }
@@ -212,7 +218,7 @@ final class CompanionSetupModel: Identifiable {
     }
 
     private var client: CompanionClient {
-        CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
+        CompanionClient(baseURL: CompanionClient.endpoint(override: nil), transport: transport)
     }
 
     func loadReasoner(reachable: Bool) async {

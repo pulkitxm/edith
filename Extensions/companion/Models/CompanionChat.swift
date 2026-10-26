@@ -229,7 +229,7 @@ extension CompanionClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await CompanionTransport.shared.data(for: request)
+            (data, response) = try await self.transport.data(for: request)
         } catch {
             throw CompanionClientError.unreachable(error.localizedDescription)
         }
@@ -283,11 +283,11 @@ extension CompanionClient {
             CompanionChatEvent, Error
         >
     {
-        if let remote = CompanionTransport.shared.remoteBridge {
+        if let remote = self.transport.remoteBridge {
             return remote.chat(message: message, conversationID: conversationId, persona: persona)
         }
         return AsyncThrowingStream { continuation in
-            let task = CompanionTransport.shared.producers.launch {
+            let task = self.transport.producers.launch {
                 do {
                     var request = URLRequest(url: url(for: "chat"))
                     request.httpMethod = "POST"
@@ -296,7 +296,7 @@ extension CompanionClient {
                     request.httpBody = try JSONEncoder().encode(
                         ChatRequest(
                             message: message, conversationId: conversationId, persona: persona))
-                    let (bytes, response) = try await CompanionTransport.shared.bytes(for: request)
+                    let (bytes, response) = try await self.transport.bytes(for: request)
                     guard let http = response as? HTTPURLResponse else {
                         throw CompanionClientError.unreachable(
                             "the server returned no HTTP response")
