@@ -39,7 +39,6 @@ final class HostLocalSession {
     let configuration: HostRemoteConfiguration
     let engine: HostRemoteEngineOwner?
     let peer: HostRemoteProcessIdentity?
-    let hostIdentifier: String
     let runtimes: [ExtensionBundleRuntime]
     fileprivate let resources: HostUIResourceOwners
     private var handles: [UUID: HostLocalSceneHandle] = [:]
@@ -73,7 +72,6 @@ final class HostLocalSession {
         }
         self.configuration = configuration
         self.engine = engine
-        hostIdentifier = marketplace.identity.identifier
         peer = Self.currentHostIdentity()
     }
 
@@ -162,32 +160,6 @@ final class HostLocalSession {
         }
     }
 
-    func context(for request: HostExtensionContentRequest, bridge: HostLocalEngineBridge?) throws
-        -> NSMutableDictionary
-    {
-        let id = configuration.package.id
-        let input = NSMutableDictionary(dictionary: [
-            "remoteUI": true, "inProcess": true, "uiOnly": configuration.uiOnly,
-            "location": request.location,
-            "presentationID": request.presentationID.uuidString,
-            "defaultsSuite": hostIdentifier + ".extension." + id + ".worker",
-            "hostIdentifier": hostIdentifier, "extensionID": id,
-        ])
-        if let bridge { input["engineClient"] = bridge }
-        input["section"] = request.section
-        if let target = request.machinesWindow {
-            input["target"] = try target.context(presentationID: request.presentationID)
-        }
-        if let target = request.herdrWindow {
-            input["target"] = target.target
-            input["herdrPresentationToken"] = target.token.uuidString
-        }
-        if let surface = request.surface {
-            input["tile"] = try JSONEncoder().encode(surface.tile)
-            input["target"] = surface.target.rawValue
-        }
-        return input
-    }
 }
 
 @MainActor
@@ -226,7 +198,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
         let bridge = try session.engine.map {
             try HostLocalEngineBridge(engine: $0, presentationID: request.presentationID)
         }
-        let input = try session.context(for: request, bridge: bridge)
+        let input = try session.configuration.uiContext(for: request, engineClient: bridge)
         for runtime in runtimes {
             let response = try runtime.response(id: id, operation: "configureUI", context: input)
             guard response["ok"] as? Bool == true else { continue }
