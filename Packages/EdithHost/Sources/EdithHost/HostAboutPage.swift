@@ -26,8 +26,14 @@ struct HostAboutPage: View {
         """
 
     var body: some View {
-        PageScaffold(width: .readable, pinnedHeader: true, header: {}) {
-            content.padding(.vertical, UIScale.pt(44))
+        GeometryReader { geometry in
+            PageScaffold(pinnedHeader: true, header: {}) {
+                content
+                    .padding(.vertical, UIScale.pt(44))
+                    .padding(.top, UIScale.pt(PageMetrics.bottom))
+                    .frame(
+                        minHeight: max(0, geometry.size.height - UIScale.pt(PageMetrics.bottom)))
+            }
         }
         .navigationTitle("About")
     }
@@ -130,7 +136,8 @@ struct HostAboutPage: View {
                             .accessibilityLabel("Open \(person.login) on GitHub")
                         }
                     }
-                    .frame(maxWidth: UIScale.pt(340))
+                    .frame(
+                        maxWidth: UIScale.pt(min(340, Double(contributors.count) * 62 - 10)))
                 }
             }
             .padding(.top, UIScale.pt(6))
