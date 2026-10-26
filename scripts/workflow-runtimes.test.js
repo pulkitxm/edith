@@ -35,7 +35,7 @@ const expectedActions = new Map([
   ["ossf/scorecard-action", "fa7117db83c52d787ae5a89f350999701505d78e"],
   ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
   ["pascalgn/size-label-action", "56b489b027932ec0cf60438a1a5f1a19c8fc71ff"],
-  ["taiki-e/install-action", "a4d3f3f761dcd95cce1b72cb61cb6d1963438177"],
+  ["taiki-e/install-action", "1e29709c0ec63babbe8f266397a465f29a825f91"],
 ]);
 
 const workflows = readdirSync(".github/workflows")
