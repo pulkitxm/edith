@@ -63,7 +63,8 @@ final class HostLocalSession {
                 package, store: marketplace.packageStore,
                 interface: marketplace.identity.root.appendingPathComponent(
                     "ExtensionState/Interface", isDirectory: true),
-                development: marketplace.identity.development)
+                development: marketplace.identity.development,
+                environment: try configuration.worker.extensionEnvironment())
             if let previous = Self.loaded[package.id] { Self.superseded.append(previous) }
             let loaded = Loaded(version: package.version, runtimes: runtimes, lease: lease)
             Self.loaded[package.id] = loaded
@@ -84,7 +85,7 @@ final class HostLocalSession {
 
     private static func load(
         _ package: ExtensionPackage, store: ExtensionPackageStore, interface: URL,
-        development: Bool
+        development: Bool, environment: [String: String]
     ) throws -> [ExtensionBundleRuntime] {
         let directory = interface.appendingPathComponent(
             "\(package.id)-\(package.version)-\(UUID().uuidString)", isDirectory: true)
@@ -101,7 +102,7 @@ final class HostLocalSession {
             runtimes.append(
                 try ExtensionBundleRuntime(
                     readOnlyPackage: package, directory: directory, role: role,
-                    hostABI: HostContract.compatibility,
+                    hostABI: HostContract.compatibility, environment: environment,
                     verify: { url in
                         if development {
                             try ExtensionCodeSignature.verifyDevelopment(url)
