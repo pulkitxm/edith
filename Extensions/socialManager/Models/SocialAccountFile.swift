@@ -1,10 +1,11 @@
+import EdithExtensionSupport
 import Foundation
 
 public struct SocialAccountFile: Sendable {
     public let url: URL
 
     public static var defaultURL: URL {
-        URL.applicationSupportDirectory.appendingPathComponent(
+        ExtensionData.root.appendingPathComponent(
             "social-manager/accounts.json", isDirectory: false)
     }
 
