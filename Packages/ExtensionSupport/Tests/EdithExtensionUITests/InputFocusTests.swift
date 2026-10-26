@@ -19,6 +19,17 @@ struct InputFocusTests {
                 characters: "a", modifiers: [], responder: EmbeddedKeyboardView()))
     }
 
+    @Test func shortcutCaptureKeepsInputAcrossSeparatelyLoadedSDKs() {
+        let view = NSView()
+        view.identifier = NSUserInterfaceItemIdentifier("EdithShortcutKeyCapture")
+        #expect(InputFocus.takesKeysDirectly(view))
+        #expect(
+            !InputFocus.shouldStartTypeAhead(
+                characters: "f", modifiers: [], responder: view))
+        view.identifier = nil
+        #expect(!InputFocus.takesKeysDirectly(view))
+    }
+
     @Test func commandFIsTheOnlySearchShortcut() {
         #expect(InputFocus.isSearchShortcut(characters: "f", modifiers: [.command]))
         #expect(InputFocus.isSearchShortcut(characters: "F", modifiers: [.command]))

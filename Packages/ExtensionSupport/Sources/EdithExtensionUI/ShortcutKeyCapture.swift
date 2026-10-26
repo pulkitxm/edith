@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 public struct ShortcutKeyCapture: NSViewRepresentable {
+    static let identifier = NSUserInterfaceItemIdentifier("EdithShortcutKeyCapture")
     @Binding private var recording: Bool
     private let handle: (NSEvent) -> Void
 
@@ -10,7 +11,11 @@ public struct ShortcutKeyCapture: NSViewRepresentable {
         self.handle = handle
     }
 
-    public func makeNSView(context: Context) -> CaptureView { CaptureView() }
+    public func makeNSView(context: Context) -> CaptureView {
+        let view = CaptureView()
+        view.identifier = Self.identifier
+        return view
+    }
 
     public func updateNSView(_ view: CaptureView, context: Context) {
         view.handle = handle
@@ -31,7 +36,7 @@ public struct ShortcutKeyCapture: NSViewRepresentable {
         if view.window?.firstResponder === view { view.window?.makeFirstResponder(nil) }
     }
 
-    public final class CaptureView: NSView {
+    public final class CaptureView: NSView, DirectKeyboardInputResponder {
         var active = false
         var handle: ((NSEvent) -> Void)?
         var cancel: (() -> Void)?
