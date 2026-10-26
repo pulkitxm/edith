@@ -15,7 +15,6 @@ final class ExtensionRuntime: NSObject {
     ])
     private let settingsChanged: @MainActor () -> Void
     private var worker: CompanionWorker?
-    private let uiBridgeOwner = UUID()
     private var uiBridge: CompanionUIBridge?
     private var uiWorkspace: CompanionWorkspaceSession?
     private var uiEngine: CompanionUIEngine?
@@ -133,7 +132,6 @@ final class ExtensionRuntime: NSObject {
         }
         uiDrains[id] = drain
         uiWorkspace = nil
-        CompanionTransport.shared.releaseRemote(uiBridgeOwner)
         uiBridge = nil
         engineClient = nil
         return drain
@@ -155,10 +153,6 @@ final class ExtensionRuntime: NSObject {
     func configureUI(client: ExtensionEngineClient) -> CompanionWorkspaceSession? {
         guard !commandsSuspended, uiDrains.count < 8, engineClient == nil else { return nil }
         let bridge = CompanionUIBridge(client: client)
-        guard CompanionTransport.shared.configureRemote(bridge, owner: uiBridgeOwner) else {
-            client.invalidate()
-            return nil
-        }
         let workspace = CompanionWorkspaceSession(
             privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
             remote: bridge)
