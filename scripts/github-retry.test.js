@@ -203,3 +203,111 @@ test("a 422 release create failure is not retried", () => {
   ).toThrow("Command failed");
   expect(pukbot).toBe(1);
 });
+
+test("workflow dispatch lookup failures retain normal retry and permission rules", () => {
+  for (const message of [
+    "could not find the dispatched Pukbot workflow run",
+    "GitHub rejected the Pukbot workflow dispatch",
+    "failed to resolve the authenticated GitHub user",
+  ]) {
+    const error = Object.assign(new Error("Command failed: pukbot"), {
+      stdout: JSON.stringify({ ok: false, error: { message } }),
+    });
+    expect(isTransientFailure(error)).toBe(true);
+    expect(
+      isTransientFailure(
+        Object.assign(error, { stderr: "HTTP 403 Forbidden" }),
+      ),
+    ).toBe(false);
+  }
+});
+
+test("an unacknowledged release edit retries through the release client", () => {
+  let mutations = 0;
+  let watches = 0;
+  const result = executeReleaseMutation(
+    ["release", "edit", "--repo", repository, "4", "--draft", "false"],
+    {
+      execute: (command) => {
+        if (command === "pukbot") {
+          mutations++;
+          if (mutations === 1) {
+            throw Object.assign(new Error("Command failed"), {
+              stdout: JSON.stringify({
+                ok: false,
+                error: {
+                  message: "could not find the dispatched Pukbot workflow run",
+                },
+              }),
+            });
+          }
+          return JSON.stringify({
+            workflowUrl: "https://github.com/synthetic/control/actions/runs/8",
+          });
+        }
+        watches++;
+        return "";
+      },
+      retry: { sleep: () => {} },
+    },
+  );
+  expect(result.workflowUrl).toBe(
+    "https://github.com/synthetic/control/actions/runs/8",
+  );
+  expect(mutations).toBe(2);
+  expect(watches).toBe(1);
+});
+
+test("an upload with a lost dispatch acknowledgement confirms the existing asset", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "github-retry-"));
+  const file = join(directory, "package.json");
+  writeFileSync(file, "payload");
+  let mutations = 0;
+  const result = await uploadReleaseAsset({
+    repository,
+    releaseID: 4,
+    tag,
+    file,
+    execute: (command) => {
+      if (command === "pukbot") {
+        mutations++;
+        throw Object.assign(new Error("Command failed"), {
+          stdout: JSON.stringify({
+            ok: false,
+            error: {
+              message: "could not find the dispatched Pukbot workflow run",
+            },
+          }),
+        });
+      }
+      return JSON.stringify({
+        id: 4,
+        tag_name: tag,
+        draft: true,
+        assets: [{ name: "package.json", size: 7, state: "uploaded" }],
+      });
+    },
+    retry: { sleep: () => {} },
+  });
+  expect(result).toBe("pukbot");
+  expect(mutations).toBe(1);
+});
+
+test("GitHub connection timeouts retry reads without changing the request", () => {
+  let calls = 0;
+  const failure = Object.assign(new Error("Command failed: gh api"), {
+    stderr:
+      'Get "https://api.github.com/repos/synthetic/fixture": dial tcp 192.0.2.1:443: connect: operation timed out',
+  });
+  expect(isTransientFailure(failure)).toBe(true);
+  const result = withGitHubRetrySync(
+    () => {
+      calls++;
+      if (calls === 1) throw failure;
+      return "verified response";
+    },
+    { sleep: () => {} },
+  );
+  expect(result).toBe("verified response");
+  expect(calls).toBe(2);
+});

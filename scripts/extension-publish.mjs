@@ -566,19 +566,20 @@ export async function publishExtensions({
       ],
     });
     await verifyState();
-    mutate(
-      "release",
-      "edit",
-      "--repo",
-      repository,
-      String(item.id),
-      "--tag",
-      entry.tag,
-      "--draft",
-      "false",
-      "--make-latest",
-      "false",
-    );
+    if (item.draft)
+      mutate(
+        "release",
+        "edit",
+        "--repo",
+        repository,
+        String(item.id),
+        "--tag",
+        entry.tag,
+        "--draft",
+        "false",
+        "--make-latest",
+        "false",
+      );
     await verifyImmutableReleaseAssets({
       repository,
       receipt: publishedAssets,
