@@ -6,6 +6,43 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostWorkerTests {
+    @Test func disablingWaitsForAnAdmittedSettingsRequest() async throws {
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.request-drain",
+            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let engine = SettingsDrainEngine()
+        let worker = HostWorker(
+            configuration: HostWorkerConfiguration(
+                identity: identity, extensionID: "sample", version: "1.0.0"),
+            engine: { _ in engine })
+        try await worker.start()
+        let synchronization = Task { try await worker.synchronize() }
+        while engine.resumeSettings == nil { await Task.yield() }
+        let stop = Task { try await worker.stop() }
+        while worker.ready { await Task.yield() }
+        #expect(!engine.operations.contains("prepareDisable"))
+        engine.resumeSettings?.resume()
+        await #expect(throws: HostWorkerError.rejected) { try await synchronization.value }
+        try await stop.value
+        #expect(engine.operations == ["start", "synchronize", "prepareDisable", "stop"])
+        #expect(worker.processIdentifier == nil)
+    }
+
+    @MainActor private final class SettingsDrainEngine: HostWorkerEngine {
+        var operations: [String] = []
+        var resumeSettings: CheckedContinuation<Void, Never>?
+
+        func deliver(_ reply: HostWorkerNavigationReply) throws {}
+
+        func perform(_ request: HostWorkerRequest) async -> HostWorkerResponse {
+            operations.append(request.operation)
+            if request.operation == "synchronize" {
+                await withCheckedContinuation { resumeSettings = $0 }
+            }
+            return HostWorkerResponse(token: request.token, ok: true, version: "1.0.0")
+        }
+    }
+
     @Test func identitiesRoundTripWithoutCrossingNamespaces() throws {
         for identifier in [
             "com.pulkit.edith", "com.pulkit.edith.dev.sample", "com.pulkit.edith.tests.sample",

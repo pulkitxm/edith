@@ -125,7 +125,8 @@ final class HostLocalSession {
         terminalRenderer.release(presentationID)
         for runtime in handle.runtimes {
             _ = try? runtime.response(
-                id: configuration.package.id, operation: "stopUI")
+                id: configuration.package.id, operation: "stopUI",
+                context: ["presentationID": presentationID.uuidString])
         }
     }
 
