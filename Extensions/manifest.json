@@ -2224,7 +2224,7 @@
     "testTargets": [
       "ci-extension-machines"
     ],
-    "version": "1.0.2",
+    "version": "1.0.3",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-5",
@@ -2314,6 +2314,7 @@
         "Extensions/machines/Services/MachineCredentialIdentity.swift",
         "Extensions/machines/Services/MachineDetailOperations.swift",
         "Extensions/machines/Services/MachineEndpoints.swift",
+        "Extensions/machines/Services/MachineEngineModels.swift",
         "Extensions/machines/Services/MachineExecutionOwner.swift",
         "Extensions/machines/Services/MachineFacts.swift",
         "Extensions/machines/Services/MachineFleetOperations.swift",

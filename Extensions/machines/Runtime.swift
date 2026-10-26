@@ -22,6 +22,7 @@ final class ExtensionRuntime: NSObject {
     private var terminalEngine: MachineTerminalEngine?
     private var uiEngine: MachineUIEngine?
     private var windowNavigation: MachineHostWindowNavigationClient?
+    private var engineModels: MachineEngineModels?
     private var uiClient: MachineUIClient?
     private var uiMachines: MachinesModel?
     private var uiWorkspace: WorkspaceModel?
@@ -59,8 +60,11 @@ final class ExtensionRuntime: NSObject {
                 return try MachineCLICatalog.encoded()
             }
             if command == "machines.cli.complete" {
+                guard let models = self.engineModels else {
+                    throw ExtensionPeerError.unavailable
+                }
                 return try await MachineCLICatalog.complete(
-                    payload, session: { MachinesModel.shared.session(for: $0) })
+                    payload, session: { models.machines.session(for: $0) })
             }
             if command.hasPrefix("machines.ui.") {
                 guard let uiEngine = self.uiEngine else { throw ExtensionPeerError.unavailable }
@@ -238,7 +242,7 @@ final class ExtensionRuntime: NSObject {
             ] as NSDictionary
         case "stopUI":
             ExtensionUIResources.cleanup(of: self, key: "paneActions") {
-                WorkspaceModel.shared.stopPaneActions()
+                self.uiWorkspace?.stopPaneActions()
                 MachineProcessModels.reset()
             }
             retireUI()
@@ -268,8 +272,8 @@ final class ExtensionRuntime: NSObject {
                         try ambientPolicy.start { [weak self] in self?.health?.reschedule() }
                     } catch { return ["ok": false] as NSDictionary }
                 }
-                MachinesModel.shared = MachinesModel()
-                WorkspaceModel.shared = WorkspaceModel(machines: .shared)
+                let models = MachineEngineModels()
+                engineModels = models
                 let transport: MachinePeerTransport
                 if fixture {
                     transport = MachinePeerTransport(
@@ -305,7 +309,7 @@ final class ExtensionRuntime: NSObject {
                     })
                 surface = MachineSurface(
                     items: {
-                        let model = MachinesModel.shared
+                        let model = models.machines
                         return model.allMachines.map { machine in
                             .init(
                                 id: machine.id, name: machine.name, detail: machine.subtitle,
@@ -313,7 +317,7 @@ final class ExtensionRuntime: NSObject {
                         }
                     },
                     open: { id in
-                        let model = MachinesModel.shared
+                        let model = models.machines
                         guard model.knows(id) else { return }
                         model.selection = id
 
@@ -329,43 +333,43 @@ final class ExtensionRuntime: NSObject {
                     })
                 let files = MachineFilesEngine(
                     session: { id in
-                        guard MachinesModel.shared.knows(id) else {
+                        guard models.machines.knows(id) else {
                             throw MachineUIError.invalidRequest
                         }
-                        return MachinesModel.shared.session(for: id)
+                        return models.machines.session(for: id)
                     },
                     makeModel: { session, path in
                         FinderModel(
                             session: session, path: path,
-                            peerSession: { MachinesModel.shared.sessions[$0] })
+                            peerSession: { models.machines.sessions[$0] })
                     }, onRelease: { FinderUndoBridge.forget($0) })
                 filesEngine = files
                 let previews = MachinePreviewEngine(session: { id in
-                    guard MachinesModel.shared.knows(id) else {
+                    guard models.machines.knows(id) else {
                         throw MachineUIError.invalidRequest
                     }
-                    return MachinesModel.shared.session(for: id)
+                    return models.machines.session(for: id)
                 })
                 previewEngine = previews
                 let directoryExport = MachineDirectoryExport(session: { id in
-                    guard MachinesModel.shared.knows(id) else {
+                    guard models.machines.knows(id) else {
                         throw MachineUIError.invalidRequest
                     }
-                    return MachinesModel.shared.session(for: id)
+                    return models.machines.session(for: id)
                 })
                 self.directoryExport = directoryExport
                 let logs = MachineLogEngine(session: { id in
-                    guard MachinesModel.shared.knows(id) else {
+                    guard models.machines.knows(id) else {
                         throw MachineUIError.invalidRequest
                     }
-                    return MachinesModel.shared.session(for: id)
+                    return models.machines.session(for: id)
                 })
                 logEngine = logs
                 let terminals = MachineTerminalEngine(session: { id in
-                    guard MachinesModel.shared.knows(id) else {
+                    guard models.machines.knows(id) else {
                         throw MachineUIError.invalidRequest
                     }
-                    return MachinesModel.shared.session(for: id)
+                    return models.machines.session(for: id)
                 })
                 terminalEngine = terminals
                 MachinesCLIEnvironment.interactive = { machine, arguments, environment in
@@ -382,23 +386,14 @@ final class ExtensionRuntime: NSObject {
                 self.windowNavigation = windowNavigation
                 uiEngine = MachineUIEngine(
                     session: { id in
-                        guard MachinesModel.shared.knows(id) else {
+                        guard models.machines.knows(id) else {
                             throw MachineUIError.invalidRequest
                         }
-                        return MachinesModel.shared.session(for: id)
+                        return models.machines.session(for: id)
                     },
-                    state: {
-                        let model = MachinesModel.shared
-                        model.reloadOwnedRecords()
-                        return MachineUIState(
-                            machines: model.store.machines, forwards: model.store.forwards,
-                            snippets: model.store.snippets,
-                            sessions: model.allMachines.map { model.session(for: $0.id).uiState() },
-                            workspaces: WorkspaceStore.load(),
-                            clipboardStates: model.sshClipboardStates)
-                    },
+                    state: { models.state() },
                     mutation: { value in
-                        let model = MachinesModel.shared
+                        let model = models.machines
                         guard value.operation == .add || model.knows(value.machine.id) else {
                             throw MachineUIError.invalidRequest
                         }
@@ -411,12 +406,12 @@ final class ExtensionRuntime: NSObject {
                     },
                     workspace: { value in
                         try WorkspaceStore.save(value)
-                        WorkspaceModel.shared.store = value
-                        if let current = value.current { WorkspaceModel.shared.layout = current }
+                        models.workspace.store = value
+                        if let current = value.current { models.workspace.layout = current }
                     },
                     paneAdmission: { terminals.admitsPaneAction($0, workspaceTabID: $1) },
                     observe: { _, active in
-                        if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
+                        if active, !fixture { models.machines.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },
                     openWindow: { request in
                         guard let windowNavigation else {
@@ -435,14 +430,14 @@ final class ExtensionRuntime: NSObject {
                     terminal: { value in try await terminals.execute(value) })
                 do {
                     cli = try MachineCLIService(runner: { machine, owner in
-                        let session = MachinesModel.shared.session(for: machine.id)
+                        let session = models.machines.session(for: machine.id)
                         return RemoteRunner(
                             machine: machine, connection: session.connectionRef, owner: owner,
                             connect: { try await session.connectForCommand() },
                             disconnect: { await session.shutdown() })
                     })
                 } catch { return ["ok": false] as NSDictionary }
-                MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
+                MachinesCLIEnvironment.changed = { models.machines.reloadOwnedRecords() }
                 if !fixture {
                     let policy = ambientPolicy
                     let health = MachineHealthLifecycle(interval: {
@@ -495,6 +490,7 @@ final class ExtensionRuntime: NSObject {
     }
     private func shutdown() async {
         running = false
+        guard let engineModels else { return }
         ambientPolicy.stop()
         windowNavigation?.invalidate(); windowNavigation = nil
         await uiEngine?.shutdown(); uiEngine = nil
@@ -515,8 +511,8 @@ final class ExtensionRuntime: NSObject {
         await peer?.shutdownAndWait()
         FinderUndoBridge.shutdown()
         PaneViewStore.shared.shutdown()
-        await WorkspaceModel.shared.shutdown()
-        await MachinesModel.shared.shutdown()
+        await engineModels.shutdown()
+        self.engineModels = nil
         await transport?.shutdown()
         transport = nil; peer = nil; surface = nil
         ExtensionUIResources.cleanup(of: self, key: "machinePrivacy") {
