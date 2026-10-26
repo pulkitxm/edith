@@ -2224,7 +2224,7 @@
     "testTargets": [
       "ci-extension-machines"
     ],
-    "version": "1.0.3",
+    "version": "1.0.4",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-5",

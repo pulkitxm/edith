@@ -84,6 +84,36 @@ import Testing
         #expect(await probe.count == 1)
     }
 
+    @Test func rescheduledWaitersFinalizeTheCompletedProbeBeforePollingAgain() async throws {
+        for _ in 0..<10 {
+            let clock = AmbientClock(); let probe = AmbientProbe()
+            await probe.setHold(true)
+            var reads = 0
+            let lifecycle = MachineHealthLifecycle(
+                monitor: monitor(probe),
+                interval: {
+                    reads += 1
+                    return reads < 20 ? 300 : nil
+                },
+                settings: { .init(notifyDown: true, notifyDiskFull: true, diskThreshold: 90) },
+                now: { clock.now }, sleep: clock.sleep)
+            lifecycle.start()
+            try await probe.awaitFirst()
+            lifecycle.reschedule()
+            let manual = Task { await lifecycle.refresh() }
+            await Task.yield()
+            await probe.release()
+            _ = await manual.value
+            try await clock.settle { lifecycle.latest != nil }
+            for _ in 0..<10 { await Task.yield() }
+            #expect(reads < 20)
+            #expect(clock.waiterCount == 1)
+            #expect(await probe.count == 1)
+            await lifecycle.stop()
+            #expect(clock.waiterCount == 0)
+        }
+    }
+
     private func policy(
         _ job: String, ambient: Double, live: Double? = nil,
         battery: @escaping @MainActor () -> Bool

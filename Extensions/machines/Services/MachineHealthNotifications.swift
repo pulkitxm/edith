@@ -78,9 +78,8 @@ public enum MachineHealthNotifications {
         guard !stopped else {
             return latest ?? .init(checkedAt: now(), machines: [], skipped: true)
         }
-        if let pending { return await pending.value }
         let monitor = monitor
-        let run = Task { await monitor.run() }
+        let run = pending ?? Task { await monitor.run() }
         pending = run
         let snapshot = await run.value
         if pending == run {
