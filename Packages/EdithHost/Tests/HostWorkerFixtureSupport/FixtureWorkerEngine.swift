@@ -98,6 +98,10 @@ public final class FixtureWorkerEngine: HostWorkerEngine {
         }
         if operation == "start", let next = request.configuration {
             configuration = next
+            if mode == "reject-start-with-reason" {
+                ok = false
+                message = "Screen Recording permission is required."
+            }
             if mode == "navigation-early", let event = navigationEvent() {
                 try? channel.navigate(event)
             }

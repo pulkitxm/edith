@@ -315,6 +315,7 @@ public enum HostWorkerError: Error, Equatable {
     case timedOut
     case invalidResponse
     case rejected
+    case startRejected(String)
     case stillRunning
     case disableRejected(String)
 }
@@ -357,6 +358,7 @@ extension HostWorkerError: LocalizedError {
         case .timedOut: "The extension process did not answer in time."
         case .invalidResponse: "The extension process sent an invalid response."
         case .rejected: "The extension process rejected the request."
+        case let .startRejected(message): message
         case .stillRunning: "The extension process is still running."
         case let .disableRejected(message): message
         }

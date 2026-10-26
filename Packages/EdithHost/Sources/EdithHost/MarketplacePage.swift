@@ -184,6 +184,9 @@ struct MarketplacePage: View {
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(status(entry)).font(.edithText(.caption)).foregroundStyle(.secondary)
+                if let failure = marketplace.sessions.failureReasons[entry.id] {
+                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                }
                 let sizes = HostMarketplacePackageSummary(
                     candidate: marketplace.available[entry.id] ?? marketplace.installed[entry.id],
                     downloadedVersions: marketplace.installedVersions[entry.id] ?? [])
@@ -214,6 +217,9 @@ struct MarketplacePage: View {
         if let package = marketplace.installed[entry.id] {
             if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
                 return "Disable pending · \(package.version)"
+            }
+            if marketplace.sessions.states[entry.id] == .failed {
+                return "Could not start · \(package.version)"
             }
             return
                 "\(shownOn(entry.id) ? "Enabled" : "Disabled") · \(package.version)"
@@ -250,7 +256,9 @@ struct MarketplacePage: View {
                     }
                     Button("Disable") { Task { await suites.select(entry, enabled: false) } }
                 } else {
-                    Button("Enable") { Task { await suites.select(entry, enabled: true) } }
+                    Button(marketplace.sessions.states[entry.id] == .failed ? "Retry" : "Enable") {
+                        Task { await suites.select(entry, enabled: true) }
+                    }
                 }
             } else if !marketplace.pendingRemovalIDs.contains(entry.id) {
                 Button(

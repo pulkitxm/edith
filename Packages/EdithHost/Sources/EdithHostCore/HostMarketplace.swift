@@ -174,7 +174,8 @@ public final class HostMarketplace {
                 sessions.pendingDisableIDs.contains(id)
                 ? (error as? HostWorkerError)?.disableMessage
                     ?? "Cleanup is pending. Retry disable after finishing macOS approval."
-                : "The extension could not start. Try enabling it again."
+                : sessions.failureReasons[id]
+                    ?? "The extension could not start. Try enabling it again."
         }
     }
 

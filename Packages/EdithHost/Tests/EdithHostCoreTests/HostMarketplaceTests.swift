@@ -7,6 +7,29 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        var attempts = 0
+        let marketplace = try fixture.marketplace { _ in
+            attempts += 1
+            return attempts == 1 ? "reject-start-with-reason" : "normal"
+        }
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.error == "Screen Recording permission is required.")
+        #expect(marketplace.sessions.states["sample"] == .failed)
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        #expect(marketplace.installed["sample"] == fixture.package("1.0.0"))
+        #expect(marketplace.operationID == nil)
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.error == nil)
+        #expect(marketplace.sessions.failureReasons["sample"] == nil)
+        #expect(await fixture.network.count == 0)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func installedExtensionsRemainUsableDuringASharedSlowCatalogRefresh() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

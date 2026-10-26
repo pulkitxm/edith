@@ -254,7 +254,14 @@ public final class HostWorker {
             Task { @MainActor in outcome.finish(.failure(CancellationError())) }
         }
         guard response.token == request.token else { throw HostWorkerError.invalidResponse }
-        guard response.ok || acceptsFailure else { throw HostWorkerError.rejected }
+        guard response.ok || acceptsFailure else {
+            if request.operation == "start", let message = response.message,
+                !message.isEmpty, message.count <= 1024
+            {
+                throw HostWorkerError.startRejected(message)
+            }
+            throw HostWorkerError.rejected
+        }
         return response
     }
 

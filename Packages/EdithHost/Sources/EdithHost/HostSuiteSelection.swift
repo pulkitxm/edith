@@ -49,6 +49,8 @@ import Observation
 
     func select(_ entry: HostExtension, enabled: Bool) async {
         guard !working, marketplace.operationID == nil else { return }
+        working = true
+        defer { working = false }
         if enabled {
             if marketplace.installed[entry.id] == nil {
                 await marketplace.download(id: entry.id)
