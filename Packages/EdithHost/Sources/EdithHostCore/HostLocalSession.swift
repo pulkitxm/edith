@@ -168,6 +168,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
     private(set) var runtime: ExtensionBundleRuntime?
     private var bridge: HostLocalEngineBridge?
     private var closed = false
+    private var closePreparation: Task<Void, any Error>?
     private var intrinsic: Bool {
         ![
             "main", "settings", "music.detail", "machines.window", "herdr.agent", "herdr.space",
@@ -229,11 +230,24 @@ public final class HostLocalSceneHandle: HostScenePresentation {
 
     public func prepareToClose() async throws {
         guard !closed, let runtime else { return }
-        try await runtime.preparePresentationToClose(
-            id: session.configuration.package.id, presentationID: request.presentationID)
-        if session.resources.beginExclusiveClose(request.presentationID) {
-            defer { session.resources.endExclusiveClose(request.presentationID) }
-            try await runtime.prepareRemoteUIToStopAll()
+        if let closePreparation {
+            try await closePreparation.value
+            return
+        }
+        let preparation = Task {
+            let exclusive = session.resources.beginExclusiveClose(request.presentationID)
+            defer {
+                if exclusive { session.resources.endExclusiveClose(request.presentationID) }
+            }
+            try await runtime.preparePresentationToClose(
+                id: session.configuration.package.id, presentationID: request.presentationID)
+        }
+        closePreparation = preparation
+        do {
+            try await preparation.value
+        } catch {
+            closePreparation = nil
+            throw error
         }
     }
 

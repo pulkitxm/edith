@@ -180,17 +180,6 @@ public final class ExtensionBundleRuntime {
         }
     }
 
-    public func suspendRemoteUICommandsAll() async throws {
-        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
-        try await suspendCommands(includeInactive: true)
-    }
-
-    public func prepareRemoteUIToStopAll() async throws {
-        guard readOnlyPackage != nil else { throw MarketplaceError.invalidBundle }
-        try await suspendCommands(includeInactive: true)
-        try await prepareToStop(includeInactive: true)
-    }
-
     public func prepareToStopAll() async throws {
         try await prepareToStop(includeInactive: false)
     }
