@@ -78,10 +78,41 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: owner.root.path))
     }
 
-    @Test func missingLiveOriginalOwnerDiagnosticsReturnActionableUnavailability() async throws {
+    @Test(arguments: ["usage", "companion"])
+    func unadvertisedAgentHooksDoNotBlockCoreTelemetry(_ id: String) async throws {
         let identity = try #require(ExtensionProcessIdentity.current)
+        let owner = AgentCapabilityFixture(pid: identity.pid, owner: id)
+        let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
+        #expect(try await hooks.jobs().isEmpty)
+        #expect(try await hooks.events().isEmpty)
+        #expect(try await hooks.logs(last: "1h").isEmpty)
         #expect(identity.isAlive)
-        let owner = MissingCoreOwnerFixture(pid: identity.pid)
+        #expect(
+            owner.calls
+                == Array(repeating: ["ls", id + ".cli.catalog", "ls"], count: 3).flatMap { $0 })
+        do {
+            try await hooks.control(job: id + ".refresh", cancel: false)
+            Issue.record("An unadvertised job was accepted.")
+        } catch let error as HostCoreCommandFailure {
+            #expect(error.code == 3)
+        }
+    }
+
+    @Test func optionalAgentChannelsDoNotBlockSupportedJobInventory() async throws {
+        let identity = try #require(ExtensionProcessIdentity.current)
+        let owner = AgentCapabilityFixture(pid: identity.pid, mode: .jobsOnly)
+        let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
+        #expect(try await hooks.jobs().isEmpty)
+        #expect(try await hooks.events().isEmpty)
+        #expect(try await hooks.logs(last: "1h").isEmpty)
+        #expect(owner.calls.contains("usage.agent.jobs"))
+        #expect(!owner.calls.contains("usage.agent.events"))
+        #expect(!owner.calls.contains("usage.agent.logs"))
+    }
+
+    @Test func malformedAdvertisedAgentHooksRemainAnError() async throws {
+        let identity = try #require(ExtensionProcessIdentity.current)
+        let owner = AgentCapabilityFixture(pid: identity.pid, owner: "companion", mode: .invalid)
         let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
         for operation in ["jobs", "events", "logs"] {
             do {
@@ -90,18 +121,29 @@ import Testing
                 case "events": _ = try await hooks.events()
                 default: _ = try await hooks.logs(last: "1h")
                 }
-                Issue.record("Missing original owner hooks were silently omitted.")
+                Issue.record("An invalid advertised agent catalog was ignored.")
             } catch let error as HostCoreCommandFailure {
                 #expect(error.code == 4)
-                #expect(error.message.contains(operation) && error.message.contains("usage"))
-                #expect(error.hint?.contains("Update usage") == true)
+                #expect(error.message.contains("companion"))
+                #expect(error.hint?.contains("doctor companion") == true)
             }
         }
-        #expect(identity.isAlive)
-        #expect(
-            owner.calls
-                == Array(repeating: ["ls", "usage.cli.catalog", "ls"], count: 3)
-                .flatMap { $0 })
+    }
+
+    @Test func retiredProviderCannotLeaveAnAgentCatalogError() async throws {
+        let identity = try #require(ExtensionProcessIdentity.current)
+        let owner = AgentCapabilityFixture(
+            pid: identity.pid, mode: .invalid, retireOnDiscovery: true)
+        let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
+        #expect(try await hooks.jobs().isEmpty)
+    }
+
+    @Test func agentJobIdentifiersBelongToTheAdvertisingOwner() async throws {
+        let identity = try #require(ExtensionProcessIdentity.current)
+        let owner = AgentCapabilityFixture(
+            pid: identity.pid, owner: "herdr", mode: .jobsOnly, jobID: "sessions.refresh")
+        let hooks = HostCoreOwnerHooks(invoke: { try owner.invoke($0) })
+        await #expect(throws: HostCLIError.self) { try await hooks.jobs() }
     }
 
     @Test func ownerDisableAndWrongAcknowledgementCannotAcknowledgeWork() async throws {
@@ -126,39 +168,78 @@ import Testing
     }
 }
 
-private final class MissingCoreOwnerFixture: @unchecked Sendable {
+private final class AgentCapabilityFixture: @unchecked Sendable {
+    enum Mode { case absent, jobsOnly, invalid }
+    private struct Jobs: Encodable { let owner: String; let jobs: [HostCoreJobSnapshot] }
     private let pid: Int32
+    private let owner: String
+    private let mode: Mode
+    private let retireOnDiscovery: Bool
+    private let jobID: String?
     private let lock = NSLock()
     private var callsValue: [String] = []
+    private var reads = 0
     var calls: [String] { lock.withLock { callsValue } }
 
-    init(pid: Int32) { self.pid = pid }
+    init(
+        pid: Int32, owner: String = "usage", mode: Mode = .absent, retireOnDiscovery: Bool = false,
+        jobID: String? = nil
+    ) {
+        self.pid = pid; self.owner = owner; self.mode = mode
+        self.retireOnDiscovery = retireOnDiscovery; self.jobID = jobID
+    }
 
     func invoke(_ request: HostCLIRequest) throws -> Data {
         try lock.withLock {
             if request.action == .ls {
-                callsValue.append("ls")
+                callsValue.append("ls"); reads += 1
+                let active = !retireOnDiscovery || reads == 1
                 return try HostCLIJSON.array([
                     .object([
-                        "id": .string("usage"), "installed": .bool(true), "compatible": .bool(true),
-                        "enabled": .bool(true), "running": .bool(true), "version": .string("1"),
+                        "id": .string(owner), "installed": .bool(true), "compatible": .bool(true),
+                        "enabled": .bool(active), "running": .bool(active), "version": .string("1"),
                         "disablePending": .bool(false), "removalPending": .bool(false),
                         "processIdentifier": .integer(Int64(pid)),
                     ])
                 ]).encoded()
             }
-            guard request.action == .invoke, request.id == "usage",
-                request.operation == "usage.cli.catalog"
-            else { throw HostCLIError.rejected("Unexpected original owner protocol invocation.") }
-            callsValue.append("usage.cli.catalog")
-            return try JSONEncoder().encode(
+            guard request.action == .invoke, request.id == owner else {
+                throw HostCLIError.rejected("Unexpected owner invocation.")
+            }
+            callsValue.append(request.operation ?? "")
+            if request.operation == owner + ".agent.jobs", mode == .jobsOnly {
+                let jobs =
+                    jobID.map {
+                        [
+                            HostCoreJobSnapshot(
+                                descriptor: .init(id: $0, title: "Synthetic work", trigger: .queue),
+                                phase: .idle, subscribers: 0, lastRun: nil, lastDuration: nil,
+                                lastError: nil, runCount: 0)
+                        ]
+                    } ?? []
+                return try JSONEncoder().encode(Jobs(owner: owner, jobs: jobs))
+            }
+            guard request.operation == owner + ".cli.catalog" else {
+                throw HostCLIError.rejected("An unsupported agent channel was invoked.")
+            }
+            let data = try JSONEncoder().encode(
                 HostCLIProviderCatalog(
-                    owner: "usage",
+                    owner: owner,
                     commands: [
                         .init(
-                            route: ["usage", "ls"], operation: "usage.cli",
-                            summary: "Read original usage.")
+                            route: [owner, "ls"], operation: owner + ".cli",
+                            summary: "Read owned state.")
                     ]))
+            var catalog = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            if mode != .absent {
+                catalog["coreOwner"] = [
+                    "version": 1, "owner": owner,
+                    "agent": [
+                        "jobs": mode == .invalid ? "foreign.agent.jobs" : owner + ".agent.jobs"
+                    ],
+                ]
+            }
+            return try JSONSerialization.data(withJSONObject: catalog)
         }
     }
 }

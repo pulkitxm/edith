@@ -28,7 +28,7 @@ public struct HostCoreOwnerHooks: Sendable {
     public func control(job: String, cancel: Bool) async throws {
         let registry = try await HostCoreOwnerRegistry.load(invoke: invoke)
         var owners: [HostCoreOwnerRegistry.Provider] = []
-        for provider in registry.providers where provider.catalog.agent != nil {
+        for provider in try agentProviders(registry, operation: "jobs") {
             if try await inventory(registry: registry, provider: provider).contains(where: {
                 $0.id == job
             }) {
@@ -38,15 +38,10 @@ public struct HostCoreOwnerHooks: Sendable {
         guard owners.count == 1, let provider = owners.first, let agent = provider.catalog.agent,
             let operation = cancel ? agent.cancel : agent.run
         else {
-            let owner = Self.originalOwners.first { job.hasPrefix($0.key) }?.value
             throw HostCoreCommandFailure(
                 "The background job is unavailable: " + job,
-                hint: owner.map {
-                    "Install and enable " + $0
-                        + " with owned agent job hooks, then retry ed agent jobs."
-                }
-                    ?? "Choose a job from ed agent jobs.",
-                code: owner == nil && owners.isEmpty ? 3 : 4)
+                hint: "Choose a supported action for a job from ed agent jobs.",
+                code: owners.isEmpty ? 3 : 4)
         }
         let ack = try await registry.call(
             Acknowledgement.self, provider: provider, operation: operation,
@@ -162,26 +157,19 @@ public struct HostCoreOwnerHooks: Sendable {
     private func agentProviders(_ registry: HostCoreOwnerRegistry, operation: String) throws
         -> [HostCoreOwnerRegistry.Provider]
     {
-        let states = registry.states.filter { state in
-            state.available
-                && (Self.originalOwners.values.contains(state.id)
-                    || registry.providers.contains {
-                        $0.state.id == state.id && $0.catalog.agent != nil
-                    })
+        if let owner = registry.agentIssues.keys.sorted().first {
+            throw HostCoreCommandFailure(
+                "The advertised agent hooks are invalid for " + owner,
+                hint: "Check ed extensions doctor " + owner + ", then retry ed agent " + operation
+                    + ".")
         }
-        return try states.map { state in
-            guard let provider = registry.providers.first(where: { $0.state.id == state.id }),
-                let agent = provider.catalog.agent,
-                operation != "events" || agent.events != nil,
-                operation != "logs" || agent.logs != nil
-            else {
-                throw HostCoreCommandFailure(
-                    "The original agent " + operation + " hook is unavailable for " + state.id,
-                    hint: "Update " + state.id
-                        + " to an extension with owned agent hooks, then retry ed agent "
-                        + operation + ".")
+        return registry.providers.filter { provider in
+            guard let agent = provider.catalog.agent else { return false }
+            switch operation {
+            case "events": return agent.events != nil
+            case "logs": return agent.logs != nil
+            default: return true
             }
-            return provider
         }
     }
 
@@ -198,8 +186,7 @@ public struct HostCoreOwnerHooks: Sendable {
     }
 
     private static func valid(_ job: HostCoreJobSnapshot, owner: String) -> Bool {
-        let prefixes = originalOwners.filter { $0.value == owner }.map(\.key) + [owner + "."]
-        return prefixes.contains(where: { job.id.hasPrefix($0) })
+        job.id.hasPrefix(owner + ".")
             && !HostCoreAgentStore.descriptors.contains(where: { $0.id == job.id })
             && HostCoreReadinessReport.text(job.id) && job.id.utf8.count <= 128
             && HostCoreReadinessReport.text(job.descriptor.title)
@@ -212,9 +199,4 @@ public struct HostCoreOwnerHooks: Sendable {
             && (job.lastError.map(HostCoreReadinessReport.text) ?? true)
     }
 
-    private static let originalOwners = [
-        "usage.": "usage", "sessions.": "herdr", "machines.": "machines",
-        "updates.": "appMaintenance", "cleaner.": "cleaner", "downloads.": "downloads",
-        "attention.": "attention", "companion.": "companion", "codestats.": "codeStats",
-    ]
 }
