@@ -208,6 +208,7 @@ test("workflow dispatch lookup failures retain normal retry and permission rules
   for (const message of [
     "could not find the dispatched Pukbot workflow run",
     "GitHub rejected the Pukbot workflow dispatch",
+    "failed to resolve the authenticated GitHub user",
   ]) {
     const error = Object.assign(new Error("Command failed: pukbot"), {
       stdout: JSON.stringify({ ok: false, error: { message } }),
