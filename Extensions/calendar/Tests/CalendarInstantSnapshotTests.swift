@@ -13,6 +13,30 @@ import Testing
             end: Date().addingTimeInterval(600), isAllDay: false)
     }
 
+    @Test func recurringCachedEventsKeepDistinctIdentitiesAndRender() async throws {
+        let first = cachedEvent()
+        var second = first
+        second.start = first.start.addingTimeInterval(86400)
+        second.end = first.end.addingTimeInterval(86400)
+        let store = CalendarStore(
+            snapshotStore: CalendarAgendaSnapshotStore(events: [first, second, first]),
+            fetch: { _ in [] }, authorization: { .fullAccess })
+        defer { store.shutdown() }
+        await store.restoreCachedAgenda()
+        #expect(store.events.count == 2)
+        #expect(Set(store.events.map(\.id)).count == 2)
+        #expect(
+            store.events[0].id
+                == CalendarEventPayload.occurrenceID(
+                    identifier: first.id, calendarID: first.calendarID, start: first.start))
+        let snapshot = CalendarUISnapshot(
+            authorized: true, blurEvents: true, days: 14, events: store.events)
+        let facade = CalendarUIFacade(invoke: { _, _ in try JSONEncoder().encode(snapshot) })
+        defer { facade.shutdown() }
+        await facade.refreshAndWait()
+        #expect(facade.loaded && facade.error == nil && facade.events.count == 2)
+    }
+
     @Test func metadataAnswersFromTheSavedAgendaWhileTheRefreshIsBlocked() async throws {
         let gate = CalendarFetchGate()
         let store = CalendarStore(
