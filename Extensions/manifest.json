@@ -1851,6 +1851,7 @@
         "Extensions/usage/Services/UsageHTTPResponse.swift",
         "Extensions/usage/Services/UsageHistory.swift",
         "Extensions/usage/Services/UsageJevPeer.swift",
+        "Extensions/usage/Services/UsageKeychain.swift",
         "Extensions/usage/Services/UsageLimitAlerts.swift",
         "Extensions/usage/Services/UsageMachinesPeer.swift",
         "Extensions/usage/Services/UsageMachinesProjection.swift",

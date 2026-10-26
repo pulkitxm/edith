@@ -7,13 +7,7 @@ import Security
 enum UsageSavedLogin {
     static func scopedCredentials(
         directory: URL?,
-        readKeychain: ([String: Any]) -> Data? = { query in
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
-                return nil
-            }
-            return item as? Data
-        }
+        readKeychain: ([String: Any]) -> Data? = { UsageKeychain.read($0) }
     ) -> Data? {
         guard let directory else { return nil }
         let hash = SHA256.hash(data: Data(directory.path.utf8))
@@ -38,13 +32,7 @@ enum UsageSavedLogin {
             defer { try? file.close() }
             return try? file.read(upToCount: 65_537)
         },
-        readKeychain: ([String: Any]) -> Data? = { query in
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
-                return nil
-            }
-            return item as? Data
-        }
+        readKeychain: ([String: Any]) -> Data? = { UsageKeychain.read($0) }
     ) -> String? {
         let data: Data?
         if let directory = environment["CLAUDE_CONFIG_DIR"], !directory.isEmpty {
