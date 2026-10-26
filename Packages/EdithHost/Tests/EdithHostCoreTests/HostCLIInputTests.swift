@@ -5,6 +5,25 @@ import Testing
 @testable import EdithHostCore
 
 @Suite struct HostCLIInputTests {
+    @Test func localVersionQueriesDoNotStartOptionalProviders() async throws {
+        var descriptors: [Int32] = [-1, -1]
+        #expect(pipe(&descriptors) == 0)
+        defer { Darwin.close(descriptors[0]); Darwin.close(descriptors[1]) }
+        let invoke: HostCLIProviderRegistry.Invoke = { _ in
+            Issue.record("A local version query must not start optional providers.")
+            throw HostCLIError.unavailable
+        }
+        for arguments in [
+            ["version"], ["--version"], ["version", "--json"], ["--version", "--json"],
+        ] {
+            #expect(!(try await HostCommandCLI.liveInputForCommand(arguments, invoke: invoke)))
+            #expect(
+                try await HostCommandCLI.inputForCommand(
+                    arguments, descriptor: descriptors[0], invoke: invoke
+                ).isEmpty)
+        }
+    }
+
     @Test func originalColourAliasIsScopedToColorProvider() throws {
         let catalog = HostCLIProviderCatalog(
             owner: "colorPicker",
