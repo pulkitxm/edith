@@ -7,7 +7,6 @@ public struct HotKeyRecorderControl: View {
     private let keyPrefix: String
     private let defaultLabel: String
     @State private var recording = false
-    @State private var monitor: Any?
     @State private var label = ""
 
     public init(keyPrefix: String, defaultLabel: String) {
@@ -25,6 +24,7 @@ public struct HotKeyRecorderControl: View {
                 .padding(.vertical, UIScale.pt(2))
                 .padding(.horizontal, UIScale.pt(6))
         }
+        .background(ShortcutKeyCapture(recording: $recording, handle: handle))
         .onAppear { label = currentLabel }
         .onDisappear { if recording { stop() } }
         .onReceive(
@@ -43,18 +43,10 @@ public struct HotKeyRecorderControl: View {
     private func start() {
         recording = true
         NSApp.activate(ignoringOtherApps: true)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            handle(event)
-            return nil
-        }
     }
 
     private func stop() {
         recording = false
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-            self.monitor = nil
-        }
         label = currentLabel
     }
 

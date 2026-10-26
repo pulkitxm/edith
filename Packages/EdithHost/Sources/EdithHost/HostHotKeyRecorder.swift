@@ -9,7 +9,6 @@ struct HostHotKeyRecorder: View {
     var commit: () -> Void = {}
     @AppStorage private var label: String
     @State private var recording = false
-    @State private var monitor: Any?
 
     init(
         keyPrefix: String, defaultLabel: String, defaults: UserDefaults,
@@ -21,31 +20,24 @@ struct HostHotKeyRecorder: View {
     var body: some View {
         Button(recording ? "Press a shortcut. Escape cancels." : label) {
             if recording { stop() } else { start() }
-        }.buttonStyle(.edith(.secondary)).onDisappear { stop() }
+        }.buttonStyle(.edith(.secondary))
+            .background(ShortcutKeyCapture(recording: $recording, handle: handle))
+            .onDisappear { stop() }
     }
-    private func start() {
-        recording = true
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let code = event.keyCode
-            let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            let characters = event.charactersIgnoringModifiers
-            let handled = MainActor.assumeIsolated {
-                if code == 53 { stop(); return true }
-                guard
-                    let shortcut = HostRecordedShortcut(
-                        code: code, flags: flags, characters: characters)
-                else { return false }
-                defaults.set(Int(code), forKey: keyPrefix + "Code")
-                defaults.set(shortcut.modifiers, forKey: keyPrefix + "Mods")
-                label = shortcut.label; commit(); stop(); return true
-            }
-            return handled ? nil : event
-        }
+    private func start() { recording = true }
+    private func handle(_ event: NSEvent) {
+        if event.keyCode == 53 { stop(); return }
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard
+            let shortcut = HostRecordedShortcut(
+                code: event.keyCode, flags: flags, characters: event.charactersIgnoringModifiers)
+        else { return }
+        defaults.set(Int(event.keyCode), forKey: keyPrefix + "Code")
+        defaults.set(shortcut.modifiers, forKey: keyPrefix + "Mods")
+        label = shortcut.label; commit(); stop()
     }
-    private func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil; recording = false
-    }
+    private func stop() { recording = false }
+
 }
 struct HostRecordedShortcut: Equatable {
     let modifiers: Int
