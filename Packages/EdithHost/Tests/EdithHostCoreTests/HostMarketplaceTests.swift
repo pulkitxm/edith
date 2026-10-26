@@ -7,6 +7,47 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func aNewProtocolRefreshesTheCatalogEvenWhenThePreviousCheckIsRecent() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let now = Date()
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(now, forKey: HostMarketplace.lastCatalogRefreshKey)
+        defaults.set("previous-protocol", forKey: HostMarketplace.lastCatalogCompatibilityKey)
+        try fixture.envelope(packages: [fixture.package("1.0.0", abi: "previous-protocol")])
+            .write(to: fixture.cache)
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [fixture.package("1.1.0")], revision: 2))
+        let marketplace = try fixture.marketplace()
+        await marketplace.loadCachedCatalog()
+        #expect(marketplace.available.isEmpty)
+        await marketplace.refreshCatalogIfStale(now: now)
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.available["sample"]?.hostABI == HostContract.compatibility)
+        await marketplace.refreshCatalogIfStale(now: now.addingTimeInterval(60))
+        #expect(await fixture.network.count == 1)
+    }
+
+    @Test func aNewProtocolChecksInstalledUpdatesWithoutWaitingForTheNextScheduledCheck()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let now = Date()
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(now, forKey: "lastAutomaticExtensionCheck")
+        defaults.set("same-build", forKey: "lastAutomaticExtensionCheckHostBuild")
+        defaults.set("previous-protocol", forKey: "lastAutomaticExtensionCheckHostABI")
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.updateInstalledIfDue(now: now, hostBuild: "same-build")
+        #expect(await fixture.network.count == 1)
+        await marketplace.updateInstalledIfDue(
+            now: now.addingTimeInterval(60), hostBuild: "same-build")
+        #expect(await fixture.network.count == 1)
+    }
+
     @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

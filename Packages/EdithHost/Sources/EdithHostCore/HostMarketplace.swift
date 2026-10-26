@@ -29,6 +29,7 @@ public final class HostMarketplace {
         }
     }
     static let lastCatalogRefreshKey = "lastCatalogRefresh"
+    static let lastCatalogCompatibilityKey = "lastCatalogCompatibility"
     static let catalogRefreshInterval: TimeInterval = 8 * 60 * 60
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let store: ExtensionPackageStore
@@ -130,6 +131,8 @@ public final class HostMarketplace {
 
     public func refreshCatalogIfStale(now: Date = Date()) async {
         if catalog != nil,
+            preferences.string(forKey: Self.lastCatalogCompatibilityKey)
+                == HostContract.compatibility,
             let refreshed = preferences.object(forKey: Self.lastCatalogRefreshKey) as? Date,
             now.timeIntervalSince(refreshed) < Self.catalogRefreshInterval
         {
@@ -148,7 +151,9 @@ public final class HostMarketplace {
         }
         if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
             now.timeIntervalSince(checked) < Self.catalogRefreshInterval,
-            preferences.string(forKey: "lastAutomaticExtensionCheckHostBuild") == hostBuild
+            preferences.string(forKey: "lastAutomaticExtensionCheckHostBuild") == hostBuild,
+            preferences.string(forKey: "lastAutomaticExtensionCheckHostABI")
+                == HostContract.compatibility
         {
             return
         }
@@ -162,6 +167,7 @@ public final class HostMarketplace {
         guard !failed else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
+        preferences.set(HostContract.compatibility, forKey: "lastAutomaticExtensionCheckHostABI")
     }
 
     public func enable(id: String) async {
@@ -235,7 +241,11 @@ public final class HostMarketplace {
                 let result = try await catalogClient.refresh()
                 offline = result.offline
                 apply(result.catalog)
-                if !result.offline { preferences.set(now, forKey: Self.lastCatalogRefreshKey) }
+                if !result.offline {
+                    preferences.set(now, forKey: Self.lastCatalogRefreshKey)
+                    preferences.set(
+                        HostContract.compatibility, forKey: Self.lastCatalogCompatibilityKey)
+                }
             } catch {
                 if self.error == nil {
                     self.error =

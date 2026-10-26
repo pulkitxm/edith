@@ -62,8 +62,12 @@ struct MarketplacePage: View {
                     Text(error).foregroundStyle(.red).font(.edithText(.callout))
                 }
                 if marketplace.offline {
-                    Text("You are offline. Installed extensions are still available.")
-                        .foregroundStyle(.secondary).font(.edithText(.callout))
+                    Text(
+                        marketplace.installed.isEmpty && !marketplace.downloadedIDs.isEmpty
+                            ? "You are offline. Connect to download extensions compatible with this app."
+                            : "You are offline. Installed extensions are still available."
+                    )
+                    .foregroundStyle(.secondary).font(.edithText(.callout))
                 }
             }
         } content: {
