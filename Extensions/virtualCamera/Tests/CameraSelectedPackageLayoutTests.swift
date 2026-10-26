@@ -13,7 +13,7 @@ import Testing
         init(
             hostIdentifier: String = "com.pulkit.edith.tests.worker-" + UUID().uuidString,
             roleSuffix: String =
-                "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/virtualCamera/app.bundle",
+                "app.bundle",
             manifestVersion: String = "1.0.0", carrierChanges: [String: String] = [:],
             privilegedVersion: String = "1.0.0"
         ) throws {
@@ -31,11 +31,11 @@ import Testing
                 [
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.app",
                     "CFBundleExecutable": "Runtime", "CFBundleShortVersionString": "1.0.0",
-                    "EdithHostABI": "edith-host-2",
+                    "EdithHostABI": "edith-host-4",
                 ])
             var carrierInfo = [
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
-                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "edith-host-2",
+                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "edith-host-4",
                 "EdithHostIdentifier": host, "EdithContainedExtensionID": "virtualCamera",
                 "EdithContainedRole": "cameraCarrier",
             ]
@@ -47,10 +47,10 @@ import Testing
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.privileged",
                     "CFBundleExecutable": "Runtime",
                     "CFBundleShortVersionString": privilegedVersion,
-                    "EdithHostABI": "edith-host-2",
+                    "EdithHostABI": "edith-host-4",
                 ])
             try JSONSerialization.data(withJSONObject: [
-                "id": "virtualCamera", "version": manifestVersion, "hostABI": "edith-host-2",
+                "id": "virtualCamera", "version": manifestVersion, "hostABI": "edith-host-4",
                 "architecture": "arm64", "dependencies": [],
             ]).write(to: role.deletingLastPathComponent().appendingPathComponent("package.json"))
         }
@@ -74,7 +74,7 @@ import Testing
         func remove() { try? FileManager.default.removeItem(at: root) }
     }
 
-    @Test func exactABI2LayoutKeepsCarrierAtRootAndPrivilegeBesideLoadedRole() throws {
+    @Test func currentFlatLayoutKeepsCarrierAndPrivilegeBesideLoadedRole() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let selected = try fixture.resolve()
@@ -82,17 +82,13 @@ import Testing
         #expect(selected.privileged.path == fixture.privileged.path)
         #expect(
             selected.carrier.deletingLastPathComponent()
-                != selected.privileged.deletingLastPathComponent())
-        #expect(
-            !FileManager.default.fileExists(
-                atPath: fixture.role.deletingLastPathComponent().appendingPathComponent(
-                    "CameraCarrier.app"
-                ).path))
+                == selected.privileged.deletingLastPathComponent())
+        #expect(FileManager.default.fileExists(atPath: selected.carrier.path))
     }
 
-    @Test func flatForeignAndIncompleteRoleLayoutsAreRejected() throws {
+    @Test func legacyForeignAndIncompleteRoleLayoutsAreRejected() throws {
         for suffix in [
-            "app.bundle",
+            "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/virtualCamera/app.bundle",
             "ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/other/app.bundle",
             "ExtensionCarrier.app/Contents/Resources/Payload/virtualCamera/app.bundle",
         ] {

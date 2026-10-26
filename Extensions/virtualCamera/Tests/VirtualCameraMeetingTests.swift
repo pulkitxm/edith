@@ -47,10 +47,14 @@ struct VirtualCameraMeetingTests {
         let pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: 320, height: 180))
         pipeline.start { _ in }
+        defer { pipeline.stop() }
         try pipeline.startRecording(to: url)
-        try await Task.sleep(for: .milliseconds(900))
+        let deadline = ContinuousClock.now + .seconds(10)
+        while pipeline.statistics.framesRendered < 15, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try #require(pipeline.statistics.framesRendered >= 15)
         _ = try await pipeline.stopRecording()
-        pipeline.stop()
         let asset = AVURLAsset(url: url)
         #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
         #expect(try Self.loudness(of: url) > 0.05)
