@@ -30,6 +30,7 @@ final class UsageNativeParser {
             path, previousBytes: previous?.size ?? 0, limits: limits
         ) {
             data, offset, end in
+            if self.isBulkToolOutput(data) { return }
             guard let row = try? UsageNativeJSON.object(data) else { return }
             let records = try self.consume(row, offset: offset, end: end)
             self.legacy.append(contentsOf: records)
@@ -47,6 +48,22 @@ final class UsageNativeParser {
         return .init(
             path: key, size: properties.0, completeBytes: properties.1, modified: properties.2,
             hash: properties.3, prefixHash: properties.4, records: records)
+    }
+
+    private static let bulkLineBytes = 8_192
+
+    private func isBulkToolOutput(_ line: Data) -> Bool {
+        guard ["cli", "cowork", "claude-cloud"].contains(source), line.count >= Self.bulkLineBytes
+        else { return false }
+        return line.withUnsafeBytes { raw in
+            func has(_ marker: StaticString) -> Bool {
+                memmem(
+                    raw.baseAddress!, raw.count, marker.utf8Start, marker.utf8CodeUnitCount)
+                    != nil
+            }
+            return has("\"tool_result\"") && !has("\"usage\"") && !has("\"title\"")
+                && !has("\"aiTitle\"")
+        }
     }
 
     private func configure(_ path: URL) throws {
