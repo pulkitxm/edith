@@ -7,6 +7,25 @@ import EdithExtensionUI
 
 extension MusicExtensionTests {
     @Suite struct DownloadWorkerTests {
+        @Test func idleObservationOnlyRefreshesWhenTheQueueChanges() async throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("queue.json")
+            let worker = DownloadWorker(file: file, executable: { nil }, isEnabled: { true })
+            try await worker.start()
+            await worker.refreshIfChanged()
+            let settled = await worker.refreshCount
+            for _ in 0..<5 { await worker.refreshIfChanged() }
+            #expect(await worker.refreshCount == settled)
+            try DownloadQueue.save(
+                [record("external", state: .error("x"), date: 1, directory: directory)], to: file)
+            await worker.refreshIfChanged()
+            #expect(await worker.refreshCount == settled + 1)
+            await worker.refreshIfChanged()
+            #expect(await worker.refreshCount == settled + 1)
+            #expect(DownloadWorker.observationInterval >= .seconds(1))
+        }
+
         @Test func startupRecoversInterruptedWorkAndDrainsOldestQueuedDownloadFirst() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }

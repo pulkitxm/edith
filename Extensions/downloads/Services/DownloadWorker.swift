@@ -155,6 +155,8 @@ public actor DownloadWorker {
     private var snapshotDirty = false
     private var publicationTask: Task<Void, Never>?
     private var observationTask: Task<Void, Never>?
+    private var observedStamp: QueueStamp?
+    private var persistedActivity: ActivityKey?
     private var schedulerLease: PersistentFileLease?
     private var estimates: [UUID: Task<CLICommandResult, Error>] = [:]
 
@@ -212,9 +214,9 @@ public actor DownloadWorker {
         startNext()
         observationTask = Task { [weak self] in
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                do { try await Task.sleep(for: Self.observationInterval) } catch { return }
                 guard let self else { return }
-                await refresh()
+                await refreshIfChanged()
             }
         }
         notify()
@@ -308,9 +310,40 @@ public actor DownloadWorker {
         )
     }
 
+    static let observationInterval = Duration.seconds(1)
+
+    private struct QueueStamp: Equatable {
+        var modified: Date?
+        var size: Int?
+        var enabled: Bool
+    }
+
+    private struct ActivityKey: Equatable {
+        var active: [UUID]
+        var logs: [String: String]
+        var retained: [UUID]
+    }
+
+    private func queueStamp() -> QueueStamp {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: file.path)
+        return QueueStamp(
+            modified: attributes?[.modificationDate] as? Date,
+            size: (attributes?[.size] as? NSNumber)?.intValue, enabled: isEnabled())
+    }
+
+    func refreshIfChanged() {
+        let stamp = queueStamp()
+        guard stamp != observedStamp || !flights.isEmpty else { return }
+        refresh()
+    }
+
+    private(set) var refreshCount = 0
+
     public func refresh() {
         guard !stopping else { return }
+        refreshCount += 1
         reload()
+        observedStamp = queueStamp()
         for id in flights.keys where !records.contains(where: { $0.id == id && Self.isRunning($0) })
         {
             flights[id]?.task.cancel()
@@ -676,10 +709,13 @@ public actor DownloadWorker {
         for (id, flight) in flights { current[id.uuidString] = flight.output.snapshot.0 }
         let active = flights.keys.sorted { $0.uuidString < $1.uuidString }
         let retained = active + records.map(\.id).filter { !flights.keys.contains($0) }
+        let key = ActivityKey(active: active, logs: current, retained: retained)
+        guard key != persistedActivity else { return }
         do {
             try DownloadSchedulerActivity.write(
                 queue: file, generation: generation, active: active, logs: current,
                 retained: retained)
+            persistedActivity = key
             activityPersistenceError = nil
         } catch {
             activityPersistenceError =
