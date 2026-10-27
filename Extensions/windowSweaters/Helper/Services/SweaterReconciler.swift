@@ -80,6 +80,17 @@ enum SweaterSnapshot {
     }
 }
 
+enum SweaterIdlePolicy {
+    static let activeWait = Duration.seconds(1)
+    static let inactiveWait = Duration.seconds(30)
+
+    static func wait(active: Bool) -> Duration { active ? activeWait : inactiveWait }
+
+    static func tolerance(active: Bool) -> Duration {
+        active ? .milliseconds(100) : .milliseconds(1_000)
+    }
+}
+
 @MainActor
 final class SweaterReconciler {
     private static let interval = 0.05
@@ -134,8 +145,8 @@ final class SweaterReconciler {
                 } else {
                     let wait = Task {
                         _ = try? await Task.sleep(
-                            for: active ? .milliseconds(100) : .seconds(30),
-                            tolerance: .milliseconds(active ? 10 : 1_000))
+                            for: SweaterIdlePolicy.wait(active: active),
+                            tolerance: SweaterIdlePolicy.tolerance(active: active))
                     }
                     self.idleWait = wait
                     await wait.value
