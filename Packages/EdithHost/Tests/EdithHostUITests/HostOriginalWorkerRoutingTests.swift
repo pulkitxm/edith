@@ -14,12 +14,11 @@ import Testing
     @Test func completeOriginalCatalogsExcludeUtilityDestinationsAndKeepShortcutOrder() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
-                "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet", "companion",
-                "plugins", "appMaintenance", "blitztree", "system", "runningApps", "desk", "media",
-                "studio", "latex", "socialManager", "timeLapse", "downloads", "music", "calendar",
-                "virtualCamera", "data", "database", "attention", "seoAudit", "codeStats",
-                "extensions", "settings",
-                "about",
+                "home", "agents", "dashboard", "herdr", "quinjet", "companion", "plugins",
+                "machines", "docs", "system", "runningApps", "blitztree", "calendar",
+                "appMaintenance", "desk", "media", "studio", "socialManager", "timeLapse",
+                "downloads", "music", "virtualCamera", "data", "database", "codeStats", "seoAudit",
+                "latex", "attention", "extensions", "settings", "about",
             ])
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [

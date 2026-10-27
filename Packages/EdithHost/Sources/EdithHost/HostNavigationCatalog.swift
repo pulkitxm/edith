@@ -90,17 +90,17 @@ enum HostNavigationCatalog {
     ]
     static let pages: [HostNavigationPage] = [
         .init(id: "home", title: "Home", symbol: "house.fill"),
-        .init(id: "machines", title: "Fleet", symbol: "server.rack", extensionID: "machines"),
-        .init(id: "docs", title: "Docs", symbol: "book.closed", extensionID: "docs"),
-        .init(id: "agents", title: "Agents", symbol: "sparkles", suite: "agents", landing: true),
+        .init(
+            id: "agents", title: "Agents & Terminal", symbol: "sparkles", suite: "agents",
+            landing: true),
         .init(
             id: "dashboard", title: "Usage", symbol: "chart.bar.fill", suite: "agents",
             parentID: "agents", extensionID: "usage"),
         .init(
-            id: "herdr", title: "Sessions", symbol: "rectangle.split.3x1.fill", suite: "agents",
+            id: "herdr", title: "Agents", symbol: "rectangle.split.3x1.fill", suite: "agents",
             parentID: "agents", extensionID: "herdr", logoName: "herdr"),
         .init(
-            id: "quinjet", title: "Review", symbol: "arrow.triangle.branch", suite: "agents",
+            id: "quinjet", title: "Code Review", symbol: "arrow.triangle.branch", suite: "agents",
             parentID: "agents", extensionID: "quinjet"),
         .init(
             id: "companion", title: "Memory", symbol: "brain.head.profile", suite: "agents",
@@ -109,15 +109,26 @@ enum HostNavigationCatalog {
             id: "plugins", title: "Plugins", symbol: "square.stack.3d.up", suite: "agents",
             parentID: "agents", extensionID: "plugins"),
         .init(
-            id: "appMaintenance", title: "Maintenance", symbol: "shippingbox.and.arrow.backward",
-            suite: "maintenance", sections: maintenance, landing: true),
+            id: "machines", title: "Machines", symbol: "server.rack", suite: "agents",
+            parentID: "agents", extensionID: "machines"),
         .init(
-            id: "blitztree", title: "BlitzTree", symbol: "square.grid.3x3.fill",
-            suite: "maintenance", parentID: "appMaintenance", extensionID: "blitztree"),
-        .init(id: "system", title: "System", symbol: "switch.2", suite: "system", landing: true),
+            id: "docs", title: "Docs", symbol: "book.closed", suite: "agents", parentID: "agents",
+            extensionID: "docs"),
         .init(
-            id: "runningApps", title: "Running apps", symbol: "cpu", suite: "system",
+            id: "system", title: "Mac Utilities", symbol: "switch.2", suite: "utilities",
+            landing: true),
+        .init(
+            id: "runningApps", title: "Running Apps", symbol: "cpu", suite: "utilities",
             parentID: "system", extensionID: "system"),
+        .init(
+            id: "blitztree", title: "Disk Map", symbol: "square.grid.3x3.fill",
+            suite: "utilities", parentID: "system", extensionID: "blitztree"),
+        .init(
+            id: "calendar", title: "Calendar", symbol: "calendar", suite: "utilities",
+            parentID: "system", extensionID: "calendar"),
+        .init(
+            id: "appMaintenance", title: "Maintenance", symbol: "shippingbox.and.arrow.backward",
+            suite: "utilities", sections: maintenance, landing: true),
         .init(id: "desk", title: "Desk", symbol: "hand.tap", suite: "desk", landing: true),
         .init(
             id: "media", title: "Media", symbol: "play.rectangle.on.rectangle", suite: "media",
@@ -125,9 +136,6 @@ enum HostNavigationCatalog {
         .init(
             id: "studio", title: "Studio", symbol: "wand.and.stars", suite: "media",
             parentID: "media", extensionID: "studio"),
-        .init(
-            id: "latex", title: "LaTeX", symbol: "doc.richtext", suite: "media", parentID: "media",
-            extensionID: "latex"),
         .init(
             id: "socialManager", title: "Social Manager", symbol: "person.crop.rectangle.stack",
             suite: "media", parentID: "media", extensionID: "socialManager", detachable: false),
@@ -141,47 +149,33 @@ enum HostNavigationCatalog {
             id: "music", title: "Music", symbol: "music.note", suite: "media", parentID: "media",
             extensionID: "music"),
         .init(
-            id: "calendar", title: "Calendar", symbol: "calendar", suite: "media",
-            parentID: "media", extensionID: "calendar"),
-        .init(
             id: "virtualCamera", title: "Virtual Camera", symbol: "web.camera", suite: "media",
             parentID: "media", extensionID: "virtualCamera"),
         .init(
-            id: "data", title: "Data", symbol: "cylinder.split.1x2", suite: "data", landing: true),
+            id: "data", title: "Developer & Data", symbol: "cylinder.split.1x2", suite: "developer",
+            landing: true),
         .init(
-            id: "database", title: "Database", symbol: "cylinder.fill", suite: "data",
+            id: "database", title: "Database", symbol: "cylinder.fill", suite: "developer",
             parentID: "data", extensionID: "database"),
         .init(
-            id: "attention", title: "Attention", symbol: "hourglass", suite: "data",
-            parentID: "data", extensionID: "attention"),
-        .init(
-            id: "seoAudit", title: "Site Audit", symbol: "doc.text.magnifyingglass", suite: "data",
-            parentID: "data", extensionID: "seoAudit"),
-        .init(
             id: "codeStats", title: "Code Stats", symbol: "chart.line.uptrend.xyaxis",
-            suite: "data", parentID: "data", extensionID: "codeStats"),
+            suite: "developer", parentID: "data", extensionID: "codeStats"),
+        .init(
+            id: "seoAudit", title: "Site Audit", symbol: "doc.text.magnifyingglass",
+            suite: "developer", parentID: "data", extensionID: "seoAudit"),
+        .init(
+            id: "latex", title: "LaTeX", symbol: "doc.richtext", suite: "developer",
+            parentID: "data", extensionID: "latex"),
+        .init(
+            id: "attention", title: "Attention", symbol: "hourglass", suite: "developer",
+            parentID: "data", extensionID: "attention"),
         .init(id: "extensions", title: "Extensions", symbol: "puzzlepiece.extension"),
         .init(
             id: "settings", title: "Settings", symbol: "gearshape", sections: settings,
             detachable: false),
         .init(id: "about", title: "About", symbol: "info.circle", detachable: false),
     ]
-    static let suiteProviders: [String: Set<String>] = [
-        "agents": ["usage", "herdr", "quinjet", "companion", "plugins"],
-        "maintenance": ["appMaintenance", "homebrew", "cleaner", "blitztree"],
-        "system": [
-            "system", "keepAwake", "lidAwake", "systemStats", "micMute",
-        ],
-        "desk": [
-            "bifrost", "clipboard", "colorPicker", "emoji", "keystrokeHighlight", "focusDim",
-            "hinge", "presenter", "windowSweaters",
-        ],
-        "media": [
-            "studio", "latex", "socialManager", "timeLapse", "downloads", "music", "calendar",
-            "virtualCamera", "audioMixer", "notchShelf",
-        ],
-        "data": ["database", "attention", "seoAudit", "codeStats"],
-    ]
+    static let suiteProviders = HostMarketplaceCatalog.providers()
     static func page(_ id: String) -> HostNavigationPage { pages.first { $0.id == id } ?? pages[0] }
     static func visible(_ page: HostNavigationPage, active: Set<String>, defaults: UserDefaults)
         -> Bool
@@ -189,6 +183,10 @@ enum HostNavigationCatalog {
         if let provider = page.extensionID, !active.contains(provider) { return false }
         guard let suite = page.suite else { return true }
         guard !active.isDisjoint(with: suiteProviders[suite] ?? []) else { return false }
+        let sectionProviders = Set(page.sections.compactMap(\.extensionID))
+        guard sectionProviders.isEmpty || !active.isDisjoint(with: sectionProviders) else {
+            return false
+        }
         let enabled =
             defaults.object(forKey: "suite" + suite.capitalized + "Enabled") as? Bool
             ?? true
@@ -210,9 +208,7 @@ enum HostNavigationCatalog {
     }
     static func expansionKey(_ page: HostNavigationPage) -> String? {
         if page.id == "settings" { return AppStorageKeys.General.settingsCategoriesExpanded }
-        if page.landing, let suite = page.suite {
-            return "sidebar" + suite.capitalized + "Expanded"
-        }
+        if page.landing { return "sidebar" + page.id.capitalized + "Expanded" }
         return nil
     }
     static func expanded(_ page: HostNavigationPage, defaults: UserDefaults) -> Bool {

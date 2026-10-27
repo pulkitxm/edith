@@ -7,13 +7,13 @@
   },
   {
     "id": "herdr",
-    "title": "Sessions",
+    "title": "Agents",
     "symbolName": "rectangle.split.3x1.fill",
     "category": "agents"
   },
   {
     "id": "quinjet",
-    "title": "Review",
+    "title": "Code Review",
     "symbolName": "arrow.triangle.branch",
     "category": "agents"
   },
@@ -30,62 +30,92 @@
     "category": "agents"
   },
   {
+    "id": "machines",
+    "title": "Machines",
+    "symbolName": "desktopcomputer",
+    "category": "agents"
+  },
+  {
+    "id": "terminal",
+    "title": "Terminal",
+    "symbolName": "terminal",
+    "category": "agents"
+  },
+  {
+    "id": "docs",
+    "title": "Docs",
+    "symbolName": "book.closed",
+    "category": "agents"
+  },
+  {
     "id": "appMaintenance",
-    "title": "Updates",
+    "title": "App Updates",
     "symbolName": "shippingbox.and.arrow.backward",
-    "category": "maintenance"
+    "category": "utilities"
   },
   {
     "id": "homebrew",
-    "title": "Packages",
+    "title": "Homebrew",
     "symbolName": "cube.box",
-    "category": "maintenance"
+    "category": "utilities"
   },
   {
     "id": "cleaner",
     "title": "Cleaner",
     "symbolName": "sparkles.rectangle.stack",
-    "category": "maintenance"
+    "category": "utilities"
   },
   {
     "id": "blitztree",
-    "title": "BlitzTree",
+    "title": "Disk Map",
     "symbolName": "square.grid.3x3.fill",
-    "category": "maintenance"
+    "category": "utilities"
   },
   {
     "id": "system",
-    "title": "System",
+    "title": "Running Apps",
     "symbolName": "switch.2",
-    "category": "system"
+    "category": "utilities"
   },
   {
     "id": "keepAwake",
     "title": "Keep Awake",
     "symbolName": "moon.zzz",
-    "category": "system"
+    "category": "utilities"
   },
   {
     "id": "lidAwake",
     "title": "Lid Awake",
     "symbolName": "laptopcomputer",
-    "category": "system"
+    "category": "utilities"
   },
   {
     "id": "systemStats",
-    "title": "CPU & Memory in menu bar",
+    "title": "Menu Bar Stats",
     "symbolName": "gauge.with.needle",
-    "category": "system"
+    "category": "utilities"
   },
   {
     "id": "micMute",
     "title": "Mic Mute",
     "symbolName": "mic.slash.fill",
-    "category": "system"
+    "category": "utilities"
+  },
+  {
+    "id": "presenter",
+    "title": "Presenter",
+    "symbolName": "theatermasks.fill",
+    "category": "utilities"
+  },
+  {
+    "id": "calendar",
+    "title": "Calendar",
+    "symbolName": "calendar",
+    "category": "utilities"
   },
   {
     "id": "bifrost",
-    "title": "Bifrost",
+    "title": "Launcher",
     "symbolName": "rainbow",
     "category": "desk"
   },
@@ -120,21 +150,15 @@
     "category": "desk"
   },
   {
-    "id": "hinge",
-    "title": "Hinge",
-    "symbolName": "laptopcomputer.and.arrow.down",
+    "id": "notchShelf",
+    "title": "Notch Shelf",
+    "symbolName": "tray.and.arrow.down",
     "category": "desk"
   },
   {
-    "id": "windowSweaters",
-    "title": "Window Sweaters",
-    "symbolName": "square.dashed",
-    "category": "desk"
-  },
-  {
-    "id": "presenter",
-    "title": "Presenter",
-    "symbolName": "theatermasks.fill",
+    "id": "audioMixer",
+    "title": "Audio Mixer",
+    "symbolName": "slider.horizontal.3",
     "category": "desk"
   },
   {
@@ -144,21 +168,15 @@
     "category": "media"
   },
   {
-    "id": "socialManager",
-    "title": "Social Manager",
-    "symbolName": "person.crop.rectangle.stack",
-    "category": "media"
-  },
-  {
-    "id": "latex",
-    "title": "LaTeX",
-    "symbolName": "doc.richtext",
-    "category": "media"
-  },
-  {
     "id": "timeLapse",
     "title": "Screen Recorder",
     "symbolName": "record.circle",
+    "category": "media"
+  },
+  {
+    "id": "virtualCamera",
+    "title": "Virtual Camera",
+    "symbolName": "web.camera",
     "category": "media"
   },
   {
@@ -174,75 +192,57 @@
     "category": "media"
   },
   {
-    "id": "notchShelf",
-    "title": "Notch Shelf",
-    "symbolName": "tray.and.arrow.down",
-    "category": "media"
-  },
-  {
-    "id": "audioMixer",
-    "title": "Audio Mixer",
-    "symbolName": "slider.horizontal.3",
-    "category": "media"
-  },
-  {
-    "id": "calendar",
-    "title": "Calendar",
-    "symbolName": "calendar",
-    "category": "media"
-  },
-  {
-    "id": "virtualCamera",
-    "title": "Virtual Camera",
-    "symbolName": "web.camera",
+    "id": "socialManager",
+    "title": "Social Manager",
+    "symbolName": "person.crop.rectangle.stack",
     "category": "media"
   },
   {
     "id": "database",
     "title": "Database",
     "symbolName": "cylinder.fill",
-    "category": "data"
-  },
-  {
-    "id": "attention",
-    "title": "Attention",
-    "symbolName": "hourglass",
-    "category": "data"
-  },
-  {
-    "id": "seoAudit",
-    "title": "Site Audit",
-    "symbolName": "doc.text.magnifyingglass",
-    "category": "data"
+    "category": "developer"
   },
   {
     "id": "codeStats",
     "title": "Code Stats",
     "symbolName": "chart.line.uptrend.xyaxis",
-    "category": "data"
+    "category": "developer"
   },
   {
-    "id": "machines",
-    "title": "Machines",
-    "symbolName": "desktopcomputer",
-    "category": "tools"
+    "id": "seoAudit",
+    "title": "Site Audit",
+    "symbolName": "doc.text.magnifyingglass",
+    "category": "developer"
   },
   {
-    "id": "docs",
-    "title": "Docs",
-    "symbolName": "book.closed",
-    "category": "tools"
+    "id": "latex",
+    "title": "LaTeX",
+    "symbolName": "doc.richtext",
+    "category": "developer"
   },
   {
-    "id": "terminal",
-    "title": "Terminal",
-    "symbolName": "terminal",
-    "category": "tools"
+    "id": "attention",
+    "title": "Attention",
+    "symbolName": "hourglass",
+    "category": "developer"
+  },
+  {
+    "id": "hinge",
+    "title": "Hinge",
+    "symbolName": "laptopcomputer.and.arrow.down",
+    "category": "labs"
+  },
+  {
+    "id": "windowSweaters",
+    "title": "Window Sweaters",
+    "symbolName": "square.dashed",
+    "category": "labs"
   },
   {
     "id": "jev",
     "title": "Jev",
     "symbolName": "sparkles",
-    "category": "tools"
+    "category": "labs"
   }
 ]

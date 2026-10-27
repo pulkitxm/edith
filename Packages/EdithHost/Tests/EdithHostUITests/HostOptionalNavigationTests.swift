@@ -8,7 +8,7 @@ import Testing
 struct HostOptionalNavigationTests {
     @Test func restoredEnabledSuitesWithNoActiveProvidersReturnHome() throws {
         try withDefaults { defaults in
-            for suite in HostNavigationCatalog.suiteProviders.keys {
+            for suite in landingProviders.keys {
                 defaults.set(true, forKey: key(suite))
                 let page = try landing(suite)
                 #expect(!HostNavigationCatalog.visible(page, active: [], defaults: defaults))
@@ -27,9 +27,9 @@ struct HostOptionalNavigationTests {
 
     @Test func eachProviderEnablesItsSuiteWithoutShowingUnavailableSuites() throws {
         try withDefaults { defaults in
-            for (suite, providers) in HostNavigationCatalog.suiteProviders {
+            for (suite, providers) in landingProviders {
                 for provider in providers {
-                    for candidate in HostNavigationCatalog.suiteProviders.keys {
+                    for candidate in landingProviders.keys {
                         let page = try landing(candidate)
                         #expect(
                             HostNavigationCatalog.visible(
@@ -43,7 +43,7 @@ struct HostOptionalNavigationTests {
 
     @Test func explicitlyDisabledSuitesRemainHiddenWithAnActiveProvider() throws {
         try withDefaults { defaults in
-            for (suite, providers) in HostNavigationCatalog.suiteProviders {
+            for (suite, providers) in landingProviders {
                 let provider = try #require(providers.sorted().first)
                 let page = try landing(suite)
                 defaults.set(false, forKey: key(suite))
@@ -98,7 +98,7 @@ struct HostOptionalNavigationTests {
 
     @Test func disablingAndRestoringLastProviderRetainsSuitePreferences() throws {
         try withDefaults { defaults in
-            for (suite, providers) in HostNavigationCatalog.suiteProviders {
+            for (suite, providers) in landingProviders {
                 let provider = try #require(providers.sorted().first)
                 let page = try landing(suite)
                 defaults.set(true, forKey: key(suite))
@@ -113,6 +113,12 @@ struct HostOptionalNavigationTests {
                     HostNavigationCatalog.resolve(page.id, active: [provider], defaults: defaults)
                         == page.id)
             }
+        }
+    }
+
+    private var landingProviders: [String: Set<String>] {
+        HostNavigationCatalog.suiteProviders.filter { suite, _ in
+            HostNavigationCatalog.pages.contains { $0.suite == suite && $0.landing }
         }
     }
 

@@ -16,7 +16,7 @@ import Testing
         ]
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         let usage = model.reviewMetadata(for: "usage")
         let herdr = model.reviewMetadata(for: "herdr")
         #expect(usage.version == "1.0.0")
@@ -36,7 +36,7 @@ import Testing
         fixture.installed = ["usage"]
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         let review = model.reviewMetadata(for: "usage")
         #expect(model.visibleEntries.map(\.id) == ["usage"])
         #expect(
@@ -95,7 +95,7 @@ import Testing
         fixture.available = ["keepAwake": package("keepAwake")]
         let model = fixture.model(entries: try HostIndex.bundled())
         model.present()
-        model.choose(.essentials)
+        model.choose(.utilities)
         #expect(model.selected == ["keepAwake"])
         #expect(model.visibleEntries.map(\.id) == ["keepAwake"])
         #expect(model.canInstall)
@@ -128,7 +128,7 @@ import Testing
         defer { fixture.remove() }
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         #expect(model.selected == ["usage", "herdr"])
         #expect(fixture.installs.isEmpty)
         #expect(fixture.active.isEmpty)
@@ -137,18 +137,18 @@ import Testing
         #expect(model.selected == ["usage", "herdr"])
     }
 
-    @Test func essentialsReviewWithFullCatalogInstallsOnlyExplicitCalendarSelection() async throws {
+    @Test func utilitiesReviewWithFullCatalogInstallsOnlyExplicitCalendarSelection() async throws {
         let fixture = Fixture()
         defer { fixture.remove() }
         let entries = try HostIndex.bundled()
         #expect(entries.count == 41)
-        let suggested = Set(["clipboard", "calendar", "system", "keepAwake", "emoji"])
+        let suggested = Set(["micMute", "calendar", "system", "keepAwake", "systemStats"])
         fixture.available = Dictionary(uniqueKeysWithValues: suggested.map { ($0, package($0)) })
         let model = fixture.model(entries: entries)
         model.present()
-        model.choose(.essentials)
+        model.choose(.utilities)
         #expect(model.selected == suggested)
-        for id in ["clipboard", "system", "keepAwake", "emoji"] { model.toggle(id) }
+        for id in ["micMute", "system", "keepAwake", "systemStats"] { model.toggle(id) }
         #expect(model.selected == ["calendar"])
         #expect(model.selected.count == 1)
         #expect(model.canInstall)
@@ -226,7 +226,7 @@ import Testing
         fixture.failures = ["herdr"]
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         model.installSelection()
         await finish(model)
         #expect(model.states["usage"] == .ready)
@@ -286,7 +286,7 @@ import Testing
         fixture.installDelay = .seconds(30)
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         model.installSelection()
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while fixture.installs.isEmpty, ContinuousClock.now < deadline {
@@ -305,13 +305,13 @@ import Testing
         defer { fixture.remove() }
         let original = fixture.model()
         original.present()
-        original.choose(.agentic)
+        original.choose(.agents)
         original.toggle("herdr")
         let reopened = fixture.model()
         reopened.present()
         #expect(reopened.stage == .review)
         #expect(reopened.selected == ["usage"])
-        #expect(reopened.workflow == .agentic)
+        #expect(reopened.workflow == .agents)
         #expect(reopened.incomplete)
         #expect(fixture.installs.isEmpty)
         #expect(fixture.active.isEmpty)
@@ -341,7 +341,7 @@ import Testing
         fixture.available = ["usage": reviewed]
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         model.toggle("herdr")
         model.installSelection()
         await finish(model)
@@ -356,7 +356,7 @@ import Testing
         fixture.changedDuringInstall = true
         let model = fixture.model()
         model.present()
-        model.choose(.agentic)
+        model.choose(.agents)
         model.toggle("herdr")
         model.installSelection()
         await finish(model)
