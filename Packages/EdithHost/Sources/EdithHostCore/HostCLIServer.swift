@@ -55,7 +55,7 @@ import Foundation
                 }
             }
             boundSocket = bound == 0
-            guard bound == 0, chmod(path, 0o600) == 0, listen(descriptor, 8) == 0,
+            guard bound == 0, chmod(path, 0o600) == 0, listen(descriptor, 128) == 0,
                 fcntl(descriptor, F_SETFL, O_NONBLOCK) == 0,
                 fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0
             else { throw HostCLIError.unavailable }

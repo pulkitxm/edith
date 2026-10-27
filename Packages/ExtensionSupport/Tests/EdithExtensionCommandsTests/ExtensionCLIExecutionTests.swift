@@ -8,7 +8,8 @@ import Testing
     @Test func preservesOriginalParserHelpValidationAndExitCodes() async throws {
         let help = try await ExtensionCLIExecution.run(FixtureCommand.self, arguments: ["--help"])
         #expect(help.exitCode == 0)
-        #expect(help.stdout.contains("USAGE: fixture"))
+        #expect(help.stdout.contains("USAGE: ed fixture"))
+        #expect(!help.stdout.contains("USAGE: fixture"))
         #expect(help.stderr.isEmpty)
         let invalid = try await ExtensionCLIExecution.run(
             FixtureCommand.self, arguments: ["--missing"])

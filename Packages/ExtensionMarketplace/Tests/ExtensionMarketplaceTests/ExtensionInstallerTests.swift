@@ -101,6 +101,37 @@ struct PackageFixture {
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: second).path))
 }
 
+private final class DownloadAttempts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int {
+        lock.withLock {
+            value += 1; return value
+        }
+    }
+}
+
+@Test func aDownloadThatFailsTwiceInTransitStillInstalls() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (package, archive) = try fixture.archive()
+    let attempts = DownloadAttempts()
+    let directory = fixture.directory
+    let installer = ExtensionPackageInstaller(
+        store: fixture.store,
+        download: { _, _ in
+            guard attempts.next() > 2 else { throw MarketplaceError.downloadFailed }
+            let copy = directory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.copyItem(at: archive, to: copy)
+            return copy
+        }, verify: { _ in })
+    _ = try await installer.install([package], repository: "example/app")
+    #expect(attempts.next() == 4)
+    #expect(
+        try fixture.store.installedPackage(id: package.id, hostABI: "host-1", architecture: "arm64")
+            == package)
+}
+
 @Test func failedUpdatesKeepTheWorkingVersion() async throws {
     let fixture = try PackageFixture()
     defer { fixture.clean() }

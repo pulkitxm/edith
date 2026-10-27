@@ -314,7 +314,9 @@ public enum HostCLIHelp {
         .init("extensions", "Manage individual optional downloads."),
         .init("extensions ls", "List all optional extensions.", flags: []),
         .init("extensions info", "Inspect an extension.", flags: [], words: ["id"]),
-        .init("extensions install", "Download one compatible extension.", flags: [], words: ["id"]),
+        .init(
+            "extensions install", "Download one compatible extension and start it.", flags: [],
+            words: ["id"]),
         .init("extensions update", "Update one installed extension.", flags: [], words: ["id"]),
         .init(
             "extensions sideload", "Install a locally built package into a development build.",

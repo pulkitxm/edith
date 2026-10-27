@@ -16,7 +16,7 @@ outstanding leases are released and retains user data, including usage history.
 | `ed extensions` | List the marketplace index and installed state |
 | `ed extensions ls` | List every indexed extension without fetching the catalog |
 | `ed extensions info <id>` | Inspect installation, compatibility, version and active state |
-| `ed extensions install <id>` | Download and verify a compatible extension |
+| `ed extensions install <id>` | Download, verify and start a compatible extension |
 | `ed extensions update <id>` | Replace an installed extension with a compatible update |
 | `ed extensions sideload <path>` | Install a locally built package into a development build |
 | `ed extensions enable <id>` | Start a downloaded extension |

@@ -25,7 +25,7 @@ import Foundation
             throw HostCLIError.rejected(
                 "Another operation is running for this extension. Try again when it finishes.")
         }
-        let failure: String?
+        var failure: String?
         switch request.action {
         case .install:
             guard !marketplace.downloadedIDs.contains(id) else {
@@ -33,6 +33,9 @@ import Foundation
                     "The extension is already installed. Use extensions update.")
             }
             failure = await marketplace.download(id: id)
+            if failure == nil, marketplace.installed[id] != nil {
+                failure = await marketplace.enable(id: id)
+            }
         case .update:
             guard marketplace.downloadedIDs.contains(id) else {
                 throw HostCLIError.rejected("Install the extension before updating it.")
