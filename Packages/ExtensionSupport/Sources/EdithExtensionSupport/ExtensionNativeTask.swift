@@ -3,7 +3,8 @@ import Foundation
 
 public enum ExtensionNativeTask {
     public static func registerDescendant(_ pid: Int32) throws {
-        guard pid > 1, pid != getpid(), getpgid(pid) == pid, isDescendant(pid, of: getpid()) else {
+        guard pid > 1, pid != getpid(), awaitGroupLeader(pid), isDescendant(pid, of: getpid())
+        else {
             throw ExtensionPeerError.invalidRequest
         }
         try ExtensionCommandOwnership.register(pid)
@@ -14,6 +15,7 @@ public enum ExtensionNativeTask {
         guard let owner = ExtensionEnvironment.values["EDITH_EXTENSION_ID"],
             let endpoint = ExtensionPeerEndpoint.current(owner: owner)
         else { throw ExtensionPeerError.unavailable }
+        guard awaitGroupLeader(pid) else { throw ExtensionPeerError.invalidRequest }
         let result = NativeRegistration()
         let task = Task.detached {
             do {
@@ -30,6 +32,17 @@ public enum ExtensionNativeTask {
         try result.value().get()
         NotificationCenter.default.post(
             name: ExtensionNativeTaskGroups.registered, object: nil, userInfo: ["pid": pid])
+    }
+
+    public static func awaitGroupLeader(_ pid: Int32, timeout: Duration = .seconds(2)) -> Bool {
+        guard pid > 1 else { return false }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while getpgid(pid) != pid {
+            guard clock.now < deadline, kill(pid, 0) == 0 || errno == EPERM else { return false }
+            usleep(2_000)
+        }
+        return true
     }
 
     public static func isDescendant(_ pid: Int32, of parent: Int32) -> Bool {
