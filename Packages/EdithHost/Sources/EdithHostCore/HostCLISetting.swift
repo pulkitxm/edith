@@ -14,15 +14,24 @@ public struct HostCLISetting: Codable, Equatable, Sendable {
     public let maximum: Int64?
     public let fallback: HostCLIJSON
     public let readOnly: Bool
+    public let owner: String?
 
     public init(
         _ key: String, _ type: ValueType, group: String, summary: String,
         scope: String = "shared", allowed: [String] = [], minimum: Int64? = nil,
-        maximum: Int64? = nil, fallback: HostCLIJSON = .null, readOnly: Bool = false
+        maximum: Int64? = nil, fallback: HostCLIJSON = .null, readOnly: Bool = false,
+        owner: String? = nil
     ) {
         self.key = key; self.type = type; self.group = group; self.summary = summary
         self.scope = scope; self.allowed = allowed; self.minimum = minimum; self.maximum = maximum
-        self.fallback = fallback; self.readOnly = readOnly
+        self.fallback = fallback; self.readOnly = readOnly; self.owner = owner
+    }
+
+    func owned(by owner: String) -> Self {
+        Self(
+            key, type, group: group, summary: summary, scope: scope, allowed: allowed,
+            minimum: minimum, maximum: maximum, fallback: fallback, readOnly: readOnly,
+            owner: owner)
     }
 
     public func validate() throws {

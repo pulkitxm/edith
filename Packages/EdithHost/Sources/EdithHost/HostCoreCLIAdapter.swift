@@ -59,7 +59,9 @@ import Foundation
             })
         return HostCoreCLIService(
             configuration: try HostConfigurationCLI(
-                shared: shared, standard: standard, changed: changed),
+                shared: shared, standard: standard,
+                owners: { UserDefaults(suiteName: identity.extensionDefaultsSuite($0)) },
+                changed: changed),
             commandProvider: {
                 commands.filter { command in
                     let generic =

@@ -134,6 +134,12 @@ public enum HostGuideCLI {
         written. `ed schema` prints the same catalog as JSON Schema, which is what
         `ed config import` accepts.
 
+        A setting that belongs to an extension, such as preventSleep or the presenter
+        and focusDim keys, is read from and written to that extension while it is on,
+        and the running extension applies a change at once. When the extension is off,
+        `ed config get` shows the default and `ed config set` fails with a hint to run
+        `ed extensions enable`. The extension's own on/off key is read only.
+
         Extensions are settings too, but they have their own verbs because turning one
         on can need a permission:
 
