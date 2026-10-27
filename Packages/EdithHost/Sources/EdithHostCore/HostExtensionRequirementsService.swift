@@ -263,7 +263,7 @@ public struct HostRequirementSetupPreview: Sendable {
                 checks.append(
                     .init(
                         id: "helper", title: "Owned runtime", status: active ? .passed : .failed,
-                        runtimePhase: active ? .installed : .loading,
+                        runtimePhase: active ? .installed : enabled ? .loading : nil,
                         detail: active
                             ? "The existing owning runtime is active."
                             : "The owning runtime is inactive; inspection did not start it."))
@@ -300,14 +300,23 @@ public struct HostRequirementSetupPreview: Sendable {
             checks.append(
                 .init(
                     id: "owner.inspection", title: "Pure owning inspection", status: .failed,
-                    runtimePhase: .loading,
                     detail: "Pure owned inspection is unavailable. Original setup guidance: "
                         + entry.setupInstruction))
         }
         try Task.checkCancellation()
         let failed = checks.filter { $0.status == .failed }
         let warning = checks.filter { $0.status == .warning }
-        let phases = Set(checks.compactMap(\.runtimePhase))
+        let runtimeChecks: Set<String> = [
+            "package", "helper", "owner.inspection", "original.registry",
+        ]
+        let phases = Set(
+            checks.compactMap { check -> HostCoreReadinessRuntimePhase? in
+                guard let phase = check.runtimePhase else { return nil }
+                if runtimeChecks.contains(check.id) || ![.uninstalled, .loading].contains(phase) {
+                    return phase
+                }
+                return nil
+            })
         let runtime: HostCoreReadinessRuntimePhase =
             [.unsupported, .error, .loading, .uninstalled, .empty].first(where: phases.contains)
             ?? .installed
