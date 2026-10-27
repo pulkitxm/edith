@@ -12,7 +12,36 @@ enum UsageNativePricing {
             [String: [String: Double]].self,
             from: Data(UsageNativePricingSnapshot.json.utf8))) ?? [:]
 
+    struct Estimator {
+        private var thresholds: [String: [Int]] = [:]
+        mutating func estimate(_ event: UsageNativeEvent) -> Estimate {
+            UsageNativePricing.estimate(event) { model, rate in
+                if let cached = thresholds[model] { return cached }
+                let value = UsageNativePricing.thresholds(rate)
+                thresholds[model] = value
+                return value
+            }
+        }
+    }
+
+    static func thresholds(_ rate: [String: Double]) -> [Int] {
+        rate.keys.compactMap { key -> Int? in
+            guard key.hasPrefix("input_cost_per_token_above_"), key.contains("k_tokens") else {
+                return nil
+            }
+            let part = key.replacingOccurrences(of: "input_cost_per_token_above_", with: "")
+                .components(separatedBy: "k_tokens")[0]
+            return Int(part).map { $0 * 1000 }
+        }
+    }
+
     static func estimate(_ event: UsageNativeEvent) -> Estimate {
+        estimate(event) { _, rate in thresholds(rate) }
+    }
+
+    static func estimate(
+        _ event: UsageNativeEvent, thresholdsFor: (String, [String: Double]) -> [Int]
+    ) -> Estimate {
         if let recorded = event.recordedCost {
             return .init(cost: recorded, missing: false, fallback: false)
         }
@@ -40,14 +69,7 @@ enum UsageNativePricing {
         case "ultrafast": tier = "_ultrafast"
         default: tier = ""
         }
-        let thresholds = rate.keys.compactMap { key -> Int? in
-            guard key.hasPrefix("input_cost_per_token_above_"), key.contains("k_tokens") else {
-                return nil
-            }
-            let part = key.replacingOccurrences(of: "input_cost_per_token_above_", with: "")
-                .components(separatedBy: "k_tokens")[0]
-            return Int(part).map { $0 * 1000 }
-        }
+        let thresholds = thresholdsFor(model, rate)
         let threshold = thresholds.filter { input > Double($0) }.max()
         let suffix = threshold.map { "_above_" + String($0 / 1000) + "k_tokens" } ?? ""
         func value(_ name: String, fallback defaultRate: Double) -> Double {

@@ -30,6 +30,14 @@ struct UsageNativeAccounts: Sendable {
             defaultID: state.defaultID)
     }
 
+    var digest: String {
+        UsageNativeJSON.hash(
+            sessions.map { $0.key + "=" + $0.value.uuidString }.sorted().joined(separator: ",")
+                + "|"
+                + names.map { $0.key.uuidString + "=" + $0.value }.sorted().joined(
+                    separator: ",") + "|" + (defaultID?.uuidString ?? ""))
+    }
+
     func source(of event: UsageNativeEvent) -> String {
         guard event.source == "cli", let account = sessions[event.session] else {
             return event.source

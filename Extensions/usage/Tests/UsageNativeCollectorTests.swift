@@ -172,8 +172,9 @@ import Testing
         try await fixture { home, data in
             let archive = try UsageNativeArchive(dataDirectory: data)
             let events = try UsageNativeCloud.normalizeCodex(codexCloud())
+            try archive.admitRemote(events, key: "codex-cloud")
             let value = try UsageNativeAssembly.document(
-                events: events, archive: archive, now: Date(),
+                archive: archive, now: Date(),
                 timezone: TimeZone(identifier: "America/Los_Angeles")!,
                 cloudSources: ["codex-cloud"])
             try validate(value)
