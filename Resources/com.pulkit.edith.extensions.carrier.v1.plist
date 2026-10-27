@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.pulkit.edith.extensions.carrier.v1</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/Edith</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>Contents/MacOS/Edith</string>
+		<string>--extension-carrier</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>com.pulkit.edith.extensions.carrier.v1</key>
+		<true/>
+	</dict>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.pulkit.edith</string>
+	</array>
+</dict>
+</plist>

@@ -262,7 +262,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.presenter, carbonID: 5, prefix: "presenterHotKey",
+                    id: HotKeyCatalog.presenter, carbonID: 13, prefix: "presenterHotKey",
                     defaultCode: kVK_ANSI_P, defaultModifiers: shiftKey | optionKey | cmdKey))
         }
         if observer == nil {
