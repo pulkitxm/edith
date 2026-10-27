@@ -75,7 +75,9 @@ struct HostApplication: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .appTermination) {
-                Button("Quit Edith") { HostQuit.terminate() }.keyboardShortcut("q")
+                Button("Close Edith") { HostQuit.closeWindows() }.keyboardShortcut("q")
+                Button("Quit Edith") { HostQuit.terminate() }
+                    .keyboardShortcut("q", modifiers: [.command, .option])
             }
             CommandGroup(replacing: .newItem) {}
         }
