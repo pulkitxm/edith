@@ -95,11 +95,13 @@ final class HostLocalSession {
                     readOnlyPackage: package, directory: directory, role: role,
                     hostABI: HostContract.compatibility, environment: environment,
                     verify: { url in
-                        if development {
-                            try ExtensionCodeSignature.verifyDevelopment(url)
-                        } else {
-                            guard let team else { throw MarketplaceError.invalidSignature }
-                            try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                        try HostBundleVerification.verify(url) { url in
+                            if development {
+                                try ExtensionCodeSignature.verifyDevelopment(url)
+                            } else {
+                                guard let team else { throw MarketplaceError.invalidSignature }
+                                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                            }
                         }
                     }))
         }

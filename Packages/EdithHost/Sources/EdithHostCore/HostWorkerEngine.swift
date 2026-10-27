@@ -55,6 +55,10 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
             let failure = await shutdown(reason: request.stopReason ?? .shutdown)
             return HostWorkerResponse(token: request.token, ok: failure == nil, version: version)
         default:
+            if request.operation == "start" {
+                await verifyBundlesBeforeStart(request)
+                guard !stopping else { return HostWorkerResponse(token: request.token, ok: false) }
+            }
             do {
                 try execute(request)
                 return HostWorkerResponse(
@@ -73,6 +77,32 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
                             ((error as? LocalizedError)?.errorDescription
                                 ?? "The extension could not finish starting.").prefix(1024))
                         : "The extension could not complete this action.")
+            }
+        }
+    }
+
+    private func verifyBundlesBeforeStart(_ request: HostWorkerRequest) async {
+        guard configuration == nil, let next = request.configuration,
+            let identity = try? next.identity()
+        else { return }
+        let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        guard
+            let package = try? store.installedPackages().first(where: {
+                $0.id == next.extensionID && $0.hostABI == HostContract.compatibility
+                    && $0.architecture == "arm64" && $0.version == next.version
+            })
+        else { return }
+        let urls = [ExtensionBundleRuntime.Role.helper, .agent, .app].map {
+            store.roleBundle(for: package, role: $0)
+        }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        let team = ExtensionCodeSignature.teamIdentifier()
+        let development = identity.development
+        await HostBundleVerification.verifyConcurrently(urls) { url in
+            if development {
+                try ExtensionCodeSignature.verifyDevelopment(url)
+            } else {
+                guard let team else { throw MarketplaceError.invalidSignature }
+                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
             }
         }
     }
@@ -212,11 +242,13 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         }
         let context = values as NSDictionary
         let verify: (URL) throws -> Void = { url in
-            if identity.development {
-                try ExtensionCodeSignature.verifyDevelopment(url)
-            } else {
-                guard let team else { throw MarketplaceError.invalidSignature }
-                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+            try HostBundleVerification.verify(url) { url in
+                if identity.development {
+                    try ExtensionCodeSignature.verifyDevelopment(url)
+                } else {
+                    guard let team else { throw MarketplaceError.invalidSignature }
+                    try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                }
             }
         }
         let roles = [ExtensionBundleRuntime.Role.helper, .agent, .app].filter {
