@@ -147,7 +147,10 @@ test("a release created between page reads restarts the listing instead of faili
     id: index + 100,
     tag_name: `foreign-${index}`,
   }));
-  const shifted = [[page, [page[99], item]], [page, [item]]];
+  const shifted = [
+    [page, [page[99], item]],
+    [page, [item]],
+  ];
   const calls = [];
   let listing = 0;
   const releases = listReleases({
@@ -159,7 +162,10 @@ test("a release created between page reads restarts the listing instead of faili
       return JSON.stringify(shifted[listing][pageNumber - 1]);
     },
   });
-  expect(releases.map(({ id }) => id)).toEqual([...page.map(({ id }) => id), 7]);
+  expect(releases.map(({ id }) => id)).toEqual([
+    ...page.map(({ id }) => id),
+    7,
+  ]);
   expect(calls).toHaveLength(4);
 });
 
