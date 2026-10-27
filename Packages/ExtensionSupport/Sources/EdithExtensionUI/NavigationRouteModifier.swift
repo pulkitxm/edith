@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 import WebKit
 
-public enum NavigationDirection: Equatable {
+@objc public enum NavigationDirection: Int, Equatable {
     case back
     case forward
 }
 
-@MainActor
+@MainActor @objc(EdithHistoryNavigatingView)
 public protocol HistoryNavigatingView: AnyObject {
     func navigateHistory(_ direction: NavigationDirection) -> Bool
 }

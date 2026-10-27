@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 
+@objc(EdithDirectKeyboardInputResponder)
 public protocol DirectKeyboardInputResponder: AnyObject {}
 
 @MainActor
