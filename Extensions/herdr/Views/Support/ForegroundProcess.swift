@@ -1,9 +1,15 @@
+import EdithExtensionSupport
 import Foundation
 public enum ForegroundProcess {
     public static func environment(
         assignments: [String], inheriting: Bool
     ) -> [String: String] {
-        let base = inheriting ? ProcessInfo.processInfo.environment : [:]
+        var base: [String: String] = [:]
+        if inheriting {
+            base = ProcessInfo.processInfo.environment.filter {
+                !ExtensionEnvironment.isPrivate($0.key)
+            }
+        }
         return assignments.reduce(into: base) { partial, entry in
             guard let index = entry.firstIndex(of: "=") else { return }
             partial[String(entry[entry.startIndex..<index])] =

@@ -277,7 +277,9 @@ public struct ExtensionCommandSpecification: Codable, Sendable {
             throw CocoaError(.fileReadNoPermission)
         }
         let arguments = ([command.executable] + command.arguments).map { strdup($0) }
-        let environment = command.environment.map { strdup($0.key + "=" + $0.value) }
+        let environment = ExtensionEnvironment.childEnvironment(
+            command.environment, executable: command.executable
+        ).map { strdup($0.key + "=" + $0.value) }
         defer { for item in arguments + environment { free(item) } }
         guard arguments.allSatisfy({ $0 != nil }), environment.allSatisfy({ $0 != nil }) else {
             throw CocoaError(.executableLoad)

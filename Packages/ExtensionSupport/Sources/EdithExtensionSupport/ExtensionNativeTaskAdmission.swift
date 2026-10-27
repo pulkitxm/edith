@@ -20,7 +20,7 @@ import Foundation
         processes[pid] = identity
     }
     public func registerDescendant(_ pid: Int32) throws {
-        guard pid > 1, pid != getpid(), getpgid(pid) == pid,
+        guard pid > 1, pid != getpid(), ExtensionNativeTask.awaitGroupLeader(pid),
             ExtensionNativeTask.isDescendant(pid, of: getpid())
                 || processes.contains(where: {
                     identity($0.key) == $0.value
