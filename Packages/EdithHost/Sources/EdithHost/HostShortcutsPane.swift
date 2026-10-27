@@ -101,6 +101,12 @@ struct HostShortcutsPane: View {
             HostHotKeyRecorder(
                 keyPrefix: keyPrefix, defaultLabel: defaultLabel,
                 defaults: shortcutDefaults(keyPrefix),
+                conflict: { code, modifiers in
+                    HostShortcutConflicts.owner(
+                        code: code, modifiers: modifiers, excluding: keyPrefix,
+                        among: shortcutOwners
+                    ).map(HostShortcutConflicts.message)
+                },
                 commit: {
                     if keyPrefix == "hotKey" { panelShortcutChanged() }
                     Task {
@@ -109,6 +115,20 @@ struct HostShortcutsPane: View {
                     }
                 })
         }
+    }
+
+    private var shortcutOwners: [HostShortcutOwner] {
+        let panel = HostShortcutConflicts.panel
+        return [
+            HostShortcutConflicts.owner(
+                title: panel.title, prefix: panel.prefix, defaultCode: panel.code,
+                defaultModifiers: panel.modifiers, defaults: shortcutDefaults(panel.prefix))
+        ]
+            + extensionShortcuts.map {
+                HostShortcutConflicts.owner(
+                    title: $0.title, prefix: $0.prefix, defaultCode: $0.defaultCode,
+                    defaultModifiers: $0.defaultModifiers, defaults: shortcutDefaults($0.prefix))
+            }
     }
 
     private func shortcutDefaults(_ keyPrefix: String) -> UserDefaults {
@@ -174,6 +194,45 @@ enum HostExtensionShortcut: String, CaseIterable {
         switch self {
         case .micMute: "micHotKey"
         default: rawValue + "HotKey"
+        }
+    }
+    var title: String {
+        switch self {
+        case .bifrost: "Bifrost"
+        case .clipboard: "Clipboard history"
+        case .emoji: "Emoji picker"
+        case .micMute: "Mic mute"
+        case .focusDim: "Focus dim"
+        case .hinge: "Hinge"
+        case .presenter: "Presenter mode"
+        case .colorPicker: "Pick a color"
+        case .keystrokeHighlight: "Keystroke highlight"
+        case .virtualCamera: "Virtual Camera"
+        }
+    }
+    var defaultCode: Int {
+        switch self {
+        case .bifrost: kVK_Space
+        case .clipboard: kVK_ANSI_C
+        case .emoji: kVK_ANSI_E
+        case .micMute: kVK_ANSI_M
+        case .focusDim: kVK_ANSI_F
+        case .hinge: kVK_ANSI_H
+        case .presenter: kVK_ANSI_P
+        case .colorPicker: kVK_ANSI_C
+        case .keystrokeHighlight: kVK_ANSI_K
+        case .virtualCamera: kVK_ANSI_V
+        }
+    }
+    var defaultModifiers: Int {
+        switch self {
+        case .bifrost: optionKey
+        case .clipboard, .emoji: controlKey | shiftKey
+        case .micMute: cmdKey | shiftKey
+        case .focusDim: optionKey | cmdKey
+        case .hinge: controlKey | optionKey
+        case .presenter: shiftKey | optionKey | cmdKey
+        case .colorPicker, .keystrokeHighlight, .virtualCamera: controlKey | optionKey | cmdKey
         }
     }
 }
