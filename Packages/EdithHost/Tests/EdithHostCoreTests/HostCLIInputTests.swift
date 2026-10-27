@@ -52,6 +52,18 @@ import Testing
         }
     }
 
+    @Test func commandsThatFinishBeforeInputEndStillReturnTheirExitCode() async throws {
+        let fixture = FinishedCommandFixture()
+        let stream = try await HostCLIStream.start(
+            owner: "database", operation: "database.cli.stream",
+            request: HostCLIInvocationContext(arguments: ["connections", "add", "--help"]),
+            invoke: { try await fixture.invoke($0) })
+        let code = try await stream.consume(
+            input: HostCLILiveInput(interactive: false, receive: { nil }, cancel: {}),
+            write: { _, _ in })
+        #expect(code == 0)
+    }
+
     @Test func nullDeviceInputEndsWithoutError() async throws {
         let null = open("/dev/null", O_RDONLY)
         #expect(null >= 0)
@@ -206,6 +218,33 @@ import Testing
             invoke: { try await stale.invoke($0) })
         await #expect(throws: HostCLIError.self) { try await rejected.send(.bytes(Data([1]))) }
         await rejected.end(cancel: true)
+    }
+}
+
+private actor FinishedCommandFixture {
+    private var handle: HostCLIStreamHandle?
+    func invoke(_ request: HostCLIRequest) async throws -> Data {
+        let object = try JSONDecoder().decode(HostCLIJSON.self, from: request.payload).object ?? [:]
+        let operation = request.operation ?? ""
+        if operation.hasSuffix(".start") {
+            let session = try #require(object["session"]?.string.flatMap(UUID.init(uuidString:)))
+            let created = HostCLIStreamHandle(owner: "database", session: session, token: UUID())
+            handle = created
+            return try JSONEncoder().encode(created)
+        }
+        if operation.hasSuffix(".read") {
+            try await Task.sleep(for: .milliseconds(100))
+            let current = try #require(handle)
+            let sequence = UInt64(try #require(object["sequence"]?.integer))
+            return try JSONEncoder().encode(
+                HostCLIStreamFrame(
+                    handle: current, sequence: sequence, nextSequence: sequence, chunks: [],
+                    state: .completed, exitCode: 0))
+        }
+        if operation.hasSuffix(".write") {
+            throw HostCLIError.rejected("The terminal input is closed.")
+        }
+        return Data("{}".utf8)
     }
 }
 
