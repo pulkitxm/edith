@@ -101,14 +101,14 @@ test("only the camera carrier build prepares a containing host without Camera pr
   expect(compile).toBeGreaterThan(signing - 1);
   expect(preparation).toBeGreaterThan(signing);
   for (const index of [compile, preparation])
-    expect(build.steps[index].if).toContain("matrix.id == 'virtualCamera'");
+    expect(build.steps[index].if).toContain("matrix.camera");
   expect(build.steps[compile].run).toBe("make host");
   expect(build.steps[preparation].run).toContain("package-shipping-host.py");
   expect(build.steps[preparation].run).toContain("--release");
   expect(text(build)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
   expect(text(build)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
   const packaging = build.steps.find(
-    (step) => step.name === "Build only this extension",
+    (step) => step.name === "Build only this batch's extensions",
   );
   expect(packaging.env.EXTENSION_CONTAINING_HOST_APP).toContain(
     "local/extension-release-host/Edith.app",
@@ -133,26 +133,27 @@ test("extension builds consume independent fingerprints without a feature framew
   expect(text(build)).not.toContain("host-interfaces");
   expect(text(build)).not.toContain("EXTENSION_HOST_PRODUCTS");
   const cache = build.steps.find(
-    (step) =>
-      step.name === "Reuse this extension's unchanged support libraries",
+    (step) => step.name === "Reuse this batch's unchanged support libraries",
   );
-  expect(cache.with.key).toContain("matrix.supportFingerprint");
-  expect(cache.with.key).toContain("matrix.id");
-  expect(build.strategy.matrix).toContain("needs.plan.outputs.matrix");
+  expect(cache.with.key).toContain("matrix.supportKey");
+  expect(cache.with.path).toBe(["$", "{{ matrix.supportPaths }}"].join(""));
+  expect(build.strategy.matrix).toContain("needs.plan.outputs.batches");
+  expect(plan.outputs.batches).toContain("steps.plan.outputs.batches");
+  expect(text(plan)).toContain("extension-build-batches.mjs");
 });
 
 test("every extension passes native package checks before release signing", () => {
   const guard = build.steps.findIndex(
-    (step) => step.name === "Require a native package",
+    (step) => step.name === "Require native packages",
   );
   const suites = build.steps.findIndex(
-    (step) => step.name === "Test this extension's optional native packages",
+    (step) => step.name === "Test this batch's optional native packages",
   );
   const signing = build.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
   );
   const bundle = build.steps.findIndex(
-    (step) => step.name === "Build only this extension",
+    (step) => step.name === "Build only this batch's extensions",
   );
   expect(guard).toBeGreaterThan(-1);
   expect(build.steps[guard].run).toContain("contractVersion!==1");
@@ -160,7 +161,13 @@ test("every extension passes native package checks before release signing", () =
   expect(guard).toBeLessThan(suites);
   expect(suites).toBeLessThan(signing);
   expect(signing).toBeLessThan(bundle);
-  expect(build.steps[bundle].run).toContain('"$EXTENSION_ID" --development');
+  expect(build.steps[bundle].run).toContain('flags="--development"');
+  expect(build.steps[bundle].run).toContain(
+    'bun scripts/build-extension-package.mjs "$id" $flags',
+  );
+  expect(build.steps[bundle].run).toContain(
+    "::error title=Extension build failed::$id",
+  );
   expect(text(build)).toContain("secrets.MACOS_CERT_P12");
   expect(text(build)).toContain("secrets.NOTARY_KEY");
 });
@@ -197,7 +204,7 @@ test("manual publication is explicit and checked builds can publish from main", 
   );
   expect(signing.if).toContain("inputs.publish == true");
   const packaging = build.steps.find(
-    (step) => step.name === "Build only this extension",
+    (step) => step.name === "Build only this batch's extensions",
   );
   expect(packaging.env.DEVELOPMENT).toContain("inputs.publish != true");
   expect(publish.env.GH_TOKEN).toContain("secrets.RELEASE_PUSH_TOKEN");
@@ -215,7 +222,7 @@ test("terminal dependencies are restored before native package checks", () => {
     (step) => step.name === "Build the optional terminal library",
   );
   const suites = build.steps.findIndex(
-    (step) => step.name === "Test this extension's optional native packages",
+    (step) => step.name === "Test this batch's optional native packages",
   );
   expect(native).toBeGreaterThan(-1);
   expect(native).toBeLessThan(cache);
@@ -243,14 +250,13 @@ test("common extension checks do not repeat every native release build", () => {
 
 test("selected optional native suites gate release signing", () => {
   const suites = build.steps.findIndex(
-    (step) => step.name === "Test this extension's optional native packages",
+    (step) => step.name === "Test this batch's optional native packages",
   );
   const prerequisites = build.steps.findIndex(
     (step) => step.name === "Build the optional terminal library",
   );
   const cache = build.steps.findIndex(
-    (step) =>
-      step.name === "Reuse this extension's unchanged support libraries",
+    (step) => step.name === "Reuse this batch's unchanged support libraries",
   );
   const signing = build.steps.find(
     (step) => step.name === "Import the release signing certificate",
@@ -258,9 +264,12 @@ test("selected optional native suites gate release signing", () => {
   expect(suites).toBeGreaterThan(prerequisites);
   expect(cache).toBeLessThan(suites);
   expect(suites).toBeLessThan(build.steps.indexOf(signing));
-  expect(build.steps[suites].env.EXTENSION_ID).toContain("matrix.id");
-  expect(build.steps[suites].run).toBe(
-    'bun scripts/test-extension-package.mjs "$EXTENSION_ID"',
+  expect(build.env.EXTENSION_IDS).toBe(["$", "{{ matrix.ids }}"].join(""));
+  expect(build.steps[suites].run).toContain(
+    'bun scripts/test-extension-package.mjs "$id"',
+  );
+  expect(build.steps[suites].run).toContain(
+    "::error title=Extension tests failed::$id",
   );
   expect(build.steps[suites].if).toBeUndefined();
   expect(build.steps[suites].env.EXTENSION_PACKAGE_SUITES).toBe(
@@ -393,7 +402,7 @@ test("workflow and test edits do not rebuild shipping packages", () => {
 
 test("package build job names bind the closed artifact intake to one owner", () => {
   expect(workflow.jobs.build.name).toBe(
-    ["build ($", "{{ matrix.id }})"].join(""),
+    ["build ($", "{{ matrix.ids }})"].join(""),
   );
 });
 
