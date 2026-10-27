@@ -348,24 +348,10 @@ public final class HostMarketplace {
                 plan, repository: MarketplaceConfiguration.repository,
                 progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
             if let package = plan.first(where: { $0.id == id }) {
-                do {
-                    if sessions.automaticallyEnabledIDs.contains(id), sessions.states[id] != .active
-                    {
-                        try await sessions.enable(package)
-                    } else {
-                        try await sessions.applyUpdate(package)
-                    }
-                    if !sessions.enabledIDs.contains(id) || sessions.versions[id] == package.version
-                    {
-                        try await mutateStore { [store] in try store.select(package) }
-                    }
-                } catch {
-                    fail(
-                        id,
-                        (error as? HostWorkerError)?.disableMessage
-                            ?? "The update could not start. The previous version will keep running if available."
-                    )
-                }
+                await activate(
+                    package,
+                    starting: sessions.automaticallyEnabledIDs.contains(id)
+                        && sessions.states[id] != .active)
             }
             try await mutateStore { [store] in
                 try store.prune(hostABI: HostContract.compatibility)
@@ -377,6 +363,91 @@ public final class HostMarketplace {
             return fail(id, "The extension was downloaded. Package files are awaiting cleanup.")
         } catch {
             return fail(id, "The extension could not be downloaded. Try again.")
+        }
+    }
+
+    private func activate(_ package: ExtensionPackage, starting: Bool) async {
+        do {
+            if starting {
+                try await sessions.enable(package)
+            } else {
+                try await sessions.applyUpdate(package)
+            }
+            if !sessions.enabledIDs.contains(package.id)
+                || sessions.versions[package.id] == package.version
+            {
+                try await mutateStore { [store] in try store.select(package) }
+            }
+        } catch {
+            fail(
+                package.id,
+                (error as? HostWorkerError)?.disableMessage
+                    ?? "The update could not start. The previous version will keep running if available."
+            )
+        }
+    }
+
+    public static func allowsSideload(identifier: String) -> Bool {
+        identifier.hasPrefix("com.pulkit.edith.dev.")
+    }
+
+    public func sideload(
+        _ sideload: ExtensionSideload,
+        admit: @escaping ExtensionPackageInstaller.Verify = HostMarketplace.adHocBundles
+    ) async throws -> ExtensionPackage {
+        guard Self.allowsSideload(identifier: identity.identifier) else {
+            throw HostCLIError.rejected("Only development builds can sideload extensions.")
+        }
+        let package = sideload.package
+        guard entries.contains(where: { $0.id == package.id }) else {
+            throw HostCLIError.rejected("Unknown extension identifier.")
+        }
+        guard
+            package.isCompatible(
+                hostABI: HostContract.compatibility, architecture: "arm64",
+                systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
+        else {
+            throw HostCLIError.rejected(
+                "The package targets \(package.hostABI) on \(package.architecture), but this build "
+                    + "runs \(HostContract.compatibility) on arm64. Rebuild it from this worktree.")
+        }
+        let missing = package.dependencies.filter { installed[$0] == nil }
+        guard missing.isEmpty else {
+            throw HostCLIError.rejected(
+                "Install its dependencies first: " + missing.joined(separator: ", ") + ".")
+        }
+        guard begin(package.id) else {
+            throw HostCLIError.rejected(
+                "Another operation is running for this extension. Try again when it finishes.")
+        }
+        defer { finish(package.id) }
+        if let previous = installed[package.id] {
+            try await mutateStore { [store] in try store.select(previous) }
+        }
+        let archive = sideload.archive
+        _ = try await installer.install(
+            [package], repository: MarketplaceConfiguration.repository,
+            source: { _, _ in
+                let copy = FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "sideload-\(UUID().uuidString).zip")
+                try FileManager.default.copyItem(at: archive, to: copy)
+                return copy
+            }, admit: admit)
+        await activate(
+            package,
+            starting: !sessions.enabledIDs.contains(package.id)
+                || sessions.states[package.id] != .active)
+        try await mutateStore { [store] in try store.prune(hostABI: HostContract.compatibility) }
+        try reloadInstalled()
+        if let failure = failures[package.id] { throw HostCLIError.rejected(failure) }
+        return package
+    }
+
+    public nonisolated static func adHocBundles(_ directory: URL) throws {
+        for bundle in try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)
+        where bundle.pathExtension == "bundle" || bundle.lastPathComponent == "CameraCarrier.app" {
+            try ExtensionCodeSignature.verifyAdHoc(bundle)
         }
     }
 

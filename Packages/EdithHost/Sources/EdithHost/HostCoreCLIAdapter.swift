@@ -106,6 +106,10 @@ import Foundation
                         ).execute(remainder)
                     }
                     return try await agent.execute(remainder)
+                case "extensions" where remainder.first == "sideload":
+                    return try await HostSideloadCLI.execute(
+                        Array(remainder.dropFirst()), marketplace: marketplace,
+                        workingDirectory: HostCoreCLIContext.workingDirectory)
                 case "extensions"
                 where ["status", "verify", "doctor", "setup"].contains(remainder.first ?? ""):
                     return try await readiness.execute(remainder)
@@ -145,7 +149,7 @@ import Foundation
                 timeout: route == ["extensions", "setup"]
                     ? 120
                     : route.first == "extensions"
-                        && ["install", "update"].contains(route.last ?? "")
+                        && ["install", "update", "sideload"].contains(route.last ?? "")
                         ? HostCLIRequest.maximumTimeout : 30,
                 jsonOutput: route.first != "schema" && route.first != "guide"
                     && route.first != "completions")

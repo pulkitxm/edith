@@ -120,6 +120,16 @@ public actor ExtensionPackageInstaller {
         progress: @escaping @Sendable (Double) -> Void = { _ in },
         downloaded: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> [ExtensionPackage] {
+        try await install(
+            plan, repository: repository, source: download, admit: { _ in }, progress: progress,
+            downloaded: downloaded)
+    }
+
+    public func install(
+        _ plan: [ExtensionPackage], repository: String, source: @escaping Download,
+        admit: @escaping Verify, progress: @escaping @Sendable (Double) -> Void = { _ in },
+        downloaded: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> [ExtensionPackage] {
         for package in plan { try package.validate(repository: repository) }
         guard Set(plan.map(\.id)).count == plan.count else { throw MarketplaceError.invalidCatalog }
         try await exclusive {
@@ -146,11 +156,14 @@ public actor ExtensionPackageInstaller {
                 downloaded(Double(index + 1) / Double(plan.count))
                 continue
             }
-            staged[package.id] = try await stage(package, in: temporary)
+            staged[package.id] = try await stage(
+                package, in: temporary, source: source, admit: admit)
             downloaded(Double(index + 1) / Double(plan.count))
         }
         return try await exclusive {
-            try await commit(plan, staged: staged, temporary: temporary, progress: progress)
+            try await commit(
+                plan, staged: staged, temporary: temporary, source: source, admit: admit,
+                progress: progress)
         }
     }
 
@@ -170,8 +183,10 @@ public actor ExtensionPackageInstaller {
         try await exclusive { try body() }
     }
 
-    private func stage(_ package: ExtensionPackage, in temporary: URL) async throws -> URL {
-        let archive = try await download(package.downloadURL, package.downloadBytes)
+    private func stage(
+        _ package: ExtensionPackage, in temporary: URL, source: Download, admit: Verify
+    ) async throws -> URL {
+        let archive = try await source(package.downloadURL, package.downloadBytes)
         defer { try? FileManager.default.removeItem(at: archive) }
         try Task.checkCancellation()
         let bytes = try Data(contentsOf: archive, options: .mappedIfSafe)
@@ -181,12 +196,13 @@ public actor ExtensionPackageInstaller {
         let staging = temporary.appendingPathComponent(package.id)
         try ExtensionArchive.extract(archive, package: package, to: staging)
         try verify(staging.appendingPathComponent(package.id))
+        try admit(staging.appendingPathComponent(package.id))
         return staging
     }
 
     private func commit(
-        _ plan: [ExtensionPackage], staged: [String: URL], temporary: URL,
-        progress: @Sendable (Double) -> Void
+        _ plan: [ExtensionPackage], staged: [String: URL], temporary: URL, source: Download,
+        admit: Verify, progress: @Sendable (Double) -> Void
     ) async throws -> [ExtensionPackage] {
         let operation = try PackageFileLock(
             url: store.root.appendingPathComponent(".operation.lock"), exclusive: true)
@@ -226,7 +242,8 @@ public actor ExtensionPackageInstaller {
                     if let prepared = staged[package.id] {
                         staging = prepared
                     } else {
-                        staging = try await stage(package, in: temporary)
+                        staging = try await stage(
+                            package, in: temporary, source: source, admit: admit)
                     }
                     installations.append(try authority.install(package, from: staging))
                 }
@@ -271,6 +288,19 @@ public enum ExtensionCodeSignature {
                 == errSecSuccess, let information = information as? [String: Any]
         else { return nil }
         return information[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    public static func verifyAdHoc(_ url: URL) throws {
+        try verifyDevelopment(url)
+        var code: SecStaticCode?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess,
+            let flags = (information as? [String: Any])?[kSecCodeInfoFlags as String] as? UInt32,
+            flags & SecCodeSignatureFlags.adhoc.rawValue != 0
+        else { throw MarketplaceError.invalidSignature }
     }
 
     public static func verifyDevelopment(_ url: URL) throws {
