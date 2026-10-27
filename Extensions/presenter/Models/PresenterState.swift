@@ -17,6 +17,7 @@ final class PresenterState {
     private var settingsToken: NSObjectProtocol?
     private var autoToken: NSObjectProtocol?
     private var stopped = false
+    private var published: [String: String] = [:]
 
     init(defaults: UserDefaults = SharedDefaults.store, state: ExtensionSharedState? = .current) {
         self.defaults = defaults
@@ -73,6 +74,7 @@ final class PresenterState {
                 "blur" + category.rawValue.prefix(1).uppercased() + category.rawValue.dropFirst()
             values[field] = hiddenPrivacy.contains(category) ? "1" : "0"
         }
-        try? state?.publish(values)
+        guard let state, values != published else { return }
+        if (try? state.publish(values)) != nil { published = values }
     }
 }

@@ -50,6 +50,28 @@ import Testing
         #expect(channel.values(for: "presenter")["active"] == "0")
     }
 
+    @MainActor @Test func unchangedPrivacyStateIsNotRepublished() throws {
+        let suite = "fixture.presenter.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let channel = ExtensionSharedState(root: root, namespace: suite, owner: "presenter")
+        defaults.set(true, forKey: AppStorageKeys.Presenter.enabled)
+        let state = PresenterState(defaults: defaults, state: channel)
+        #expect(channel.values(for: "presenter")["active"] == "0")
+        try channel.clear("presenter")
+        state.refresh()
+        state.refresh()
+        #expect(channel.values(for: "presenter").isEmpty)
+        defaults.set(true, forKey: AppStorageKeys.Presenter.mode)
+        state.refresh()
+        #expect(channel.values(for: "presenter")["active"] == "1")
+        state.shutdown()
+    }
+
     @Test func jevRequestsUseTheOwnedServiceContract() throws {
         let payload = try PresenterJevClient.request(windows: "synthetic window")
         let call = try JSONSerialization.jsonObject(with: payload) as! [String: Any]
