@@ -316,6 +316,9 @@ public enum HostCLIHelp {
         .init("extensions info", "Inspect an extension.", flags: [], words: ["id"]),
         .init("extensions install", "Download one compatible extension.", flags: [], words: ["id"]),
         .init("extensions update", "Update one installed extension.", flags: [], words: ["id"]),
+        .init(
+            "extensions sideload", "Install a locally built package into a development build.",
+            words: ["path"]),
         .init("extensions enable", "Enable an installed extension.", flags: [], words: ["id"]),
         .init("extensions disable", "Prepare and stop an extension.", flags: [], words: ["id"]),
         .init("extensions remove", "Remove an extension.", flags: [], words: ["id"]),

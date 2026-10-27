@@ -68,6 +68,12 @@ run at once next to the installed Edith without touching it or each other.
 - Talk to a development build with its own CLI,
   `dist/Edith.app/Contents/MacOS/ed`. The `ed` on your `PATH` is the installed
   app's CLI and reaches the installed app.
+- Test an unpublished extension change with `make extension-sideload
+  EXTENSION=<id>`. It builds an ad-hoc signed development package and installs
+  it into this worktree's running development build through
+  `ed extensions sideload`, replacing the catalog version in that slot. Release
+  builds refuse sideloaded packages, and the package must match this build's
+  host ABI.
 - The app owns the core services and extension engines in process. Development builds never
   register login items or the lid-awake daemon, so never register or restart the
   production labels (`com.pulkit.edith.agent`, `com.pulkit.edith.helper.v2`,

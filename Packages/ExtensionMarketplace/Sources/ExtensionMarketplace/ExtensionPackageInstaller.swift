@@ -118,6 +118,18 @@ public actor ExtensionPackageInstaller {
         _ plan: [ExtensionPackage], repository: String,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> [ExtensionPackage] {
+        try await install(
+            plan, repository: repository, source: download, admit: { _ in }, progress: progress)
+    }
+
+    public func install(
+        _ plan: [ExtensionPackage], repository: String, source download: @escaping Download,
+        admit: @escaping Verify, progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> [ExtensionPackage] {
+        let verify: Verify = { [verify] directory in
+            try verify(directory)
+            try admit(directory)
+        }
         guard !busy else { throw MarketplaceError.packageBusy }
         busy = true
         defer { busy = false }
@@ -222,6 +234,19 @@ public enum ExtensionCodeSignature {
                 == errSecSuccess, let information = information as? [String: Any]
         else { return nil }
         return information[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    public static func verifyAdHoc(_ url: URL) throws {
+        try verifyDevelopment(url)
+        var code: SecStaticCode?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess,
+            let flags = (information as? [String: Any])?[kSecCodeInfoFlags as String] as? UInt32,
+            flags & SecCodeSignatureFlags.adhoc.rawValue != 0
+        else { throw MarketplaceError.invalidSignature }
     }
 
     public static func verifyDevelopment(_ url: URL) throws {

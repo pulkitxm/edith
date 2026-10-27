@@ -48,6 +48,13 @@ extension under `Extensions/<id>` that is built and released as its own package
 with `bun scripts/build-extension-package.mjs <id>`, and `make extension-dev
 EXTENSION=<id>` builds one for development.
 
+To exercise an extension change in a running development build before it is
+published, run `make extension-sideload EXTENSION=<id>` in the same worktree.
+It builds an ad-hoc signed package with a fresh patch version and installs it
+with `dist/Edith.app/Contents/MacOS/ed extensions sideload <package.zip>`,
+replacing the catalog version in that slot only. Release builds refuse
+sideloaded packages.
+
 The signature is applied by `package-shipping-host.py` rather than left to a
 build tool. A designated requirement that names the exact leaf certificate
 stops matching when the certificate is re-issued, and macOS then drops every TCC
