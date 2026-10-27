@@ -214,7 +214,7 @@ public actor DownloadWorker {
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
                 guard let self else { return }
-                await refresh()
+                await observe()
             }
         }
         notify()
@@ -306,6 +306,45 @@ public actor DownloadWorker {
                 ?? activityPersistenceError, executable: executable(),
             runningCount: max(flights.count, activity.active.count)
         )
+    }
+
+    private struct ObservedState: Equatable {
+        var queue: [Int]
+        var enabled: Bool
+        var executables: [URL?]
+    }
+
+    private var observedState: ObservedState?
+    private var observedExecutables: [URL?] = []
+    private var executablesCheckedAt: ContinuousClock.Instant?
+
+    private func currentExecutables() -> [URL?] {
+        let now = ContinuousClock.now
+        if let checked = executablesCheckedAt, now - checked < .seconds(2) {
+            return observedExecutables
+        }
+        executablesCheckedAt = now
+        observedExecutables = [executable(), galleryExecutable()]
+        return observedExecutables
+    }
+
+    private func currentObservedState() -> ObservedState {
+        var metadata = stat()
+        let queue =
+            lstat(file.path, &metadata) == 0
+            ? [
+                Int(metadata.st_ino), Int(metadata.st_size), Int(metadata.st_mtimespec.tv_sec),
+                Int(metadata.st_mtimespec.tv_nsec),
+            ] : []
+        return ObservedState(
+            queue: queue, enabled: isEnabled(), executables: currentExecutables())
+    }
+
+    func observe() {
+        let state = currentObservedState()
+        if flights.isEmpty, state == observedState, records.allSatisfy(\.isFinished) { return }
+        refresh()
+        observedState = currentObservedState()
     }
 
     public func refresh() {
