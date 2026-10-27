@@ -453,7 +453,7 @@ verify-bundle:
 	python3 scripts/verify-shipping-host.py dist/Edith.app
 
 ci-shipping:
-	bun test scripts/shipping-host.test.js scripts/build-install.test.js scripts/local-install-signing.test.js scripts/release-workflows.test.js scripts/ci-routing.test.js scripts/camera-extension.test.js scripts/publish-release-state.test.js scripts/publish-host-release.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extensions-workflow.test.js
+	bun test scripts/shipping-host.test.js scripts/build-install.test.js scripts/local-install-signing.test.js scripts/release-workflows.test.js scripts/ci-routing.test.js scripts/camera-extension.test.js scripts/publish-release-state.test.js scripts/publish-host-release.test.js scripts/extension-release-plan.test.js scripts/extension-build-batches.test.js scripts/extension-publish.test.js scripts/extensions-workflow.test.js
 
 shipping-fixture:
 	@test -n "$(HOST_FIXTURE)" || { echo "set HOST_FIXTURE to a signed empty host" >&2; exit 1; }

@@ -507,7 +507,7 @@ test("all maintained signing and publication guards independently reject validat
       (step) => step.name === "Import the release signing certificate",
     ),
     workflow.jobs.build.steps.find(
-      (step) => step.name === "Notarize the downloaded package",
+      (step) => step.name === "Notarize the downloaded packages",
     ),
     workflow.jobs.publish,
   ];
@@ -588,12 +588,12 @@ test("validation preserves all native package and global gates while withholding
     ).run,
   ).toContain("scripts/extension-all-validation.test.js");
   const packaging = workflow.jobs.build.steps.find(
-    (step) => step.name === "Build only this extension",
+    (step) => step.name === "Build only this batch's extensions",
   );
   expect(admitted(packaging.env.DEVELOPMENT, context)).toBe(true);
   expect(
     workflow.jobs.build.steps.find(
-      (step) => step.name === "Test this extension's optional native packages",
+      (step) => step.name === "Test this batch's optional native packages",
     ).run,
   ).toContain("test-extension-package.mjs");
   expect(
