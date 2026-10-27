@@ -910,25 +910,6 @@ final class AppMaintenanceModel {
         loading.reset()
     }
 
-    func openExtension(_ id: String) {
-        if engineClient != nil, !stopped, !suspending {
-            sendRemote("openExtension", value: id); return
-        }
-        guard !stopped, !suspending else { return }
-        trackCleanup { [self] in
-            do {
-                guard let endpoint = ExtensionPeerEndpoint.current(owner: id) else {
-                    throw ExtensionPeerError.unavailable
-                }
-                _ = try await endpoint.invoke("extension.open", payload: Data(), timeout: 3)
-            } catch {
-                guard !stopped, !suspending else { return }
-                errorMessage =
-                    "Download and enable this extension in Extensions, then open it here."
-            }
-        }
-    }
-
     private func releaseSecurityScopedAccess() {
         if hasSecurityScopedAccess { securityScopedURL?.stopAccessingSecurityScopedResource() }
         securityScopedURL = nil
