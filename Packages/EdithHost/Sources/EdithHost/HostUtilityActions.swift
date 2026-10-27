@@ -20,8 +20,8 @@ struct HostUtilityConfirmation: Identifiable {
     @ObservationIgnored private var actionTask: Task<Void, Never>?
     @ObservationIgnored private var actionToken: UUID?
 
-    func isOn(_ utility: HostSidebarUtility, preventSleep: Bool) -> Bool {
-        if utility == .keepAwake { return pendingKeepAwake ?? preventSleep }
+    func isOn(_ utility: HostSidebarUtility) -> Bool {
+        if utility == .keepAwake, let pendingKeepAwake { return pendingKeepAwake }
         return utility.isOn(snapshots[utility.id])
     }
 
@@ -56,11 +56,11 @@ struct HostUtilityConfirmation: Identifiable {
 
     func perform(
         _ utility: HostSidebarUtility, marketplace: HostMarketplace, tile: SurfaceTile,
-        version: String, preventSleep: Bool, current: @escaping @MainActor () -> String?
+        version: String, current: @escaping @MainActor () -> String?
     ) {
         guard actionTask == nil else { return }
         if utility == .keepAwake {
-            let wanted = !preventSleep
+            let wanted = !isOn(utility)
             pendingKeepAwake = wanted
             let snapshot = SurfaceSnapshot(
                 providerID: utility.id,
@@ -121,6 +121,7 @@ struct HostUtilityConfirmation: Identifiable {
                 if utility == .lidAwake, let message = result.message { lidAwakeError = message }
             } catch {
                 guard !Task.isCancelled, actionToken == token else { return }
+                refreshTick += 1
                 report(utility, error)
             }
         }
