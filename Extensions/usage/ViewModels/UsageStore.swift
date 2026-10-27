@@ -109,6 +109,7 @@ final class UsageStore {
     private var seedTask: Task<Void, Never>?
     private var limitsRequestTask: Task<Void, Never>?
     private var limitsRestoreObserver: NSObjectProtocol?
+    private var presenterObserver: NSObjectProtocol?
     private let menuBarAllowed: Bool
     private var terminating = false
     private var limitsRestoreReloadGeneration = UsageReloadGenerationState()
@@ -189,6 +190,15 @@ final class UsageStore {
                 }
             }
         }
+        if showMenuBar {
+            presenterObserver = ExtensionSharedState.current?.observe { [weak self] owner in
+                guard owner == "presenter" else { return }
+                MainActor.assumeIsolated {
+                    UsagePresenterState.shared.refresh()
+                    self?.refreshMenuBarItem()
+                }
+            }
+        }
         limitsUpdatedObserver = UsageEvents.observe(UsageEvents.limitsUpdated) { [weak self] in
             self?.limitsTopicTask?.cancel()
             self?.limitsTopicTask = Task { @MainActor [weak self] in
@@ -250,6 +260,8 @@ final class UsageStore {
             UsageEvents.stopObserving(limitsRestoreObserver)
             self.limitsRestoreObserver = nil
         }
+        ExtensionSharedState.current?.stopObserving(presenterObserver)
+        presenterObserver = nil
     }
 
     func syncStatusItem() {
