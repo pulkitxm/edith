@@ -104,7 +104,7 @@ struct HostWindowNavigationTests {
                     extensionID: owner, version: "1.0.0", section: page, relativePath: path)
             }
         }
-        fixture.defaults.set(false, forKey: "suiteMediaEnabled")
+        fixture.defaults.set(false, forKey: "suiteUtilitiesEnabled")
         await #expect(throws: HostWindowNavigationError.invalidDestination) {
             try await navigation.navigate(extensionID: "calendar", version: "1.0.0")
         }

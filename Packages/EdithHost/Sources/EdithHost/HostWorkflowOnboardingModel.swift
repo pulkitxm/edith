@@ -134,7 +134,7 @@ struct HostWorkflowPackageReview: Equatable {
     func choose(_ workflow: HostWorkflow) {
         guard !busy else { return }
         self.workflow = workflow
-        selected = workflow.suggestions.intersection(Set(entries.map(\.id))).intersection(
+        selected = workflow.suggestions(in: entries).intersection(
             offeredIDs)
         stage = .review
         saveSelection()

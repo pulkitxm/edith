@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-from verify_shipping_host import inspect_host, run
+from verify_shipping_host import CARRIER_PLIST, inspect_host, run
 from host_build_metadata import load_metadata, package_version, write_metadata
 
 parser = argparse.ArgumentParser()
@@ -66,6 +66,10 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
     shutil.copyfile('Resources/ed-launcher', launcher)
     launcher.chmod(0o755)
     (bundle / 'Contents/MacOS/ed').symlink_to('../Resources/ed-launcher')
+    if args.release:
+        daemons = bundle / 'Contents/Library/LaunchDaemons'
+        daemons.mkdir(parents=True)
+        shutil.copyfile(Path(__file__).resolve().parents[1] / 'Resources' / CARRIER_PLIST, daemons / CARRIER_PLIST)
     for path in bundle.rglob('._*'):
         path.unlink()
     run('dot_clean', '-m', str(bundle))

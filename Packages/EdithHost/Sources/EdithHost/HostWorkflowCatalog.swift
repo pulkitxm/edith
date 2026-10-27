@@ -3,39 +3,14 @@ import ExtensionMarketplace
 import Foundation
 
 enum HostWorkflow: String, CaseIterable, Identifiable, Sendable {
-    case agentic, creative, developer, essentials, custom
+    case agents, utilities, desk, media, developer, custom
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
-    var symbol: String {
-        switch self {
-        case .agentic: "sparkles"
-        case .creative: "paintpalette"
-        case .developer: "hammer"
-        case .essentials: "house"
-        case .custom: "slider.horizontal.3"
-        }
-    }
-    var detail: String {
-        switch self {
-        case .agentic: "Follow sessions, monitor usage and review your agents' work."
-        case .creative: "Create and edit media, record your screen and shape your workspace."
-        case .developer: "Work with terminals, machines, databases and local documents."
-        case .essentials: "Everyday tools for your clipboard, calendar and Mac."
-        case .custom: "Choose exactly the tools you want."
-        }
-    }
-    static let coreExtensionIDs: Set<String> = ["jev"]
-    var suggestions: Set<String> {
-        Self.coreExtensionIDs.union(workflowSuggestions)
-    }
-    private var workflowSuggestions: Set<String> {
-        switch self {
-        case .agentic: ["usage", "herdr", "quinjet", "companion", "plugins"]
-        case .creative: ["studio", "timeLapse", "music", "colorPicker", "downloads"]
-        case .developer: ["terminal", "machines", "docs", "database", "codeStats"]
-        case .essentials: ["clipboard", "calendar", "system", "keepAwake", "emoji"]
-        case .custom: []
-        }
+    var suite: HostMarketplaceSuite? { HostMarketplaceCatalog.suites.first { $0.id == rawValue } }
+    var title: String { suite?.title ?? "Custom" }
+    var symbol: String { suite?.symbol ?? "slider.horizontal.3" }
+    var detail: String { suite?.subtitle ?? "Choose exactly the extensions you want." }
+    func suggestions(in entries: [HostExtension]) -> Set<String> {
+        Set(entries.filter { $0.category == rawValue }.map(\.id))
     }
 }
 
