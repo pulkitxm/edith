@@ -53,6 +53,7 @@ public final class HostExtensionSessions {
     @ObservationIgnored private var retryPackages: [String: ExtensionPackage] = [:]
     @ObservationIgnored private var retryTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var retryAttempts: [String: Int] = [:]
+    @ObservationIgnored private var disableAttempts: [String: Int] = [:]
 
     public init(
         defaults: UserDefaults, create: @escaping @MainActor (ExtensionPackage) throws -> HostWorker
@@ -265,6 +266,21 @@ public final class HostExtensionSessions {
         }
     }
 
+    private func scheduleDisableRetry(_ id: String) {
+        let attempt = disableAttempts[id] ?? 0
+        guard retryTasks[id] == nil, attempt < retryDelays.count else { return }
+        disableAttempts[id] = attempt + 1
+        let delay = retryDelays[attempt]
+        let sleep = sleep
+        retryTasks[id] = Task { @MainActor [weak self] in
+            do { try await sleep(delay) } catch { return }
+            guard let self, !Task.isCancelled else { return }
+            retryTasks[id] = nil
+            guard states[id] == .failed, pendingDisableIDs.contains(id) else { return }
+            try? await disable(id: id)
+        }
+    }
+
     public func disable(id: String, remember: Bool = true) async throws {
         try await stop(id: id, remember: remember, reason: .disable)
     }
@@ -303,8 +319,12 @@ public final class HostExtensionSessions {
             if !pendingDisableIDs.contains(id) { pendingRecoveryIDs.insert(id) }
             states[id] = .failed
             failures.insert(id)
+            if reason == .disable, remember, error as? HostWorkerError == .timedOut {
+                scheduleDisableRetry(id)
+            }
             throw error
         }
+        disableAttempts[id] = nil
         if remember || pendingDisableIDs.contains(id) { save(enabledIDs.subtracting([id])) }
         pendingDisableIDs.remove(id)
         pendingRecoveryIDs.remove(id)
