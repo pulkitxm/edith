@@ -269,9 +269,13 @@ public enum MusicLibraryIndex {
     private static func mutate(_ body: (inout MusicLibraryIndexSnapshot) -> Void) {
         lock.withLock {
             var current = memory ?? loadFromDisk()
+            let before = current
             body(&current)
             memory = current
-            guard let fileURL, let data = try? JSONEncoder().encode(current) else { return }
+            guard let fileURL else { return }
+            guard current != before || !FileManager.default.fileExists(atPath: fileURL.path),
+                let data = try? JSONEncoder().encode(current)
+            else { return }
             try? FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: fileURL, options: .atomic)
