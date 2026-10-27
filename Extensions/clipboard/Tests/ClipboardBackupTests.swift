@@ -10,23 +10,63 @@ import Testing
         defer { fixture.remove() }
         let seed = ClipboardArchive(root: fixture.root.appendingPathComponent("seed"))
         _ = try capture("cloud", in: seed)
-        try seed.stageExport(to: fixture.cloud)
+        try seed.exportSnapshot(to: fixture.cloud)
         let local = try capture("local", in: fixture.archive)
-        let staging = fixture.root.appendingPathComponent("staging")
-        try fixture.archive.stageExport(to: staging)
         let oldIndex = fixture.cloud.appendingPathComponent("index.jsonl")
-        let newIndex = staging.appendingPathComponent("index.jsonl")
-        let previous = try Data(contentsOf: oldIndex), current = try Data(contentsOf: newIndex)
-        #expect(previous != current)
-        #expect(previous.count == current.count)
+        let previous = try Data(contentsOf: oldIndex)
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         try FileManager.default.setAttributes(
             [.modificationDate: date], ofItemAtPath: oldIndex.path)
-        try FileManager.default.setAttributes(
-            [.modificationDate: date], ofItemAtPath: newIndex.path)
-        try await ClipboardBackupProvider.exportSnapshot(staging: staging, cloud: fixture.cloud)
-        #expect(try Data(contentsOf: oldIndex) == current)
+        #expect(try fixture.archive.exportSnapshot(to: fixture.cloud))
+        let current = try Data(contentsOf: oldIndex)
+        #expect(previous != current)
+        #expect(previous.count == current.count)
         #expect(try ClipboardArchive(root: fixture.cloud).payload(id: local.id).data == local.data)
+    }
+
+    @Test func unchangedHistoryExportsNothingAndNewEntriesCopyOnlyTheirOwnBlob() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let first = try capture("first", in: fixture.archive)
+        #expect(try fixture.archive.exportSnapshot(to: fixture.cloud))
+        let blobs = fixture.cloud.appendingPathComponent("blobs")
+        let existing = try FileManager.default.contentsOfDirectory(atPath: blobs.path)
+        let marker = Date(timeIntervalSince1970: 1_600_000_000)
+        for name in existing {
+            try FileManager.default.setAttributes(
+                [.modificationDate: marker],
+                ofItemAtPath: blobs.appendingPathComponent(name).path)
+        }
+        #expect(try !fixture.archive.exportSnapshot(to: fixture.cloud))
+        let second = try capture("second", in: fixture.archive)
+        #expect(try fixture.archive.exportSnapshot(to: fixture.cloud))
+        for name in existing {
+            let attributes = try FileManager.default.attributesOfItem(
+                atPath: blobs.appendingPathComponent(name).path)
+            #expect(attributes[.modificationDate] as? Date == marker)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: blobs.path).count == 2)
+        let exported = ClipboardArchive(root: fixture.cloud)
+        #expect(try exported.payload(id: first.id).data == first.data)
+        #expect(try exported.payload(id: second.id).data == second.data)
+        _ = try fixture.archive.mutate(.init(.delete, ids: [first.id]))
+        #expect(try fixture.archive.exportSnapshot(to: fixture.cloud))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: blobs.path).count == 1)
+        #expect(try !fixture.archive.exportSnapshot(to: fixture.cloud))
+    }
+
+    @Test func placeholderBlobsCountAsAlreadyExported() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let entry = try capture("first", in: fixture.archive)
+        try fixture.archive.exportSnapshot(to: fixture.cloud)
+        let blobs = fixture.cloud.appendingPathComponent("blobs")
+        let name = try #require(FileManager.default.contentsOfDirectory(atPath: blobs.path).first)
+        try FileManager.default.moveItem(
+            at: blobs.appendingPathComponent(name),
+            to: blobs.appendingPathComponent("." + name + ".icloud"))
+        #expect(try !fixture.archive.exportSnapshot(to: fixture.cloud))
+        #expect(entry.data == Data("first".utf8))
     }
 
     @Test @MainActor func enableMergesVerifiedHistoryAndExportMirrorsTheFilteredSnapshot()
@@ -36,7 +76,7 @@ import Testing
         defer { fixture.remove() }
         let seed = ClipboardArchive(root: fixture.root.appendingPathComponent("seed"))
         let remote = try capture("cloud", in: seed)
-        try seed.stageExport(to: fixture.cloud)
+        try seed.exportSnapshot(to: fixture.cloud)
         let local = try capture("local", in: fixture.archive)
         let provider = fixture.provider()
         #expect(await provider.restoreOnEnable())
@@ -65,7 +105,7 @@ import Testing
         defer { fixture.remove() }
         let seed = ClipboardArchive(root: fixture.root.appendingPathComponent("seed"))
         let remote = try capture("cloud", in: seed)
-        try seed.stageExport(to: fixture.cloud)
+        try seed.exportSnapshot(to: fixture.cloud)
         let entry = try seed.entry(id: remote.id)
         try Data("corrupted".utf8).write(
             to: fixture.cloud.appendingPathComponent("blobs/" + entry.sha256 + "." + entry.ext))
@@ -152,7 +192,7 @@ import Testing
         provider.preferencesChanged()
         let seed = ClipboardArchive(root: fixture.root.appendingPathComponent("seed"))
         let remote = try capture("remote", in: seed)
-        try seed.stageExport(to: fixture.cloud)
+        try seed.exportSnapshot(to: fixture.cloud)
         fixture.defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
         provider.preferencesChanged()
         await wait {
@@ -173,7 +213,7 @@ import Testing
         defer { fixture.remove() }
         let seed = ClipboardArchive(root: fixture.root.appendingPathComponent("seed"))
         _ = try capture("remote", in: seed)
-        try seed.stageExport(to: fixture.cloud)
+        try seed.exportSnapshot(to: fixture.cloud)
         fixture.defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
         let provider = fixture.provider()
         #expect(await provider.restoreOnEnable())

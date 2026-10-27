@@ -36,6 +36,31 @@ import Testing
         #expect(await clock.pending == 0)
     }
 
+    @Test func laterChangesDoNotPushBackThePendingTransfer() async throws {
+        var calls = 0
+        let queue = ClipboardBackupEventQueue(
+            debounce: .milliseconds(300), onBattery: { false }, enabled: { true }
+        ) { calls += 1 }
+        queue.changed()
+        try await Task.sleep(for: .milliseconds(200))
+        queue.changed()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(calls == 1)
+        await queue.shutdown()
+    }
+
+    @Test func failedTransfersRetryRarely() async {
+        let clock = ClipboardBackupBatterySleep()
+        let queue = ClipboardBackupEventQueue(
+            debounce: .zero, onBattery: { false }, sleep: { try await clock.sleep($0) },
+            enabled: { true }
+        ) { throw ExtensionPeerError.unavailable }
+        queue.changed()
+        await wait { await clock.count == 1 }
+        #expect(await clock.durations[0] >= .seconds(60))
+        await queue.shutdown()
+    }
+
     @Test func cancellationDiscardsPausedWorkAndDrainsOwnedPoll() async {
         var battery = true
         var calls = 0

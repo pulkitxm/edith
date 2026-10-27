@@ -130,7 +130,7 @@ import IOKit.ps
     }
     private var exportEnabled: Bool { defaults.bool(forKey: AppStorageKeys.Clipboard.backup) }
 
-    func startScheduling(debounce: Duration = .seconds(5), restorePending: Bool = false) {
+    func startScheduling(debounce: Duration = .seconds(300), restorePending: Bool = false) {
         guard !stopping, events == nil else { return }
         observedCloudEnabled = cloudEnabled
         needsRestore = restorePending && cloudEnabled
@@ -219,22 +219,16 @@ import IOKit.ps
         self.cancellation = cancellation
         let work = Task {
             if export {
-                let staging = FileManager.default.temporaryDirectory.appendingPathComponent(
-                    "clipboard-backup-export-" + UUID().uuidString)
-                defer { try? FileManager.default.removeItem(at: staging) }
-                try FileManager.default.createDirectory(
-                    at: staging, withIntermediateDirectories: true,
-                    attributes: [.posixPermissions: 0o700])
+                try Self.checkDirectory(cloud, create: true)
                 let preparation = Task.detached(priority: .utility) {
-                    try archive.stageExport(to: staging)
+                    try archive.exportSnapshot(to: cloud)
                 }
                 try await withTaskCancellationHandler {
-                    try await preparation.value
+                    _ = try await preparation.value
                 } onCancel: {
                     preparation.cancel()
                 }
                 try Task.checkCancellation()
-                try await Self.exportSnapshot(staging: staging, cloud: cloud)
                 defaults.set(
                     Date().timeIntervalSince1970, forKey: AppStorageKeys.Clipboard.lastBackupAt)
             } else {
@@ -268,21 +262,6 @@ import IOKit.ps
             failure = error is CancellationError ? nil : "Clipboard backup could not finish."
             throw error
         }
-    }
-
-    nonisolated static func exportSnapshot(staging: URL, cloud: URL) async throws {
-        try checkDirectory(staging, create: false)
-        try checkDirectory(cloud, create: true)
-        let result = try await CLICommandRunner.run(
-            CLICommandRequest(
-                executableURL: URL(fileURLWithPath: "/usr/bin/rsync"),
-                arguments: [
-                    "-a", "--delete", "--checksum", "--no-links", staging.path + "/",
-                    cloud.path + "/",
-                ],
-                environment: CLIToolEnvironment.sanitized(), timeout: 600,
-                maximumOutputBytes: 32_768, terminatesProcessGroup: true), onLine: { _ in })
-        guard result.terminationStatus == 0 else { throw ExtensionPeerError.unavailable }
     }
 
     private nonisolated static func restore(
@@ -436,7 +415,7 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
     var scheduled: Bool { pending || task != nil }
 
     init(
-        debounce: Duration, retry: Duration = .seconds(3), onBattery: @escaping () -> Bool,
+        debounce: Duration, retry: Duration = .seconds(300), onBattery: @escaping () -> Bool,
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
             try await Task.sleep(for: $0)
         }, enabled: @escaping () -> Bool,
@@ -453,8 +432,8 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
     func changed() {
         guard !stopping, !cancelling else { return }
         guard enabled() else { pending = false; task?.cancel(); return }
+        if !pending { deadline = ContinuousClock.now.advanced(by: debounce) }
         pending = true
-        deadline = ContinuousClock.now.advanced(by: debounce)
         guard task == nil else { return }
         task = Task { [weak self] in
             guard let self else { return }

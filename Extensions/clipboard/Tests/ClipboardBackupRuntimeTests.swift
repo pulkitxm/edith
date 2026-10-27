@@ -30,7 +30,7 @@ import Testing
         let local = ClipboardArchive(root: root.appendingPathComponent("clipboard"))
         let seed = ClipboardArchive(root: root.appendingPathComponent("seed"))
         let remote = try capture("restored", in: seed)
-        try seed.stageExport(to: cloud)
+        try seed.exportSnapshot(to: cloud)
         let selected = try capture("selected", in: local)
         _ = NSApplication.shared
         let first = ExtensionRuntime()
