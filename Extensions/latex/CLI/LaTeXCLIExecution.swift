@@ -14,6 +14,14 @@ import Foundation
             }
         }
     }
+    static func catalog(_ payload: Data) throws -> Data {
+        let base = try ExtensionCLICatalog.data(
+            LaTeXCommand.self, owner: "latex", payload: payload, streaming: true)
+        guard var catalog = try JSONSerialization.jsonObject(with: base) as? [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        catalog["acceptsInput"] = true
+        return try JSONSerialization.data(withJSONObject: catalog, options: [.sortedKeys])
+    }
     static func stream(
         _ streams: ExtensionCLIStreams, operation: String, payload: Data, store: LaTeXProjectStore
     ) throws -> Data {
