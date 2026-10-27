@@ -47,15 +47,27 @@ public struct ExtensionSharedState: Sendable {
     }
 
     public func values(for owner: String) -> [String: String] {
-        guard Self.validOwner(owner),
-            let handle = try? FileHandle(forReadingFrom: file(owner))
-        else { return [:] }
-        defer { try? handle.close() }
-        guard let data = try? handle.read(upToCount: 65_537), data.count <= 65_536,
-            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
-            snapshot.pid > 1, Self.generation(snapshot.pid) == snapshot.generation
-        else { return [:] }
+        guard Self.validOwner(owner), let snapshot = snapshot(owner) else { return [:] }
+        guard snapshot.pid > 1, Self.generation(snapshot.pid) == snapshot.generation else {
+            return Self.orphaned(owner: owner, values: snapshot.values)
+        }
         return snapshot.values
+    }
+
+    private func snapshot(_ owner: String) -> Snapshot? {
+        guard let handle = try? FileHandle(forReadingFrom: file(owner)) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 65_537), data.count <= 65_536 else {
+            return nil
+        }
+        return try? JSONDecoder().decode(Snapshot.self, from: data)
+    }
+
+    private static func orphaned(owner: String, values: [String: String]) -> [String: String] {
+        guard owner == "presenter", values["enabled"] == "1" else { return [:] }
+        var closed = values
+        closed["active"] = "1"
+        return closed
     }
 
     public func clear(_ owner: String) throws {

@@ -64,8 +64,9 @@ final class PresenterState {
 
     private func publish() {
         var values = [
-            "active": active ? "1" : "0", "manual": manual ? "1" : "0",
-            "autoActive": autoActive ? "1" : "0", "autoReason": autoReason ?? "",
+            "enabled": enabled ? "1" : "0", "active": active ? "1" : "0",
+            "manual": manual ? "1" : "0", "autoActive": autoActive ? "1" : "0",
+            "autoReason": autoReason ?? "",
             "hideMenuBarNumbers": defaults.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
                 ? "1" : "0",
         ]

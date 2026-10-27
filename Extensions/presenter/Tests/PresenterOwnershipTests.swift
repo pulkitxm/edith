@@ -40,6 +40,7 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Presenter.mode)
         let state = PresenterState(defaults: defaults, state: channel)
         #expect(channel.values(for: "presenter")["active"] == "1")
+        #expect(channel.values(for: "presenter")["enabled"] == "1")
         #expect(channel.values(for: "presenter")["blurCalendar"] == "1")
         #expect(channel.values(for: "presenter")["blurUsage"] == "0")
         defaults.set(false, forKey: AppStorageKeys.Presenter.blurCalendar)
@@ -48,6 +49,7 @@ import Testing
         state.shutdown()
         state.refresh()
         #expect(channel.values(for: "presenter")["active"] == "0")
+        #expect(channel.values(for: "presenter")["enabled"] == "0")
     }
 
     @MainActor @Test func unchangedPrivacyStateIsNotRepublished() throws {

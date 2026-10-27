@@ -30,6 +30,42 @@ import Testing
         #expect(!state.hides(.agents) && !state.hides(.ability("machines")))
     }
 
+    @Test func aConsumerCreatedBeforeAnEnabledPresenterRepublishesStartsHidden() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let channel = ExtensionSharedState(
+            root: root, namespace: UUID().uuidString, owner: "presenter")
+        try channel.publish(["enabled": "1", "active": "0", "blurMusic": "0", "blurAgents": "1"])
+        try orphan(root.appendingPathComponent("presenter.json"))
+        let state = SurfacePrivacyState(channel: channel)
+        defer { state.shutdown() }
+        #expect(state.hides(.agents) && state.hides(.machines) && state.hides(.ability("studio")))
+        #expect(!state.hides(.music) && !state.hides(.clocks) && !state.hides(.actions))
+        try channel.publish(["enabled": "1", "active": "0"])
+        state.refresh()
+        #expect(!state.hides(.agents))
+    }
+
+    @Test func aConsumerCreatedAfterPresenterWasDisabledStartsVisible() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let channel = ExtensionSharedState(
+            root: root, namespace: UUID().uuidString, owner: "presenter")
+        try channel.publish(["enabled": "0", "active": "0"])
+        try orphan(root.appendingPathComponent("presenter.json"))
+        let state = SurfacePrivacyState(channel: channel)
+        defer { state.shutdown() }
+        #expect(!state.hides(.agents) && !state.hides(.machines))
+    }
+
+    private func orphan(_ file: URL) throws {
+        var snapshot =
+            try #require(
+                try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        snapshot["pid"] = Int32.max
+        try JSONSerialization.data(withJSONObject: snapshot).write(to: file)
+    }
+
     @Test func privacyObservationClearsOnDisableAndStopsAfterItsOwnerShutsDown() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
