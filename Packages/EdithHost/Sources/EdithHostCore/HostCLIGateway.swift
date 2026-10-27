@@ -99,6 +99,10 @@ import Foundation
         try JSONSerialization.data(withJSONObject: info(id), options: .sortedKeys)
     }
 
+    static func stateName(_ state: HostActivationState?, installed: Bool) -> String {
+        state?.rawValue ?? (installed ? HostActivationState.disabled : .notInstalled).rawValue
+    }
+
     private func info(_ id: String) -> [String: Any] {
         let entry = marketplace.entries.first { $0.id == id }
         return [
@@ -110,7 +114,9 @@ import Foundation
             "enabled": marketplace.sessions.enabledIDs.contains(id),
             "running": marketplace.sessions.activeIDs.contains(id),
             "processIdentifier": marketplace.sessions.processIdentifiers[id] as Any? ?? NSNull(),
-            "state": marketplace.sessions.states[id]?.rawValue ?? "notInstalled",
+            "state": Self.stateName(
+                marketplace.sessions.states[id],
+                installed: marketplace.installedVersions[id] != nil),
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),
             "updateAvailable": marketplace.updateAvailable(id: id), "offline": marketplace.offline,
