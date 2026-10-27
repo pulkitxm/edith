@@ -31,9 +31,10 @@ test("every planned extension builds in exactly one balanced batch", () => {
       batch.ids.split(" "),
     );
     for (const id of batch.ids.split(" "))
-      expect(batch.supportPaths).toContain(
-        `local/extension-support/${id}_*/build.json`,
-      );
+      for (const path of ["build.json", "Package.swift", "Sources"])
+        expect(batch.supportPaths).toContain(
+          `local/extension-support/${id}_*/${path}`,
+        );
     expect(batch.supportKey).toMatch(/^[a-f0-9]{64}$/);
   }
 });

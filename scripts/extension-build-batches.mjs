@@ -80,6 +80,8 @@ export function batchExtensionBuilds(include, limit = maximumBuildBatches) {
       supportPaths: sorted
         .flatMap(({ id }) => [
           `local/extension-support/${id}_*/build.json`,
+          `local/extension-support/${id}_*/Package.swift`,
+          `local/extension-support/${id}_*/Sources`,
           `local/extension-support/${id}_*/.build/arm64-apple-macosx/release/lib*.a`,
           `local/extension-support/${id}_*/.build/arm64-apple-macosx/release/Modules`,
           `local/extension-support/${id}_*/.build/arm64-apple-macosx/release/*.bundle`,
