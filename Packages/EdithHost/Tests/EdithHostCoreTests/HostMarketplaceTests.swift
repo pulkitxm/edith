@@ -95,6 +95,21 @@ import HostWorkerFixtureSupport
         #expect(!marketplace.busy)
     }
 
+    @Test func aTransferThatFailsTwiceInTransitIsRetried() async throws {
+        var attempts = 0
+        let value = try await HostMarketplace.retryingTransfer { () async throws -> Int in
+            attempts += 1
+            if attempts < 3 { throw MarketplaceError.downloadFailed }
+            return attempts
+        }
+        #expect(value == 3)
+        await #expect(throws: MarketplaceError.invalidCatalog) {
+            try await HostMarketplace.retryingTransfer { () async throws -> Int in
+                throw MarketplaceError.invalidCatalog
+            }
+        }
+    }
+
     @Test func installingSeveralExtensionsReportsEachFailureSeparately() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -104,7 +119,7 @@ import HostWorkerFixtureSupport
         let marketplace = try fixture.marketplace(ids: ids)
         let failures = await marketplace.install(ids: ids)
         #expect(Set(failures.keys) == Set(ids))
-        #expect(await fixture.archives.urls.count == ids.count)
+        #expect(Set(await fixture.archives.urls).count == ids.count)
         #expect(!marketplace.busy)
     }
 
@@ -508,7 +523,7 @@ import HostWorkerFixtureSupport
         await fixture.network.set(data: try fixture.envelope(packages: [reviewed]))
         let marketplace = try fixture.marketplace()
         await marketplace.download(id: "sample", expectedPackage: reviewed)
-        #expect(await fixture.archives.urls == [reviewed.downloadURL])
+        #expect(Set(await fixture.archives.urls) == [reviewed.downloadURL])
         #expect(marketplace.error?.contains("package changed") == false)
         #expect(try fixture.store.installedPackages().isEmpty)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
@@ -741,8 +756,12 @@ import HostWorkerFixtureSupport
             ids: ids, workerMode: { _ in "normal" }, serving: archives)
         let gateway = HostCLIGateway(marketplace: marketplace)
 
-        let failures = await marketplace.install(ids: ids)
-        #expect(failures.isEmpty)
+        for id in ids {
+            let reply = try await gateway.execute(HostCLIRequest(action: .install, id: id))
+            let info = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+            #expect(info["state"] as? String == "active")
+            #expect(info["running"] as? Bool == true)
+        }
         #expect(marketplace.downloadedIDs == Set(ids))
         for id in ids {
             let reply = try await gateway.execute(HostCLIRequest(action: .enable, id: id))

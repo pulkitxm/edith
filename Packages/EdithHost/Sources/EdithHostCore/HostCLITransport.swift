@@ -143,6 +143,12 @@ public enum HostCLITransport {
         if let connection = try attempt(identity: identity, timeout: timeout) {
             return connection
         }
+        for _ in 0..<10 {
+            usleep(100_000)
+            if let connection = try attempt(identity: identity, timeout: timeout) {
+                return connection
+            }
+        }
         guard launchHostApp() else { throw HostCLIError.unavailable }
         let deadline = Date().addingTimeInterval(20)
         while Date() < deadline {

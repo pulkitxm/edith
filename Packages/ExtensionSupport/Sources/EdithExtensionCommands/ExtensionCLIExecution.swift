@@ -68,6 +68,14 @@ import Foundation
         }
     }
 
+    private static func presented<Command: AsyncParsableCommand>(
+        _ message: String, root: Command.Type
+    ) -> String {
+        guard let name = root.configuration.commandName else { return message }
+        return message.replacingOccurrences(of: "USAGE: \(name) ", with: "USAGE: ed \(name) ")
+            .replacingOccurrences(of: "See '\(name) help", with: "See 'ed \(name) help")
+    }
+
     private static func execute<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
     ) async throws -> Int32 {
@@ -88,9 +96,9 @@ import Foundation
         } catch {
             let resolved = root.exitCode(for: error)
             if resolved == .success {
-                CLIOut.out(root.message(for: error))
+                CLIOut.out(presented(root.message(for: error), root: root))
             } else {
-                CLIOut.note(root.fullMessage(for: error))
+                CLIOut.note(presented(root.fullMessage(for: error), root: root))
             }
             exitCode = resolved == .validationFailure ? 2 : resolved.rawValue
         }
