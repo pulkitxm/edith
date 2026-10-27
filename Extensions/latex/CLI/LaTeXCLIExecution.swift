@@ -14,6 +14,11 @@ import Foundation
             }
         }
     }
+    static func catalog(_ payload: Data) throws -> Data {
+        try ExtensionCLICatalog.data(
+            LaTeXCommand.self, owner: "latex", payload: payload, streaming: true,
+            acceptsInput: true)
+    }
     static func stream(
         _ streams: ExtensionCLIStreams, operation: String, payload: Data, store: LaTeXProjectStore
     ) throws -> Data {

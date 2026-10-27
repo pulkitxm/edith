@@ -13,7 +13,8 @@ public enum ExtensionCLICatalog {
 
     public static func data<Command: ParsableCommand>(
         _ root: Command.Type, owner: String, payload: Data, streaming: Bool,
-        timeout: Double = 120, destructive: Set<String> = destructiveNames
+        acceptsInput: Bool = false, timeout: Double = 120,
+        destructive: Set<String> = destructiveNames
     ) throws -> Data {
         guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
         let help = try parserHelp(root)
@@ -46,7 +47,7 @@ public enum ExtensionCLICatalog {
         return try JSONSerialization.data(
             withJSONObject: [
                 "version": 1, "owner": owner, "commands": commands, "settings": [],
-                "acceptsInput": false, "parserHelp": [help],
+                "acceptsInput": acceptsInput, "parserHelp": [help],
             ], options: [.sortedKeys])
     }
 
