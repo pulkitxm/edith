@@ -77,13 +77,13 @@ struct MarketplacePage: View {
                         ContentUnavailableView {
                             Label(
                                 search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? "No abilities available" : "No abilities found",
+                                    ? "No extensions available" : "No extensions found",
                                 systemImage: "magnifyingglass")
                         } description: {
                             Text(
                                 search.isEmpty
-                                    ? "This suite has no abilities available."
-                                    : "No ability matches \"\(search.trimmingCharacters(in: .whitespacesAndNewlines))\". Try another search."
+                                    ? "This group has no extensions available."
+                                    : "No extension matches \"\(search.trimmingCharacters(in: .whitespacesAndNewlines))\". Try another search."
                             )
                         }.frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
                     } else {
