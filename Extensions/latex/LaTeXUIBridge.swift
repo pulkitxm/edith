@@ -116,6 +116,7 @@ struct LaTeXPDFChunkRequest: Codable { let projectID: UUID; let generation: UUID
         }
         await model.start()
         try Task.checkCancellation()
+        if command == "latex.ui.snapshot" || command == "latex.ui.action" { model.syncProjects() }
         switch command {
         case "latex.ui.pdfChunk":
             let request = try JSONDecoder().decode(LaTeXPDFChunkRequest.self, from: payload)

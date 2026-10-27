@@ -87,6 +87,23 @@ final class LaTeXModel {
         }
     }
 
+    func syncProjects() {
+        guard remote == nil, !isStopped, !busy, !dirty, !load.isRunning,
+            let stored = try? store.load(), stored != projects
+        else { return }
+        projects = stored
+        if let selectedID, !stored.contains(where: { $0.id == selectedID }) {
+            self.selectedID = nil
+            hasRepositoryBuild = false
+            stopFollowingBuild()
+            source = ""
+            original = nil
+            review = nil
+            pdfPreview = nil
+        }
+        load.setContent(empty: stored.isEmpty)
+    }
+
     func select(_ id: UUID) async {
         if remote != nil {
             guard !isStopped, !dirty, !busy else { return }
