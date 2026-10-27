@@ -34,7 +34,7 @@ Camera uses the separately installed OBS Virtual Camera provider. Disabling Edit
 
 Each extension release contains its ZIP, JSON package metadata and detached checksum. A signed shared catalog points to immutable release assets. Package verification checks the expected publisher, package identity, archive boundaries, checksum and compatibility before installation. Catalog signatures and revision checks prevent untrusted catalogs and rollback from replacing a verified cache.
 
-Production planning fingerprints each extension's production inputs, scoped support libraries, the marketplace runtime and dependencies. A change rebuilds the affected extensions and their dependents. Test-only edits do not change shipping fingerprints. Shared runtime or ABI changes can correctly rebuild several or all packages. Extension releases remain separate from the app release, and the app release waits for a compatible published catalog before advertising the new host.
+Production planning fingerprints each extension's production inputs, scoped support libraries, the marketplace runtime and dependencies. A change rebuilds the affected extensions and their dependents. Test-only edits do not change shipping fingerprints. Shared runtime or ABI changes can correctly rebuild several or all packages. Extension packages publish in the same CI run as the app, before it. The app release then checks once that the catalog has a package for every extension on its host contract.
 
 Native builds, package tests and package verification gate publication. Build jobs can run alongside portable tests, but publishing requires those tests to succeed. Resuming an interrupted release verifies existing assets before promotion instead of trusting an unfinished draft.
 

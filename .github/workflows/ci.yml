@@ -52,6 +52,7 @@ jobs:
       companion: ${{ steps.areas.outputs.companion }}
       companion_runtime: ${{ steps.areas.outputs.companion_runtime }}
       music_player: ${{ steps.areas.outputs.music_player }}
+      extensions: ${{ steps.areas.outputs.extensions }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -91,6 +92,7 @@ jobs:
             fi
           }
           area swift '^(apps/music-player/|Packages/(EdithHost|EdithDocsWorker|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|host_build_metadata\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
+          area extensions '^(Extensions/|Packages/(ExtensionMarketplace|EdithHost|ExtensionSupport|EdithDocsWorker)/|docs/cli/|scripts/generate-cli-docs-bundle\.mjs$|scripts/[^/]*extension|scripts/release-asset-|scripts/release-lookup\.|scripts/(build-minimal-host|build-contained-host-runtime|build-camera-carrier)\.mjs$|scripts/build-ghostty\.sh$|scripts/patches/ghostty-external-io\.patch$|apps/music-player/|\.github/actions/cache-host/|\.github/workflows/(extensions|ci)\.yml$|scripts/(package-shipping-host|verify_shipping_host|host_build_metadata)\.py$)'
           area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
@@ -356,6 +358,19 @@ jobs:
         run: cargo run --locked -- --migrate-only
         working-directory: apps/companion
 
+  extensions:
+    needs: changes
+    if: >-
+      needs.changes.result == 'success'
+      && (needs.changes.outputs.extensions == 'true'
+      || (github.event_name == 'workflow_dispatch' && inputs.release))
+    uses: ./.github/workflows/extensions.yml
+    with:
+      publish: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
+    secrets: inherit
+    permissions:
+      contents: read
+
   version:
     name: Resolve version
     needs: changes
@@ -608,14 +623,15 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [version, dmg]
+    needs: [version, dmg, extensions]
     if: >-
       !cancelled()
       && needs.version.result == 'success'
       && needs.dmg.result == 'success'
       && needs.dmg.outputs.superseded != 'true'
+      && (needs.extensions.result == 'success' || needs.extensions.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 30
     concurrency:
       group: release-publication
       cancel-in-progress: false
@@ -672,7 +688,7 @@ jobs:
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
 
-      - name: Wait for compatible extension releases
+      - name: Verify compatible extension releases
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node release-source/scripts/extension-release-ready.mjs release-source

@@ -20,6 +20,7 @@ import {
   preflightExtensionBuilds,
   publishExtensionAssets,
   restorePublishedExtension,
+  runBounded,
   validateExtensionChecksum,
 } from "./extension-publish.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
@@ -649,4 +650,27 @@ test("uploads use fixed private bytes and reject remote substitution before and 
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("extension publication runs a bounded pool and stops scheduling after a failure", async () => {
+  let running = 0;
+  let peak = 0;
+  const started = [];
+  await runBounded([1, 2, 3, 4, 5, 6, 7], 3, async (item) => {
+    started.push(item);
+    peak = Math.max(peak, ++running);
+    await new Promise((done) => setTimeout(done, 5));
+    running--;
+  });
+  expect(peak).toBe(3);
+  expect(started.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  const attempted = [];
+  await expect(
+    runBounded([1, 2, 3, 4, 5], 2, async (item) => {
+      attempted.push(item);
+      await new Promise((done) => setTimeout(done, 5));
+      if (item === 1) throw new Error("synthetic failure");
+    }),
+  ).rejects.toThrow("synthetic failure");
+  expect(attempted).toEqual([1, 2]);
 });

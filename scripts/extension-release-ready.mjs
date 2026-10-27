@@ -10,7 +10,6 @@ import {
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
-import { extensionFingerprint } from "./extension-release-plan.mjs";
 import {
   compareSystemVersions,
   validateMinimumSystemVersion,
@@ -24,46 +23,20 @@ export function verifyCatalog(envelope, publicKey) {
 }
 
 export function missingPackages(expected, catalog) {
+  for (const published of catalog.packages)
+    validateMinimumSystemVersion(published.minimumSystemVersion);
   return expected.filter((entry) => {
     validateMinimumSystemVersion(entry.minimumSystemVersion);
-    for (const published of catalog.packages)
-      validateMinimumSystemVersion(published.minimumSystemVersion);
-    const compatible = catalog.packages.filter(
+    return !catalog.packages.some(
       (published) =>
         published.id === entry.id &&
         published.hostABI === entry.hostABI &&
-        published.architecture === entry.architecture,
+        published.architecture === entry.architecture &&
+        compareSystemVersions(
+          published.minimumSystemVersion,
+          entry.minimumSystemVersion,
+        ) <= 0,
     );
-    const systems = new Set([
-      entry.minimumSystemVersion,
-      ...compatible
-        .map((published) => published.minimumSystemVersion)
-        .filter(
-          (system) =>
-            compareSystemVersions(system, entry.minimumSystemVersion) >= 0,
-        ),
-    ]);
-    return [...systems].some((system) => {
-      const selected = compatible
-        .filter(
-          (published) =>
-            compareSystemVersions(published.minimumSystemVersion, system) <= 0,
-        )
-        .reduce(
-          (latest, published) =>
-            !latest ||
-            latest.version.localeCompare(published.version, undefined, {
-              numeric: true,
-            }) < 0
-              ? published
-              : latest,
-          undefined,
-        );
-      return (
-        selected?.sourceFingerprint !== entry.fingerprint ||
-        selected?.minimumSystemVersion !== entry.minimumSystemVersion
-      );
-    });
   });
 }
 
@@ -74,17 +47,14 @@ export async function expectedPackages(root) {
       await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
     ),
   );
-  return Promise.all(
-    definitions.map(async (entry) => ({
-      id: entry.id,
-      hostABI: entry.hostABI,
-      architecture: "arm64",
-      minimumSystemVersion: validateMinimumSystemVersion(
-        entry.minimumSystemVersion,
-      ),
-      fingerprint: await extensionFingerprint(root, entry, definitions),
-    })),
-  );
+  return definitions.map((entry) => ({
+    id: entry.id,
+    hostABI: entry.hostABI,
+    architecture: "arm64",
+    minimumSystemVersion: validateMinimumSystemVersion(
+      entry.minimumSystemVersion,
+    ),
+  }));
 }
 
 export async function verifyCurrentMain({
@@ -245,6 +215,7 @@ if (
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
     publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
+    timeout: 0,
     fetchCatalog: fetchMetadata,
     verifySource:
       target === undefined

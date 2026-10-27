@@ -1,26 +1,33 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-export const maximumBuildBatches = 6;
+export const maximumBuildBatches = 5;
 
 export const extensionBuildCost = {
-  database: 13,
-  virtualCamera: 12,
-  studio: 8,
-  herdr: 8,
-  attention: 8,
-  usage: 7,
-  machines: 7,
-  quinjet: 6,
-  music: 6,
-  notchShelf: 5,
-  lidAwake: 5,
-  codeStats: 5,
-  terminal: 4,
+  database: 640,
+  virtualCamera: 600,
+  herdr: 450,
+  studio: 380,
+  music: 380,
+  attention: 360,
+  machines: 340,
+  usage: 310,
+  companion: 260,
+  audioMixer: 240,
+  appMaintenance: 230,
+  bifrost: 220,
+  quinjet: 200,
+  clipboard: 200,
+  cleaner: 190,
+  notchShelf: 190,
+  docs: 180,
+  lidAwake: 180,
+  emoji: 170,
+  seoAudit: 170,
 };
 
 export function buildCost(id) {
-  return extensionBuildCost[id] ?? 3;
+  return extensionBuildCost[id] ?? 120;
 }
 
 const identifier = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
