@@ -45,7 +45,7 @@ final class HostStoragePageModel {
     }
 
     func remove(id: String, marketplace: HostMarketplace) async {
-        guard removingID == nil, marketplace.operationID == nil else {
+        guard removingID == nil, !marketplace.isBusy(id) else {
             removalError =
                 "An extension operation is already running. Wait for it to finish and retry."
             return
@@ -59,8 +59,7 @@ final class HostStoragePageModel {
         removalError = nil
         removalNotice = nil
         defer { removingID = nil }
-        await marketplace.remove(id: id)
-        removalError = marketplace.error
+        removalError = await marketplace.remove(id: id)
         if removalError == nil {
             removalNotice =
                 marketplace.pendingRemovalIDs.contains(id)

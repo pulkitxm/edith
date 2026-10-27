@@ -205,8 +205,8 @@ struct HostWorkflowPackageReview: Equatable {
                 throw HostWorkflowFailure(
                     "Extension versions or sizes changed. Review your selection and try again.")
             }
+            var installs: [Task<Void, Error>] = []
             for id in chosen {
-                try Task.checkCancellation()
                 if model.environment.installed().contains(id),
                     model.environment.active().contains(id)
                 {
@@ -214,24 +214,34 @@ struct HostWorkflowPackageReview: Equatable {
                     continue
                 }
                 model.states[id] = .installing
-                do {
-                    try await model.environment.install(id, reviewed[id])
-                    try Task.checkCancellation()
-                    guard model.environment.installed().contains(id),
-                        model.environment.active().contains(id)
-                    else {
-                        throw HostWorkflowFailure(
-                            "The downloaded extension could not start. Retry to finish setup.")
-                    }
-                    model.states[id] = .ready
-                } catch is CancellationError { throw CancellationError() } catch let error
-                    as HostWorkflowReviewChanged
-                {
-                    model.stage = .review
-                    throw error
-                } catch {
-                    model.states[id] = .failed(error.localizedDescription)
-                }
+                installs.append(
+                    Task {
+                        do {
+                            try await model.environment.install(id, reviewed[id])
+                            try Task.checkCancellation()
+                            guard model.environment.installed().contains(id),
+                                model.environment.active().contains(id)
+                            else {
+                                throw HostWorkflowFailure(
+                                    "The downloaded extension could not start. Retry to finish setup."
+                                )
+                            }
+                            model.states[id] = .ready
+                        } catch is CancellationError { throw CancellationError() } catch let error
+                            as HostWorkflowReviewChanged
+                        {
+                            model.stage = .review
+                            throw error
+                        } catch {
+                            model.states[id] = .failed(error.localizedDescription)
+                        }
+                    })
+            }
+            let started = installs
+            try await withTaskCancellationHandler {
+                for install in started { try await install.value }
+            } onCancel: {
+                for install in started { install.cancel() }
             }
             guard
                 chosen.allSatisfy({

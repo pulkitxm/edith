@@ -278,7 +278,7 @@ import Testing
         #expect(model.cost.downloadBytes == 500)
     }
 
-    @Test func cancelAndShutdownDrainOwnedInstallerWithoutCompletingOrStartingAnotherPackage()
+    @Test func cancelAndShutdownDrainEveryParallelInstallWithoutCompletingAnyPackage()
         async throws
     {
         let fixture = Fixture()
@@ -292,7 +292,7 @@ import Testing
         while fixture.installs.isEmpty, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(1))
         }
-        #expect(fixture.installs.count == 1)
+        #expect(!fixture.installs.isEmpty)
         await model.shutdown()
         #expect(!model.busy)
         #expect(fixture.active.isEmpty)
