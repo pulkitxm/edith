@@ -211,10 +211,11 @@ public actor DownloadWorker {
         started = true
         startNext()
         observationTask = Task { [weak self] in
+            var delay = Self.busyObservationInterval
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                do { try await Task.sleep(for: delay) } catch { return }
                 guard let self else { return }
-                await observe()
+                delay = await observe()
             }
         }
         notify()
@@ -340,11 +341,18 @@ public actor DownloadWorker {
             queue: queue, enabled: isEnabled(), executables: currentExecutables())
     }
 
-    func observe() {
+    static let busyObservationInterval = Duration.milliseconds(250)
+    static let idleObservationInterval = Duration.seconds(1)
+
+    @discardableResult
+    func observe() -> Duration {
         let state = currentObservedState()
-        if flights.isEmpty, state == observedState, records.allSatisfy(\.isFinished) { return }
+        if flights.isEmpty, state == observedState, records.allSatisfy(\.isFinished) {
+            return Self.idleObservationInterval
+        }
         refresh()
         observedState = currentObservedState()
+        return Self.busyObservationInterval
     }
 
     public func refresh() {

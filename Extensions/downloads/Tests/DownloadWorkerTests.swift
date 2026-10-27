@@ -30,6 +30,19 @@ extension DownloadsExtensionTests {
             #expect(DownloadQueue.load(from: file).filter { $0.resultPaths != nil }.count == 2)
         }
 
+        @Test func idleObservationBacksOffToTheIdleInterval() async throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let worker = DownloadWorker(
+                file: directory.appendingPathComponent("queue.json"), executable: { nil },
+                isEnabled: { true })
+            try await worker.start()
+            _ = await worker.observe()
+            let idle = await worker.observe()
+            #expect(idle == DownloadWorker.idleObservationInterval)
+            #expect(DownloadWorker.idleObservationInterval >= .seconds(1))
+        }
+
         @Test func concurrentMutationsHaveOneWriterAndRejectQueueOverflow() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }
