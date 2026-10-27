@@ -318,12 +318,13 @@ test("main guard admits only exact source or its own single release commit", asy
   ).rejects.toThrow("403");
 });
 
-test("host publication timeout covers initial catalog readiness without changing main and rebuild guards", () => {
+test("host publication checks the catalog once without changing main and rebuild guards", () => {
   const workflow = Bun.YAML.parse(
     readFileSync(".github/workflows/ci.yml", "utf8"),
   );
   const publish = workflow.jobs.publish;
-  expect(publish["timeout-minutes"]).toBe(150);
+  expect(publish["timeout-minutes"]).toBe(30);
+  expect(publish.needs).toContain("extensions");
   expect(publish.env.BUILT_SHA).toContain("needs.version.outputs.sha");
   expect(publish.env.GH_TOKEN).toContain("secrets.RELEASE_PUSH_TOKEN");
   expect(

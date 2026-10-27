@@ -215,6 +215,7 @@ if (
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
     publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
+    timeout: 0,
     fetchCatalog: fetchMetadata,
     verifySource:
       target === undefined

@@ -6,6 +6,13 @@ const workflow = Bun.YAML.parse(
   readFileSync(".github/workflows/extensions.yml", "utf8"),
 );
 const { plan, build, publish } = workflow.jobs;
+const ci = Bun.YAML.parse(readFileSync(".github/workflows/ci.yml", "utf8"));
+const extensionArea = new RegExp(
+  ci.jobs.changes.steps
+    .find(({ id }) => id === "areas")
+    .run.match(/area extensions '([^']+)'/)[1],
+);
+const routes = (path) => extensionArea.test(path);
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
 test("portable planning uses Ubuntu while native checks and publication keep macOS", () => {
@@ -30,11 +37,12 @@ test("portable planning uses Ubuntu while native checks and publication keep mac
 });
 
 test("downloaded Docs source and reference changes run independent package checks", () => {
-  for (const event of [workflow.on.pull_request, workflow.on.push]) {
-    expect(event.paths).toContain("Packages/EdithDocsWorker/**");
-    expect(event.paths).toContain("docs/cli/**");
-    expect(event.paths).toContain("scripts/generate-cli-docs-bundle.mjs");
-  }
+  for (const path of [
+    "Packages/EdithDocsWorker/Sources/EdithDocsWorker/main.swift",
+    "docs/cli/index.md",
+    "scripts/generate-cli-docs-bundle.mjs",
+  ])
+    expect(routes(path)).toBe(true);
   const definitions = JSON.parse(
     readFileSync("Extensions/manifest.json", "utf8"),
   );
@@ -55,20 +63,14 @@ test("maintained terminal native inputs trigger selective extension checks", () 
     "scripts/extension-ghostty-native.mjs",
   ];
   for (const path of inputs) {
-    for (const event of [workflow.on.pull_request, workflow.on.push]) {
-      expect(
-        event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
-      ).toBe(true);
-    }
+    expect(routes(path)).toBe(true);
     expect(
       planExtensionBuilds(definitions, [path]).map(({ id }) => id),
     ).toEqual(["terminal", "machines", "herdr", "quinjet"]);
   }
 });
 
-test.each(["pull_request", "push"])(
-  "%s paths cover every explicit maintained producer script",
-  (event) => {
+test("CI routes every explicit maintained producer script to the extension checks", () => {
     const definitions = JSON.parse(
       readFileSync("Extensions/manifest.json", "utf8"),
     );
@@ -80,16 +82,8 @@ test.each(["pull_request", "push"])(
         ]),
       ),
     ].filter((path) => /^scripts\/[^*?[\]{}]+\.(mjs|js|py|sh)$/.test(path));
-    expect(
-      inputs.filter(
-        (path) =>
-          !workflow.on[event].paths.some((pattern) =>
-            new Bun.Glob(pattern).match(path),
-          ),
-      ),
-    ).toEqual([]);
-  },
-);
+    expect(inputs.filter((path) => !routes(path))).toEqual([]);
+});
 
 test("only the camera carrier build prepares a containing host without Camera provisioning", () => {
   const names = build.steps.map((step) => step.name);
@@ -120,8 +114,7 @@ test("only the camera carrier build prepares a containing host without Camera pr
 });
 
 test("release asset helper changes run the extension checks", () => {
-  expect(workflow.on.pull_request.paths).toContain("scripts/release-asset-*");
-  expect(workflow.on.push.paths).toContain("scripts/release-asset-*");
+  expect(routes("scripts/release-asset-upload.mjs")).toBe(true);
 });
 
 test("extension builds consume independent fingerprints without a feature framework host", () => {
@@ -332,12 +325,7 @@ test("camera carrier packaging inputs rebuild only the camera package", () => {
     "scripts/build-contained-host-runtime.mjs",
     "scripts/build-camera-carrier.mjs",
   ];
-  for (const event of [workflow.on.pull_request, workflow.on.push]) {
-    for (const path of camera)
-      expect(
-        event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
-      ).toBe(true);
-  }
+  for (const path of camera) expect(routes(path)).toBe(true);
   for (const path of camera) {
     expect(
       planExtensionBuilds(definitions, [path]).map(({ id }) => id),

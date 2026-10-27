@@ -161,15 +161,17 @@ test("automated commits do not re-run CI", () => {
   expect(ciWorkflow).toContain("github.event_name != 'push'");
 });
 
-test("publication requires the host build and verified shipping catalog while unrelated checks remain visible", () => {
-  expect([...publish.needs].sort()).toEqual(["dmg", "version"]);
+test("publication follows the host build and extension publication in the same run", () => {
+  expect([...publish.needs].sort()).toEqual(["dmg", "extensions", "version"]);
   expect(publish.if).toContain("!cancelled()");
   expect(condition(publish.if, publicationContext())).toBe(true);
   for (const name of publish.needs) {
     for (const result of ["failure", "cancelled", "skipped"]) {
       const context = publicationContext();
       context.needs[name].result = result;
-      expect(condition(publish.if, context)).toBe(false);
+      expect(condition(publish.if, context)).toBe(
+        name === "extensions" && result === "skipped",
+      );
     }
   }
   for (const name of [
@@ -187,7 +189,7 @@ test("publication requires the host build and verified shipping catalog while un
   }
   const steps = publish.steps;
   const readiness = steps.findIndex(
-    (step) => step.name === "Wait for compatible extension releases",
+    (step) => step.name === "Verify compatible extension releases",
   );
   expect(readiness).toBeGreaterThan(-1);
   expect(steps[readiness].run).toContain(

@@ -272,73 +272,17 @@ test("repeat validation includes unchanged published owners with current version
   });
 });
 
-function concurrencyValue(value, changes = {}) {
-  const github = {
-    event_name: "workflow_dispatch",
-    ref: "refs/heads/main",
-    sha: sourceSHA,
-    ...changes.github,
-  };
-  const inputs = {
-    publish: false,
-    validation_sha: sourceSHA,
-    ...changes.inputs,
-  };
-  return value.replace(/\$\{\{([\s\S]*?)\}\}/g, (_, expression) =>
-    String(
-      new Function("github", "inputs", "format", `return (${expression});`)(
-        github,
-        inputs,
-        (pattern, ...arguments_) =>
-          pattern.replace(
-            /\{(\d+)\}/g,
-            (_, index) => arguments_[Number(index)],
-          ),
-      ),
-    ),
+test("only catalog publication is serialized and CI owns pull request cancellation", async () => {
+  expect(workflow.concurrency).toBeUndefined();
+  expect(workflow.jobs.publish.concurrency).toEqual({
+    group: "extensions-publish",
+    "cancel-in-progress": false,
+  });
+  const ci = Bun.YAML.parse(await Bun.file(".github/workflows/ci.yml").text());
+  expect(ci.jobs.extensions.uses).toBe("./.github/workflows/extensions.yml");
+  expect(ci.concurrency["cancel-in-progress"]).toBe(
+    "${{ github.event_name == 'pull_request' }}",
   );
-}
-
-test("exact nonpublishing validation is serialized by source without occupying the publisher group", () => {
-  expect(concurrencyValue(workflow.concurrency.group)).toBe(
-    `extensions-validation-${sourceSHA}`,
-  );
-  const next = "b".repeat(40);
-  expect(
-    concurrencyValue(workflow.concurrency.group, {
-      github: { sha: next },
-      inputs: { validation_sha: next },
-    }),
-  ).toBe(`extensions-validation-${next}`);
-  expect(concurrencyValue(workflow.concurrency["cancel-in-progress"])).toBe(
-    "false",
-  );
-});
-
-test("ordinary publishers and pull requests retain their original concurrency and cancellation policy", () => {
-  for (const changes of [
-    { github: { event_name: "push" } },
-    { inputs: { publish: true } },
-    { inputs: { validation_sha: "" } },
-    { inputs: { validation_sha: "b".repeat(40) } },
-    { github: { event_name: "workflow_run" } },
-  ]) {
-    expect(concurrencyValue(workflow.concurrency.group, changes)).toBe(
-      "extensions-publish",
-    );
-    expect(
-      concurrencyValue(workflow.concurrency["cancel-in-progress"], changes),
-    ).toBe("false");
-  }
-  for (const ref of ["refs/pull/1/merge", "refs/pull/2/merge"]) {
-    const changes = { github: { event_name: "pull_request", ref } };
-    expect(concurrencyValue(workflow.concurrency.group, changes)).toBe(
-      `extensions-${ref}`,
-    );
-    expect(
-      concurrencyValue(workflow.concurrency["cancel-in-progress"], changes),
-    ).toBe("true");
-  }
 });
 
 test("ordinary selective release and PR planning remain unchanged for published and changed source", async () => {
