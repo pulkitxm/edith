@@ -237,10 +237,11 @@ struct HostWorkflowPackageReview: Equatable {
                         }
                     })
             }
+            let started = installs
             try await withTaskCancellationHandler {
-                for install in installs { try await install.value }
+                for install in started { try await install.value }
             } onCancel: {
-                for install in installs { install.cancel() }
+                for install in started { install.cancel() }
             }
             guard
                 chosen.allSatisfy({
