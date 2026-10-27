@@ -10,6 +10,8 @@ import ExtensionMarketplace
         private var value = 0
         var count: Int { lock.withLock { value } }
         func increment() { lock.withLock { value += 1 } }
+        func decrement() { lock.withLock { value -= 1 } }
+        func raise(to candidate: Int) { lock.withLock { value = max(value, candidate) } }
     }
 
     private func makeBundle() throws -> URL {
@@ -77,6 +79,28 @@ import ExtensionMarketplace
             try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         }
         #expect(counter.count == 4)
+    }
+
+    @Test func blockingVerificationStaysOffTheCooperativePoolAndIsBounded() async throws {
+        let bundles = try (0..<48).map { _ in try makeBundle() }
+        defer {
+            for bundle in bundles {
+                try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent())
+            }
+        }
+        let running = Counter()
+        let peak = Counter()
+        let finished = Counter()
+        await HostBundleVerification.verifyConcurrently(bundles) { _ in
+            running.increment()
+            peak.raise(to: running.count)
+            Thread.sleep(forTimeInterval: 0.01)
+            running.decrement()
+            finished.increment()
+        }
+        #expect(finished.count == 48)
+        #expect(peak.count <= HostBundleVerification.maximumConcurrentVerifications)
+        #expect(peak.count >= 2)
     }
 
     @Test func bundlesWithoutAnExecutableAreNotCached() throws {

@@ -15,6 +15,16 @@ enum HostBundleVerification {
         let stamps: [FileStamp]
     }
 
+    static let maximumConcurrentVerifications = 4
+
+    private static let verificationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "edith.host.bundle-verification"
+        queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = maximumConcurrentVerifications
+        return queue
+    }()
+
     private static let lock = NSLock()
     nonisolated(unsafe) private static var verified = Set<Fingerprint>()
 
@@ -30,7 +40,14 @@ enum HostBundleVerification {
     ) async {
         await withTaskGroup(of: Void.self) { group in
             for url in urls {
-                group.addTask { try? Self.verify(url, using: verify) }
+                group.addTask {
+                    await withCheckedContinuation { continuation in
+                        verificationQueue.addOperation {
+                            try? Self.verify(url, using: verify)
+                            continuation.resume()
+                        }
+                    }
+                }
             }
         }
     }
