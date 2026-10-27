@@ -239,7 +239,7 @@ public actor HostCLIStream {
                             }
                             try await self.send(nil)
                         } catch {
-                            if await self.ended { return }
+                            if await self.ended || Self.inputAlreadyClosed(error) { return }
                             throw error
                         }
                     } onCancel: {
@@ -258,6 +258,10 @@ public actor HostCLIStream {
         } catch {
             input.cancel(); await end(cancel: true); throw error
         }
+    }
+
+    private static func inputAlreadyClosed(_ error: Error) -> Bool {
+        error.localizedDescription == "The terminal input is closed."
     }
 
     public func consume(write: @Sendable (Data, Bool) async throws -> Void) async throws -> Int32 {
