@@ -8,15 +8,7 @@ struct CleanerPage: View {
 
     var body: some View {
         PageWorkspace {
-            PageHeader(
-                "Cleaner",
-                accessory: {
-                    Text("Find reclaimable space and remove it after review.")
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                })
-            Divider()
+            EmptyView()
         } content: {
             ScrollView {
                 CleanerCard(dark: scheme == .dark, framed: false, model: model)

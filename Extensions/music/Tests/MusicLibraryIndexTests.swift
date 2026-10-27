@@ -27,6 +27,27 @@ extension MusicExtensionTests {
             }
         }
 
+        @Test func storingAnUnchangedListingDoesNotRewriteTheIndexFile() throws {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("edith-music-index-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer {
+                MusicLibraryIndex.reset()
+                try? FileManager.default.removeItem(at: root)
+            }
+            let index = root.appendingPathComponent("index.json")
+            MusicLibraryIndex.activate(fileURL: index)
+            MusicLibraryIndex.storeListing("A", folders: ["A/B"], tracks: ["A/one.mp3"])
+            let first = try FileManager.default.attributesOfItem(atPath: index.path)
+            let identifier = first[.systemFileNumber] as? Int
+            MusicLibraryIndex.storeListing("A", folders: ["A/B"], tracks: ["A/one.mp3"])
+            let second = try FileManager.default.attributesOfItem(atPath: index.path)
+            #expect(second[.systemFileNumber] as? Int == identifier)
+            MusicLibraryIndex.storeListing("A", folders: [], tracks: ["A/one.mp3"])
+            let third = try FileManager.default.attributesOfItem(atPath: index.path)
+            #expect(third[.systemFileNumber] as? Int != identifier)
+        }
+
         @Test func secondAppearanceReadsDurationFromTheIndex() async {
             let root = FileManager.default.temporaryDirectory
                 .appendingPathComponent("edith-music-duration-\(UUID().uuidString)")

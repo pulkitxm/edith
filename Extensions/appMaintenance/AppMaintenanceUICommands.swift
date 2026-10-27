@@ -205,10 +205,6 @@ struct AppMaintenanceUIAction: Codable {
                     model.snooze(item, until: Date(timeIntervalSince1970: until))
                 }
             case "reset": model.resetUpdatePolicies()
-            case "openExtension":
-                guard let id = request.value, ["homebrew", "cleaner", "blitztree"].contains(id)
-                else { throw ExtensionPeerError.invalidRequest }
-                model.openExtension(id)
             default: throw ExtensionPeerError.invalidRequest
             }
         } else {
