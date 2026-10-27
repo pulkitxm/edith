@@ -30,11 +30,13 @@ test("local CI runs the same make targets as each CI lane after the checks", () 
   const jobs = planLocalJobs(plan, parseArguments([]), definitions);
   expect(jobs.map((job) => job.lane)).toEqual([
     "checks",
+    "security",
     "host-runtime",
     "extension-virtualCamera",
     "extension-usage",
   ]);
-  expect(jobs[1].make).toEqual(["ci-host", "ci-marketplace-runtime"]);
+  expect(jobs[1].make).toEqual(["ci-security", "ci-workflows"]);
+  expect(jobs[2].make).toEqual(["ci-host", "ci-marketplace-runtime"]);
 });
 
 test("builds add one development package per planned extension and mark camera hosts", () => {
