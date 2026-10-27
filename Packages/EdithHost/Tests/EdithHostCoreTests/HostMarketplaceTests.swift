@@ -570,6 +570,29 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func theClientStagesAVerifiedPackageWhereTheAppCanReadIt() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let sideload = try fixture.build("1.0.9")
+        let staging = fixture.directory.appendingPathComponent("tmp")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        let staged = try HostSideloadCLI.stage(
+            ["sample.zip", "--json"],
+            workingDirectory: sideload.archive.deletingLastPathComponent().path,
+            temporaryDirectory: staging)
+        #expect(staged.directory.deletingLastPathComponent().path == staging.path)
+        #expect(staged.arguments.last == "--json")
+        let copy = try ExtensionSideload(path: URL(fileURLWithPath: staged.arguments[0]))
+        #expect(copy.package == sideload.package)
+        var bytes = try Data(contentsOf: sideload.archive)
+        bytes[0] ^= 0xFF
+        try bytes.write(to: sideload.archive)
+        #expect(throws: HostCLIError.self) {
+            try HostSideloadCLI.stage(
+                [sideload.archive.path], workingDirectory: "/", temporaryDirectory: staging)
+        }
+    }
+
     @Test func aSideloadReplacesTheRunningCatalogVersion() async throws {
         let fixture = try Fixture(identifier: "com.pulkit.edith.dev.sideload-\(UUID().uuidString)")
         defer { fixture.clean() }
