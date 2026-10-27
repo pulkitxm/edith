@@ -42,6 +42,21 @@ import Testing
         #expect(model.report == nil)
         #expect(model.error == nil)
     }
+
+    @Test func idleModelPollsRarelyAndWorkingModelFollowsClosely() async {
+        let model = BlitzTreeModel(
+            client: BlitzTreeClient { root, _ in
+                try await Task.sleep(for: .seconds(30))
+                return BlitzTreeClientTests.report(root: root)
+            })
+        #expect(model.refreshInterval == .seconds(10))
+        model.scan("/slow")
+        #expect(model.scanning)
+        #expect(model.refreshInterval == .seconds(1))
+        model.cancel()
+        await Task.yield()
+        #expect(model.refreshInterval == .seconds(10))
+    }
 }
 
 private actor ScanGate {
