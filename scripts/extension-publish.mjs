@@ -575,7 +575,10 @@ async function publishEntries({
   return Promise.all(
     include.map(async (entry) =>
       JSON.parse(
-        await readFile(resolve(directory, `${entry.id}.published.json`), "utf8"),
+        await readFile(
+          resolve(directory, `${entry.id}.published.json`),
+          "utf8",
+        ),
       ),
     ),
   );

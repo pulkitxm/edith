@@ -134,7 +134,9 @@ test("a package for the host contract must support the extension's OS floor", ()
   expect(missingPackages(onlyNewerOS, { packages: [record] })).toEqual([]);
   expect(
     missingPackages(expected, {
-      packages: [{ ...newer, minimumSystemVersion: "14.0.0", hostABI: "runtime-3" }],
+      packages: [
+        { ...newer, minimumSystemVersion: "14.0.0", hostABI: "runtime-3" },
+      ],
     }),
   ).toEqual(expected);
 });

@@ -20,8 +20,8 @@ import {
   preflightExtensionBuilds,
   publishExtensionAssets,
   restorePublishedExtension,
-  validateExtensionChecksum,
   runBounded,
+  validateExtensionChecksum,
 } from "./extension-publish.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import {

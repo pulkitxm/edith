@@ -71,18 +71,18 @@ test("maintained terminal native inputs trigger selective extension checks", () 
 });
 
 test("CI routes every explicit maintained producer script to the extension checks", () => {
-    const definitions = JSON.parse(
-      readFileSync("Extensions/manifest.json", "utf8"),
-    );
-    const inputs = [
-      ...new Set(
-        definitions.flatMap(({ inputs, sharedInputs }) => [
-          ...inputs,
-          ...sharedInputs,
-        ]),
-      ),
-    ].filter((path) => /^scripts\/[^*?[\]{}]+\.(mjs|js|py|sh)$/.test(path));
-    expect(inputs.filter((path) => !routes(path))).toEqual([]);
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  const inputs = [
+    ...new Set(
+      definitions.flatMap(({ inputs, sharedInputs }) => [
+        ...inputs,
+        ...sharedInputs,
+      ]),
+    ),
+  ].filter((path) => /^scripts\/[^*?[\]{}]+\.(mjs|js|py|sh)$/.test(path));
+  expect(inputs.filter((path) => !routes(path))).toEqual([]);
 });
 
 test("only the camera carrier build prepares a containing host without Camera provisioning", () => {
