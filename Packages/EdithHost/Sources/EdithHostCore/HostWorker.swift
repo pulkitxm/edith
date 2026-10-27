@@ -99,12 +99,6 @@ public final class HostWorker {
             guard response.version == configuration.version else {
                 throw HostWorkerError.invalidResponse
             }
-            groupRefresh = Task { @MainActor [weak self] in
-                while !Task.isCancelled {
-                    self?.ownedProcessGroups.refresh(owner: getpid())
-                    do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
-                }
-            }
             ready = true
         } catch {
             await finish(reason: .shutdown)
@@ -361,8 +355,26 @@ public final class HostWorker {
                 ExtensionNativeTask.isDescendant(resource.pid, of: getpid())
             else { throw HostWorkerError.invalidResponse }
             try ownedProcessGroups.register(resource, owner: getpid())
+            refreshOwnedProcessGroups()
         } else {
             ownedProcessGroups.release(resource, owner: getpid())
+        }
+    }
+
+    var isRefreshingProcessGroups: Bool { groupRefresh != nil }
+
+    private func refreshOwnedProcessGroups() {
+        guard running, groupRefresh == nil, !ownedProcessGroups.isEmpty else { return }
+        groupRefresh = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                guard let self else { return }
+                ownedProcessGroups.refresh(owner: getpid())
+                if ownedProcessGroups.isEmpty {
+                    groupRefresh = nil
+                    return
+                }
+            }
         }
     }
 

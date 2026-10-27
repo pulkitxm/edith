@@ -16,7 +16,11 @@ struct HostUtilityConfirmation: Identifiable {
     var pendingKeepAwake: Bool?
     var lidAwakeError: String?
     var confirmation: HostUtilityConfirmation?
-    var refreshTick = 0
+    var refreshTick = 0 {
+        didSet { wake?.resume(); wake = nil }
+    }
+    static let pollInterval = Duration.seconds(2)
+    @ObservationIgnored private var wake: CheckedContinuation<Void, Never>?
     @ObservationIgnored private var actionTask: Task<Void, Never>?
     @ObservationIgnored private var actionToken: UUID?
 
@@ -47,11 +51,30 @@ struct HostUtilityConfirmation: Identifiable {
                     snapshots[utility.id] = nil
                 }
             }
-            let tick = refreshTick
-            for _ in 0..<20 where refreshTick == tick {
-                do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
-            }
+            await waitForRefresh(after: Self.pollInterval)
         } while !Task.isCancelled
+    }
+
+    func waitForRefresh(after interval: Duration) async {
+        guard !Task.isCancelled else { return }
+        let sleeper = Task { [weak self] in
+            do { try await Task.sleep(for: interval) } catch { return }
+            self?.wake?.resume()
+            self?.wake = nil
+        }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                wake?.resume()
+                wake = continuation
+            }
+        } onCancel: {
+            sleeper.cancel()
+            Task { @MainActor [weak self] in
+                self?.wake?.resume()
+                self?.wake = nil
+            }
+        }
+        sleeper.cancel()
     }
 
     func perform(
