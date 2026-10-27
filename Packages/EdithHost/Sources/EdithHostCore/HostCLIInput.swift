@@ -105,13 +105,16 @@ public final class HostCLIInput: @unchecked Sendable {
                 guard ready >= 0 else { throw HostCLIError.rejected("Command stdin poll failed.") }
                 if state.withLock({ stopped }) { throw CancellationError() }
                 if ready == 0 { continue }
-                guard events[0].revents & Int16(POLLNVAL | POLLERR) == 0 else {
+                guard events[0].revents & Int16(POLLERR) == 0 else {
                     throw HostCLIError.rejected("Command stdin closed.")
                 }
                 var bytes = [UInt8](repeating: 0, count: 16384)
                 let count = Darwin.read(descriptor, &bytes, bytes.count)
                 if count < 0, errno == EINTR || errno == EAGAIN { continue }
                 if count < 0, interactive, errno == EIO { return nil }
+                if count < 0, errno == EBADF {
+                    throw HostCLIError.rejected("Command stdin closed.")
+                }
                 guard count >= 0 else {
                     throw HostCLIError.rejected("Could not read command stdin.")
                 }

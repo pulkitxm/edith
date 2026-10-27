@@ -73,6 +73,15 @@ import Testing
         #expect(observed == request)
         #expect(ExtensionCLIContext.request == nil)
     }
+    @Test func freshlyInstalledExtensionWithoutAStoredFlagAcceptsCommands() async throws {
+        let defaults = UserDefaults(suiteName: "edith.emoji.fresh." + UUID().uuidString)!
+        var picks = 0
+        let reply = try await EmojiCLIExecution.run(
+            ExtensionCLIRequest(arguments: ["pick"]), defaults: defaults, catalog: catalog(),
+            pick: { picks += 1 }, insert: { _ in true }, changed: {})
+        #expect(reply.exitCode == 0 && picks == 1)
+    }
+
     private func catalog() throws -> EmojiCatalog {
         try EmojiCatalog.decode(
             Data(

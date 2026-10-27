@@ -18,6 +18,17 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
 }
 
 @Suite struct AppMaintenanceTests {
+    @Test func hostSectionsSelectTheirOwnPage() {
+        #expect(AppMaintenanceSection(hostSection: "Updates") == .updates)
+        #expect(AppMaintenanceSection(hostSection: "Remove") == .removal)
+        #expect(AppMaintenanceSection(hostSection: "History") == .history)
+        #expect(AppMaintenanceSection(hostSection: "appMaintenance") == .updates)
+        #expect(AppMaintenanceSection(hostSection: nil) == .updates)
+        #expect(AppMaintenanceSection.removal.uiScope == .removal)
+        #expect(AppMaintenanceSection.history.uiScope == .history)
+        #expect(AppMaintenanceSection.updates.uiScope == .updates)
+    }
+
     @Test func inventoryFindsRegularAppsAndAppliesExactHomebrewUpdates() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

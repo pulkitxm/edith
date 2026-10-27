@@ -634,7 +634,7 @@ struct DatabaseConnectionsAddCommand: AsyncParsableCommand {
         try await execute {
             let resolvedProduct = try DatabaseCLI.product(product)
             let resolvedEnvironment = try DatabaseCLI.environment(environment)
-            let password = passwordStdin ? try DatabaseCLIEnvironment.readPassword() : nil
+            let password = passwordStdin ? try await DatabaseCLIEnvironment.readPassword() : nil
             let reference = password.map { _ in
                 DatabaseSecretReference(identifier: UUID(), purpose: .password)
             }

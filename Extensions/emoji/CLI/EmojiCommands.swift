@@ -25,7 +25,7 @@ struct EmojiCommand: AsyncParsableCommand {
     static func requireExtension() throws {
         guard
             EmojiCLIEnvironment.defaults.object(forKey: AppStorageKeys.Emoji.enabled) as? Bool
-                == true
+                != false
         else {
             throw CLIFailure.unavailable(
                 "the Emoji Picker extension is off",

@@ -648,6 +648,134 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    private func report(_ marketplace: HostMarketplace, _ id: String = "sample") async throws
+        -> [String: Any]
+    {
+        let reply = try await HostCLIGateway(marketplace: marketplace)
+            .execute(HostCLIRequest(action: .info, id: id))
+        return try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+    }
+
+    @Test func cliReportsAnUninstalledCatalogPackageAsCompatibleAndNotInstalled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.checkForUpdates()
+        let info = try await report(marketplace)
+        #expect(info["compatible"] as? Bool == true)
+        #expect(info["installed"] as? Bool == false)
+        #expect(info["state"] as? String == "notInstalled")
+        #expect(info["availableVersion"] as? String == "1.0.0")
+    }
+
+    @Test func cliReportsADownloadedButDisabledExtensionAsDisabled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        await marketplace.restoreEnabledExtensions()
+        var info = try await report(marketplace)
+        #expect(info["installed"] as? Bool == true)
+        #expect(info["compatible"] as? Bool == true)
+        #expect(info["enabled"] as? Bool == false)
+        #expect(info["state"] as? String == "disabled")
+        await marketplace.enable(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "active")
+        await marketplace.disable(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "disabled")
+        await marketplace.remove(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "notInstalled")
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func cliReportsADownloadedPackageForAnotherHostAsIncompatible() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0", abi: "incompatible")])
+        let marketplace = try fixture.marketplace()
+        let info = try await report(marketplace)
+        #expect(info["installed"] as? Bool == true)
+        #expect(info["compatible"] as? Bool == false)
+    }
+
+    @Test func removingAnExtensionWhoseSettingsWereViewedCompletesImmediately() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let package = fixture.package("1.0.0")
+        try fixture.install([package])
+        try FileManager.default.createDirectory(
+            at: fixture.store.roleBundle(for: package, role: .app),
+            withIntermediateDirectories: true)
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let settings = HostExtensionContentRequest(
+            extensionID: "sample", location: "settings", section: "extension")
+        let session = try HostLocalSession(
+            configuration: manager.selectedConfiguration(for: settings), engine: nil,
+            marketplace: marketplace)
+        #expect(throws: MarketplaceError.packageBusy) {
+            try PackageFileLock(url: fixture.store.leaseURL(for: package), exclusive: true)
+        }
+        let failure = await marketplace.remove(id: "sample")
+        #expect(failure == nil)
+        #expect(marketplace.pendingRemovalIDs.isEmpty)
+        #expect(marketplace.installedVersions["sample"] == nil)
+        #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
+        withExtendedLifetime(session) {}
+    }
+
+    @Test func extensionsInstalledTogetherWorkAtOnceAndAfterARelaunchWithoutRestarts() async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second", "third", "fourth"]
+        let builds = try ids.map { try fixture.build("1.0.0", id: $0) }
+        await fixture.network.set(data: try fixture.envelope(packages: builds.map(\.package)))
+        let archives = Dictionary(
+            uniqueKeysWithValues: builds.map { ($0.package.downloadURL, $0.archive) })
+        let marketplace = try fixture.marketplace(
+            ids: ids, workerMode: { _ in "normal" }, serving: archives)
+        let gateway = HostCLIGateway(marketplace: marketplace)
+
+        let failures = await marketplace.install(ids: ids)
+        #expect(failures.isEmpty)
+        #expect(marketplace.downloadedIDs == Set(ids))
+        for id in ids {
+            let reply = try await gateway.execute(HostCLIRequest(action: .enable, id: id))
+            let info = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+            #expect(info["state"] as? String == "active")
+        }
+        try await expectEveryExtensionAvailable(ids, marketplace: marketplace, gateway: gateway)
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.sessions.shutdown(reason: .applicationQuit))
+
+        let relaunched = try fixture.marketplace(
+            ids: ids, workerMode: { _ in "normal" }, serving: archives)
+        await relaunched.loadCachedCatalog()
+        await relaunched.restoreEnabledExtensions()
+        try await expectEveryExtensionAvailable(
+            ids, marketplace: relaunched, gateway: HostCLIGateway(marketplace: relaunched))
+        #expect(await relaunched.sessions.shutdown())
+    }
+
+    private func expectEveryExtensionAvailable(
+        _ ids: [String], marketplace: HostMarketplace, gateway: HostCLIGateway
+    ) async throws {
+        let listing = try await gateway.execute(HostCLIRequest(action: .ls))
+        let states = try JSONDecoder().decode([HostCLIProviderState].self, from: listing)
+        #expect(Set(states.filter(\.available).map(\.id)) == Set(ids))
+        #expect(marketplace.surfaceAvailability.activeIDs == Set(ids))
+        #expect(marketplace.sessions.activeIDs == Set(ids))
+        for id in ids {
+            #expect(marketplace.sessions.versions[id] == "1.0.0")
+            #expect(marketplace.sessions.processIdentifiers[id] != nil)
+        }
+    }
+
     @MainActor private struct Fixture {
         let directory: URL
         let identity: HostIdentity
@@ -669,7 +797,8 @@ import HostWorkerFixtureSupport
         }
 
         func marketplace(
-            ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil
+            ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil,
+            serving: [URL: URL] = [:]
         ) throws
             -> HostMarketplace
         {
@@ -691,7 +820,11 @@ import HostWorkerFixtureSupport
                 store: store,
                 download: { [archives] url, _ in
                     await archives.record(url)
-                    throw MarketplaceError.downloadFailed
+                    guard let archive = serving[url] else { throw MarketplaceError.downloadFailed }
+                    let copy = FileManager.default.temporaryDirectory.appendingPathComponent(
+                        "download-\(UUID().uuidString).zip")
+                    try FileManager.default.copyItem(at: archive, to: copy)
+                    return copy
                 }, verify: { _ in })
             return try HostMarketplace(
                 identity: identity,
@@ -729,19 +862,21 @@ import HostWorkerFixtureSupport
                 SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload)))
         }
 
-        func build(_ version: String, abi: String = HostContract.compatibility) throws
+        func build(
+            _ version: String, abi: String = HostContract.compatibility, id: String = "sample"
+        ) throws
             -> ExtensionSideload
         {
             let output = directory.appendingPathComponent("dist-\(UUID().uuidString)")
-            let payload = output.appendingPathComponent("staging/sample")
+            let payload = output.appendingPathComponent("staging/\(id)")
             let runtime = payload.appendingPathComponent("app.bundle/Contents/MacOS/Runtime")
             try FileManager.default.createDirectory(
                 at: runtime.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("local runtime \(version)".utf8).write(to: runtime)
-            let placeholder = package(version, abi: abi)
+            let placeholder = package(version, abi: abi, id: id)
             try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder)).write(
                 to: payload.appendingPathComponent("package.json"))
-            let archive = output.appendingPathComponent("sample.zip")
+            let archive = output.appendingPathComponent("\(id).zip")
             let zip = Process()
             zip.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
             zip.arguments = [
@@ -764,12 +899,12 @@ import HostWorkerFixtureSupport
                             ? (attributes[.size] as? Int64 ?? 0) : 0)
                 }
             let record = ExtensionPackage(
-                id: "sample", version: version, hostABI: abi,
+                id: id, version: version, hostABI: abi,
                 downloadURL: placeholder.downloadURL,
                 sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
                 downloadBytes: Int64(bytes.count), installedBytes: installedBytes)
             try JSONEncoder().encode(record).write(
-                to: output.appendingPathComponent("sample.json"))
+                to: output.appendingPathComponent("\(id).json"))
             return try ExtensionSideload(path: archive)
         }
 

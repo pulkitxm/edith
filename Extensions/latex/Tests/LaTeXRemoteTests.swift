@@ -103,6 +103,15 @@ import Testing
         await engine.shutdown()
     }
 
+    @Test func catalogDeclaresThatTerminalInputIsAccepted() throws {
+        let catalog = try #require(
+            JSONSerialization.jsonObject(
+                with: LaTeXCLIExecution.catalog(Data("{}".utf8))) as? [String: Any])
+        #expect(catalog["acceptsInput"] as? Bool == true)
+        let routes = try #require(catalog["commands"] as? [[String: Any]])
+        #expect(routes.contains { $0["route"] as? [String] == ["latex", "write"] })
+    }
+
     @Test func terminalStreamsUseCallerDirectoryAndStandardInput() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

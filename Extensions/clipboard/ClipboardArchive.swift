@@ -335,25 +335,53 @@ public final class ClipboardArchive: @unchecked Sendable {
         }
     }
 
-    public func stageExport(to destination: URL) throws {
-        return try withLock {
+    @discardableResult
+    public func exportSnapshot(to destination: URL) throws -> Bool {
+        try withLock {
             let entries = try load()
             let supported: Set<String> = ["txt", "rtf", "html", "url", "png", "tiff"]
             let output = destination.appendingPathComponent("blobs")
             try ensureDirectory(output)
+            let listing = try FileManager.default.contentsOfDirectory(atPath: output.path)
+            let files = Dictionary(
+                listing.map { (Self.exportedName($0), $0) }, uniquingKeysWith: { first, _ in first }
+            )
+            var changed = false
             var exported: [ClipboardEntry] = []
+            var wanted: Set<String> = []
             for entry in entries where supported.contains(entry.ext) && entry.size <= 1_048_576 {
                 try Task.checkCancellation()
-                guard let data = try read(blobURL(entry), maximum: 1_048_576),
-                    data.count == entry.size, ClipboardRepository.sha256Hex(data) == entry.sha256
-                else { continue }
-                try data.write(to: output.appendingPathComponent(entry.sha256 + "." + entry.ext))
+                let name = entry.sha256 + "." + entry.ext
+                if files[name] == nil {
+                    guard let data = try read(blobURL(entry), maximum: 1_048_576),
+                        data.count == entry.size,
+                        ClipboardRepository.sha256Hex(data) == entry.sha256
+                    else { continue }
+                    try data.write(to: output.appendingPathComponent(name), options: .atomic)
+                    changed = true
+                }
+                wanted.insert(name)
                 exported.append(entry)
             }
             try Task.checkCancellation()
-            try Data(ClipboardIndex.encode(exported).utf8).write(
-                to: destination.appendingPathComponent("index.jsonl"), options: .atomic)
+            let index = Data(ClipboardIndex.encode(exported).utf8)
+            let indexURL = destination.appendingPathComponent("index.jsonl")
+            if try read(indexURL, maximum: Self.maximumIndexBytes) != index {
+                try index.write(to: indexURL, options: .atomic)
+                changed = true
+            }
+            for (name, file) in files where !wanted.contains(name) {
+                try Task.checkCancellation()
+                try FileManager.default.removeItem(at: output.appendingPathComponent(file))
+                changed = true
+            }
+            return changed
         }
+    }
+
+    private static func exportedName(_ file: String) -> String {
+        guard file.hasPrefix("."), file.hasSuffix(".icloud") else { return file }
+        return String(file.dropFirst().dropLast(7))
     }
 
     private func withLock<Value>(_ body: () throws -> Value) throws -> Value {

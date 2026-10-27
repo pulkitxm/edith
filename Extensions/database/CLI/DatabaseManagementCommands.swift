@@ -569,7 +569,7 @@ struct DatabaseSavedQueriesSaveCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let text = try DatabaseCLIEnvironment.readQueryText(file)
+            let text = try await DatabaseCLIEnvironment.readQueryText(file)
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw CLIFailure.usage("saved database query text cannot be empty")
             }

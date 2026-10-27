@@ -2,12 +2,12 @@ import AppKit
 import SwiftUI
 import WebKit
 
-public enum NavigationDirection: Equatable {
+@objc public enum NavigationDirection: Int, Equatable {
     case back
     case forward
 }
 
-@MainActor
+@MainActor @objc(EdithHistoryNavigatingView)
 public protocol HistoryNavigatingView: AnyObject {
     func navigateHistory(_ direction: NavigationDirection) -> Bool
 }
@@ -558,12 +558,16 @@ enum NavigationHistoryInput {
         return true
     }
 
+    static let menuIdentifier = NSUserInterfaceItemIdentifier("EdithNavigateMenu")
+
     private static func installMenu() {
         guard !installedMenu, let main = NSApp.mainMenu else { return }
-        if main.items.contains(where: { $0.submenu is NavigationMenu }) {
-            installedMenu = true
-            return
-        }
+        install(in: main)
+        installedMenu = true
+    }
+
+    static func install(in main: NSMenu) {
+        guard !main.items.contains(where: { $0.identifier == menuIdentifier }) else { return }
         let menu = NavigationMenu(title: "Navigate")
         let back = NSMenuItem(
             title: "Back", action: #selector(NavigationMenuTarget.goBack(_:)), keyEquivalent: "[")
@@ -578,13 +582,13 @@ enum NavigationHistoryInput {
         menu.addItem(forward)
         menu.delegate = NavigationMenuTarget.shared
         let item = NSMenuItem(title: "Navigate", action: nil, keyEquivalent: "")
+        item.identifier = menuIdentifier
         item.submenu = menu
         if let index = main.items.firstIndex(where: { $0.title == "Window" }) {
             main.insertItem(item, at: index)
         } else {
             main.addItem(item)
         }
-        installedMenu = true
     }
 }
 

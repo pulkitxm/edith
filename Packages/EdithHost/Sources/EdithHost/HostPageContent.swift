@@ -51,13 +51,9 @@ struct HostPageContent: View {
                 let child = HostNavigationCatalog.maintenanceDestination(
                     maintenanceSection, active: active), let id = child.extensionID
             {
-                if id == "homebrew" {
-                    VStack(spacing: 0) {
-                        maintenanceHeader(current: child)
-                        Divider()
-                        content(id, section: child.id)
-                    }
-                } else {
+                VStack(spacing: 0) {
+                    maintenanceHeader(current: child, tight: id == "appMaintenance")
+                    if id != "appMaintenance" { Divider() }
                     content(id, section: child.id)
                 }
             } else if let id = destination.extensionID {
@@ -67,7 +63,7 @@ struct HostPageContent: View {
             }
         }
     }
-    private func maintenanceHeader(current: HostNavigationSection) -> some View {
+    private func maintenanceHeader(current: HostNavigationSection, tight: Bool) -> some View {
         let sections = HostNavigationCatalog.maintenance.filter {
             $0.extensionID.map(active.contains) ?? false
         }
@@ -88,7 +84,9 @@ struct HostPageContent: View {
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-            })
+            }
+        )
+        .padding(.bottom, tight ? -UIScale.pt(6) : 0)
     }
     @ViewBuilder private var settingsContent: some View {
         switch settingsDestination {

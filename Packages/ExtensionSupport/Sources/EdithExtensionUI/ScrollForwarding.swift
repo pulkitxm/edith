@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 
-@MainActor
+@MainActor @objc(EdithDirectScrollHandling)
 public protocol DirectScrollHandling: AnyObject {}
 
 @MainActor

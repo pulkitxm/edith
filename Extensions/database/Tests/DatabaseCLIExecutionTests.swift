@@ -162,6 +162,39 @@ import Testing
         }
     }
 
+    @Test func queryReadsLiveStreamedStandardInput() async throws {
+        let sender = RecordingSender()
+        let streams = try ExtensionCLIStreams(owner: "database")
+        let request = ExtensionCLIStreamStart(
+            owner: "database", session: UUID(),
+            request: try ExtensionCLIRequest(
+                arguments: ["query", connectionID, "--file", "-", "--json"]), deadline: 5)
+        let handle = try DatabaseCLIEnvironment.$resources.withValue(
+            DatabaseCLIResources(
+                sender: sender, credentials: { throw CredentialAccess.forbidden },
+                runMCP: { throw CredentialAccess.forbidden })
+        ) { try streams.start(DatabaseCommand.self, request: request) }
+        let query = Data("select 41 + 1".utf8)
+        #expect(
+            try streams.write(
+                ExtensionCLIStreamWrite(handle: handle, sequence: 0, data: query, end: true)
+            ).accepted)
+        var cursor: UInt64 = 0
+        let deadline = ContinuousClock.now + .seconds(5)
+        finished: while ContinuousClock.now < deadline {
+            let frame = try streams.read(ExtensionCLIStreamRead(handle: handle, sequence: cursor))
+            cursor = frame.nextSequence
+            if frame.state != .running { break finished }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let sent = try #require(await sender.requests.first)
+        guard case let .query(query) = sent else {
+            Issue.record("The streamed query was not delivered to the owned engine."); return
+        }
+        #expect(query.command == "select 41 + 1")
+        await streams.stopAndWait()
+    }
+
     @Test func packManagementCannotMutateOrRestartTheOwningWorker() async throws {
         let sender = RecordingSender()
         for command in ["install", "remove"] {
@@ -228,7 +261,7 @@ import Testing
                 try await Task.sleep(for: .milliseconds(25))
                 #expect(ExtensionCLIContext.request == request)
                 #expect(
-                    try DatabaseCLIEnvironment.readQueryText(nil)
+                    try await DatabaseCLIEnvironment.readQueryText(nil)
                         == String(data: request.standardInput, encoding: .utf8))
                 #expect(DatabaseCLIEnvironment.resources != nil)
             })

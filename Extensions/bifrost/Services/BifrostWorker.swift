@@ -124,7 +124,6 @@ extension BifrostPanel: BifrostWorkerPanel {}
         if let observer { BifrostIPC.stopObserving(observer) }; observer = nil
         if let hostObserver { ExtensionSharedState.current?.stopObserving(hostObserver) }
         hostObserver = nil
-        if ownsHotKey { HotKeyRegistrar.shutdown(); ownsHotKey = false }
     }
 
     func drain() async {

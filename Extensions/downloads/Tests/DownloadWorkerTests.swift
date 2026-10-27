@@ -113,6 +113,46 @@ extension DownloadsExtensionTests {
             try await eventually { await worker.snapshot().running == 0 }
         }
 
+        @Test func remoteObserversPollSlowlyUntilWorkIsPending() throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            func snapshot(_ records: [DownloadRecord], running: Bool = false)
+                -> DownloadWorkerSnapshot
+            {
+                DownloadWorkerSnapshot(
+                    records: records, logs: [:], enabled: true, running: running,
+                    generation: UUID(), revision: 1)
+            }
+            #expect(snapshot([]).pollInterval == .seconds(2))
+            #expect(
+                snapshot([record("done", state: .error("x"), date: 1, directory: directory)])
+                    .pollInterval == .seconds(2))
+            #expect(
+                snapshot([record("next", state: .queued, date: 1, directory: directory)])
+                    .pollInterval == .milliseconds(250))
+            #expect(snapshot([], running: true).pollInterval == .milliseconds(250))
+        }
+
+        @Test func idleWorkerStopsPublishingUntilTheQueueFileChanges() async throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("queue.json")
+            let publishes = DownloadTestCounter()
+            let worker = DownloadWorker(
+                file: file, executable: { URL(fileURLWithPath: "/bin/sh") },
+                isEnabled: { true }, publish: { _ in publishes.increment() })
+            try await worker.start()
+            try await Task.sleep(for: .milliseconds(300))
+            let settled = publishes.value
+            try await Task.sleep(for: .milliseconds(1_200))
+            #expect(publishes.value == settled)
+            try DownloadQueue.save(
+                [record("external", state: .error("failed"), date: 1, directory: directory)],
+                to: file)
+            try await eventually { publishes.value > settled }
+            #expect(await worker.snapshot().failed == 1)
+        }
+
         @Test func disablingStopsActiveWorkAndReenablingDrainsWaitingWork() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }
@@ -331,6 +371,13 @@ extension DownloadsExtensionTests {
             try Data().write(to: result)
             return CLICommandResult(terminationStatus: 0, output: result.path + "\n")
         }
+    }
+
+    private final class DownloadTestCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        var value: Int { lock.withLock { count } }
+        func increment() { lock.withLock { count += 1 } }
     }
 
     private final class DownloadTestFlag: @unchecked Sendable {

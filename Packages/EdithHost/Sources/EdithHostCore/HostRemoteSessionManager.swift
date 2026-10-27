@@ -374,6 +374,7 @@ public final class HostRemoteSessionManager {
         marketplace.sessions.ambientPolicyCoordinator.release(owner: extensionID)
         detach(extensionID)
         localSessions.removeValue(forKey: extensionID)?.stop()
+        HostLocalSession.evict(extensionID)
         terminalClients = terminalClients.filter {
             presentations[$0.key]?.request.extensionID != extensionID
         }

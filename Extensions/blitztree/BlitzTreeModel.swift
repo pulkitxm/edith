@@ -64,6 +64,8 @@ final class BlitzTreeModel {
             scanning: scanning, removing: removing, scannedEntries: scannedEntries, error: error)
     }
 
+    var refreshInterval: Duration { scanning || removing ? .seconds(1) : .seconds(10) }
+
     func refreshRemote() async {
         await refreshRemoteOnce()
         guard !following else { return }

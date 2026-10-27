@@ -20,8 +20,7 @@ final class ExtensionRuntime: NSObject {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
             if command == "latex.cli.catalog" {
-                return try ExtensionCLICatalog.data(
-                    LaTeXCommand.self, owner: "latex", payload: payload, streaming: true)
+                return try LaTeXCLIExecution.catalog(payload)
             }
             if command.hasPrefix("latex.cli.") {
                 if self.cliStreams == nil {

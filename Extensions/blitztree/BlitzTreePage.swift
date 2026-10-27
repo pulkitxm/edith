@@ -73,7 +73,7 @@ struct BlitzTreePage: View {
                 )
             }
         }
-        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
+        .pageRefresh(interval: { model.refreshInterval }) { await model.refreshRemote() }
     }
 
     private var folderBinding: Binding<String> {

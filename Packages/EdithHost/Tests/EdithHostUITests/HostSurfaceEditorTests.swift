@@ -420,6 +420,8 @@ import HostWorkerFixtureSupport
             HostRecordedShortcut(code: 14, flags: [.option, .command], characters: "e")?.label
                 == "⌥⌘E")
         #expect(HostRecordedShortcut(code: 14, flags: [], characters: "e") == nil)
+        #expect(HostRecordedShortcut(code: 14, flags: [.shift], characters: "e") == nil)
+        #expect(HostRecordedShortcut(code: 14, flags: [.control, .shift], characters: "e") != nil)
         #expect(HostExtensionShortcut.micMute.prefix == "micHotKey")
     }
 

@@ -362,6 +362,7 @@ struct DatabaseConnectionGallery: View {
                 ].compactMap { $0 }.joined(separator: ", ")
             )
             .accessibilityHint("Open this database workspace")
+            .accessibilityAction { openConnection(connection) }
 
             if performConnectionAction != nil {
                 if busyConnectionID == connection.id {

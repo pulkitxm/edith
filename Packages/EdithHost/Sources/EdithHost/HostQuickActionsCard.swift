@@ -71,8 +71,6 @@ struct HostQuickActionsCard: View {
     var fill = false
     var openExtensions: (() -> Void)? = nil
     @State private var actions = HostUtilityActions()
-    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store)
-    private var preventSleep = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @Environment(\.compactLayout) private var compact
@@ -123,12 +121,12 @@ struct HostQuickActionsCard: View {
     }
 
     private func control(_ utility: HostSidebarUtility) -> some View {
-        let on = actions.isOn(utility, preventSleep: preventSleep)
+        let on = actions.isOn(utility)
         return Button {
             guard visible, let version = versions[utility.id] else { return }
             actions.perform(
                 utility, marketplace: marketplace, tile: tile, version: version,
-                preventSleep: preventSleep, current: { versions[utility.id] })
+                current: { versions[utility.id] })
         } label: {
             VStack(spacing: UIScale.pt(6)) {
                 if tile.shows("icons") {

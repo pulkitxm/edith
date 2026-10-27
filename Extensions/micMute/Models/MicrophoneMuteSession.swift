@@ -18,11 +18,14 @@ struct MicrophoneAccess {
 final class MicrophoneMuteSession {
     private let access: MicrophoneAccess
     private(set) var saved: [MicrophoneControl: Float] = [:]
+    private var engaged = false
 
     init(access: MicrophoneAccess) { self.access = access }
 
     @discardableResult
     func setMuted(_ muted: Bool) -> Bool {
+        guard muted || engaged else { return true }
+        engaged = true
         var success = true
         for control in access.controls() {
             if control.kind == .mute {
@@ -47,6 +50,7 @@ final class MicrophoneMuteSession {
                     success = false
                 }
             }
+            engaged = !success
         }
         return success
     }
