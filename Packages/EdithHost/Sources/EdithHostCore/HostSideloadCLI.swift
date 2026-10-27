@@ -3,7 +3,8 @@ import ExtensionMarketplace
 import Foundation
 
 @MainActor public enum HostSideloadCLI {
-    public nonisolated static let usage = "usage: ed extensions sideload <package.zip|package directory> [--json]"
+    public nonisolated static let usage =
+        "usage: ed extensions sideload <package.zip|package directory> [--json]"
 
     public nonisolated static func stage(
         _ arguments: [String], workingDirectory: String,
