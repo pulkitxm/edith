@@ -37,6 +37,8 @@ final class UsagePresenterState {
     func hides(_ category: String) -> Bool {
         closed || (active && (values["blur" + category].map { $0 != "0" } ?? (category != "Usage")))
     }
+    var hidesMenuBarNumbers: Bool { active && values["hideMenuBarNumbers"] == "1" }
+    func refresh() { privacy?.refresh() }
     func shutdown() { privacy?.shutdown() }
 }
 

@@ -49,10 +49,7 @@ final class LimitsStatusItem {
 
     func update(_ providers: [ProviderLimits]) {
         let defaults = SharedDefaults.store
-        let masked =
-            UsagePresenterState.shared.active
-            && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
-                as? Bool ?? false)
+        let masked = UsagePresenterState.shared.hidesMenuBarNumbers
         let accounts = store?.providerEnabled(.claude) == true ? store?.claudeAccounts ?? [] : []
         let accountGroups = MenuBarLimits.accountGroups(
             accounts, selectedID: defaults.string(forKey: MenuBarLimits.accountSelectionKey),
@@ -561,9 +558,7 @@ struct LimitsMenuPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if UsagePresenterState.shared.active
-                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
-            {
+            if UsagePresenterState.shared.hidesMenuBarNumbers {
                 Text("Usage hidden during presentation").foregroundStyle(.secondary)
             } else {
                 ForEach(store.enabledProviders) { provider in
