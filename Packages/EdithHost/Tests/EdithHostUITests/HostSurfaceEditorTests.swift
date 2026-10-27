@@ -67,12 +67,22 @@ import HostWorkerFixtureSupport
         let entries = fixture.marketplace.entries
         #expect(
             HostMarketplaceCatalog.suites.map(\.id) == [
-                "agents", "maintenance", "system", "desk", "media", "data", "tools",
+                "agents", "utilities", "desk", "media", "developer", "labs",
+            ])
+        #expect(
+            Set(entries.map(\.category)).isSubset(of: Set(HostMarketplaceCatalog.suites.map(\.id))))
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "", category: "all").allSatisfy {
+                $0.category != "labs"
+            })
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "hinge", category: "all").map(\.id) == [
+                "hinge"
             ])
         #expect(Set(entries.map(\.id)) == Set(HostMarketplaceCatalog.subtitles.keys))
         #expect(
             HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").map(
-                \.id) == ["clipboard", "colorPicker"])
+                \.id) == ["clipboard"])
         #expect(
             HostMarketplaceCatalog.filter(entries, query: "", category: "media").allSatisfy {
                 $0.category == "media"
@@ -96,12 +106,16 @@ import HostWorkerFixtureSupport
         defer { window.orderOut(nil) }
         await settle(window, host: host)
         #expect(find(host, label: "Extensions") != nil)
-        #expect(find(host, label: "Agents suite enabled") != nil)
+        #expect(find(host, label: "Agents & Terminal suite enabled") != nil)
         #expect(
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
         #expect(
-            find(host, label: "Claude, Codex and Cursor limits, usage stats, and alerts.") != nil)
+            find(
+                host,
+                label:
+                    "See Claude, Codex and Cursor limits and usage, with alerts before you run out."
+            ) != nil)
         #expect(find(host, label: "Download") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
@@ -163,7 +177,7 @@ import HostWorkerFixtureSupport
     ) async throws {
         let fixture = try SuiteFixture(rejectDisable: rejectDisable)
         defer { fixture.clean() }
-        let suite = try #require(HostMarketplaceCatalog.suites.first { $0.id == "system" })
+        let suite = try #require(HostMarketplaceCatalog.suites.first { $0.id == "utilities" })
         let selection = HostSuiteSelection(
             marketplace: fixture.marketplace, defaults: fixture.defaults)
         for id in ["keepAwake", "lidAwake", "clipboard"] {
@@ -436,13 +450,11 @@ import HostWorkerFixtureSupport
     @Test func mainNavigationPreservesEstablishedDestinationOrderAndSections() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
-                "home", "machines", "docs", "agents", "dashboard", "herdr", "quinjet", "companion",
-                "plugins",
-                "appMaintenance", "blitztree", "system", "runningApps", "desk", "media", "studio",
-                "latex", "socialManager",
-                "timeLapse", "downloads", "music", "calendar", "virtualCamera", "data", "database",
-                "attention",
-                "seoAudit", "codeStats", "extensions", "settings", "about",
+                "home", "agents", "dashboard", "herdr", "quinjet", "companion", "plugins",
+                "machines", "docs", "system", "runningApps", "blitztree", "calendar",
+                "appMaintenance", "desk", "media", "studio", "socialManager", "timeLapse",
+                "downloads", "music", "virtualCamera", "data", "database", "codeStats", "seoAudit",
+                "latex", "attention", "extensions", "settings", "about",
             ])
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
@@ -464,11 +476,11 @@ import HostWorkerFixtureSupport
         #expect(
             HostNavigationCatalog.resolve("calendar", active: ["calendar"], defaults: defaults)
                 == "calendar")
-        defaults.set(false, forKey: AppStorageKeys.Suites.media)
+        defaults.set(false, forKey: "suiteUtilitiesEnabled")
         #expect(
             HostNavigationCatalog.resolve("calendar", active: ["calendar"], defaults: defaults)
                 == "home")
-        defaults.set(true, forKey: AppStorageKeys.Suites.media)
+        defaults.set(true, forKey: "suiteUtilitiesEnabled")
         #expect(HostNavigationCatalog.resolve("calendar", active: [], defaults: defaults) == "home")
         #expect(
             HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "home")
@@ -509,7 +521,8 @@ import HostWorkerFixtureSupport
         for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar", "Terminal"] {
             #expect(find(host, label: title) != nil)
         }
-        for title in ["Fleet", "Docs", "Agents", "Media", "Agent connections", "Jev"] {
+        let hidden = ["Machines", "Docs", "Agents & Terminal", "Media", "Agent connections", "Jev"]
+        for title in hidden {
             #expect(find(host, label: title) == nil)
         }
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)

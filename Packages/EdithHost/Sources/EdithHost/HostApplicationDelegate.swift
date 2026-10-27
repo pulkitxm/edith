@@ -25,6 +25,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     private var quitCancelled = false
     private(set) var launchedAtLogin = false
     private var windowCloseObserver: NSObjectProtocol?
+    private var windowKeyObserver: NSObjectProtocol?
 
     static func applyConfiguredActivationPolicy(defaults: UserDefaults = SharedDefaults.store) {
         let showsDock =
@@ -36,13 +37,30 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         false
     }
 
+    static func presentsApplication(_ window: NSWindow) -> Bool {
+        window.canBecomeMain && !(window is NSPanel)
+    }
+
+    private func appearInDockWhilePresenting() {
+        windowKeyObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { notification in
+            guard let window = notification.object as? NSWindow else { return }
+            MainActor.assumeIsolated {
+                guard Self.presentsApplication(window), NSApp.activationPolicy() == .accessory
+                else { return }
+                Self.applyConfiguredActivationPolicy()
+            }
+        }
+    }
+
     private func dropToAccessoryWhenWindowless() {
         windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
         ) { _ in
             DispatchQueue.main.async {
                 let presenting = NSApp.windows.contains {
-                    ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
+                    ($0.isVisible || $0.isMiniaturized) && Self.presentsApplication($0)
                 }
                 if !presenting { NSApp.setActivationPolicy(.accessory) }
             }
@@ -109,12 +127,14 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         TextEditingCommands.install()
         ScrollForwarding.install()
         dropToAccessoryWhenWindowless()
+        appearInDockWhilePresenting()
         if launchesRuntime { runtime.launch() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if deferringQuit { quitCancelled = true }
-        return true
+        showMainWindow()
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

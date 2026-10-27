@@ -4,9 +4,9 @@ Edith ships the app shell, marketplace, settings and Home and Notch layout contr
 
 ## Choose a workflow
 
-Onboarding lives inside the app. Choose Agentic, Creative, Developer, Essentials or Custom, then review the individual extensions, versions, download bytes and installed package bytes. Suggestions are editable. Dependencies count once, and packages already installed are excluded from the new-download estimate. Unknown package sizes prevent installation until a compatible verified catalog is available. If a reviewed package changes, the app asks for a new review before downloading it.
+Onboarding lives inside the app. Choose a group (Agents & Terminal, Mac Utilities, Desk, Media, or Developer & Data) or Custom, then review the individual extensions, versions, download bytes and installed package bytes. Suggestions are editable. Dependencies count once, and packages already installed are excluded from the new-download estimate. Unknown package sizes prevent installation until a compatible verified catalog is available. If a reviewed package changes, the app asks for a new review before downloading it.
 
-The Extensions page supports search, categories, individual downloads and enable controls. Downloading, enabling and removing are separate actions. Undownloaded extension pages stay out of navigation. Downloaded extensions retain their original pages and controls. Home and Notch layouts belong to the app; extension cards follow installed and active provider availability. Disabling a provider makes its live cards inactive while retaining the saved layout.
+The Extensions page groups extensions into those five groups and supports search, individual downloads and enable controls. Experimental extensions (Hinge, Window Sweaters and Jev) live in a Labs group that is hidden from the full list and appears in search or when Labs is selected. Downloading, enabling and removing are separate actions. Undownloaded extension pages stay out of navigation. Downloaded extensions retain their original pages and controls. Home and Notch layouts belong to the app; extension cards follow installed and active provider availability. Disabling a provider makes its live cards inactive while retaining the saved layout.
 
 ## App and extension updates
 
