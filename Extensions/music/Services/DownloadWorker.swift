@@ -30,7 +30,7 @@ private final class DownloadWorkerOutput: @unchecked Sendable {
     }
 }
 
-private struct DownloadSchedulerActivity: Codable {
+struct DownloadSchedulerActivity: Codable {
     var generation: UUID?
     var active: [UUID] = []
     var logs: [String: String] = [:]
@@ -113,6 +113,8 @@ public actor DownloadWorker {
     }
 
     static let maximumConcurrent = 3
+    static let busyObservationInterval = Duration.milliseconds(250)
+    static let idleObservationInterval = Duration.seconds(1)
     private var logs: [String: String] = [:]
     private var flights: [UUID: Flight] = [:]
     private var started = false
@@ -123,6 +125,21 @@ public actor DownloadWorker {
     private var publicationTask: Task<Void, Never>?
     private var observationTask: Task<Void, Never>?
     private var schedulerLease: PersistentFileLease?
+    private var persistedActivity: PersistedActivity?
+    private var observedState: ObservedState?
+
+    private struct PersistedActivity: Equatable {
+        var active: [UUID]
+        var logs: [String: String]
+    }
+
+    private struct ObservedState: Equatable {
+        var records: [DownloadRecord]
+        var active: [UUID]
+        var logs: [String: String]
+        var enabled: Bool
+        var running: Int
+    }
 
     public init(
         file: URL = DownloadQueue.file,
@@ -176,10 +193,11 @@ public actor DownloadWorker {
         started = true
         startNext()
         observationTask = Task { [weak self] in
+            var delay = Self.busyObservationInterval
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                do { try await Task.sleep(for: delay) } catch { return }
                 guard let self else { return }
-                await refresh()
+                delay = await observe()
             }
         }
         notify()
@@ -199,6 +217,7 @@ public actor DownloadWorker {
         }
         for task in tasks { await task.value }
         schedulerLease = nil
+        persistedActivity = nil
         notify()
         await publicationTask?.value
         for continuation in subscribers.values { continuation.finish() }
@@ -248,6 +267,22 @@ public actor DownloadWorker {
         }
         startNext()
         notify()
+    }
+
+    func observe() -> Duration {
+        guard !stopping else { return Self.idleObservationInterval }
+        reload()
+        let activity = sharedActivity()
+        let state = ObservedState(
+            records: records, active: activity.active, logs: activity.logs,
+            enabled: isEnabled(), running: flights.count)
+        let changed = state != observedState
+        observedState = state
+        if changed { refresh() }
+        let busy =
+            !flights.isEmpty || !activity.active.isEmpty
+            || records.contains { $0.status == .queued || Self.isRunning($0) }
+        return busy ? Self.busyObservationInterval : Self.idleObservationInterval
     }
 
     public func mutate(_ request: MusicDownloadMutation) throws -> MusicDownloadMutationResult {
@@ -357,6 +392,7 @@ public actor DownloadWorker {
                         at: file.appendingPathExtension("scheduler.lock"))
                 else { return }
                 schedulerLease = lease
+                persistedActivity = nil
                 logs.removeAll()
                 try update { records in
                     for index in records.indices {
@@ -378,7 +414,8 @@ public actor DownloadWorker {
 
     private func startOne() -> Bool {
         guard started, !stopping, let lease = schedulerLease,
-            flights.count < Self.maximumConcurrent, isEnabled(), let executable = executable()
+            flights.count < Self.maximumConcurrent, isEnabled(), let executable = executable(),
+            records.contains(where: { $0.status == .queued && flights[$0.id] == nil })
         else { return false }
         var selected: DownloadRecord?
         do {
@@ -582,12 +619,16 @@ public actor DownloadWorker {
         for (id, flight) in flights { current[id.uuidString] = flight.output.snapshot.0 }
         let active = flights.keys.sorted { $0.uuidString < $1.uuidString }
         let retained = active + records.map(\.id).filter { !flights.keys.contains($0) }
+        let state = PersistedActivity(active: active, logs: current)
+        guard state != persistedActivity else { return }
         do {
+            persistedActivity = state
             try DownloadSchedulerActivity.write(
                 queue: file, generation: generation, active: active, logs: current,
                 retained: retained)
             activityPersistenceError = nil
         } catch {
+            persistedActivity = nil
             activityPersistenceError =
                 "Download activity could not be saved: \(error.localizedDescription)"
         }

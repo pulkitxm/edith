@@ -31,6 +31,45 @@ extension MusicExtensionTests {
             #expect(DownloadQueue.load(from: file).filter { $0.resultPaths != nil }.count == 2)
         }
 
+        @Test func idleObservationNeverRewritesTheQueueOrActivityFiles() async throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("queue.json")
+            let done = record("done", state: .done("ok"), date: 1, directory: directory)
+            try DownloadQueue.save([done], to: file)
+            let gate = DownloadTestGate(directory: directory)
+            let worker = worker(file, gate: gate)
+            try await worker.start()
+            let activity = DownloadSchedulerActivity.file(for: file)
+            let queueIdentity = try fileIdentity(file)
+            let activityIdentity = try fileIdentity(activity)
+            for _ in 0..<5 {
+                let interval = await worker.observe()
+                #expect(interval == DownloadWorker.idleObservationInterval)
+            }
+            #expect(try fileIdentity(file) == queueIdentity)
+            #expect(try fileIdentity(activity) == activityIdentity)
+            await worker.stop()
+        }
+
+        @Test func observationIsBusyWhileDownloadsAreQueued() async throws {
+            let directory = try sandbox()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("queue.json")
+            try DownloadQueue.save(
+                [record("waiting", state: .queued, date: 1, directory: directory)], to: file)
+            let worker = DownloadWorker(
+                file: file, executable: { nil }, isEnabled: { true })
+            try await worker.start()
+            #expect(await worker.observe() == DownloadWorker.busyObservationInterval)
+            await worker.stop()
+        }
+
+        private func fileIdentity(_ url: URL) throws -> [AnyHashable] {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            return [attributes[.systemFileNumber] as? Int, attributes[.modificationDate] as? Date]
+        }
+
         @Test func concurrentMutationsHaveOneWriterAndRejectQueueOverflow() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }
