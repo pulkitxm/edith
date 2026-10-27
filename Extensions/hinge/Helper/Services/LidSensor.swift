@@ -1,10 +1,15 @@
 import Foundation
 import IOKit.hid
 
+enum LidPollPolicy {
+    static func polls(tracking: Bool, idlePolling: Bool) -> Bool { tracking || idlePolling }
+}
+
 final class LidSensor {
     private let queue = DispatchQueue(label: "hinge.sensor", qos: .userInteractive)
     private var connection: LidConnection?
     private var tracking = false
+    private var idlePolling = false
     private var hasConnected = false
     var onAngle: ((Double?) -> Void)?
     var onMissing: (() -> Void)?
@@ -19,6 +24,18 @@ final class LidSensor {
             self.tracking = active
             self.connection?.setTracking(active)
         }
+    }
+
+    func setIdlePolling(_ active: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.idlePolling = active
+            self.connection?.setIdlePolling(active)
+        }
+    }
+
+    func sampleNow() {
+        queue.sync { connection?.sampleNow() }
     }
 
     func reconnect() {
@@ -65,6 +82,7 @@ final class LidSensor {
             self.connection = connection
             hasConnected = true
             onAngle?(angle)
+            connection.setIdlePolling(idlePolling)
             connection.setTracking(tracking)
             return
         }
@@ -96,6 +114,7 @@ private final class LidConnection {
     private let onAngle: (Double?) -> Void
     private var timer: DispatchSourceTimer?
     private var tracking = false
+    private var idlePolling = false
     private var failures = 0
     private var angle: Double?
     private var quietAt: UInt64 = 0
@@ -117,6 +136,17 @@ private final class LidConnection {
         self.onAngle = onAngle
     }
 
+    func setIdlePolling(_ active: Bool) {
+        idlePolling = active
+        schedule(after: 0)
+    }
+
+    func sampleNow() {
+        guard let value = Self.read(device, precise: precise) else { return }
+        angle = value
+        onAngle(value)
+    }
+
     func setTracking(_ active: Bool) {
         tracking = active
         failures = 0
@@ -130,6 +160,10 @@ private final class LidConnection {
     }
 
     private func schedule(after delay: UInt64) {
+        guard LidPollPolicy.polls(tracking: tracking, idlePolling: idlePolling) else {
+            timer?.schedule(deadline: .distantFuture)
+            return
+        }
         timer?.schedule(
             deadline: .now() + .nanoseconds(Int(delay)),
             leeway: .microseconds(tracking ? 500 : 10_000))

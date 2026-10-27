@@ -124,6 +124,7 @@ final class LiveDesktop: NSObject, ObservableObject {
                 if self.error == nil { self.error = Self.missingSensorMessage }
             }
         }
+        sensor.setIdlePolling(isEnabled)
         sensor.start()
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
@@ -161,6 +162,7 @@ final class LiveDesktop: NSObject, ObservableObject {
 
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
+        sensor.setIdlePolling(enabled)
         restoringAtLaunch = false
         HingeState.setActive(enabled)
         if enabled { Task { await start() } } else { stop() }
@@ -198,6 +200,7 @@ final class LiveDesktop: NSObject, ObservableObject {
     }
 
     func setOpenPosition() {
+        sensor.sampleNow()
         guard let angle = motion.calibrate() else {
             error = String(localized: "Open the lid to your comfortable viewing position first.")
             return
