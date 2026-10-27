@@ -735,3 +735,34 @@ private enum FixtureInspectorTab: String {
         #expect(!NavigationShortcutGate.pageHistory(.forward, in: nil))
     }
 }
+
+@MainActor @Suite struct NavigationMenuInstallTests {
+    private func menu(titles: [String]) -> NSMenu {
+        let menu = NSMenu(title: "Main")
+        for title in titles {
+            menu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
+        }
+        return menu
+    }
+
+    @Test func installsOneNavigateMenuBeforeWindow() {
+        let main = menu(titles: ["Edith", "Edit", "Window", "Help"])
+        NavigationHistoryInput.install(in: main)
+        #expect(main.items.map(\.title) == ["Edith", "Edit", "Navigate", "Window", "Help"])
+        let items = main.items[2].submenu?.items
+        #expect(items?.map(\.keyEquivalent) == ["[", "]"])
+    }
+
+    @Test func aMenuInstalledByAnotherCopyOfTheSupportCodeIsNotDuplicated() {
+        let main = menu(titles: ["Edith", "Window"])
+        let foreign = NSMenuItem(title: "Navigate", action: nil, keyEquivalent: "")
+        foreign.identifier = NavigationHistoryInput.menuIdentifier
+        foreign.submenu = NSMenu(title: "Navigate")
+        main.insertItem(foreign, at: 1)
+        NavigationHistoryInput.install(in: main)
+        NavigationHistoryInput.install(in: main)
+        #expect(
+            main.items.filter { $0.identifier == NavigationHistoryInput.menuIdentifier }.count == 1)
+        #expect(main.items.map(\.title) == ["Edith", "Navigate", "Window"])
+    }
+}
