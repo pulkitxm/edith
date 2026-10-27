@@ -24,6 +24,44 @@ import Testing
         }
     }
 
+    @Test func helpRequestsNeverTakeLiveInput() async throws {
+        let catalog = HostCLIProviderCatalog(
+            owner: "database",
+            commands: [
+                HostCLIProviderCommand(
+                    route: ["database", "query"], operation: "database.cli",
+                    summary: "Run a query.", streamOperation: "database.cli.stream",
+                    streamDeadline: 30, readsInput: true)
+            ], acceptsInput: true)
+        let data = try JSONEncoder().encode(catalog)
+        let invoke: HostCLIProviderRegistry.Invoke = { request in
+            if request.action == .ls {
+                return Data(
+                    "[{\"id\":\"database\",\"installed\":true,\"compatible\":true,\"enabled\":true,\"running\":true,\"disablePending\":false,\"removalPending\":false,\"version\":\"1\"}]"
+                        .utf8)
+            }
+            if request.operation == "database.cli.catalog" { return data }
+            throw HostCLIError.unavailable
+        }
+        #expect(try await HostCommandCLI.liveInputForCommand(["database", "query"], invoke: invoke))
+        for help in ["--help", "-h"] {
+            #expect(
+                !(try await HostCommandCLI.liveInputForCommand(
+                    ["database", "query", help], invoke: invoke)))
+        }
+    }
+
+    @Test func nullDeviceInputEndsWithoutError() async throws {
+        let null = open("/dev/null", O_RDONLY)
+        #expect(null >= 0)
+        defer { Darwin.close(null) }
+        var fds: [Int32] = [-1, -1]
+        #expect(pipe(&fds) == 0)
+        defer { Darwin.close(fds[0]); Darwin.close(fds[1]) }
+        let input = try HostCLIInput(descriptor: null, output: fds[1])
+        #expect(try await input.receive() == nil)
+    }
+
     @Test func originalColourAliasIsScopedToColorProvider() throws {
         let catalog = HostCLIProviderCatalog(
             owner: "colorPicker",

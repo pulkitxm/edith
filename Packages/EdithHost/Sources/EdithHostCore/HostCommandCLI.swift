@@ -597,6 +597,10 @@ public struct HostCommandCLI: Sendable {
             Set(candidates.filter { $0.hasPrefix(prefix) }).sorted().joined(separator: "\n"))
     }
 
+    static func requestsHelp(_ arguments: [String]) -> Bool {
+        arguments.contains("--help") || arguments.contains("-h")
+    }
+
     static func liveInputForCommand(
         _ arguments: [String], invoke: @escaping HostCLIProviderRegistry.Invoke
     ) async throws -> Bool {
@@ -616,7 +620,7 @@ public struct HostCommandCLI: Sendable {
         }.sorted { $0.1.route.count > $1.1.route.count }
         guard let (catalog, command) = matching?.first else { return false }
         return catalog.acceptsInput == true && command.readsInput == true
-            && command.streamOperation != nil
+            && command.streamOperation != nil && !requestsHelp(arguments)
     }
 
     static func inputForCommand(
@@ -647,7 +651,7 @@ public struct HostCommandCLI: Sendable {
         }
         var declaredInput = false
         if isatty(descriptor) == 0, let command = arguments.first, command != "--version",
-            !Self.coreCommands.contains(command)
+            !Self.coreCommands.contains(command), !requestsHelp(arguments)
         {
             let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
             try Task.checkCancellation()
