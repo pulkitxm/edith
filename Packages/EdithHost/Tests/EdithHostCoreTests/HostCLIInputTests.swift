@@ -43,7 +43,8 @@ import Testing
             if request.operation == "database.cli.catalog" { return data }
             throw HostCLIError.unavailable
         }
-        #expect(try await HostCommandCLI.liveInputForCommand(["database", "query"], invoke: invoke))
+        #expect(
+            try await HostCommandCLI.liveInputForCommand(["database", "query"], invoke: invoke))
         for help in ["--help", "-h"] {
             #expect(
                 !(try await HostCommandCLI.liveInputForCommand(
