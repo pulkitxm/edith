@@ -49,6 +49,21 @@ import Testing
         await queue.shutdown()
     }
 
+    @Test func promptChangeShortensAnAlreadyWaitingTransfer() async throws {
+        var calls = 0
+        let queue = ClipboardBackupEventQueue(
+            debounce: .seconds(300), promptDelay: .milliseconds(50), onBattery: { false },
+            enabled: { true }
+        ) { calls += 1 }
+        queue.changed()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(calls == 0)
+        queue.changed(prompt: true)
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(calls == 1)
+        await queue.shutdown()
+    }
+
     @Test func failedTransfersRetryRarely() async {
         let clock = ClipboardBackupBatterySleep()
         let queue = ClipboardBackupEventQueue(

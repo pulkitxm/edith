@@ -15,6 +15,7 @@ import IOKit.ps
     private var observers: [NSObjectProtocol] = []
     private var bootstrapCancelled = false
     private var observedCloudEnabled = false
+    private var observedExportEnabled = false
     private var needsRestore = false
     private let cloudAvailable: () -> Bool
     private let onBattery: () -> Bool
@@ -133,6 +134,7 @@ import IOKit.ps
     func startScheduling(debounce: Duration = .seconds(300), restorePending: Bool = false) {
         guard !stopping, events == nil else { return }
         observedCloudEnabled = cloudEnabled
+        observedExportEnabled = exportEnabled
         needsRestore = restorePending && cloudEnabled
         events = ClipboardBackupEventQueue(
             debounce: debounce, onBattery: onBattery, sleep: sleep,
@@ -160,17 +162,20 @@ import IOKit.ps
             IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                 MainActor.assumeIsolated { self?.preferencesChanged() }
             })
-        if !bootstrapCancelled { events?.changed() }
+        if !bootstrapCancelled { events?.changed(prompt: true) }
     }
 
     func preferencesChanged() {
         guard !stopping else { return }
         applicationDefaults.synchronize(); defaults.synchronize()
         let enabled = cloudEnabled
+        let exporting = exportEnabled
+        let prompt = enabled && (!observedCloudEnabled || (exporting && !observedExportEnabled))
         if enabled && !observedCloudEnabled { needsRestore = true }
         observedCloudEnabled = enabled
+        observedExportEnabled = exporting
         if !enabled { cancellation?.cancel(); work?.cancel() }
-        events?.changed()
+        events?.changed(prompt: prompt)
     }
 
     func cancelPendingCommands() {
@@ -405,6 +410,7 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
     private let sleep: @Sendable (Duration) async throws -> Void
     private let transfer: () async throws -> Void
     private let debounce: Duration
+    private let promptDelay: Duration
     private let retry: Duration
     private var pending = false
     private var stopping = false
@@ -415,13 +421,15 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
     var scheduled: Bool { pending || task != nil }
 
     init(
-        debounce: Duration, retry: Duration = .seconds(300), onBattery: @escaping () -> Bool,
+        debounce: Duration, promptDelay: Duration = .seconds(1), retry: Duration = .seconds(300),
+        onBattery: @escaping () -> Bool,
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
             try await Task.sleep(for: $0)
         }, enabled: @escaping () -> Bool,
         transfer: @escaping () async throws -> Void
     ) {
         self.debounce = max(.zero, debounce)
+        self.promptDelay = max(.zero, min(promptDelay, debounce))
         self.retry = max(.milliseconds(1), retry)
         self.enabled = enabled
         self.onBattery = onBattery
@@ -429,12 +437,17 @@ private final class ClipboardBackupCancellation: @unchecked Sendable {
         self.transfer = transfer
     }
 
-    func changed() {
+    func changed(prompt: Bool = false) {
         guard !stopping, !cancelling else { return }
         guard enabled() else { pending = false; task?.cancel(); return }
-        if !pending { deadline = ContinuousClock.now.advanced(by: debounce) }
+        let candidate = ContinuousClock.now.advanced(by: prompt ? promptDelay : debounce)
+        let shortened = pending && candidate < deadline
+        if !pending || shortened { deadline = candidate }
         pending = true
-        guard task == nil else { return }
+        guard task == nil else {
+            if shortened { task?.cancel() }
+            return
+        }
         task = Task { [weak self] in
             guard let self else { return }
             defer {
