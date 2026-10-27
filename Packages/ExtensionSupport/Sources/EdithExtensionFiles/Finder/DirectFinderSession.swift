@@ -45,6 +45,7 @@ public final class DirectFinderSession: FinderSession {
     }
 
     @ObservationIgnored private let connector: (@Sendable () async throws -> Void)?
+    @ObservationIgnored private let localListing: @Sendable (String) -> [RemoteFileEntry]
     @ObservationIgnored public var opener: (@MainActor (RemoteFileEntry) -> Void)?
     @ObservationIgnored private var connecting: Task<Void, Never>?
 
@@ -52,8 +53,12 @@ public final class DirectFinderSession: FinderSession {
         id: UUID, name: String, isLocal: Bool, connection: (any RemoteShellConnection)? = nil,
         connector: (@Sendable () async throws -> Void)? = nil,
         remoteClient: (any FinderRemoteClient)? = nil,
-        opener: (@MainActor (RemoteFileEntry) -> Void)? = nil
+        opener: (@MainActor (RemoteFileEntry) -> Void)? = nil,
+        localListing: @escaping @Sendable (String) -> [RemoteFileEntry] = {
+            LocalFileListing.entries(path: $0)
+        }
     ) {
+        self.localListing = localListing
         self.id = id
         machineName = name
         self.isLocal = isLocal
@@ -134,7 +139,9 @@ public final class DirectFinderSession: FinderSession {
                 try await remoteClient.listFiles(machineID: id, path: path)
             }
         }
-        if isLocal { return .success(LocalFileListing.entries(path: path)) }
+        if isLocal {
+            return .success(await LocalFileListing.entriesOffMain(path: path, load: localListing))
+        }
         do {
             try await ensureConnected()
             let listing = try await RemoteDirectoryOperationExecution.list(

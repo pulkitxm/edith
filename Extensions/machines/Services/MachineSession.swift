@@ -1044,7 +1044,7 @@ public final class MachineSession {
         }
         if synthetic { return .success([]) }
 
-        if isLocal { return .success(Self.listLocalFiles(path: path)) }
+        if isLocal { return .success(await LocalFileListing.entriesOffMain(path: path)) }
         do {
             let listing = try await RemoteDirectoryOperationExecution.list(
                 path: path, showHidden: true, using: directoryEndpoint)
@@ -1112,10 +1112,6 @@ public final class MachineSession {
         root: String, query: String, limit: Int = 300
     ) -> [RemoteFileEntry] {
         LocalFileListing.search(root: root, query: query, limit: limit)
-    }
-
-    nonisolated static func listLocalFiles(path: String) -> [RemoteFileEntry] {
-        LocalFileListing.entries(path: path)
     }
 }
 
