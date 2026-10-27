@@ -78,6 +78,22 @@ export function listReleases({
   retry = {},
 }) {
   validateIdentity({ repository, maximumPages });
+  for (let attempt = 1; attempt <= listingAttempts; attempt++) {
+    const releases = listReleasePages({
+      repository,
+      execute,
+      maximumPages,
+      retry,
+    });
+    if (releases !== shiftedListing) return releases;
+  }
+  throw new Error("Duplicate release lookup ID");
+}
+
+const listingAttempts = 3;
+const shiftedListing = Symbol("shiftedListing");
+
+function listReleasePages({ repository, execute, maximumPages, retry }) {
   const seen = new Set();
   const releases = [];
   for (let page = 1; page <= maximumPages; page++) {
@@ -88,9 +104,14 @@ export function listReleases({
     });
     if (!Array.isArray(values) || values.length > 100)
       throw new Error("Invalid release lookup page");
+    const pageIDs = new Set();
     for (const value of values) {
       validateRelease(value);
-      if (seen.has(value.id)) throw new Error("Duplicate release lookup ID");
+      if (pageIDs.has(value.id)) throw new Error("Duplicate release lookup ID");
+      pageIDs.add(value.id);
+      if (seen.has(value.id)) return shiftedListing;
+    }
+    for (const value of values) {
       seen.add(value.id);
       releases.push(value);
     }
