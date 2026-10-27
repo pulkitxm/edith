@@ -533,9 +533,9 @@ ci-semgrep:
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
-	  --skip-dirs Packages/EdithStudio/.build --skip-dirs apps/macos/.build --skip-dirs build --skip-dirs dist \
+	  --skip-dirs "**/.build" --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
-	  --skip-dirs .wiki-build --skip-dirs .wiki-clone \ --skip-dirs extras .
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras .
 
 prepare-pdf-extract:
 	python3 -B apps/companion/prepare-pdf-extract.py

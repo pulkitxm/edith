@@ -10,6 +10,21 @@ name: Extensions
         type: string
         required: false
         default: ""
+    secrets:
+      EXTENSION_CATALOG_PRIVATE_KEY:
+        required: false
+      MACOS_CERT_P12:
+        required: false
+      MACOS_CERT_PASSWORD:
+        required: false
+      NOTARY_ISSUER_ID:
+        required: false
+      NOTARY_KEY:
+        required: false
+      NOTARY_KEY_ID:
+        required: false
+      RELEASE_PUSH_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       publish:

@@ -367,7 +367,14 @@ jobs:
     uses: ./.github/workflows/extensions.yml
     with:
       publish: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
-    secrets: inherit
+    secrets:
+      EXTENSION_CATALOG_PRIVATE_KEY: ${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
     permissions:
       contents: read
 
