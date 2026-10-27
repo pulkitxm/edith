@@ -137,7 +137,7 @@ enum UsageNativeFileIO {
                 let end = tail.distance(from: tail.startIndex, to: newline) + 1
                 let line = tail.prefix(end - 1)
                 guard line.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }
-                try consume(Data(line), offset, offset + end)
+                try autoreleasepool { try consume(Data(line), offset, offset + end) }
                 offset += end; complete = offset; tail.removeFirst(end)
             }
             guard tail.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }

@@ -95,6 +95,28 @@ final class UsageNativeDatabase {
         }
     }
 
+    func forEachRow(
+        _ sql: String, _ values: [Any] = [], _ body: (OpaquePointer) throws -> Void
+    ) throws {
+        let statement = try prepare(sql, values)
+        defer { sqlite3_finalize(statement) }
+        while true {
+            try Task.checkCancellation()
+            let step = sqlite3_step(statement)
+            if step == SQLITE_DONE { return }
+            guard step == SQLITE_ROW else { throw UsageNativeFailure.archive("read records") }
+            try body(statement)
+        }
+    }
+
+    static func text(_ statement: OpaquePointer, _ column: Int32) -> String? {
+        sqlite3_column_text(statement, column).map { String(cString: $0) }
+    }
+
+    static func integer(_ statement: OpaquePointer, _ column: Int32) -> Int {
+        Int(sqlite3_column_int64(statement, column))
+    }
+
     private func prepare(_ sql: String, _ values: [Any]) throws -> OpaquePointer {
         try Task.checkCancellation()
         var statement: OpaquePointer?

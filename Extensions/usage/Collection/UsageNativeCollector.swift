@@ -31,6 +31,25 @@ public enum UsageNativeCollector {
         accounts: UsageNativeAccounts = .init(),
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
+        let work = Task.detached(priority: .utility) {
+            try await collectIndexed(
+                home: home, dataDirectory: dataDirectory, environment: environment, now: now,
+                network: network, remoteContext: remoteContext, accounts: accounts,
+                onEvent: onEvent)
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
+    }
+
+    private static func collectIndexed(
+        home: URL, dataDirectory: URL, environment: [String: String], now: Date,
+        network: UsageNativeNetwork, remoteContext: UsageRemoteCollectionContext?,
+        accounts: UsageNativeAccounts,
+        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async throws -> Data {
         let started = ContinuousClock.now
         try Task.checkCancellation()
         let archive = try UsageNativeArchive(
@@ -47,48 +66,53 @@ public enum UsageNativeCollector {
                 under: root.path, extensions: ["jsonl", "json"])
             for file in files {
                 try Task.checkCancellation()
-                if root.source == "opencode", !file.path.contains("/message/") { continue }
-                if root.source == "grok", file.lastPathComponent != "updates.jsonl" { continue }
-                if root.source == "droid", !file.lastPathComponent.hasSuffix(".settings.json") {
-                    continue
-                }
-                if root.source == "codebuff", file.lastPathComponent != "chat-messages.json" {
-                    continue
-                }
-                if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { continue }
-                let key = try archive.journalKey(source: root.source, file: file, home: home)
-                guard seen.insert(key).inserted else { continue }
-                let previous = try archive.known(key)
-                var status = stat()
-                guard lstat(file.path, &status) == 0 else { continue }
-                let modified =
-                    Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec) / 1e9
-                if let previous, previous.size == Int(status.st_size), previous.modified == modified
-                {
-                    continue
-                }
-                if file.pathExtension.lowercased() == "json" {
-                    let data = try UsageNativeFileIO.read(file)
-                    guard let object = try? JSONSerialization.jsonObject(with: data) else {
-                        continue
+                try autoreleasepool {
+                    if root.source == "opencode", !file.path.contains("/message/") { return }
+                    if root.source == "grok", file.lastPathComponent != "updates.jsonl" { return }
+                    if root.source == "droid", !file.lastPathComponent.hasSuffix(".settings.json") {
+                        return
                     }
-                    let parser = UsageNativeParser(source: root.source)
-                    let records = try parser.document(object, path: file, modified: modified)
-                    let prefix =
-                        previous.map { UsageNativeJSON.hash(Data(data.prefix($0.size))) }
-                        ?? UsageNativeJSON.hash(Data())
-                    try archive.admit(
-                        .init(
-                            path: key, size: data.count, completeBytes: data.count,
-                            modified: modified,
-                            hash: UsageNativeJSON.hash(data), prefixHash: prefix, records: records),
-                        previous: previous)
-                } else {
-                    let parser = UsageNativeParser(source: root.source, tier: root.tier)
-                    let snapshot = try parser.snapshot(file, key: key, previous: previous)
-                    try archive.admit(snapshot, previous: previous)
+                    if root.source == "codebuff", file.lastPathComponent != "chat-messages.json" {
+                        return
+                    }
+                    if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { return }
+                    let key = try archive.journalKey(source: root.source, file: file, home: home)
+                    guard seen.insert(key).inserted else { return }
+                    let previous = try archive.known(key)
+                    var status = stat()
+                    guard lstat(file.path, &status) == 0 else { return }
+                    let modified =
+                        Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec)
+                        / 1e9
+                    if let previous, previous.size == Int(status.st_size),
+                        previous.modified == modified
+                    {
+                        return
+                    }
+                    if file.pathExtension.lowercased() == "json" {
+                        let data = try UsageNativeFileIO.read(file)
+                        guard let object = try? JSONSerialization.jsonObject(with: data) else {
+                            return
+                        }
+                        let parser = UsageNativeParser(source: root.source)
+                        let records = try parser.document(object, path: file, modified: modified)
+                        let prefix =
+                            previous.map { UsageNativeJSON.hash(Data(data.prefix($0.size))) }
+                            ?? UsageNativeJSON.hash(Data())
+                        try archive.admit(
+                            .init(
+                                path: key, size: data.count, completeBytes: data.count,
+                                modified: modified,
+                                hash: UsageNativeJSON.hash(data), prefixHash: prefix,
+                                records: records),
+                            previous: previous)
+                    } else {
+                        let parser = UsageNativeParser(source: root.source, tier: root.tier)
+                        let snapshot = try parser.snapshot(file, key: key, previous: previous)
+                        try archive.admit(snapshot, previous: previous)
+                    }
+                    scanned += 1
                 }
-                scanned += 1
             }
             onEvent(
                 .phase(
@@ -114,20 +138,49 @@ public enum UsageNativeCollector {
         }
         try Task.checkCancellation()
         let zone = environment["TZ"].flatMap(TimeZone.init(identifier:)) ?? .current
-        let document = try UsageNativeAssembly.document(
-            events: archive.events(), archive: archive, now: now,
-            timezone: zone, cloudSources: cloud, accounts: accounts)
-        let unpriced = (document["pricing"] as? [String: Any])?["unpricedModels"] as? [String] ?? []
-        if !unpriced.isEmpty {
+        let stamp = ISO8601DateFormatter().string(from: now)
+        let key = [
+            try archive.revisionKey(), zone.identifier,
+            String(
+                Int((now.timeIntervalSince1970 + Double(zone.secondsFromGMT(for: now))) / 86400)),
+            cloud.sorted().joined(separator: ","), UsageNativePricingSnapshot.revision,
+            accounts.digest,
+        ].joined(separator: "|")
+        let data: Data
+        let unpricedCount: Int
+        let dayCount: Int
+        if let cached = archive.cachedDocument(key: key),
+            let text = String(data: cached.data, encoding: .utf8)
+        {
+            data = Data(
+                text.replacingOccurrences(
+                    of: "\"generatedAt\":\"" + cached.stamp + "\"",
+                    with: "\"generatedAt\":\"" + stamp + "\""
+                ).utf8)
+            unpricedCount = cached.unpriced
+            dayCount = cached.days
+        } else {
+            let document = try UsageNativeAssembly.document(
+                archive: archive, now: now, timezone: zone, cloudSources: cloud,
+                accounts: accounts)
+            let unpriced =
+                (document["pricing"] as? [String: Any])?["unpricedModels"] as? [String] ?? []
+            data = try UsageNativeJSON.encode(document)
+            unpricedCount = unpriced.count
+            dayCount = (document["daily"] as? [Any])?.count ?? 0
+            guard data.count <= 67_108_864 else { throw UsageNativeFailure.capacity }
+            archive.storeDocument(
+                data, key: key, stamp: stamp, unpriced: unpricedCount, days: dayCount)
+        }
+        if unpricedCount > 0 {
             onEvent(
                 .note(
-                    "Cost estimates are unavailable for \(unpriced.count) model(s); token counts are retained"
+                    "Cost estimates are unavailable for \(unpricedCount) model(s); token counts are retained"
                 ))
         }
-        let data = try UsageNativeJSON.encode(document)
         guard data.count <= 67_108_864 else { throw UsageNativeFailure.capacity }
         onEvent(.summary(label: "journals", value: String(scanned)))
-        onEvent(.summary(label: "days", value: String((document["daily"] as? [Any])?.count ?? 0)))
+        onEvent(.summary(label: "days", value: String(dayCount)))
         onEvent(.finished(seconds: elapsed(since: started)))
         try Task.checkCancellation()
         return data

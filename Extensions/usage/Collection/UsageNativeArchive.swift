@@ -10,6 +10,7 @@ final class UsageNativeArchive {
     }
 
     let database: UsageNativeDatabase
+    private let root: URL
     private let limits: UsageNativeFileLimits
     let remoteContext: UsageRemoteCollectionContext?
     let remoteProjects: [String: UsageRemoteProjectMetadata]
@@ -24,10 +25,11 @@ final class UsageNativeArchive {
             uniqueKeysWithValues: (remoteContext?.projects ?? []).map { ($0.cwd, $0) })
         self.limits = limits
         let root = dataDirectory.appendingPathComponent("native-usage-history", isDirectory: true)
+        self.root = root
         try UsageNativeFileIO.privateDirectory(root)
         database = try UsageNativeDatabase(url: root.appendingPathComponent("usage.sqlite"))
         let version = try database.rows("PRAGMA user_version").first?["user_version"] ?? "0"
-        guard version == "0" || version == "1" else {
+        guard ["0", "1", "2"].contains(version) else {
             throw UsageNativeFailure.archive("open an unsupported schema")
         }
         try database.execute(
@@ -44,8 +46,8 @@ final class UsageNativeArchive {
             CREATE TABLE IF NOT EXISTS aggregate_candidates(period TEXT NOT NULL,hash TEXT NOT NULL,payload TEXT NOT NULL,
               PRIMARY KEY(period,hash));
             CREATE TABLE IF NOT EXISTS cloud_cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL);
-            PRAGMA user_version=1;
             """)
+        try migrateRecordColumns(from: version)
         let owner = remoteContext?.machineID.uuidString.lowercased() ?? "local"
         let previousOwner = try database.rows(
             "SELECT value FROM metadata WHERE key='collectionOwner'"
@@ -83,6 +85,35 @@ final class UsageNativeArchive {
                 """)
         }
 
+    }
+
+    private func migrateRecordColumns(from version: String) throws {
+        let columns = try database.rows("PRAGMA table_info(records)").compactMap { $0["name"] }
+        let wanted = [
+            "source TEXT", "ident TEXT", "outtok REAL", "total REAL", "receipt TEXT",
+        ]
+        for column in wanted where !columns.contains(String(column.split(separator: " ")[0])) {
+            try database.execute("ALTER TABLE records ADD COLUMN " + column)
+        }
+        let fill = """
+            source=json_extract(payload,'$.source'),ident=json_extract(payload,'$.identity'),
+            outtok=COALESCE(json_extract(payload,'$.tokens.output'),0),
+            total=COALESCE(json_extract(payload,'$.tokens.input'),0)
+              +COALESCE(json_extract(payload,'$.tokens.output'),0)
+              +COALESCE(json_extract(payload,'$.tokens.creation'),0)
+              +COALESCE(json_extract(payload,'$.tokens.read'),0),
+            receipt=json_extract(payload,'$.receiptID')
+            """
+        try database.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS records_columns AFTER INSERT ON records BEGIN
+                UPDATE records SET \(fill) WHERE sequence=new.sequence; END;
+            CREATE INDEX IF NOT EXISTS records_receipt ON records(receipt) WHERE receipt IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS records_source ON records(source);
+            """)
+        if version != "2" {
+            try database.execute("UPDATE records SET " + fill + "; PRAGMA user_version=2;")
+        }
     }
 
     func journalKey(source: String, file: URL, home: URL) throws -> String {
@@ -205,24 +236,102 @@ final class UsageNativeArchive {
         }
     }
 
-    func events() throws -> [UsageNativeEvent] {
-        var result: [UsageNativeEvent] = []
-        for row in try database.rows(
-            "SELECT path,identity,payload FROM records ORDER BY sequence", maximum: limits.records)
-        {
-            try Task.checkCancellation()
-            guard let payload = row["payload"], payload.utf8.count <= limits.lineBytes else {
-                throw UsageNativeFailure.archive("decode a record")
-            }
-            var event = try JSONDecoder().decode(UsageNativeEvent.self, from: Data(payload.utf8))
-            if event.identity == nil {
-                event.identity =
-                    "anonymous:" + UsageNativeJSON.hash(row["path"] ?? "") + ":"
-                    + (row["identity"] ?? "") + ":" + UsageNativeJSON.hash(payload)
-            }
-            result.append(event)
+    func revisionKey() throws -> String {
+        let records =
+            try database.rows(
+                "SELECT COUNT(*) AS n,COALESCE(MAX(sequence),0) AS m,COALESCE(SUM(sequence),0) AS s FROM records",
+                maximum: 1
+            ).first ?? [:]
+        let files =
+            try database.rows(
+                "SELECT COUNT(*) AS n,COALESCE(SUM(size),0) AS z,COALESCE(SUM(generation),0) AS g FROM files",
+                maximum: 1
+            ).first ?? [:]
+        return [records["n"], records["m"], records["s"], files["n"], files["z"], files["g"]]
+            .map { $0 ?? "" }.joined(separator: ":")
+    }
+
+    func forEachEffectiveEvent(_ body: (UsageNativeEvent, Int) throws -> Void) throws {
+        try database.execute(
+            "CREATE TEMP TABLE IF NOT EXISTS usage_excluded(sequence INTEGER PRIMARY KEY); DELETE FROM usage_excluded;"
+        )
+        var copilot: [(Int, UsageNativeEvent)] = []
+        try database.forEachRow("SELECT sequence,payload FROM records WHERE source='copilot'") {
+            row in
+            guard let payload = UsageNativeDatabase.text(row, 1) else { return }
+            let event = try JSONDecoder().decode(UsageNativeEvent.self, from: Data(payload.utf8))
+            copilot.append((UsageNativeDatabase.integer(row, 0), event))
         }
-        return result
+        let prioritized = copilot.filter { $0.1.observationPriority != nil }
+        for (sequence, event) in prioritized {
+            guard let priority = event.observationPriority else { continue }
+            let hidden = prioritized.contains { _, candidate in
+                guard let other = candidate.observationPriority, other < priority else {
+                    return false
+                }
+                if priority == 4 { return candidate.session == event.session }
+                return (event.traceID != nil && candidate.traceID == event.traceID)
+                    || (event.receiptID != nil && candidate.receiptID == event.receiptID)
+            }
+            if hidden {
+                try database.run("INSERT OR IGNORE INTO usage_excluded VALUES(?)", [sequence])
+            }
+        }
+        try database.forEachRow(
+            """
+            SELECT r.sequence,r.payload FROM records r JOIN (
+              SELECT sequence FROM (
+                SELECT sequence,ROW_NUMBER() OVER (
+                  PARTITION BY source,COALESCE(ident,'anon:'||sequence)
+                  ORDER BY outtok DESC,total DESC,sequence) AS rn
+                FROM records
+                WHERE sequence NOT IN (SELECT sequence FROM usage_excluded)
+                  AND NOT (source='claude-cloud' AND receipt IS NOT NULL AND EXISTS(
+                    SELECT 1 FROM records l WHERE l.source IN ('cli','cowork')
+                      AND l.receipt=records.receipt))
+              ) WHERE rn=1) w ON w.sequence=r.sequence
+            ORDER BY r.sequence
+            """
+        ) { row in
+            guard let payload = UsageNativeDatabase.text(row, 1),
+                payload.utf8.count <= limits.lineBytes
+            else { throw UsageNativeFailure.archive("decode a record") }
+            let event = try JSONDecoder().decode(UsageNativeEvent.self, from: Data(payload.utf8))
+            try autoreleasepool { try body(event, UsageNativeDatabase.integer(row, 0)) }
+        }
+    }
+
+    struct CachedDocument {
+        let data: Data
+        let stamp: String
+        let unpriced: Int
+        let days: Int
+    }
+
+    func cachedDocument(key: String) -> CachedDocument? {
+        guard
+            let stored = try? UsageNativeFileIO.read(
+                root.appendingPathComponent("assembly.json"), maximum: 67_108_864),
+            let header = try? UsageNativeFileIO.read(
+                root.appendingPathComponent("assembly.key"), maximum: 4096),
+            let lines = String(data: header, encoding: .utf8)?.split(
+                separator: "\n", omittingEmptySubsequences: false),
+            lines.count >= 4, lines[0] == key, let unpriced = Int(lines[2]),
+            let days = Int(lines[3])
+        else { return nil }
+        return .init(data: stored, stamp: String(lines[1]), unpriced: unpriced, days: days)
+    }
+
+    func storeDocument(_ data: Data, key: String, stamp: String, unpriced: Int, days: Int) {
+        let json = root.appendingPathComponent("assembly.json")
+        let header = root.appendingPathComponent("assembly.key")
+        try? FileManager.default.removeItem(at: header)
+        guard (try? data.write(to: json, options: .atomic)) != nil else { return }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: json.path)
+        let lines = [key, stamp, String(unpriced), String(days)].joined(separator: "\n")
+        try? Data(lines.utf8).write(to: header, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: header.path)
     }
 
     func unresolvedCandidates() throws -> Int {
