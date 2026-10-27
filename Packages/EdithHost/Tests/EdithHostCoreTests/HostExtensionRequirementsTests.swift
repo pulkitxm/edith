@@ -58,6 +58,24 @@ import Testing
         #expect(fixture.setupCalls == 0)
     }
 
+    @Test func aRunningExtensionWithUncapturedPermissionsStillReportsItsRuntimeAsInstalled()
+        async throws
+    {
+        let fixture = RequirementFixture()
+        fixture.package = .installed(version: "1.0.0", enabled: true, active: true)
+        fixture.permissionStates = [
+            "screenRecording": .unknown("Screen Recording access has not been captured.")
+        ]
+        fixture.toolStates = ["ffmpeg": .missing("ffmpeg is missing")]
+        let report = try await fixture.service.inspect(id: "hinge")
+        #expect(report.state.runtimePhase == .installed)
+        let disabled = RequirementFixture()
+        disabled.package = .installed(version: "1.0.0", enabled: false, active: false)
+        let idle = try await disabled.service.inspect(id: "keepAwake")
+        #expect(idle.state.runtimePhase == .installed)
+        #expect(idle.state.phase == .disabled)
+    }
+
     @Test func usageAcceptsOneVerifiedProviderAndDoesNotRequireBoth() async throws {
         let fixture = RequirementFixture()
         fixture.toolStates = ["claude": .missing("Not installed"), "codex": .available("1.2.3")]
