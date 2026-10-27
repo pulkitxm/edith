@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   copyFile,
   mkdtemp,
@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import {
   catalogPointer,
@@ -426,7 +427,161 @@ export async function promoteExtensionCatalog({
   await updatePointer(current.release.id, JSON.stringify(pointer));
 }
 
-export async function publishExtensions({
+async function publishEntry({
+  repository,
+  directory,
+  entry,
+  target,
+  existingReleases,
+  verifyState,
+}) {
+  const recordPath = resolve(directory, `${entry.id}.json`);
+  let record = await validatedExtensionBuild({
+    repository,
+    directory,
+    entry,
+  });
+  const zip = resolve(directory, `${entry.id}.zip`);
+  let item = releaseFromListing(existingReleases, entry.tag);
+  if (!item) {
+    mutate(
+      "release",
+      "create",
+      "--repo",
+      repository,
+      entry.tag,
+      "--target",
+      target,
+      "--name",
+      `${entry.id} ${entry.version}`,
+      "--draft",
+      "--prerelease",
+      "--body",
+      `Independent extension package for Edith host ${record.hostABI}.`,
+    );
+    item = release(repository, entry.tag);
+    if (!item) throw new Error("Created extension release is not available");
+  }
+  const checksumPath = resolve(directory, `${entry.id}.zip.sha256`);
+  const publishedChecksum = item.assets.find(
+    (asset) => asset.name === `${entry.id}.zip.sha256`,
+  );
+  const publishedRecord = item.assets.find(
+    (asset) => asset.name === `${entry.id}.json`,
+  );
+  const publishedArchive = item.assets.find(
+    (asset) => asset.name === `${entry.id}.zip`,
+  );
+  if (publishedArchive) {
+    if (!publishedRecord)
+      throw new Error("Existing release is missing its package record");
+    record = await restorePublishedExtension({
+      repository,
+      record,
+      entry,
+      publishedRecord,
+      publishedArchive,
+      publishedChecksum,
+      checksumPath,
+      recordPath,
+      zip,
+    });
+  }
+  const publishedAssets = await publishExtensionAssets({
+    repository,
+    item,
+    entry,
+    files: [
+      [zip, `${entry.id}.zip`],
+      [recordPath, `${entry.id}.json`],
+      [checksumPath, `${entry.id}.zip.sha256`],
+    ],
+  });
+  await verifyState();
+  if (item.draft)
+    mutate(
+      "release",
+      "edit",
+      "--repo",
+      repository,
+      String(item.id),
+      "--tag",
+      entry.tag,
+      "--draft",
+      "false",
+      "--make-latest",
+      "false",
+    );
+  await verifyImmutableReleaseAssets({
+    repository,
+    receipt: publishedAssets,
+  });
+  return record;
+}
+
+export const publicationConcurrency = 6;
+
+export async function runBounded(items, limit, task) {
+  const queue = [...items];
+  let failure;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, queue.length) }, async () => {
+      while (queue.length && !failure) {
+        const item = queue.shift();
+        try {
+          await task(item);
+        } catch (error) {
+          failure ??= error;
+        }
+      }
+    }),
+  );
+  if (failure) throw failure;
+}
+
+async function publishEntries({
+  directory,
+  repository,
+  target,
+  ref,
+  catalogTag,
+  publicKey,
+  include,
+}) {
+  const script = fileURLToPath(import.meta.url);
+  const environment = {
+    ...process.env,
+    EXTENSION_OUTPUT: directory,
+    GITHUB_REPOSITORY: repository,
+    GITHUB_SHA: target,
+    GITHUB_REF: ref ?? "",
+    EXTENSION_CATALOG_TAG: catalogTag,
+    EXTENSION_CATALOG_PUBLIC_KEY: publicKey,
+  };
+  const worker = (entry) =>
+    new Promise((done, fail) => {
+      const child = spawn(process.execPath, [script, "--entry", entry.id], {
+        env: environment,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      child.on("error", fail);
+      child.on("exit", (code) =>
+        code === 0
+          ? done()
+          : fail(new Error(`Extension publication failed: ${entry.id}`)),
+      );
+    });
+  await runBounded(include, publicationConcurrency, worker);
+  return Promise.all(
+    include.map(async (entry) =>
+      JSON.parse(
+        await readFile(resolve(directory, `${entry.id}.published.json`), "utf8"),
+      ),
+    ),
+  );
+}
+
+async function publicationContext({
   directory,
   repository,
   target,
@@ -434,18 +589,6 @@ export async function publishExtensions({
   catalogTag,
   publicKey,
 }) {
-  if (!publicKey || !process.env.EXTENSION_CATALOG_PRIVATE_KEY)
-    throw new Error(
-      "Catalog signing credentials are required before publication",
-    );
-  execFileSync(
-    "swift",
-    ["scripts/extension-catalog-sign.swift", "check-key", publicKey],
-    {
-      stdio: "inherit",
-      timeout: 60_000,
-    },
-  );
   const old = JSON.parse(
     await readFile(resolve(directory, "previous.json"), "utf8"),
   );
@@ -466,6 +609,37 @@ export async function publishExtensions({
     });
     return current ? { ...current, catalogRevision: old.revision } : undefined;
   };
+  return { old, include, verifyState };
+}
+
+export async function publishExtensions({
+  directory,
+  repository,
+  target,
+  ref,
+  catalogTag,
+  publicKey,
+}) {
+  if (!publicKey || !process.env.EXTENSION_CATALOG_PRIVATE_KEY)
+    throw new Error(
+      "Catalog signing credentials are required before publication",
+    );
+  execFileSync(
+    "swift",
+    ["scripts/extension-catalog-sign.swift", "check-key", publicKey],
+    {
+      stdio: "inherit",
+      timeout: 60_000,
+    },
+  );
+  const { old, include, verifyState } = await publicationContext({
+    directory,
+    repository,
+    target,
+    ref,
+    catalogTag,
+    publicKey,
+  });
   await verifyState();
   const publishDraft = async (id, tag) =>
     mutate(
@@ -500,92 +674,15 @@ export async function publishExtensions({
     await verifyState();
     return { published: [], revision: old.revision };
   }
-  const records = [];
-  const existingReleases = listReleases({ repository });
-  for (const entry of include) {
-    const recordPath = resolve(directory, `${entry.id}.json`);
-    let record = await validatedExtensionBuild({
-      repository,
-      directory,
-      entry,
-    });
-    const zip = resolve(directory, `${entry.id}.zip`);
-    let item = releaseFromListing(existingReleases, entry.tag);
-    if (!item) {
-      mutate(
-        "release",
-        "create",
-        "--repo",
-        repository,
-        entry.tag,
-        "--target",
-        target,
-        "--name",
-        `${entry.id} ${entry.version}`,
-        "--draft",
-        "--prerelease",
-        "--body",
-        `Independent extension package for Edith host ${record.hostABI}.`,
-      );
-      item = release(repository, entry.tag);
-      if (!item) throw new Error("Created extension release is not available");
-    }
-    const checksumPath = resolve(directory, `${entry.id}.zip.sha256`);
-    const publishedChecksum = item.assets.find(
-      (asset) => asset.name === `${entry.id}.zip.sha256`,
-    );
-    const publishedRecord = item.assets.find(
-      (asset) => asset.name === `${entry.id}.json`,
-    );
-    const publishedArchive = item.assets.find(
-      (asset) => asset.name === `${entry.id}.zip`,
-    );
-    if (publishedArchive) {
-      if (!publishedRecord)
-        throw new Error("Existing release is missing its package record");
-      record = await restorePublishedExtension({
-        repository,
-        record,
-        entry,
-        publishedRecord,
-        publishedArchive,
-        publishedChecksum,
-        checksumPath,
-        recordPath,
-        zip,
-      });
-    }
-    const publishedAssets = await publishExtensionAssets({
-      repository,
-      item,
-      entry,
-      files: [
-        [zip, `${entry.id}.zip`],
-        [recordPath, `${entry.id}.json`],
-        [checksumPath, `${entry.id}.zip.sha256`],
-      ],
-    });
-    await verifyState();
-    if (item.draft)
-      mutate(
-        "release",
-        "edit",
-        "--repo",
-        repository,
-        String(item.id),
-        "--tag",
-        entry.tag,
-        "--draft",
-        "false",
-        "--make-latest",
-        "false",
-      );
-    await verifyImmutableReleaseAssets({
-      repository,
-      receipt: publishedAssets,
-    });
-    records.push(record);
-  }
+  const records = await publishEntries({
+    directory,
+    repository,
+    target,
+    ref,
+    catalogTag,
+    publicKey,
+    include,
+  });
   const next = mergeExtensionCatalog(
     old,
     records,
@@ -706,6 +803,33 @@ if (import.meta.main) {
     );
     process.stdout.write(
       `Verified catalog revision: ${state.catalog.revision}\n`,
+    );
+  } else if (process.argv[2] === "--entry") {
+    if (process.argv.length !== 4)
+      throw new Error("Supply the extension to publish");
+    const directory = process.env.EXTENSION_OUTPUT ?? "dist/extensions";
+    const target = process.env.GITHUB_SHA;
+    const { include, verifyState } = await publicationContext({
+      directory,
+      repository,
+      target,
+      ref: process.env.GITHUB_REF,
+      catalogTag,
+      publicKey,
+    });
+    const entry = include.find(({ id }) => id === process.argv[3]);
+    if (!entry) throw new Error("Unknown extension publication entry");
+    const record = await publishEntry({
+      repository,
+      directory,
+      entry,
+      target,
+      existingReleases: listReleases({ repository }),
+      verifyState,
+    });
+    await writeFile(
+      resolve(directory, `${entry.id}.published.json`),
+      JSON.stringify(record),
     );
   } else {
     if (process.argv.length !== 2)
