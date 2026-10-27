@@ -10,7 +10,6 @@ final class MaintenanceCancellation: @unchecked Sendable {
 
 enum MaintenancePreferences {
     static let installDestination = AppStorageKeys.AppMaintenance.installDestination
-    static let section = AppStorageKeys.AppMaintenance.section
     static let updateAutoRefresh = AppStorageKeys.AppMaintenance.updateAutoRefresh
     static let updateConcurrency = AppStorageKeys.AppMaintenance.updateConcurrency
     static let updateNotifications = AppStorageKeys.AppMaintenance.updateNotifications

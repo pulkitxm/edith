@@ -6,66 +6,32 @@ import UniformTypeIdentifiers
 
 enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     case updates = "Updates"
-    case packages = "Packages"
     case removal = "Remove"
-    case cleaner = "Cleaner"
     case history = "History"
 
     var id: Self { self }
 
-    var symbol: String {
-        switch self {
-        case .updates: "arrow.up.circle"
-        case .packages: "shippingbox"
-        case .removal: "trash"
-        case .cleaner: "sparkles.rectangle.stack"
-        case .history: "clock.arrow.circlepath"
-        }
-    }
-
-    var abilityID: String {
-        switch self {
-        case .packages: "homebrew"
-        case .cleaner: "cleaner"
-        default: "appMaintenance"
-        }
+    init(hostSection: String?) {
+        self = hostSection.flatMap(Self.init(rawValue:)) ?? .updates
     }
 
     var uiScope: AppMaintenanceUIScope {
         switch self {
         case .removal: .removal
         case .history: .history
-        case .updates, .packages, .cleaner: .updates
-        }
-    }
-
-    var usesApplicationInventory: Bool {
-        switch self {
-        case .packages, .cleaner: false
-        case .updates, .removal, .history: true
-        }
-    }
-
-    var summary: String {
-        switch self {
-        case .updates: "Review and run available application updates."
-        case .packages: "Manage installed and discoverable Homebrew packages."
-        case .removal: "Review applications and their related files before removal."
-        case .cleaner: "Find reclaimable space and remove it after review."
-        case .history: "Review completed maintenance operations."
+        case .updates: .updates
         }
     }
 }
 
 struct AppMaintenanceView: View {
     @State var model: AppMaintenanceModel
+    let section: AppMaintenanceSection
     @State private var query = ""
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
     @State private var showingDiskImagePicker = false
     @State private var showingUpdateSettings = false
-    @AppStorage(MaintenancePreferences.section, store: SharedDefaults.store)
-    private var sectionRaw = AppMaintenanceSection.updates.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
@@ -116,19 +82,9 @@ struct AppMaintenanceView: View {
 
     private var theme: Color { themeColor(themeName) }
 
-    private var section: AppMaintenanceSection {
-        AppMaintenanceSection(rawValue: sectionRaw) ?? .updates
-    }
-
-    private var sectionBinding: Binding<AppMaintenanceSection> {
-        Binding(
-            get: { section },
-            set: { sectionRaw = $0.rawValue })
-    }
-
     var body: some View {
         PageWorkspace {
-            header
+            toolbar
             Divider()
         } content: {
             content
@@ -136,11 +92,11 @@ struct AppMaintenanceView: View {
         .onChange(of: section, initial: true) { _, section in model.scope = section.uiScope }
         .onChange(of: model.focusedUpdateID) { Task { await model.refreshRemote() } }
         .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
-        .pageTask(active: section.usesApplicationInventory, cancel: model.cancelDiscovery) {
+        .pageTask(cancel: model.cancelDiscovery) {
             model.refresh(interval: updateRefreshInterval)
         }
         .pageRefresh(
-            active: updateAutoRefresh && section.usesApplicationInventory,
+            active: updateAutoRefresh,
             interval: { .seconds(max(updateRefreshInterval, 900)) }
         ) {
             model.refresh(automatic: true, interval: updateRefreshInterval)
@@ -183,88 +139,59 @@ struct AppMaintenanceView: View {
         }
     }
 
-    private var header: some View {
-        PageHeader(
-            section.rawValue,
-            trailing: {
-                Picker("Section", selection: sectionBinding) {
-                    ForEach(AppMaintenanceSection.allCases) { section in
-                        Label(section.rawValue, systemImage: section.symbol).tag(section)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .accessibilityLabel("App Maintenance section")
-            },
-            accessory: {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    Text(section.summary)
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    if section.usesApplicationInventory {
-                        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
-                            Button {
-                                showingUpdateSettings.toggle()
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .buttonStyle(.edith(.iconOnly))
-                            .accessibilityLabel("Update settings")
-                            .help("Update settings")
-                            .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                            Menu {
-                                Picker(
-                                    "Destination",
-                                    selection: Binding(
-                                        get: { installDestinationRaw },
-                                        set: { installDestinationRaw = $0 })
-                                ) {
-                                    ForEach(
-                                        AppMaintenanceInstallDestination.allCases,
-                                        id: \.rawValue
-                                    ) {
-                                        destination in
-                                        Text(destination.title).tag(destination.rawValue)
-                                    }
-                                }
-                            } label: {
-                                Label(installDestination.title, systemImage: "folder")
-                            }
-                            if model.checkingUpdates {
-                                Text("Checking updates")
-                                    .font(.system(size: UIScale.pt(12)))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Button {
-                                showingDiskImagePicker = true
-                            } label: {
-                                Label(
-                                    "Install Disk Image",
-                                    systemImage: "externaldrive.badge.plus")
-                            }
-                            .disabled(model.phase != .ready)
-                            Button {
-                                model.refresh(interval: updateRefreshInterval)
-                            } label: {
-                                Label("Refresh", systemImage: "arrow.clockwise")
-                            }
-                            .disabled(model.phase != .ready)
-                            .buttonStyle(.edith(.secondary))
-                        }
-                    }
-                }
+    private var toolbar: some View {
+        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
+            Button {
+                showingUpdateSettings.toggle()
+            } label: {
+                Image(systemName: "gearshape")
             }
-        )
+            .buttonStyle(.edith(.iconOnly))
+            .accessibilityLabel("Update settings")
+            .help("Update settings")
+            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+            Menu {
+                Picker(
+                    "Destination",
+                    selection: Binding(
+                        get: { installDestinationRaw },
+                        set: { installDestinationRaw = $0 })
+                ) {
+                    ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
+                        destination in
+                        Text(destination.title).tag(destination.rawValue)
+                    }
+                }
+            } label: {
+                Label(installDestination.title, systemImage: "folder")
+            }
+            if model.checkingUpdates {
+                Text("Checking updates")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(.secondary)
+            }
+            Button {
+                showingDiskImagePicker = true
+            } label: {
+                Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
+            }
+            .disabled(model.phase != .ready)
+            Button {
+                model.refresh(interval: updateRefreshInterval)
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.phase != .ready)
+            .buttonStyle(.edith(.secondary))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pageGutter(compact)
+        .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
     }
 
     @ViewBuilder
     private var content: some View {
-        if section == .packages {
-            extensionLink("Homebrew", id: "homebrew", symbol: "shippingbox")
-        } else if section == .cleaner {
-            extensionLink("Cleaner", id: "cleaner", symbol: "sparkles.rectangle.stack")
-        } else if model.phase == .loading {
+        if model.phase == .loading {
             ScrollView {
                 PageSkeleton(layout: .list)
                     .pageContent(compact)
@@ -289,26 +216,10 @@ struct AppMaintenanceView: View {
         }
     }
 
-    private func extensionLink(_ title: String, id: String, symbol: String) -> some View {
-        PageScaffold {
-            EmptyView()
-        } content: {
-            ContentStatusView(
-                title, message: "Download and enable \(title) in Extensions to use it here.",
-                symbol: symbol)
-            Button("Open \(title)") { model.openExtension(id) }
-                .buttonStyle(.edith(.primary))
-            if let message = model.errorMessage {
-                PageNotice(message, tone: .error)
-            }
-        }
-    }
-
     @ViewBuilder
     private var sectionInventory: some View {
         switch section {
         case .updates: updateInventory
-        case .packages, .cleaner: EmptyView()
         case .removal: removalInventory
         case .history: historyInventory
         }
@@ -472,7 +383,6 @@ struct AppMaintenanceView: View {
     private var detail: some View {
         switch section {
         case .updates: updateDetail
-        case .packages, .cleaner: EmptyView()
         case .removal: removalDetail
         case .history: historyDetail
         }
