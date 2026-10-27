@@ -83,6 +83,9 @@ public final class FixtureWorkerEngine: HostWorkerEngine {
                 ok = false
                 message = "Restore sleep settings and try again."
             }
+            if mode == "timeout-disable-once", prepareCount == 1 {
+                try? await Task.sleep(for: .seconds(30))
+            }
             if mode == "late-disable", prepareCount == 1 {
                 try? await Task.sleep(for: .milliseconds(300))
             }
