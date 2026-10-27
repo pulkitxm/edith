@@ -442,6 +442,24 @@ import HostWorkerFixtureSupport
         #expect(await fixture.sessions.shutdown())
     }
 
+    @Test func aDisableThatTimesOutFinishesOnItsOwnWithoutRestartingTheApp() async throws {
+        let fixture = try Fixture(mode: "timeout-disable-once")
+        defer { fixture.clean() }
+        fixture.sessions.retryDelays = Array(repeating: .milliseconds(1), count: 3)
+        fixture.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(1)) }
+        let package = fixture.package("1.0.0")
+        try await fixture.sessions.enable(package)
+        await #expect(throws: HostWorkerError.self) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        try await fixture.waitUntil { fixture.sessions.states["sample"] == .disabled }
+        #expect(fixture.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+        try await fixture.sessions.enable(package)
+        #expect(fixture.sessions.activeIDs == ["sample"])
+        await fixture.sessions.shutdown()
+    }
+
     @Test func shutdownCancelsPendingRetries() async throws {
         let fixture = try Fixture(failingWorkers: 0..<1)
         defer { fixture.clean() }
