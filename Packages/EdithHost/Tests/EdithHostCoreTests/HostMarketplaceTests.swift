@@ -95,6 +95,21 @@ import HostWorkerFixtureSupport
         #expect(!marketplace.busy)
     }
 
+    @Test func aTransferThatFailsTwiceInTransitIsRetried() async throws {
+        var attempts = 0
+        let value = try await HostMarketplace.retryingTransfer { () async throws -> Int in
+            attempts += 1
+            if attempts < 3 { throw MarketplaceError.downloadFailed }
+            return attempts
+        }
+        #expect(value == 3)
+        await #expect(throws: MarketplaceError.invalidCatalog) {
+            try await HostMarketplace.retryingTransfer { () async throws -> Int in
+                throw MarketplaceError.invalidCatalog
+            }
+        }
+    }
+
     @Test func installingSeveralExtensionsReportsEachFailureSeparately() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

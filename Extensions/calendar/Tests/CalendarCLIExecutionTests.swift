@@ -35,7 +35,7 @@ import Testing
                 reads += 1; return []
             }
             #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
-            #expect(reply.stdout.contains("USAGE: calendar"))
+            #expect(reply.stdout.contains("USAGE: ed calendar"))
         }
         for arguments in [
             ["ls", "--days", "121"], ["ls", "--days", "-1"], ["join"], ["--unknown"],

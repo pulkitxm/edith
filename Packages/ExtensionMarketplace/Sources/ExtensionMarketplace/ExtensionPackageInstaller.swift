@@ -183,21 +183,10 @@ public actor ExtensionPackageInstaller {
         try await exclusive { try body() }
     }
 
-    private func download(_ package: ExtensionPackage, source: Download) async throws -> URL {
-        var attempt = 0
-        while true {
-            do { return try await source(package.downloadURL, package.downloadBytes) } catch {
-                attempt += 1
-                guard attempt < 3, !(error is CancellationError) else { throw error }
-                try await Task.sleep(for: .milliseconds(500 * attempt))
-            }
-        }
-    }
-
     private func stage(
         _ package: ExtensionPackage, in temporary: URL, source: Download, admit: Verify
     ) async throws -> URL {
-        let archive = try await download(package, source: source)
+        let archive = try await source(package.downloadURL, package.downloadBytes)
         defer { try? FileManager.default.removeItem(at: archive) }
         try Task.checkCancellation()
         let bytes = try Data(contentsOf: archive, options: .mappedIfSafe)

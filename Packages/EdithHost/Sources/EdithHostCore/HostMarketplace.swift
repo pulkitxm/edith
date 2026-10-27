@@ -344,9 +344,11 @@ public final class HostMarketplace {
                     self?.operations[id] = value
                 }
             }
-            _ = try await installer.install(
-                plan, repository: MarketplaceConfiguration.repository,
-                progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
+            _ = try await Self.retryingTransfer {
+                try await installer.install(
+                    plan, repository: MarketplaceConfiguration.repository,
+                    progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
+            }
             if let package = plan.first(where: { $0.id == id }) {
                 await activate(
                     package,
@@ -363,6 +365,19 @@ public final class HostMarketplace {
             return fail(id, "The extension was downloaded. Package files are awaiting cleanup.")
         } catch {
             return fail(id, "The extension could not be downloaded. Try again.")
+        }
+    }
+
+    static func retryingTransfer<T>(_ operation: () async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do { return try await operation() } catch {
+                attempt += 1
+                let transient =
+                    (error as? MarketplaceError) == .downloadFailed || error is URLError
+                guard transient, attempt < 3 else { throw error }
+                try await Task.sleep(for: .milliseconds(300 * attempt))
+            }
         }
     }
 
