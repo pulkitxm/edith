@@ -103,6 +103,29 @@ import Testing
         await engine.shutdown()
     }
 
+    @Test func snapshotsFollowProjectsChangedFromTheTerminal() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("synthetic.tex")
+        try Data("original document".utf8).write(to: source)
+        let store = LaTeXProjectStore(url: root.appendingPathComponent("projects.json"))
+        let engine = LaTeXModel(store: store)
+        let bridge = LaTeXUIBridge(invoke: { command, payload in
+            try await LaTeXUIBridge.execute(command, payload: payload, model: engine)
+        })
+        #expect(try await bridge.snapshot().projects.isEmpty)
+        let project = LaTeXProject(name: "Terminal", location: .disk, sourcePath: source.path)
+        try store.save([project])
+        #expect(try await bridge.snapshot().projects.map(\.id) == [project.id])
+        _ = try await bridge.perform(.init(action: "select", projectID: project.id))
+        #expect(try await bridge.snapshot().selectedID == project.id)
+        try store.save([])
+        let emptied = try await bridge.snapshot()
+        #expect(emptied.projects.isEmpty && emptied.selectedID == nil)
+        await engine.shutdown()
+    }
+
     @Test func catalogDeclaresThatTerminalInputIsAccepted() throws {
         let catalog = try #require(
             JSONSerialization.jsonObject(
