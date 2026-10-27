@@ -127,7 +127,7 @@ final class AgentActivityMonitor {
         if let uiClient {
             do {
                 receive(
-                    try JSONDecoder().decode(
+                    try AgentPayload.decode(
                         AgentActivitySnapshot.self, from: await uiClient.perform("activity.status"))
                 )
             } catch { hookError = error.localizedDescription }

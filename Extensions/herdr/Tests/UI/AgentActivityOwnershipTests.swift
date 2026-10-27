@@ -219,4 +219,23 @@ import Testing
         } while ContinuousClock.now < deadline
         throw ExtensionPeerError.unavailable
     }
+
+    @Test func interfaceMonitorDecodesEngineSnapshotDates() async throws {
+        let suite = "activity-ui-snapshot-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let signal = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = AgentActivitySnapshot(
+            refreshedAt: signal.addingTimeInterval(60), providerSignals: ["claude": signal])
+        let encoded = try AgentPayload.encode(snapshot)
+        let client = HerdrUIClient { operation, _ in
+            #expect(operation == "activity.status")
+            return encoded
+        }
+        let monitor = AgentActivityMonitor(defaults: defaults, uiClient: client)
+        await monitor.refresh()
+        #expect(monitor.hookError == nil)
+        #expect(monitor.activity.providerSignals["claude"] == signal)
+        #expect(monitor.activity.refreshedAt == signal.addingTimeInterval(60))
+    }
 }

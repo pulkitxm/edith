@@ -74,6 +74,16 @@ import Testing
         #expect(await calls.streamOperations == ["herdr.agent.cli.start", "herdr.agent.cli.read"])
     }
 
+    @Test func streamedHookEndsItsInputSoTheOwnerSeesEndOfFile() async throws {
+        let calls = ActivityCalls(mode: .streamChanged)
+        await #expect(throws: HostCoreCommandFailure.self) {
+            try await HostCoreAgentRouteCLI.execute(
+                ["agent", "activity", "hook"], input: Data("{}".utf8),
+                invoke: { try await calls.invoke($0) })
+        }
+        #expect(await calls.inputEnds == [true])
+    }
+
     @Test func hiddenHookCannotBecomeAnMCPToolOrCompletionCandidate() async throws {
         let calls = ActivityCalls()
         let output = ActivityOutput()
@@ -110,6 +120,7 @@ private actor ActivityCalls {
     var enabled: Bool
     var inputs: [Data] = []
     var streamOperations: [String] = []
+    var inputEnds: [Bool] = []
     var handle: HostCLIStreamHandle?
     init(mode: Mode = .ordinary) { self.mode = mode; enabled = mode != .disabled }
     func invoke(_ request: HostCLIRequest) async throws -> Data {
@@ -175,8 +186,22 @@ private actor ActivityCalls {
             self.handle = handle
             return try JSONEncoder().encode(handle)
         }
+        if request.operation == "herdr.agent.cli.write" {
+            let body = try JSONDecoder().decode(HostCLIJSON.self, from: request.payload)
+            inputEnds.append(body.object?["end"] == .bool(true))
+            let sequence = try #require(body.object?["sequence"]?.integer)
+            return try JSONEncoder().encode(
+                HostCLIStreamInputAck(
+                    handle: #require(handle), sequence: UInt64(sequence),
+                    nextSequence: UInt64(sequence) + 1, accepted: true))
+        }
         if request.operation == "herdr.agent.cli.read" {
-            streamOperations.append(request.operation!); enabled = false
+            streamOperations.append(request.operation!)
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while inputEnds.isEmpty, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            enabled = false
             return try JSONEncoder().encode(
                 HostCLIStreamFrame(
                     handle: #require(handle), sequence: 0, nextSequence: 1,

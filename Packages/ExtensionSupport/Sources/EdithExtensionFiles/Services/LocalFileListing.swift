@@ -1,6 +1,13 @@
 import Foundation
 
 public enum LocalFileListing {
+    public static func entriesOffMain(
+        path: String,
+        load: @escaping @Sendable (String) -> [RemoteFileEntry] = { entries(path: $0) }
+    ) async -> [RemoteFileEntry] {
+        await Task.detached(priority: .userInitiated) { load(path) }.value
+    }
+
     public static func entries(path: String) -> [RemoteFileEntry] {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [

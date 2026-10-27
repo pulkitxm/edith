@@ -48,12 +48,14 @@ public enum HostCoreAgentRouteCLI {
             let stream = try await HostCLIStream.start(
                 owner: owner, operation: operation, request: context,
                 maximumDuration: command.streamDeadline ?? 1800, invoke: checkedInvoke)
+            let streamInput = HostCLILiveInput(interactive: false, receive: { nil }, cancel: {})
             if let streamWrite {
-                let code = try await stream.consume(write: streamWrite)
+                let code = try await stream.consume(input: streamInput, write: streamWrite)
                 return try ExtensionCLIReply(stdout: "", stderr: "", exitCode: code)
             }
             let capture = HostCLIStreamCapture()
-            let code = try await stream.consume(write: { try await capture.append($0, stderr: $1) })
+            let code = try await stream.consume(
+                input: streamInput, write: { try await capture.append($0, stderr: $1) })
             return try await capture.reply(code: code)
         }
         let reply = try await registry.call(
