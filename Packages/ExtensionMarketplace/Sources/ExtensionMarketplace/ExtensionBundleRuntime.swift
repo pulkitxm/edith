@@ -523,7 +523,7 @@ public final class ExtensionBundleRuntime {
             readOnlyPackage == nil
             ? store.roleBundle(for: package, role: role)
             : directory.appendingPathComponent(id).appendingPathComponent("\(role.rawValue).bundle")
-        try verify(url)
+        try ExtensionBundleVerification.verify(url, using: verify)
         guard let bundle = Bundle(url: url), let executable = bundle.executableURL else {
             throw MarketplaceError.invalidBundle
         }
