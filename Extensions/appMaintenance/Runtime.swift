@@ -171,7 +171,8 @@ final class ExtensionRuntime: NSObject {
             return NSHostingController(
                 rootView: ExtensionPageHost { AppMaintenanceView(model: model, section: section) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize":
+            if let settings = settingsModel { Task { await settings.load() } }
         case "stop":
             _ = beginResourceStop()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary

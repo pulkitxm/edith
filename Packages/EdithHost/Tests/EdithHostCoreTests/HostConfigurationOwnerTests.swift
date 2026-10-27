@@ -52,7 +52,7 @@ import Testing
         "appMaintenance": [
             "appMaintenanceEnabled", "appMaintenanceInstallDestination", "appUpdateAutoRefresh",
             "appUpdateRefreshInterval", "appUpdateNotifications", "appUpdateConcurrency",
-            "appUpdateRetries",
+            "appUpdateRetries", "appMaintenanceCategoriesExpanded",
         ],
         "cleaner": [
             "cleanerEnabled", "cleanerSelectedDrives", "cleanerCustomFolders",
@@ -69,7 +69,7 @@ import Testing
         let service: HostConfigurationCLI
         var announced: () -> Int
 
-        init() throws {
+        init(availability: HostOwnerAvailability = .ready) throws {
             let id = UUID().uuidString
             names = [
                 "com.pulkit.edith.tests.owner-shared-\(id)", "com.pulkit.edith.tests.owner-\(id)",
@@ -81,7 +81,8 @@ import Testing
             let counter = Counter()
             service = try HostConfigurationCLI(
                 shared: shared, standard: shared,
-                owners: { _ in owner }, changed: { counter.value += 1 })
+                owners: { _ in owner }, availability: { _ in availability },
+                changed: { counter.value += 1 })
             announced = { counter.value }
         }
 
@@ -180,5 +181,30 @@ import Testing
         _ = try fixture.service.execute(["set", "appearance", "dark"])
         #expect(fixture.shared.string(forKey: "appearance") == "dark")
         #expect(fixture.owner.object(forKey: "appearance") == nil)
+    }
+
+    @Test(arguments: [
+        (HostOwnerAvailability.off, "ed extensions enable presenter"),
+        (HostOwnerAvailability.notInstalled, "ed extensions install presenter"),
+    ]) func writesToAnUnavailableOwnerFailWithTheRecoveryCommand(
+        _ availability: HostOwnerAvailability, _ hint: String
+    ) throws {
+        let fixture = try Fixture(availability: availability)
+        defer { fixture.clean() }
+        for arguments in [
+            ["set", "presenterAutoEnabled", "true"], ["unset", "presenterAutoEnabled"],
+        ] {
+            let error = #expect(throws: HostCLIError.self) {
+                try fixture.service.execute(arguments)
+            }
+            #expect(error?.errorDescription?.contains(hint) == true)
+        }
+        let input = Data("{\"presenterAutoEnabled\":true}".utf8)
+        #expect(throws: HostCLIError.self) {
+            try fixture.service.execute(["import", "-", "--json"], input: input)
+        }
+        #expect(fixture.owner.object(forKey: "presenterAutoEnabled") == nil)
+        #expect(try fixture.service.execute(["get", "presenterAutoEnabled"]).stdout == "\n")
+        _ = try fixture.service.execute(["set", "appearance", "dark"])
     }
 }

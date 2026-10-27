@@ -178,7 +178,15 @@ final class ExtensionRuntime: NSObject {
                 rootView: ExtensionPageHost { SystemPage(model: model, presentation: presentation) }
             )
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize":
+            let defaults = SharedDefaults.store
+            if let raw = defaults.string(forKey: RunningAppsKeys.sort),
+                AppSortKey(rawValue: raw) != nil
+            {
+                model?.restoreSort(
+                    SystemAppsSort(
+                        sortKey: raw, ascending: defaults.bool(forKey: RunningAppsKeys.ascending)))
+            }
         case "stop":
             commands.shutdown()
             cleaning?.shutdown()

@@ -143,7 +143,7 @@ final class ExtensionRuntime: NSObject {
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { CleanerPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
+        case "synchronize": uiModel?.reloadPreferences()
         case "stop":
             _ = beginResourceStop()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
