@@ -1,17 +1,21 @@
 import EdithExtensionSupport
 import Foundation
 
+public enum HostOwnerAvailability: Sendable { case ready, notInstalled, off }
+
 @MainActor public final class HostConfigurationCLI {
     private let shared: UserDefaults
     private let standard: UserDefaults
     private let settings: [HostCLISetting]
     private let changed: () -> Void
     private let owners: (String) -> UserDefaults?
+    private let availability: (String) -> HostOwnerAvailability
 
     public init(
         shared: UserDefaults, standard: UserDefaults,
         settings: [HostCLISetting] = HostConfigurationCLI.applicationSettings,
         owners: @escaping (String) -> UserDefaults? = { _ in nil },
+        availability: @escaping (String) -> HostOwnerAvailability = { _ in .ready },
         changed: @escaping () -> Void = {}
     ) throws {
         guard Set(settings.map(\.key)).count == settings.count else {
@@ -19,7 +23,7 @@ import Foundation
         }
         for setting in settings { try setting.validate() }
         self.shared = shared; self.standard = standard; self.settings = settings;
-        self.changed = changed; self.owners = owners
+        self.changed = changed; self.owners = owners; self.availability = availability
     }
 
     public func execute(_ arguments: [String], input: Data = Data()) throws -> ExtensionCLIReply {
@@ -65,6 +69,7 @@ import Foundation
             guard !definition.readOnly else {
                 throw HostCLIError.usage("\(definition.key) is read only.")
             }
+            try requireOwner(definition)
             let previous = try value(definition)
             if action == "set" {
                 try set(definition.parse(args.words[1]), definition: definition)
@@ -112,6 +117,7 @@ import Foundation
             }
             let dryRun = args.flags.contains("--dry-run")
             if !dryRun {
+                for (definition, _) in pending { try requireOwner(definition) }
                 for (definition, value) in pending { try set(value, definition: definition) }
                 if !pending.isEmpty { changed() }
             }
@@ -136,6 +142,20 @@ import Foundation
             throw HostCLIError.usage("No setting named \(key).")
         }
         return result
+    }
+    private func requireOwner(_ definition: HostCLISetting) throws {
+        guard let owner = definition.owner else { return }
+        switch availability(owner) {
+        case .ready: return
+        case .notInstalled:
+            throw HostCLIError.rejected(
+                "\(definition.key) belongs to the \(owner) extension, which is not installed. Run `ed extensions install \(owner)` and `ed extensions enable \(owner)`."
+            )
+        case .off:
+            throw HostCLIError.rejected(
+                "\(definition.key) belongs to the \(owner) extension, which is off. Run `ed extensions enable \(owner)`."
+            )
+        }
     }
     private func store(_ definition: HostCLISetting) -> UserDefaults {
         if let owner = definition.owner, let store = owners(owner) { return store }
@@ -262,7 +282,7 @@ import Foundation
                 summary: "Use iCloud for owned backups.", fallback: .bool(true)),
             .init(
                 AppStorageKeys.Backup.settings, .bool, group: "backup",
-                summary: "Back up application settings.", fallback: .bool(true)),
+                summary: "Back up application settings."),
         ]
         + [
             (AppStorageKeys.Permissions.accessibilityGranted, "Accessibility"),
@@ -281,7 +301,7 @@ import Foundation
             .init(
                 AppStorageKeys.Permissions.filter, .string, group: "permissions",
                 summary: "Filter the Permissions page opens with.")
-        ] + HostExtensionConfigurationSettings.all
+        ] + HostExtensionConfigurationSettings.all + HostRestoredConfigurationSettings.all
 }
 
 struct HostCLIArguments {

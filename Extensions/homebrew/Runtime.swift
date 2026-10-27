@@ -81,7 +81,7 @@ final class ExtensionRuntime: NSObject {
             stopUI()
         case "cancel":
             return ["ok": true, "cancelled": operations?.cancel() ?? false] as NSDictionary
-        case "synchronize": break
+        case "synchronize": uiModel?.refreshPreferredKind()
         case "status": return ["ok": true, "running": operations != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

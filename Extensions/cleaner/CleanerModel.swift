@@ -93,6 +93,10 @@ final class CleanerModel {
                 "reclaimableBytes": String(estimate.reclaimableBytes)
             ])
         }
+        reloadPreferences()
+    }
+
+    func reloadPreferences() {
         let confirmed = Set(
             defaults.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
         if let raw = defaults.array(forKey: Self.selectedDrivesKey) as? [String] {

@@ -1,0 +1,3664 @@
+[
+  {
+    "key": "EdithMainWindowFullScreen",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Whether the main window opens in full screen.",
+    "scope": "standard",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "SUAutomaticallyUpdate",
+    "type": "bool",
+    "group": "system",
+    "summary": "Download and install updates automatically.",
+    "scope": "standard",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "SUEnableAutomaticChecks",
+    "type": "bool",
+    "group": "system",
+    "summary": "Check for updates on a schedule.",
+    "scope": "standard",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "SUScheduledCheckInterval",
+    "type": "number",
+    "group": "system",
+    "summary": "Seconds between scheduled update checks.",
+    "scope": "standard",
+    "allowed": [],
+    "default": 86400,
+    "readOnly": false
+  },
+  {
+    "key": "agentActivityProviders",
+    "type": "string",
+    "group": "agent",
+    "summary": "Provider observation and explicit approval controls for agent surfaces.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "{\"monitorTerminalAttention\":false,\"providers\":{},\"quietMinutes\":10}",
+    "readOnly": false
+  },
+  {
+    "key": "agentNotifyOnErrors",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Notify when a coding agent stops with an error.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "agentNotifyWhenBlocked",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Notify when a coding agent needs approval or an answer.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "agentNotifyWhenFinished",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Notify when a coding agent finishes its work.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "agentNotifyWhenStuck",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Notify when a coding agent shows no progress on screen.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "agentOpenDiffWhenFinished",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Open the diff when a coding agent finishes with changes to review.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "agentPauseAmbientOnBattery",
+    "type": "bool",
+    "group": "agent",
+    "summary": "Pause the agent's ambient jobs while this Mac is on battery.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "agentRegistrationState",
+    "type": "string",
+    "group": "agent",
+    "summary": "Login Items registration state of the background agent.",
+    "scope": "shared",
+    "allowed": [
+      "notRegistered",
+      "enabled",
+      "awaitingApproval",
+      "notFound"
+    ],
+    "default": "notRegistered",
+    "readOnly": true
+  },
+  {
+    "key": "agentStuckMinutes",
+    "type": "int",
+    "group": "agent",
+    "summary": "Minutes without screen progress before an agent counts as stuck.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 2,
+    "maximum": 120,
+    "default": 10,
+    "readOnly": false
+  },
+  {
+    "key": "appMaintenanceCategoriesExpanded",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Whether App Maintenance sections are expanded in the main sidebar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "appMaintenanceEnabled",
+    "type": "bool",
+    "group": "system",
+    "summary": "App Maintenance extension: inventory, installation and safe removal.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "appMaintenanceInstallDestination",
+    "type": "string",
+    "group": "system",
+    "summary": "Default disk image installation destination.",
+    "scope": "shared",
+    "allowed": [
+      "user",
+      "system"
+    ],
+    "default": "user",
+    "readOnly": false
+  },
+  {
+    "key": "appUpdateAutoRefresh",
+    "type": "bool",
+    "group": "system",
+    "summary": "Refresh App Update Center automatically.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "appUpdateConcurrency",
+    "type": "int",
+    "group": "system",
+    "summary": "Maximum updates running together.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 2,
+    "readOnly": false
+  },
+  {
+    "key": "appUpdateNotifications",
+    "type": "bool",
+    "group": "system",
+    "summary": "Notify after automatic refreshes find new updates.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "appUpdateRefreshInterval",
+    "type": "number",
+    "group": "system",
+    "summary": "Seconds between enabled App Update Center refreshes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 86400,
+    "readOnly": false
+  },
+  {
+    "key": "appUpdateRetries",
+    "type": "int",
+    "group": "system",
+    "summary": "Retries after an update fails.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 1,
+    "readOnly": false
+  },
+  {
+    "key": "appearance",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Window and panel appearance.",
+    "scope": "shared",
+    "allowed": [
+      "system",
+      "light",
+      "dark"
+    ],
+    "default": "system",
+    "readOnly": false
+  },
+  {
+    "key": "backupLimits",
+    "type": "bool",
+    "group": "backup",
+    "summary": "Back up limit history to iCloud.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "backupSettings",
+    "type": "bool",
+    "group": "backup",
+    "summary": "Back up settings to iCloud.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "backupUsage",
+    "type": "bool",
+    "group": "backup",
+    "summary": "Back up usage history to iCloud.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostEnabled",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Bifrost extension: one bar for applications, sums and conversions.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostHotKeyCode",
+    "type": "int",
+    "group": "bifrost",
+    "summary": "Virtual key code of the launcher shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostHotKeyLabel",
+    "type": "string",
+    "group": "bifrost",
+    "summary": "Printable label for the launcher shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostHotKeyMods",
+    "type": "int",
+    "group": "bifrost",
+    "summary": "Carbon modifier mask of the launcher shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostIndexedAt",
+    "type": "number",
+    "group": "bifrost",
+    "summary": "When the application index was last rebuilt.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "bifrostPasteSnippets",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Paste a snippet straight into the app you were typing in.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostPopupAt",
+    "type": "string",
+    "group": "bifrost",
+    "summary": "Where the launcher bar opens.",
+    "scope": "shared",
+    "allowed": [
+      "cursor",
+      "statusItem",
+      "window",
+      "center",
+      "lastPosition"
+    ],
+    "default": "center",
+    "readOnly": false
+  },
+  {
+    "key": "bifrostQuicklinks",
+    "type": "string",
+    "group": "bifrost",
+    "summary": "Saved quicklinks, stored as JSON.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostResultLimit",
+    "type": "int",
+    "group": "bifrost",
+    "summary": "How many results the launcher shows at once.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 3,
+    "maximum": 12,
+    "default": 8,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostShellCommands",
+    "type": "string",
+    "group": "bifrost",
+    "summary": "Saved shell commands, stored as JSON.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSnippets",
+    "type": "string",
+    "group": "bifrost",
+    "summary": "Saved snippets, stored as JSON.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceAppleShortcuts",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Search the shortcuts you built in the Shortcuts app.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceOpenWindows",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Offer every open window by title.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceQuicklinks",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Search your saved quicklinks.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceRunningApplications",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Offer the apps that are running right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceShellCommands",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Search your saved shell commands.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceSnippets",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Search your saved snippets.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceSystemActions",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Offer lock, sleep, appearance and trash actions.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "bifrostSourceWindowActions",
+    "type": "bool",
+    "group": "bifrost",
+    "summary": "Offer the window management actions.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "budgetCapPercent",
+    "type": "number",
+    "group": "budget",
+    "summary": "Budget cap as a percentage of the limit.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 50,
+    "readOnly": false
+  },
+  {
+    "key": "budgetDeadline",
+    "type": "number",
+    "group": "budget",
+    "summary": "Unix timestamp the budget is paced towards.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 0,
+    "readOnly": false
+  },
+  {
+    "key": "budgetEnabled",
+    "type": "bool",
+    "group": "budget",
+    "summary": "Track a spend budget.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "budgetKind",
+    "type": "string",
+    "group": "budget",
+    "summary": "Window the budget applies to.",
+    "scope": "shared",
+    "allowed": [
+      "session",
+      "weekly"
+    ],
+    "default": "session",
+    "readOnly": false
+  },
+  {
+    "key": "budgetMode",
+    "type": "string",
+    "group": "budget",
+    "summary": "Budget comparison mode.",
+    "scope": "shared",
+    "allowed": [
+      "cap",
+      "pace"
+    ],
+    "default": "cap",
+    "readOnly": false
+  },
+  {
+    "key": "claudeLimitsEnabled",
+    "type": "bool",
+    "group": "limits",
+    "summary": "Track Claude rate limits.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "cleanerCategoryDefaults",
+    "type": "map",
+    "group": "cleaner",
+    "summary": "Per-category cleaner defaults.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "cleanerCustomFolders",
+    "type": "stringList",
+    "group": "cleaner",
+    "summary": "Extra folders added to the disk cleaner.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "cleanerEnabled",
+    "type": "bool",
+    "group": "cleaner",
+    "summary": "Cleaner ability: reclaimable space scanning and removal.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "cleanerSelectedDrives",
+    "type": "stringList",
+    "group": "cleaner",
+    "summary": "Volumes the disk cleaner scans.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "cleanerSelectionOverrides",
+    "type": "map",
+    "group": "cleaner",
+    "summary": "Per-path cleaner selection overrides.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardAutoPaste",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Paste straight into the frontmost app on pick.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardBackup",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Include clipboard history in the iCloud backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardCapturePaused",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Stop recording new copies until capture is resumed.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardCheckInterval",
+    "type": "number",
+    "group": "clipboard",
+    "summary": "Seconds between pasteboard polls.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 1,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardEnabled",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Clipboard extension: history with instant paste.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardHotKeyCode",
+    "type": "int",
+    "group": "clipboard",
+    "summary": "Virtual key code of the clipboard panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardHotKeyLabel",
+    "type": "string",
+    "group": "clipboard",
+    "summary": "Printable label for the clipboard panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardHotKeyMods",
+    "type": "int",
+    "group": "clipboard",
+    "summary": "Carbon modifier mask of the clipboard panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardIgnoredApps",
+    "type": "csv",
+    "group": "clipboard",
+    "summary": "Comma separated bundle identifiers never captured.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardMaxAgeDays",
+    "type": "int",
+    "group": "clipboard",
+    "summary": "Days a clipboard entry is kept before it is pruned.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardMaxItemBytes",
+    "type": "int",
+    "group": "clipboard",
+    "summary": "Largest single clipboard entry kept, in bytes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardMaxItems",
+    "type": "int",
+    "group": "clipboard",
+    "summary": "Maximum entries kept in the clipboard history.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardPastePlainText",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Strip formatting when pasting.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardPinTo",
+    "type": "string",
+    "group": "clipboard",
+    "summary": "Which edge the clipboard panel grows from.",
+    "scope": "shared",
+    "allowed": [
+      "top",
+      "bottom"
+    ],
+    "default": "top",
+    "readOnly": false
+  },
+  {
+    "key": "clipboardPopupAt",
+    "type": "string",
+    "group": "clipboard",
+    "summary": "Where the clipboard panel opens.",
+    "scope": "shared",
+    "allowed": [
+      "cursor",
+      "statusItem",
+      "window",
+      "center",
+      "lastPosition"
+    ],
+    "default": "cursor",
+    "readOnly": false
+  },
+  {
+    "key": "clipboardSaveFiles",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Capture copied files.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardSaveImages",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Capture copied images.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardSaveText",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Capture copied text.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardShowFooter",
+    "type": "bool",
+    "group": "clipboard",
+    "summary": "Show the hint footer in the clipboard panel.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardWindowPositionX",
+    "type": "number",
+    "group": "clipboard",
+    "summary": "Last clipboard panel x position.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "clipboardWindowPositionY",
+    "type": "number",
+    "group": "clipboard",
+    "summary": "Last clipboard panel y position.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsExcludedAccounts",
+    "type": "stringList",
+    "group": "codestats",
+    "summary": "gh account logins whose repositories are not synced or counted.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsFolderPath",
+    "type": "string",
+    "group": "codestats",
+    "summary": "Folder holding the repository mirror. Change it with ed code-stats folder.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "codeStatsIdentityEmails",
+    "type": "stringList",
+    "group": "codestats",
+    "summary": "Author emails that mark a commit as yours.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsIdentitySubstrings",
+    "type": "stringList",
+    "group": "codestats",
+    "summary": "Name or login fragments that mark a commit as yours.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsIncludeArchived",
+    "type": "bool",
+    "group": "codestats",
+    "summary": "Mirror and count archived repositories.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsIncludeForks",
+    "type": "bool",
+    "group": "codestats",
+    "summary": "Mirror and count repositories that are forks.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsScheduleHour",
+    "type": "int",
+    "group": "codestats",
+    "summary": "Hour of the day a scheduled refresh runs.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 0,
+    "maximum": 23,
+    "default": 9,
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsScheduleKind",
+    "type": "string",
+    "group": "codestats",
+    "summary": "How often Code Stats refreshes on its own.",
+    "scope": "shared",
+    "allowed": [
+      "manual",
+      "daily",
+      "weekly"
+    ],
+    "default": "manual",
+    "readOnly": false
+  },
+  {
+    "key": "codeStatsScheduleWeekday",
+    "type": "int",
+    "group": "codestats",
+    "summary": "Weekday a weekly refresh runs, from 1 for Sunday to 7 for Saturday.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 1,
+    "maximum": 7,
+    "default": 2,
+    "readOnly": false
+  },
+  {
+    "key": "codexLimitsEnabled",
+    "type": "bool",
+    "group": "limits",
+    "summary": "Track Codex rate limits.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerCopyFormat",
+    "type": "string",
+    "group": "colorpicker",
+    "summary": "Format the sampled colour is copied in.",
+    "scope": "shared",
+    "allowed": [
+      "hex",
+      "rgb",
+      "hsl",
+      "swiftUI",
+      "nsColor"
+    ],
+    "default": "hex",
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerEnabled",
+    "type": "bool",
+    "group": "colorpicker",
+    "summary": "Color Picker extension: system loupe on a hotkey.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerHistorySize",
+    "type": "int",
+    "group": "colorpicker",
+    "summary": "Number of swatches kept in the history.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerHotKeyCode",
+    "type": "int",
+    "group": "colorpicker",
+    "summary": "Virtual key code of the colour picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerHotKeyLabel",
+    "type": "string",
+    "group": "colorpicker",
+    "summary": "Printable label for the colour picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerHotKeyMods",
+    "type": "int",
+    "group": "colorpicker",
+    "summary": "Carbon modifier mask of the colour picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "colorPickerProfile",
+    "type": "string",
+    "group": "colorpicker",
+    "summary": "Colour space the loupe samples in.",
+    "scope": "shared",
+    "allowed": [
+      "sRGB",
+      "displayP3"
+    ],
+    "default": "sRGB",
+    "readOnly": false
+  },
+  {
+    "key": "companionEndpoint",
+    "type": "string",
+    "group": "companion",
+    "summary": "Companion API base URL the app and CLI talk to.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "http://127.0.0.1:4820",
+    "readOnly": false
+  },
+  {
+    "key": "companionTab",
+    "type": "string",
+    "group": "companion",
+    "summary": "Companion screen shown on open.",
+    "scope": "shared",
+    "allowed": [
+      "chat",
+      "capture",
+      "desk",
+      "library",
+      "mind",
+      "setup",
+      "settings"
+    ],
+    "default": "chat",
+    "readOnly": false
+  },
+  {
+    "key": "completionsAutoRefresh",
+    "type": "bool",
+    "group": "terminal",
+    "summary": "Keep the shell completion scripts current when the app starts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "creditHidden",
+    "type": "bool",
+    "group": "appearance",
+    "summary": "Hide the credit line at the bottom of the panel.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "critPercent",
+    "type": "int",
+    "group": "limits",
+    "summary": "Percentage at which a limit turns red.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 85,
+    "readOnly": false
+  },
+  {
+    "key": "cursorLimitsEnabled",
+    "type": "bool",
+    "group": "limits",
+    "summary": "Track Cursor models and other models included usage.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "dashHeatMetric",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Metric the activity heatmap colours by.",
+    "scope": "shared",
+    "allowed": [
+      "tokens",
+      "cost"
+    ],
+    "default": "tokens",
+    "readOnly": false
+  },
+  {
+    "key": "dashKnownSources",
+    "type": "csv",
+    "group": "dashboard",
+    "summary": "Sources seen so far, used to auto-select newly discovered ones.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "dashModels",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Model filter for the dashboard charts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "dashPaths",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Folder scope for the dashboard charts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "dashRange",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Dashboard date range.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "all",
+    "readOnly": false
+  },
+  {
+    "key": "dashSort",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Model table sort column.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "cost",
+    "readOnly": false
+  },
+  {
+    "key": "dashSortAsc",
+    "type": "bool",
+    "group": "dashboard",
+    "summary": "Sort the model table ascending.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "dashSourceSelectionVersion",
+    "type": "int",
+    "group": "dashboard",
+    "summary": "Schema version of the stored source selection.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "dashSources",
+    "type": "csv",
+    "group": "dashboard",
+    "summary": "Comma separated usage sources included in the dashboard.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "dockerLogFontSize",
+    "type": "number",
+    "group": "machines",
+    "summary": "Text size in the Docker log viewer.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 11,
+    "readOnly": false
+  },
+  {
+    "key": "dockerLogTimestamps",
+    "type": "bool",
+    "group": "machines",
+    "summary": "Show timestamps in the Docker log viewer.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "dockerLogWrap",
+    "type": "bool",
+    "group": "machines",
+    "summary": "Wrap long lines in the Docker log viewer.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "downloadsEnabled",
+    "type": "bool",
+    "group": "music",
+    "summary": "Downloads ability: queued audio and video downloads.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "emojiEnabled",
+    "type": "bool",
+    "group": "emoji",
+    "summary": "Emoji Picker extension: every macOS emoji on a hotkey.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "emojiFrequentCount",
+    "type": "int",
+    "group": "emoji",
+    "summary": "How many frequently used emoji pin to the top of the picker.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 0,
+    "maximum": 24,
+    "default": 10,
+    "readOnly": false
+  },
+  {
+    "key": "emojiHotKeyCode",
+    "type": "int",
+    "group": "emoji",
+    "summary": "Virtual key code of the emoji picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "emojiHotKeyLabel",
+    "type": "string",
+    "group": "emoji",
+    "summary": "Printable label for the emoji picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "emojiHotKeyMods",
+    "type": "int",
+    "group": "emoji",
+    "summary": "Carbon modifier mask of the emoji picker shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "emojiPopupAt",
+    "type": "string",
+    "group": "emoji",
+    "summary": "Where the emoji picker opens.",
+    "scope": "shared",
+    "allowed": [
+      "cursor",
+      "statusItem",
+      "window",
+      "center",
+      "lastPosition"
+    ],
+    "default": "cursor",
+    "readOnly": false
+  },
+  {
+    "key": "emojiSkinTone",
+    "type": "int",
+    "group": "emoji",
+    "summary": "Default skin tone index applied to emoji that support one.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 0,
+    "maximum": 5,
+    "default": 0,
+    "readOnly": false
+  },
+  {
+    "key": "extensionsExpand",
+    "type": "string",
+    "group": "panel",
+    "summary": "Extension card the Extensions page scrolls to and opens next.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "finderIconSize",
+    "type": "number",
+    "group": "finder",
+    "summary": "Icon size in the remote file browser.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "finderShowHidden",
+    "type": "bool",
+    "group": "finder",
+    "summary": "Show dotfiles in the remote file browser.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "finderSortAscending",
+    "type": "bool",
+    "group": "finder",
+    "summary": "Sort the remote file browser ascending.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "finderSortKey",
+    "type": "string",
+    "group": "finder",
+    "summary": "Remote file browser sort column.",
+    "scope": "shared",
+    "allowed": [
+      "name",
+      "size",
+      "modified",
+      "kind"
+    ],
+    "default": "name",
+    "readOnly": false
+  },
+  {
+    "key": "finderViewMode",
+    "type": "string",
+    "group": "finder",
+    "summary": "Remote file browser layout.",
+    "scope": "shared",
+    "allowed": [
+      "icon",
+      "list"
+    ],
+    "default": "list",
+    "readOnly": false
+  },
+  {
+    "key": "focusDimActive",
+    "type": "bool",
+    "group": "focusdim",
+    "summary": "Focus dim on right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimAnimationDuration",
+    "type": "number",
+    "group": "focusdim",
+    "summary": "Seconds the dim takes to fade.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimEnabled",
+    "type": "bool",
+    "group": "focusdim",
+    "summary": "Focus Dim extension: dim everything behind the active app.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimHotKeyCode",
+    "type": "int",
+    "group": "focusdim",
+    "summary": "Virtual key code of the focus dim shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimHotKeyLabel",
+    "type": "string",
+    "group": "focusdim",
+    "summary": "Printable label for the focus dim shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimHotKeyMods",
+    "type": "int",
+    "group": "focusdim",
+    "summary": "Carbon modifier mask of the focus dim shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimIntensity",
+    "type": "number",
+    "group": "focusdim",
+    "summary": "Dim strength from 0 to 1.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 0.5,
+    "readOnly": false
+  },
+  {
+    "key": "focusDimOtherDisplaysMode",
+    "type": "string",
+    "group": "focusdim",
+    "summary": "How other displays are treated.",
+    "scope": "shared",
+    "allowed": [
+      "perScreenFront",
+      "dimUnfocused"
+    ],
+    "default": "perScreenFront",
+    "readOnly": false
+  },
+  {
+    "key": "grokLimitsEnabled",
+    "type": "bool",
+    "group": "limits",
+    "summary": "Track the Grok weekly or monthly allowance.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "herdrGhosttyTerminal",
+    "type": "bool",
+    "group": "herdr",
+    "summary": "Run Herdr terminals on the Ghostty engine instead of SwiftTerm.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "herdrLaunchDefaults",
+    "type": "map",
+    "group": "herdr",
+    "summary": "Model, effort and fast mode per agent kind when Edith starts an agent.",
+    "scope": "shared",
+    "allowed": [],
+    "default": {},
+    "readOnly": false
+  },
+  {
+    "key": "herdrTerminalConfirmClose",
+    "type": "bool",
+    "group": "herdr",
+    "summary": "Ask before closing a terminal, or a tab, that is running something.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "herdrTerminalFontSize",
+    "type": "number",
+    "group": "herdr",
+    "summary": "Text size in agent-tab terminals.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 13,
+    "readOnly": false
+  },
+  {
+    "key": "herdrTerminalMouse",
+    "type": "string",
+    "group": "herdr",
+    "summary": "Mouse input sent to agent-tab terminals: wheel only, or clicks too.",
+    "scope": "shared",
+    "allowed": [
+      "scroll",
+      "buttons"
+    ],
+    "default": "scroll",
+    "readOnly": false
+  },
+  {
+    "key": "herdrTerminalStartFolder",
+    "type": "string",
+    "group": "herdr",
+    "summary": "Where a new agent-tab terminal starts: the agent's folder or home.",
+    "scope": "shared",
+    "allowed": [
+      "agent",
+      "home"
+    ],
+    "default": "agent",
+    "readOnly": false
+  },
+  {
+    "key": "herdrTerminalStartupCommand",
+    "type": "string",
+    "group": "herdr",
+    "summary": "Command run in every new agent-tab terminal.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "",
+    "readOnly": false
+  },
+  {
+    "key": "hingeActive",
+    "type": "bool",
+    "group": "hinge",
+    "summary": "Hinge fold on right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "hingeBlursByDistance",
+    "type": "bool",
+    "group": "hinge",
+    "summary": "Blur the fold more as it moves away.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "hingeCropsTop",
+    "type": "bool",
+    "group": "hinge",
+    "summary": "Crop the top of the desktop as it folds.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "hingeEffectStrength",
+    "type": "number",
+    "group": "hinge",
+    "summary": "Fold strength from 0.25 to 1.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 1,
+    "readOnly": false
+  },
+  {
+    "key": "hingeEnabled",
+    "type": "bool",
+    "group": "hinge",
+    "summary": "Hinge extension: fold the desktop as the MacBook lid closes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "hingeHotKeyCode",
+    "type": "int",
+    "group": "hinge",
+    "summary": "Virtual key code of the Hinge shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "hingeHotKeyLabel",
+    "type": "string",
+    "group": "hinge",
+    "summary": "Printable label for the Hinge shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "hingeHotKeyMods",
+    "type": "int",
+    "group": "hinge",
+    "summary": "Carbon modifier mask of the Hinge shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "hingeOpenAngle",
+    "type": "number",
+    "group": "hinge",
+    "summary": "Lid angle, in degrees, that counts as fully open.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 100,
+    "readOnly": false
+  },
+  {
+    "key": "hingeSideFill",
+    "type": "string",
+    "group": "hinge",
+    "summary": "What fills the sides of the fold.",
+    "scope": "shared",
+    "allowed": [
+      "blur",
+      "black"
+    ],
+    "default": "blur",
+    "readOnly": false
+  },
+  {
+    "key": "homeClockZones",
+    "type": "csv",
+    "group": "appearance",
+    "summary": "Comma separated time zone identifiers shown on the Home clocks.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "homebrewDefaultKind",
+    "type": "string",
+    "group": "homebrew",
+    "summary": "Package kind selected when App Maintenance opens Packages.",
+    "scope": "shared",
+    "allowed": [
+      "formula",
+      "cask"
+    ],
+    "default": "formula",
+    "readOnly": false
+  },
+  {
+    "key": "homebrewEnabled",
+    "type": "bool",
+    "group": "homebrew",
+    "summary": "Packages ability: the Homebrew client for formulae, casks and taps.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "hotKeyCode",
+    "type": "int",
+    "group": "panel",
+    "summary": "Virtual key code of the global panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 14,
+    "readOnly": false
+  },
+  {
+    "key": "hotKeyLabel",
+    "type": "string",
+    "group": "panel",
+    "summary": "Printable label for the global panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "hotKeyMods",
+    "type": "int",
+    "group": "panel",
+    "summary": "Carbon modifier mask of the global panel shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 2304,
+    "readOnly": false
+  },
+  {
+    "key": "icloudBackup",
+    "type": "bool",
+    "group": "backup",
+    "summary": "Master switch for the iCloud backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "keepAwakeEnabled",
+    "type": "bool",
+    "group": "system",
+    "summary": "Keep Awake ability: prevent idle sleep independently of System.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightActive",
+    "type": "bool",
+    "group": "keystrokes",
+    "summary": "Show key presses in an on-screen overlay.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightDuration",
+    "type": "number",
+    "group": "keystrokes",
+    "summary": "Seconds each key press remains on screen.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 1.5,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightEnabled",
+    "type": "bool",
+    "group": "keystrokes",
+    "summary": "Make the Keystroke Highlight extension available.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightHotKeyCode",
+    "type": "int",
+    "group": "keystrokes",
+    "summary": "Virtual key code of the keystroke highlight shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 40,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightHotKeyLabel",
+    "type": "string",
+    "group": "keystrokes",
+    "summary": "Printable label for the keystroke highlight shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "⌃⌥⌘K",
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightHotKeyMods",
+    "type": "int",
+    "group": "keystrokes",
+    "summary": "Carbon modifier mask of the keystroke highlight shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 6400,
+    "readOnly": false
+  },
+  {
+    "key": "keystrokeHighlightPosition",
+    "type": "string",
+    "group": "keystrokes",
+    "summary": "Screen edge used for the key press overlay.",
+    "scope": "shared",
+    "allowed": [
+      "top",
+      "bottom"
+    ],
+    "default": "bottom",
+    "readOnly": false
+  },
+  {
+    "key": "lastBackupAt",
+    "type": "number",
+    "group": "backup",
+    "summary": "Unix timestamp of the last settings backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "lastClipboardBackupAt",
+    "type": "number",
+    "group": "backup",
+    "summary": "Unix timestamp of the last clipboard backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "lastMusicBackupAt",
+    "type": "number",
+    "group": "backup",
+    "summary": "Unix timestamp of the last music backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "lastPaletteTheme",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Palette the theme picker restores when a custom accent is cleared.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "lidAwakeActive",
+    "type": "bool",
+    "group": "system",
+    "summary": "Whether Lid Awake is currently preventing lid-close sleep.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "lidAwakeBatteryThreshold",
+    "type": "int",
+    "group": "system",
+    "summary": "Battery percentage below which Lid Awake pauses; 0 disables it.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 0,
+    "maximum": 100,
+    "default": 0,
+    "readOnly": false
+  },
+  {
+    "key": "lidAwakeEnabled",
+    "type": "bool",
+    "group": "system",
+    "summary": "Lid Awake extension: keep running with the lid shut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "lidAwakeRestoreOnQuit",
+    "type": "bool",
+    "group": "system",
+    "summary": "Restore normal lid-close sleep when Edith quits.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "lidAwakeSession",
+    "type": "string",
+    "group": "system",
+    "summary": "Session used when Lid Awake starts.",
+    "scope": "shared",
+    "allowed": [
+      "indefinite",
+      "fifteenMinutes",
+      "thirtyMinutes",
+      "oneHour",
+      "twoHours",
+      "untilLidReopens"
+    ],
+    "default": "indefinite",
+    "readOnly": false
+  },
+  {
+    "key": "limitsInMenuBar",
+    "type": "bool",
+    "group": "menubar",
+    "summary": "Show limit percentages in the menu bar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "limitsProvider",
+    "type": "string",
+    "group": "limits",
+    "summary": "Provider shown first in the limits UI.",
+    "scope": "shared",
+    "allowed": [
+      "claude",
+      "codex",
+      "cursor",
+      "grok"
+    ],
+    "default": "claude",
+    "readOnly": false
+  },
+  {
+    "key": "machinesAutoConnect",
+    "type": "bool",
+    "group": "machines",
+    "summary": "Connect to machines automatically when the app starts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "machinesDiskThreshold",
+    "type": "number",
+    "group": "machines",
+    "summary": "Disk usage percentage that triggers the disk alert.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 90,
+    "readOnly": false
+  },
+  {
+    "key": "machinesMode",
+    "type": "string",
+    "group": "machines",
+    "summary": "Machines page view shown on open.",
+    "scope": "shared",
+    "allowed": [
+      "fleet",
+      "workspace",
+      "machine"
+    ],
+    "default": "fleet",
+    "readOnly": false
+  },
+  {
+    "key": "machinesNotifyDiskFull",
+    "type": "bool",
+    "group": "machines",
+    "summary": "Notify when a machine's disk crosses the threshold.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "machinesNotifyDown",
+    "type": "bool",
+    "group": "machines",
+    "summary": "Notify when a machine stops responding.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "machinesSelection",
+    "type": "string",
+    "group": "machines",
+    "summary": "Identifier of the machine the detail view opens on.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "machinesTab",
+    "type": "string",
+    "group": "machines",
+    "summary": "Machine detail tab shown on open.",
+    "scope": "shared",
+    "allowed": [
+      "overview",
+      "processes",
+      "docker",
+      "terminal",
+      "tools"
+    ],
+    "default": "overview",
+    "readOnly": false
+  },
+  {
+    "key": "mainSidebarOpen",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Whether the main window sidebar starts open.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "mainSidebarWidth",
+    "type": "number",
+    "group": "panel",
+    "summary": "Main window sidebar width in points.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "mainWindowSection",
+    "type": "string",
+    "group": "panel",
+    "summary": "Section the main window opens on.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "mainWindowZoom",
+    "type": "number",
+    "group": "panel",
+    "summary": "Main window zoom factor.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 1,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarClaudeWindows",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Claude windows shown in the menu bar, comma-separated (session, week, fable).",
+    "scope": "shared",
+    "allowed": [],
+    "default": "session,week,fable",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarCodexWindows",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Codex windows shown in the menu bar, comma-separated (session, week, credits).",
+    "scope": "shared",
+    "allowed": [],
+    "default": "session,week",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarColorMode",
+    "type": "string",
+    "group": "menubar",
+    "summary": "How the menu bar readout is tinted.",
+    "scope": "shared",
+    "allowed": [
+      "auto",
+      "custom"
+    ],
+    "default": "auto",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarCursorWindows",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Cursor pools shown in the menu bar, comma-separated (session, week). session is Cursor models and week is Other models.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "session,week",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarGrokWindows",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Grok allowance shown in the menu bar. week is the plan pool.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "week",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarHighColorHex",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Hex colour used above the critical threshold.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarLimitsStyle",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Layout of the menu bar limits readout.",
+    "scope": "shared",
+    "allowed": [
+      "stacked",
+      "tagged",
+      "slash"
+    ],
+    "default": "stacked",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarLowColorHex",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Hex colour used below the warning threshold.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarMidColorHex",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Hex colour used between the warning and critical thresholds.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarStatsColorHex",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Hex colour of the CPU and memory menu bar readout.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarStatsColorMode",
+    "type": "string",
+    "group": "menubar",
+    "summary": "How the CPU and memory menu bar readout is tinted.",
+    "scope": "shared",
+    "allowed": [
+      "auto",
+      "custom"
+    ],
+    "default": "auto",
+    "readOnly": false
+  },
+  {
+    "key": "menuBarSubColorHex",
+    "type": "string",
+    "group": "menubar",
+    "summary": "Hex colour of the menu bar subtitle text.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "menuBarSystemStats",
+    "type": "bool",
+    "group": "menubar",
+    "summary": "CPU and memory readout as a menu bar item.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "micHotKeyCode",
+    "type": "int",
+    "group": "micmute",
+    "summary": "Virtual key code of the mic mute shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "micHotKeyLabel",
+    "type": "string",
+    "group": "micmute",
+    "summary": "Printable label for the mic mute shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "micHotKeyMods",
+    "type": "int",
+    "group": "micmute",
+    "summary": "Carbon modifier mask of the mic mute shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "micMuteEnabled",
+    "type": "bool",
+    "group": "micmute",
+    "summary": "Mic Mute extension: system-wide microphone kill switch.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "micMuteInMenuBar",
+    "type": "bool",
+    "group": "micmute",
+    "summary": "Show the mic mute indicator in the menu bar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "micMuted",
+    "type": "bool",
+    "group": "micmute",
+    "summary": "Microphone muted right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "musicBackup",
+    "type": "bool",
+    "group": "music",
+    "summary": "Include the music folder in the iCloud backup.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "musicBarAutoHide",
+    "type": "bool",
+    "group": "music",
+    "summary": "Hide the player bar when nothing is playing.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "musicBarCollapsed",
+    "type": "bool",
+    "group": "music",
+    "summary": "Collapse the player bar to a progress line.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "musicCrossfadeEnabled",
+    "type": "bool",
+    "group": "music",
+    "summary": "Fade between tracks when one ends.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "musicCrossfadeSeconds",
+    "type": "number",
+    "group": "music",
+    "summary": "Seconds the crossfade between tracks lasts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 2,
+    "readOnly": false
+  },
+  {
+    "key": "musicDownloadKind",
+    "type": "string",
+    "group": "music",
+    "summary": "Default format for downloads.",
+    "scope": "shared",
+    "allowed": [
+      "post",
+      "images",
+      "audio",
+      "video"
+    ],
+    "default": "post",
+    "readOnly": false
+  },
+  {
+    "key": "musicFavourites",
+    "type": "stringList",
+    "group": "music",
+    "summary": "Relative paths of favourited tracks.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "musicFolderStale",
+    "type": "bool",
+    "group": "music",
+    "summary": "Whether the stored music folder has gone missing.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "musicGridView",
+    "type": "bool",
+    "group": "music",
+    "summary": "Show the library as a grid.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "musicLastPosition",
+    "type": "number",
+    "group": "music",
+    "summary": "Seconds into the track playback resumes from.",
+    "scope": "standard",
+    "allowed": [],
+    "default": 0,
+    "readOnly": true
+  },
+  {
+    "key": "musicLastTrack",
+    "type": "string",
+    "group": "music",
+    "summary": "Relative path of the track playback resumes from.",
+    "scope": "standard",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "musicLooping",
+    "type": "bool",
+    "group": "music",
+    "summary": "Repeat the current track.",
+    "scope": "standard",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "musicShuffling",
+    "type": "bool",
+    "group": "music",
+    "summary": "Play the folder in a random order.",
+    "scope": "standard",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "musicVolume",
+    "type": "number",
+    "group": "music",
+    "summary": "Player volume from 0 to 1.",
+    "scope": "standard",
+    "allowed": [],
+    "default": 0.7,
+    "readOnly": false
+  },
+  {
+    "key": "musicWasPlaying",
+    "type": "bool",
+    "group": "music",
+    "summary": "Whether playback was running when the app last quit.",
+    "scope": "standard",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "notchAlertAudio",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Alert on audio device changes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchAlertBattery",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Alert on battery level changes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchAlertBluetooth",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Alert on Bluetooth connections.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchAlertPower",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Alert on power source changes.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchAlertsEnabled",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Show alerts around the notch.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchAudioMixerEnabled",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Audio Mixer ability: per-app volume in the notch shelf.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notchBrowserEnabled",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Notch Shelf browser tab: tabbed browsing in the notch with a Chrome profile.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notchBrowserSearchEngine",
+    "type": "string",
+    "group": "notch",
+    "summary": "Search engine the notch browser address bar uses for plain text.",
+    "scope": "shared",
+    "allowed": [
+      "google",
+      "duckDuckGo",
+      "bing",
+      "kagi"
+    ],
+    "default": "google",
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfEnabled",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Notch Shelf extension: file shelf, now playing, camera and alerts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfHaptics",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Haptic feedback on the shelf.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfKeepDuration",
+    "type": "string",
+    "group": "notch",
+    "summary": "How long shelf items are kept.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfOpenOnDrag",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Open the shelf when a drag reaches the notch.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfOpenOnHover",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Open the shelf on hover.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfRemoveAfterDragOut",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Remove an item from the shelf after it is dragged out.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfRequireOption",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Require Option held to open the shelf.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfShowMusic",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Show now playing controls in the shelf.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notchShelfShowOnExternal",
+    "type": "bool",
+    "group": "notch",
+    "summary": "Show the shelf on external displays.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "notifyAlmostCapped",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert once per window when usage crosses the almost-capped line.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyAlmostCappedPercent",
+    "type": "int",
+    "group": "alerts",
+    "summary": "Percentage that counts as almost capped.",
+    "scope": "shared",
+    "allowed": [],
+    "minimum": 50,
+    "maximum": 99,
+    "default": 90,
+    "readOnly": false
+  },
+  {
+    "key": "notifyBack",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert at the reset of a window that was capped or nearly capped.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyCapped",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert when a window hits 100%, with its reset time.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyHeadroom",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert on the last day of a weekly window when half or more is unused.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notifyLoginProblems",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert once when a provider login breaks, until it recovers.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyMaster",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Master switch for every usage notification.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notifyOnPace",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Alert when the recent burn rate would hit the cap before the reset.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyOutlook",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Morning outlook when a weekly window is heading for a tight finish.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "notifyTrackSession",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Send limit alerts for 5-hour windows.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "notifyTrackWeekly",
+    "type": "bool",
+    "group": "alerts",
+    "summary": "Send limit alerts for weekly windows, Fable included, and Cursor's billing-cycle pools.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "onboardingCompleted",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Whether the welcome tour has been finished or skipped.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "pacingMargin",
+    "type": "number",
+    "group": "limits",
+    "summary": "Percentage points ahead of an even pace before smart color turns amber.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 10,
+    "readOnly": false
+  },
+  {
+    "key": "permAccessibilityGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Accessibility permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permCalendarGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Calendar permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permCameraGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Camera permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permFullDiskGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Full Disk Access permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permInputMonitoringGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Input Monitoring permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permNotificationsGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Notifications permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permScreenRecordingGranted",
+    "type": "bool",
+    "group": "permissions",
+    "summary": "Screen Recording permission, as last observed by Edith.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "permissionsFilter",
+    "type": "string",
+    "group": "permissions",
+    "summary": "Filter the Permissions page opens with.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterAskJev",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Ask Jev whether on-screen windows look like a shared screen. Sends window titles to TypeSafe.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "presenterAutoActive",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "A share is being detected right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "presenterAutoEnabled",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Turn presenter mode on automatically when a share is detected.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterAutoPaused",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Auto presenter mode is paused until the current share ends.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": true
+  },
+  {
+    "key": "presenterAutoReason",
+    "type": "string",
+    "group": "presenter",
+    "summary": "Why auto presenter mode turned on.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": true
+  },
+  {
+    "key": "presenterBlurAgents",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Hide live Herdr titles and blur attached terminals.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurAttention",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur attention activity, titles and sites.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurBrowser",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur the notch browser, including the address and page titles.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurCalendar",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur calendar entries.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurCamera",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur the virtual camera picture and personal backdrops.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurDatabase",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur database connections and rows.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurFleet",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur machine names, files and terminals.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurMemory",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur memory chats, notes and captures.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurMoney",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur spend figures.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurMusic",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur track names, artwork and folders.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurReview",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur review sessions.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurRunningApps",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur running app names and icons.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurShelf",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur files parked on the shelf.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurSiteAudit",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur site audit projects and pages.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurStudio",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur Studio files, projects and previews.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterBlurUsage",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Blur usage percentages.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterDetectMirroring",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Treat display mirroring as a share.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterDetectRecording",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Treat screen recording as a share.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterDetectScreenSharing",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Treat screen sharing as a share.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterEnabled",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Presenter extension: blur sensitive numbers while sharing.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "presenterHideMenuBarNumbers",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Hide menu bar percentages while presenting.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterHotKeyCode",
+    "type": "int",
+    "group": "presenter",
+    "summary": "Virtual key code of the presenter shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterHotKeyLabel",
+    "type": "string",
+    "group": "presenter",
+    "summary": "Printable label for the presenter shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterHotKeyMods",
+    "type": "int",
+    "group": "presenter",
+    "summary": "Carbon modifier mask of the presenter shortcut.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "presenterMode",
+    "type": "bool",
+    "group": "presenter",
+    "summary": "Presenter mode on right now.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "preventSleep",
+    "type": "bool",
+    "group": "system",
+    "summary": "Keep the Mac awake (Keep Awake).",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "projSort",
+    "type": "string",
+    "group": "dashboard",
+    "summary": "Project drilldown sort column.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "cost",
+    "readOnly": false
+  },
+  {
+    "key": "projSortAsc",
+    "type": "bool",
+    "group": "dashboard",
+    "summary": "Sort the project drilldown ascending.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "quinjetTerminal",
+    "type": "string",
+    "group": "quinjet",
+    "summary": "Terminal used to launch Quinjet workspaces.",
+    "scope": "shared",
+    "allowed": [
+      "embedded",
+      "cmux"
+    ],
+    "default": "embedded",
+    "readOnly": false
+  },
+  {
+    "key": "quinjetTheme",
+    "type": "string",
+    "group": "quinjet",
+    "summary": "Color theme used by embedded Quinjet terminals.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "app",
+    "readOnly": false
+  },
+  {
+    "key": "settingsCategoriesExpanded",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Whether Settings categories are expanded in the main sidebar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "settingsSection",
+    "type": "string",
+    "group": "panel",
+    "summary": "Settings section a deep link opens on.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "settingsTab",
+    "type": "string",
+    "group": "panel",
+    "summary": "Settings tab shown on open.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "showDockIcon",
+    "type": "bool",
+    "group": "appearance",
+    "summary": "Show Edith in the Dock as well as the menu bar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "skillsAgentSelections",
+    "type": "map",
+    "group": "panel",
+    "summary": "Remember agent selections when installing plugins.",
+    "scope": "shared",
+    "allowed": [],
+    "default": {},
+    "readOnly": false
+  },
+  {
+    "key": "smartColor",
+    "type": "bool",
+    "group": "menubar",
+    "summary": "Tint the menu bar readout by a time-aware risk model.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "studioDestination",
+    "type": "string",
+    "group": "studio",
+    "summary": "Where Studio saves results: next to the original, downloads or a folder.",
+    "scope": "shared",
+    "allowed": [
+      "original",
+      "downloads",
+      "folder"
+    ],
+    "default": "original",
+    "readOnly": false
+  },
+  {
+    "key": "studioFolder",
+    "type": "string",
+    "group": "studio",
+    "summary": "Folder Studio saves results into when the destination is a folder.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "",
+    "readOnly": false
+  },
+  {
+    "key": "suiteAgentsEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "Agents suite: Usage, live sessions, review and memory for your coding agents.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "suiteDataEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "Data suite: Databases, attention history and local site audits.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "suiteDeskEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "Desk suite: The launcher, clipboard and pickers, keystrokes, dimming and presenting.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "suiteMaintenanceEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "Maintenance suite: Updates, packages, review-first removal, disk cleanup and history.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "suiteMediaEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "Media suite: Studio, music, downloads, the notch shelf and your calendar.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "suiteSystemEnabled",
+    "type": "bool",
+    "group": "suites",
+    "summary": "System suite: Running apps, sleep, the cleaning lock, menu bar stats and mic mute.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "surfaceGrid.home",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Home widget layout and configuration.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "surfaceGrid.notch",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Notch widget layout and configuration.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "surfaceLayoutProfiles",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Named Home and Notch layout profiles.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "systemAppsSort",
+    "type": "string",
+    "group": "system",
+    "summary": "Running apps sort column.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "memory",
+    "readOnly": false
+  },
+  {
+    "key": "systemAppsSortAsc",
+    "type": "bool",
+    "group": "system",
+    "summary": "Sort running apps ascending.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tab",
+    "type": "string",
+    "group": "panel",
+    "summary": "Panel tab shown on open.",
+    "scope": "standard",
+    "allowed": [],
+    "default": "usage",
+    "readOnly": false
+  },
+  {
+    "key": "tabAttentionEnabled",
+    "type": "bool",
+    "group": "attention",
+    "summary": "Attention extension: app and browser activity with focus sessions.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabBlitzTreeEnabled",
+    "type": "bool",
+    "group": "panel",
+    "summary": "BlitzTree extension: disk-space treemap and cleanup candidates.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabCalendarEnabled",
+    "type": "bool",
+    "group": "calendar",
+    "summary": "Calendar extension: your schedule in the panel and the app.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabCodeStatsEnabled",
+    "type": "bool",
+    "group": "codestats",
+    "summary": "Code Stats extension: mirror GitHub repositories and chart your own commits.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabCompanionEnabled",
+    "type": "bool",
+    "group": "companion",
+    "summary": "Show the Companion page.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabDatabaseEnabled",
+    "type": "bool",
+    "group": "database",
+    "summary": "Database extension: guarded database exploration and operations.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabHerdrEnabled",
+    "type": "bool",
+    "group": "herdr",
+    "summary": "Herdr extension: live sessions on this Mac and SSH machines.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabLaTeXEnabled",
+    "type": "bool",
+    "group": "latex",
+    "summary": "LaTeX extension: compile documents on disk or through GitHub pull requests.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabMusicEnabled",
+    "type": "bool",
+    "group": "music",
+    "summary": "Music extension: local library playback with media keys.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabOrder",
+    "type": "csv",
+    "group": "panel",
+    "summary": "Comma separated panel tab order.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "tabPluginsEnabled",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Show Plugins in the Agents suite.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabQuinjetEnabled",
+    "type": "bool",
+    "group": "quinjet",
+    "summary": "Quinjet extension: pull request and live workspace review.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabSEOAuditEnabled",
+    "type": "bool",
+    "group": "panel",
+    "summary": "Site Audit extension: sitemap, metadata, and local Lighthouse reports.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabSocialManagerEnabled",
+    "type": "bool",
+    "group": "social-manager",
+    "summary": "Social Manager extension: profiles with isolated website accounts, tabs and side-by-side browsing.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabStudioEnabled",
+    "type": "bool",
+    "group": "studio",
+    "summary": "Studio extension: edit, convert and compress images, PDFs, video and audio.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabSystemEnabled",
+    "type": "bool",
+    "group": "system",
+    "summary": "System extension: running apps and the cleaning lock.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabTimeLapseEnabled",
+    "type": "bool",
+    "group": "studio",
+    "summary": "Screen Recorder extension: record displays or windows at normal speed or as a time-lapse.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "tabUsageEnabled",
+    "type": "bool",
+    "group": "usage",
+    "summary": "Agent Usage extension: Claude, Codex, Cursor and Grok limits, stats and alerts.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "theme",
+    "type": "string",
+    "group": "appearance",
+    "summary": "Accent palette name.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "default",
+    "readOnly": false
+  },
+  {
+    "key": "usageMachines",
+    "type": "stringList",
+    "group": "usage",
+    "summary": "Ids of the machines whose agent usage is collected over SSH.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "virtualCameraEnabled",
+    "type": "bool",
+    "group": "virtualCamera",
+    "summary": "Virtual Camera extension: send a framed and styled camera to video apps.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "warnPercent",
+    "type": "int",
+    "group": "limits",
+    "summary": "Percentage at which a limit turns amber.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 60,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersAccessibilityFocus",
+    "type": "bool",
+    "group": "sweaters",
+    "summary": "Read the focused window through Accessibility instead of the server.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersActive",
+    "type": "bool",
+    "group": "sweaters",
+    "summary": "Sweaters on right now. Turn off to pause without disabling.",
+    "scope": "shared",
+    "allowed": [],
+    "default": true,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersAnchor",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "Where each side's pattern repeat starts.",
+    "scope": "shared",
+    "allowed": [
+      "corner",
+      "centre"
+    ],
+    "default": "corner",
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersBasket",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "Colourway used by apps without a curated sweater.",
+    "scope": "shared",
+    "allowed": [
+      "dopamine",
+      "neon",
+      "punch",
+      "wool",
+      "sorbet",
+      "forest",
+      "mono"
+    ],
+    "default": "wool",
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersBorderWidth",
+    "type": "number",
+    "group": "sweaters",
+    "summary": "Border width in points, 2 to 60.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 12,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersEnabled",
+    "type": "bool",
+    "group": "sweaters",
+    "summary": "Window Sweaters extension: knitted borders around your windows.",
+    "scope": "shared",
+    "allowed": [],
+    "default": false,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersExcludedApps",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "Comma-separated app names that never get a sweater.",
+    "scope": "shared",
+    "allowed": [],
+    "default": null,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersGauge",
+    "type": "number",
+    "group": "sweaters",
+    "summary": "Stitch rows across the band; fewer rows knit chunkier.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 6,
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersOrder",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "Whether the sweater sits behind or in front of the window.",
+    "scope": "shared",
+    "allowed": [
+      "below",
+      "above"
+    ],
+    "default": "below",
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersPattern",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "by-app, none, or a built-in pattern name.",
+    "scope": "shared",
+    "allowed": [],
+    "default": "by-app",
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersStitch",
+    "type": "string",
+    "group": "sweaters",
+    "summary": "Plain knitting stitch used where no pattern applies.",
+    "scope": "shared",
+    "allowed": [
+      "stockinette",
+      "rib",
+      "garter"
+    ],
+    "default": "stockinette",
+    "readOnly": false
+  },
+  {
+    "key": "windowSweatersUnfocusedDim",
+    "type": "number",
+    "group": "sweaters",
+    "summary": "How far unfocused sweaters are darkened, 0 to 0.9.",
+    "scope": "shared",
+    "allowed": [],
+    "default": 0,
+    "readOnly": false
+  }
+]

@@ -71,6 +71,10 @@ final class HomebrewPageModel {
         }
     }
 
+    func refreshPreferredKind() {
+        Task { [weak self] in _ = try? await self?.preferredKind() }
+    }
+
     func preferredKind() async throws -> HomebrewPackageKind {
         let kind = try await client.preferredKind()
         memory?.kind = kind

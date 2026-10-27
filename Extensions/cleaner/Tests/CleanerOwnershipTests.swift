@@ -112,6 +112,18 @@ import Testing
         #expect(await gate.calls == 1)
     }
 
+    @Test func externalPreferenceChangesReachARunningModelOnSynchronize() async throws {
+        let preferences = try CleanerPreferencesFixture()
+        let model = CleanerModel(
+            defaults: preferences.defaults, services: CleanerServices(drives: { [] }))
+        #expect(model.customFolders.isEmpty)
+        let home = NSHomeDirectory() + "/Downloads"
+        preferences.defaults.set([home], forKey: "cleanerCustomFolders")
+        model.reloadPreferences()
+        #expect(model.customFolders == [home])
+        await model.shutdown()
+    }
+
     @Test func selectionKeepsThePreviewAndPersistsInItsOwnPreferences() async throws {
         let preferences = try CleanerPreferencesFixture()
         let services = CleanerServices(drives: { [] }, scan: { _, _, _ in Self.result() })

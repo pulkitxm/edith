@@ -11,23 +11,23 @@ enum HostExtensionConfigurationSettings {
             ("homebrew", homebrew), ("system", system),
         ].flatMap { owner, settings in settings.map { $0.owned(by: owner) } }
 
-    private static let presenterPrivacy: [(String, String, String)] = [
-        ("Music", "Blur track names, artwork and folders.", "true"),
-        ("Money", "Blur spend figures.", "true"),
-        ("Usage", "Blur usage percentages.", "false"),
-        ("Calendar", "Blur calendar entries.", "true"),
-        ("Agents", "Hide live Herdr titles and blur attached terminals.", "true"),
-        ("Attention", "Blur attention activity, titles and sites.", "true"),
-        ("Camera", "Blur the virtual camera picture and personal backdrops.", "true"),
-        ("Studio", "Blur Studio files, projects and previews.", "true"),
-        ("Database", "Blur database connections and rows.", "true"),
-        ("Memory", "Blur memory chats, notes and captures.", "true"),
-        ("Fleet", "Blur machine names, files and terminals.", "true"),
-        ("Review", "Blur review sessions.", "true"),
-        ("SiteAudit", "Blur site audit projects and pages.", "true"),
-        ("RunningApps", "Blur running app names and icons.", "true"),
-        ("Shelf", "Blur files parked on the shelf.", "true"),
-        ("Browser", "Blur the notch browser, including the address and page titles.", "true"),
+    private static let presenterPrivacy: [(String, String)] = [
+        ("Music", "Blur track names, artwork and folders."),
+        ("Money", "Blur spend figures."),
+        ("Usage", "Blur usage percentages."),
+        ("Calendar", "Blur calendar entries."),
+        ("Agents", "Hide live Herdr titles and blur attached terminals."),
+        ("Attention", "Blur attention activity, titles and sites."),
+        ("Camera", "Blur the virtual camera picture and personal backdrops."),
+        ("Studio", "Blur Studio files, projects and previews."),
+        ("Database", "Blur database connections and rows."),
+        ("Memory", "Blur memory chats, notes and captures."),
+        ("Fleet", "Blur machine names, files and terminals."),
+        ("Review", "Blur review sessions."),
+        ("SiteAudit", "Blur site audit projects and pages."),
+        ("RunningApps", "Blur running app names and icons."),
+        ("Shelf", "Blur files parked on the shelf."),
+        ("Browser", "Blur the notch browser, including the address and page titles."),
     ]
 
     private static let presenter: [HostCLISetting] =
@@ -71,10 +71,8 @@ enum HostExtensionConfigurationSettings {
                 AppStorageKeys.Presenter.hideMenuBarNumbers, .bool, group: "presenter",
                 summary: "Hide menu bar percentages while presenting."),
         ]
-        + presenterPrivacy.map { name, summary, fallback in
-            .init(
-                "presenterBlur" + name, .bool, group: "presenter", summary: summary,
-                fallback: .bool(fallback == "true"))
+        + presenterPrivacy.map { name, summary in
+            .init("presenterBlur" + name, .bool, group: "presenter", summary: summary)
         } + [
             .init(
                 "presenterHotKeyCode", .int, group: "presenter",

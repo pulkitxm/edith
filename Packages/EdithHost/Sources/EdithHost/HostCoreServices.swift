@@ -408,6 +408,10 @@ import SwiftUI
             changed: { [weak self] in
                 IPC.post(IPC.Name.settingsChanged)
                 self?.settingsScheduler?.preferencesChanged()
+                guard let self else { return }
+                Task {
+                    await self.marketplace.sessions.synchronizeAppearance(identity: self.identity)
+                }
             })
     }
 
