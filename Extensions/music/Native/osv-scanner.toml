@@ -12,3 +12,8 @@ reason = "Unreachable in librespot-core 0.8.0: its sole quick-xml consumer uses 
 id = "RUSTSEC-2023-0071"
 ignoreUntil = 2026-11-17
 reason = "Unreachable in librespot-core 0.8.0: RSA is used only to verify the Spotify server signature with RsaPublicKey. No RSA private key, signing, or decryption operation is used, so private-key timing recovery does not apply. Reassess when upgrading librespot."
+
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+ignoreUntil = 2026-11-17
+reason = "No compatible fix: block-buffer 0.10 is pinned by digest 0.10 and sha2 0.10, and the fix ships only in 0.12.1. The issue needs a caught panic inside the compress callback followed by buffer reuse; SHA compression here never panics. Reassess when the digest crates move to 0.11."
