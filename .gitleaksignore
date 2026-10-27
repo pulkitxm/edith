@@ -6,3 +6,6 @@ c90313b5c9777346d8a30c5eca0174120cb172c0:scripts/signing-keychain.sh:generic-api
 72d5eae9e7f0ceb9ea95a25382642d0ea17feb85:scripts/test-hosted-public-release.py:generic-api-key:162
 e2e672a425e24a516d8f916a57bc555592722ce4:docs/extension-host-rebuild-size-report.json:generic-api-key:1821
 e2e672a425e24a516d8f916a57bc555592722ce4:docs/extension-size-report.json:generic-api-key:517
+05df0912343f3d43fe269494da508503a2790a84:docs/extension-size-report.json:generic-api-key:517
+05df0912343f3d43fe269494da508503a2790a84:docs/extension-host-rebuild-size-report.json:generic-api-key:1821
+05df0912343f3d43fe269494da508503a2790a84:scripts/test-hosted-public-release.py:generic-api-key:162
