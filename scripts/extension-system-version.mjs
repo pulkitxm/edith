@@ -21,8 +21,10 @@ export function compareSystemVersions(left, right) {
   return 0;
 }
 
+const supportedSystemFloor = "14.0.0";
+
 export function validateMinimumSystemVersion(value) {
-  if (compareSystemVersions(value, "14.0.0") < 0)
+  if (compareSystemVersions(value, supportedSystemFloor) < 0)
     throw new Error("Invalid minimum system version");
   return value;
 }
