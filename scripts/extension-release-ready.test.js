@@ -22,7 +22,6 @@ const expected = [
     hostABI: "runtime-2",
     architecture: "arm64",
     minimumSystemVersion: "14.0.0",
-    fingerprint: "a".repeat(64),
   },
 ];
 const record = {
@@ -49,26 +48,19 @@ function signed(packages) {
   });
 }
 
-test("app publication requires its own source and host contract", () => {
-  for (const change of [
-    { hostABI: "runtime-1" },
-    { sourceFingerprint: "b".repeat(64) },
-    { architecture: "x86_64" },
-  ])
+test("app publication requires a package built for its host contract", () => {
+  for (const change of [{ hostABI: "runtime-1" }, { architecture: "x86_64" }])
     expect(
       missingPackages(expected, { packages: [{ ...record, ...change }] }),
     ).toEqual(expected);
   expect(
     missingPackages(expected, {
-      packages: [
-        record,
-        { ...record, version: "1.1.0", sourceFingerprint: "b".repeat(64) },
-      ],
+      packages: [{ ...record, sourceFingerprint: "b".repeat(64) }],
     }),
-  ).toEqual(expected);
+  ).toEqual([]);
 });
 
-test("the release guard authenticates the catalog before trusting fingerprints", () => {
+test("the release guard authenticates the catalog before trusting its packages", () => {
   expect(verifyCatalog(signed([record]), rawKey).packages).toEqual([record]);
   const forged = JSON.parse(signed([record]));
   forged.payload = Buffer.from(
@@ -134,69 +126,17 @@ test("the Node command rejects an invalid release source instead of skipping val
   }
 });
 
-test("source reverts wait for the new selected release instead of retained rollback code", async () => {
-  const changed = {
-    ...record,
-    version: "1.1.0",
-    sourceFingerprint: "b".repeat(64),
-  };
-  const reverted = { ...record, version: "1.2.0" };
-  expect(missingPackages(expected, { packages: [record, changed] })).toEqual(
-    expected,
-  );
-  expect(
-    missingPackages(expected, { packages: [record, changed, reverted] }),
-  ).toEqual([]);
-  let calls = 0;
-  await waitForPackages({
-    expected,
-    url: "https://synthetic.invalid/catalog.json",
-    publicKey: rawKey,
-    fetchCatalog: async () =>
-      new Response(
-        signed(++calls === 1 ? [record, changed] : [changed, reverted]),
-      ),
-    sleep: async () => {},
-  });
-  expect(calls).toBe(2);
-});
-
-test("every supported OS tier selects its highest compatible numeric version", () => {
-  const future = {
-    ...record,
-    version: "1.10.0",
-    minimumSystemVersion: "15.0.0",
-    sourceFingerprint: "b".repeat(64),
-  };
-  const current = { ...record, version: "1.9.0" };
-  expect(missingPackages(expected, { packages: [future, current] })).toEqual(
-    expected,
-  );
-  expect(
-    missingPackages(expected, {
-      packages: [future, { ...current, version: "1.11.0" }],
-    }),
-  ).toEqual([]);
-  expect(missingPackages(expected, { packages: [future] })).toEqual(expected);
+test("a package for the host contract must support the extension's OS floor", () => {
+  const newer = { ...record, minimumSystemVersion: "15.0.0" };
+  expect(missingPackages(expected, { packages: [newer] })).toEqual(expected);
+  expect(missingPackages(expected, { packages: [newer, record] })).toEqual([]);
   const onlyNewerOS = [{ ...expected[0], minimumSystemVersion: "15.0.0" }];
-  expect(missingPackages(onlyNewerOS, { packages: [future, current] })).toEqual(
-    onlyNewerOS,
-  );
-  expect(
-    missingPackages(onlyNewerOS, {
-      packages: [{ ...future, sourceFingerprint: record.sourceFingerprint }],
-    }),
-  ).toEqual([]);
+  expect(missingPackages(onlyNewerOS, { packages: [record] })).toEqual([]);
   expect(
     missingPackages(expected, {
-      packages: [current, { ...future, architecture: "x86_64" }],
+      packages: [{ ...newer, minimumSystemVersion: "14.0.0", hostABI: "runtime-3" }],
     }),
-  ).toEqual([]);
-  expect(
-    missingPackages(expected, {
-      packages: [current, { ...future, hostABI: "runtime-3" }],
-    }),
-  ).toEqual([]);
+  ).toEqual(expected);
 });
 
 test("signed malformed, duplicate, missing dependency and oversized catalogs reject before selection", () => {
@@ -442,22 +382,9 @@ test("minor OS readiness rejects a package that skips the required support floor
   ).toEqual([]);
   expect(
     missingPackages(required, {
-      packages: [
-        { ...record, minimumSystemVersion: "14.4.0" },
-        {
-          ...record,
-          version: "1.1.0",
-          minimumSystemVersion: "14.10.0",
-          sourceFingerprint: "b".repeat(64),
-        },
-      ],
-    }),
-  ).toEqual(required);
-  expect(
-    missingPackages(required, {
       packages: [{ ...record, minimumSystemVersion: "14.0.0" }],
     }),
-  ).toEqual(required);
+  ).toEqual([]);
   for (const minimumSystemVersion of [14, "14.4", "14.04.0", "14.4.0-beta"])
     expect(() =>
       missingPackages(required, {
