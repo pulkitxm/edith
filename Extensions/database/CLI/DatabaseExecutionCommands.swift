@@ -67,9 +67,9 @@ extension DatabaseCLI {
         return DatabasePageRequest(pageSize: size, continuation: token)
     }
 
-    static func queryText(path: String?) throws -> String {
+    static func queryText(path: String?) async throws -> String {
         let source = path == "-" ? nil : path
-        let text = try DatabaseCLIEnvironment.readQueryText(source)
+        let text = try await DatabaseCLIEnvironment.readQueryText(source)
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw CLIFailure.usage("database query input is empty")
         }
@@ -599,7 +599,7 @@ struct DatabaseQueryCommand: AsyncParsableCommand {
             let page = try DatabaseCLI.pageRequest(limit: limit, continuation: continuation)
             let operation = try DatabaseCLI.operationContext(
                 timeoutMilliseconds: timeoutMilliseconds)
-            let command = try DatabaseCLI.queryText(path: file)
+            let command = try await DatabaseCLI.queryText(path: file)
             let response = try await DatabaseCLI.send(
                 .query(
                     DatabaseQueryRequest(
