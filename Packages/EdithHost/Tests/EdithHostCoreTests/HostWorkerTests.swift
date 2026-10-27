@@ -28,6 +28,21 @@ import HostWorkerFixtureSupport
         #expect(worker.processIdentifier == nil)
     }
 
+    @Test func startedWorkersRunNoRepeatingTimerWithoutOwnedProcessGroups() async throws {
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.idle-worker",
+            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let worker = HostWorker(
+            configuration: HostWorkerConfiguration(
+                identity: identity, extensionID: "sample", version: "1.0.0"),
+            engine: { _ in SettingsDrainEngine() })
+        try await worker.start()
+        #expect(worker.ready)
+        #expect(!worker.isRefreshingProcessGroups)
+        try await worker.stop()
+        #expect(!worker.isRefreshingProcessGroups)
+    }
+
     @MainActor private final class SettingsDrainEngine: HostWorkerEngine {
         var operations: [String] = []
         var resumeSettings: CheckedContinuation<Void, Never>?
