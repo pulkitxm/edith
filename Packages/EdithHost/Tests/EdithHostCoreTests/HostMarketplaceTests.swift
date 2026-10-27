@@ -62,13 +62,50 @@ import HostWorkerFixtureSupport
         #expect(marketplace.sessions.states["sample"] == .failed)
         #expect(marketplace.sessions.activeIDs.isEmpty)
         #expect(marketplace.installed["sample"] == fixture.package("1.0.0"))
-        #expect(marketplace.operationID == nil)
+        #expect(!marketplace.busy)
         await marketplace.enable(id: "sample")
         #expect(marketplace.sessions.activeIDs == ["sample"])
         #expect(marketplace.error == nil)
         #expect(marketplace.sessions.failureReasons["sample"] == nil)
         #expect(await fixture.network.count == 0)
         #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func downloadsOfDifferentExtensionsRunTogetherWithTheirOwnStateAndOneCatalogFetch()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let packages = [fixture.package("1.0.0"), fixture.package("1.0.0", id: "second")]
+        await fixture.network.set(data: try fixture.envelope(packages: packages))
+        await fixture.network.block()
+        let marketplace = try fixture.marketplace(ids: ["sample", "second"])
+        let first = Task { await marketplace.download(id: "sample") }
+        let second = Task { await marketplace.download(id: "second") }
+        while await fixture.network.count == 0 { await Task.yield() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(marketplace.isBusy("sample") && marketplace.isBusy("second"))
+        #expect(await marketplace.download(id: "sample") == nil)
+        await fixture.network.release()
+        let failures = [await first.value, await second.value]
+        #expect(failures.allSatisfy { $0 != nil })
+        #expect(await fixture.network.count == 1)
+        #expect(Set(await fixture.archives.urls) == Set(packages.map(\.downloadURL)))
+        #expect(Set(marketplace.failures.keys) == ["sample", "second"])
+        #expect(!marketplace.busy)
+    }
+
+    @Test func installingSeveralExtensionsReportsEachFailureSeparately() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second", "third", "fourth", "fifth"]
+        await fixture.network.set(
+            data: try fixture.envelope(packages: ids.map { fixture.package("1.0.0", id: $0) }))
+        let marketplace = try fixture.marketplace(ids: ids)
+        let failures = await marketplace.install(ids: ids)
+        #expect(Set(failures.keys) == Set(ids))
+        #expect(await fixture.archives.urls.count == ids.count)
+        #expect(!marketplace.busy)
     }
 
     @Test func installedExtensionsRemainUsableDuringASharedSlowCatalogRefresh() async throws {
@@ -82,7 +119,7 @@ import HostWorkerFixtureSupport
         while await fixture.network.count == 0 { await Task.yield() }
         let second = Task { await marketplace.checkForUpdates() }
         #expect(marketplace.refreshingCatalog)
-        #expect(marketplace.operationID == nil)
+        #expect(!marketplace.busy)
         await marketplace.enable(id: "sample")
         #expect(marketplace.sessions.activeIDs == ["sample"])
         await marketplace.disable(id: "sample")
@@ -339,7 +376,7 @@ import HostWorkerFixtureSupport
         #expect(marketplace.updateAvailable(id: "sample"))
         await marketplace.download(id: "sample")
         #expect(marketplace.installed["sample"]?.version == "1.0.0")
-        #expect(marketplace.operationID == nil)
+        #expect(!marketplace.busy)
         #expect(marketplace.error != nil)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
     }
@@ -460,7 +497,7 @@ import HostWorkerFixtureSupport
         #expect(await fixture.archives.urls.isEmpty)
         #expect(try fixture.store.installedPackages().isEmpty)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
-        #expect(marketplace.operationID == nil)
+        #expect(!marketplace.busy)
         #expect(await fixture.network.count == 2)
     }
 
@@ -540,7 +577,9 @@ import HostWorkerFixtureSupport
                 at: store.root, withIntermediateDirectories: true)
         }
 
-        func marketplace(workerMode: ((ExtensionPackage) -> String)? = nil) throws
+        func marketplace(
+            ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil
+        ) throws
             -> HostMarketplace
         {
             let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
@@ -565,23 +604,22 @@ import HostWorkerFixtureSupport
                 }, verify: { _ in })
             return try HostMarketplace(
                 identity: identity,
-                entries: [
-                    HostExtension(
-                        id: "sample", title: "Sample", symbolName: "square", category: "Tools")
-                ], store: store, catalogClient: client, installer: installer, sessions: sessions)
+                entries: ids.map {
+                    HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
+                }, store: store, catalogClient: client, installer: installer, sessions: sessions)
         }
 
         func package(
             _ version: String, abi: String = HostContract.compatibility,
-            minimumSystemVersion: ExtensionSystemVersion = .init(major: 14)
+            minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), id: String = "sample"
         )
             -> ExtensionPackage
         {
             ExtensionPackage(
-                id: "sample", version: version, hostABI: abi,
+                id: id, version: version, hostABI: abi,
                 minimumSystemVersion: minimumSystemVersion,
                 downloadURL: URL(
-                    string: "https://github.com/pulkitxm/edith/releases/download/fixture/sample.zip"
+                    string: "https://github.com/pulkitxm/edith/releases/download/fixture/\(id).zip"
                 )!, sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
         }
 

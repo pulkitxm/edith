@@ -167,6 +167,6 @@ struct HostSuiteAbilityRow: View {
             }
         }
         .padding(.horizontal, UIScale.pt(14)).padding(.vertical, UIScale.pt(11))
-        .disabled(marketplace.operationID != nil || suites.working)
+        .disabled(marketplace.isBusy(entry.id) || suites.working)
     }
 }

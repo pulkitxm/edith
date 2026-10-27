@@ -21,7 +21,7 @@ import Observation
     }
 
     func setEnabled(_ enabled: Bool, suite: HostMarketplaceSuite) async {
-        guard !working, marketplace.operationID == nil else { return }
+        guard !working else { return }
         working = true
         defer { working = false; revision += 1 }
         let entries = marketplace.entries.filter { $0.category == suite.id }
@@ -32,8 +32,7 @@ import Observation
             defaults.set(true, forKey: suite.defaultsKey)
             revision += 1
             for id in remembered.sorted() where marketplace.installed[id] != nil {
-                await marketplace.enable(id: id)
-                if marketplace.error != nil { break }
+                if await marketplace.enable(id: id) != nil { break }
             }
         } else {
             let active = marketplace.surfaceAvailability.activeIDs.intersection(allowed)
@@ -48,9 +47,7 @@ import Observation
     }
 
     func select(_ entry: HostExtension, enabled: Bool) async {
-        guard !working, marketplace.operationID == nil else { return }
-        working = true
-        defer { working = false }
+        guard !marketplace.isBusy(entry.id) else { return }
         if enabled {
             if marketplace.installed[entry.id] == nil {
                 await marketplace.download(id: entry.id)

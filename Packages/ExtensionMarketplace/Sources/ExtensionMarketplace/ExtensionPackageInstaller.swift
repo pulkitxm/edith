@@ -166,6 +166,10 @@ public actor ExtensionPackageInstaller {
         return try await body()
     }
 
+    public func exclusively(_ body: @Sendable () throws -> Void) async throws {
+        try await exclusive { try body() }
+    }
+
     private func stage(_ package: ExtensionPackage, in temporary: URL) async throws -> URL {
         let archive = try await download(package.downloadURL, package.downloadBytes)
         defer { try? FileManager.default.removeItem(at: archive) }

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct HostWorkflowOnboardingView: View {
     @Bindable var model: HostWorkflowOnboardingModel
-    let progress: () -> Double
+    let progress: (String) -> Double
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var permissions = HostPermissions()
@@ -246,7 +246,7 @@ struct HostWorkflowOnboardingView: View {
                     }
                 }.font(.edithText(.callout))
                 if case .installing = model.states[entry.id] {
-                    ProgressView(value: min(1, max(0, progress())))
+                    ProgressView(value: min(1, max(0, progress(entry.id))))
                 }
                 if case .failed(let failure) = model.states[entry.id] {
                     Text(failure).font(.edithText(.caption)).foregroundStyle(.orange)

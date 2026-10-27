@@ -39,7 +39,7 @@ struct HostStoragePage: View {
             }.sorted()
     }
 
-    private var busy: Bool { marketplace.operationID != nil || model.removingID != nil }
+    private var busy: Bool { model.removingID != nil }
 
     var body: some View {
         PageScaffold(width: .fluid, header: {}) {
@@ -64,7 +64,7 @@ struct HostStoragePage: View {
                 Text(notice).font(.edithText(.callout)).foregroundStyle(.secondary)
             }
         }
-        .pageTask(id: request, active: marketplace.operationID == nil, cancel: model.cancelScan) {
+        .pageTask(id: request, active: !marketplace.busy, cancel: model.cancelScan) {
             do {
                 let inventory = try HostStorageInventory(
                     marketplace: marketplace, appBundle: appBundle, appVersion: appVersion)
@@ -174,7 +174,8 @@ struct HostStoragePage: View {
                     entry: entry, measurement: measurement,
                     pendingRemoval: marketplace.pendingRemovalIDs.contains(entry.id),
                     removing: model.removingID == entry.id,
-                    canRemove: !busy && marketplace.installedVersions[entry.id]?.isEmpty == false
+                    canRemove: !busy && !marketplace.isBusy(entry.id)
+                        && marketplace.installedVersions[entry.id]?.isEmpty == false
                 ) {
                     Task {
                         await model.remove(id: entry.id, marketplace: marketplace)
