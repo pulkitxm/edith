@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum ExtensionBundleVerification {
+enum HostBundleVerification {
     private struct FileStamp: Hashable {
         let device: dev_t
         let inode: ino_t
@@ -18,14 +18,14 @@ public enum ExtensionBundleVerification {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var verified = Set<Fingerprint>()
 
-    public static func verify(_ url: URL, using verify: (URL) throws -> Void) throws {
+    static func verify(_ url: URL, using verify: (URL) throws -> Void) throws {
         let fingerprint = fingerprint(of: url)
         if let fingerprint, lock.withLock({ verified.contains(fingerprint) }) { return }
         try verify(url)
         if let fingerprint { lock.withLock { _ = verified.insert(fingerprint) } }
     }
 
-    public static func verifyConcurrently(
+    static func verifyConcurrently(
         _ urls: [URL], using verify: @escaping @Sendable (URL) throws -> Void
     ) async {
         await withTaskGroup(of: Void.self) { group in

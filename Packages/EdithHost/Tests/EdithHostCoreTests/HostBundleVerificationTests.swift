@@ -1,9 +1,10 @@
 import Foundation
 import Testing
 
-@testable import ExtensionMarketplace
+@testable import EdithHostCore
+import ExtensionMarketplace
 
-@Suite struct ExtensionBundleVerificationTests {
+@Suite struct HostBundleVerificationTests {
     private final class Counter: @unchecked Sendable {
         private let lock = NSLock()
         private var value = 0
@@ -31,7 +32,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent()) }
         let counter = Counter()
         for _ in 0..<5 {
-            try ExtensionBundleVerification.verify(bundle) { _ in counter.increment() }
+            try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         }
         #expect(counter.count == 1)
     }
@@ -40,10 +41,10 @@ import Testing
         let bundle = try makeBundle()
         defer { try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent()) }
         let counter = Counter()
-        try ExtensionBundleVerification.verify(bundle) { _ in counter.increment() }
+        try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         try Data("tampered binary".utf8).write(
             to: bundle.appendingPathComponent("Contents/MacOS/Runtime"))
-        try ExtensionBundleVerification.verify(bundle) { _ in counter.increment() }
+        try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         #expect(counter.count == 2)
     }
 
@@ -53,7 +54,7 @@ import Testing
         let counter = Counter()
         for _ in 0..<2 {
             #expect(throws: MarketplaceError.self) {
-                try ExtensionBundleVerification.verify(bundle) { _ in
+                try HostBundleVerification.verify(bundle) { _ in
                     counter.increment()
                     throw MarketplaceError.invalidSignature
                 }
@@ -70,10 +71,10 @@ import Testing
             }
         }
         let counter = Counter()
-        await ExtensionBundleVerification.verifyConcurrently(bundles) { _ in counter.increment() }
+        await HostBundleVerification.verifyConcurrently(bundles) { _ in counter.increment() }
         #expect(counter.count == 4)
         for bundle in bundles {
-            try ExtensionBundleVerification.verify(bundle) { _ in counter.increment() }
+            try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         }
         #expect(counter.count == 4)
     }
@@ -84,7 +85,7 @@ import Testing
         try FileManager.default.removeItem(at: bundle.appendingPathComponent("Contents/MacOS"))
         let counter = Counter()
         for _ in 0..<2 {
-            try ExtensionBundleVerification.verify(bundle) { _ in counter.increment() }
+            try HostBundleVerification.verify(bundle) { _ in counter.increment() }
         }
         #expect(counter.count == 2)
     }

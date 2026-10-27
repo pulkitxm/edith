@@ -97,7 +97,7 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         }.filter { FileManager.default.fileExists(atPath: $0.path) }
         let team = ExtensionCodeSignature.teamIdentifier()
         let development = identity.development
-        await ExtensionBundleVerification.verifyConcurrently(urls) { url in
+        await HostBundleVerification.verifyConcurrently(urls) { url in
             if development {
                 try ExtensionCodeSignature.verifyDevelopment(url)
             } else {
@@ -242,11 +242,13 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         }
         let context = values as NSDictionary
         let verify: (URL) throws -> Void = { url in
-            if identity.development {
-                try ExtensionCodeSignature.verifyDevelopment(url)
-            } else {
-                guard let team else { throw MarketplaceError.invalidSignature }
-                try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+            try HostBundleVerification.verify(url) { url in
+                if identity.development {
+                    try ExtensionCodeSignature.verifyDevelopment(url)
+                } else {
+                    guard let team else { throw MarketplaceError.invalidSignature }
+                    try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                }
             }
         }
         let roles = [ExtensionBundleRuntime.Role.helper, .agent, .app].filter {
