@@ -16,6 +16,9 @@ def inspect_cli(executable, version):
     assert json.loads(run(str(executable), 'version', '--json'))['version'] == version, 'Invalid JSON CLI version'
 
 
+CARRIER_PLIST = 'com.pulkit.edith.extensions.carrier.v1.plist'
+
+
 def inspect_layout(bundle, release=False, launcher_required=True):
     bundle = Path(bundle).resolve()
     plist = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
@@ -30,6 +33,10 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     executable = bundle / 'Contents/MacOS/Edith'
     assert executable.is_file() and not executable.is_symlink()
     allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature'}
+    if release:
+        allowed.add('Library')
+        assert {path.relative_to(bundle / 'Contents').as_posix() for path in (bundle / 'Contents/Library').rglob('*')} == {'Library/LaunchDaemons', f'Library/LaunchDaemons/{CARRIER_PLIST}'}, 'Unexpected host library payload'
+        assert (bundle / 'Contents/Library/LaunchDaemons' / CARRIER_PLIST).read_bytes() == (Path(__file__).resolve().parents[1] / 'Resources' / CARRIER_PLIST).read_bytes(), 'Invalid carrier daemon'
     assert {path.name for path in (bundle / 'Contents').iterdir()} <= allowed, 'Unexpected host payload directory'
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
     assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework'}, 'Feature framework in host'
