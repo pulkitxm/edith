@@ -55,7 +55,7 @@ struct HostRecordedShortcut: Equatable {
     let modifiers: Int
     let label: String
     init?(code: UInt16, flags: NSEvent.ModifierFlags, characters: String?) {
-        guard !flags.intersection([.command, .control, .option, .shift]).isEmpty else { return nil }
+        guard !flags.intersection([.command, .control, .option]).isEmpty else { return nil }
         var modifiers = 0
         var prefix = ""
         if flags.contains(.control) { modifiers |= controlKey; prefix += "⌃" }
