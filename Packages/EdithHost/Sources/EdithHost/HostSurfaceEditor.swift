@@ -238,7 +238,7 @@ struct HostSurfaceEditor: View {
                             Task { await marketplace.download(id: entry.id) }
                         }
                     }
-                }.disabled(marketplace.operationID != nil)
+                }.disabled(marketplace.isBusy(entry.id))
             }
             if let error = marketplace.error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.red)

@@ -28,7 +28,7 @@ struct HostExtensionReview: View {
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(entry.id) }
     private var installed: Bool { marketplace.installed[entry.id] != nil }
-    private var busy: Bool { task != nil || marketplace.operationID != nil || suites.working }
+    private var busy: Bool { task != nil || marketplace.isBusy(entry.id) || suites.working }
     private var pending: Bool {
         marketplace.pendingRemovalIDs.contains(entry.id)
             || marketplace.sessions.pendingDisableIDs.contains(entry.id)

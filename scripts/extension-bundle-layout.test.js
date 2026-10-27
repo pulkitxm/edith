@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 
 const required = ["Sparkle.framework"];
 
-function verify({ missing, extra, artwork = "valid" } = {}) {
+function verify({ missing, extra, artwork = "valid", carrier = "valid" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
   try {
     const app = join(root, "Edith.app");
@@ -51,6 +51,13 @@ function verify({ missing, extra, artwork = "valid" } = {}) {
       "#!/bin/sh\nexit 0\n",
     );
     symlinkSync("../Resources/ed-launcher", join(contents, "MacOS/ed"));
+    const daemons = join(contents, "Library/LaunchDaemons");
+    mkdirSync(daemons, { recursive: true });
+    if (carrier !== "missing")
+      copyFileSync(
+        resolve("Resources/com.pulkit.edith.extensions.carrier.v1.plist"),
+        join(daemons, "com.pulkit.edith.extensions.carrier.v1.plist"),
+      );
     if (extra) mkdirSync(join(app, extra), { recursive: true });
     return spawnSync(
       "python3",
@@ -89,13 +96,17 @@ test.each(["missing", "corrupt", "extra"])(
   },
 );
 
+test("release bundle requires the privileged carrier daemon", () => {
+  expect(verify({ carrier: "missing" }).status).not.toBe(0);
+});
+
 test.each(required)("release bundle rejects missing %s", (missing) => {
   expect(verify({ missing }).status).not.toBe(0);
 });
 
 test.each([
   "Contents/Extensions/Feature.appex",
-  "Contents/Library/LaunchDaemons",
+  "Contents/Library/LaunchAgents",
   "Contents/Frameworks/ExtensionMarketplace.framework/ExtensionMarketplace.framework",
   "Contents/Frameworks/EdithShared.framework",
   "Contents/MacOS/downloaded-worker",

@@ -42,7 +42,7 @@ struct MarketplacePage: View {
             }, query: search, category: category)
     }
     private var dark: Bool { scheme == .dark }
-    private var busy: Bool { marketplace.operationID != nil || suites.working }
+    private var busy: Bool { suites.working }
 
     var body: some View {
         PageWorkspace {
@@ -77,13 +77,13 @@ struct MarketplacePage: View {
                         ContentUnavailableView {
                             Label(
                                 search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? "No abilities available" : "No abilities found",
+                                    ? "No extensions available" : "No extensions found",
                                 systemImage: "magnifyingglass")
                         } description: {
                             Text(
                                 search.isEmpty
-                                    ? "This suite has no abilities available."
-                                    : "No ability matches \"\(search.trimmingCharacters(in: .whitespacesAndNewlines))\". Try another search."
+                                    ? "This group has no extensions available."
+                                    : "No extension matches \"\(search.trimmingCharacters(in: .whitespacesAndNewlines))\". Try another search."
                             )
                         }.frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
                     } else {
@@ -188,7 +188,9 @@ struct MarketplacePage: View {
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(status(entry)).font(.edithText(.caption)).foregroundStyle(.secondary)
-                if let failure = marketplace.sessions.failureReasons[entry.id] {
+                if let failure = marketplace.failures[entry.id]
+                    ?? marketplace.sessions.failureReasons[entry.id]
+                {
                     Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
                 }
                 let sizes = HostMarketplacePackageSummary(
@@ -208,7 +210,7 @@ struct MarketplacePage: View {
                 }
                 controls(entry)
             }
-        }.disabled(busy)
+        }.disabled(marketplace.isBusy(entry.id))
     }
 
     private func status(_ entry: HostExtension) -> String {
@@ -239,9 +241,11 @@ struct MarketplacePage: View {
 
     @ViewBuilder private func controls(_ entry: HostExtension) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            if marketplace.operationID == entry.id {
-                LoadingProgress(value: marketplace.progress).frame(width: UIScale.pt(90))
-                    .accessibilityLabel("Working on \(entry.title)")
+            if marketplace.isBusy(entry.id) {
+                LoadingProgress(value: marketplace.progress(for: entry.id)).frame(
+                    width: UIScale.pt(90)
+                )
+                .accessibilityLabel("Working on \(entry.title)")
             } else if marketplace.installed[entry.id] != nil {
                 if marketplace.updateAvailable(id: entry.id) {
                     Button("Update") { Task { await marketplace.download(id: entry.id) } }
@@ -273,7 +277,7 @@ struct MarketplacePage: View {
                 }
                 .disabled(marketplace.available[entry.id] == nil)
             }
-            if marketplace.operationID != entry.id,
+            if !marketplace.isBusy(entry.id),
                 marketplace.installedVersions[entry.id]?.isEmpty == false
             {
                 Button("Remove") { Task { await marketplace.remove(id: entry.id) } }

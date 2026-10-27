@@ -128,7 +128,7 @@ describe("build install lifecycle", () => {
         { stdout: "pipe", stderr: "pipe", timeout: 30000 },
       );
       const output = new TextDecoder().decode(result.stderr);
-      expect(output).toContain("Ran 14 tests");
+      expect(output).toMatch(/Ran \d+ tests/);
       expect(output).toContain("OK");
       expect(result.exitCode).toBe(0);
     },

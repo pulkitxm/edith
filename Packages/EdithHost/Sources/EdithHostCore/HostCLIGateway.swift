@@ -21,33 +21,34 @@ import Foundation
         if request.action == .invoke || request.action == .terminal {
             return try await invoke(request, id: id)
         }
-        guard marketplace.operationID == nil else {
+        guard !marketplace.isBusy(id) else {
             throw HostCLIError.rejected(
-                "Another marketplace operation is running. Try again when it finishes.")
+                "Another operation is running for this extension. Try again when it finishes.")
         }
+        let failure: String?
         switch request.action {
         case .install:
             guard !marketplace.downloadedIDs.contains(id) else {
                 throw HostCLIError.rejected(
                     "The extension is already installed. Use extensions update.")
             }
-            await marketplace.download(id: id)
+            failure = await marketplace.download(id: id)
         case .update:
             guard marketplace.downloadedIDs.contains(id) else {
                 throw HostCLIError.rejected("Install the extension before updating it.")
             }
-            await marketplace.download(id: id)
+            failure = await marketplace.download(id: id)
         case .enable:
             guard marketplace.installed[id] != nil else {
                 throw HostCLIError.rejected("Install a compatible extension before enabling it.")
             }
-            await marketplace.enable(id: id)
-        case .disable: await marketplace.disable(id: id)
-        case .remove: await marketplace.remove(id: id)
+            failure = await marketplace.enable(id: id)
+        case .disable: failure = await marketplace.disable(id: id)
+        case .remove: failure = await marketplace.remove(id: id)
         default: throw HostCLIError.usage("Invalid marketplace action.")
         }
         try Task.checkCancellation()
-        if let message = marketplace.error { throw HostCLIError.rejected(message) }
+        if let message = failure { throw HostCLIError.rejected(message) }
         return try encodedInfo(id)
     }
 

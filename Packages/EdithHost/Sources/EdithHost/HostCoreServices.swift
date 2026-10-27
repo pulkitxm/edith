@@ -222,7 +222,8 @@ import SwiftUI
                         || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)))
                 ? AnyView(
                     HostWorkflowOnboardingView(
-                        model: workflowModel, progress: { [marketplace] in marketplace.progress }))
+                        model: workflowModel,
+                        progress: { [marketplace] in marketplace.progress(for: $0) }))
                 : nil
         default: nil
         }
@@ -246,21 +247,20 @@ import SwiftUI
                 },
                 active: { [weak self] in self?.readyWorkflowExtensions() ?? [] },
                 refresh: { [weak self] in
-                    guard let self, marketplace.operationID == nil else {
-                        throw HostWorkerError.rejected
-                    }
+                    guard let self else { throw HostWorkerError.rejected }
                     await marketplace.checkForUpdates()
                     try Task.checkCancellation()
                     if let error = marketplace.error { throw HostWorkflowFailure(error) }
                 },
                 install: { [weak self] id, expectedPackage in
-                    guard let self, marketplace.operationID == nil else {
+                    guard let self, !marketplace.isBusy(id) else {
                         throw HostWorkerError.rejected
                     }
                     if marketplace.installed[id] == nil {
-                        await marketplace.download(id: id, expectedPackage: expectedPackage)
+                        let failure = await marketplace.download(
+                            id: id, expectedPackage: expectedPackage)
                         try Task.checkCancellation()
-                        if let error = marketplace.error {
+                        if let error = failure {
                             if let expectedPackage, marketplace.available[id] != expectedPackage {
                                 throw HostWorkflowReviewChanged()
                             }
@@ -271,9 +271,9 @@ import SwiftUI
                         throw HostWorkflowFailure(
                             "A compatible download is unavailable for this extension.")
                     }
-                    await marketplace.enable(id: id)
+                    let failure = await marketplace.enable(id: id)
                     try Task.checkCancellation()
-                    if let error = marketplace.error { throw HostWorkflowFailure(error) }
+                    if let error = failure { throw HostWorkflowFailure(error) }
                     guard readyWorkflowExtensions().contains(id) else {
                         throw HostWorkerError.rejected
                     }
