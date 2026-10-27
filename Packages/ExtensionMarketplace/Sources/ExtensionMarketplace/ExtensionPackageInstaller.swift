@@ -75,6 +75,7 @@ public actor ExtensionPackageInstaller {
     private let download: Download
     private let verify: Verify
     private var busy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
 
     public init(
         store: ExtensionPackageStore, download: @escaping Download, verify: @escaping Verify
@@ -116,24 +117,17 @@ public actor ExtensionPackageInstaller {
 
     public func install(
         _ plan: [ExtensionPackage], repository: String,
-        progress: @escaping @Sendable (Double) -> Void = { _ in }
+        progress: @escaping @Sendable (Double) -> Void = { _ in },
+        downloaded: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> [ExtensionPackage] {
-        guard !busy else { throw MarketplaceError.packageBusy }
-        busy = true
-        defer { busy = false }
-        let operation = try PackageFileLock(
-            url: store.root.appendingPathComponent(".operation.lock"), exclusive: true)
-        defer { operation.close() }
         for package in plan { try package.validate(repository: repository) }
         guard Set(plan.map(\.id)).count == plan.count else { throw MarketplaceError.invalidCatalog }
-        try store.cancelPendingRemovals(ids: Set(plan.map(\.id)))
-        let original = try store.installedPackages()
-        var resulting = original
-        let authority = try PackageDirectory(store.root, create: true)
-        var installations: [PackageInstallation] = []
-        var replacementLeases: [PackageFileLock] = []
-        var committed = false
-        defer { replacementLeases.forEach { $0.close() } }
+        try await exclusive {
+            let operation = try PackageFileLock(
+                url: store.root.appendingPathComponent(".operation.lock"), exclusive: true)
+            defer { operation.close() }
+            try store.cancelPendingRemovals(ids: Set(plan.map(\.id)))
+        }
         let temporaryRoot = URL(
             fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"]
                 ?? FileManager.default.temporaryDirectory.path)
@@ -142,6 +136,64 @@ public actor ExtensionPackageInstaller {
             at: temporary, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: temporary) }
+        let snapshot = try store.installedPackages()
+        var staged: [String: URL] = [:]
+        for (index, package) in plan.enumerated() {
+            try Task.checkCancellation()
+            if snapshot.contains(package),
+                (try? PackageDirectory(store.root, create: true).contains(package)) == true
+            {
+                downloaded(Double(index + 1) / Double(plan.count))
+                continue
+            }
+            staged[package.id] = try await stage(package, in: temporary)
+            downloaded(Double(index + 1) / Double(plan.count))
+        }
+        return try await exclusive {
+            try await commit(plan, staged: staged, temporary: temporary, progress: progress)
+        }
+    }
+
+    public func exclusive<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        while busy {
+            await withCheckedContinuation { waiting.append($0) }
+        }
+        busy = true
+        defer {
+            busy = false
+            if !waiting.isEmpty { waiting.removeFirst().resume() }
+        }
+        return try await body()
+    }
+
+    private func stage(_ package: ExtensionPackage, in temporary: URL) async throws -> URL {
+        let archive = try await download(package.downloadURL, package.downloadBytes)
+        defer { try? FileManager.default.removeItem(at: archive) }
+        try Task.checkCancellation()
+        let bytes = try Data(contentsOf: archive, options: .mappedIfSafe)
+        guard bytes.count == package.downloadBytes else { throw MarketplaceError.downloadFailed }
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        guard digest == package.sha256 else { throw MarketplaceError.checksumMismatch }
+        let staging = temporary.appendingPathComponent(package.id)
+        try ExtensionArchive.extract(archive, package: package, to: staging)
+        try verify(staging.appendingPathComponent(package.id))
+        return staging
+    }
+
+    private func commit(
+        _ plan: [ExtensionPackage], staged: [String: URL], temporary: URL,
+        progress: @Sendable (Double) -> Void
+    ) async throws -> [ExtensionPackage] {
+        let operation = try PackageFileLock(
+            url: store.root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
+        let original = try store.installedPackages()
+        var resulting = original
+        let authority = try PackageDirectory(store.root, create: true)
+        var installations: [PackageInstallation] = []
+        var replacementLeases: [PackageFileLock] = []
+        var committed = false
+        defer { replacementLeases.forEach { $0.close() } }
         do {
             for (index, package) in plan.enumerated() {
                 try Task.checkCancellation()
@@ -166,19 +218,12 @@ public actor ExtensionPackageInstaller {
                                 == ExtensionPayloadManifest(package: package)
                         else { throw MarketplaceError.invalidArchive }
                     }
-                    let archive = try await download(package.downloadURL, package.downloadBytes)
-                    defer { try? FileManager.default.removeItem(at: archive) }
-                    try Task.checkCancellation()
-                    let bytes = try Data(contentsOf: archive, options: .mappedIfSafe)
-                    guard bytes.count == package.downloadBytes else {
-                        throw MarketplaceError.downloadFailed
+                    let staging: URL
+                    if let prepared = staged[package.id] {
+                        staging = prepared
+                    } else {
+                        staging = try await stage(package, in: temporary)
                     }
-                    let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }
-                        .joined()
-                    guard digest == package.sha256 else { throw MarketplaceError.checksumMismatch }
-                    let staging = temporary.appendingPathComponent(package.id)
-                    try ExtensionArchive.extract(archive, package: package, to: staging)
-                    try verify(staging.appendingPathComponent(package.id))
                     installations.append(try authority.install(package, from: staging))
                 }
                 resulting.removeAll {

@@ -526,7 +526,7 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     #expect(try replacementBackups(fixture, replacement).isEmpty)
 }
 
-@Test func earlierReplacementLeaseRemainsHeldThroughLaterPlanDownload() async throws {
+@Test func failedLaterDownloadLeavesTheEarlierInstalledVersionUntouched() async throws {
     let fixture = try PackageFixture()
     defer { fixture.clean() }
     let (original, originalArchive) = try fixture.archive(runtime: "original runtime")
@@ -537,12 +537,7 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
     let installer = ExtensionPackageInstaller(
         store: fixture.store,
         download: { url, _ in
-            if url == dependency.downloadURL {
-                #expect(throws: MarketplaceError.packageBusy) {
-                    try fixture.store.lease(replacement)
-                }
-                throw MarketplaceError.downloadFailed
-            }
+            if url == dependency.downloadURL { throw MarketplaceError.downloadFailed }
             let copy = fixture.directory.appendingPathComponent(UUID().uuidString)
             try FileManager.default.copyItem(at: replacementArchive, to: copy)
             return copy
@@ -624,4 +619,56 @@ private func replacementBackups(_ fixture: PackageFixture, _ package: ExtensionP
         try Data(contentsOf: replacementRuntimeURL(fixture, replacement))
             == Data("replaced runtime".utf8))
     #expect(try replacementBackups(fixture, replacement).count == 1)
+}
+
+@Test func concurrentInstallsOfDifferentExtensionsAllCommit() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    var archives: [URL: URL] = [:]
+    var packages: [ExtensionPackage] = []
+    for id in ["keepAwake", "focusDim", "hinge", "micMute"] {
+        let (package, archive) = try fixture.archive(id: id)
+        archives[package.downloadURL] = archive
+        packages.append(package)
+    }
+    let installer = fixture.installer(archives: archives)
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        for package in packages {
+            group.addTask {
+                _ = try await installer.install([package], repository: "example/app")
+            }
+        }
+        try await group.waitForAll()
+    }
+    #expect(Set(try fixture.store.installedPackages().map(\.id)) == Set(packages.map(\.id)))
+}
+
+@Test func exclusiveSectionsRunOneAtATime() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let installer = fixture.installer(archives: [:])
+    let tracker = ExclusiveTracker()
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        for _ in 0..<8 {
+            group.addTask {
+                try await installer.exclusive {
+                    await tracker.enter()
+                    try await Task.sleep(for: .milliseconds(5))
+                    await tracker.leave()
+                }
+            }
+        }
+        try await group.waitForAll()
+    }
+    #expect(await tracker.maximum == 1)
+}
+
+private actor ExclusiveTracker {
+    private var active = 0
+    private(set) var maximum = 0
+    func enter() {
+        active += 1
+        maximum = max(maximum, active)
+    }
+    func leave() { active -= 1 }
 }
