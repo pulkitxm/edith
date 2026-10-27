@@ -62,7 +62,9 @@ import Foundation
                 shared: shared, standard: standard,
                 owners: { UserDefaults(suiteName: identity.extensionDefaultsSuite($0)) },
                 availability: { id in
-                    guard marketplace.entries.contains(where: { $0.id == id }) else { return .ready }
+                    guard marketplace.entries.contains(where: { $0.id == id }) else {
+                        return .ready
+                    }
                     if marketplace.installed[id] == nil { return .notInstalled }
                     return marketplace.sessions.activeIDs.contains(id) ? .ready : .off
                 },
