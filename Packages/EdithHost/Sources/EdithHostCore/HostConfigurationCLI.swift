@@ -6,10 +6,12 @@ import Foundation
     private let standard: UserDefaults
     private let settings: [HostCLISetting]
     private let changed: () -> Void
+    private let owners: (String) -> UserDefaults?
 
     public init(
         shared: UserDefaults, standard: UserDefaults,
         settings: [HostCLISetting] = HostConfigurationCLI.applicationSettings,
+        owners: @escaping (String) -> UserDefaults? = { _ in nil },
         changed: @escaping () -> Void = {}
     ) throws {
         guard Set(settings.map(\.key)).count == settings.count else {
@@ -17,7 +19,7 @@ import Foundation
         }
         for setting in settings { try setting.validate() }
         self.shared = shared; self.standard = standard; self.settings = settings;
-        self.changed = changed
+        self.changed = changed; self.owners = owners
     }
 
     public func execute(_ arguments: [String], input: Data = Data()) throws -> ExtensionCLIReply {
@@ -136,7 +138,8 @@ import Foundation
         return result
     }
     private func store(_ definition: HostCLISetting) -> UserDefaults {
-        definition.scope == "standard" ? standard : shared
+        if let owner = definition.owner, let store = owners(owner) { return store }
+        return definition.scope == "standard" ? standard : shared
     }
     private func value(_ definition: HostCLISetting) throws -> HostCLIJSON {
         guard let raw = store(definition).object(forKey: definition.key) else {

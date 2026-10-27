@@ -240,10 +240,10 @@ not here cannot be set, and `import` skips it.
 | `SUEnableAutomaticChecks` | bool | `true` | standard | Check for updates on a schedule. |
 | `SUScheduledCheckInterval` | number | `86400` | standard | Seconds between scheduled update checks. |
 | `SUAutomaticallyUpdate` | bool | `true` | standard | Download and install updates automatically. |
-| `tabSystemEnabled` | bool | `false` | shared | System extension: running apps and the cleaning lock. |
-| `keepAwakeEnabled` | bool | `false` | shared | Enable the independent Keep Awake ability. |
+| `tabSystemEnabled` | bool, read only | `false` | shared | System extension: running apps and the cleaning lock. |
+| `keepAwakeEnabled` | bool, read only | `false` | shared | Enable the independent Keep Awake ability. |
 | `preventSleep` | bool | `false` | shared | Keep the Mac awake (Keep Awake). |
-| `lidAwakeEnabled` | bool | `false` | shared | Enable the Lid Awake extension. |
+| `lidAwakeEnabled` | bool, read only | `false` | shared | Enable the Lid Awake extension. |
 | `lidAwakeRestoreOnQuit` | bool | `true` | shared | Restore normal lid-close sleep when Edith quits. |
 | `lidAwakeSession` | string: `indefinite`, `fifteenMinutes`, `thirtyMinutes`, `oneHour`, `twoHours`, `untilLidReopens` | `indefinite` | shared | Session used when Lid Awake starts. |
 | `lidAwakeBatteryThreshold` | int | `0` | shared | Battery percentage below which Lid Awake pauses; 0 disables it. |
@@ -345,7 +345,7 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `focusDimActive` | bool | `false` | shared | Focus dim on right now. |
-| `focusDimEnabled` | bool | `false` | shared | Focus Dim extension: dim everything behind the active app. |
+| `focusDimEnabled` | bool, read only | `false` | shared | Focus Dim extension: dim everything behind the active app. |
 | `focusDimIntensity` | number | `0.5` | shared | Dim strength from 0 to 1. |
 | `focusDimAnimationDuration` | number | none | shared | Seconds the dim takes to fade. |
 | `focusDimOtherDisplaysMode` | string: `perScreenFront`, `dimUnfocused` | `perScreenFront` | shared | How other displays are treated. |
@@ -358,8 +358,8 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `hingeActive` | bool | `false` | shared | Hinge fold on right now. |
-| `hingeEnabled` | bool | `false` | shared | Hinge extension: fold the desktop as the MacBook lid closes. |
-| `hingeOpenAngle` | number | `100` | shared | Lid angle, in degrees, that counts as fully open. |
+| `hingeEnabled` | bool, read only | `false` | shared | Hinge extension: fold the desktop as the MacBook lid closes. |
+| `hingeOpenAngle` | number, read only | `100` | shared | Lid angle, in degrees, that counts as fully open. |
 | `hingeEffectStrength` | number | `1` | shared | Fold strength from 0.25 to 1. |
 | `hingeSideFill` | string: `blur`, `black` | `blur` | shared | What fills the sides of the fold. |
 | `hingeCropsTop` | bool | `true` | shared | Crop the top of the desktop as it folds. |
@@ -375,7 +375,7 @@ not here cannot be set, and `import` skips it.
 | `presenterAutoActive` | bool | `false` | shared, read only | A share is being detected right now. |
 | `presenterAutoPaused` | bool | `false` | shared, read only | Auto presenter mode is paused until the current share ends. |
 | `presenterAutoReason` | string | none | shared, read only | Why auto presenter mode turned on. |
-| `presenterEnabled` | bool | `false` | shared | Presenter extension: blur sensitive numbers while sharing. |
+| `presenterEnabled` | bool, read only | `false` | shared | Presenter extension: blur sensitive numbers while sharing. |
 | `presenterMode` | bool | `false` | shared | Presenter mode on right now. |
 | `presenterAutoEnabled` | bool | none | shared | Turn presenter mode on automatically when a share is detected. |
 | `presenterDetectRecording` | bool | none | shared | Treat screen recording as a share. |
@@ -419,7 +419,7 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `micMuted` | bool | `false` | shared, read only | Microphone muted right now. |
-| `micMuteEnabled` | bool | `false` | shared | Mic Mute extension: system-wide microphone kill switch. |
+| `micMuteEnabled` | bool, read only | `false` | shared | Mic Mute extension: system-wide microphone kill switch. |
 | `micMuteInMenuBar` | bool | none | shared | Show the mic mute indicator in the menu bar. |
 | `micHotKeyCode` | int | none | shared | Virtual key code of the mic mute shortcut. |
 | `micHotKeyMods` | int | none | shared | Carbon modifier mask of the mic mute shortcut. |
