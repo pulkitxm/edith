@@ -117,33 +117,45 @@ enum UsageNativeFileIO {
             before.st_size >= 0, before.st_size <= limits.bytes
         else { throw UsageNativeFailure.capacity }
         var digest = SHA256(), prefix = SHA256()
-        var buffer = [UInt8](repeating: 0, count: 65_536)
-        var tail = Data(), offset = 0, position = 0, complete = 0
+        var buffer = [UInt8](repeating: 0, count: 262_144)
+        var carry = [UInt8](), offset = 0, position = 0, complete = 0
         while true {
             try Task.checkCancellation()
             let count = Darwin.read(descriptor, &buffer, buffer.count)
             if count == -1, errno == EINTR { continue }
             guard count >= 0 else { throw UsageNativeFailure.invalidInput("file") }
             if count == 0 { break }
-            let chunk = Data(buffer.prefix(count))
-            digest.update(data: chunk)
-            if position < previousBytes {
-                prefix.update(data: chunk.prefix(min(count, previousBytes - position)))
+            try buffer.withUnsafeBytes { raw in
+                let chunk = UnsafeRawBufferPointer(rebasing: raw[0..<count])
+                digest.update(bufferPointer: chunk)
+                if position < previousBytes {
+                    prefix.update(
+                        bufferPointer: UnsafeRawBufferPointer(
+                            rebasing: chunk[0..<min(count, previousBytes - position)]))
+                }
+                position += count
+                guard position <= limits.bytes else { throw UsageNativeFailure.capacity }
+                var start = 0
+                while start < count,
+                    let found = memchr(chunk.baseAddress! + start, 10, count - start)
+                {
+                    let stop = chunk.baseAddress!.distance(to: UnsafeRawPointer(found))
+                    let length = carry.count + stop - start
+                    guard length <= limits.lineBytes else { throw UsageNativeFailure.capacity }
+                    var line = Data(capacity: length)
+                    line.append(contentsOf: carry)
+                    line.append(contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<stop]))
+                    carry.removeAll(keepingCapacity: true)
+                    try autoreleasepool { try consume(line, offset, offset + length + 1) }
+                    offset += length + 1; complete = offset
+                    start = stop + 1
+                }
+                carry.append(contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<count]))
+                guard carry.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }
             }
-            position += count
-            guard position <= limits.bytes else { throw UsageNativeFailure.capacity }
-            tail.append(chunk)
-            while let newline = tail.firstIndex(of: 10) {
-                let end = tail.distance(from: tail.startIndex, to: newline) + 1
-                let line = tail.prefix(end - 1)
-                guard line.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }
-                try autoreleasepool { try consume(Data(line), offset, offset + end) }
-                offset += end; complete = offset; tail.removeFirst(end)
-            }
-            guard tail.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }
         }
-        if !tail.isEmpty, (try? JSONSerialization.jsonObject(with: tail)) != nil {
-            try consume(tail, offset, position); complete = position
+        if !carry.isEmpty, (try? JSONSerialization.jsonObject(with: Data(carry))) != nil {
+            try consume(Data(carry), offset, position); complete = position
         }
         var after = stat()
         guard fstat(descriptor, &after) == 0, unchanged(before, after), position == before.st_size
