@@ -38,6 +38,24 @@ import Testing
         #expect(state.values(for: "presenter").isEmpty)
     }
 
+    @Test func onlyAnEnabledPresenterFailsClosedAfterItsProcessExits() throws {
+        for (owner, enabled, expected) in [
+            ("presenter", "1", ["enabled": "1", "active": "1", "blurMusic": "0"]),
+            ("presenter", "0", [:]), ("calendar", "1", [:]),
+        ] as [(String, String, [String: String])] {
+            let state = ExtensionSharedState(root: root, namespace: "fixture", owner: owner)
+            try state.publish(["enabled": enabled, "active": "0", "blurMusic": "0"])
+            let file = root.appendingPathComponent(owner + ".json")
+            var snapshot =
+                try #require(
+                    try JSONSerialization.jsonObject(with: Data(contentsOf: file))
+                        as? [String: Any])
+            snapshot["pid"] = Int32.max
+            try JSONSerialization.data(withJSONObject: snapshot).write(to: file)
+            #expect(state.values(for: owner) == expected)
+        }
+    }
+
     @Test func unsafeOwnersAndOversizedStateCannotBePublishedOrRead() throws {
         for owner in ["../outside", ".hidden", "", "a/b"] {
             let state = ExtensionSharedState(root: root, namespace: "fixture", owner: owner)

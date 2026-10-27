@@ -324,6 +324,41 @@ import HostWorkerFixtureSupport
         #expect(await fixture.sessions.shutdown())
     }
 
+    @Test func orphanedPresenterStateSurvivesLaunchOnlyWhileTheExtensionIsEnabled() throws {
+        for (enabled, expected) in [(true, "1"), (false, nil)] as [(Bool, String?)] {
+            let fixture = try Fixture()
+            defer { fixture.clean() }
+            if enabled { fixture.defaults.set(["presenter"], forKey: "enabledExtensions") }
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+                UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let identity = try HostIdentity(
+                identifier: "com.pulkit.edith.tests.surfaces." + UUID().uuidString,
+                supportDirectory: directory)
+            defer {
+                UserDefaults(suiteName: identity.defaultsSuite)?.removePersistentDomain(
+                    forName: identity.defaultsSuite)
+            }
+            let root = identity.root.appendingPathComponent("ExtensionState")
+            let presenter = ExtensionSharedState(
+                root: root, namespace: identity.identifier, owner: "presenter")
+            try presenter.publish(["enabled": "1", "active": "0"])
+            let file = root.appendingPathComponent("presenter.json")
+            var snapshot =
+                try #require(
+                    try JSONSerialization.jsonObject(with: Data(contentsOf: file))
+                        as? [String: Any])
+            snapshot["pid"] = Int32.max
+            try JSONSerialization.data(withJSONObject: snapshot).write(to: file)
+            let entry = HostExtension(
+                id: "presenter", title: "Presenter", symbolName: "square", category: "Tools")
+            let surfaces = try HostSurfaces(
+                identity: identity, entries: [entry], sessions: fixture.sessions)
+            #expect(surfaces.privacy.values["active"] == expected)
+            #expect(surfaces.privacy.hides(.agents) == enabled)
+        }
+    }
+
     @Test func manualEnableAfterFailedRecoveryRestartsNormalWorker() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

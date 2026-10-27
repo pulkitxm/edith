@@ -20,6 +20,11 @@ public final class HostSurfaces {
         let channel = ExtensionSharedState(
             root: identity.root.appendingPathComponent("ExtensionState"),
             namespace: identity.identifier, owner: "host")
+        let releasePresenter: @MainActor () -> Void = { [weak sessions] in
+            guard let sessions, !sessions.enabledIDs.contains("presenter") else { return }
+            try? channel.clear("presenter")
+        }
+        releasePresenter()
         context = SurfaceHostContext(defaults: defaults, sharedState: channel)
         privacy = SurfacePrivacyState(channel: channel)
         navigation = HostSurfaceNavigation(context: context)
@@ -39,6 +44,7 @@ public final class HostSurfaces {
         }
         self.requests = requests
         let publish: @MainActor () -> Void = {
+            releasePresenter()
             let versions = activeVersions()
             guard let data = try? JSONEncoder().encode(versions.keys.sorted()),
                 let encodedVersions = try? JSONEncoder().encode(versions)
