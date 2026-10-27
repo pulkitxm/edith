@@ -28,6 +28,27 @@ import Testing
         }
     }
 
+    @Test func idleWaitsSleepInLongSlices() {
+        #expect(ExtensionPeerSocketConnection.waitSliceMilliseconds >= 1_000)
+    }
+
+    @Test func cancelWakesBlockedReadImmediately() async throws {
+        let (sender, receiver) = try pair()
+        defer { sender.close(); receiver.close() }
+        let started = DispatchTime.now()
+        let reader = Task.detached {
+            do {
+                _ = try receiver.readFrame(deadline: DispatchTime.now() + 30)
+                return false
+            } catch is CancellationError { return true } catch { return false }
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        receiver.cancel()
+        #expect(await reader.value)
+        let elapsed = DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds
+        #expect(elapsed < 900_000_000)
+    }
+
     @Test func binaryFrameRoundTripRetainsLengthAndPayload() throws {
         let (sender, receiver) = try pair()
         defer { sender.close(); receiver.close() }

@@ -175,13 +175,16 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
         }
     }
 
+    static let waitSliceMilliseconds: UInt64 = 1_000
+
     func wait(for events: Int16, deadline: DispatchTime) throws {
         while true {
             try check(deadline: deadline)
             let now = DispatchTime.now().uptimeNanoseconds
             guard now < deadline.uptimeNanoseconds else { throw ExtensionPeerError.timedOut }
             let remaining = deadline.uptimeNanoseconds - now
-            let milliseconds = Int32(max(1, min(50, (remaining + 999_999) / 1_000_000)))
+            let milliseconds = Int32(
+                max(1, min(Self.waitSliceMilliseconds, (remaining + 999_999) / 1_000_000)))
             var event = pollfd(fd: descriptor, events: events, revents: 0)
             let result = Darwin.poll(&event, 1, milliseconds)
             if result < 0, errno == EINTR { continue }
