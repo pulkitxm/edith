@@ -219,6 +219,12 @@ public struct HostCommandCLI: Sendable {
         if command == "agent" {
             return try await core(arguments, input: input)
         }
+        if command == "extensions", arguments.count > 1, arguments[1] == "sideload" {
+            let staged = try HostSideloadCLI.stage(
+                Array(arguments.dropFirst(2)), workingDirectory: await commandWorkingDirectory())
+            defer { try? FileManager.default.removeItem(at: staged.directory) }
+            return try await core(["extensions", "sideload"] + staged.arguments, input: input)
+        }
         if command == "extensions", arguments.count > 1,
             ["status", "setup", "verify", "doctor"].contains(arguments[1])
         {
@@ -291,10 +297,16 @@ public struct HostCommandCLI: Sendable {
     }
 
     private func core(_ arguments: [String], input: Data) async throws -> ExtensionCLIReply {
-        let timeout: Double =
-            arguments.first == "camera" || arguments.starts(with: ["extensions", "setup"])
-            ? 120
-            : arguments.starts(with: ["app", "check-updates"]) ? 65 : 30
+        let timeout: Double
+        if arguments.starts(with: ["extensions", "sideload"]) {
+            timeout = 600
+        } else if arguments.first == "camera" || arguments.starts(with: ["extensions", "setup"]) {
+            timeout = 120
+        } else if arguments.starts(with: ["app", "check-updates"]) {
+            timeout = 65
+        } else {
+            timeout = 30
+        }
         let data = try await invoke(
             HostCoreCLIEnvelope(arguments: arguments, input: input).request(timeout: timeout))
         let result = try JSONDecoder().decode(ExtensionCLIReply.self, from: data)

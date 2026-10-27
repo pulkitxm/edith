@@ -215,6 +215,12 @@ host:
 extension-dev:
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
+extension-sideload:
+	@test -n "$(EXTENSION)" || { echo "usage: make extension-sideload EXTENSION=<id>" >&2; exit 2; }
+	EXTENSION_VERSION="$$(bun -e 'const m=require("./Extensions/manifest.json").find(e=>e.id===process.argv[1]); if(!m) process.exit(2); console.log(m.version.split(".").slice(0,2).join("."))' $(EXTENSION)).$$(date +%s)" \
+		bun scripts/build-extension-package.mjs $(EXTENSION) --development
+	dist/Edith.app/Contents/MacOS/ed extensions sideload dist/extensions/$(EXTENSION).zip
+
 .PHONY: ci-extension-keep-awake-compile ci-extension-keep-awake package-extension-keep-awake
 ci-extension-keep-awake-compile:
 	/usr/bin/time -p swift build --package-path Extensions/keepAwake --target KeepAwakeExtensionTests --build-system native --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"

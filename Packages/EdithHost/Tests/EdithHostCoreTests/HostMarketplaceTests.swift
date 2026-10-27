@@ -557,6 +557,97 @@ import HostWorkerFixtureSupport
         }
     }
 
+    @Test func onlyDevelopmentBuildsAcceptSideloadedPackages() async throws {
+        #expect(HostMarketplace.allowsSideload(identifier: "com.pulkit.edith.dev.main"))
+        #expect(!HostMarketplace.allowsSideload(identifier: "com.pulkit.edith"))
+        #expect(!HostMarketplace.allowsSideload(identifier: "com.pulkit.edith.tests.sample"))
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let sideload = try fixture.build("1.0.9")
+        let error = await #expect(throws: HostCLIError.self) {
+            try await marketplace.sideload(sideload, admit: { _ in })
+        }
+        #expect(error?.errorDescription == "Only development builds can sideload extensions.")
+        #expect(marketplace.installed.isEmpty)
+    }
+
+    @Test func aSideloadBuiltForAnotherHostContractIsRejected() async throws {
+        let fixture = try Fixture(identifier: "com.pulkit.edith.dev.sideload-\(UUID().uuidString)")
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let sideload = try fixture.build("1.0.9", abi: "edith-host-previous")
+        await #expect(throws: HostCLIError.self) {
+            try await marketplace.sideload(sideload, admit: { _ in })
+        }
+        #expect(marketplace.installed.isEmpty)
+        #expect(!marketplace.busy)
+    }
+
+    @Test func sideloadCommandResolvesRelativePathsAndReportsTheInstalledBuild() async throws {
+        let fixture = try Fixture(identifier: "com.pulkit.edith.dev.sideload-\(UUID().uuidString)")
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        let sideload = try fixture.build("1.0.9")
+        for arguments in [[String](), ["a", "b"]] {
+            await #expect(throws: HostCLIError.self) {
+                try await HostSideloadCLI.execute(
+                    arguments, marketplace: marketplace, workingDirectory: "/", admit: { _ in })
+            }
+        }
+        let reply = try await HostSideloadCLI.execute(
+            ["sample.zip", "--json"], marketplace: marketplace,
+            workingDirectory: sideload.archive.deletingLastPathComponent().path,
+            admit: { _ in })
+        let object = try #require(
+            try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+        #expect(object["id"] as? String == "sample")
+        #expect(object["version"] as? String == "1.0.9")
+        #expect(object["running"] as? Bool == true)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func theClientStagesAVerifiedPackageWhereTheAppCanReadIt() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let sideload = try fixture.build("1.0.9")
+        let staging = fixture.directory.appendingPathComponent("tmp")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        let staged = try HostSideloadCLI.stage(
+            ["sample.zip", "--json"],
+            workingDirectory: sideload.archive.deletingLastPathComponent().path,
+            temporaryDirectory: staging)
+        #expect(staged.directory.deletingLastPathComponent().path == staging.path)
+        #expect(staged.arguments.last == "--json")
+        let copy = try ExtensionSideload(path: URL(fileURLWithPath: staged.arguments[0]))
+        #expect(copy.package == sideload.package)
+        var bytes = try Data(contentsOf: sideload.archive)
+        bytes[0] ^= 0xFF
+        try bytes.write(to: sideload.archive)
+        #expect(throws: HostCLIError.self) {
+            try HostSideloadCLI.stage(
+                [sideload.archive.path], workingDirectory: "/", temporaryDirectory: staging)
+        }
+    }
+
+    @Test func aSideloadReplacesTheRunningCatalogVersion() async throws {
+        let fixture = try Fixture(identifier: "com.pulkit.edith.dev.sideload-\(UUID().uuidString)")
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        await marketplace.enable(id: "sample")
+        #expect(marketplace.sessions.versions["sample"] == "1.0.0")
+        let sideload = try fixture.build("1.0.9")
+        let package = try await marketplace.sideload(sideload, admit: { _ in })
+        #expect(package.version == "1.0.9")
+        #expect(marketplace.installed["sample"] == sideload.package)
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.sessions.versions["sample"] == "1.0.9")
+        #expect(marketplace.error == nil)
+        #expect(await fixture.network.count == 0)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @MainActor private struct Fixture {
         let directory: URL
         let identity: HostIdentity
@@ -566,12 +657,12 @@ import HostWorkerFixtureSupport
         let archives = ArchiveRequests()
         var cache: URL { identity.root.appendingPathComponent("catalog.json") }
 
-        init() throws {
+        init(identifier: String = "com.pulkit.edith.tests.marketplace-\(UUID().uuidString)")
+            throws
+        {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(
                 UUID().uuidString)
-            identity = try HostIdentity(
-                identifier: "com.pulkit.edith.tests.marketplace-\(UUID().uuidString)",
-                supportDirectory: directory)
+            identity = try HostIdentity(identifier: identifier, supportDirectory: directory)
             store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
             try FileManager.default.createDirectory(
                 at: store.root, withIntermediateDirectories: true)
@@ -636,6 +727,50 @@ import HostWorkerFixtureSupport
                 ExtensionCatalog(revision: revision, packages: packages))
             return try JSONEncoder().encode(
                 SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload)))
+        }
+
+        func build(_ version: String, abi: String = HostContract.compatibility) throws
+            -> ExtensionSideload
+        {
+            let output = directory.appendingPathComponent("dist-\(UUID().uuidString)")
+            let payload = output.appendingPathComponent("staging/sample")
+            let runtime = payload.appendingPathComponent("app.bundle/Contents/MacOS/Runtime")
+            try FileManager.default.createDirectory(
+                at: runtime.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("local runtime \(version)".utf8).write(to: runtime)
+            let placeholder = package(version, abi: abi)
+            try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder)).write(
+                to: payload.appendingPathComponent("package.json"))
+            let archive = output.appendingPathComponent("sample.zip")
+            let zip = Process()
+            zip.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+            zip.arguments = [
+                "-c",
+                "import pathlib,sys,zipfile; root=pathlib.Path(sys.argv[1]); "
+                    + "z=zipfile.ZipFile(sys.argv[2],'w'); "
+                    + "[z.write(p,p.relative_to(root.parent)) for p in sorted(root.rglob('*')) "
+                    + "if p.is_file()]; z.close()",
+                payload.path, archive.path,
+            ]
+            try zip.run()
+            zip.waitUntilExit()
+            let bytes = try Data(contentsOf: archive)
+            let installedBytes = try FileManager.default.subpathsOfDirectory(atPath: payload.path)
+                .reduce(Int64(0)) { total, path in
+                    let attributes = try FileManager.default.attributesOfItem(
+                        atPath: payload.appendingPathComponent(path).path)
+                    return total
+                        + (attributes[.type] as? FileAttributeType == .typeRegular
+                            ? (attributes[.size] as? Int64 ?? 0) : 0)
+                }
+            let record = ExtensionPackage(
+                id: "sample", version: version, hostABI: abi,
+                downloadURL: placeholder.downloadURL,
+                sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
+                downloadBytes: Int64(bytes.count), installedBytes: installedBytes)
+            try JSONEncoder().encode(record).write(
+                to: output.appendingPathComponent("sample.json"))
+            return try ExtensionSideload(path: archive)
         }
 
         func clean() {

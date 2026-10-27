@@ -18,6 +18,7 @@ outstanding leases are released and retains user data, including usage history.
 | `ed extensions info <id>` | Inspect installation, compatibility, version and active state |
 | `ed extensions install <id>` | Download and verify a compatible extension |
 | `ed extensions update <id>` | Replace an installed extension with a compatible update |
+| `ed extensions sideload <path>` | Install a locally built package into a development build |
 | `ed extensions enable <id>` | Start a downloaded extension |
 | `ed extensions disable <id>` | Stop an extension and retain its download |
 | `ed extensions remove <id>` | Remove its package files while retaining user data |
@@ -34,7 +35,7 @@ inactive until a compatible version is available.
 ## Reference
 
 - [ls](./ls.md) and [info](./info.md)
-- [install](./install.md), [update](./update.md) and [remove](./remove.md)
+- [install](./install.md), [update](./update.md), [sideload](./sideload.md) and [remove](./remove.md)
 - [enable](./enable.md) and [disable](./disable.md)
 - [status](./status.md), [verify](./verify.md) and [doctor](./doctor.md)
 - [setup](./setup.md) and [runtime detection](./runtime-detection.md)
