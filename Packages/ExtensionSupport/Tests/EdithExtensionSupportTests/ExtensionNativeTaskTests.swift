@@ -82,7 +82,8 @@ import Testing
                 "EDITH_APPLICATION_IDENTIFIER": "com.example",
             ])
         if let host = Bundle.main.executablePath {
-            #expect(ExtensionEnvironment.childEnvironment(environment, executable: host) == environment)
+            #expect(
+                ExtensionEnvironment.childEnvironment(environment, executable: host) == environment)
         }
     }
 }
