@@ -521,7 +521,8 @@ import HostWorkerFixtureSupport
         for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar", "Terminal"] {
             #expect(find(host, label: title) != nil)
         }
-        for title in ["Machines", "Docs", "Agents & Terminal", "Media", "Agent connections", "Jev"] {
+        let hidden = ["Machines", "Docs", "Agents & Terminal", "Media", "Agent connections", "Jev"]
+        for title in hidden {
             #expect(find(host, label: title) == nil)
         }
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
