@@ -128,6 +128,44 @@ struct DatabaseConnectionGalleryTests {
         }
     }
 
+    @Test func connectionCardsAnswerAccessibilityPress() async throws {
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let oldAttributes = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, oldAttributes) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+        let fixture = try await Self.fixture()
+        var opened: [DatabaseConnectionID] = []
+        let view = DatabaseConnectionGallery(
+            model: fixture.model, createConnection: {},
+            openConnection: { opened.append($0.id) })
+        try await withGalleryHostAsync(view, width: 1_024, height: 700) { host in
+            var seen = Set<ObjectIdentifier>()
+            func elements(_ root: NSObject) -> [NSObject] {
+                guard seen.insert(ObjectIdentifier(root)).inserted else { return [] }
+                let children = (root as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+                return [root] + children.flatMap(elements)
+            }
+            let all = elements(host)
+            let cards = fixture.connections.compactMap { connection in
+                all.first {
+                    (nativeAccessibilityString($0, selector: "accessibilityLabel") ?? "")
+                        .hasPrefix(connection.displayName + ",")
+                }
+            }
+            #expect(cards.count == fixture.connections.count)
+            for card in cards {
+                #expect((card as AnyObject).accessibilityPerformPress?() == true)
+            }
+        }
+        #expect(opened.count == fixture.connections.count)
+    }
+
     @Test func galleryRendersWideAndCompactInBothAppearances() async throws {
         let fixture = try await Self.fixture()
 

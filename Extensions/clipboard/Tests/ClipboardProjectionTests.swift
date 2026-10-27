@@ -78,7 +78,7 @@ import Testing
                 preview: "saved"), sourceApp: nil, sourceBundleID: nil)
         _ = try archive.capture(capture, maxItems: 200, maxBytes: 1000, maxAge: nil)
         let stage = root.appendingPathComponent("stage")
-        try archive.stageExport(to: stage)
+        try archive.exportSnapshot(to: stage)
         _ = try archive.mutate(.init(.delete, ids: [capture.id]))
         let backup = ClipboardArchive(root: stage)
         #expect(try backup.payload(id: capture.id).data == capture.data)
@@ -107,7 +107,7 @@ import Testing
                 preview: "image"), sourceApp: nil, sourceBundleID: nil)
         _ = try archive.capture(large, maxItems: 200, maxBytes: 2 << 20, maxAge: nil)
         let stage = root.appendingPathComponent("stage")
-        try archive.stageExport(to: stage)
+        try archive.exportSnapshot(to: stage)
         #expect(try ClipboardArchive(root: stage).snapshot(.init()).total == 0)
         #expect(try archive.snapshot(.init()).total == 1)
     }

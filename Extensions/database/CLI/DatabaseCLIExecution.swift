@@ -28,15 +28,28 @@ enum DatabaseCLIEnvironment {
         try await resources.runMCP()
     }
 
-    static func readPassword() throws -> String {
-        let value = try readQueryText(nil).trimmingCharacters(in: .newlines)
+    static func readPassword() async throws -> String {
+        let value = try await readQueryText(nil).trimmingCharacters(in: .newlines)
         guard !value.isEmpty, !value.utf8.contains(0),
             value.utf8.count <= DatabaseSecretStorageLimits.defaultMaximumBytes
         else { throw CLIFailure.usage("database password input must contain a bounded secret") }
         return value
     }
 
-    static func readQueryText(_ path: String?) throws -> String {
+    private static func standardInput(_ request: ExtensionCLIRequest) async throws -> Data {
+        guard let input = ExtensionCLIContext.input else { return request.standardInput }
+        var data = Data()
+        while let event = try await input.read() {
+            guard case .bytes(let bytes) = event else { continue }
+            data.append(bytes)
+            guard data.count <= ExtensionCLIRequest.maximumInputBytes else {
+                throw CLIFailure.usage("database query input must be bounded UTF-8")
+            }
+        }
+        return data
+    }
+
+    static func readQueryText(_ path: String?) async throws -> String {
         guard let request = ExtensionCLIContext.request else {
             throw ExtensionPeerError.unavailable
         }
@@ -56,7 +69,7 @@ enum DatabaseCLIEnvironment {
             else { throw CLIFailure.usage("database query input must be a bounded regular file") }
             data = try handle.read(upToCount: ExtensionCLIRequest.maximumInputBytes + 1) ?? Data()
         } else {
-            data = request.standardInput
+            data = try await standardInput(request)
         }
         guard data.count <= ExtensionCLIRequest.maximumInputBytes,
             let text = String(data: data, encoding: .utf8)

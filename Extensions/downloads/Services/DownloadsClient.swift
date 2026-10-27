@@ -66,6 +66,10 @@ public struct DownloadWorkerSnapshot: Codable, Sendable {
         self.finished = records.count { if case .done = $0.status { true } else { false } }
         self.failed = records.count { $0.canRetry }
     }
+
+    public var pollInterval: Duration {
+        running > 0 || queued > 0 ? .milliseconds(250) : .seconds(2)
+    }
 }
 
 public struct DownloadsClient: Sendable {
@@ -102,8 +106,9 @@ public struct DownloadsClient: Sendable {
                 let task = Task {
                     do {
                         while !Task.isCancelled {
-                            continuation.yield(try await read())
-                            try await Task.sleep(for: .milliseconds(250))
+                            let snapshot = try await read()
+                            continuation.yield(snapshot)
+                            try await Task.sleep(for: snapshot.pollInterval)
                         }
                     } catch {}
                     continuation.finish()

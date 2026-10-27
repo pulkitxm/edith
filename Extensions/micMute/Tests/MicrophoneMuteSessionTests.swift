@@ -64,6 +64,28 @@ import Testing
         #expect(fixture.values[control] == 0.5)
     }
 
+    @Test func unmutingWhatWasNeverMutedLeavesAnExternalMuteAlone() {
+        let mute = MicrophoneControl(device: 1, element: 0, kind: .mute)
+        let volume = MicrophoneControl(device: 2, element: 1, kind: .volume)
+        let fixture = MicrophoneFixture(values: [mute: 1, volume: 0])
+        let session = MicrophoneMuteSession(access: fixture.access)
+        #expect(session.setMuted(false))
+        #expect(fixture.writes == 0)
+        #expect(fixture.values == [mute: 1, volume: 0])
+    }
+
+    @Test func unmutingAfterAFailedRestoreStillRetries() {
+        let mute = MicrophoneControl(device: 1, element: 0, kind: .mute)
+        let fixture = MicrophoneFixture(values: [mute: 0])
+        let session = MicrophoneMuteSession(access: fixture.access)
+        #expect(session.setMuted(true))
+        fixture.rejectWrites = true
+        #expect(!session.setMuted(false))
+        fixture.rejectWrites = false
+        #expect(session.setMuted(false))
+        #expect(fixture.values[mute] == 0)
+    }
+
     @Test func unreadableVolumeControlsAreLeftUnchanged() {
         let control = MicrophoneControl(device: 1, element: 1, kind: .volume)
         let fixture = MicrophoneFixture(values: [control: 0.5])

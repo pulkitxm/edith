@@ -34,7 +34,6 @@ final class HostLocalSession {
     }
 
     private static var loaded: [String: Loaded] = [:]
-    private static var superseded: [Loaded] = []
     private static var hostIdentity: HostRemoteProcessIdentity?
     let configuration: HostRemoteConfiguration
     let engine: HostRemoteEngineOwner?
@@ -62,7 +61,6 @@ final class HostLocalSession {
                 package, store: marketplace.packageStore,
                 development: marketplace.identity.development,
                 environment: try configuration.worker.extensionEnvironment())
-            if let previous = Self.loaded[package.id] { Self.superseded.append(previous) }
             let loaded = Loaded(version: package.version, runtimes: runtimes, lease: lease)
             Self.loaded[package.id] = loaded
             resources = loaded.resources
@@ -72,6 +70,8 @@ final class HostLocalSession {
         self.engine = engine
         peer = Self.currentHostIdentity()
     }
+
+    static func evict(_ id: String) { loaded[id] = nil }
 
     private static func currentHostIdentity() -> HostRemoteProcessIdentity? {
         if let hostIdentity { return hostIdentity }

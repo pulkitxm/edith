@@ -318,19 +318,22 @@ final class VirtualCameraPageModel: ObservableObject {
         }
     }
 
-    private func refreshFrame() async {
-        guard let engineClient, !stopped else { return }
+    @discardableResult
+    private func refreshFrame() async -> Bool {
+        guard let engineClient, !stopped else { return false }
         do {
             let data = try await engineClient.invoke(
                 "camera.ui.frame",
                 payload: JSONSerialization.data(withJSONObject: ["after": frameSequence]))
             let value = try JSONDecoder().decode(CameraUIFrame.self, from: data)
-            guard !stopped, !Task.isCancelled else { return }
+            guard !stopped, !Task.isCancelled else { return false }
             frameSequence = value.sequence
             if let preview = value.preview.flatMap(Self.image), let buffer = Self.buffer(preview) {
                 display.push(buffer)
+                return true
             }
         } catch {}
+        return false
     }
 
     private static func image(_ data: Data) -> CGImage? {
@@ -423,6 +426,9 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     static let statusRefreshTicks = 5
+    static let frameInterval = Duration.milliseconds(33)
+    static let idleFrameInterval = Duration.milliseconds(250)
+    static let statusInterval = Duration.milliseconds(250)
 
     var statusHeadline: String {
         if state.privacy == .stopped { return "Stopped" }
@@ -453,8 +459,13 @@ final class VirtualCameraPageModel: ObservableObject {
                 defer { self?.framePoll = nil }
                 while !Task.isCancelled {
                     guard let self, visible, !stopped else { return }
-                    await refreshFrame()
-                    do { try await Task.sleep(for: .milliseconds(33)) } catch { return }
+                    let delivered = await refreshFrame()
+                    do {
+                        try await Task.sleep(
+                            for: delivered ? Self.frameInterval : Self.idleFrameInterval)
+                    } catch {
+                        return
+                    }
                 }
             }
             remotePoll = launch { [weak self] in
@@ -462,7 +473,7 @@ final class VirtualCameraPageModel: ObservableObject {
                 while !Task.isCancelled {
                     guard let self, visible, !stopped else { return }
                     await refreshRemote()
-                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                    do { try await Task.sleep(for: Self.statusInterval) } catch { return }
                 }
             }; return
         }

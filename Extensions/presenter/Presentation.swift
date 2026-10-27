@@ -382,7 +382,7 @@ struct ControlSettingsHost<Content: View>: View {
             PageLoading(
                 state: presentation.load.state, title: "Settings unavailable",
                 message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .list, retry: retry
+                layout: .editor, retry: retry
             ) { content() }
         }
         .pageRefresh(

@@ -63,8 +63,6 @@ struct HostSidebarFooter: View {
     var music: AnyView? = nil
     @State private var actions = HostUtilityActions()
     @State private var presenterSettings = false
-    @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store)
-    private var preventSleep = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tile = SurfaceTile(.actions)
     @Environment(\.windowVisible) private var visible
@@ -121,7 +119,7 @@ struct HostSidebarFooter: View {
                             HStack(spacing: 0) {
                                 utility(.presenter, background: false)
                                 Rectangle().fill(
-                                    actions.isOn(.presenter, preventSleep: preventSleep)
+                                    actions.isOn(.presenter)
                                         ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
                                 )
                                 .frame(width: UIScale.pt(1), height: UIScale.pt(28))
@@ -150,11 +148,11 @@ struct HostSidebarFooter: View {
                                     .frame(maxHeight: UIScale.pt(440))
                                 }
                             }.foregroundStyle(
-                                actions.isOn(.presenter, preventSleep: preventSleep)
+                                actions.isOn(.presenter)
                                     ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
                             )
                             .background(
-                                actions.isOn(.presenter, preventSleep: preventSleep)
+                                actions.isOn(.presenter)
                                     ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(9))
                             )
@@ -223,7 +221,7 @@ struct HostSidebarFooter: View {
     private func utility(_ value: HostSidebarUtility, background: Bool = true) -> some View {
         HostSidebarUtilityButton(
             utility: value,
-            active: value != .system && actions.isOn(value, preventSleep: preventSleep),
+            active: value != .system && actions.isOn(value),
             theme: theme,
             background: background,
             action: { perform(value) }
@@ -234,7 +232,7 @@ struct HostSidebarFooter: View {
         guard enabled, visible, let version = versions[utility.id] else { return }
         actions.perform(
             utility, marketplace: marketplace, tile: tile, version: version,
-            preventSleep: preventSleep, current: { versions[utility.id] })
+            current: { versions[utility.id] })
     }
 
     private func clear() {

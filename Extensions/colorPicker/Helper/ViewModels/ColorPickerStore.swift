@@ -15,6 +15,8 @@ final class ColorPickerStore: FeatureModule {
     private var stopped = false
     @ObservationIgnored private var selectionTask: Task<Void, Never>?
     @ObservationIgnored private var requestObserver: NSObjectProtocol?
+    @ObservationIgnored private var pickResponse: AsyncStream<NSColor?>.Continuation?
+    @ObservationIgnored var showSampler: ((@escaping @Sendable (NSColor?) -> Void) -> Void)?
 
     private let fixture: WorkerFixtureAdmission?
     private(set) var fixtureCopies: [String] = []
@@ -34,6 +36,8 @@ final class ColorPickerStore: FeatureModule {
 
     func shutdown() {
         stopped = true
+        pickResponse?.finish()
+        pickResponse = nil
         HotKeyRegistrar.clear(HotKeyCatalog.colorPicker)
         if let requestObserver { IPC.stopObserving(requestObserver) }
         requestObserver = nil
@@ -59,6 +63,7 @@ final class ColorPickerStore: FeatureModule {
         guard selectionTask == nil else { return }
         let sampler = NSColorSampler()
         let response = AsyncStream<NSColor?>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        pickResponse = response.continuation
         selectionTask = Task { [self, sampler] in
             defer { selectionTask = nil }
             for await color in response.stream {
@@ -68,8 +73,12 @@ final class ColorPickerStore: FeatureModule {
         }
         ColorPickerOperationExecution.perform(
             .pick,
-            show: { completion in
-                sampler.show(selectionHandler: completion)
+            show: { [showSampler] completion in
+                if let showSampler {
+                    showSampler(completion)
+                } else {
+                    sampler.show(selectionHandler: completion)
+                }
             }
         ) { color in
             response.continuation.yield(color)

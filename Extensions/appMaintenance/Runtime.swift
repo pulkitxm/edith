@@ -167,8 +167,9 @@ final class ExtensionRuntime: NSObject {
                     rootView: ExtensionPageHost { AppMaintenanceSettings(model: settingsModel) })
             }
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
+            let section = AppMaintenanceSection(hostSection: uiSection)
             return NSHostingController(
-                rootView: ExtensionPageHost { AppMaintenanceView(model: model) })
+                rootView: ExtensionPageHost { AppMaintenanceView(model: model, section: section) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":

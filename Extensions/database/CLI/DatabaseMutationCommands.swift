@@ -31,9 +31,9 @@ extension DatabaseCLI {
         path: String?,
         maximumBytes: Int,
         name: String
-    ) throws -> Value {
+    ) async throws -> Value {
         let source = path == "-" ? nil : path
-        let text = try DatabaseCLIEnvironment.readQueryText(source)
+        let text = try await DatabaseCLIEnvironment.readQueryText(source)
         let data = Data(text.utf8)
         guard !data.isEmpty else {
             throw CLIFailure.usage("\(name) is empty")
@@ -167,10 +167,10 @@ extension DatabaseCLI {
         ])
     }
 
-    static func mutationReceipt(path: String) throws
+    static func mutationReceipt(path: String) async throws
         -> (DatabaseConnectionID, DatabaseAcceptedMutation)
     {
-        let receipt = try decodeDocument(
+        let receipt = try await decodeDocument(
             DatabaseMutationReceiptDocument.self,
             path: path,
             maximumBytes: maximumConfirmationDocumentBytes,
@@ -279,10 +279,13 @@ struct DatabaseMutationDocumentRequestCommand: AsyncParsableCommand {
                 throw CLIFailure.usage(
                     "--product must be mongodb, elasticsearch or opensearch")
             }
-            let fields = try document.map { path in
-                let text = try DatabaseCLIEnvironment.readQueryText(path == "-" ? nil : path)
+            var fields: [DatabaseObjectField]?
+            if let document {
+                let text = try await DatabaseCLIEnvironment.readQueryText(
+                    document == "-" ? nil : document)
                 do {
-                    return product == .elasticsearch || product == .openSearch
+                    fields =
+                        product == .elasticsearch || product == .openSearch
                         ? try DatabaseJSONDocumentCodec.decodePlainObject(text)
                         : try DatabaseJSONDocumentCodec.decodeObject(text)
                 } catch {
@@ -615,21 +618,22 @@ struct DatabaseMutationRowRequestCommand: AsyncParsableCommand {
             else {
                 throw CLIFailure.usage("row mutations require exactly two --path values")
             }
-            let record = try identity.map {
-                try DatabaseCLI.decodeDocument(
+            var record: DatabaseRecordIdentity?
+            if let identity {
+                record = try await DatabaseCLI.decodeDocument(
                     DatabaseRecordIdentity.self,
-                    path: $0,
+                    path: identity,
                     maximumBytes: DatabaseCLI.maximumConfirmationDocumentBytes,
                     name: "database row identity")
             }
-            let fields =
-                try values.map {
-                    try DatabaseCLI.decodeDocument(
-                        [DatabaseObjectField].self,
-                        path: $0,
-                        maximumBytes: DatabaseCLI.maximumMutationDocumentBytes,
-                        name: "database row values")
-                } ?? []
+            var fields: [DatabaseObjectField] = []
+            if let values {
+                fields = try await DatabaseCLI.decodeDocument(
+                    [DatabaseObjectField].self,
+                    path: values,
+                    maximumBytes: DatabaseCLI.maximumMutationDocumentBytes,
+                    name: "database row values")
+            }
             let target = DatabaseTargetIdentifier(
                 connectionID: try DatabaseCLI.connectionID(connectionID),
                 object: DatabaseObjectIdentifier(kind: .table, path: path),
@@ -691,7 +695,7 @@ struct DatabaseMutationPreviewCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let mutation = try DatabaseCLI.decodeDocument(
+            let mutation = try await DatabaseCLI.decodeDocument(
                 DatabaseDestructiveRequest.self,
                 path: requestPath,
                 maximumBytes: DatabaseCLI.maximumMutationDocumentBytes,
@@ -761,12 +765,12 @@ struct DatabaseMutationApplyCommand: AsyncParsableCommand {
             guard requestPath != confirmation else {
                 throw CLIFailure.usage("apply requires distinct request and confirmation inputs")
             }
-            let mutation = try DatabaseCLI.decodeDocument(
+            let mutation = try await DatabaseCLI.decodeDocument(
                 DatabaseDestructiveRequest.self,
                 path: requestPath,
                 maximumBytes: DatabaseCLI.maximumMutationDocumentBytes,
                 name: "database mutation request")
-            let confirmation = try DatabaseCLI.decodeDocument(
+            let confirmation = try await DatabaseCLI.decodeDocument(
                 DatabaseMutationConfirmationDocument.self,
                 path: confirmation,
                 maximumBytes: DatabaseCLI.maximumConfirmationDocumentBytes,
@@ -829,7 +833,7 @@ struct DatabaseMutationStatusCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let (connectionID, accepted) = try DatabaseCLI.mutationReceipt(path: receipt)
+            let (connectionID, accepted) = try await DatabaseCLI.mutationReceipt(path: receipt)
             let response = try await DatabaseCLI.send(
                 .mutationStatus(
                     DatabaseMutationStatusRequest(
@@ -885,7 +889,7 @@ struct DatabaseMutationCancelCommand: AsyncParsableCommand {
             guard yes else {
                 throw CLIFailure.usage("database mutation cancellation requires --yes")
             }
-            let (connectionID, accepted) = try DatabaseCLI.mutationReceipt(path: receipt)
+            let (connectionID, accepted) = try await DatabaseCLI.mutationReceipt(path: receipt)
             let response = try await DatabaseCLI.send(
                 .mutationCancel(
                     DatabaseMutationCancelRequest(
