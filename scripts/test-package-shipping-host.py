@@ -99,6 +99,12 @@ class ShippingHostVersionTests(unittest.TestCase):
                 self.package(*options)
                 info = plistlib.loads((self.destination / 'Contents/Info.plist').read_bytes())
                 self.assertEqual((info['CFBundleShortVersionString'], info['CFBundleVersion']), ('1.2.3', '123'))
+                carrier = self.destination / 'Contents/Library/LaunchDaemons/com.pulkit.edith.extensions.carrier.v1.plist'
+                self.assertEqual(carrier.is_file(), options == ('--release',))
+                if carrier.is_file():
+                    daemon = plistlib.loads(carrier.read_bytes())
+                    self.assertEqual(daemon['ProgramArguments'], ['Contents/MacOS/Edith', '--extension-carrier'])
+                    self.assertEqual(list(daemon['MachServices']), ['com.pulkit.edith.extensions.carrier.v1'])
                 self.unchanged_source()
 
     def test_malformed_or_unpaired_release_metadata_rejects_before_any_packaging_or_signing(self):
