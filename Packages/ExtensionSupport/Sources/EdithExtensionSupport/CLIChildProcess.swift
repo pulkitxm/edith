@@ -83,7 +83,11 @@ public final class CLIChildProcess: @unchecked Sendable {
             ? Bundle.main.executableURL?.path ?? ""
             : request.executableURL.path
         let arguments = [executable] + (wrapped ? ["--extension-command"] : request.arguments)
-        var environment = request.environment
+        var environment =
+            wrapped
+            ? request.environment
+            : ExtensionEnvironment.childEnvironment(
+                request.environment, executable: request.executableURL.path)
         if wrapped { environment["EDITH_EXTENSION_WORKER"] = "1" }
         guard request.executableURL.isFileURL,
             request.currentDirectoryURL.map(\.isFileURL) ?? true,
