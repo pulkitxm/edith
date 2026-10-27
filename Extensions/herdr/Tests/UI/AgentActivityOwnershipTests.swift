@@ -220,7 +220,7 @@ import Testing
         throw ExtensionPeerError.unavailable
     }
 
-    @Test func interfaceMonitorDecodesTheEngineSnapshotWithItsDatesAndClearsTheHookError() async throws {
+    @Test func interfaceMonitorDecodesEngineSnapshotDates() async throws {
         let suite = "activity-ui-snapshot-" + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
