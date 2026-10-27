@@ -648,6 +648,60 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    private func report(_ marketplace: HostMarketplace, _ id: String = "sample") async throws
+        -> [String: Any]
+    {
+        let reply = try await HostCLIGateway(marketplace: marketplace)
+            .execute(HostCLIRequest(action: .info, id: id))
+        return try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+    }
+
+    @Test func cliReportsAnUninstalledCatalogPackageAsCompatibleAndNotInstalled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.checkForUpdates()
+        let info = try await report(marketplace)
+        #expect(info["compatible"] as? Bool == true)
+        #expect(info["installed"] as? Bool == false)
+        #expect(info["state"] as? String == "notInstalled")
+        #expect(info["availableVersion"] as? String == "1.0.0")
+    }
+
+    @Test func cliReportsADownloadedButDisabledExtensionAsDisabled() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        await marketplace.restoreEnabledExtensions()
+        var info = try await report(marketplace)
+        #expect(info["installed"] as? Bool == true)
+        #expect(info["compatible"] as? Bool == true)
+        #expect(info["enabled"] as? Bool == false)
+        #expect(info["state"] as? String == "disabled")
+        await marketplace.enable(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "active")
+        await marketplace.disable(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "disabled")
+        await marketplace.remove(id: "sample")
+        info = try await report(marketplace)
+        #expect(info["state"] as? String == "notInstalled")
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func cliReportsADownloadedPackageForAnotherHostAsIncompatible() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0", abi: "incompatible")])
+        let marketplace = try fixture.marketplace()
+        let info = try await report(marketplace)
+        #expect(info["installed"] as? Bool == true)
+        #expect(info["compatible"] as? Bool == false)
+    }
+
     @MainActor private struct Fixture {
         let directory: URL
         let identity: HostIdentity
