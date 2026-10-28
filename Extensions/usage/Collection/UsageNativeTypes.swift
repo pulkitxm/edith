@@ -135,6 +135,8 @@ struct UsageNativeFileSnapshot: Sendable {
     let hash: String
     let prefixHash: String
     let records: [UsageNativeParsedRecord]
+    var appended: Bool?
+    var state: String?
 }
 
 enum UsageNativeJSON {

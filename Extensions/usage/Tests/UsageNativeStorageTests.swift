@@ -51,10 +51,14 @@ import Testing
             var offsets: [Int] = []
             let first = try UsageNativeFileIO.lines(path) { _, offset, _ in offsets.append(offset) }
             #expect(offsets == [0, 9]); #expect(first.1 == first.0)
-            let prefix = first.3
+            let anchor = first.3
             try Data("{\"id\":1}\n{\"id\":2}\n{\"id\":".utf8).write(to: path)
-            let second = try UsageNativeFileIO.lines(path, previousBytes: first.0) { _, _, _ in }
-            #expect(second.4 == prefix); #expect(second.1 < second.0)
+            #expect(UsageNativeFileIO.anchorMatches(path, upTo: first.1, anchor: anchor))
+            var resumed: [Int] = []
+            let second = try UsageNativeFileIO.lines(path, startingAt: first.1) { _, offset, _ in
+                resumed.append(offset)
+            }
+            #expect(resumed == [first.1]); #expect(second.1 < second.0)
         }
     }
 
