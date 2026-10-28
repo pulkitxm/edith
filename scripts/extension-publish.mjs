@@ -123,6 +123,35 @@ async function upload(repository, releaseID, tag, file, name) {
   await uploadReleaseAsset({ repository, releaseID, tag, file, name });
 }
 
+export const stableCatalogAsset = "catalog.json";
+
+export async function publishStableCatalog({
+  repository,
+  tag,
+  file,
+  readRelease = (request) => release(request.repository, request.tag),
+  removeAsset = (id) =>
+    execFileSync(
+      "gh",
+      ["api", "-X", "DELETE", `repos/${repository}/releases/assets/${id}`],
+      { stdio: "ignore", timeout: 60_000 },
+    ),
+  uploadAsset = upload,
+}) {
+  const item = readRelease({ repository, tag });
+  if (!item) throw new Error("Catalog release is not available");
+  for (const asset of item.assets.filter(
+    (entry) => entry.name === stableCatalogAsset,
+  ))
+    removeAsset(asset.id);
+  await uploadAsset(repository, item.id, tag, file, stableCatalogAsset);
+  const stable = readRelease({ repository, tag })?.assets.filter(
+    (entry) => entry.name === stableCatalogAsset,
+  );
+  if (stable?.length !== 1 || stable[0].size !== (await stat(file)).size)
+    throw new Error("Stable catalog upload did not finish");
+}
+
 export function extensionChecksum(record) {
   if (
     !/^[A-Za-z][A-Za-z0-9]*$/.test(record.id ?? "") ||
@@ -763,6 +792,11 @@ export async function publishExtensions({
         "--make-latest",
         "false",
       ),
+  });
+  await publishStableCatalog({
+    repository,
+    tag: catalogTag,
+    file: envelope,
   });
   if (catalog.draft)
     await finalizeDraftCatalog({

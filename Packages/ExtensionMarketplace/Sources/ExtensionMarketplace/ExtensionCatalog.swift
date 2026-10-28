@@ -6,6 +6,7 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
     case invalidSignature
     case incompatiblePackage
     case downloadFailed
+    case rateLimited
     case invalidArchive
     case checksumMismatch
     case packageNotInstalled
@@ -20,6 +21,7 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
         case .invalidSignature: "The extension publisher could not be verified."
         case .incompatiblePackage: "This extension needs a compatible version of Edith."
         case .downloadFailed: "The extension download failed. Try again."
+        case .rateLimited: "GitHub is limiting requests from this network. Try again later."
         case .invalidArchive: "The extension package could not be installed safely."
         case .checksumMismatch: "The extension download did not match its published checksum."
         case .packageNotInstalled: "Download this extension before enabling it."

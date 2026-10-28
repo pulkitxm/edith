@@ -229,7 +229,7 @@ extension MarketplaceHarness {
                     "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json"
             )!,
             publicKey: key, repository: MarketplaceConfiguration.repository, cache: cache,
-            fetch: { _ in throw MarketplaceError.downloadFailed })
+            fetch: { _ in throw URLError(.notConnectedToInternet) })
         let cached = try await offline.refresh()
         try requirePublic(cached.offline && cached.catalog == catalog)
         for package in request.current {

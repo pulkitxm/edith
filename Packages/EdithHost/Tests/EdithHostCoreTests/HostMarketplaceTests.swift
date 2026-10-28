@@ -28,6 +28,22 @@ import HostWorkerFixtureSupport
         #expect(await fixture.network.count == 1)
     }
 
+    @Test func aRateLimitedRefreshKeepsTheCachedCatalogAndNamesTheCause() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.envelope(packages: [fixture.package("1.0.0")]).write(to: fixture.cache)
+        await fixture.network.fail(with: MarketplaceError.rateLimited)
+        let marketplace = try fixture.marketplace()
+        await marketplace.checkForUpdates()
+        #expect(marketplace.available["sample"] != nil)
+        #expect(!marketplace.offline)
+        #expect(marketplace.error?.contains("limiting requests") == true)
+        await fixture.network.fail(with: URLError(.notConnectedToInternet))
+        await marketplace.checkForUpdates()
+        #expect(marketplace.offline)
+        #expect(marketplace.error == nil)
+    }
+
     @Test func aNewProtocolChecksInstalledUpdatesWithoutWaitingForTheNextScheduledCheck()
         async throws
     {
@@ -557,7 +573,9 @@ import HostWorkerFixtureSupport
         private var data: Data?
         private var blocked = false
         private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var failure: Error?
         func set(data: Data) { self.data = data }
+        func fail(with error: Error?) { failure = error }
         func block() { blocked = true }
         func release() {
             blocked = false
@@ -567,6 +585,7 @@ import HostWorkerFixtureSupport
         func fetch() async throws -> Data {
             count += 1
             if blocked { await withCheckedContinuation { waiters.append($0) } }
+            if let failure { throw failure }
             guard let data else { throw MarketplaceError.downloadFailed }
             return data
         }
