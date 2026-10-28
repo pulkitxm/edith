@@ -141,6 +141,34 @@ test("pagination is bounded and repeated IDs across pages reject", () => {
   expect(() => lookup([page], { maximumPages: 1 })).toThrow("pagination limit");
 });
 
+test("a release created between page reads restarts the listing instead of failing", () => {
+  const page = Array.from({ length: 100 }, (_, index) => ({
+    ...item,
+    id: index + 100,
+    tag_name: `foreign-${index}`,
+  }));
+  const shifted = [
+    [page, [page[99], item]],
+    [page, [item]],
+  ];
+  const calls = [];
+  let listing = 0;
+  const releases = listReleases({
+    repository,
+    execute: (_command, args) => {
+      calls.push(args[1]);
+      const pageNumber = Number(args[1].split("page=").at(-1));
+      if (pageNumber === 1 && calls.length > 1) listing++;
+      return JSON.stringify(shifted[listing][pageNumber - 1]);
+    },
+  });
+  expect(releases.map(({ id }) => id)).toEqual([
+    ...page.map(({ id }) => id),
+    7,
+  ]);
+  expect(calls).toHaveLength(4);
+});
+
 test("invalid identities reject before any process starts", () => {
   for (const value of [
     { repository: "../foreign" },

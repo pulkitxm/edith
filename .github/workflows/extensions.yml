@@ -205,8 +205,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: "${{ matrix.supportPaths }}"
-          key: "extension-support-v4-${{ runner.os }}-${{ runner.arch }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportKey }}"
-          restore-keys: "extension-support-v4-${{ runner.os }}-${{ runner.arch }}-${{ steps.support-toolchain.outputs.fingerprint }}-"
+          key: "extension-support-v5-${{ runner.os }}-${{ runner.arch }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportKey }}"
+          restore-keys: "extension-support-v5-${{ runner.os }}-${{ runner.arch }}-${{ steps.support-toolchain.outputs.fingerprint }}-"
       - name: "Test this batch's optional native packages"
         env:
           EXTENSION_PACKAGE_SUITES: "${{ (!inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))) && 'skip' || 'run' }}"

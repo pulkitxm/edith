@@ -6,7 +6,9 @@ import Testing
 @testable import UsageExtension
 
 @Suite struct UsageConfigBaselineTests {
-    private static let groups: Set<String> = ["alerts", "budget", "dashboard", "limits", "menubar", "usage"]
+    private static let groups: Set<String> = [
+        "alerts", "budget", "dashboard", "limits", "menubar", "usage",
+    ]
     private static let hostOwned: Set<String> = [
         "menuBarStatsColorHex", "menuBarStatsColorMode", "menuBarSystemStats", "tabUsageEnabled",
     ]
@@ -16,7 +18,8 @@ import Testing
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent(
-                "Packages/EdithHost/Tests/EdithHostCoreTests/Fixtures/config-baseline-v0.0.350.json")
+                "Packages/EdithHost/Tests/EdithHostCoreTests/Fixtures/config-baseline-v0.0.350.json"
+            )
         let rows = try #require(
             JSONSerialization.jsonObject(with: Data(contentsOf: fixture)) as? [[String: Any]])
         let owned = rows.filter {
@@ -33,7 +36,8 @@ import Testing
             }
             let expectedDefault = row["default"] is NSNull ? nil : row["default"]
             let actual = try? JSONSerialization.jsonObject(
-                with: Data(JSONSerializer.string(setting.fallback).utf8), options: .fragmentsAllowed)
+                with: Data(JSONSerializer.string(setting.fallback).utf8), options: .fragmentsAllowed
+            )
             let sameDefault =
                 (actual == nil || actual is NSNull) && expectedDefault == nil
                 || ((actual as? NSObject)?.isEqual(expectedDefault) ?? false)

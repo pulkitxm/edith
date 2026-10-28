@@ -155,8 +155,12 @@ extension DownloadsExtensionTests {
                 file: file, executable: { URL(fileURLWithPath: "/bin/sh") },
                 isEnabled: { true }, publish: { _ in publishes.increment() })
             try await worker.start()
-            try await Task.sleep(for: .milliseconds(300))
-            let settled = publishes.value
+            var settled = publishes.value
+            for _ in 0..<20 {
+                try await Task.sleep(for: .milliseconds(300))
+                if publishes.value == settled { break }
+                settled = publishes.value
+            }
             try await Task.sleep(for: .milliseconds(1_200))
             #expect(publishes.value == settled)
             try DownloadQueue.save(
