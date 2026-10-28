@@ -380,7 +380,8 @@ final class RunningAppsModel {
         guard let engineClient else { return }
         var current = presentation?.hideApps ?? false
         while !stopped, !Task.isCancelled {
-            guard let payload = try? JSONEncoder().encode(SystemPresentationWait(hideApps: current)),
+            guard
+                let payload = try? JSONEncoder().encode(SystemPresentationWait(hideApps: current)),
                 let data = try? await engineClient.invoke("system.presentation", payload: payload),
                 let state = try? JSONDecoder().decode(SystemPresentationReply.self, from: data)
             else {

@@ -139,7 +139,8 @@ import Testing
                     }
                     if operation == "system.presentation" {
                         presentationCalls += 1
-                        let wait = try JSONDecoder().decode(SystemPresentationWait.self, from: payload)
+                        let wait = try JSONDecoder().decode(
+                            SystemPresentationWait.self, from: payload)
                         let hideApps = await presentation.waitForChange(
                             from: wait.hideApps, timeout: .seconds(10))
                         return try JSONEncoder().encode(SystemPresentationReply(hideApps: hideApps))
