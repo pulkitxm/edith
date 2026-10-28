@@ -376,13 +376,22 @@ final class RunningAppsModel {
         }
     }
 
-    func refreshPresentation() async {
-        guard let engineClient, !stopped else { return }
-        guard let data = try? await engineClient.invoke("system.presentation"),
-            let state = try? JSONDecoder().decode(SystemPresentationReply.self, from: data),
-            !stopped
-        else { return }
-        presentation?.apply(hideApps: state.hideApps)
+    func followPresentation() async {
+        guard let engineClient else { return }
+        var current = presentation?.hideApps ?? false
+        while !stopped, !Task.isCancelled {
+            guard
+                let payload = try? JSONEncoder().encode(SystemPresentationWait(hideApps: current)),
+                let data = try? await engineClient.invoke("system.presentation", payload: payload),
+                let state = try? JSONDecoder().decode(SystemPresentationReply.self, from: data)
+            else {
+                try? await Task.sleep(for: .seconds(1))
+                continue
+            }
+            guard !stopped, !Task.isCancelled else { return }
+            current = state.hideApps
+            presentation?.apply(hideApps: current)
+        }
     }
 
     func clearActionStatus() {

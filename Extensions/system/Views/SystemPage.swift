@@ -50,10 +50,7 @@ struct SystemPage: View {
             if !model.scrolling { await model.refresh() }
         }
         .pageTask {
-            while !Task.isCancelled {
-                await model.refreshPresentation()
-                try? await Task.sleep(for: .milliseconds(250))
-            }
+            await model.followPresentation()
         }
     }
 

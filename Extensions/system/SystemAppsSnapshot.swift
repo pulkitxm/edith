@@ -7,6 +7,7 @@ struct SystemAppsSnapshot: Codable, Sendable {
     let ascending: Bool
     let hideApps: Bool
 }
+struct SystemPresentationWait: Codable, Sendable { let hideApps: Bool }
 struct SystemPresentationReply: Codable, Sendable { let hideApps: Bool }
 struct SystemAppsSort: Codable, Sendable { let sortKey: String; let ascending: Bool }
 struct SystemAppsQuitReply: Decodable {
