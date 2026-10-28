@@ -1,9 +1,10 @@
 import Foundation
 
 enum UsageNativeProviderDatabases {
-    static func collect(home: URL, environment: [String: String], archive: UsageNativeArchive)
-        throws
-    {
+    static func collect(
+        home: URL, environment: [String: String], archive: UsageNativeArchive,
+        issues: UsageNativeIssues = .init()
+    ) throws {
         func roots(_ key: String, defaults: [String]) -> [URL] {
             if let value = environment[key] {
                 return value.split(separator: ",").map {
@@ -33,27 +34,38 @@ enum UsageNativeProviderDatabases {
         for root in roots(
             "OPENCLAW_DIR", defaults: [".openclaw", ".clawdbot", ".moltbot", ".moldbot"])
         {
-            candidates += try UsageNativeFileIO.files(under: root, extensions: ["sqlite", "db"])
-                .filter {
+            do {
+                candidates += try UsageNativeFileIO.files(
+                    under: root, extensions: ["sqlite", "db"]
+                ).filter {
                     $0.lastPathComponent == "openclaw-agent.sqlite"
                 }.map { ("openclaw", $0) }
+            } catch {
+                guard UsageNativeIssues.isolates(error) else { throw error }
+                issues.failed(source: "openclaw", item: root.lastPathComponent, error: error)
+            }
         }
         var seen: Set<String> = []
         for (source, path) in candidates {
             try Task.checkCancellation()
             guard FileManager.default.fileExists(atPath: path.path), seen.insert(path.path).inserted
             else { continue }
-            let database = try UsageNativeDatabase(url: path, readOnly: true)
-            defer { database.close() }
-            let events: [UsageNativeEvent]
-            switch source {
-            case "hermes": events = try hermes(database)
-            case "goose": events = try goose(database)
-            case "kilo": events = try kilo(database)
-            default: events = try openClaw(database)
+            do {
+                let database = try UsageNativeDatabase(url: path, readOnly: true)
+                defer { database.close() }
+                let events: [UsageNativeEvent]
+                switch source {
+                case "hermes": events = try hermes(database)
+                case "goose": events = try goose(database)
+                case "kilo": events = try kilo(database)
+                default: events = try openClaw(database)
+                }
+                try archive.admitRemote(
+                    events, key: archive.journalKey(source: source + "-db", file: path, home: home))
+            } catch {
+                guard UsageNativeIssues.isolates(error) else { throw error }
+                issues.failed(source: source, item: path.lastPathComponent, error: error)
             }
-            try archive.admitRemote(
-                events, key: archive.journalKey(source: source + "-db", file: path, home: home))
         }
     }
 
@@ -172,11 +184,9 @@ enum UsageNativeProviderDatabases {
     private static func payloads(_ database: UsageNativeDatabase, sql: String) throws -> [[String:
         Any]]
     {
-        try database.rows(sql).map { row in
+        try database.rows(sql).compactMap { row in
             try Task.checkCancellation()
-            guard let text = row["payload"], text.utf8.count <= 1_048_576 else {
-                throw UsageNativeFailure.capacity
-            }
+            guard let text = row["payload"], text.utf8.count <= 1_048_576 else { return nil }
             return try UsageNativeJSON.object(Data(text.utf8))
         }
     }

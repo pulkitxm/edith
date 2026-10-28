@@ -3,9 +3,6 @@ import Darwin
 import Foundation
 
 struct UsageNativeFileLimits: Sendable {
-    var files = 100_000
-    var records = 2_000_000
-    var bytes = 2_147_483_648
     var lineBytes = 33_554_432
     var documentBytes = 67_108_864
 }
@@ -22,9 +19,7 @@ enum UsageNativeFileIO {
         else { throw UsageNativeFailure.unsafePath }
     }
 
-    static func files(under root: URL, extensions: Set<String>, limit: Int = 100_000) throws
-        -> [URL]
-    {
+    static func files(under root: URL, extensions: Set<String>) throws -> [URL] {
         try Task.checkCancellation()
         var status = stat()
         guard lstat(root.path, &status) == 0 else {
@@ -44,11 +39,8 @@ enum UsageNativeFileIO {
                 options: [.skipsPackageDescendants])
         else { return [] }
         var result: [URL] = []
-        var inspected = 0
         for case let path as URL in iterator {
             try Task.checkCancellation()
-            inspected += 1
-            guard inspected <= limit * 8 else { throw UsageNativeFailure.capacity }
             var entry = stat()
             guard lstat(path.path, &entry) == 0 else {
                 if errno == ENOENT { continue }
@@ -62,7 +54,6 @@ enum UsageNativeFileIO {
                             || path.lastPathComponent.contains(".jsonl.reset.")))
             {
                 result.append(path)
-                guard result.count <= limit else { throw UsageNativeFailure.capacity }
             }
         }
         return result.sorted { $0.path < $1.path }
@@ -141,14 +132,14 @@ enum UsageNativeFileIO {
         _ path: URL, previousBytes: Int = 0, startingAt start: Int = 0,
         limits: UsageNativeFileLimits = .init(),
         consume: (Data, Int, Int) throws -> Void
-    ) throws -> (Int, Int, Double, String, String) {
+    ) throws -> (Int, Int, Double, String, String, Int) {
         let descriptor = open(path.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         guard descriptor >= 0 else { throw UsageNativeFailure.unsafePath }
         defer { close(descriptor) }
         var before = stat()
         guard fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
-            before.st_size >= 0, before.st_size <= limits.bytes
-        else { throw UsageNativeFailure.capacity }
+            before.st_size >= 0
+        else { throw UsageNativeFailure.unsafePath }
         guard start <= before.st_size else { throw UsageNativeFailure.invalidInput("file") }
         if start > 0, lseek(descriptor, off_t(start), SEEK_SET) != off_t(start) {
             throw UsageNativeFailure.invalidInput("file")
@@ -156,6 +147,7 @@ enum UsageNativeFileIO {
         var prefix = SHA256()
         var buffer = [UInt8](repeating: 0, count: 262_144)
         var carry = [UInt8](), offset = start, position = start, complete = start
+        var oversized = false, oversizedLength = 0, skipped = 0
         while true {
             try Task.checkCancellation()
             let count = Darwin.read(descriptor, &buffer, buffer.count)
@@ -170,27 +162,45 @@ enum UsageNativeFileIO {
                             rebasing: chunk[0..<min(count, previousBytes - position)]))
                 }
                 position += count
-                guard position <= limits.bytes else { throw UsageNativeFailure.capacity }
                 var start = 0
-                while start < count,
-                    let found = memchr(chunk.baseAddress! + start, 10, count - start)
-                {
+                while start < count {
+                    guard let found = memchr(chunk.baseAddress! + start, 10, count - start) else {
+                        break
+                    }
                     let stop = chunk.baseAddress!.distance(to: UnsafeRawPointer(found))
-                    let length = carry.count + stop - start
-                    guard length <= limits.lineBytes else { throw UsageNativeFailure.capacity }
-                    var line = Data(capacity: length)
-                    line.append(contentsOf: carry)
-                    line.append(contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<stop]))
-                    carry.removeAll(keepingCapacity: true)
-                    try autoreleasepool { try consume(line, offset, offset + length + 1) }
-                    offset += length + 1; complete = offset
+                    if oversized {
+                        oversizedLength += stop - start
+                        offset += oversizedLength + 1; complete = offset
+                        oversized = false; oversizedLength = 0; skipped += 1
+                    } else if carry.count + stop - start > limits.lineBytes {
+                        offset += carry.count + stop - start + 1; complete = offset
+                        carry.removeAll(keepingCapacity: true); skipped += 1
+                    } else {
+                        let length = carry.count + stop - start
+                        var line = Data(capacity: length)
+                        line.append(contentsOf: carry)
+                        line.append(
+                            contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<stop]))
+                        carry.removeAll(keepingCapacity: true)
+                        try autoreleasepool { try consume(line, offset, offset + length + 1) }
+                        offset += length + 1; complete = offset
+                    }
                     start = stop + 1
                 }
-                carry.append(contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<count]))
-                guard carry.count <= limits.lineBytes else { throw UsageNativeFailure.capacity }
+                if oversized {
+                    oversizedLength += count - start
+                } else if carry.count + count - start > limits.lineBytes {
+                    oversized = true
+                    oversizedLength = carry.count + count - start
+                    carry.removeAll(keepingCapacity: true)
+                } else {
+                    carry.append(contentsOf: UnsafeRawBufferPointer(rebasing: chunk[start..<count]))
+                }
             }
         }
-        if !carry.isEmpty, (try? JSONSerialization.jsonObject(with: Data(carry))) != nil {
+        if !oversized, !carry.isEmpty,
+            (try? JSONSerialization.jsonObject(with: Data(carry))) != nil
+        {
             try consume(Data(carry), offset, position); complete = position
         }
         var after = stat()
@@ -205,7 +215,7 @@ enum UsageNativeFileIO {
             position, complete,
             Double(before.st_mtimespec.tv_sec) + Double(before.st_mtimespec.tv_nsec) / 1e9,
             anchor,
-            prefix.finalize().map { String(format: "%02x", $0) }.joined()
+            prefix.finalize().map { String(format: "%02x", $0) }.joined(), skipped
         )
     }
 

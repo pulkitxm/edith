@@ -3,25 +3,22 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageNativeArchiveTests {
-    @Test func capacityCountersTrackUpsertDeleteAndRollbackExactly() throws {
+    @Test func legacyCapacityTableAndTriggersAreDroppedOnOpen() throws {
         try fixture { root in
-            let archive = try UsageNativeArchive(dataDirectory: root)
-            try archive.cache(["value": "mock-one"], key: "cache")
-            try archive.cache(["value": "mock-two-longer"], key: "cache")
-            let event = try UsageNativeParser(source: "cli").consume(
-                UsageNativeJSON.object(line(id: "one").dropLast())
-            ).map(\.event)
-            try archive.replaceRemote(event, key: "remote", account: "one")
-            let before = try archive.database.rows("SELECT bytes,records FROM capacity").first!
-            #expect(before["records"] == "1")
-            try archive.replaceRemote([], key: "remote", account: "one")
-            let after = try archive.database.rows("SELECT bytes,records FROM capacity").first!
-            #expect(after["records"] == "0")
-            let actual = try archive.database.rows(
-                "SELECT SUM(length(CAST(payload AS BLOB))) AS bytes FROM cloud_cache"
-            ).first!["bytes"]!
-            #expect(after["bytes"] == actual)
-            #expect(Int(before["bytes"]!)! > Int(after["bytes"]!)!)
+            _ = try UsageNativeArchive(dataDirectory: root)
+            let database = try UsageNativeDatabase(
+                url: root.appendingPathComponent("native-usage-history/usage.sqlite"))
+            try database.execute(
+                """
+                CREATE TABLE capacity(singleton INTEGER PRIMARY KEY,files INTEGER,records INTEGER,bytes INTEGER);
+                CREATE TRIGGER capacity_records_insert AFTER INSERT ON records BEGIN
+                    UPDATE capacity SET records=records+1; END;
+                """)
+            database.close()
+            let reopened = try UsageNativeArchive(dataDirectory: root)
+            let names = try reopened.database.rows(
+                "SELECT name FROM sqlite_master WHERE name LIKE 'capacity%'")
+            #expect(names.isEmpty)
         }
     }
 
@@ -95,21 +92,6 @@ import Testing
             let events = try archive.events()
             #expect(events.count == 2)
             #expect(Set(events.compactMap(\.identity)).count == 2)
-        }
-    }
-
-    @Test func admissionCapacityRollsBackRecordsAndFileMetadataTogether() throws {
-        try fixture { root in
-            var limits = UsageNativeFileLimits(); limits.records = 1
-            let archive = try UsageNativeArchive(dataDirectory: root, limits: limits)
-            try archive.bootstrap(nil)
-            let path = root.appendingPathComponent("journal.jsonl")
-            try (line(id: "one") + line(id: "two")).write(to: path)
-            #expect(throws: UsageNativeFailure.self) {
-                try admit(path, key: "journal", archive: archive)
-            }
-            #expect(try archive.events().isEmpty)
-            #expect(try archive.known("journal") == nil)
         }
     }
 

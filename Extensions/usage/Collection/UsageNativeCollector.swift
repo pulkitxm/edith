@@ -54,19 +54,27 @@ public enum UsageNativeCollector {
         try Task.checkCancellation()
         let archive = try UsageNativeArchive(
             dataDirectory: dataDirectory, remoteContext: remoteContext)
-        let previous = try UsageNativeFileIO.optionalObject(
+        let previous = try? UsageNativeFileIO.optionalObject(
             dataDirectory.appendingPathComponent("usage.json"))
         try archive.bootstrap(previous?.objectSchema8)
         let roots = try discover(home: home, environment: environment)
+        let issues = UsageNativeIssues()
         var seen: Set<String> = []
         var scanned = 0
         var timestamp = ContinuousClock.now
         for root in roots {
-            let files = try UsageNativeFileIO.files(
-                under: root.path, extensions: ["jsonl", "json"])
+            let files: [URL]
+            do {
+                files = try UsageNativeFileIO.files(
+                    under: root.path, extensions: ["jsonl", "json"])
+            } catch {
+                guard UsageNativeIssues.isolates(error) else { throw error }
+                issues.failed(source: root.source, item: root.path.lastPathComponent, error: error)
+                continue
+            }
             for file in files {
                 try Task.checkCancellation()
-                try autoreleasepool {
+                do { try autoreleasepool {
                     if root.source == "opencode", !file.path.contains("/message/") { return }
                     if root.source == "grok", file.lastPathComponent != "updates.jsonl" { return }
                     if root.source == "droid", !file.lastPathComponent.hasSuffix(".settings.json") {
@@ -110,8 +118,12 @@ public enum UsageNativeCollector {
                         let parser = UsageNativeParser(source: root.source, tier: root.tier)
                         let snapshot = try parser.snapshot(file, key: key, previous: previous)
                         try archive.admit(snapshot, previous: previous)
+                        issues.skipped(source: root.source, lines: snapshot.skippedLines)
                     }
                     scanned += 1
+                } } catch {
+                    guard UsageNativeIssues.isolates(error) else { throw error }
+                    issues.failed(source: root.source, item: file.lastPathComponent, error: error)
                 }
             }
             onEvent(
@@ -120,9 +132,15 @@ public enum UsageNativeCollector {
                     seconds: elapsed(since: timestamp)))
             timestamp = .now
         }
-        try collectOpenCodeDatabases(home: home, environment: environment, archive: archive)
+        do {
+            try collectOpenCodeDatabases(home: home, environment: environment, archive: archive)
+        } catch {
+            guard UsageNativeIssues.isolates(error) else { throw error }
+            issues.failed(source: "opencode", item: "opencode.db", error: error)
+        }
         try UsageNativeProviderDatabases.collect(
-            home: home, environment: environment, archive: archive)
+            home: home, environment: environment, archive: archive, issues: issues)
+        for note in issues.notes { onEvent(.note(note)) }
         let candidates = try archive.unresolvedCandidates()
         let retained = try archive.retainedFiles(seen: seen)
         if candidates > 0 {
@@ -211,7 +229,7 @@ public enum UsageNativeCollector {
             var inspected = 0
             for case let path as URL in iterator {
                 try Task.checkCancellation(); inspected += 1
-                guard inspected <= 100_000 else { throw UsageNativeFailure.capacity }
+                guard inspected <= 100_000 else { break }
                 var metadata = stat()
                 guard lstat(path.path, &metadata) == 0 else { continue }
                 if metadata.st_mode & S_IFMT == S_IFLNK { iterator.skipDescendants(); continue }
@@ -346,7 +364,7 @@ public enum UsageNativeCollector {
             let parser = UsageNativeParser(source: "opencode")
             for row in try database.rows(sql) {
                 guard let payload = row["payload"], payload.utf8.count <= 1_048_576 else {
-                    throw UsageNativeFailure.capacity
+                    continue
                 }
                 events.append(
                     contentsOf: try parser.consume(UsageNativeJSON.object(Data(payload.utf8))).map(

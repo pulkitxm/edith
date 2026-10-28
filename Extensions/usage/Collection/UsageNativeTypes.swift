@@ -11,11 +11,49 @@ public enum UsageNativeFailure: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidInput(let source): "Invalid usage data for " + source
-        case .capacity: "Usage collection exceeded its admission limit"
+        case .capacity: "A usage input exceeded its safety size limit"
         case .unsafePath: "Usage storage must be a private regular file or directory"
         case .archive(let operation): "Usage archive could not " + operation
         case .network(let status): "Usage request failed with HTTP " + String(status)
         }
+    }
+}
+
+final class UsageNativeIssues {
+    private var failures: [String: (count: Int, example: String)] = [:]
+    private var skippedLines: [String: Int] = [:]
+
+    static func isolates(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        if case UsageNativeFailure.archive = error { return false }
+        return true
+    }
+
+    func failed(source: String, item: String, error: Error) {
+        let reason = String(error.localizedDescription.prefix(160))
+        let current = failures[source]
+        failures[source] = (
+            (current?.count ?? 0) + 1, current?.example ?? item + ": " + reason
+        )
+    }
+
+    func skipped(source: String, lines: Int) {
+        if lines > 0 { skippedLines[source, default: 0] += lines }
+    }
+
+    var notes: [String] {
+        let label = { (source: String) in UsageNativeAssembly.labels[source] ?? source }
+        let failed = failures.keys.sorted().map { source -> String in
+            let entry = failures[source]!
+            return label(source) + ": skipped " + String(entry.count)
+                + (entry.count == 1 ? " source (" : " sources (e.g. ") + entry.example
+                + "); other receipts were collected"
+        }
+        let lines = skippedLines.keys.sorted().map { source in
+            label(source) + ": skipped " + String(skippedLines[source]!)
+                + " line(s) larger than the safety limit"
+        }
+        return failed + lines
     }
 }
 
@@ -136,6 +174,7 @@ struct UsageNativeFileSnapshot: Sendable {
     let prefixHash: String
     let records: [UsageNativeParsedRecord]
     var appended: Bool?
+    var skippedLines = 0
     var state: String?
 }
 
