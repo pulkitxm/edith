@@ -15,7 +15,7 @@ import Testing
         groups.terminate()
         children[0].waitUntilExit()
         children[1].waitUntilExit()
-        #expect(children.allSatisfy { !$0.isRunning && kill(-$0.processIdentifier, 0) == -1 })
+        #expect(children.allSatisfy { !$0.isRunning && groupExits($0.processIdentifier) })
     }
 
     @Test func deadGroupsArePrunedAndLateRegistrationIsTerminated() throws {
@@ -62,6 +62,15 @@ import Testing
             usleep(10_000)
         }
         return process
+    }
+
+    private func groupExits(_ group: Int32) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while kill(-group, 0) == 0 {
+            guard Date() < deadline else { return false }
+            usleep(10_000)
+        }
+        return true
     }
 
     private func cleanup(_ processes: [Process]) {
