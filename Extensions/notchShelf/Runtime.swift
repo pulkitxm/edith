@@ -135,13 +135,12 @@ final class ExtensionRuntime: NSObject {
             if ["notch.cli.start", "notch.cli.read", "notch.cli.cancel", "notch.cli.end"].contains(
                 command)
             {
-                let configuration = ShelfCLIConfiguration(
+                let configuration = ShelfCLIExecution.configuration(
                     root: controller.store.root, defaults: controller.context.defaults,
-                    open: { NSWorkspace.shared.open($0) },
-                    reveal: { NSWorkspace.shared.activateFileViewerSelecting($0) },
-                    share: { try await controller.shareCLIItems($0) },
-                    checkAccess: controller.requireShelfCLIAccess)
-                return try ShelfCLIEnvironment.$configuration.withValue(configuration) {
+                    checkAccess: controller.requireShelfCLIAccess
+                ) { ids in try await controller.shareCLIItems(ids) }
+                return try await ShelfCLIEnvironment.$configuration.withValue(configuration) {
+                    () async throws -> Data in
                     if self.cliStreams == nil {
                         self.cliStreams = try ExtensionCLIStreams(owner: "notchShelf")
                     }

@@ -30,6 +30,20 @@ enum ShelfCLIEnvironment {
 }
 
 @MainActor enum ShelfCLIExecution {
+    static func configuration(
+        root: URL, defaults: UserDefaults,
+        open: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        reveal: @escaping @MainActor ([URL]) -> Void = {
+            NSWorkspace.shared.activateFileViewerSelecting($0)
+        },
+        checkAccess: @escaping @MainActor () throws -> Void = {},
+        share: @escaping @MainActor ([UUID]) async throws -> Void
+    ) -> ShelfCLIConfiguration {
+        ShelfCLIConfiguration(
+            root: root, defaults: defaults, open: open, reveal: reveal, share: share,
+            checkAccess: checkAccess)
+    }
+
     static func run(
         _ request: ExtensionCLIRequest, root: URL, defaults: UserDefaults,
         open: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
@@ -40,9 +54,9 @@ enum ShelfCLIEnvironment {
         share: @escaping @MainActor ([UUID]) async throws -> Void
     ) async throws -> ExtensionCLIReply {
         try request.validate()
-        let configuration = ShelfCLIConfiguration(
-            root: root, defaults: defaults, open: open, reveal: reveal, share: share,
-            checkAccess: checkAccess)
+        let configuration = configuration(
+            root: root, defaults: defaults, open: open, reveal: reveal, checkAccess: checkAccess,
+            share: share)
         return try await ShelfCLIEnvironment.$configuration.withValue(configuration) {
             try await ExtensionCLIExecution.run(ShelfCommand.self, request: request)
         }
