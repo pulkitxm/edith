@@ -38,7 +38,7 @@ final class ExtensionRuntime: NSObject {
                 guard let cliStreams = self?.cliStreams else {
                     throw ExtensionPeerError.unavailable
                 }
-                return try CameraCLIEnvironment.$streamEngine.withValue(worker.engine) {
+                return try await CameraCLIEnvironment.$streamEngine.withValue(worker.engine) {
                     try cliStreams.invoke(
                         CameraCommand.self, operation: command, prefix: "camera.cli.stream",
                         payload: payload)

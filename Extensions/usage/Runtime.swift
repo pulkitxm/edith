@@ -78,7 +78,7 @@ final class ExtensionRuntime: NSObject {
                 guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
                 let resources = UsageCLIResources(
                     controller: controller, hookOwner: self.cliHooks, forgetMachine: forget)
-                return try UsageCLIEnvironment.$resources.withValue(resources) {
+                return try await UsageCLIEnvironment.$resources.withValue(resources) {
                     try streams.invoke(
                         UsageCommand.self, operation: command,
                         prefix: "usage.cli", payload: payload)

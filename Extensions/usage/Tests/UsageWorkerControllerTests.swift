@@ -110,3 +110,33 @@ private func emptyDocument(pricing: [String: Any] = [:]) throws -> Data {
         ],
     ])
 }
+
+@MainActor @Suite(.serialized)
+struct UsageBackgroundShutdownTests {
+    @Test func shuttingDownWhileTheBackgroundLoopSleepsDoesNotAbort() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = UsageWorkerController(
+            dataDirectory: root,
+            fetchLimits: { _ in .init(refreshedAt: Date(), providers: [], failure: nil) },
+            projectLimits: { _ in .init(refreshedAt: Date(), providers: [], failure: nil) },
+            allowsBackgroundCollection: { true }
+        ) { _, _ in try emptyDocument() }
+        controller.startBackgroundCollection()
+        try await Task.sleep(for: .milliseconds(300))
+        await controller.shutdown()
+    }
+
+    @Test func mainQueueWakeFiresAfterItsDelayAndCancelledWakesNeverFire() async throws {
+        var fired: [String] = []
+        let cancel = UsageWake.mainQueue(after: .milliseconds(50)) { fired.append("cancelled") }
+        _ = UsageWake.mainQueue(after: .milliseconds(50)) { fired.append("kept") }
+        cancel()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while fired.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(fired == ["kept"])
+    }
+}

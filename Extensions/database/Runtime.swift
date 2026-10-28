@@ -44,7 +44,7 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("database.cli.stream.") {
                 guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try DatabaseCLIEnvironment.$resources.withValue(
+                return try await DatabaseCLIEnvironment.$resources.withValue(
                     DatabaseCLIResources(
                         sender: DatabaseWorkerClient(),
                         credentials: { try DatabaseWorkerClient.credentialStore() },

@@ -47,7 +47,7 @@ import Foundation
         if command == "homebrew.cli.catalog" { return try HomebrewCLICatalog.data() }
         if command.hasPrefix("homebrew.cli.stream.") {
             guard let cliStreams else { throw ExtensionPeerError.unavailable }
-            return try HomebrewCLIEnvironment.$streamOwner.withValue(self) {
+            return try await HomebrewCLIEnvironment.$streamOwner.withValue(self) {
                 try cliStreams.invoke(
                     HomebrewCommand.self, operation: command, prefix: "homebrew.cli.stream",
                     payload: payload)

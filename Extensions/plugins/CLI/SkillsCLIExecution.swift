@@ -39,7 +39,7 @@ import Foundation
     ) async throws -> Data {
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         await model.discoverAgents()
-        return try SkillsCLIEnvironment.$model.withValue(model) {
+        return try await SkillsCLIEnvironment.$model.withValue(model) {
             try streams.invoke(
                 SkillsCommand.self, operation: operation, prefix: "plugins.cli", payload: payload)
         }
