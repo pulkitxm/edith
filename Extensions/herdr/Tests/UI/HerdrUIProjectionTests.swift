@@ -526,6 +526,40 @@ import Testing
         await worker.shutdown()
     }
 
+    @Test func droppingAnUnopenedAgentOnAPaneEdgeSplitsTheTabWithoutAnExtraTab() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let worker = worker()
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ui = HerdrStore(uiClient: client)
+        try await ui.performUI("herdr.ui.read")
+        let first = try #require(ui.agents.first)
+        let second = try #require(ui.agents.last)
+        ui.open(first)
+        for _ in 0..<200 {
+            if worker.store.tabs.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let tab = try #require(ui.currentTab)
+        ui.drop(.agent(second), on: .edge(first.id, .right))
+        _ = try? await worker.execute(
+            "herdr.terminal.open",
+            payload: JSONSerialization.data(withJSONObject: ["agentID": second.id]))
+        #expect(ui.tabs.count == 1)
+        #expect(ui.selectedTab == tab.id)
+        #expect(ui.currentTab?.agentIDs == [first.id, second.id])
+        for _ in 0..<200 {
+            if worker.store.currentTab?.agentIDs == [first.id, second.id] { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try await ui.performUI("herdr.ui.read")
+        #expect(worker.store.tabs.count == 1)
+        #expect(ui.tabs.count == 1)
+        #expect(ui.selectedTab == tab.id)
+        #expect(ui.currentTab?.agentIDs == [first.id, second.id])
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
     @Test func checkedFacadeRejectsUnknownAgentsMalformedLayoutAndDisabledOwner() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()
