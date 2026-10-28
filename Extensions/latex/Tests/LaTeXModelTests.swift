@@ -65,12 +65,15 @@ import EdithExtensionUI
                     LaTeXPage(model: model, opensEditor: true).environment(\.compactLayout, compact)
                         .environment(
                             \.colorScheme, scheme), size: size)
-                try await Task.sleep(for: .milliseconds(100))
-                host.layoutSubtreeIfNeeded()
-                let text = try auditText(host)
+                var text = ""
+                for _ in 0..<30 {
+                    try await Task.sleep(for: .milliseconds(100))
+                    host.layoutSubtreeIfNeeded()
+                    text = try auditText(host)
+                    if text.contains("Save"), Self.showsFileName(text) { break }
+                }
                 #expect(text.contains("Save"))
-                #expect(
-                    text.lowercased().filter { $0.isLetter || $0.isNumber }.contains("papertex"))
+                #expect(Self.showsFileName(text))
                 try capture(host, name: "latex-local-\(compact)-\(scheme)")
             }
         }
@@ -546,6 +549,10 @@ import EdithExtensionUI
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    private static func showsFileName(_ text: String) -> Bool {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }.contains("papertex")
     }
 
     private func capture(_ host: NSHostingView<AnyView>, name: String) throws {
