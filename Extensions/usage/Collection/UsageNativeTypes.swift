@@ -190,9 +190,19 @@ enum UsageNativeJSON {
         try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
     }
 
-    static func hash(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    private static let hexDigits = Array("0123456789abcdef".utf8)
+
+    static func hex<Bytes: Sequence>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+        var digits = [UInt8]()
+        digits.reserveCapacity(64)
+        for byte in bytes {
+            digits.append(hexDigits[Int(byte >> 4)])
+            digits.append(hexDigits[Int(byte & 15)])
+        }
+        return String(decoding: digits, as: UTF8.self)
     }
+
+    static func hash(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
 
     static func hash(_ value: String) -> String { hash(Data(value.utf8)) }
 
@@ -207,12 +217,20 @@ enum UsageNativeJSON {
         }
         guard let value = value as? String else { return nil }
         if let number = Double(value), number > 0 { return date(NSNumber(value: number)) }
+        return fractionalFormatter.date(from: value) ?? plainFormatter.date(from: value)
+    }
+
+    private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
+        return formatter
+    }()
+
+    private static let plainFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
-    }
+        return formatter
+    }()
 
     static func text(_ value: Any?, maximum: Int = 4096) -> String? {
         guard let text = value as? String, !text.isEmpty, text.utf8.count <= maximum,

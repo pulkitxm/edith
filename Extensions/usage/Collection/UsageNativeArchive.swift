@@ -95,14 +95,28 @@ final class UsageNativeArchive {
             """
         try database.execute(
             """
-            CREATE TRIGGER IF NOT EXISTS records_columns AFTER INSERT ON records BEGIN
-                UPDATE records SET \(fill) WHERE sequence=new.sequence; END;
+            DROP TRIGGER IF EXISTS records_columns;
             CREATE INDEX IF NOT EXISTS records_receipt ON records(receipt) WHERE receipt IS NOT NULL;
             CREATE INDEX IF NOT EXISTS records_source ON records(source);
             """)
         if version != "2" {
             try database.execute("UPDATE records SET " + fill + "; PRAGMA user_version=2;")
         }
+    }
+
+    private func insertRecord(
+        path: String, identity: String, hash: String, payload: String, event: UsageNativeEvent
+    ) throws {
+        try database.run(
+            """
+            INSERT OR IGNORE INTO records(path,identity,hash,payload,source,ident,outtok,total,receipt)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            [
+                path, identity, hash, payload, event.source,
+                event.identity.map { $0 as Any } ?? NSNull(), event.tokens.output,
+                event.tokens.total, event.receiptID.map { $0 as Any } ?? NSNull(),
+            ])
     }
 
     func journalKey(source: String, file: URL, home: URL) throws -> String {
@@ -153,13 +167,11 @@ final class UsageNativeArchive {
                         "INSERT OR IGNORE INTO candidates VALUES(?,?,?,?)",
                         [snapshot.path, snapshot.hash + ":" + String(record.offset), hash, payload])
                 } else {
-                    try database.run(
-                        "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                        [
-                            snapshot.path,
-                            record.event.identity ?? String(generation) + ":"
-                                + String(record.offset), hash, payload,
-                        ])
+                    try insertRecord(
+                        path: snapshot.path,
+                        identity: record.event.identity ?? String(generation) + ":"
+                            + String(record.offset), hash: hash, payload: payload,
+                        event: record.event)
                 }
             }
             try database.run(
@@ -181,9 +193,9 @@ final class UsageNativeArchive {
             for (index, event) in events.enumerated() {
                 try Task.checkCancellation()
                 let payload = String(decoding: try event.canonicalData, as: UTF8.self)
-                try database.run(
-                    "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                    [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
+                try insertRecord(
+                    path: key, identity: event.identity ?? String(index),
+                    hash: UsageNativeJSON.hash(payload), payload: payload, event: event)
             }
         }
     }
@@ -217,9 +229,9 @@ final class UsageNativeArchive {
         for (index, event) in events.enumerated() {
             try Task.checkCancellation()
             let payload = String(decoding: try event.canonicalData, as: UTF8.self)
-            try database.run(
-                "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
+            try insertRecord(
+                path: key, identity: event.identity ?? String(index),
+                hash: UsageNativeJSON.hash(payload), payload: payload, event: event)
         }
     }
 

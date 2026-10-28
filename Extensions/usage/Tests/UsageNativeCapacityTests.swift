@@ -24,8 +24,8 @@ import Testing
                 try archive.database.run(
                     """
                     WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
-                    INSERT INTO records(path,identity,hash,payload)
-                    SELECT 'bulk','id'||i,'h'||i,json_set(?,'$.identity','id'||i) FROM n
+                    INSERT INTO records(path,identity,hash,payload,source,ident,outtok,total)
+                    SELECT 'bulk','id'||i,'h'||i,json_set(?,'$.identity','id'||i),'cli','id'||i,2,12 FROM n
                     """, [seeded, payload])
                 try archive.database.run(
                     """

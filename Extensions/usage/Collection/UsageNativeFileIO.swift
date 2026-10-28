@@ -215,7 +215,7 @@ enum UsageNativeFileIO {
             position, complete,
             Double(before.st_mtimespec.tv_sec) + Double(before.st_mtimespec.tv_nsec) / 1e9,
             anchor,
-            prefix.finalize().map { String(format: "%02x", $0) }.joined(), skipped
+            UsageNativeJSON.hex(prefix.finalize()), skipped
         )
     }
 
