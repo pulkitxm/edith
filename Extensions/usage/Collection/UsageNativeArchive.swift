@@ -7,6 +7,7 @@ final class UsageNativeArchive {
         let modified: Double
         let hash: String
         let generation: Int
+        let state: String?
     }
 
     let database: UsageNativeDatabase
@@ -47,6 +48,9 @@ final class UsageNativeArchive {
               PRIMARY KEY(period,hash));
             CREATE TABLE IF NOT EXISTS cloud_cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL);
             """)
+        if try database.rows("PRAGMA table_info(files)").allSatisfy({ $0["name"] != "state" }) {
+            try database.execute("ALTER TABLE files ADD COLUMN state TEXT")
+        }
         try migrateRecordColumns(from: version)
         let owner = remoteContext?.machineID.uuidString.lowercased() ?? "local"
         let previousOwner = try database.rows(
@@ -133,13 +137,14 @@ final class UsageNativeArchive {
         else { return nil }
         return .init(
             size: size, completeBytes: complete, modified: modified, hash: hash,
-            generation: generation)
+            generation: generation, state: row["state"])
     }
 
     func admit(_ snapshot: UsageNativeFileSnapshot, previous: KnownFile?) throws {
         let appended =
-            previous == nil
-            || (snapshot.size >= previous!.size && snapshot.prefixHash == previous!.hash)
+            snapshot.appended
+            ?? (previous == nil
+                || (snapshot.size >= previous!.size && snapshot.prefixHash == previous!.hash))
         try database.transaction {
             let latest = try known(snapshot.path)
             guard latest?.hash == previous?.hash, latest?.generation == previous?.generation else {
@@ -174,13 +179,14 @@ final class UsageNativeArchive {
             }
             try database.run(
                 """
-                INSERT INTO files VALUES(?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
+                INSERT INTO files(path,size,complete_bytes,mtime,hash,generation,state)
+                VALUES(?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
                 size=excluded.size,complete_bytes=excluded.complete_bytes,mtime=excluded.mtime,
-                hash=excluded.hash,generation=excluded.generation
+                hash=excluded.hash,generation=excluded.generation,state=excluded.state
                 """,
                 [
                     snapshot.path, snapshot.size, snapshot.completeBytes, snapshot.modified,
-                    snapshot.hash, generation,
+                    snapshot.hash, generation, snapshot.state.map { $0 as Any } ?? NSNull(),
                 ])
             try enforceCapacity()
         }

@@ -14,7 +14,36 @@ final class UsageNativeParser {
     private var child = false
     private var childTurn = false
     private var fallbackTimestamp = Date()
+    private var hadModern = false
     private let source: String
+
+    private struct ResumeState: Codable {
+        var session: String
+        var cwd: String
+        var model: String
+        var tier: String?
+        var title: String?
+        var titles: [String: String]
+        var prior: UsageNativeTokens?
+        var seenResponses: [String]
+        var child: Bool
+        var childTurn: Bool
+        var hadModern: Bool
+    }
+
+    private var resumeState: ResumeState {
+        .init(
+            session: session, cwd: cwd, model: model, tier: tier, title: title, titles: titles,
+            prior: prior, seenResponses: seenResponses.sorted(), child: child,
+            childTurn: childTurn, hadModern: hadModern || !modern.isEmpty)
+    }
+
+    private func restore(_ state: ResumeState) {
+        session = state.session; cwd = state.cwd; model = state.model; tier = state.tier
+        title = state.title; titles = state.titles; prior = state.prior
+        seenResponses = Set(state.seenResponses); child = state.child
+        childTurn = state.childTurn; hadModern = state.hadModern
+    }
 
     init(source: String, model: String = "gpt-5", tier: String? = nil) {
         self.source = source;
@@ -26,8 +55,20 @@ final class UsageNativeParser {
         limits: UsageNativeFileLimits = .init()
     ) throws -> UsageNativeFileSnapshot {
         try configure(path)
+        var resumeAt = 0
+        var appended: Bool?
+        if let previous, let text = previous.state {
+            if let state = try? JSONDecoder().decode(ResumeState.self, from: Data(text.utf8)),
+                UsageNativeFileIO.anchorMatches(
+                    path, upTo: previous.completeBytes, anchor: previous.hash)
+            {
+                restore(state); resumeAt = previous.completeBytes; appended = true
+            } else {
+                appended = false
+            }
+        }
         let properties = try UsageNativeFileIO.lines(
-            path, previousBytes: previous?.size ?? 0, limits: limits
+            path, previousBytes: previous?.size ?? 0, startingAt: resumeAt, limits: limits
         ) {
             data, offset, end in
             if self.isBulkToolOutput(data) { return }
@@ -38,7 +79,8 @@ final class UsageNativeParser {
                 throw UsageNativeFailure.capacity
             }
         }
-        let selected = source == "codex" && !modern.isEmpty ? modern : legacy
+        let state = resumeState
+        let selected = source == "codex" && state.hadModern ? modern : legacy
         let records = selected.map { record -> UsageNativeParsedRecord in
             var event = record.event
             if event.title == nil { event.title = titles[event.session] ?? title }
@@ -47,7 +89,9 @@ final class UsageNativeParser {
         }
         return .init(
             path: key, size: properties.0, completeBytes: properties.1, modified: properties.2,
-            hash: properties.3, prefixHash: properties.4, records: records)
+            hash: properties.3, prefixHash: properties.4, records: records, appended: appended,
+            state: String(
+                decoding: try JSONEncoder().encode(state), as: UTF8.self))
     }
 
     private static let bulkLineBytes = 8_192

@@ -104,8 +104,41 @@ enum UsageNativeFileIO {
         return try UsageNativeJSON.object(read(path, maximum: maximum))
     }
 
+    static let anchorBytes = 65_536
+
+    static func anchor(_ descriptor: Int32, upTo end: Int) -> String? {
+        func window(_ start: Int, _ count: Int) -> String? {
+            var bytes = [UInt8](repeating: 0, count: count)
+            var done = 0
+            while done < count {
+                let read = bytes.withUnsafeMutableBytes {
+                    pread(descriptor, $0.baseAddress! + done, count - done, off_t(start + done))
+                }
+                if read == -1, errno == EINTR { continue }
+                guard read > 0 else { return nil }
+                done += read
+            }
+            return UsageNativeJSON.hash(Data(bytes))
+        }
+        guard end >= 0, let head = window(0, min(end, anchorBytes)),
+            let tail = window(max(0, end - anchorBytes), min(end, anchorBytes))
+        else { return nil }
+        return head + ":" + tail
+    }
+
+    static func anchorMatches(_ path: URL, upTo end: Int, anchor expected: String) -> Bool {
+        let descriptor = open(path.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        var status = stat()
+        guard fstat(descriptor, &status) == 0, status.st_mode & S_IFMT == S_IFREG,
+            Int(status.st_size) >= end
+        else { return false }
+        return anchor(descriptor, upTo: end) == expected
+    }
+
     static func lines(
-        _ path: URL, previousBytes: Int = 0,
+        _ path: URL, previousBytes: Int = 0, startingAt start: Int = 0,
         limits: UsageNativeFileLimits = .init(),
         consume: (Data, Int, Int) throws -> Void
     ) throws -> (Int, Int, Double, String, String) {
@@ -116,9 +149,13 @@ enum UsageNativeFileIO {
         guard fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
             before.st_size >= 0, before.st_size <= limits.bytes
         else { throw UsageNativeFailure.capacity }
-        var digest = SHA256(), prefix = SHA256()
+        guard start <= before.st_size else { throw UsageNativeFailure.invalidInput("file") }
+        if start > 0, lseek(descriptor, off_t(start), SEEK_SET) != off_t(start) {
+            throw UsageNativeFailure.invalidInput("file")
+        }
+        var prefix = SHA256()
         var buffer = [UInt8](repeating: 0, count: 262_144)
-        var carry = [UInt8](), offset = 0, position = 0, complete = 0
+        var carry = [UInt8](), offset = start, position = start, complete = start
         while true {
             try Task.checkCancellation()
             let count = Darwin.read(descriptor, &buffer, buffer.count)
@@ -127,8 +164,7 @@ enum UsageNativeFileIO {
             if count == 0 { break }
             try buffer.withUnsafeBytes { raw in
                 let chunk = UnsafeRawBufferPointer(rebasing: raw[0..<count])
-                digest.update(bufferPointer: chunk)
-                if position < previousBytes {
+                if start == 0, position < previousBytes {
                     prefix.update(
                         bufferPointer: UnsafeRawBufferPointer(
                             rebasing: chunk[0..<min(count, previousBytes - position)]))
@@ -162,10 +198,13 @@ enum UsageNativeFileIO {
         else {
             throw UsageNativeFailure.invalidInput("changed file")
         }
+        guard let anchor = anchor(descriptor, upTo: complete) else {
+            throw UsageNativeFailure.invalidInput("file")
+        }
         return (
             position, complete,
             Double(before.st_mtimespec.tv_sec) + Double(before.st_mtimespec.tv_nsec) / 1e9,
-            digest.finalize().map { String(format: "%02x", $0) }.joined(),
+            anchor,
             prefix.finalize().map { String(format: "%02x", $0) }.joined()
         )
     }
