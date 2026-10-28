@@ -131,42 +131,36 @@ test("malformed pages, duplicate IDs and ambiguous exact tags fail closed", () =
     expect(() => lookup([page])).toThrow();
 });
 
-test("pagination is bounded and repeated IDs across pages reject", () => {
+test("pagination is bounded", () => {
   const page = Array.from({ length: 100 }, (_, index) => ({
     ...item,
     id: index + 100,
     tag_name: `foreign-${index}`,
   }));
-  expect(() => lookup([page, [{ ...item, id: 100 }]])).toThrow("Duplicate");
   expect(() => lookup([page], { maximumPages: 1 })).toThrow("pagination limit");
 });
 
-test("a release created between page reads restarts the listing instead of failing", () => {
+test("releases created while paging shift repeats onto later pages without failing", () => {
   const page = Array.from({ length: 100 }, (_, index) => ({
     ...item,
     id: index + 100,
     tag_name: `foreign-${index}`,
   }));
-  const shifted = [
-    [page, [page[99], item]],
-    [page, [item]],
-  ];
+  const shifted = [page, [page[98], page[99], item]];
   const calls = [];
-  let listing = 0;
   const releases = listReleases({
     repository,
     execute: (_command, args) => {
       calls.push(args[1]);
-      const pageNumber = Number(args[1].split("page=").at(-1));
-      if (pageNumber === 1 && calls.length > 1) listing++;
-      return JSON.stringify(shifted[listing][pageNumber - 1]);
+      return JSON.stringify(shifted[Number(args[1].split("page=").at(-1)) - 1]);
     },
   });
   expect(releases.map(({ id }) => id)).toEqual([
     ...page.map(({ id }) => id),
     7,
   ]);
-  expect(calls).toHaveLength(4);
+  expect(calls).toHaveLength(2);
+  expect(releaseFromListing(releases, tag)).toEqual(item);
 });
 
 test("invalid identities reject before any process starts", () => {
