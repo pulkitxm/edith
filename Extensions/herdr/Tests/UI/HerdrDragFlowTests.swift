@@ -290,7 +290,9 @@ final class RenderedHerdrPage {
     private let window: NSWindow
     private let suite = "HerdrDragFlowTests-\(UUID().uuidString)"
 
-    init(workspaces: [String] = ["demo", "demo", "demo"]) async throws {
+    init(workspaces: [String] = ["demo", "demo", "demo"], terminalLaunch: Bool = false)
+        async throws
+    {
         let defaults = try #require(UserDefaults(suiteName: suite))
         store = HerdrStore(defaults: defaults, liveWatcher: { _ in }, machinesProvider: { [] })
         agents = ["Alpha task", "Beta task", "Gamma task"].enumerated().map { index, title in
@@ -304,7 +306,7 @@ final class RenderedHerdrPage {
             rootView: AnyView(
                 HerdrPage(store: store, drag: drag)
                     .environment(\.automaticViewActionsEnabled, false)
-                    .environment(\.terminalLaunchEnabled, false)
+                    .environment(\.terminalLaunchEnabled, terminalLaunch)
                     .transaction { $0.animation = nil }))
         host.frame = CGRect(x: 0, y: 0, width: 1280, height: 820)
         window = TestWindowHost.window(contentRect: host.frame)
