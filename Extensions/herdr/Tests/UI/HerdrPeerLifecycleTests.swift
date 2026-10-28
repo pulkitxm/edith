@@ -81,9 +81,10 @@ import Testing
                 arguments: [
                     "-c",
                     "import os,time; open('" + pidFile.path
-                        + "','w').write(str(os.getpid())); time.sleep(60)",
+                        + ".t','w').write(str(os.getpid())); os.rename('" + pidFile.path
+                        + ".t','" + pidFile.path + "'); time.sleep(60)",
                 ], environment: []), transport: .terminal)
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(30)
         let output = try FileHandle(forWritingTo: URL(fileURLWithPath: "/dev/null"))
         defer { try? output.close() }
         let status = try HerdrNativeTerminalBridge.relay(

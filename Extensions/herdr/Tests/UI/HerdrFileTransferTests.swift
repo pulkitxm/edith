@@ -83,17 +83,17 @@ import Testing
         let destination = root.appendingPathComponent("download.bin")
         let pidFile = root.appendingPathComponent("pid")
         let script =
-            "import os,sys,time; open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(60)"
+            "import os,sys,time; open(sys.argv[1]+'.t','w').write(str(os.getpid())); os.rename(sys.argv[1]+'.t',sys.argv[1]); time.sleep(60)"
         for cancel in [false, true] {
             let request = CLICommandRequest(
                 executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
                 arguments: ["-c", script, pidFile.path], environment: ["PATH": "/usr/bin:/bin"],
-                timeout: cancel ? 5 : 0.5, terminatesProcessGroup: true)
+                timeout: cancel ? 30 : 5, terminatesProcessGroup: true)
             let task = Task {
                 try await HerdrFileTransfer.download(
                     request: request, to: destination, maximumBytes: 256)
             }
-            let deadline = ContinuousClock.now + .seconds(3)
+            let deadline = ContinuousClock.now + .seconds(4)
             while !FileManager.default.fileExists(atPath: pidFile.path),
                 ContinuousClock.now < deadline
             {
