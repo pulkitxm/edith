@@ -18,6 +18,23 @@ import Testing
         #expect(invalid.stderr.contains("--missing"))
     }
 
+    @Test func groupHelpNamesTheEdCommandAndOffersVersion() async throws {
+        let original = ExtensionCLIExecution.hostVersion
+        ExtensionCLIExecution.hostVersion = { "9.8.7" }
+        defer { ExtensionCLIExecution.hostVersion = original }
+        for arguments in [["--help"], ["sub", "--help"], ["help", "sub"]] {
+            let output = try await ExtensionCLIExecution.run(
+                GroupFixtureCommand.self, arguments: arguments)
+            #expect(output.exitCode == 0)
+            #expect(output.stdout.contains("USAGE: ed group"))
+            #expect(!output.stdout.contains("USAGE: group"))
+            #expect(output.stdout.contains("--version"))
+        }
+        let version = try await ExtensionCLIExecution.run(
+            GroupFixtureCommand.self, arguments: ["--version"])
+        #expect(version.exitCode == 0 && version.stdout == "9.8.7\n" && version.stderr.isEmpty)
+    }
+
     @Test func separatesStdoutAndStderrWithoutOpeningAnotherProcess() async throws {
         let output = try await ExtensionCLIExecution.run(
             FixtureCommand.self, arguments: ["synthetic"])
@@ -167,5 +184,15 @@ private struct DestructiveCommand: AsyncParsableCommand {
         guard plan.shouldApply() else { return }
         Self.applied += 1
         plan.finish(changed: true, plain: "removed synthetic")
+    }
+}
+
+private struct GroupFixtureCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "group", abstract: "Group fixture.",
+        subcommands: [Sub.self], defaultSubcommand: Sub.self)
+    struct Sub: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "sub")
+        @MainActor mutating func run() async throws { CLIOut.out("sub") }
     }
 }

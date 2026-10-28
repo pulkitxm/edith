@@ -5,6 +5,9 @@ import Foundation
 @MainActor public enum ExtensionCLIExecution {
     nonisolated public static let maximumConcurrentExecutions = 8
     private static var activeExecutions = 0
+    public static var hostVersion: @MainActor () -> String? = {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    }
 
     public static func run<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
@@ -72,14 +75,29 @@ import Foundation
         _ message: String, root: Command.Type
     ) -> String {
         guard let name = root.configuration.commandName else { return message }
-        return message.replacingOccurrences(of: "USAGE: \(name) ", with: "USAGE: ed \(name) ")
-            .replacingOccurrences(of: "See '\(name) help", with: "See 'ed \(name) help")
+        var presented = message.replacingOccurrences(
+            of: "USAGE: \(name) ", with: "USAGE: ed \(name) "
+        )
+        .replacingOccurrences(of: "See '\(name) help", with: "See 'ed \(name) help")
+        if root.configuration.version.isEmpty, !presented.contains("--version"),
+            let range = presented.range(of: "  -h, --help ")
+        {
+            presented.insert(
+                contentsOf: "  --version               Show the version.\n", at: range.lowerBound)
+        }
+        return presented
     }
 
     private static func execute<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
     ) async throws -> Int32 {
         var exitCode: Int32 = 0
+        if arguments == ["--version"], root.configuration.version.isEmpty,
+            let version = hostVersion()
+        {
+            CLIOut.out(version)
+            return 0
+        }
         do {
             var parsed = try root.parseAsRoot(arguments)
             if var async = parsed as? AsyncParsableCommand {
