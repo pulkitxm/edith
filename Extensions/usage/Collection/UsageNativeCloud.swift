@@ -47,7 +47,9 @@ final class UsageNativeCloud {
                 try Task.checkCancellation()
                 onEvent(
                     .note(
-                        "\(source) refresh is unavailable; previously collected receipts are retained"
+                        "\(UsageNativeAssembly.labels[source] ?? source) refresh is unavailable ("
+                            + String(error.localizedDescription.prefix(160))
+                            + "); previously collected receipts are retained"
                     ))
             }
         }
