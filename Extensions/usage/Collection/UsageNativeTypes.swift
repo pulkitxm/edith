@@ -11,11 +11,49 @@ public enum UsageNativeFailure: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidInput(let source): "Invalid usage data for " + source
-        case .capacity: "Usage collection exceeded its admission limit"
+        case .capacity: "A usage input exceeded its safety size limit"
         case .unsafePath: "Usage storage must be a private regular file or directory"
         case .archive(let operation): "Usage archive could not " + operation
         case .network(let status): "Usage request failed with HTTP " + String(status)
         }
+    }
+}
+
+final class UsageNativeIssues {
+    private var failures: [String: (count: Int, example: String)] = [:]
+    private var skippedLines: [String: Int] = [:]
+
+    static func isolates(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        if case UsageNativeFailure.archive = error { return false }
+        return true
+    }
+
+    func failed(source: String, item: String, error: Error) {
+        let reason = String(error.localizedDescription.prefix(160))
+        let current = failures[source]
+        failures[source] = (
+            (current?.count ?? 0) + 1, current?.example ?? item + ": " + reason
+        )
+    }
+
+    func skipped(source: String, lines: Int) {
+        if lines > 0 { skippedLines[source, default: 0] += lines }
+    }
+
+    var notes: [String] {
+        let label = { (source: String) in UsageNativeAssembly.labels[source] ?? source }
+        let failed = failures.keys.sorted().map { source -> String in
+            let entry = failures[source]!
+            return label(source) + ": skipped " + String(entry.count)
+                + (entry.count == 1 ? " source (" : " sources (e.g. ") + entry.example
+                + "); other receipts were collected"
+        }
+        let lines = skippedLines.keys.sorted().map { source in
+            label(source) + ": skipped " + String(skippedLines[source]!)
+                + " line(s) larger than the safety limit"
+        }
+        return failed + lines
     }
 }
 
@@ -136,6 +174,7 @@ struct UsageNativeFileSnapshot: Sendable {
     let prefixHash: String
     let records: [UsageNativeParsedRecord]
     var appended: Bool?
+    var skippedLines = 0
     var state: String?
 }
 
@@ -151,9 +190,19 @@ enum UsageNativeJSON {
         try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
     }
 
-    static func hash(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    private static let hexDigits = Array("0123456789abcdef".utf8)
+
+    static func hex<Bytes: Sequence>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+        var digits = [UInt8]()
+        digits.reserveCapacity(64)
+        for byte in bytes {
+            digits.append(hexDigits[Int(byte >> 4)])
+            digits.append(hexDigits[Int(byte & 15)])
+        }
+        return String(decoding: digits, as: UTF8.self)
     }
+
+    static func hash(_ data: Data) -> String { hex(SHA256.hash(data: data)) }
 
     static func hash(_ value: String) -> String { hash(Data(value.utf8)) }
 
@@ -168,12 +217,20 @@ enum UsageNativeJSON {
         }
         guard let value = value as? String else { return nil }
         if let number = Double(value), number > 0 { return date(NSNumber(value: number)) }
+        return fractionalFormatter.date(from: value) ?? plainFormatter.date(from: value)
+    }
+
+    private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: value) { return date }
+        return formatter
+    }()
+
+    private static let plainFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
-    }
+        return formatter
+    }()
 
     static func text(_ value: Any?, maximum: Int = 4096) -> String? {
         guard let text = value as? String, !text.isEmpty, text.utf8.count <= maximum,

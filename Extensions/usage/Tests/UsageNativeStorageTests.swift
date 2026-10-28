@@ -79,9 +79,11 @@ import Testing
                 try UsageNativeFileIO.read(target, maximum: 1)
             }
             var limits = UsageNativeFileLimits(); limits.lineBytes = 1
-            #expect(throws: UsageNativeFailure.self) {
-                try UsageNativeFileIO.lines(target, limits: limits) { _, _, _ in }
+            var consumed = 0
+            _ = try UsageNativeFileIO.lines(target, limits: limits) { _, _, _ in
+                consumed += 1
             }
+            #expect(consumed == 0)
         }
     }
 

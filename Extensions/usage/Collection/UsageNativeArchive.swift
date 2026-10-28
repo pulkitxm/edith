@@ -60,35 +60,20 @@ final class UsageNativeArchive {
             throw UsageNativeFailure.invalidInput("archive belongs to a different machine")
         }
         try database.run("INSERT OR IGNORE INTO metadata VALUES('collectionOwner',?)", [owner])
-        let payloadTables = [
-            "records", "candidates", "baselines", "aggregate_candidates", "cloud_cache",
-        ]
-        let byteCount = payloadTables.map {
-            "COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM " + $0 + "),0)"
-        }.joined(separator: "+")
         try database.execute(
             """
-            CREATE TABLE IF NOT EXISTS capacity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),files INTEGER NOT NULL,records INTEGER NOT NULL,bytes INTEGER NOT NULL);
-            INSERT INTO capacity SELECT 1,(SELECT COUNT(*) FROM files),
-                (SELECT COUNT(*) FROM records)+(SELECT COUNT(*) FROM candidates),\(byteCount)
-                WHERE NOT EXISTS(SELECT 1 FROM capacity);
-            CREATE TRIGGER IF NOT EXISTS capacity_files_insert AFTER INSERT ON files BEGIN UPDATE capacity SET files=files+1; END;
-            CREATE TRIGGER IF NOT EXISTS capacity_files_delete AFTER DELETE ON files BEGIN UPDATE capacity SET files=files-1; END;
+            DROP TABLE IF EXISTS capacity;
+            DROP TRIGGER IF EXISTS capacity_files_insert;
+            DROP TRIGGER IF EXISTS capacity_files_delete;
             """)
-        for table in payloadTables {
-            let insertCount = ["records", "candidates"].contains(table) ? ",records=records+1" : ""
-            let deleteCount = ["records", "candidates"].contains(table) ? ",records=records-1" : ""
+        for table in ["records", "candidates", "baselines", "aggregate_candidates", "cloud_cache"] {
             try database.execute(
                 """
-                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_insert AFTER INSERT ON \(table) BEGIN
-                    UPDATE capacity SET bytes=bytes+length(CAST(new.payload AS BLOB))\(insertCount); END;
-                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_delete AFTER DELETE ON \(table) BEGIN
-                    UPDATE capacity SET bytes=bytes-length(CAST(old.payload AS BLOB))\(deleteCount); END;
-                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_update AFTER UPDATE OF payload ON \(table) BEGIN
-                    UPDATE capacity SET bytes=bytes+length(CAST(new.payload AS BLOB))-length(CAST(old.payload AS BLOB)); END;
+                DROP TRIGGER IF EXISTS capacity_\(table)_insert;
+                DROP TRIGGER IF EXISTS capacity_\(table)_delete;
+                DROP TRIGGER IF EXISTS capacity_\(table)_update;
                 """)
         }
-
     }
 
     private func migrateRecordColumns(from version: String) throws {
@@ -110,14 +95,28 @@ final class UsageNativeArchive {
             """
         try database.execute(
             """
-            CREATE TRIGGER IF NOT EXISTS records_columns AFTER INSERT ON records BEGIN
-                UPDATE records SET \(fill) WHERE sequence=new.sequence; END;
+            DROP TRIGGER IF EXISTS records_columns;
             CREATE INDEX IF NOT EXISTS records_receipt ON records(receipt) WHERE receipt IS NOT NULL;
             CREATE INDEX IF NOT EXISTS records_source ON records(source);
             """)
         if version != "2" {
             try database.execute("UPDATE records SET " + fill + "; PRAGMA user_version=2;")
         }
+    }
+
+    private func insertRecord(
+        path: String, identity: String, hash: String, payload: String, event: UsageNativeEvent
+    ) throws {
+        try database.run(
+            """
+            INSERT OR IGNORE INTO records(path,identity,hash,payload,source,ident,outtok,total,receipt)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """,
+            [
+                path, identity, hash, payload, event.source,
+                event.identity.map { $0 as Any } ?? NSNull(), event.tokens.output,
+                event.tokens.total, event.receiptID.map { $0 as Any } ?? NSNull(),
+            ])
     }
 
     func journalKey(source: String, file: URL, home: URL) throws -> String {
@@ -168,13 +167,11 @@ final class UsageNativeArchive {
                         "INSERT OR IGNORE INTO candidates VALUES(?,?,?,?)",
                         [snapshot.path, snapshot.hash + ":" + String(record.offset), hash, payload])
                 } else {
-                    try database.run(
-                        "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                        [
-                            snapshot.path,
-                            record.event.identity ?? String(generation) + ":"
-                                + String(record.offset), hash, payload,
-                        ])
+                    try insertRecord(
+                        path: snapshot.path,
+                        identity: record.event.identity ?? String(generation) + ":"
+                            + String(record.offset), hash: hash, payload: payload,
+                        event: record.event)
                 }
             }
             try database.run(
@@ -188,7 +185,6 @@ final class UsageNativeArchive {
                     snapshot.path, snapshot.size, snapshot.completeBytes, snapshot.modified,
                     snapshot.hash, generation, snapshot.state.map { $0 as Any } ?? NSNull(),
                 ])
-            try enforceCapacity()
         }
     }
 
@@ -197,11 +193,10 @@ final class UsageNativeArchive {
             for (index, event) in events.enumerated() {
                 try Task.checkCancellation()
                 let payload = String(decoding: try event.canonicalData, as: UTF8.self)
-                try database.run(
-                    "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                    [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
+                try insertRecord(
+                    path: key, identity: event.identity ?? String(index),
+                    hash: UsageNativeJSON.hash(payload), payload: payload, event: event)
             }
-            try enforceCapacity()
         }
     }
 
@@ -212,7 +207,6 @@ final class UsageNativeArchive {
                 "INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 ["account:" + key, account])
             try insertRemote(events, key: key)
-            try enforceCapacity()
         }
     }
 
@@ -228,7 +222,6 @@ final class UsageNativeArchive {
                 "INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 ["account:" + key, account])
             try insertRemote(events, key: key)
-            try enforceCapacity()
         }
     }
 
@@ -236,9 +229,9 @@ final class UsageNativeArchive {
         for (index, event) in events.enumerated() {
             try Task.checkCancellation()
             let payload = String(decoding: try event.canonicalData, as: UTF8.self)
-            try database.run(
-                "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
-                [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
+            try insertRecord(
+                path: key, identity: event.identity ?? String(index),
+                hash: UsageNativeJSON.hash(payload), payload: payload, event: event)
         }
     }
 
@@ -346,9 +339,11 @@ final class UsageNativeArchive {
     }
 
     func retainedFiles(seen: Set<String>) throws -> Int {
-        try database.rows("SELECT path FROM files", maximum: limits.files).filter {
-            !seen.contains($0["path"] ?? "")
-        }.count
+        var retained = 0
+        try database.forEachRow("SELECT path FROM files") { row in
+            if !seen.contains(UsageNativeDatabase.text(row, 0) ?? "") { retained += 1 }
+        }
+        return retained
     }
 
     func bootstrap(_ previous: [String: Any]?) throws {
@@ -391,7 +386,6 @@ final class UsageNativeArchive {
                 "period": period, "bySource": ["cli": cli], "hours": hours, "projects": projects,
             ]
         }
-        guard blocks.count <= 4096 else { throw UsageNativeFailure.capacity }
         try database.transaction {
             for block in blocks {
                 let payload = String(decoding: try UsageNativeJSON.encode(block), as: UTF8.self)
@@ -399,7 +393,6 @@ final class UsageNativeArchive {
                     "INSERT INTO baselines VALUES(?,?)", [block["period"] as! String, payload])
             }
             try database.run("INSERT INTO metadata VALUES('baseline',?)", [generated])
-            try enforceCapacity()
         }
     }
 
@@ -415,7 +408,7 @@ final class UsageNativeArchive {
                 try database.rows("SELECT value FROM metadata WHERE key='baseline'").first?["value"]
                 ?? ""
             for baseline in try database.rows(
-                "SELECT period,payload FROM baselines ORDER BY period", maximum: 4096)
+                "SELECT period,payload FROM baselines ORDER BY period")
             {
                 guard let period = baseline["period"], let payload = baseline["payload"] else {
                     continue
@@ -450,7 +443,7 @@ final class UsageNativeArchive {
                 }
                 let candidates = try database.rows(
                     "SELECT payload FROM aggregate_candidates WHERE period=? ORDER BY hash",
-                    [period], maximum: 8192)
+                    [period])
                 guard !candidates.isEmpty else { continue }
                 blocks.append([
                     "period": period, "source": "cli", "state": "partial-overlap",
@@ -461,10 +454,6 @@ final class UsageNativeArchive {
                     },
                 ])
             }
-            guard try UsageNativeJSON.encode(["blocks": blocks]).count <= 16_777_216 else {
-                throw UsageNativeFailure.capacity
-            }
-            try enforceCapacity()
             return ["version": 1, "blocks": blocks]
         }
     }
@@ -480,24 +469,12 @@ final class UsageNativeArchive {
 
     func cache(_ value: [String: Any], key: String) throws {
         let data = try UsageNativeJSON.encode(value)
-        guard data.count <= 33_554_432 else { throw UsageNativeFailure.capacity }
+        guard data.count <= 33_554_432 else { return }
         try database.transaction {
             try database.run(
                 "INSERT INTO cloud_cache VALUES(?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload",
                 [key, String(decoding: data, as: UTF8.self)])
-            try enforceCapacity()
         }
-    }
-
-    private func enforceCapacity() throws {
-        let record =
-            try database.rows(
-                "SELECT files,records,bytes FROM capacity WHERE singleton=1", maximum: 1
-            ).first ?? [:]
-        guard (Int(record["files"] ?? "0") ?? .max) <= limits.files,
-            (Int(record["records"] ?? "0") ?? .max) <= limits.records,
-            (Int(record["bytes"] ?? "0") ?? .max) <= limits.bytes
-        else { throw UsageNativeFailure.capacity }
     }
 
     private static func contentIdentity(_ value: Any, ordered: Bool = false) throws -> Data {

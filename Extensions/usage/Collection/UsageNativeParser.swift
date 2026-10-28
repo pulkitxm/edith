@@ -75,9 +75,6 @@ final class UsageNativeParser {
             guard let row = try? UsageNativeJSON.object(data) else { return }
             let records = try self.consume(row, offset: offset, end: end)
             self.legacy.append(contentsOf: records)
-            guard self.legacy.count + self.modern.count <= limits.records else {
-                throw UsageNativeFailure.capacity
-            }
         }
         let state = resumeState
         let selected = source == "codex" && state.hadModern ? modern : legacy
@@ -90,6 +87,7 @@ final class UsageNativeParser {
         return .init(
             path: key, size: properties.0, completeBytes: properties.1, modified: properties.2,
             hash: properties.3, prefixHash: properties.4, records: records, appended: appended,
+            skippedLines: properties.5,
             state: String(
                 decoding: try JSONEncoder().encode(state), as: UTF8.self))
     }

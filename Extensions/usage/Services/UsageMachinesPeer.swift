@@ -231,7 +231,16 @@ struct UsageMachinesPeer: Sendable {
             try Task.checkCancellation()
             let file = cacheDirectory.appendingPathComponent(
                 machine.id.uuidString.lowercased() + ".json")
-            var data = try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864)
+            var data: Data?
+            do {
+                data = try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864)
+            } catch {
+                try Task.checkCancellation()
+                onEvent(
+                    .note(
+                        String(machine.name.prefix(256))
+                            + ": cached usage could not be read and will be recollected"))
+            }
             let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
             let due = date.map { Date().timeIntervalSince($0) >= 1_800 } ?? true
