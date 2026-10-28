@@ -51,7 +51,7 @@ extension HerdrStore {
                 try Task.checkCancellation()
                 guard tab.holder.generation == generation else { throw CancellationError() }
                 let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-                if tab.holder.descriptor != descriptor {
+                if tab.holder.descriptor != descriptor || !tab.holder.isBound {
                     tab.holder.reset()
                     tab.holder.bind(
                         try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
@@ -83,7 +83,7 @@ extension HerdrStore {
                 try Task.checkCancellation()
                 guard terminal.holder.generation == generation else { throw CancellationError() }
                 let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-                if terminal.holder.descriptor != descriptor {
+                if terminal.holder.descriptor != descriptor || !terminal.holder.isBound {
                     terminal.holder.reset()
                     terminal.holder.bind(
                         try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))
@@ -123,7 +123,7 @@ extension HerdrStore {
                 try Task.checkCancellation()
                 guard holder.generation == generation else { throw CancellationError() }
                 let descriptor = try JSONDecoder().decode(OwnedTerminalDescriptor.self, from: data)
-                if holder.descriptor != descriptor {
+                if holder.descriptor != descriptor || !holder.isBound {
                     holder.reset()
                     holder.bind(
                         try OwnedTerminalClient(descriptor: descriptor, invoke: terminalClient))

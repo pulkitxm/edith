@@ -457,6 +457,8 @@ final class TerminalSessionHolder {
         if let ghosttyView { flushQueuedInput(to: ghosttyView) }
     }
 
+    var isBound: Bool { client != nil }
+
     func executeTerminal(_ operation: String, payload: Data) async throws -> Data {
         guard let engineSession else { throw ExtensionPeerError.unavailable }
         return try await engineSession.execute(operation, payload: payload)

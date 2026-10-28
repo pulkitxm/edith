@@ -396,7 +396,7 @@ struct HerdrPanelTerminalView: View {
             }
         }
         .background(Color(nsColor: palette.background))
-        .task(id: "\(terminal.pane ?? "")|\(mouse.rawValue)") { await start() }
+        .task(id: "\(terminal.pane ?? "")|\(terminal.holder.generation)|\(mouse.rawValue)") { await start() }
         .task(id: terminal.pane) {
             guard store.uiClient == nil, let pane = terminal.pane else { return }
             await terminal.scroll.watch(
@@ -438,7 +438,7 @@ struct HerdrPanelTerminalView: View {
 
     private func start() async {
         guard launchEnabled, terminal.pane != nil else { return }
-        if terminal.holder.started {
+        if terminal.holder.started, terminal.holder.isBound {
             guard let startedMouse, startedMouse != mouse else { return }
             terminal.holder.stop()
         }
@@ -447,6 +447,8 @@ struct HerdrPanelTerminalView: View {
         do {
             try await store.connectTerminal(for: terminal)
             startedMouse = mouse
+        } catch is CancellationError {
+            return
         } catch {
             store.terminalPanels.fail(terminal.id, error.localizedDescription)
         }
