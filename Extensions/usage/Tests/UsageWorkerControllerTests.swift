@@ -126,4 +126,17 @@ struct UsageBackgroundShutdownTests {
         try await Task.sleep(for: .milliseconds(300))
         await controller.shutdown()
     }
+
+    @Test func mainQueueWakeFiresAfterItsDelayAndCancelledWakesNeverFire() async throws {
+        var fired: [String] = []
+        let cancel = UsageWake.mainQueue(after: .milliseconds(50)) { fired.append("cancelled") }
+        _ = UsageWake.mainQueue(after: .milliseconds(50)) { fired.append("kept") }
+        cancel()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while fired.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(fired == ["kept"])
+    }
 }

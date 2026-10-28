@@ -163,23 +163,23 @@ struct UsageAmbientPolicyTests {
     }
 
     @Test func policyChangeReschedulesOnlyTheOwnedSleeperAndShutdownDrainsIt() async throws {
-        let sleep = UsageRecordedSleep()
-        let fixture = try Fixture(sleep: { try await sleep.wait($0) })
+        let wake = UsageRecordedWake()
+        let fixture = try Fixture(scheduleWake: wake.schedule)
         defer { fixture.remove() }
         try fixture.apply(paused: true)
         fixture.controller.startBackgroundCollection()
         #expect(await fixture.counts.snapshot() == [0, 0])
         try fixture.apply(paused: false)
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while await sleep.count == 0 {
+        while wake.count == 0 {
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
         }
         await fixture.drain()
         #expect(await fixture.counts.snapshot() == [0, 1])
-        #expect(await sleep.duration == .seconds(900))
+        #expect(wake.duration == .seconds(900))
         await fixture.controller.shutdown()
-        #expect(await sleep.cancelled)
+        #expect(wake.cancelled)
         #expect(fixture.controller.nextPeriodicDelay(now: now) == nil)
     }
 
@@ -211,9 +211,7 @@ struct UsageAmbientPolicyTests {
         let controller: UsageWorkerController
 
         init(
-            sleep: @escaping @Sendable (Duration) async throws -> Void = {
-                try await Task.sleep(for: $0)
-            },
+            scheduleWake: @escaping UsageWakeScheduler = UsageWake.mainQueue,
             observe: @escaping ExtensionAmbientPolicy.BatteryObservation = { _ in {} }
         ) throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -231,7 +229,7 @@ struct UsageAmbientPolicyTests {
                     constrained: { power.constrained }, notificationCenter: NotificationCenter(),
                     observeBatteryChanges: observe),
                 allowsBackgroundCollection: { true },
-                clock: { Date(timeIntervalSince1970: 1_800_000_000) }, sleep: sleep
+                clock: { Date(timeIntervalSince1970: 1_800_000_000) }, scheduleWake: scheduleWake
             ) { _, _ in
                 await counts.usage()
                 return try usageDocument()
@@ -290,16 +288,15 @@ private func usageDocument() throws -> Data {
     ])
 }
 
-private actor UsageRecordedSleep {
+@MainActor private final class UsageRecordedWake {
     private(set) var count = 0
     private(set) var duration: Duration?
     private(set) var cancelled = false
-    func wait(_ duration: Duration) async throws {
+    func schedule(
+        _ duration: Duration, _ wake: @escaping @MainActor @Sendable () -> Void
+    ) -> @MainActor () -> Void {
         count += 1
         self.duration = duration
-        do { try await Task.sleep(for: .seconds(30)) } catch {
-            cancelled = Task.isCancelled
-            throw error
-        }
+        return { self.cancelled = true }
     }
 }

@@ -24,12 +24,12 @@ public final class UsageWorkerController {
     var refreshObservation: UsageRefreshObservation? { refreshRecorder?.snapshot }
     var refreshRecording: UsageRefreshRecorder? { refreshRecorder }
     private var backgroundTask: Task<Void, Never>?
-    private var backgroundSleepTask: Task<Void, Never>?
+    private var backgroundWake: (@MainActor () -> Void)?
     private var backgroundContinuation: AsyncStream<Void>.Continuation?
     private let ambientPolicy: ExtensionAmbientPolicy
     private let allowsBackgroundCollection: @MainActor () -> Bool
     private let clock: @MainActor () -> Date
-    private let sleep: @Sendable (Duration) async throws -> Void
+    private let scheduleWake: UsageWakeScheduler
     private var periodicAdmissions: [String: Date] = [:]
     private let fetchLimits: FetchLimits
     private let projectLimits: FetchLimits
@@ -58,9 +58,8 @@ public final class UsageWorkerController {
             UsageExecutionEnvironment.fixtureHome == nil
         },
         clock: @escaping @MainActor () -> Date = Date.init,
-        sleep: @escaping @Sendable (Duration) async throws -> Void = {
-            try await Task.sleep(nanoseconds: UInt64(min(max(0, $0 / .nanoseconds(1)), 4e18)))
-        }, collect: @escaping Collect
+        scheduleWake: @escaping UsageWakeScheduler = UsageWake.mainQueue,
+        collect: @escaping Collect
     ) {
         self.ambientPolicy =
             ambientPolicy
@@ -70,7 +69,7 @@ public final class UsageWorkerController {
             ])
         self.allowsBackgroundCollection = allowsBackgroundCollection
         self.clock = clock
-        self.sleep = sleep
+        self.scheduleWake = scheduleWake
         self.dataDirectory = dataDirectory
         self.collect = collect
         self.fetchLimits = fetchLimits
@@ -311,22 +310,15 @@ public final class UsageWorkerController {
             }
             for await _ in events {
                 guard !Task.isCancelled, let self, !self.stopped else { return }
-                let previous = backgroundSleepTask
-                previous?.cancel()
-                await previous?.value
+                backgroundWake?()
+                backgroundWake = nil
                 guard !Task.isCancelled, !stopped else { return }
                 let now = clock()
                 try? requestPeriodicCollection(now: now)
                 guard let delay = nextPeriodicDelay(now: now) else {
-                    backgroundSleepTask = nil
                     continue
                 }
-                let sleep = sleep
-                backgroundSleepTask = Task {
-                    do { try await sleep(.seconds(delay)) } catch { return }
-                    guard !Task.isCancelled else { return }
-                    continuation.yield()
-                }
+                backgroundWake = scheduleWake(.seconds(delay)) { continuation.yield() }
             }
         }
         continuation.yield()
@@ -391,7 +383,8 @@ public final class UsageWorkerController {
         stopped = true
         ambientPolicy.stop()
         backgroundContinuation?.finish()
-        backgroundSleepTask?.cancel()
+        backgroundWake?()
+        backgroundWake = nil
         backgroundTask?.cancel()
         progress?.close()
         usageTask?.cancel()
@@ -404,10 +397,9 @@ public final class UsageWorkerController {
 
     public func suspendAndWait() async {
         beginShutdown()
-        let background = backgroundTask, sleeper = backgroundSleepTask
+        let background = backgroundTask
         let usage = usageTask, limits = limitsTask
         await background?.value
-        await sleeper?.value
         await usage?.value
         await limits?.value
         await withCheckedContinuation { continuation in
@@ -418,8 +410,6 @@ public final class UsageWorkerController {
     public func shutdown() async {
         await suspendAndWait()
         await backgroundTask?.value
-        await backgroundSleepTask?.value
-        backgroundSleepTask = nil
         backgroundContinuation = nil
         await limitsSession.clear()
         await usageTask?.value
@@ -471,5 +461,21 @@ public enum UsageWorkerOperations {
         if let client = UsageUIClient.current { client.perform("usage.limits.refresh"); return }
         guard let controller else { throw ExtensionPeerError.unavailable }
         try controller.requestLimitsRefresh()
+    }
+}
+
+public typealias UsageWakeScheduler =
+    @MainActor (Duration, @escaping @MainActor @Sendable () -> Void) -> @MainActor () -> Void
+
+public enum UsageWake {
+    @MainActor public static func mainQueue(
+        after delay: Duration, _ wake: @escaping @MainActor @Sendable () -> Void
+    ) -> @MainActor () -> Void {
+        let item = DispatchWorkItem { MainActor.assumeIsolated { wake() } }
+        let seconds =
+            Double(delay.components.seconds)
+            + Double(delay.components.attoseconds) / 1e18
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, seconds), execute: item)
+        return { item.cancel() }
     }
 }
