@@ -115,7 +115,9 @@ private func signedCatalog(_ key: Curve25519.Signing.PrivateKey, revision: Int64
     let fixture = try PackageFixture()
     defer { fixture.clean() }
     let key = Curve25519.Signing.PrivateKey()
-    for (repository, tag) in [("example", "tag"), ("example/app/extra", "tag"), ("example/app", "../tag")] {
+    for (repository, tag) in [
+        ("example", "tag"), ("example/app/extra", "tag"), ("example/app", "../tag"),
+    ] {
         let requests = CatalogRequests()
         let client = ExtensionCatalogClient(
             releaseRepository: repository, catalogTag: tag,

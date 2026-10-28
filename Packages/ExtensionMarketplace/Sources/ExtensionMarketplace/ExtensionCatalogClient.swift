@@ -155,7 +155,8 @@ public actor ExtensionCatalogClient {
 
     private func load() async throws -> Data {
         if let source { return try await download(source) }
-        guard let release, release.repository.split(separator: "/", omittingEmptySubsequences: false).count == 2,
+        guard let release,
+            release.repository.split(separator: "/", omittingEmptySubsequences: false).count == 2,
             release.repository.split(separator: "/").allSatisfy({
                 ExtensionPackage.validComponent(String($0))
             }),
