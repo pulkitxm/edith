@@ -19,6 +19,7 @@ import {
   mergeExtensionCatalog,
   preflightExtensionBuilds,
   publishExtensionAssets,
+  publishStableCatalog,
   restorePublishedExtension,
   runBounded,
   validateExtensionChecksum,
@@ -673,4 +674,51 @@ test("extension publication runs a bounded pool and stops scheduling after a fai
     }),
   ).rejects.toThrow("synthetic failure");
   expect(attempted).toEqual([1, 2]);
+});
+
+test("the catalog is also published under the stable unauthenticated asset name", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-stable-catalog-"));
+  try {
+    const file = join(directory, "catalog.json");
+    writeFileSync(file, "synthetic catalog");
+    const assets = [
+      { id: 1, name: "catalog-1.json", size: 3 },
+      { id: 2, name: "catalog.json", size: 99 },
+    ];
+    const removed = [];
+    const uploaded = [];
+    await publishStableCatalog({
+      repository: "synthetic/fixture",
+      tag: "catalog-fixture",
+      file,
+      readRelease: () => ({ id: 7, assets: [...assets] }),
+      removeAsset: (id) => {
+        removed.push(id);
+        assets.splice(
+          assets.findIndex((asset) => asset.id === id),
+          1,
+        );
+      },
+      uploadAsset: async (repository, releaseID, tag, _path, name) => {
+        uploaded.push([repository, releaseID, tag, name]);
+        assets.push({ id: 3, name, size: 17 });
+      },
+    });
+    expect(removed).toEqual([2]);
+    expect(uploaded).toEqual([
+      ["synthetic/fixture", 7, "catalog-fixture", "catalog.json"],
+    ]);
+    await expect(
+      publishStableCatalog({
+        repository: "synthetic/fixture",
+        tag: "catalog-fixture",
+        file,
+        readRelease: () => ({ id: 7, assets: [] }),
+        removeAsset: () => {},
+        uploadAsset: async () => {},
+      }),
+    ).rejects.toThrow("Stable catalog upload did not finish");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
