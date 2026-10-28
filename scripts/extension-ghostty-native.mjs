@@ -147,9 +147,19 @@ export async function verifyGhosttyArtifacts(
   fingerprint,
   architecture = process.arch === "arm64" ? "arm64" : "x86_64",
 ) {
-  const receipt = JSON.parse(
-    await readFile(resolve(root, vendorPath, receiptName), "utf8"),
-  );
+  let receiptText;
+  try {
+    receiptText = await readFile(
+      resolve(root, vendorPath, receiptName),
+      "utf8",
+    );
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    throw new Error(
+      `Missing Ghostty native artifacts (${vendorPath}/${receiptName}). Run scripts/build-ghostty.sh, or copy Extensions/terminal/Native/vendor from a built checkout.`,
+    );
+  }
+  const receipt = JSON.parse(receiptText);
   if (
     receipt.schema !== 1 ||
     receipt.fingerprint !== fingerprint ||

@@ -185,6 +185,17 @@ describe("verified native cache", () => {
     90_000,
   );
 
+  test("a checkout without built Ghostty artifacts says how to get them", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ghostty-missing-"));
+    try {
+      await expect(verifyGhosttyArtifacts(root, "fingerprint")).rejects.toThrow(
+        "Run scripts/build-ghostty.sh",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   nativeTest(
     "unchanged input reuses a verified archive; source, pin, toolchain and architecture invalidate",
     async () => {
