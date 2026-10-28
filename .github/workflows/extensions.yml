@@ -333,4 +333,12 @@ jobs:
       - name: Install verified release dependencies
         run: bun install --frozen-lockfile
       - name: Publish immutable extension releases and the signed catalog
-        run: bun scripts/extension-publish.mjs
+        run: |
+          set -o pipefail
+          LOG="$RUNNER_TEMP/extension-publish.log"
+          if bun scripts/extension-publish.mjs 2>&1 | tee "$LOG"; then exit 0; fi
+          if grep -q "Extension publication superseded: main changed" "$LOG"; then
+            echo "::notice title=Extension publication superseded::A newer main commit will publish the catalog."
+            exit 0
+          fi
+          exit 1

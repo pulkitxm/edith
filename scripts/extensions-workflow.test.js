@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { planExtensionBuilds } from "./extension-release-plan.mjs";
 
 const workflow = Bun.YAML.parse(
@@ -640,4 +649,39 @@ test("the marketplace harness is compiled before the marketplace lifecycle suite
   );
   expect(harness).toBeGreaterThan(-1);
   expect(marketplace).toBeGreaterThan(harness);
+});
+
+test("a publication superseded by a newer main commit skips instead of failing the run", () => {
+  const script = publish.steps.find(
+    ({ name }) =>
+      name === "Publish immutable extension releases and the signed catalog",
+  ).run;
+  const runWith = (stderr) => {
+    const root = mkdtempSync(join(tmpdir(), "extension-publish-step-"));
+    try {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(
+        join(bin, "bun"),
+        `#!/bin/sh\necho "${stderr}" >&2\nexit 1\n`,
+        { mode: 0o755 },
+      );
+      return spawnSync("bash", ["-c", script], {
+        env: { PATH: `${bin}:/usr/bin:/bin`, RUNNER_TEMP: root },
+        encoding: "utf8",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  };
+  const superseded = runWith(
+    "error: Extension publication superseded: main changed",
+  );
+  expect(superseded.status).toBe(0);
+  expect(superseded.stdout).toContain("::notice");
+  expect(
+    runWith("error: Extension publication superseded: trusted catalog changed")
+      .status,
+  ).toBe(1);
+  expect(runWith("error: Extension publication failed: music").status).toBe(1);
 });
