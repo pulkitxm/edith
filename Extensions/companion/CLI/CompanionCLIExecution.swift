@@ -50,7 +50,7 @@ import Foundation
     {
         try request.validate()
         if request.arguments.first == "stop" {
-            return try ExtensionCLIContext.$request.withValue(request) {
+            return try await ExtensionCLIContext.$request.withValue(request) {
                 try CompanionStopCommand.reply(request.arguments)
             }
         }

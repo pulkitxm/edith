@@ -110,3 +110,20 @@ private func emptyDocument(pricing: [String: Any] = [:]) throws -> Data {
         ],
     ])
 }
+
+@MainActor @Suite(.serialized)
+struct UsageBackgroundShutdownTests {
+    @Test func shuttingDownWhileTheBackgroundLoopSleepsDoesNotAbort() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = UsageWorkerController(
+            dataDirectory: root,
+            fetchLimits: { _ in .init(refreshedAt: Date(), providers: [], failure: nil) },
+            projectLimits: { _ in .init(refreshedAt: Date(), providers: [], failure: nil) },
+            allowsBackgroundCollection: { true }
+        ) { _, _ in try emptyDocument() }
+        controller.startBackgroundCollection()
+        try await Task.sleep(for: .milliseconds(300))
+        await controller.shutdown()
+    }
+}

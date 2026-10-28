@@ -27,7 +27,7 @@ final class JevCommands {
             if command == "jev.cli.catalog" { return try JevCLICatalog.data() }
             if command.hasPrefix("jev.cli.stream.") {
                 guard let cliStreams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try JevCLIEnvironment.$streamOwner.withValue(JevCLIEngine(engine: engine)) {
+                return try await JevCLIEnvironment.$streamOwner.withValue(JevCLIEngine(engine: engine)) {
                     try cliStreams.invoke(
                         JevCommand.self, operation: command, prefix: "jev.cli.stream",
                         payload: payload)

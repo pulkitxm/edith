@@ -59,7 +59,7 @@ public final class UsageWorkerController {
         },
         clock: @escaping @MainActor () -> Date = Date.init,
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
-            try await Task.sleep(for: $0)
+            try await Task.sleep(nanoseconds: UInt64(max(0, $0 / .nanoseconds(1))))
         }, collect: @escaping Collect
     ) {
         self.ambientPolicy =

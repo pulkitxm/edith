@@ -84,7 +84,7 @@ actor AttentionBackgroundService {
         notificationCenter: NotificationCenter = .default,
         clock: @escaping @Sendable () -> Date = { Date() },
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
-            try await Task.sleep(for: $0)
+            try await Task.sleep(nanoseconds: UInt64(max(0, $0 / .nanoseconds(1))))
         },
         decider: @escaping @Sendable () async -> JevDeciding? = {
             await AttentionJevPeer.configured()

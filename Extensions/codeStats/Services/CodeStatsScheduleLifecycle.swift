@@ -19,7 +19,7 @@ import Foundation
         check: @escaping @MainActor () async -> Void,
         now: @escaping @MainActor () -> Date = Date.init,
         sleep: @escaping @MainActor (Duration) async throws -> Void = {
-            try await Task.sleep(for: $0)
+            try await Task.sleep(nanoseconds: UInt64(max(0, $0 / .nanoseconds(1))))
         }
     ) {
         self.interval = interval; self.ready = ready; self.check = check

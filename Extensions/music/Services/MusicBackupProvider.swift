@@ -28,7 +28,7 @@ import IOKit.ps
         applicationDefaults: UserDefaults, defaults: UserDefaults,
         cloudAvailable: @escaping () -> Bool = { true }, onBattery: @escaping () -> Bool,
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
-            try await Task.sleep(for: $0)
+            try await Task.sleep(nanoseconds: UInt64(max(0, $0 / .nanoseconds(1))))
         }
     ) {
         self.directory = directory
@@ -377,7 +377,7 @@ import IOKit.ps
     init(
         debounce: Duration, retry: Duration = .seconds(3), onBattery: @escaping () -> Bool,
         sleep: @escaping @Sendable (Duration) async throws -> Void = {
-            try await Task.sleep(for: $0)
+            try await Task.sleep(nanoseconds: UInt64(max(0, $0 / .nanoseconds(1))))
         }, enabled: @escaping () -> Bool,
         transfer: @escaping () async throws -> Void
     ) {

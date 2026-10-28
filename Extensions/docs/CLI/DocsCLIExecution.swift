@@ -23,7 +23,7 @@ import Foundation
     ) async throws -> Data {
         await browser.load()
         try Task.checkCancellation()
-        return try DocsCLIEnvironment.$library.withValue(browser.library) {
+        return try await DocsCLIEnvironment.$library.withValue(browser.library) {
             try streams.invoke(
                 DocsCommandGroup.self, operation: operation, prefix: "docs.cli", payload: payload)
         }
