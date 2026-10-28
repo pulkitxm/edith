@@ -189,6 +189,44 @@ import Testing
         await streams.stopAndWait()
     }
 
+    @Test func streamsRunUnderAnAsyncBindingBuiltByTheSharedConfiguration() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let streams = try ExtensionCLIStreams(owner: "notchShelf")
+        defer { streams.stop() }
+        let configuration = ShelfCLIExecution.configuration(
+            root: fixture.root, defaults: fixture.defaults
+        ) { _ in throw ExtensionPeerError.unavailable }
+        let start = try JSONEncoder().encode(
+            ExtensionCLIStreamStart(
+                owner: "notchShelf", session: UUID(),
+                request: .init(
+                    arguments: ["add-text", "async binding"], standardInput: Data(),
+                    workingDirectory: fixture.directory.path)))
+        let reply = try await ShelfCLIEnvironment.$configuration.withValue(configuration) {
+            () async throws -> Data in
+            try streams.invoke(
+                ShelfCommand.self, operation: "notch.cli.start", prefix: "notch.cli",
+                payload: start)
+        }
+        let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: reply)
+        var output = Data()
+        var sequence: UInt64 = 0
+        for _ in 0..<100 {
+            let frame = try streams.read(.init(handle: handle, sequence: sequence))
+            sequence = frame.nextSequence
+            for chunk in frame.chunks { output.append(chunk.data) }
+            if frame.state != .running { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(String(decoding: output, as: UTF8.self) == "shelved Dropped Text.txt\n")
+        #expect(
+            try ShelfMutationExecution.snapshot(root: fixture.root).items.map(\.name) == [
+                "Dropped Text.txt"
+            ])
+        await streams.stopAndWait()
+    }
+
     @MainActor private struct Fixture {
         let id = "shelf-cli-fixture-" + UUID().uuidString
         let directory: URL
