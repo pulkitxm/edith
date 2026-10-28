@@ -74,63 +74,54 @@ public enum UsageNativeCollector {
             }
             for file in files {
                 try Task.checkCancellation()
-                do {
-                    try autoreleasepool {
-                        if root.source == "opencode", !file.path.contains("/message/") { return }
-                        if root.source == "grok", file.lastPathComponent != "updates.jsonl" {
-                            return
-                        }
-                        if root.source == "droid",
-                            !file.lastPathComponent.hasSuffix(".settings.json")
-                        {
-                            return
-                        }
-                        if root.source == "codebuff", file.lastPathComponent != "chat-messages.json"
-                        {
-                            return
-                        }
-                        if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { return }
-                        let key = try archive.journalKey(
-                            source: root.source, file: file, home: home)
-                        guard seen.insert(key).inserted else { return }
-                        let previous = try archive.known(key)
-                        var status = stat()
-                        guard lstat(file.path, &status) == 0 else { return }
-                        let modified =
-                            Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec)
-                            / 1e9
-                        if let previous, previous.size == Int(status.st_size),
-                            previous.modified == modified
-                        {
-                            return
-                        }
-                        if file.pathExtension.lowercased() == "json" {
-                            let data = try UsageNativeFileIO.read(file)
-                            guard let object = try? JSONSerialization.jsonObject(with: data) else {
-                                return
-                            }
-                            let parser = UsageNativeParser(source: root.source)
-                            let records = try parser.document(
-                                object, path: file, modified: modified)
-                            let prefix =
-                                previous.map { UsageNativeJSON.hash(Data(data.prefix($0.size))) }
-                                ?? UsageNativeJSON.hash(Data())
-                            try archive.admit(
-                                .init(
-                                    path: key, size: data.count, completeBytes: data.count,
-                                    modified: modified,
-                                    hash: UsageNativeJSON.hash(data), prefixHash: prefix,
-                                    records: records),
-                                previous: previous)
-                        } else {
-                            let parser = UsageNativeParser(source: root.source, tier: root.tier)
-                            let snapshot = try parser.snapshot(file, key: key, previous: previous)
-                            try archive.admit(snapshot, previous: previous)
-                            issues.skipped(source: root.source, lines: snapshot.skippedLines)
-                        }
-                        scanned += 1
+                do { try autoreleasepool {
+                    if root.source == "opencode", !file.path.contains("/message/") { return }
+                    if root.source == "grok", file.lastPathComponent != "updates.jsonl" { return }
+                    if root.source == "droid", !file.lastPathComponent.hasSuffix(".settings.json") {
+                        return
                     }
-                } catch {
+                    if root.source == "codebuff", file.lastPathComponent != "chat-messages.json" {
+                        return
+                    }
+                    if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { return }
+                    let key = try archive.journalKey(source: root.source, file: file, home: home)
+                    guard seen.insert(key).inserted else { return }
+                    let previous = try archive.known(key)
+                    var status = stat()
+                    guard lstat(file.path, &status) == 0 else { return }
+                    let modified =
+                        Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec)
+                        / 1e9
+                    if let previous, previous.size == Int(status.st_size),
+                        previous.modified == modified
+                    {
+                        return
+                    }
+                    if file.pathExtension.lowercased() == "json" {
+                        let data = try UsageNativeFileIO.read(file)
+                        guard let object = try? JSONSerialization.jsonObject(with: data) else {
+                            return
+                        }
+                        let parser = UsageNativeParser(source: root.source)
+                        let records = try parser.document(object, path: file, modified: modified)
+                        let prefix =
+                            previous.map { UsageNativeJSON.hash(Data(data.prefix($0.size))) }
+                            ?? UsageNativeJSON.hash(Data())
+                        try archive.admit(
+                            .init(
+                                path: key, size: data.count, completeBytes: data.count,
+                                modified: modified,
+                                hash: UsageNativeJSON.hash(data), prefixHash: prefix,
+                                records: records),
+                            previous: previous)
+                    } else {
+                        let parser = UsageNativeParser(source: root.source, tier: root.tier)
+                        let snapshot = try parser.snapshot(file, key: key, previous: previous)
+                        try archive.admit(snapshot, previous: previous)
+                        issues.skipped(source: root.source, lines: snapshot.skippedLines)
+                    }
+                    scanned += 1
+                } } catch {
                     guard UsageNativeIssues.isolates(error) else { throw error }
                     issues.failed(source: root.source, item: file.lastPathComponent, error: error)
                 }

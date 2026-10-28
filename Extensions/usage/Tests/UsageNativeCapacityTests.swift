@@ -99,9 +99,7 @@ import Testing
             let totals = try #require(document["totals"] as? [String: Any])
             #expect(totals["tokens"] as? Double == 12)
             #expect(
-                notes.values.contains {
-                    $0.hasPrefix("Codex: skipped 1 source") && $0.contains("broken.jsonl")
-                })
+                notes.values.contains { $0.hasPrefix("Codex: skipped 1 source") && $0.contains("broken.jsonl") })
         }
     }
 
@@ -128,10 +126,7 @@ import Testing
                     }))
             let totals = try #require(document["totals"] as? [String: Any])
             #expect(totals["tokens"] as? Double == 12)
-            #expect(
-                notes.values.contains {
-                    $0.hasPrefix("Claude Code Web refresh is unavailable")
-                })
+            #expect(notes.values.contains { $0.hasPrefix("Claude Code Web refresh is unavailable") })
         }
     }
 
