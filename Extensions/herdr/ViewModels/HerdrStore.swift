@@ -1104,6 +1104,13 @@ final class HerdrStore {
         open(agent, showing: request.view)
     }
 
+    @discardableResult
+    func attachSession(for agent: HerdrAgent) -> HerdrOpenTab {
+        if let existing = session(agent.id) { return existing }
+        adoptSession(for: agent, showing: nil)
+        return sessions[sessions.count - 1]
+    }
+
     func open(_ agent: HerdrAgent, showing view: HerdrAgentView?) {
         usage.record(agent)
         revealSpace(containing: agent)
@@ -2637,7 +2644,10 @@ final class HerdrStore {
     var uiLayout: HerdrUILayoutState {
         .init(
             tabs: tabs, selected: selectedTab,
-            views: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.view) }),
+            views: Dictionary(
+                uniqueKeysWithValues: sessions.filter { tab(containing: $0.id) != nil }.map {
+                    ($0.id, $0.view)
+                }),
             arrangements: savedArrangements)
     }
 

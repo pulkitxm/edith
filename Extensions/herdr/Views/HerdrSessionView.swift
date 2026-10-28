@@ -168,7 +168,9 @@ struct HerdrSessionView: View {
                 }
             }
         }
-        .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
+        .task(id: "\(tab.id)|\(ObjectIdentifier(tab.holder).hashValue)|\(mouse.rawValue)|\(launchEnabled)") {
+            await startIfNeeded()
+        }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
         .task(id: filesRequest) { prepareFilesIfNeeded() }
         .task(id: fileLinksRequest) { configureFileLinks() }
