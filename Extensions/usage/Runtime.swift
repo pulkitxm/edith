@@ -61,6 +61,7 @@ final class ExtensionRuntime: NSObject {
                 return try JSONEncoder().encode(reply)
             }
             if command.hasPrefix("usage.cli"), let controller = self.controller {
+                controller.demandIndex()
                 let forget: @MainActor (UUID) async throws -> Void = { id in
                     guard let projection = self.machinesProjection else {
                         throw ExtensionPeerError.unavailable

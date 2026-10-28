@@ -68,9 +68,29 @@ struct UsageAmbientPolicyTests {
         await fixture.controller.shutdown()
     }
 
+    @Test func usageIndexWaitsForFirstDemandWhileLimitsKeepTheirCadence() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.controller.requestPeriodicCollection(now: now)
+        await fixture.drain()
+        #expect(await fixture.counts.snapshot() == [0, 1])
+        try fixture.controller.requestPeriodicCollection(now: now.addingTimeInterval(900))
+        await fixture.drain()
+        #expect(await fixture.counts.snapshot() == [0, 2])
+        fixture.controller.demandIndex()
+        await fixture.drain()
+        #expect(await fixture.counts.snapshot() == [1, 2])
+        fixture.controller.demandIndex()
+        await fixture.drain()
+        #expect(await fixture.counts.snapshot() == [1, 2])
+        await fixture.controller.shutdown()
+    }
+
     @Test func defaultAndOffBatteryCadencesRemainNineHundredSeconds() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
+        fixture.controller.demandIndex()
+        await fixture.drain()
         try fixture.controller.requestPeriodicCollection(now: now)
         await fixture.drain()
         #expect(await fixture.counts.snapshot() == [1, 1])
@@ -122,7 +142,7 @@ struct UsageAmbientPolicyTests {
             try Task.checkCancellation()
             return try usageDocument()
         }
-        try controller.requestPeriodicCollection(now: now)
+        _ = try controller.requestRefresh()
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !(await gate.started) {
             try #require(ContinuousClock.now < deadline)
@@ -156,7 +176,7 @@ struct UsageAmbientPolicyTests {
             await Task.yield()
         }
         await fixture.drain()
-        #expect(await fixture.counts.snapshot() == [1, 1])
+        #expect(await fixture.counts.snapshot() == [0, 1])
         #expect(await sleep.duration == .seconds(900))
         await fixture.controller.shutdown()
         #expect(await sleep.cancelled)

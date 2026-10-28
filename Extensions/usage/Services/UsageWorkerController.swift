@@ -43,6 +43,7 @@ public final class UsageWorkerController {
     private var limitsWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var usageID: UUID?
     private var stopped = false
+    private var indexDemanded = false
 
     public init(
         dataDirectory: URL = Repo.dataDir,
@@ -84,6 +85,7 @@ public final class UsageWorkerController {
     @discardableResult
     public func requestRefresh(policy: UsageMachineRefreshPolicy = .due) throws -> String {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        indexDemanded = true
         if let usageID { return usageID.uuidString }
         let id = UUID()
         usageID = id
@@ -254,6 +256,7 @@ public final class UsageWorkerController {
                 now.timeIntervalSince(periodicAdmissions[job] ?? .distantPast) >= interval
             else { continue }
             if job == "usage.refresh" {
+                guard indexDemanded else { continue }
                 _ = try requestRefresh()
             } else {
                 try requestLimitsRefresh()
@@ -264,11 +267,20 @@ public final class UsageWorkerController {
 
     func nextPeriodicDelay(now: Date) -> TimeInterval? {
         guard !stopped else { return nil }
-        return ["usage.refresh", "usage.limits"].compactMap { job in
-            cadence(for: job).map { interval in
-                max(0, interval - now.timeIntervalSince(periodicAdmissions[job] ?? now))
-            }
-        }.min()
+        var delays: [TimeInterval] = []
+        for job in ["usage.refresh", "usage.limits"] {
+            if job == "usage.refresh", !indexDemanded { continue }
+            guard let interval = cadence(for: job) else { continue }
+            delays.append(max(0, interval - now.timeIntervalSince(periodicAdmissions[job] ?? now)))
+        }
+        return delays.min()
+    }
+
+    func demandIndex() {
+        guard !stopped, !indexDemanded, allowsBackgroundCollection() else { return }
+        _ = try? requestRefresh()
+        periodicAdmissions["usage.refresh"] = clock()
+        backgroundContinuation?.yield()
     }
 
     public func startBackgroundCollection() {

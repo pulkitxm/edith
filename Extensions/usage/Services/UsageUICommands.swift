@@ -80,6 +80,7 @@ struct UsageUILimits: Codable, Sendable {
         switch command {
         case "usage.ui.document":
             try empty(object)
+            controller.demandIndex()
             let directory = directory
             let read = Task.detached(priority: .utility) {
                 try UsageDataFiles.readRegularFile(
@@ -98,6 +99,7 @@ struct UsageUILimits: Codable, Sendable {
             return try receipt(data)
         case "usage.ui.homeUsage":
             try empty(object)
+            controller.demandIndex()
             guard let cached = await homeUsage.load(), cached.hasDays else {
                 throw ExtensionPeerError.unavailable
             }
@@ -168,6 +170,7 @@ struct UsageUILimits: Codable, Sendable {
                     !$0.isEmpty && $0.utf8.count <= 2_048 && !$0.utf8.contains(0)
                 }) ?? true
             else { throw ExtensionPeerError.invalidRequest }
+            controller.demandIndex()
             let store = SurfaceUsageStore(url: directory.appendingPathComponent("usage.json"))
             let snapshot = try await store.snapshot(tile: tile)
             try Task.checkCancellation()

@@ -67,6 +67,7 @@ final class UsageSurface {
             return .init(providerID: "usage", message: "Hidden while presenting.")
         }
         if tile.widget == .limits { return try await limitsSnapshot(tile) }
+        controller.demandIndex()
         let value: SurfaceUsageSnapshot
         do { value = try await store.snapshot(tile: tile) } catch {
             try Task.checkCancellation()
