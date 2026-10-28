@@ -66,6 +66,27 @@ struct UsageWorkerControllerTests {
         #expect(throws: (any Error).self) { try controller.requestRefresh() }
     }
 
+    @Test func suspendingReturnsWhileACollectionIgnoresCancellation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let release = UsageBlockedCollection()
+        let controller = UsageWorkerController(dataDirectory: root) { _, _ in
+            await release.wait()
+            return try emptyDocument()
+        }
+        _ = try controller.requestRefresh()
+        try await Task.sleep(for: .milliseconds(50))
+        let finished = UsageBlockedCollection()
+        Task {
+            await controller.suspendAndWait()
+            await finished.open()
+        }
+        let outcome = await finished.wait(within: .seconds(10))
+        await release.open()
+        #expect(outcome)
+        await controller.shutdown()
+    }
+
     @Test func malformedCollectionPreservesExistingHistory() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -138,5 +159,29 @@ struct UsageBackgroundShutdownTests {
         }
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(fired == ["kept"])
+    }
+}
+
+actor UsageBlockedCollection {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        opened = true
+        let pending = waiters
+        waiters = []
+        for waiter in pending { waiter.resume() }
+    }
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func wait(within limit: Duration) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: limit)
+        while !opened, clock.now < deadline { try? await Task.sleep(for: .milliseconds(25)) }
+        return opened
     }
 }
