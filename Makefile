@@ -213,10 +213,12 @@ host:
 	bun scripts/build-minimal-host.mjs
 
 extension-dev:
+	bun scripts/prepare-extension-native.mjs $(EXTENSION)
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
 extension-sideload:
 	@test -n "$(EXTENSION)" || { echo "usage: make extension-sideload EXTENSION=<id>" >&2; exit 2; }
+	bun scripts/prepare-extension-native.mjs $(EXTENSION)
 	EXTENSION_VERSION="$$(bun -e 'const m=require("./Extensions/manifest.json").find(e=>e.id===process.argv[1]); if(!m) process.exit(2); console.log(m.version.split(".").slice(0,2).join("."))' $(EXTENSION)).$$(date +%s)" \
 		bun scripts/build-extension-package.mjs $(EXTENSION) --development
 	dist/Edith.app/Contents/MacOS/ed extensions sideload dist/extensions/$(EXTENSION).zip
