@@ -85,7 +85,31 @@ import Testing
         await remote.refresh()
         #expect(!remote.loading.isRunning)
     }
+    @Test func followingPresentationWaitsForChangesInsteadOfPolling() async throws {
+        let suite = "synthetic.system.follow." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let owner = RunningAppsModel(defaults: defaults)
+        let presentation = SystemPresentationState(channel: nil)
+        let bridge = Bridge(owner: owner, presentation: presentation, defaults: defaults)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let remotePresentation = SystemPresentationState(channel: nil)
+        let remote = RunningAppsModel(
+            engineClient: client, presentation: remotePresentation, defaults: defaults)
+        let following = Task { await remote.followPresentation() }
+        try await Task.sleep(for: .milliseconds(1200))
+        #expect(bridge.presentationCalls <= 2)
+        presentation.apply(hideApps: true)
+        for _ in 0..<500 {
+            if remotePresentation.hideApps { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(remotePresentation.hideApps)
+        following.cancel()
+        remote.shutdown(); client.invalidate(); owner.shutdown(); presentation.shutdown()
+    }
     @MainActor private final class Bridge: NSObject {
+        var presentationCalls = 0
         let owner: RunningAppsModel; let presentation: SystemPresentationState;
         let defaults: UserDefaults
         let registry = ExtensionCommandRegistry()
@@ -112,6 +136,13 @@ import Testing
                     if operation == "system.apps.snapshot" {
                         await owner.refresh();
                         return try JSONEncoder().encode(owner.snapshot(presentation: presentation))
+                    }
+                    if operation == "system.presentation" {
+                        presentationCalls += 1
+                        let wait = try JSONDecoder().decode(SystemPresentationWait.self, from: payload)
+                        let hideApps = await presentation.waitForChange(
+                            from: wait.hideApps, timeout: .seconds(10))
+                        return try JSONEncoder().encode(SystemPresentationReply(hideApps: hideApps))
                     }
                     guard operation == "system.apps.sort" else {
                         throw ExtensionPeerError.invalidRequest

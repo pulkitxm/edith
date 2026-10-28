@@ -66,11 +66,13 @@ final class ExtensionRuntime: NSObject {
                 await model.refresh()
                 return try JSONEncoder().encode(model.snapshot(presentation: presentation))
             case "system.presentation":
-                guard payload == Data("{}".utf8), let presentation = self.presentation else {
+                let wait = try JSONDecoder().decode(SystemPresentationWait.self, from: payload)
+                guard let presentation = self.presentation else {
                     throw ExtensionPeerError.invalidRequest
                 }
-                return try JSONEncoder().encode(
-                    SystemPresentationReply(hideApps: presentation.hideApps))
+                let hideApps = await presentation.waitForChange(
+                    from: wait.hideApps, timeout: .seconds(10))
+                return try JSONEncoder().encode(SystemPresentationReply(hideApps: hideApps))
             case "system.apps.sort":
                 let sort = try JSONDecoder().decode(SystemAppsSort.self, from: payload)
                 guard let key = AppSortKey(rawValue: sort.sortKey) else {
