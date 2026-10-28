@@ -172,6 +172,7 @@ public final class HostMarketplace {
             let result = try await catalogClient.refresh()
             offline = result.offline
             apply(result.catalog)
+            if let message = result.fallback?.message { error = message }
             return result
         }
         catalogFetch = fetch
@@ -287,7 +288,7 @@ public final class HostMarketplace {
         let refresh = Task { @MainActor in
             do {
                 let result = try await fetchCatalog()
-                if !result.offline {
+                if result.fallback == nil {
                     preferences.set(now, forKey: Self.lastCatalogRefreshKey)
                     preferences.set(
                         HostContract.compatibility, forKey: Self.lastCatalogCompatibilityKey)
@@ -295,7 +296,9 @@ public final class HostMarketplace {
             } catch {
                 if self.error == nil {
                     self.error =
-                        "Extension downloads are unavailable. Check your connection and try again."
+                        (error as? MarketplaceError) == .rateLimited
+                        ? MarketplaceError.rateLimited.errorDescription
+                        : "Extension downloads are unavailable. Check your connection and try again."
                 }
             }
         }
@@ -363,6 +366,8 @@ public final class HostMarketplace {
         } catch MarketplaceError.packageCleanupPending {
             try? reloadInstalled()
             return fail(id, "The extension was downloaded. Package files are awaiting cleanup.")
+        } catch MarketplaceError.rateLimited {
+            return fail(id, MarketplaceError.rateLimited.errorDescription ?? "")
         } catch {
             return fail(id, "The extension could not be downloaded. Try again.")
         }

@@ -92,6 +92,12 @@ public actor ExtensionPackageInstaller {
             store: store,
             download: { url, expectedBytes in
                 let (file, response) = try await URLSession.shared.download(from: url)
+                if let http = response as? HTTPURLResponse,
+                    http.statusCode == 403 || http.statusCode == 429
+                {
+                    try? FileManager.default.removeItem(at: file)
+                    throw MarketplaceError.rateLimited
+                }
                 guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                     (try file.resourceValues(forKeys: [.fileSizeKey]).fileSize)
                         == Int(expectedBytes)
