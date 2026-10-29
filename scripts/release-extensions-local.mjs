@@ -160,8 +160,10 @@ function compareVersions(left, right) {
 
 if (!process.env.EXTENSION_CATALOG_PRIVATE_KEY)
   throw new Error("EXTENSION_CATALOG_PRIVATE_KEY is required (see AGENTS.md)");
-if (!process.env.EDITH_SIGN_IDENTITY)
-  throw new Error("EDITH_SIGN_IDENTITY is required (see AGENTS.md)");
+if (!process.env.EDITH_SIGN_IDENTITY?.startsWith("Developer ID Application: "))
+  throw new Error("A Developer ID Application signing identity is required");
+for (const key of ["NOTARY_KEY_ID", "NOTARY_ISSUER_ID", "NOTARY_KEY"])
+  if (!process.env[key]) throw new Error(`${key} is required`);
 run("swift", ["scripts/extension-catalog-sign.swift", "check-key", publicKey]);
 await mkdir(work, { recursive: true });
 const target = run("git", ["rev-parse", "HEAD"]).trim();
@@ -235,6 +237,17 @@ const built = await pool(plan.include, jobs, async (entry) => {
     throw new Error(`${entry.id} built ${result.tag}, planned ${entry.tag}`);
   process.stdout.write(`    built ${entry.id} ${entry.version}\n`);
   return result;
+});
+
+step("notarizing the downloaded packages");
+await pool(built, jobs, async (result) => {
+  run(
+    "./scripts/notarize.sh",
+    [resolve("dist/extensions", `${result.id}.zip`)],
+    {
+      stdio: ["ignore", "inherit", "inherit"],
+    },
+  );
 });
 
 step("publishing package releases");

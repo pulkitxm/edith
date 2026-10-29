@@ -32,7 +32,8 @@ def sample_group(processes):
     if sys.platform != "darwin":
         return
     for pid, command in processes:
-        if "swiftpm-testing-helper" not in command:
+        name = pathlib.Path(command).name
+        if name not in ("swiftpm-testing", "swiftpm-testing-helper") and not name.endswith("PackageTests"):
             continue
         print(f"Capturing stalled test process {pid}", flush=True)
         try:

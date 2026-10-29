@@ -87,6 +87,37 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func retryingAnExtensionThatCannotStartMovesItToTheCatalogUpdate() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let old = fixture.package("1.0.0")
+        try fixture.install([old])
+        let sideload = try fixture.build("1.1.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [sideload.package]))
+        let marketplace = try fixture.marketplace(
+            workerMode: { $0.version == old.version ? "reject-start-with-reason" : "normal" },
+            serving: [sideload.package.downloadURL: sideload.archive])
+        await marketplace.checkForUpdates()
+        #expect(marketplace.updateAvailable(id: "sample"))
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(marketplace.installed["sample"] == sideload.package)
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.sessions.versions["sample"] == "1.1.0")
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func aFailedStartWithoutAnUpdateReportsTheRealReason() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "reject-start-with-reason" })
+        let failure = await marketplace.enable(id: "sample")
+        #expect(failure == "Screen Recording permission is required.")
+        #expect(marketplace.failures["sample"] == failure)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func downloadsOfDifferentExtensionsRunTogetherWithTheirOwnStateAndOneCatalogFetch()
         async throws
     {

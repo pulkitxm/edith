@@ -39,6 +39,65 @@ import Testing
         #expect(try await store.load() == state)
     }
 
+    private func holdStorageLock(_ directory: URL, mode: Int32) throws -> Int32 {
+        let descriptor = open(directory.appendingPathComponent(".lock").path, O_RDWR | O_CLOEXEC)
+        try #require(descriptor >= 0)
+        try #require(flock(descriptor, mode | LOCK_NB) == 0)
+        return descriptor
+    }
+
+    @Test func concurrentLoadsShareTheStorageLock() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let account = ClaudeAccount(name: "Synthetic shared", credential: "synthetic-token")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await ClaudeAccountStorage(directory: directory).save(state, expected: .init())
+        let reader = try holdStorageLock(directory, mode: LOCK_SH)
+        defer { close(reader) }
+        let clock = ContinuousClock()
+        let start = clock.now
+        let loaded = try await withThrowingTaskGroup(of: ClaudeAccountsState.self) { group in
+            for _ in 0..<3 {
+                group.addTask { try await ClaudeAccountStorage(directory: directory).load() }
+            }
+            return try await group.reduce(into: []) { $0.append($1) }
+        }
+        #expect(loaded == [state, state, state])
+        #expect(clock.now - start < .milliseconds(500))
+    }
+
+    @Test func storageWaitsForABrieflyHeldLock() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        #expect(try await store.load() == .init())
+        let writer = try holdStorageLock(directory, mode: LOCK_EX)
+        let release = Task {
+            try await Task.sleep(for: .milliseconds(150))
+            flock(writer, LOCK_UN)
+            close(writer)
+        }
+        let account = ClaudeAccount(name: "Synthetic waiting", credential: "synthetic-token")
+        let state = ClaudeAccountsState(accounts: [account], defaultID: account.id)
+        try await store.save(state, expected: .init())
+        try await release.value
+        #expect(try await store.load() == state)
+    }
+
+    @Test func storageRejectsALockHeldPastTheWait() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("Accounts", isDirectory: true)
+        let store = ClaudeAccountStorage(directory: directory)
+        #expect(try await store.load() == .init())
+        let writer = try holdStorageLock(directory, mode: LOCK_EX)
+        defer { close(writer) }
+        let error = await #expect(throws: ClaudeAccountError.self) { _ = try await store.load() }
+        #expect(error?.errorDescription == "Account storage is busy. Try again.")
+    }
+
     @Test func symlinkAncestorIsRejectedBeforeRootCreation() async throws {
         let root = try fixture()
         defer { try? FileManager.default.removeItem(at: root) }

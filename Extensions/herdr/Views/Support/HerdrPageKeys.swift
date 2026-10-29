@@ -105,7 +105,7 @@ final class HerdrPageKeyMonitor {
             [weak self, weak store] event in
             let handled = MainActor.assumeIsolated {
                 guard let self, self.active, let store else { return false }
-                return handle(store, event, NSApp.keyWindow)
+                return handle(store, event, event.window ?? NSApp.keyWindow)
             }
             return handled ? nil : event
         }
