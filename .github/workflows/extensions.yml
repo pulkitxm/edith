@@ -331,7 +331,7 @@ jobs:
           python3 - <<'PY'
           import glob, json
           merged = {}
-          for path in sorted(glob.glob("local/notary/*/submissions.json")):
+          for path in sorted(glob.glob("local/notary/**/submissions.json", recursive=True)):
               merged.update(json.load(open(path)))
           assert merged, "no notarization submissions were downloaded"
           json.dump(merged, open("local/notary/all.json", "w"))
