@@ -400,6 +400,7 @@ jobs:
       SOURCE_SHA: ${{ github.sha }}
       WORKFLOW_REF: ${{ github.ref }}
       HAS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
+      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
       HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY != '' }}
       HAS_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
       HAS_TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN != '' }}
@@ -430,6 +431,8 @@ jobs:
           fi
           test "$HAS_SIGNING" = true \
             || { echo "release blocked: MACOS_CERT_P12 is required" >&2; exit 1; }
+          test "$HAS_NOTARY" = true \
+            || { echo "release blocked: NOTARY_KEY_ID, NOTARY_ISSUER_ID and NOTARY_KEY are required" >&2; exit 1; }
           test "$HAS_SPARKLE_KEY" = true \
             || { echo "release blocked: SPARKLE_PRIVATE_KEY is required" >&2; exit 1; }
           test "$HAS_PUSH_TOKEN" = true \
@@ -448,11 +451,10 @@ jobs:
     name: Build DMG
     needs: version
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
     outputs:
       superseded: ${{ steps.release_build.outputs.superseded }}
     env:
-      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
       REBUILD: ${{ inputs.rebuild }}
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
@@ -484,6 +486,11 @@ jobs:
           echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" \
             -T /usr/bin/codesign
+          intermediate="$(find /Applications/Xcode*.app -iname DeveloperIDCA-G2.cer -print -quit)"
+          test -n "$intermediate"
+          security import "$intermediate" -k "$KEYCHAIN" -T /usr/bin/codesign
+          security find-identity -v -p codesigning "$KEYCHAIN" | grep -q '"Developer ID Application:' \
+            || { echo "release blocked: MACOS_CERT_P12 must contain a Developer ID Application identity" >&2; exit 1; }
           security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$KEYCHAIN"
           KEYCHAINS=("$KEYCHAIN")
           while IFS= read -r keychain; do
@@ -494,8 +501,6 @@ jobs:
 
       - name: Build the app
         id: release_build
-        env:
-          EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
         run: |
           BUILD_STATUS=0
           SUPERSEDED_FILE="$RUNNER_TEMP/release-build-superseded"
@@ -522,22 +527,18 @@ jobs:
 
       - name: Package the DMG
         if: steps.release_build.outputs.superseded != 'true'
-        run: python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
+        run: |
+          python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
+          codesign --force --sign "Developer ID Application" --timestamp Edith.dmg
 
       - name: Notarize and staple
-        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
+        if: steps.release_build.outputs.superseded != 'true'
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
           NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
         run: |
-          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
-          xcrun notarytool submit Edith.dmg --wait \
-            --key "$RUNNER_TEMP/notary-key.p8" \
-            --key-id "$NOTARY_KEY_ID" \
-            --issuer "$NOTARY_ISSUER_ID"
-          xcrun stapler staple Edith.dmg
-          rm -f "$RUNNER_TEMP/notary-key.p8"
+          ./scripts/notarize.sh Edith.dmg
 
       - name: Generate the signed appcast
         if: steps.release_build.outputs.superseded != 'true'
@@ -566,20 +567,20 @@ jobs:
         run: codesign --verify --deep --strict dist/Edith.app
 
       - name: Verify notarized disk image
-        if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
-        run: spctl -a -t open --context context:primary-signature Edith.dmg
+        if: steps.release_build.outputs.superseded != 'true'
+        run: |
+          spctl --assess --type open --context context:primary-signature -vv Edith.dmg
+          spctl --assess --type execute -vv dist/Edith.app
 
       - name: Record the source-bound static host release proof
         if: steps.release_build.outputs.superseded != 'true'
         run: |
           set -euo pipefail
-          notary=skipped
-          if [ "$HAS_NOTARY" = true ]; then notary=verified; fi
           python3 -B scripts/test-host-release-source-cleanliness.py
           python3 scripts/test-host-release-proof.py
           python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg dist/appcast/appcast.xml local/host-release-proof \
             --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
-            --notarization "$notary"
+            --notarization verified
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: steps.release_build.outputs.superseded != 'true'

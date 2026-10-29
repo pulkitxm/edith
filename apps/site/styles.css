@@ -5035,16 +5035,6 @@ button.action {
   line-height: 1.6;
 }
 
-.faq details video {
-  margin-top: 1.25rem;
-  display: block;
-  height: auto;
-  width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid var(--color-line-2);
-  background: #000;
-}
-
 .download {
   border-top: 1px solid var(--color-line);
   padding: 6rem 1.5rem 7rem;

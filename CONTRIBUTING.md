@@ -167,7 +167,7 @@ form instead.
 
 Merging application changes into `main` publishes a new patch version through the
 CI workflow. Its `version` and `dmg` jobs prepare the signed DMG alongside the
-routed checks, notarize it when Apple credentials are available, and generate the
+routed checks, notarize and staple it, verify Gatekeeper accepts it, and generate the
 signed Sparkle appcast. The `publish` job waits for the required checks to pass
 and the DMG build to succeed without being superseded before publishing both
 assets to one GitHub Release. All jobs appear in the same CI run on the commit.
@@ -187,7 +187,7 @@ same publication gate. Choose either `release` or `rebuild`, not both.
 | Secret | Why |
 | --- | --- |
 | `SPARKLE_PRIVATE_KEY` | Signs the appcast. Without it the workflow refuses to publish. |
-| `MACOS_CERT_P12` | Base64 of the exported signing certificate and private key. |
+| `MACOS_CERT_P12` | Base64 of the Developer ID Application certificate and private key. |
 | `MACOS_CERT_PASSWORD` | The password on that `.p12`. |
 | `RELEASE_PUSH_TOKEN` | Pushes the release commit and tag to a protected `main`. |
 | `TAP_PUSH_TOKEN` | Pushes the updated cask to `pulkitxm/homebrew-tap`. |
@@ -206,16 +206,22 @@ failing at the push.
 `pulkitxm/homebrew-tap`, and is documented in
 [docs/homebrew-internals.md](docs/homebrew-internals.md).
 
-### Optional notarization secrets
+### Required notarization secrets
 
-The workflow notarizes and staples the DMG when all three Apple credentials are
-configured. A signed DMG is still published when they are absent.
+Host and extension releases require all three credentials. Releases stop when
+credentials are absent, Apple rejects a submission, or Gatekeeper rejects the DMG.
+Use a team API key with the Developer role for notarization.
 
 | Secret | Why |
 | --- | --- |
 | `NOTARY_KEY_ID` | Identifies the App Store Connect API key used for notarization. |
 | `NOTARY_ISSUER_ID` | Identifies the App Store Connect API key issuer. |
 | `NOTARY_KEY` | Contains the App Store Connect API private key. |
+
+Local releases read the same credentials from `.env`. Store the certificate as
+`MACOS_CERT_P12_BASE64` locally and `MACOS_CERT_P12` in GitHub Actions. Preserve
+previous signing values as comments in the local `.env`, keep that file private,
+and remove the active `EDITH_RELEASE_ALLOW_DEV_SIGNING` setting when migrating.
 
 `SPARKLE_PRIVATE_KEY` is the EdDSA key `generate_keys -x` exports, the private
 half of `SUPublicEDKey` in `Info.plist`:
@@ -238,9 +244,10 @@ gh secret set MACOS_CERT_P12 < <(base64 -i cert.p12)
 printf %s "<pick-a-password>" | gh secret set MACOS_CERT_PASSWORD
 ```
 
-A Developer ID Application certificate is preferred for public distribution.
-The workflow also accepts the configured Apple Development certificate so the
-signed release flow remains available, but Gatekeeper can warn on other Macs.
+Public releases require a Developer ID Application certificate from the paid
+team. The DMG is signed and notarized before generating its Sparkle appcast.
+Downloaded extension packages are also notarized before publication. Keep the
+Sparkle and extension catalog keys unchanged when rotating Apple credentials.
 
 The DMG is published as `Edith.dmg` rather than a versioned name so
 `releases/latest/download/Edith.dmg` always resolves to the newest build, which
@@ -263,15 +270,11 @@ identifier "com.pulkit.edith" and anchor apple generic
   and certificate leaf[subject.OU] = "<team id>"
 ```
 
-Every certificate the team owns satisfies that, so grants survive renewals and
-the move to Developer ID. macOS records the requirement at the moment a
-permission is granted, so reset once after installing a build made with this
-change:
-
-```bash
-tccutil reset All com.pulkit.edith
-tccutil reset All com.pulkit.edith.helper.v2
-```
+Certificate renewals within the same team preserve that requirement. Moving
+from the old team to `PUWDA36B2R` changes the requirement, so users may need to
+grant macOS permissions again once. Developer ID signing and notarization let
+Gatekeeper verify the distributed app; screen recording, microphone, camera,
+and other privacy permissions still require the user's consent.
 
 ## Website
 

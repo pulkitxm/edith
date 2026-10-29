@@ -104,14 +104,6 @@
             "uploadDate": "2026-07-16"
           },
           {
-            "@type": "VideoObject",
-            "name": "Installing Edith past the macOS privacy warning",
-            "description": "A walkthrough of installing Edith on macOS, including approving the app in System Settings under Privacy & Security.",
-            "contentUrl": "https://edith.pulkit.page/install-guide.mp4",
-            "thumbnailUrl": "https://edith.pulkit.page/install-guide-poster.jpg",
-            "uploadDate": "2026-07-19"
-          },
-          {
             "@type": "FAQPage",
             "mainEntity": [
               {
@@ -124,10 +116,10 @@
               },
               {
                 "@type": "Question",
-                "name": "Why might macOS show a privacy and security warning?",
+                "name": "How does macOS verify Edith downloads?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "The release workflow always signs Edith and notarizes it when the Apple notarization credentials are configured. If Gatekeeper blocks a build that was published without notarization, verify that it came from the official GitHub release, then use Open Anyway in System Settings under Privacy & Security."
+                  "text": "New releases require Developer ID signing, Apple notarization, and Gatekeeper verification before publication. macOS may still ask you to confirm the first launch and grant permissions such as screen recording or microphone access. Always download Edith from the official GitHub release."
                 }
               },
               {
@@ -1130,26 +1122,15 @@
           </details>
           <details>
             <summary>
-              Why might macOS show a privacy and security warning?
+              How does macOS verify Edith downloads?
               <span aria-hidden="true">+</span>
             </summary>
             <p>
-              The release workflow always signs Edith and notarizes it when the Apple notarization
-              credentials are configured. If Gatekeeper blocks a build published without
-              notarization, verify that it came from the official GitHub release, then use Open
-              Anyway in System Settings under Privacy &amp; Security. The video below shows the
-              relevant control.
+              New releases require Developer ID signing, Apple notarization, and Gatekeeper
+              verification before publication. macOS may still ask you to confirm the first launch
+              and grant permissions such as screen recording or microphone access. Always download
+              Edith from the official GitHub release.
             </p>
-            <video
-              controls
-              playsinline
-              preload="none"
-              src="/install-guide.mp4"
-              poster="/install-guide-poster.jpg"
-              width="1728"
-              height="1118"
-              aria-label="Installing Edith past the macOS privacy warning"
-            ></video>
           </details>
           <details>
             <summary>

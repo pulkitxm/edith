@@ -1012,31 +1012,33 @@ private func decodedMachinePowerShell(_ command: String) -> String? {
     }
 
     @Test func keepsPreferredBackendsAheadOfFallbacks() throws {
-        let status = MachineControlCenterCommands.statusCommand
-        let wpctl = try #require(status.range(of: "command -v wpctl"))
-        let pactl = try #require(status.range(of: "command -v pactl"))
-        let amixer = try #require(status.range(of: "command -v amixer"))
-        let nmcli = try #require(status.range(of: "command -v nmcli"))
-        let wifiRfkill = try #require(
-            status.range(of: "command -v rfkill", range: nmcli.upperBound..<status.endIndex))
-        let bluetoothStart = try #require(status.range(of: "bluetooth_done=0"))
-        let bluetoothctl = try #require(
-            status.range(
-                of: "command -v bluetoothctl",
-                range: bluetoothStart.upperBound..<status.endIndex))
-        let bluetoothRfkill = try #require(
-            status.range(
-                of: "command -v rfkill", range: bluetoothctl.upperBound..<status.endIndex))
+        let bytes = Array(MachineControlCenterCommands.statusCommand.utf8)
+        func backendRange(_ command: String, after start: Int = 0) throws -> Range<Int> {
+            let match = bytes[start...].firstRange(of: Array(command.utf8))
+            return try #require(match)
+        }
+        let wpctl = try backendRange("command -v wpctl")
+        let pactl = try backendRange("command -v pactl")
+        let amixer = try backendRange("command -v amixer")
+        let nmcli = try backendRange("command -v nmcli")
+        let wifiRfkill = try backendRange("command -v rfkill", after: nmcli.upperBound)
+        let bluetoothStart = try backendRange("bluetooth_done=0")
+        let bluetoothctl = try backendRange(
+            "command -v bluetoothctl", after: bluetoothStart.upperBound)
+        let bluetoothRfkill = try backendRange(
+            "command -v rfkill", after: bluetoothctl.upperBound)
 
         #expect(wpctl.lowerBound < pactl.lowerBound)
         #expect(pactl.lowerBound < amixer.lowerBound)
         #expect(nmcli.lowerBound < wifiRfkill.lowerBound)
         #expect(bluetoothctl.lowerBound < bluetoothRfkill.lowerBound)
-        #expect(status.contains("brightnessctl -c backlight"))
-        #expect(status.contains("/sys/class/power_supply/*"))
-        #expect(status.contains("/sys/class/backlight/*"))
-        #expect(status.contains("brightnessctl -d \"$keyboard_name\""))
-        #expect(status.contains("/sys/class/leds/*"))
+        for command in [
+            "brightnessctl -c backlight", "/sys/class/power_supply/*", "/sys/class/backlight/*",
+            "brightnessctl -d \"$keyboard_name\"", "/sys/class/leds/*",
+        ] {
+            let containsCommand = bytes.firstRange(of: Array(command.utf8)) != nil
+            #expect(containsCommand, "Missing \(command)")
+        }
     }
 
     @Test func includesSupportedPlatformToolsAndDesktopEnvironmentDefaults() {
