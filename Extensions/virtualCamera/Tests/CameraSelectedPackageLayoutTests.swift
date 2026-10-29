@@ -15,7 +15,7 @@ import Testing
             roleSuffix: String =
                 "app.bundle",
             manifestVersion: String = "1.0.0", carrierChanges: [String: String] = [:],
-            privilegedVersion: String = "1.0.0"
+            privilegedVersion: String = "1.0.0", hostABI: String = "edith-host-6"
         ) throws {
             host = hostIdentifier
             root = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -31,11 +31,11 @@ import Testing
                 [
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.app",
                     "CFBundleExecutable": "Runtime", "CFBundleShortVersionString": "1.0.0",
-                    "EdithHostABI": "edith-host-5",
+                    "EdithHostABI": hostABI,
                 ])
             var carrierInfo = [
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
-                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "edith-host-5",
+                "CFBundleShortVersionString": "1.0.0", "EdithHostABI": hostABI,
                 "EdithHostIdentifier": host, "EdithContainedExtensionID": "virtualCamera",
                 "EdithContainedRole": "cameraCarrier",
             ]
@@ -47,10 +47,10 @@ import Testing
                     "CFBundleIdentifier": "com.pulkit.edith.extensions.virtualCamera.privileged",
                     "CFBundleExecutable": "Runtime",
                     "CFBundleShortVersionString": privilegedVersion,
-                    "EdithHostABI": "edith-host-5",
+                    "EdithHostABI": hostABI,
                 ])
             try JSONSerialization.data(withJSONObject: [
-                "id": "virtualCamera", "version": manifestVersion, "hostABI": "edith-host-5",
+                "id": "virtualCamera", "version": manifestVersion, "hostABI": hostABI,
                 "architecture": "arm64", "dependencies": [],
             ]).write(to: role.deletingLastPathComponent().appendingPathComponent("package.json"))
         }
@@ -96,6 +96,17 @@ import Testing
             defer { fixture.remove() }
             #expect(throws: (any Error).self) { try fixture.resolve() }
         }
+    }
+
+    @Test func packagesResolveForWhicheverHostABITheirPartsShare() throws {
+        for hostABI in ["edith-host-6", "edith-host-7"] {
+            let fixture = try Fixture(hostABI: hostABI)
+            defer { fixture.remove() }
+            #expect(try fixture.resolve().carrier.path == fixture.carrier.path)
+        }
+        let unprefixed = try Fixture(hostABI: "host-6")
+        defer { unprefixed.remove() }
+        #expect(throws: (any Error).self) { try unprefixed.resolve() }
     }
 
     @Test func carrierMetadataCannotSelectForeignHostOwnerRoleVersionOrABI() throws {
