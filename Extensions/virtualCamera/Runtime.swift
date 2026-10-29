@@ -222,7 +222,8 @@ struct CameraSelectedPackageLayout {
             roleBundle.bundleIdentifier == "com.pulkit.edith.extensions.virtualCamera.app",
             let version = roleBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String, !version.isEmpty, version.utf8.count <= 80,
-            roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-5"
+            let hostABI = roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String,
+            hostABI.hasPrefix("edith-host-")
         else { throw ExtensionPeerError.invalidRequest }
         guard role.lastPathComponent == "app.bundle",
             role.deletingLastPathComponent().lastPathComponent == "virtualCamera"
@@ -238,7 +239,7 @@ struct CameraSelectedPackageLayout {
                 with: Data(contentsOf: manifestURL)) as? [String: Any],
             manifest["id"] as? String == "virtualCamera",
             manifest["version"] as? String == version,
-            manifest["hostABI"] as? String == "edith-host-5",
+            manifest["hostABI"] as? String == hostABI,
             manifest["architecture"] as? String == "arm64"
         else { throw ExtensionPeerError.invalidRequest }
         let carrier = package.appendingPathComponent("CameraCarrier.app")
@@ -260,14 +261,13 @@ struct CameraSelectedPackageLayout {
                 == "cameraCarrier",
             carrierBundle.object(forInfoDictionaryKey: "EdithHostIdentifier") as? String
                 == hostIdentifier,
-            carrierBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-5",
+            carrierBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI,
             let privilegedBundle = Bundle(url: privileged),
             privilegedBundle.bundleIdentifier
                 == "com.pulkit.edith.extensions.virtualCamera.privileged",
             privilegedBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 == version,
-            privilegedBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
-                == "edith-host-5"
+            privilegedBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI
         else { throw ExtensionPeerError.invalidRequest }
         self.carrier = carrier
         self.privileged = privileged

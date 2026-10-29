@@ -45,7 +45,7 @@ import Testing
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
                 "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "1.0.0",
                 "EdithContainedRole": "cameraCarrier", "EdithContainedExtensionID": "virtualCamera",
-                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-5",
+                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-6",
                 "EdithExecutableProvenance": String(repeating: "a", count: 64),
                 "EdithCameraTransport": obs ? "obs" : "native",
             ])
@@ -55,7 +55,7 @@ import Testing
             try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
                 .write(to: source.appendingPathComponent("Contents/Info.plist"))
         }
-        func installer(hostABI: String = "edith-host-5") throws -> CameraSealedInstallation {
+        func installer(hostABI: String = "edith-host-6") throws -> CameraSealedInstallation {
             try CameraSealedInstallation(
                 configuration: .init(
                     hostIdentifier: host, version: "1.0.0", hostABI: hostABI,
@@ -91,10 +91,10 @@ import Testing
         }
     }
 
-    @Test func currentABIIsAcceptedAndLegacyConfigurationAndCarrierAreRejected() throws {
+    @Test func hostABIIsAcceptedAndMalformedConfigurationAndMismatchedCarrierAreRejected() throws {
         let fixture = try Fixture(obs: true)
         _ = try fixture.installer()
-        #expect(throws: (any Error).self) { try fixture.installer(hostABI: "edith-host-1") }
+        #expect(throws: (any Error).self) { try fixture.installer(hostABI: "host-6") }
         let infoURL = fixture.source.appendingPathComponent("Contents/Info.plist")
         var info = try #require(
             PropertyListSerialization.propertyList(from: Data(contentsOf: infoURL), format: nil)
@@ -141,7 +141,7 @@ import Testing
             JSONSerialization.jsonObject(with: Data(contentsOf: receipt)) as? [String: String])
         #expect(values["originalHostSHA256"] == String(repeating: "a", count: 64))
         #expect(values["executableSHA256"]?.count == 64)
-        #expect(values["hostABI"] == "edith-host-5")
+        #expect(values["hostABI"] == "edith-host-6")
         let reused = try installer.installCarrier(source: fixture.source, providerExited: false)
         #expect(reused.path == installed.path)
         let modes =
