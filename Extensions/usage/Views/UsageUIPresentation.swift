@@ -179,6 +179,7 @@ struct UsageUISceneRoute: Equatable {
 
 private struct UsagePresentationView: View {
     let scene: UsageUIPresentation
+    @Environment(\.windowVisible) private var windowVisible
     var body: some View {
         Group {
             switch scene.route.interior {
@@ -190,6 +191,9 @@ private struct UsagePresentationView: View {
             default:
                 if let tile = scene.route.tile { UsageHomeScene(tile: tile, scene: scene) }
             }
+        }
+        .onChange(of: windowVisible, initial: true) { _, visible in
+            scene.client?.setVisible(visible)
         }
         .environment(\.usageUIClient, scene.client)
         .environment(

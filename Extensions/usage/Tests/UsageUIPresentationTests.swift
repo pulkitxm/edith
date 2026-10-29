@@ -18,6 +18,26 @@ import Vision
         ]
     }
 
+    @Test func hiddenWindowStopsEnginePollingAndVisibleResumesIt() async throws {
+        let calls = UsagePollCounter()
+        let client = UsageUIClient(invoke: { _, _ in
+            calls.record()
+            throw ExtensionPeerError.unavailable
+        })
+        client.start()
+        try await Task.sleep(for: .milliseconds(200))
+        client.setVisible(false)
+        try await Task.sleep(for: .milliseconds(100))
+        let hidden = calls.count
+        #expect(hidden > 0)
+        try await Task.sleep(for: .milliseconds(2600))
+        #expect(calls.count == hidden)
+        client.setVisible(true)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(calls.count > hidden)
+        await client.stopAndWait()
+    }
+
     @Test func originalHomeAndNotchInteriorsRequireExactRoutesAndNormalizedTiles() throws {
         for location in ["home", "notch"] {
             for widget in [SurfaceWidget.usage, .activity, .limits] {
@@ -384,4 +404,11 @@ import Vision
 private actor UsagePresentationCollectionCounter {
     private(set) var value = 0
     func record() { value += 1 }
+}
+
+final class UsagePollCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var total = 0
+    var count: Int { lock.withLock { total } }
+    func record() { lock.withLock { total += 1 } }
 }
