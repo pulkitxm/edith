@@ -41,7 +41,7 @@ public actor ClaudeAccountStorage {
     }
 
     public func load() throws -> ClaudeAccountsState {
-        try withRoot { try readState($0) }
+        try withRoot(lockMode: LOCK_SH) { try readState($0) }
     }
 
     public func save(_ state: ClaudeAccountsState, expected: ClaudeAccountsState? = nil) throws {
@@ -613,9 +613,10 @@ public actor ClaudeAccountStorage {
             JSONEncoder().encode(state), name: "accounts.json", directory: root)
     }
 
-    private func withRoot<T>(checkCancellation: Bool = true, _ operation: (Int32) throws -> T)
-        throws -> T
-    {
+    private func withRoot<T>(
+        checkCancellation: Bool = true, lockMode: Int32 = LOCK_EX,
+        _ operation: (Int32) throws -> T
+    ) throws -> T {
         if checkCancellation { try Task.checkCancellation() }
         let root = try OwnedAccountFiles.root(directory)
         defer { close(root) }
@@ -624,11 +625,21 @@ public actor ClaudeAccountStorage {
         guard lock >= 0 else { throw ClaudeAccountError.invalidRequest }
         defer { close(lock) }
         try OwnedAccountFiles.validate(lock, directory: false, privateMode: 0o600)
-        guard flock(lock, LOCK_EX | LOCK_NB) == 0 else {
-            throw ClaudeAccountError.rejected("Account storage is busy. Try again.")
-        }
+        try acquire(lock, mode: lockMode)
         defer { flock(lock, LOCK_UN) }
         if checkCancellation { try Task.checkCancellation() }
         return try operation(root)
     }
+
+    private func acquire(_ lock: Int32, mode: Int32) throws {
+        for _ in 0..<Self.lockAttempts {
+            if flock(lock, mode | LOCK_NB) == 0 { return }
+            guard errno == EWOULDBLOCK else { break }
+            usleep(Self.lockRetryMicroseconds)
+        }
+        throw ClaudeAccountError.rejected("Account storage is busy. Try again.")
+    }
+
+    private static let lockAttempts = 200
+    private static let lockRetryMicroseconds: useconds_t = 10_000
 }
