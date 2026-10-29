@@ -2974,6 +2974,7 @@
         "Extensions/herdr/Views/Support/HerdrPageKeys.swift",
         "Extensions/herdr/Views/Support/HerdrPeerUI.swift",
         "Extensions/herdr/Views/Support/HerdrShellTerminal.swift",
+        "Extensions/herdr/Views/Support/HerdrTerminalConnection.swift",
         "Extensions/herdr/Views/Support/JevText.swift",
         "Extensions/herdr/Views/Support/LauncherUsage.swift",
         "Extensions/herdr/Views/Support/OwnedTerminalUIPresentation.swift",

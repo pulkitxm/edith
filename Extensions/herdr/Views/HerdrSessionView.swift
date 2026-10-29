@@ -138,8 +138,7 @@ struct HerdrSessionView: View {
     private var appThemeName = AppTheme.accent.rawValue
     private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
     @State private var startedMouse: HerdrTerminalMouse?
-    @State private var connectError: String?
-    @State private var starting = false
+    @State private var connection = HerdrTerminalConnection()
     @State private var dragWidth: CGFloat?
     @State private var handleHovered = false
     @State private var splitTerminalFocus = HerdrTerminalFocus.agent
@@ -168,7 +167,7 @@ struct HerdrSessionView: View {
                 }
             }
         }
-        .task(id: "\(tab.id)|\(ObjectIdentifier(tab.holder).hashValue)|\(mouse.rawValue)|\(launchEnabled)") {
+        .task(id: startRequest) {
             await startIfNeeded()
         }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
@@ -191,6 +190,10 @@ struct HerdrSessionView: View {
                 return store.messaging.draft.flatMap { $0.presenterID == tab.id ? $0 : nil }
             },
             set: { store.messaging.draft = $0 })
+    }
+
+    private var startRequest: String {
+        "\(tab.id)|\(ObjectIdentifier(tab.holder).hashValue)|\(tab.holder.generation)|\(mouse.rawValue)|\(launchEnabled)"
     }
 
     @ViewBuilder
@@ -442,7 +445,8 @@ struct HerdrSessionView: View {
     @ViewBuilder
     private var agentTerminalOverlay: some View {
         switch HerdrAgentTerminalOverlay.make(
-            connectError: connectError, starting: starting, started: tab.holder.started,
+            connectError: connection.error, starting: connection.starting,
+            started: tab.holder.started,
             exitMessage: tab.holder.exitMessage)
         {
         case .none:
@@ -453,10 +457,15 @@ struct HerdrSessionView: View {
                 palette: .edith(dark: dark)
             )
         case .failure(let message):
-            Text(message)
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.warn)
-                .padding(UIScale.pt(16))
+            VStack(spacing: UIScale.pt(10)) {
+                Text(message)
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(DashSkin.warn)
+                Button("Retry") { HerdrWorkOwnership.start { await startIfNeeded() } }
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(!launchEnabled)
+            }
+            .padding(UIScale.pt(16))
         case .ended(let message):
             VStack(spacing: UIScale.pt(10)) {
                 Text(message)
@@ -545,18 +554,12 @@ struct HerdrSessionView: View {
 
     private func startIfNeeded() async {
         guard launchEnabled else { return }
-        if tab.holder.started {
+        if tab.holder.started, tab.holder.isBound {
             guard !agent.isTerminal, let startedMouse, startedMouse != mouse else { return }
             tab.holder.stop()
         }
-        connectError = nil
-        starting = true
-        defer { starting = false }
-        do {
-            try await store.connectTerminal(for: tab)
+        if await connection.run({ try await store.connectTerminal(for: tab) }) {
             startedMouse = mouse
-        } catch {
-            connectError = error.localizedDescription
         }
     }
 }
