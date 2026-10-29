@@ -101,6 +101,7 @@ import WorkerFixtureSupport
         self.hostWindowNavigation = hostWindowNavigation
         self.hostFolderChoice = hostFolderChoice
         let ownedStore = store ?? .shared
+        ownedStore.resumeWork()
         self.defaults = defaults
         self.ambientPolicy =
             ambientPolicy
