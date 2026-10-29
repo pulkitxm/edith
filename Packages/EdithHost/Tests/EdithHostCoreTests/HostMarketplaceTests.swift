@@ -726,6 +726,24 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func cliInstallEnablesAnInstalledButDisabledExtension() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace(workerMode: { _ in "normal" })
+        await marketplace.restoreEnabledExtensions()
+        let gateway = HostCLIGateway(marketplace: marketplace)
+        var info = try await report(marketplace)
+        #expect(info["state"] as? String == "disabled")
+        let reply = try await gateway.execute(HostCLIRequest(action: .install, id: "sample"))
+        info = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        #expect(info["state"] as? String == "active")
+        let again = try await gateway.execute(HostCLIRequest(action: .install, id: "sample"))
+        info = try #require(try JSONSerialization.jsonObject(with: again) as? [String: Any])
+        #expect(info["state"] as? String == "active")
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func cliReportsADownloadedPackageForAnotherHostAsIncompatible() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
