@@ -105,6 +105,13 @@ public final class HostExtensionSessions {
         for restore in restores { await restore.value }
     }
 
+    public func restoreArrived(_ package: ExtensionPackage) async {
+        let id = package.id
+        guard states[id] == .notInstalled, pendingDisableIDs.union(pendingRecoveryIDs).contains(id)
+        else { return }
+        await restore(id: id, package: package)
+    }
+
     private func restore(id: String, package: ExtensionPackage) async {
         if pendingDisableIDs.contains(id) {
             packages[id] = package
