@@ -135,7 +135,17 @@ struct HerdrPage: View {
         .onChange(of: store.selectedTab) { compactRailPresented = false }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
-        .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
+        .background(
+            HerdrWindowReader(
+                onWindow: { store.movePage(from: $0, to: $1) },
+                onKey: { [weak store] event in
+                    guard automaticActions, let store else { return false }
+                    return store.performPageKey(
+                        characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
+                        modifiers: event.modifierFlags, repeats: event.isARepeat,
+                        in: event.window)
+                })
+        )
         .navigationTitle("Herdr")
         .onAppear {
             keyMonitor.active = automaticActions
@@ -1326,20 +1336,29 @@ extension View {
 
 struct HerdrWindowReader: NSViewRepresentable {
     let onWindow: (NSWindow?, NSWindow?) -> Void
+    var onKey: ((NSEvent) -> Bool)?
 
     func makeNSView(context: Context) -> ReaderView {
         let view = ReaderView()
         view.onWindow = onWindow
+        view.onKey = onKey
         return view
     }
 
     func updateNSView(_ view: ReaderView, context: Context) {
         view.onWindow = onWindow
+        view.onKey = onKey
     }
 
     final class ReaderView: NSView {
         var onWindow: ((NSWindow?, NSWindow?) -> Void)?
+        var onKey: ((NSEvent) -> Bool)?
         private weak var current: NSWindow?
+
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if event.type == .keyDown, onKey?(event) == true { return true }
+            return super.performKeyEquivalent(with: event)
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
