@@ -560,6 +560,37 @@ import Testing
         await worker.shutdown()
     }
 
+    @Test func aFreshlyLaunchedAgentOpensItsTerminalBeforeTheNextRefresh() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let defaults = HerdrUIDefaults()
+        let store = HerdrStore(
+            defaults: defaults,
+            newAgentPaneCreator: { _, _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "wA", tabID: "wA:t1", paneID: "wA:p4Y")
+            }, agentStarter: { _, _, _ in },
+            terminalIDResolver: { _, _, _ in "terminal-1" }, machinesProvider: { [] })
+        store.hosts = [
+            .init(
+                id: "local", name: "Synthetic Mac", isLocal: true,
+                herdrPresent: true, reachable: true, agents: [])
+        ]
+        let worker = HerdrWorker(store: store, defaults: defaults, automaticActions: false)
+        _ = try await worker.execute(
+            "herdr.ui.launch",
+            payload: JSONSerialization.data(withJSONObject: [
+                "kind": "Codex", "machineID": "local", "beside": false, "label": "fresh",
+            ]))
+        let placeholder = try #require(store.sessions.first?.agent)
+        do {
+            _ = try await worker.execute(
+                "herdr.terminal.open",
+                payload: JSONSerialization.data(withJSONObject: ["agentID": placeholder.id]))
+        } catch {
+            #expect("\(error)" != "\(ExtensionPeerError.invalidRequest)")
+        }
+        await worker.shutdown()
+    }
+
     @Test func checkedFacadeRejectsUnknownAgentsMalformedLayoutAndDisabledOwner() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()

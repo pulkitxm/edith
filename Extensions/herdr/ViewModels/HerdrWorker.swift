@@ -609,12 +609,15 @@ import WorkerFixtureSupport
 
     func currentAgent(_ id: String) -> HerdrAgent? {
         guard !isStopped, !workSuspended, !id.isEmpty, id.utf8.count <= 512 else { return nil }
-        if let agent = store.agents.first(where: { $0.id == id }) { return agent }
+        if let agent = store.agents.first(where: { $0.id == id }) {
+            store.launchingAgents[id] = nil
+            return agent
+        }
         guard
             let terminal = store.hosts.map({ HerdrMachineTerminal.agent(for: $0) }).first(where: {
                 $0.id == id
             })
-        else { return nil }
+        else { return store.launchingAgent(id) }
         return store.session(id)?.agent ?? store.detachedTab(id: id)?.agent ?? terminal
     }
 
