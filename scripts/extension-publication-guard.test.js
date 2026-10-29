@@ -617,6 +617,7 @@ test("zero-matrix workflow tests the marketplace before trusted draft finalizati
   const needs = {
     plan: { result: "success", outputs: { changed: "false", draft: "true" } },
     build: { result: "skipped" },
+    notarize: { result: "skipped" },
     tests: { result: "success" },
   };
   expect(run(workflow.jobs.tests, needs)).toBe(true);
@@ -654,6 +655,7 @@ test("zero-matrix workflow tests the marketplace before trusted draft finalizati
       ...needs,
       plan: { result: "success", outputs: { changed: "true", draft: "false" } },
       build: { result: "success" },
+      notarize: { result: "success" },
     }),
   ).toBe(true);
 });

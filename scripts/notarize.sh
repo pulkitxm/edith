@@ -6,21 +6,12 @@ artifact="${1:?artifact to notarize is required}"
 : "${NOTARY_ISSUER_ID:?NOTARY_ISSUER_ID is required}"
 : "${NOTARY_KEY:?NOTARY_KEY is required}"
 
-umask 077
+here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-printf '%s\n' "$NOTARY_KEY" > "$work/key.p8"
-credentials=(--key "$work/key.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
 
-xcrun notarytool submit "$artifact" --wait --timeout 45m --output-format json \
-  "${credentials[@]}" > "$work/result.json"
-status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$work/result.json")"
-submission="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$work/result.json")"
-echo "notarization $submission for $artifact: $status"
-if [ "$status" != Accepted ]; then
-  xcrun notarytool log "$submission" "${credentials[@]}" >&2 || true
-  exit 1
-fi
+"$here/notary-submit.sh" "$work/submissions.json" "$artifact"
+python3 "$here/notary_wait.py" "$work/submissions.json"
 
 case "$artifact" in
   *.dmg | *.app | *.pkg)

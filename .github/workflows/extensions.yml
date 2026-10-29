@@ -270,7 +270,7 @@ jobs:
           done
           df -h "$GITHUB_WORKSPACE" | tail -1
           test -z "$failed" || { echo "Extension packages failed to build:$failed" >&2; exit 1; }
-      - name: Notarize the downloaded packages
+      - name: Submit the downloaded packages for notarization
         if: "${{ !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}"
         env:
           NOTARY_KEY: "${{ secrets.NOTARY_KEY }}"
@@ -280,9 +280,19 @@ jobs:
           test -n "$NOTARY_KEY"
           test -n "$NOTARY_KEY_ID"
           test -n "$NOTARY_ISSUER_ID"
+          mkdir -p local/notary
+          packages=()
           for id in $EXTENSION_IDS; do
-            ./scripts/notarize.sh "dist/extensions/$id.zip"
+            packages+=("dist/extensions/$id.zip")
           done
+          ./scripts/notary-submit.sh local/notary/submissions.json "${packages[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: "${{ !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}"
+        with:
+          name: "notary-batch-${{ matrix.batch }}"
+          path: local/notary/submissions.json
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: "extension-batch-${{ matrix.batch }}"
@@ -291,6 +301,42 @@ jobs:
       - name: Remove the temporary signing keychain
         if: always()
         run: "security delete-keychain \"$RUNNER_TEMP/extensions.keychain-db\" || true"
+  notarize:
+    name: Wait for notarization
+    needs:
+      - plan
+      - build
+    if: "!cancelled() && needs.build.result == 'success' && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    env:
+      NOTARY_KEY: "${{ secrets.NOTARY_KEY }}"
+      NOTARY_KEY_ID: "${{ secrets.NOTARY_KEY_ID }}"
+      NOTARY_ISSUER_ID: "${{ secrets.NOTARY_ISSUER_ID }}"
+      NOTARY_DEADLINE_SECONDS: "18000"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.event.pull_request.head.sha || github.sha }}"
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: notary-batch-*
+          path: local/notary
+      - name: Wait until Apple accepts every package
+        run: |
+          test -n "$NOTARY_KEY"
+          python3 - <<'PY'
+          import glob, json
+          merged = {}
+          for path in sorted(glob.glob("local/notary/*/submissions.json")):
+              merged.update(json.load(open(path)))
+          assert merged, "no notarization submissions were downloaded"
+          json.dump(merged, open("local/notary/all.json", "w"))
+          PY
+          python3 scripts/notary_wait.py local/notary/all.json
   publish:
     timeout-minutes: 360
     concurrency:
@@ -301,8 +347,9 @@ jobs:
     needs:
       - plan
       - build
+      - notarize
       - tests
-    if: "!cancelled() && !inputs.validation_sha && needs.plan.outputs.mode != 'validation' && github.repository == 'pulkitxm/edith' && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.tests.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
+    if: "!cancelled() && !inputs.validation_sha && needs.plan.outputs.mode != 'validation' && github.repository == 'pulkitxm/edith' && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.tests.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success' && needs.notarize.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
     runs-on: macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"

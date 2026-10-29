@@ -178,7 +178,7 @@ test("changed packages require successful builds before publication", () => {
   expect(build.if).toContain("!cancelled()");
   expect(build.if).toContain("needs.plan.result == 'success'");
   expect(build.if).toContain("needs.plan.outputs.changed == 'true'");
-  expect(publish.needs).toEqual(["plan", "build", "tests"]);
+  expect(publish.needs).toEqual(["plan", "build", "notarize", "tests"]);
   expect(publish.if).toContain("needs.tests.result == 'success'");
   expect(publish.if).toContain("github.event_name != 'pull_request'");
   expect(publish.if).toContain("github.ref == 'refs/heads/main'");
@@ -442,7 +442,10 @@ function routingContext(changes = {}) {
 
 function jobAdmitted(job, context) {
   const needs = Object.fromEntries(
-    (job.needs ?? []).map((name) => [name, context.needs[name]]),
+    (job.needs ?? []).map((name) => [
+      name,
+      context.needs[name] ?? context.needs.build,
+    ]),
   );
   const succeeded = Object.values(needs).every(
     (dependency) => dependency.result === "success",
