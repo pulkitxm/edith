@@ -49,7 +49,8 @@ public struct HostCLIRequest: Sendable, Equatable {
         self.operation = operation
         self.payload = payload
         self.timeout =
-            timeout ?? (action == .install || action == .update || action == .updateAll
+            timeout
+            ?? (action == .install || action == .update || action == .updateAll
                 ? Self.maximumTimeout : 30)
         self.raw = raw
         try validate()
