@@ -78,11 +78,10 @@ if [ -n "$PREBUILT" ]; then
     echo "--from-app requires --release --install without --pr or --branch." >&2
     exit 1
   fi
-  REQUIREMENT='anchor apple generic and identifier "com.pulkit.edith" and certificate leaf[subject.OU] = "HDYBQ2SLGT"'
-  if [ "${EDITH_RELEASE_ALLOW_DEV_SIGNING:-0}" != 1 ]; then
-    REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
-  fi
+  REQUIREMENT='anchor apple generic and identifier "com.pulkit.edith" and certificate leaf[subject.OU] = "PUWDA36B2R"'
+  REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
   codesign --verify --deep --strict --test-requirement "=$REQUIREMENT" "$PREBUILT"
+  spctl --assess --type execute "$PREBUILT"
   python3 scripts/verify-shipping-host.py "$PREBUILT" --release
   python3 scripts/install_app.py "$PREBUILT" "/Applications/Edith.app"
   if [ "$NO_OPEN" != 1 ]; then open -n "/Applications/Edith.app"; fi

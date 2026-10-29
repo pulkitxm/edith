@@ -358,8 +358,8 @@ export async function buildExtensionPackage({
     environment.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
   const releaseVersion = version ?? definition.version;
   const identity = environment.EXTENSION_SIGN_IDENTITY;
-  if (!development && (!identity || identity === "-"))
-    throw new Error("A release signing identity is required");
+  if (!development && !identity?.startsWith("Developer ID Application: "))
+    throw new Error("A Developer ID Application signing identity is required");
   const fingerprint = await extensionFingerprint(root, definition, definitions);
   const tag =
     tagOverride ??

@@ -41,7 +41,14 @@ set +a
 : "${SPARKLE_PRIVATE_KEY:?release blocked: SPARKLE_PRIVATE_KEY missing from .env}"
 : "${EDITH_SIGN_IDENTITY:?release blocked: EDITH_SIGN_IDENTITY missing from .env}"
 : "${EXTENSION_CATALOG_PRIVATE_KEY:?release blocked: EXTENSION_CATALOG_PRIVATE_KEY missing from .env}"
-export EDITH_RELEASE_ALLOW_DEV_SIGNING="${EDITH_RELEASE_ALLOW_DEV_SIGNING:-1}"
+: "${NOTARY_KEY_ID:?release blocked: NOTARY_KEY_ID missing from .env}"
+: "${NOTARY_ISSUER_ID:?release blocked: NOTARY_ISSUER_ID missing from .env}"
+: "${NOTARY_KEY:?release blocked: NOTARY_KEY missing from .env}"
+case "$EDITH_SIGN_IDENTITY" in
+  "Developer ID Application: "*) ;;
+  *) echo "release blocked: a Developer ID Application identity is required" >&2; exit 1 ;;
+esac
+unset EDITH_RELEASE_ALLOW_DEV_SIGNING
 
 if [ "$DRY_RUN" -eq 0 ]; then
   if [ "$(git branch --show-current)" != main ]; then
@@ -54,8 +61,8 @@ if [ "$DRY_RUN" -eq 0 ]; then
   fi
 fi
 
-WWDR="$(find /Applications/Xcode*.app -iname 'AppleWWDRCA-2030.cer' 2>/dev/null | head -1)"
-[ -n "$WWDR" ] || { echo "release blocked: the WWDR G3 intermediate (AppleWWDRCA-2030.cer) is not in Xcode" >&2; exit 1; }
+INTERMEDIATE="$(find /Applications/Xcode*.app -iname DeveloperIDCA-G2.cer -print -quit)"
+[ -n "$INTERMEDIATE" ] || { echo "release blocked: the Developer ID G2 intermediate is not in Xcode" >&2; exit 1; }
 
 git fetch origin main --tags --quiet
 BUILT_SHA="$(git rev-parse HEAD)"
@@ -99,7 +106,7 @@ trap cleanup EXIT
 security create-keychain -p release "$KEYCHAIN"
 security set-keychain-settings "$KEYCHAIN"
 security unlock-keychain -p release "$KEYCHAIN"
-security import "$WWDR" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
+security import "$INTERMEDIATE" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
 P12="$(mktemp).p12"
 printf '%s' "$MACOS_CERT_P12_BASE64" | base64 -d > "$P12"
 security import "$P12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null 2>&1
@@ -125,6 +132,10 @@ BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edi
 
 echo "==> packaging the empty-host DMG"
 python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
+codesign --force --sign "$EDITH_SIGN_IDENTITY" --timestamp Edith.dmg
+./scripts/notarize.sh Edith.dmg
+spctl --assess --type open --context context:primary-signature -vv Edith.dmg
+spctl --assess --type execute -vv dist/Edith.app
 
 echo "==> generating the signed appcast"
 GENERATE_APPCAST="$(find Packages/EdithHost/.build/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
@@ -147,7 +158,7 @@ rm -rf local/host-release-proof
 GITHUB_SHA="$BUILT_SHA" python3 scripts/host_release_proof.py dist/Edith.app Edith.dmg \
   dist/appcast/appcast.xml local/host-release-proof \
   --source "$BUILT_SHA" --tag "$RELEASE_TAG" --version "$RELEASE_VERSION" --build "$RELEASE_BUILD" \
-  --notarization skipped
+  --notarization verified
 
 for plist in Resources/Info.plist Resources/HelperInfo.plist; do
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"

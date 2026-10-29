@@ -221,7 +221,7 @@ test("release builds and publishes only empty-host macOS assets", () => {
   expect(text).not.toContain("edith-database");
   expect(text).toContain("Packages/EdithHost/.build/artifacts");
   expect(text).toContain("SPARKLE_PRIVATE_KEY");
-  expect(text).toContain("xcrun notarytool submit Edith.dmg --wait");
+  expect(text).toContain("./scripts/notarize.sh Edith.dmg");
   expect(buildScript).toContain("scripts/build-minimal-host.mjs");
   expect(buildScript).not.toContain("xcodebuild -project");
   expect(buildScript).not.toContain("cargo build");
@@ -283,16 +283,31 @@ test("bundle verification enforces the empty host and same executable launcher",
   expect(verifier).toContain("--deep");
 });
 
-test("macOS notarization is conditional on its optional credentials", () => {
-  expect(releaseWorkflow).toContain("HAS_NOTARY:");
-  expect(releaseWorkflow).toContain(
-    "if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'",
+test("public releases require Developer ID signing and notarization", () => {
+  expect(version.env.HAS_NOTARY).toContain("secrets.NOTARY_KEY");
+  expect(jobText(version)).toContain(
+    "NOTARY_KEY_ID, NOTARY_ISSUER_ID and NOTARY_KEY are required",
   );
-  expect(releaseWorkflow).not.toContain("env.HAS_NOTARY != 'true'");
-});
-
-test("macOS release accepts the configured development certificate", () => {
-  expect(releaseWorkflow).toContain('EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"');
+  expect(dmg.env.HAS_NOTARY).toBeUndefined();
+  expect(jobText(dmg)).not.toContain("EDITH_RELEASE_ALLOW_DEV_SIGNING");
+  expect(jobText(dmg)).toContain("Developer ID Application identity");
+  expect(jobText(dmg)).toContain("DeveloperIDCA-G2.cer");
+  const notarize = dmg.steps.find(
+    (step) => step.name === "Notarize and staple",
+  );
+  expect(notarize.if).toBe("steps.release_build.outputs.superseded != 'true'");
+  expect(notarize.run).toContain("./scripts/notarize.sh Edith.dmg");
+  expect(jobText(dmg)).toContain(
+    "spctl --assess --type execute -vv dist/Edith.app",
+  );
+  expect(jobText(dmg)).toContain("--notarization verified");
+  expect(jobText(dmg)).not.toContain("notary=skipped");
+  expect(jobText(dmg).indexOf("--timestamp Edith.dmg")).toBeLessThan(
+    jobText(dmg).indexOf("./scripts/notarize.sh Edith.dmg"),
+  );
+  expect(jobText(dmg).indexOf("./scripts/notarize.sh Edith.dmg")).toBeLessThan(
+    jobText(dmg).indexOf("Generate the signed appcast"),
+  );
 });
 
 test("the publisher uses a token that clears the ruleset", () => {
