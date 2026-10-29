@@ -222,7 +222,6 @@ final class TerminalSessionHolder {
         queuedGhosttyInput = ""
         appliedTheme = nil
         presentation = nil
-        hostWindowState = nil
         nativePaneAction = nil
         dropTransferError = nil
         generation += 1

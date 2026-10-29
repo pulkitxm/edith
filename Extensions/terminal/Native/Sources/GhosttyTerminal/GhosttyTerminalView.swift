@@ -490,6 +490,13 @@ public final class GhosttyTerminalView: NSView {
     var owningApplicationActive: Bool { hostApplicationActive ?? NSApp.isActive }
     var owningWindowKey: Bool { hostWindowKey ?? (window?.isKeyWindow == true) }
 
+    public var surfaceFocused: Bool {
+        Self.shouldFocus(
+            active: renderingActive && (hostApplicationActive ?? true),
+            keyWindow: hostWindowKey ?? (window?.isKeyWindow == true),
+            firstResponder: window?.firstResponder === self)
+    }
+
     public var hasInputFocus: Bool {
         !closed && renderingActive && window?.firstResponder === self
     }
