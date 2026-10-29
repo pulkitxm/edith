@@ -47,6 +47,13 @@ struct MarketplacePage: View {
     var body: some View {
         PageWorkspace {
             PageHeader("Extensions") {
+                if !marketplace.updatableIDs.isEmpty {
+                    Button(
+                        marketplace.busy
+                            ? "Updating..." : "Update all (\(marketplace.updatableIDs.count))"
+                    ) { Task { await marketplace.updateAll() } }
+                    .buttonStyle(.edith(.primary)).disabled(busy || marketplace.busy)
+                }
                 Button("Check for Updates") { Task { await marketplace.checkForUpdates() } }
                     .buttonStyle(.edith(.secondary)).disabled(busy || marketplace.refreshingCatalog)
             } accessory: {
