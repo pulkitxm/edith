@@ -13,8 +13,17 @@ test("optional test packages run only the selected extension's declared targets"
   );
   expect(calls).toEqual([
     [
-      "make",
-      ["ci-extension-studio", "ci-extension-studio-native"],
+      "python3",
+      [
+        "-B",
+        "scripts/run-test-with-timeout.py",
+        "--timeout",
+        "2400",
+        "--",
+        "make",
+        "ci-extension-studio",
+        "ci-extension-studio-native",
+      ],
       { stdio: "inherit" },
     ],
   ]);
@@ -63,7 +72,19 @@ test("Notch's actual manifest runs its standalone browser and panel tests only",
   const calls = [];
   runExtensionPackageTests(notch, (...args) => calls.push(args));
   expect(calls).toEqual([
-    ["make", ["ci-extension-notch-native"], { stdio: "inherit" }],
+    [
+      "python3",
+      [
+        "-B",
+        "scripts/run-test-with-timeout.py",
+        "--timeout",
+        "2400",
+        "--",
+        "make",
+        "ci-extension-notch-native",
+      ],
+      { stdio: "inherit" },
+    ],
   ]);
 });
 

@@ -37,7 +37,20 @@ export function runExtensionPackageTests(
       );
     return;
   }
-  if (targets.length) run("make", targets, { stdio: "inherit" });
+  if (targets.length)
+    run(
+      "python3",
+      [
+        "-B",
+        "scripts/run-test-with-timeout.py",
+        "--timeout",
+        "2400",
+        "--",
+        "make",
+        ...targets,
+      ],
+      { stdio: "inherit" },
+    );
 }
 
 if (import.meta.main) {

@@ -30,6 +30,24 @@ test("test results and output pass through", () => {
   expect(result.stdout).toContain("synthetic result");
 });
 
+test("timeout diagnostics sample both SwiftPM test runners and package executables", () => {
+  const result = Bun.spawnSync([
+    "python3",
+    "-B",
+    "-c",
+    `import importlib.util
+from unittest.mock import patch
+spec = importlib.util.spec_from_file_location("test_timeout", ${JSON.stringify(script)})
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+with patch.object(module.sys, "platform", "darwin"), patch.object(module.subprocess, "run") as sample:
+    module.sample_group([(11, "/synthetic/swiftpm-testing"), (12, "/synthetic/swiftpm-testing-helper"), (13, "/synthetic/FixturePackageTests"), (14, "/synthetic/swift-package")])
+    assert [call.args[0][1] for call in sample.call_args_list] == ["11", "12", "13"]
+`,
+  ]);
+  expect(result.exitCode).toBe(0);
+});
+
 test("stalled tests terminate with an explicit timeout result", () => {
   const result = run("import time; time.sleep(60)", 0.2);
   expect(result.code).toBe(124);
