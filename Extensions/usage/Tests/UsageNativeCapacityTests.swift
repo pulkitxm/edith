@@ -129,9 +129,7 @@ import Testing
             let totals = try #require(document["totals"] as? [String: Any])
             #expect(totals["tokens"] as? Double == 12)
             #expect(
-                notes.values.contains {
-                    $0.hasPrefix("Claude Code Web refresh is unavailable")
-                })
+                notes.values.contains { $0.hasPrefix("Claude Code Web refresh is unavailable") })
         }
     }
 

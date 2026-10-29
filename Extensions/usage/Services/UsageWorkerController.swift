@@ -399,11 +399,26 @@ public final class UsageWorkerController {
         beginShutdown()
         let background = backgroundTask
         let usage = usageTask, limits = limitsTask
-        await background?.value
-        await usage?.value
-        await limits?.value
+        await Self.settle([background, usage, limits].compactMap { $0 }, within: Self.settleLimit)
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    private static let settleLimit = Duration.seconds(3)
+
+    private static func settle(_ tasks: [Task<Void, Never>], within limit: Duration) async {
+        guard !tasks.isEmpty else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let gate = UsageSettleGate(continuation)
+            Task {
+                for task in tasks { await task.value }
+                gate.fire()
+            }
+            Task {
+                try? await Task.sleep(for: limit)
+                gate.fire()
+            }
         }
     }
 
@@ -477,5 +492,20 @@ public enum UsageWake {
             + Double(delay.components.attoseconds) / 1e18
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, seconds), execute: item)
         return { item.cancel() }
+    }
+}
+
+private final class UsageSettleGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(_ continuation: CheckedContinuation<Void, Never>) { self.continuation = continuation }
+
+    func fire() {
+        let pending = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        pending?.resume()
     }
 }
