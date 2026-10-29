@@ -329,6 +329,7 @@ final class HerdrStore {
     private var settleTask: Task<Void, Never>?
     private var pendingHosts: [HerdrHostSnapshot]?
     private var detachedTabs: [String: HerdrOpenTab] = [:]
+    @ObservationIgnored var launchingAgents: [String: HerdrAgent] = [:]
     private var watchGeneration = 0
     @ObservationIgnored nonisolated(unsafe) private var machinesObserver: NSObjectProtocol?
 
@@ -2279,6 +2280,14 @@ final class HerdrStore {
         return try await TerminalDropTransfer.upload(urls, over: connection(for: machine))
     }
 
+    func launchingAgent(_ id: String) -> HerdrAgent? {
+        guard session(id) != nil else {
+            launchingAgents[id] = nil
+            return nil
+        }
+        return launchingAgents[id]
+    }
+
     func machine(for host: HerdrHostSnapshot) -> Machine? {
         host.isLocal ? nil : availableMachines.first { $0.id.uuidString == host.id }
     }
@@ -2391,6 +2400,7 @@ final class HerdrStore {
             sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
             status: .unknown, title: kind,
             workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        launchingAgents[placeholder.id] = placeholder
         accountSessions[placeholder.id] = account?.id.uuidString
         accountSessionIdentities.removeValue(forKey: placeholder.id)
         persistAccountSessions()
