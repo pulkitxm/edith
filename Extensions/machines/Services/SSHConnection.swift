@@ -370,9 +370,9 @@ public actor SSHConnection {
                     progress?(written)
                 }
                 try? output.close()
-                process.waitUntilExit()
+                let status = await Self.waitForExit(process, timeout: 30)
                 try Task.checkCancellation()
-                return process.terminationStatus
+                return status
             } onCancel: {
                 if process.isRunning { process.terminate() }
                 try? reader.close()
