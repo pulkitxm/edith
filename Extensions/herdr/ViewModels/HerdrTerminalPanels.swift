@@ -423,7 +423,10 @@ enum HerdrTerminalOwnership {
 @Observable
 final class HerdrTerminalPanels {
     private(set) var panels: [String: HerdrTerminalPanel] = [:]
-    private(set) var terminals: [String: HerdrPanelTerminal] = [:]
+    private(set) var terminals: [String: HerdrPanelTerminal] = [:] {
+        didSet { onTerminalsChanged?() }
+    }
+    @ObservationIgnored var onTerminalsChanged: (() -> Void)?
     private(set) var focusedOwner: String?
     var uiAction: (@MainActor (String, [String: Any]) async throws -> Void)?
     private var adoptingUI = false

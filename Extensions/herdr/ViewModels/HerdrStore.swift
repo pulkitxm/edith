@@ -101,7 +101,11 @@ final class HerdrStore {
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
     private(set) var uiSpaces: [String: HerdrSpaceWindowModel] = [:]
-    var terminalUI: OwnedTerminalUIPresentation?
+    var terminalUI: OwnedTerminalUIPresentation? {
+        didSet {
+            terminalPanels.onTerminalsChanged = { [weak self] in self?.terminalUI?.refresh() }
+        }
+    }
     var uiPresentationID: UUID?
     private(set) var uiPresentations: [HerdrUIPresentation] = []
     private var uiSpaceBaselines: [String: HerdrUISpace] = [:]
@@ -187,7 +191,12 @@ final class HerdrStore {
     var tabs: [HerdrTab] = [] {
         didSet { scheduleTerminalRetarget(from: oldValue); scheduleUIChange() }
     }
-    private(set) var sessions: [HerdrOpenTab] = [] { didSet { scheduleUIChange() } }
+    private(set) var sessions: [HerdrOpenTab] = [] {
+        didSet {
+            scheduleUIChange()
+            terminalUI?.refresh()
+        }
+    }
     private var closedHistory: [HerdrClosedRecord] = []
     private let closedHistoryLimit = 10
     var refreshing = false
