@@ -720,6 +720,10 @@ final class HerdrStore {
         }
     }
 
+    func resumeWork() {
+        workSuspended = false
+    }
+
     func cancelPendingWork() {
         claudeAccounts.cancelPendingWork()
         workSuspended = true
