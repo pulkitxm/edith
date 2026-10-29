@@ -200,7 +200,10 @@ public final class HostMarketplace {
         hostBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
             ?? ""
     ) async {
-        guard automaticallyUpdatesExtensions, !downloadedIDs.isEmpty, !busy else {
+        let incompatibleIDs = downloadedIDs.filter { installed[$0] == nil }
+        guard !downloadedIDs.isEmpty, !busy,
+            automaticallyUpdatesExtensions || !incompatibleIDs.isEmpty
+        else {
             return
         }
         if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
@@ -213,7 +216,10 @@ public final class HostMarketplace {
         }
         await checkForUpdates(now: now)
         guard error == nil, !offline else { return }
-        let failed = await updateAll()
+        let failed =
+            automaticallyUpdatesExtensions
+            ? await updateAll()
+            : await install(ids: incompatibleIDs.sorted().filter { updateAvailable(id: $0) })
         guard failed.isEmpty else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")

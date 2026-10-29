@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const workerHostABI = "edith-host-5";
+export const workerHostABI = "edith-host-6";
 
 export async function hostABI(root = process.cwd()) {
   const files = [];
