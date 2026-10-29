@@ -429,6 +429,7 @@ function admitted(expression, changes = {}) {
     },
     build: { result: changes.buildResult ?? "success" },
     tests: { result: "success" },
+    notarize: { result: changes.buildResult ?? "success" },
   };
   return Boolean(
     new Function(
@@ -451,7 +452,7 @@ test("all maintained signing and publication guards independently reject validat
       (step) => step.name === "Import the release signing certificate",
     ),
     workflow.jobs.build.steps.find(
-      (step) => step.name === "Notarize the downloaded packages",
+      (step) => step.name === "Submit the downloaded packages for notarization",
     ),
     workflow.jobs.publish,
   ];
