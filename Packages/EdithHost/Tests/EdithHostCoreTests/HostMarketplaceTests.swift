@@ -103,6 +103,29 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func anExtensionLeftMidRecoveryStartsOnceItsMigratedPackageArrives() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let previous = fixture.package("1.0.0", abi: "edith-host-5")
+        try fixture.install([previous])
+        let current = try fixture.build("1.0.0")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [previous, current.package]))
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(["sample"], forKey: "enabledExtensions")
+        defaults.set(["sample"], forKey: "pendingStopRecoveryExtensions")
+        let marketplace = try fixture.marketplace(
+            workerMode: { _ in "normal" },
+            serving: [current.package.downloadURL: current.archive])
+        await marketplace.restoreEnabledExtensions()
+        #expect(marketplace.sessions.states["sample"] == .notInstalled)
+        await marketplace.updateInstalledIfDue(now: Date(), hostBuild: "build")
+        #expect(marketplace.installed["sample"] == current.package)
+        #expect(marketplace.sessions.pendingRecoveryIDs.isEmpty)
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

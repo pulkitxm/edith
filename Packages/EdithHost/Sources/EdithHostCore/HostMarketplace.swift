@@ -415,6 +415,8 @@ public final class HostMarketplace {
         do {
             if starting {
                 try await sessions.enable(package)
+            } else if sessions.states[package.id] == .notInstalled {
+                await sessions.restoreArrived(package)
             } else {
                 try await sessions.applyUpdate(package)
             }
