@@ -196,6 +196,31 @@ import HostWorkerFixtureSupport
         #expect(await restarted.sessions.shutdown())
     }
 
+    @Test func aFailedRecoveryDoesNotKeepAnExtensionFromStarting() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingStopRecoveryExtensions")
+        let restarted = try Fixture(suite: fixture.suite, failingWorkers: 0..<1)
+        try await restarted.sessions.enable(fixture.package("1.0.0"))
+        #expect(restarted.sessions.activeIDs == ["sample"])
+        #expect(restarted.sessions.failureReasons["sample"] == nil)
+        #expect(await restarted.sessions.shutdown())
+    }
+
+    @Test func aFailureBeforeTheWorkerStartsStillNamesItsCause() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let restarted = try Fixture(suite: fixture.suite, failingWorkers: 0..<1)
+        await #expect(throws: HostWorkerError.self) {
+            try await restarted.sessions.enable(fixture.package("1.0.0"))
+        }
+        #expect(restarted.sessions.states["sample"] == .failed)
+        #expect(restarted.sessions.failureReasons["sample"]?.isEmpty == false)
+    }
+
     @Test func pendingDisableSurvivesFreshSessionAndRecoversWithoutNormalStartup() async throws {
         let original = try Fixture(rejectDisable: true)
         defer { original.clean() }

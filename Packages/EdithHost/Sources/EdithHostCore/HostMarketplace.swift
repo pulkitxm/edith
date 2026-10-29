@@ -221,7 +221,18 @@ public final class HostMarketplace {
     }
 
     @discardableResult public func enable(id: String) async -> String? {
-        guard let package = installed[id], begin(id) else { return nil }
+        guard let package = installed[id] else { return nil }
+        guard let failure = await start(package) else { return nil }
+        guard updateAvailable(id: id), !offline else { return failure }
+        guard await download(id: id) == nil, let updated = installed[id],
+            updated.version != package.version
+        else { return fail(id, failure) }
+        return await start(updated)
+    }
+
+    private func start(_ package: ExtensionPackage) async -> String? {
+        let id = package.id
+        guard begin(id) else { return nil }
         defer { finish(id) }
         do { try await sessions.enable(package) } catch {
             return fail(

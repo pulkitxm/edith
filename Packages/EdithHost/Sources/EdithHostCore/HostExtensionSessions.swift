@@ -125,6 +125,17 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
+        do { try await start(package) } catch {
+            if failureReasons[id] == nil, states[id] != .starting, states[id] != .stopping {
+                failures.insert(id)
+                failureReasons[id] = Self.reason(error)
+            }
+            throw error
+        }
+    }
+
+    private func start(_ package: ExtensionPackage) async throws {
+        let id = package.id
         cancelRetry(id)
         retryPackages[id] = package
         if pendingDisableIDs.contains(id) {
@@ -132,7 +143,9 @@ public final class HostExtensionSessions {
             try await disable(id: id, remember: false)
         } else if pendingRecoveryIDs.contains(id) {
             packages[id] = package
-            try await stop(id: id, remember: false, reason: .disable)
+            do { try await stop(id: id, remember: false, reason: .disable) } catch {
+                pendingRecoveryIDs.remove(id)
+            }
         }
         if let worker = workers[id], worker.ready {
             if worker.configuration.recoveryOnly {
@@ -148,8 +161,10 @@ public final class HostExtensionSessions {
             }
         }
         if let worker = workers[id] {
-            try await worker.stop()
-            guard worker.isStopped else { throw HostWorkerError.stillRunning }
+            if !worker.isStopped {
+                try await worker.stop()
+                guard worker.isStopped else { throw HostWorkerError.stillRunning }
+            }
             workers[id] = nil
         }
         pendingDisableIDs.remove(id)
