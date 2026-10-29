@@ -379,13 +379,31 @@ import Testing
         let environment = try await HostRequirementToolProbe.execute(
             URL(fileURLWithPath: "/usr/bin/env"), arguments: [])
         #expect(environment.stdout.contains("HOME=/var/empty"))
-        #expect(environment.stdout.contains("npm_config_userconfig=/dev/null"))
+        #expect(environment.stdout.contains("npm_config_userconfig=/var/empty/.npmrc"))
+        #expect(environment.stdout.contains("npm_config_globalconfig=/var/empty/npmrc"))
         #expect(!environment.stdout.contains("USER="))
         #expect(
             try FileManager.default.contentsOfDirectory(atPath: root.path).sorted() == [
                 "node", "npx",
             ])
         #expect(!HostRequirementToolProbe.nodeSupported("22.20.0-beta.1"))
+    }
+
+    @Test(
+        .enabled(if: HostRequirementToolProbeTests.installedNpxDirectory != nil)
+    ) func theInstalledNpxPassesItsVersionProbe() async throws {
+        let directory = try #require(Self.installedNpxDirectory)
+        let probe = HostRequirementToolProbe(directories: [directory])
+        guard case .available = try await probe.inspect(id: "npx") else {
+            Issue.record("npx in \(directory.path) failed its version probe")
+            return
+        }
+    }
+
+    nonisolated static var installedNpxDirectory: URL? {
+        ["/opt/homebrew/bin", "/usr/local/bin"].map { URL(fileURLWithPath: $0) }.first {
+            FileManager.default.isExecutableFile(atPath: $0.appendingPathComponent("npx").path)
+        }
     }
 
     @Test func originalMacOSCapabilitiesRetainVersionGates() {

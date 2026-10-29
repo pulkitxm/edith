@@ -107,7 +107,8 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
             "HOMEBREW_NO_AUTO_UPDATE": "1", "HOMEBREW_NO_ANALYTICS": "1", "NO_UPDATE_NOTIFIER": "1",
             "npm_config_update_notifier": "false", "npm_config_offline": "true",
             "HOME": "/var/empty", "XDG_CONFIG_HOME": "/var/empty",
-            "npm_config_userconfig": "/dev/null", "npm_config_globalconfig": "/dev/null",
+            "npm_config_userconfig": "/var/empty/.npmrc",
+            "npm_config_globalconfig": "/var/empty/npmrc",
             "npm_config_cache": "/dev/null", "npm_config_audit": "false",
             "npm_config_fund": "false",
         ]
