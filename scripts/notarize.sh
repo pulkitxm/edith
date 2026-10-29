@@ -14,8 +14,8 @@ credentials=(--key "$work/key.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_IS
 
 xcrun notarytool submit "$artifact" --wait --timeout 45m --output-format json \
   "${credentials[@]}" > "$work/result.json"
-status="$(plutil -extract status raw "$work/result.json")"
-submission="$(plutil -extract id raw "$work/result.json")"
+status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$work/result.json")"
+submission="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$work/result.json")"
 echo "notarization $submission for $artifact: $status"
 if [ "$status" != Accepted ]; then
   xcrun notarytool log "$submission" "${credentials[@]}" >&2 || true
