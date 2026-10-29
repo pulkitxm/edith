@@ -471,7 +471,9 @@ import WorkerFixtureSupport
             {
                 return try JSONEncoder().encode(descriptor)
             }
-            guard let agent = currentAgent(id) else { throw ExtensionPeerError.invalidRequest }
+            guard let agent = currentAgent(id) ?? retained?.agent else {
+                throw ExtensionPeerError.invalidRequest
+            }
             let tab = retained ?? store.attachSession(for: agent)
             try await store.connectTerminal(for: tab)
             try Task.checkCancellation()
