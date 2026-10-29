@@ -64,6 +64,26 @@ import HostWorkerFixtureSupport
         #expect(await fixture.network.count == 1)
     }
 
+    @Test func theWorkerContractIsTheOneSignedByTheCurrentTeam() {
+        #expect(HostContract.compatibility == "edith-host-6")
+    }
+
+    @Test func extensionsInstalledForThePreviousContractMoveToTheCurrentOneOnLaunch() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let previous = fixture.package("1.0.0", abi: "edith-host-5")
+        try fixture.install([previous])
+        let current = try fixture.build("1.0.0")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [previous, current.package]))
+        let marketplace = try fixture.marketplace(
+            serving: [current.package.downloadURL: current.archive])
+        #expect(marketplace.installed["sample"] == nil)
+        await marketplace.updateInstalledIfDue(now: Date(), hostBuild: "build")
+        #expect(marketplace.installed["sample"] == current.package)
+        #expect(marketplace.error == nil)
+    }
+
     @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
