@@ -18,6 +18,30 @@ import Vision
         ]
     }
 
+    @Test func aSceneDoesNotPollUntilItsViewReportsVisible() async throws {
+        let calls = UsagePollCounter()
+        let client = UsageUIClient(invoke: { _, _ in
+            calls.record()
+            throw ExtensionPeerError.unavailable
+        })
+        let scene = UsageUIPresentation(
+            id: UUID(), route: try #require(UsageUISceneRoute(context: ["location": "main"])),
+            client: client)
+        scene.start()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(calls.count == 0)
+        client.setVisible(true)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(calls.count > 0)
+        await scene.shutdownAndWait()
+    }
+
+    @Test func pollingBacksOffAfterQuietTicksAndResetsOnChange() {
+        #expect(UsageUIClient.pollInterval(quiet: 0) == .seconds(2))
+        #expect(UsageUIClient.pollInterval(quiet: 14) == .seconds(2))
+        #expect(UsageUIClient.pollInterval(quiet: 15) == .seconds(10))
+    }
+
     @Test func hiddenWindowStopsEnginePollingAndVisibleResumesIt() async throws {
         let calls = UsagePollCounter()
         let client = UsageUIClient(invoke: { _, _ in
@@ -96,6 +120,7 @@ import Vision
             clients.append(client)
             #expect(
                 registry.configure(UsageUIPresentation(id: UUID(), route: route, client: client)))
+            client.setVisible(true)
         }
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while invoked < 16, ContinuousClock.now < deadline { await Task.yield() }

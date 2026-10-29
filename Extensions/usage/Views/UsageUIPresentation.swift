@@ -76,6 +76,7 @@ struct UsageUISceneRoute: Equatable {
 
     init(id: UUID, route: UsageUISceneRoute, client: UsageUIClient?, readOnly: Bool = false) {
         self.id = id; self.route = route; self.client = client; self.readOnly = readOnly
+        client?.setVisible(false)
         model = DashboardModel(uiClient: client)
         presenter = UsagePresenterState(client: client)
     }
