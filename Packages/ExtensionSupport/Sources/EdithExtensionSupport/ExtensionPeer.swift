@@ -252,7 +252,6 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
             getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &pid, &size) == 0,
             size == MemoryLayout<Int32>.size,
             let actual = ExtensionPeerProcess.read(pid), actual.birth == expected,
-            actual.isCurrent,
             lock.withLock({
                 guard !closed, !cancelled, authenticatedPeer == nil else { return false }
                 authenticatedPeer = actual
@@ -347,7 +346,9 @@ final class ExtensionPeerSocketConnection: @unchecked Sendable {
 private final class ExtensionPeerCall: @unchecked Sendable {
     private let endpoint: ExtensionPeerEndpoint
     private let request: ExtensionPeerRequest
-    private let queue = DispatchQueue(label: "edith.extension.command", qos: .utility)
+    private static let sharedQueue = DispatchQueue(
+        label: "edith.extension.command", qos: .utility, attributes: .concurrent)
+    private var queue: DispatchQueue { Self.sharedQueue }
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?

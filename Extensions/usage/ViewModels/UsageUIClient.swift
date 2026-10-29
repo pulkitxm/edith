@@ -8,6 +8,7 @@ import Observation
     private let invokeOperation: Invoke
     private let invalidateClient: @MainActor () -> Void
     private(set) var stopped = false
+    private(set) var visible = true
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var requests: [UUID: Task<Data, Error>] = [:]
     private var polling: Task<Void, Never>?
@@ -182,8 +183,18 @@ import Observation
         guard !stopped else { throw ExtensionPeerError.unavailable }
     }
 
+    func setVisible(_ value: Bool) {
+        guard visible != value, !stopped else { return }
+        visible = value
+        if value {
+            start()
+        } else {
+            polling?.cancel(); polling = nil
+        }
+    }
+
     func start() {
-        guard !stopped, polling == nil else { return }
+        guard !stopped, visible, polling == nil else { return }
         polling = Task { [weak self] in
             guard let self else { return }
             do { try await prepare() } catch {
