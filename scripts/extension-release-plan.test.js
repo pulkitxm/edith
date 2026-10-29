@@ -303,6 +303,57 @@ describe("independent extension releases", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+  test("a new host contract republishes every extension at its version under a new release tag", async () => {
+    const root = await mkdtemp(join(tmpdir(), "extension-abi-bump-"));
+    const entry = (id, hostABI) => ({
+      id,
+      version: "1.0.7",
+      hostABI,
+      inputs: [`Extensions/${id}`],
+      sharedInputs: [],
+      dependencies: [],
+      usesHostRuntime: false,
+    });
+    const previous = [
+      entry("herdr", "edith-host-5"),
+      entry("music", "edith-host-5"),
+    ];
+    const bumped = previous.map(({ id }) => entry(id, "edith-host-6"));
+    try {
+      for (const { id } of previous) {
+        await mkdir(join(root, `Extensions/${id}`), { recursive: true });
+        await writeFile(join(root, `Extensions/${id}/Runtime.swift`), id);
+      }
+      const published = await Promise.all(
+        previous.map(async (item) => ({
+          id: item.id,
+          version: item.version,
+          hostABI: item.hostABI,
+          architecture: "arm64",
+          sourceFingerprint: await extensionFingerprint(root, item, previous),
+        })),
+      );
+      expect(
+        await planUnpublishedExtensions(root, previous, published),
+      ).toEqual([]);
+      const plan = await planUnpublishedExtensions(root, bumped, published);
+      expect(plan.map(({ id, version }) => `${id}@${version}`)).toEqual([
+        "herdr@1.0.7",
+        "music@1.0.7",
+      ]);
+      for (const row of plan)
+        expect(row.tag).not.toBe(
+          extensionReleaseTag({
+            id: row.id,
+            version: row.version,
+            fingerprint: published.find(({ id }) => id === row.id)
+              .sourceFingerprint,
+          }),
+        );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("immutable release identities include the version and exact source", () => {
     const identity = {
       id: "music",

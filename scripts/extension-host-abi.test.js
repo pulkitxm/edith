@@ -244,3 +244,23 @@ test.each(["legacy source", "worker source", "worker manifest"])(
     });
   },
 );
+
+test("the worker contract is bumped for the Developer ID signing team and every package follows it", async () => {
+  expect(workerHostABI).toBe("edith-host-6");
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const manifest = JSON.parse(
+    await readFile(join(root, "Extensions/manifest.json"), "utf8"),
+  );
+  expect(new Set(manifest.map(({ hostABI }) => hostABI))).toEqual(
+    new Set([workerHostABI]),
+  );
+  expect(
+    await readFile(
+      join(
+        root,
+        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+      ),
+      "utf8",
+    ),
+  ).toContain(`public static let workerHostABI = "${workerHostABI}"`);
+});
