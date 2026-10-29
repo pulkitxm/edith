@@ -217,7 +217,51 @@ enum UsageNativeJSON {
         }
         guard let value = value as? String else { return nil }
         if let number = Double(value), number > 0 { return date(NSNumber(value: number)) }
+        if let parsed = utcTimestamp(value) { return parsed }
         return fractionalFormatter.date(from: value) ?? plainFormatter.date(from: value)
+    }
+
+    static func utcTimestamp(_ value: String) -> Date? {
+        var bytes = Array(value.utf8)
+        guard bytes.count >= 20, bytes.count <= 40, bytes.last == 90 else { return nil }
+        bytes.removeLast()
+        func digits(_ range: Range<Int>) -> Int? {
+            var total = 0
+            for index in range {
+                let digit = Int(bytes[index]) - 48
+                guard (0...9).contains(digit) else { return nil }
+                total = total * 10 + digit
+            }
+            return total
+        }
+        guard bytes[4] == 45, bytes[7] == 45, bytes[10] == 84, bytes[13] == 58, bytes[16] == 58,
+            let year = digits(0..<4), let month = digits(5..<7), let day = digits(8..<10),
+            let hour = digits(11..<13), let minute = digits(14..<16), let second = digits(17..<19),
+            year >= 1970, (1...12).contains(month), (1...31).contains(day), hour < 24, minute < 60, second < 60
+        else { return nil }
+        var fraction = 0.0
+        if bytes.count > 19 {
+            guard bytes[19] == 46, bytes.count > 20, bytes.count <= 29 else { return nil }
+            var scale = 0.1
+            for index in 20..<bytes.count {
+                let digit = Int(bytes[index]) - 48
+                guard (0...9).contains(digit) else { return nil }
+                fraction += Double(digit) * scale
+                scale /= 10
+            }
+        }
+        let shiftedYear = month <= 2 ? year - 1 : year
+        let era = shiftedYear / 400
+        let yearOfEra = shiftedYear - era * 400
+        let monthIndex = (month + 9) % 12
+        let dayOfYear = (153 * monthIndex + 2) / 5 + day - 1
+        let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        let days = era * 146_097 + dayOfEra - 719_468
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+        let daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        guard day <= daysInMonth[month - 1] else { return nil }
+        let seconds = Double(days) * 86_400 + Double(hour * 3600 + minute * 60 + second)
+        return Date(timeIntervalSince1970: seconds + fraction)
     }
 
     private static let fractionalFormatter: ISO8601DateFormatter = {

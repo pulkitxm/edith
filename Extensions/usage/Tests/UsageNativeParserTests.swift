@@ -3,6 +3,33 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageNativeParserTests {
+    @Test func fastUTCTimestampParsingMatchesTheSystemFormatterAndIsFast() throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        for value in [
+            "2026-10-29T04:57:16.123Z", "2024-02-29T23:59:59.999Z", "1970-01-01T00:00:00.000Z",
+            "2000-12-31T12:00:00.5Z", "2026-03-01T00:00:00.001Z",
+        ] {
+            let fast = try #require(UsageNativeJSON.utcTimestamp(value))
+            #expect(abs(fast.timeIntervalSince(try #require(formatter.date(from: value)))) < 0.0005)
+        }
+        let whole = try #require(UsageNativeJSON.utcTimestamp("2026-10-29T04:57:16Z"))
+        #expect(whole == plain.date(from: "2026-10-29T04:57:16Z"))
+        for value in [
+            "2026-02-30T00:00:00Z", "2026-10-29T04:57:16+05:30", "2026-10-29 04:57:16Z",
+            "2026-13-01T00:00:00Z", "2026-10-29T24:00:00Z",
+        ] { #expect(UsageNativeJSON.utcTimestamp(value) == nil) }
+        let clock = ContinuousClock()
+        let elapsed = clock.measure {
+            for index in 0..<100_000 {
+                _ = UsageNativeJSON.date("2026-10-29T04:57:16.\(100 + index % 800)Z")
+            }
+        }
+        #expect(elapsed < .seconds(1))
+    }
+
     @Test func grokModelReceiptsSubtractCachedInputAndPreserveDollarTicks() throws {
         let row: [String: Any] = [
             "params": [

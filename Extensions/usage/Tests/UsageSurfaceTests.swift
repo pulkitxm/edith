@@ -9,7 +9,12 @@ struct UsageSurfaceTests {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let today = Date().formatted(.iso8601.year().month().day().dateSeparator(.dash))
+        let dayFormat = DateFormatter()
+        dayFormat.calendar = Calendar.current
+        dayFormat.timeZone = Calendar.current.timeZone
+        dayFormat.locale = Locale(identifier: "en_US_POSIX")
+        dayFormat.dateFormat = "yyyy-MM-dd"
+        let today = dayFormat.string(from: Date())
         let url = root.appendingPathComponent("usage.json")
         try JSONSerialization.data(withJSONObject: [
             "daily": [
