@@ -713,6 +713,65 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func updateAllUpdatesOnlyOutdatedExtensionsIsolatesFailuresAndKeepsEnabledState()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second", "third", "fourth"]
+        try fixture.install(ids.map { fixture.package("1.0.0", id: $0) })
+        let sample = try fixture.build("1.1.0", id: "sample")
+        let second = try fixture.build("1.1.0", id: "second")
+        let fourth = fixture.package("1.1.0", id: "fourth")
+        let current = fixture.package("1.0.0", id: "third")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [sample.package, second.package, current, fourth]))
+        let marketplace = try fixture.marketplace(
+            ids: ids, workerMode: { _ in "normal" },
+            serving: [
+                sample.package.downloadURL: sample.archive,
+                second.package.downloadURL: second.archive,
+            ])
+        await marketplace.restoreEnabledExtensions()
+        await marketplace.enable(id: "sample")
+        await marketplace.checkForUpdates()
+        #expect(marketplace.updatableIDs == ["fourth", "sample", "second"])
+        let failures = await marketplace.updateAll()
+        #expect(Set(failures.keys) == ["fourth"])
+        #expect(marketplace.installed["sample"]?.version == "1.1.0")
+        #expect(marketplace.installed["second"]?.version == "1.1.0")
+        #expect(marketplace.installed["third"]?.version == "1.0.0")
+        #expect(marketplace.installed["fourth"]?.version == "1.0.0")
+        #expect(marketplace.sessions.versions["sample"] == "1.1.0")
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.sessions.enabledIDs == ["sample"])
+        #expect(marketplace.updatableIDs == ["fourth"])
+        #expect(!marketplace.busy)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func cliUpdateAllSummarizesUpdatedFailedAndUpToDateExtensions() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second", "third"]
+        try fixture.install(ids.map { fixture.package("1.0.0", id: $0) })
+        let sample = try fixture.build("1.1.0", id: "sample")
+        let current = fixture.package("1.0.0", id: "third")
+        let missing = fixture.package("1.1.0", id: "second")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [sample.package, missing, current]))
+        let marketplace = try fixture.marketplace(
+            ids: ids, serving: [sample.package.downloadURL: sample.archive])
+        let reply = try await HostCLIGateway(marketplace: marketplace)
+            .execute(HostCLIRequest(action: .updateAll))
+        let summary = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        #expect(summary["updated"] as? [String] == ["sample"])
+        #expect(Array((summary["failed"] as? [String: String] ?? [:]).keys) == ["second"])
+        #expect(summary["upToDate"] as? [String] == ["third"])
+        let parsed = try HostCLICommand.parse(["extensions", "update", "--all", "--json"])
+        #expect(parsed == .request(try HostCLIRequest(action: .updateAll)))
+    }
+
     private func report(_ marketplace: HostMarketplace, _ id: String = "sample") async throws
         -> [String: Any]
     {

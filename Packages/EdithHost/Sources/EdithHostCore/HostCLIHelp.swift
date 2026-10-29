@@ -317,7 +317,9 @@ public enum HostCLIHelp {
         .init(
             "extensions install", "Download one compatible extension and start it.", flags: [],
             words: ["id"]),
-        .init("extensions update", "Update one installed extension.", flags: [], words: ["id"]),
+        .init(
+            "extensions update", "Update one installed extension, or all with --all.",
+            flags: ["all"], words: ["[id]"]),
         .init(
             "extensions sideload", "Install a locally built package into a development build.",
             words: ["path"]),

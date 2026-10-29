@@ -6,8 +6,11 @@ Check the signed catalog and install the current compatible release.
 
 ```sh
 ed extensions update <id> [--json]
+ed extensions update --all [--json]
 ```
 
 The extension must already be installed. A disabled extension remains disabled. An enabled extension switches workers using the same prepare, stop, verify, and rollback rules as the marketplace UI. A failed update retains the selected working version.
 
 The command allows up to 30 minutes for downloading and verification. Disconnecting or cancelling the command cancels its owned work.
+
+`--all` refreshes the catalog and updates every installed extension that has an update, continuing past failures. It prints `{"updated":[...],"failed":{"id":"reason"},"upToDate":[...]}`.

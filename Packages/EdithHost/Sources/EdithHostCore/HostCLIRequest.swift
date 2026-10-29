@@ -29,7 +29,7 @@ public enum HostCLIError: Error, LocalizedError, Sendable {
 
 public struct HostCLIRequest: Sendable, Equatable {
     public enum Action: String, Sendable {
-        case ls, info, install, update, enable, disable, remove, invoke, terminal
+        case ls, info, install, update, updateAll, enable, disable, remove, invoke, terminal
     }
     public let action: Action
     public let id: String?
@@ -49,7 +49,9 @@ public struct HostCLIRequest: Sendable, Equatable {
         self.operation = operation
         self.payload = payload
         self.timeout =
-            timeout ?? (action == .install || action == .update ? Self.maximumTimeout : 30)
+            timeout
+            ?? (action == .install || action == .update || action == .updateAll
+                ? Self.maximumTimeout : 30)
         self.raw = raw
         try validate()
     }
@@ -96,7 +98,7 @@ public struct HostCLIRequest: Sendable, Equatable {
         guard !raw || action == .invoke else {
             throw HostCLIError.usage("Only invoke supports --raw.")
         }
-        if action == .ls {
+        if action == .ls || action == .updateAll {
             guard id == nil, operation == nil else {
                 throw HostCLIError.usage("Invalid list command.")
             }
@@ -133,6 +135,7 @@ public enum HostCLICommand: Equatable {
     public static let usageText = """
         usage: ed extensions ls [--json]
                ed extensions info|install|update|enable|disable|remove <id> [--json]
+               ed extensions update --all [--json]
                ed invoke <id> <operation> [--json <json|->] [--timeout <seconds>] [--raw]
                ed calendar [ls|open|join|directions] [arguments]
                ed --help | --version
@@ -175,6 +178,9 @@ public enum HostCLICommand: Equatable {
         if arguments.first == "extensions" {
             var args = Array(arguments.dropFirst())
             if args.last == "--json" { args.removeLast() }
+            if args == ["update", "--all"] {
+                return .request(try HostCLIRequest(action: .updateAll))
+            }
             guard let word = args.first, let action = HostCLIRequest.Action(rawValue: word),
                 action != .invoke, action != .terminal,
                 args.count == (action == .ls ? 1 : 2)

@@ -213,7 +213,7 @@ public final class HostMarketplace {
         }
         await checkForUpdates(now: now)
         guard error == nil, !offline else { return }
-        let failed = await install(ids: downloadedIDs.sorted().filter { updateAvailable(id: $0) })
+        let failed = await updateAll()
         guard failed.isEmpty else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
@@ -287,6 +287,14 @@ public final class HostMarketplace {
         if downloadedIDs.contains(id), installed[id] == nil, available[id] != nil { return true }
         guard let package = installed[id], let next = available[id] else { return false }
         return package.version.compare(next.version, options: .numeric) == .orderedAscending
+    }
+
+    public var updatableIDs: [String] {
+        downloadedIDs.sorted().filter { updateAvailable(id: $0) }
+    }
+
+    @discardableResult public func updateAll() async -> [String: String] {
+        await install(ids: updatableIDs)
     }
 
     public func checkForUpdates(now: Date = Date()) async {
