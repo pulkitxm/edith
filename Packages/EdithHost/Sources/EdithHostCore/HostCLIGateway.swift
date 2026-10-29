@@ -14,6 +14,7 @@ import Foundation
                 withJSONObject: marketplace.entries.map { info($0.id) },
                 options: .sortedKeys)
         }
+        if request.action == .updateAll { return try await updateAll() }
         guard let id = request.id, marketplace.entries.contains(where: { $0.id == id }) else {
             throw HostCLIError.rejected("Unknown extension identifier.")
         }
@@ -53,6 +54,24 @@ import Foundation
         try Task.checkCancellation()
         if let message = failure { throw HostCLIError.rejected(message) }
         return try encodedInfo(id)
+    }
+
+    private func updateAll() async throws -> Data {
+        await marketplace.checkForUpdates()
+        let candidates = marketplace.updatableIDs
+        let failed = await marketplace.updateAll()
+        try Task.checkCancellation()
+        let updated = candidates.filter {
+            failed[$0] == nil && !marketplace.updateAvailable(id: $0)
+        }
+        let skipped = Set(candidates).subtracting(updated).subtracting(failed.keys)
+        var failures = failed
+        for id in skipped { failures[id] = "Another operation is running for this extension." }
+        return try JSONSerialization.data(
+            withJSONObject: [
+                "updated": updated, "failed": failures,
+                "upToDate": marketplace.downloadedIDs.subtracting(candidates).sorted(),
+            ], options: .sortedKeys)
     }
 
     private func invoke(_ request: HostCLIRequest, id: String) async throws -> Data {
