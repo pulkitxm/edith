@@ -1408,7 +1408,7 @@ private actor ProcessReadProbe {
     }
 }
 
-@Suite struct SSHProcessWaitTests {
+@Suite(.timeLimit(.minutes(1))) struct SSHProcessWaitTests {
     private func process(_ command: String) throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
