@@ -60,6 +60,7 @@ struct UsageUILimits: Codable, Sendable {
     func shutdownAndWait() async {
         let pending = Array(limitsPreparations.values)
         let caching = homeUsageTask
+        homeUsageTask = nil
         shutdown()
         for task in pending { _ = await task.value }
         await caching?.value
