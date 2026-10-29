@@ -84,6 +84,25 @@ import HostWorkerFixtureSupport
         #expect(marketplace.error == nil)
     }
 
+    @Test func extensionsWithNoCompatibleInstallMigrateEvenWhenAutomaticUpdatesAreOff()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let previous = fixture.package("1.0.0", abi: "edith-host-5")
+        try fixture.install([previous])
+        let current = try fixture.build("1.0.0")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [previous, current.package]))
+        let marketplace = try fixture.marketplace(
+            serving: [current.package.downloadURL: current.archive])
+        marketplace.automaticallyUpdatesExtensions = false
+        await marketplace.updateInstalledIfDue(now: Date(), hostBuild: "build")
+        #expect(marketplace.installed["sample"] == current.package)
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
     @Test func failedActivationExplainsTheCauseAndRetainsTheDownloadForRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
