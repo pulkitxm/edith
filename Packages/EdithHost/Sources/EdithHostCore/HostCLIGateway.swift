@@ -28,12 +28,12 @@ import Foundation
         var failure: String?
         switch request.action {
         case .install:
-            guard !marketplace.downloadedIDs.contains(id) else {
-                throw HostCLIError.rejected(
-                    "The extension is already installed. Use extensions update.")
+            if !marketplace.downloadedIDs.contains(id) {
+                failure = await marketplace.download(id: id)
             }
-            failure = await marketplace.download(id: id)
-            if failure == nil, marketplace.installed[id] != nil {
+            if failure == nil, marketplace.installed[id] != nil,
+                marketplace.sessions.states[id] != .active
+            {
                 failure = await marketplace.enable(id: id)
             }
         case .update:
