@@ -200,14 +200,30 @@ import Observation
             do { try await prepare() } catch {
                 if !Task.isCancelled { failure = error.localizedDescription }
             }
+            var quiet = 0
             while !Task.isCancelled, !stopped {
+                let before = stateSignature
                 do {
                     if !prepared { try await prepare() }
                     try await refreshState()
                 } catch { if !Task.isCancelled { failure = error.localizedDescription } }
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                quiet = before == stateSignature && !refreshing ? quiet + 1 : 0
+                do { try await Task.sleep(for: Self.pollInterval(quiet: quiet)) } catch { return }
             }
         }
+    }
+
+    static func pollInterval(quiet: Int) -> Duration {
+        quiet >= 15 ? .seconds(10) : .seconds(2)
+    }
+
+    private var stateSignature: [String] {
+        [
+            "\(refreshing)", notice ?? "", progressLine ?? "", failure ?? "",
+            "\(usageUpdatedAt ?? 0)", "\(limitsUpdatedAt ?? 0)", "\(limitsRefreshedAt ?? 0)",
+            "\(presentationValues?.sorted { $0.key < $1.key }.map { $0.key + $0.value } ?? [])",
+            "\(preferences?.values.count ?? 0)",
+        ]
     }
 
     func refreshState() async throws {
