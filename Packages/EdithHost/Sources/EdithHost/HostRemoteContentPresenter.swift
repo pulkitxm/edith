@@ -113,6 +113,15 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         }
     }
 
+    func terminalDiagnostics() async -> [HostCLIJSON] {
+        var result: [HostCLIJSON] = []
+        for controller in controllers.values
+        where HostTerminalUIRequest.accepts(controller.request) {
+            result.append(await controller.terminalDiagnostics())
+        }
+        return result
+    }
+
     func park(key: String, version: String, presentationID: UUID, controller: NSViewController) {
         guard let remote = controllers[presentationID], remote === controller, !remote.detached,
             remote.failure == nil
@@ -379,6 +388,19 @@ final class HostRemoteViewController: NSViewController {
     }
 
     func prepareInputToClose() async { await terminalInput?.stopAndWait() }
+
+    func terminalDiagnostics() async -> HostCLIJSON {
+        var result: [String: HostCLIJSON] = [
+            "extensionID": .string(request.extensionID), "location": .string(request.location),
+            "presentationID": .string(request.presentationID.uuidString),
+            "connected": .bool(connected), "detached": .bool(detached),
+            "failure": failure.map(HostCLIJSON.string) ?? .null,
+            "visible": .bool(state.visible),
+            "attached": .bool(isViewLoaded && view.window != nil),
+        ]
+        result["input"] = await terminalInput?.diagnostics() ?? .null
+        return .object(result)
+    }
 
     private func containsResponder(in window: NSWindow) -> Bool {
         guard isViewLoaded, view.window === window else { return false }

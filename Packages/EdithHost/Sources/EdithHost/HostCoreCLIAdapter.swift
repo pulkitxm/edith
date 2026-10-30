@@ -12,6 +12,7 @@ import Foundation
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping HostAppCLIAdapter.Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        terminalInputs: @escaping @MainActor () async -> [HostCLIJSON] = { [] },
         agentBackend: HostCoreAgentCLIBackend? = nil,
         quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
         changed: @escaping @MainActor () -> Void
@@ -20,7 +21,8 @@ import Foundation
             permissions: permissionState, marketplace: marketplace, defaults: shared)
         let app = HostAppCLIAdapter(
             identity: identity, marketplace: marketplace, updater: updater,
-            showMainWindow: showMainWindow, navigation: navigation, core: core, quit: quit,
+            showMainWindow: showMainWindow, navigation: navigation, core: core,
+            terminalInputs: terminalInputs, quit: quit,
             relaunch: {
                 throw HostCLIError.rejected(
                     "Relaunch must be performed by the matching CLI caller.")

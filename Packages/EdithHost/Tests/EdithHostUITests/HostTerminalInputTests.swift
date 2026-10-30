@@ -119,6 +119,23 @@ struct HostTerminalInputTests {
         #expect(fixture.events.last?.sequence == 2)
     }
 
+    @Test func diagnosticsReportTheLastDeliveredStateAndItsRejection() async {
+        let fixture = TerminalInputFixture()
+        fixture.accept = false
+        let input = fixture.input()
+        defer { input.stop(); fixture.window.close() }
+        input.stateChanged()
+        await settle { input.failure != nil }
+        let report = await input.diagnostics().object
+        let last = report?["lastEvent"]?.object
+        #expect(last?["sequence"] == .integer(1))
+        #expect(last?["accepted"] == .bool(false))
+        #expect(last?["key"] == .bool(false))
+        #expect(report?["rejectedEvents"] == .integer(1))
+        #expect(report?["ownsResponder"] == .bool(true))
+        #expect(report?["engineFocused"] == .bool(false))
+    }
+
     private func settle(until condition: () -> Bool) async {
         for _ in 0..<200 {
             if condition() { return }

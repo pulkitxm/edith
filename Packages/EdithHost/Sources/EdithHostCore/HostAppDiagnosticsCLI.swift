@@ -3,13 +3,15 @@ import Foundation
 
 public enum HostAppDiagnosticsCLI {
     public static func process(
-        info: HostCLIJSON, startedAt: Date, agent: HostCLIJSON, extensionIDs: [String]
+        info: HostCLIJSON, startedAt: Date, agent: HostCLIJSON, extensionIDs: [String],
+        terminalInputs: [HostCLIJSON] = []
     ) throws -> HostCLIJSON {
         let seconds = max(0, Int64(Date().timeIntervalSince(startedAt)))
         return .object([
             "info": info, "pid": .integer(Int64(getpid())), "uptimeSeconds": .integer(seconds),
             "uptime": .string(uptime(seconds)), "idleWakeups": .integer(try idleWakeups()),
             "agent": agent, "extensions": .strings(extensionIDs.sorted()),
+            "terminalInputs": .array(terminalInputs),
         ])
     }
 
