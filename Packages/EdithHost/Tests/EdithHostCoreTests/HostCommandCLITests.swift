@@ -191,6 +191,19 @@ import Testing
 }
 
 @Suite struct HostCLILifecycleTests {
+    @Test @MainActor func relaunchQuitsTheAppCompletelyInsteadOfOnlyClosingWindows() async throws {
+        var calls: [(String, [String: HostCLIJSON])] = []
+        let app = HostAppCommandCLI(
+            available: Set(HostAppCommandCLI.actions),
+            perform: { action, payload in
+                calls.append((action, payload))
+                return .object(["changed": .bool(true)])
+            })
+        #expect(HostCLIRelaunch.quitArguments.first == "app")
+        _ = try await app.execute(Array(HostCLIRelaunch.quitArguments.dropFirst()))
+        #expect(calls.last?.0 == "quit" && calls.last?.1["completely"] == .bool(true))
+    }
+
     @Test func relaunchWaitsForOwnedTargetToExitAndNeverLaunchesWhenQuitIsRejected() async throws {
         let fixture = RelaunchFixture()
         let bundle = URL(fileURLWithPath: "/synthetic/Edith.app")

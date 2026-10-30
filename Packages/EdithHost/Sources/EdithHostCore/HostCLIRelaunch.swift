@@ -3,6 +3,8 @@ import EdithExtensionSupport
 import Foundation
 
 public enum HostCLIRelaunch {
+    static let quitArguments = ["app", "quit", "--yes", "--completely", "--json"]
+
     public static func run(
         bundle: URL, json: Bool, timeout: Double = 8,
         quit: @Sendable () async throws -> Void,
@@ -57,7 +59,7 @@ public enum HostCLIRelaunch {
             bundle: URL(fileURLWithPath: path), json: json,
             quit: {
                 let data = try await invoke(
-                    HostCoreCLIEnvelope(arguments: ["app", "quit", "--yes", "--json"]).request())
+                    HostCoreCLIEnvelope(arguments: quitArguments).request())
                 let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: data)
                 try reply.validate()
                 guard reply.exitCode == 0 else { throw HostCLIError.rejected(reply.stderr) }
