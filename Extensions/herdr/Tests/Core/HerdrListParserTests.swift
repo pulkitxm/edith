@@ -117,6 +117,23 @@ import Testing
         #expect(fromList.map(\.stateSequence) == [681])
     }
 
+    @Test func anUntitledAgentIsNamedByItsKindInsteadOfItsPane() {
+        let json = """
+            {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w1V:p6","agent":"codex","agent_status":"unknown","workspace_id":"w1V"}],"agents":[],"workspaces":[]}}}
+            """
+        let agents = HerdrListParser.agents(
+            fromSnapshot: json, session: "default", machineID: "local", machineName: "This Mac",
+            machineIsLocal: true, sshTarget: nil)
+        #expect(agents.map(\.title) == ["Codex"])
+        let list = """
+            {"result":{"agents":[{"agent":"codex","pane_id":"w1V:p6"},{"pane_id":"w1V:p7"}]}}
+            """
+        let listed = HerdrListParser.agents(
+            from: list, session: "default", machineID: "local", machineName: "This Mac",
+            machineIsLocal: true, sshTarget: nil)
+        #expect(listed.map(\.title) == ["Codex", "w1V:p7"])
+    }
+
     @Test func snapshotUnionsPanesWhenAgentsDropsTheRow() {
         let json = """
             {"id":"s","result":{"type":"session_snapshot","snapshot":{"panes":[{"pane_id":"w3:p1N","agent":"opencode","agent_status":"working","terminal_title_stripped":"Image Query","workspace_id":"w3","foreground_cwd":"/srv/app"},{"pane_id":"w3:p1Q","agent":null,"agent_status":"unknown","workspace_id":"w3"}],"agents":[],"workspaces":[{"label":"quinjet","workspace_id":"w3"}]}}}
