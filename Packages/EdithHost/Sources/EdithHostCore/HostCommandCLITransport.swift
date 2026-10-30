@@ -2,9 +2,9 @@ import Darwin
 import Foundation
 
 public enum HostCommandCLITransport {
-    public static func invoke(_ request: HostCLIRequest, identity: HostIdentity) async throws
-        -> Data
-    {
+    public static func invoke(
+        _ request: HostCLIRequest, identity: HostIdentity, launchesHost: Bool = true
+    ) async throws -> Data {
         try request.validate()
         try Task.checkCancellation()
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -15,8 +15,9 @@ public enum HostCommandCLITransport {
             let work = Task.detached {
                 defer { connection.close() }
                 try cancellation.check()
-                try HostCLITransport.connect(identity: identity, timeout: request.timeout + 2)
-                    .close()
+                try HostCLITransport.connect(
+                    identity: identity, timeout: request.timeout + 2, launchesHost: launchesHost
+                ).close()
                 try connection.configure(timeout: request.timeout + 2)
                 var address = try HostCLITransport.address(
                     HostCLITransport.socketPath(identity: identity))
