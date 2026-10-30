@@ -10,13 +10,16 @@ import WorkerFixtureSupport
 
 @MainActor @objc(EdithHerdrExtensionRuntime)
 final class ExtensionRuntime: NSObject {
-    private var uiClient: ExtensionEngineClient?
-    private var sessionSettingsModel: HerdrSessionSettingsModel?
-    private var settingsModel: HerdrSettingsModel?
-    private var uiStore: HerdrStore?
-    private var uiActivity: AgentActivityMonitor?
-    private var uiController: NSViewController?
-    private var uiLocation: String?
+    private struct UIPresentation {
+        let location: String
+        let client: ExtensionEngineClient?
+        var store: HerdrStore?
+        var activity: AgentActivityMonitor?
+        var sessionSettings: HerdrSessionSettingsModel?
+        var settings: HerdrSettingsModel?
+        var controller: NSViewController?
+    }
+    private var presentations: [UUID: UIPresentation] = [:]
     private var worker: HerdrWorker?
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
@@ -87,27 +90,27 @@ final class ExtensionRuntime: NSObject {
         suspended = true
         let worker = worker
         let startup = startup
-        let store = uiStore
-        let activity = uiActivity
-        let sessionSettings = sessionSettingsModel
-        let settings = settingsModel
-        store?.cancelPendingWork()
-        activity?.beginCommandDrain()
-        sessionSettings?.shutdown()
-        settings?.shutdown()
+        let current = Array(presentations.values)
+        for presentation in current {
+            presentation.store?.cancelPendingWork()
+            presentation.activity?.beginCommandDrain()
+            presentation.sessionSettings?.shutdown()
+            presentation.settings?.shutdown()
+        }
         startup?.cancel()
         worker?.requestWorkCancellation()
         if suspension == nil {
             let retired = Array(uiRetirements.values)
-            suspension = Task {
-                [self, worker, startup, store, activity, sessionSettings, settings] in
+            suspension = Task { [self, worker, startup, current] in
                 await startup?.value
                 await worker?.cancelPendingWork()
                 await commands.suspendAndWait()
-                await store?.drain()
-                await sessionSettings?.stopAndWait()
-                await settings?.stopAndWait()
-                await activity?.cancelPendingWorkAndWait()
+                for presentation in current {
+                    await presentation.store?.drain()
+                    await presentation.sessionSettings?.stopAndWait()
+                    await presentation.settings?.stopAndWait()
+                    await presentation.activity?.cancelPendingWorkAndWait()
+                }
                 for task in retired { await task.value }
             }
         }
@@ -151,7 +154,7 @@ final class ExtensionRuntime: NSObject {
             await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await worker?.shutdown()
-            stopUI()
+            stopAllUI()
             for task in Array(uiRetirements.values) { await task.value }
             self.worker = nil
             fixture = nil
@@ -172,7 +175,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
+            guard !suspended else { return ["ok": false] as NSDictionary }
             guard worker == nil, let location = input["location"] as? String,
                 [
                     "main", "settings", "notch", "herdr.agent", "herdr.agent.controls",
@@ -197,9 +200,9 @@ final class ExtensionRuntime: NSObject {
                     UUID(uuidString: raw) != nil
                 else { return ["ok": false] as NSDictionary }
             }
-            stopUI()
-            uiLocation = location
-            uiClient = configuration.engineClient
+            stopUI(presentationID)
+            var presentation = UIPresentation(
+                location: location, client: configuration.engineClient)
             if location != "settings", let client = configuration.engineClient {
                 let facade = HerdrUIClient(client: client)
                 let store = HerdrStore(uiClient: facade)
@@ -211,9 +214,9 @@ final class ExtensionRuntime: NSObject {
                         UUID.init(uuidString:)))
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
                 store.uiActivity = activity
-                uiStore = store
-                uiActivity = activity
-                uiController = NSHostingController(
+                presentation.store = store
+                presentation.activity = activity
+                presentation.controller = NSHostingController(
                     rootView: ExtensionPageHost {
                         if location == "main" {
                             HerdrPage(store: store, activity: activity)
@@ -243,9 +246,9 @@ final class ExtensionRuntime: NSObject {
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
                 activity.folderPresentationID = presentationID
                 store.uiActivity = activity
-                uiStore = store
-                uiActivity = activity
-                uiController = NSHostingController(
+                presentation.store = store
+                presentation.activity = activity
+                presentation.controller = NSHostingController(
                     rootView: ExtensionPageHost {
                         HerdrActivitySettingsPage(store: store, monitor: activity)
                     })
@@ -257,8 +260,8 @@ final class ExtensionRuntime: NSObject {
                     facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
                 }
                 let model = HerdrSessionSettingsModel(client: facade)
-                sessionSettingsModel = model
-                uiController = NSHostingController(
+                presentation.sessionSettings = model
+                presentation.controller = NSHostingController(
                     rootView: ExtensionPageHost { HerdrExtensionSettingsPage(model: model) })
             } else {
                 let model: HerdrSettingsModel
@@ -267,17 +270,21 @@ final class ExtensionRuntime: NSObject {
                 } else {
                     model = HerdrSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
                 }
-                settingsModel = model
-                uiController = NSHostingController(
+                presentation.settings = model
+                presentation.controller = NSHostingController(
                     rootView: ExtensionPageHost { HerdrSettingsPage(model: model) })
             }
+            presentations[presentationID] = presentation
         case "terminalUI", "terminalUIStatus":
-            guard let binding = uiStore?.terminalUI else { return ["ok": false] as NSDictionary }
+            guard let binding = presentation(input)?.store?.terminalUI else {
+                return ["ok": false] as NSDictionary
+            }
             return binding.execute(input)
-        case "stopUI": stopUI()
+        case "stopUI":
+            if let id = presentationID(input) { stopUI(id) } else { stopAllUI() }
         case "start":
             guard !suspended else { return ["ok": false] as NSDictionary }
-            guard uiLocation == nil, !ExtensionHostRole.isInterfaceProcess else {
+            guard presentations.isEmpty, !ExtensionHostRole.isInterfaceProcess else {
                 return ["ok": false] as NSDictionary
             }
             let admitted: WorkerFixtureAdmission?
@@ -308,10 +315,11 @@ final class ExtensionRuntime: NSObject {
                 || ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
             if !recovery { startup = Task { await created.start() } }
         case "view":
-            guard input["location"] as? String == uiLocation, let uiController else {
-                return ["ok": false] as NSDictionary
-            }
-            return uiController
+            guard let presentation = presentation(input),
+                input["location"] as? String == presentation.location,
+                let controller = presentation.controller
+            else { return ["ok": false] as NSDictionary }
+            return controller
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard let worker else { return ["ok": false] as NSDictionary }
@@ -330,32 +338,32 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
-    private func stopUI() {
-        let sessionSettings = sessionSettingsModel
-        let settings = settingsModel
-        sessionSettings?.shutdown()
-        settings?.shutdown()
-        sessionSettingsModel = nil
-        settingsModel = nil
-        let store = uiStore
-        let activity = uiActivity
-        store?.stopRendering()
-        activity?.beginCommandDrain()
-        uiClient?.invalidate()
-        uiClient = nil
-        uiStore = nil
-        uiActivity = nil
-        uiController = nil
-        uiLocation = nil
-        if store != nil || activity != nil || sessionSettings != nil || settings != nil {
-            let id = UUID()
-            uiRetirements[id] = Task { [self, store, activity, sessionSettings, settings] in
-                await store?.shutdown()
-                await activity?.shutdown()
-                await sessionSettings?.stopAndWait()
-                await settings?.stopAndWait()
-                uiRetirements[id] = nil
-            }
+    private func presentationID(_ input: NSDictionary) -> UUID? {
+        (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
+    }
+
+    private func presentation(_ input: NSDictionary) -> UIPresentation? {
+        presentationID(input).flatMap { presentations[$0] }
+    }
+
+    private func stopAllUI() {
+        for id in Array(presentations.keys) { stopUI(id) }
+    }
+
+    private func stopUI(_ id: UUID) {
+        guard let presentation = presentations.removeValue(forKey: id) else { return }
+        presentation.sessionSettings?.shutdown()
+        presentation.settings?.shutdown()
+        presentation.store?.stopRendering()
+        presentation.activity?.beginCommandDrain()
+        presentation.client?.invalidate()
+        let retirement = UUID()
+        uiRetirements[retirement] = Task { [self, presentation] in
+            await presentation.store?.shutdown()
+            await presentation.activity?.shutdown()
+            await presentation.sessionSettings?.stopAndWait()
+            await presentation.settings?.stopAndWait()
+            uiRetirements[retirement] = nil
         }
     }
 

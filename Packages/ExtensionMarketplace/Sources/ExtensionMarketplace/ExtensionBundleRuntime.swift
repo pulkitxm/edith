@@ -444,7 +444,13 @@ public final class ExtensionBundleRuntime {
                 }
                 return try execute()
             case "stopUI":
-                bindings.removeAll(); sequences.removeAll()
+                if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID)
+                {
+                    bindings[presentation] = nil; sequences[presentation] = nil
+                } else {
+                    bindings.removeAll(); sequences.removeAll()
+                }
                 return try execute()
             case "terminalUI", "terminalUIStatus":
                 guard role == .app, let rawID = context["presentationID"] as? String,

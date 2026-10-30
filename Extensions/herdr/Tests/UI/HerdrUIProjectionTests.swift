@@ -407,6 +407,39 @@ import Testing
                 as? Bool == false)
     }
 
+    @Test func eachPresentationKeepsItsTerminalInputWhenAnotherOpensOrStops() throws {
+        let runtime = ExtensionRuntime()
+        let registry = OwnedTerminalSessionRegistry()
+        defer { registry.stopAll() }
+        let host = "com.pulkit.edith.tests.herdr-presentations"
+        func configure(_ location: String, _ bridge: SyntheticPTYEngineBridge) -> Bool {
+            (runtime.execute([
+                "operation": "configureUI", "location": location, "remoteUI": true,
+                "inProcess": true, "hostIdentifier": host, "extensionID": "herdr",
+                "defaultsSuite": host + ".extensions.herdr", "uiOnly": false,
+                "presentationID": bridge.presentation.uuidString, "engineClient": bridge,
+            ]) as? NSDictionary)?["ok"] as? Bool == true
+        }
+        func accepts(_ bridge: SyntheticPTYEngineBridge) -> Bool {
+            (runtime.execute([
+                "operation": "terminalUIStatus", "presentationID": bridge.presentation.uuidString,
+            ]) as? NSDictionary)?["ok"] as? Bool == true
+        }
+        let main = SyntheticPTYEngineBridge(registry: registry)
+        let notch = SyntheticPTYEngineBridge(registry: registry)
+        #expect(configure("main", main))
+        #expect(accepts(main))
+        #expect(configure("notch", notch))
+        #expect(accepts(main))
+        _ = runtime.execute([
+            "operation": "stopUI", "presentationID": notch.presentation.uuidString,
+        ])
+        #expect(accepts(main))
+        #expect(!accepts(notch))
+        _ = runtime.execute(["operation": "stopUI", "presentationID": main.presentation.uuidString])
+        #expect(!accepts(main))
+    }
+
     @Test func ownerStopCancelsInflightOriginalCatalogDiscoveryBeforeCommandDrain() async throws {
         defer { HerdrWorkOwnership.enable() }
         let signal = HerdrCatalogCancellationFixture()
