@@ -29,7 +29,8 @@ struct HostNotchSlotMotionTests {
     @Test func nativeSlotsClipCardsTallerThanTheirRectangle() {
         let container = container()
         let slot = slot()
-        container.attach(slot, rectangle: CGRect(x: 10, y: 40, width: 100, height: 60), native: true)
+        let rectangle = CGRect(x: 10, y: 40, width: 100, height: 60)
+        container.attach(slot, rectangle: rectangle, native: true)
         #expect(slot.view.clipsToBounds)
     }
 
