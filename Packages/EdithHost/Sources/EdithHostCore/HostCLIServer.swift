@@ -11,14 +11,22 @@ import Foundation
     }
     private let identity: HostIdentity
     private let execute: Execute
+    private let socketCheckInterval: Duration
     private var listener: DispatchSourceRead?
+    private var socketMonitor: Task<Void, Never>?
+    private var boundSocket: (path: String, device: dev_t, inode: ino_t)?
+    private var rebinding = false
     private var listenerPaused = false
     private var jobs: [UUID: Job] = [:]
     private var retired: [UUID: Task<Void, Never>] = [:]
     private var replying = Set<UUID>()
 
-    public init(identity: HostIdentity, execute: @escaping Execute) {
+    public init(
+        identity: HostIdentity, socketCheckInterval: Duration = .seconds(5),
+        execute: @escaping Execute
+    ) {
         self.identity = identity
+        self.socketCheckInterval = socketCheckInterval
         self.execute = execute
     }
 
@@ -40,7 +48,7 @@ import Foundation
         }
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { Darwin.close(lease); throw HostCLIError.unavailable }
-        var boundSocket = false
+        var bindSucceeded = false
         do {
             if lstat(path, &info) == 0 {
                 guard info.st_mode & S_IFMT == S_IFSOCK, info.st_uid == getuid() else {
@@ -54,29 +62,70 @@ import Foundation
                     bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
                 }
             }
-            boundSocket = bound == 0
+            bindSucceeded = bound == 0
             guard bound == 0, chmod(path, 0o600) == 0, listen(descriptor, 128) == 0,
                 fcntl(descriptor, F_SETFL, O_NONBLOCK) == 0,
-                fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0
+                fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0, lstat(path, &info) == 0
             else { throw HostCLIError.unavailable }
         } catch {
             Darwin.close(descriptor)
-            if boundSocket { unlink(path) }
+            if bindSucceeded { unlink(path) }
             Darwin.close(lease)
             throw error
         }
+        let device = info.st_dev
+        let inode = info.st_ino
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
         source.setEventHandler { [weak self] in
             MainActor.assumeIsolated { self?.accept(descriptor) }
         }
         source.setCancelHandler {
-            Darwin.close(descriptor); unlink(path); Darwin.close(lease)
+            Darwin.close(descriptor)
+            if Self.isSocket(path, device: device, inode: inode) { unlink(path) }
+            Darwin.close(lease)
         }
         listener = source
+        boundSocket = (path, device, inode)
         source.resume()
+        monitorSocket()
+    }
+
+    private func monitorSocket() {
+        guard socketMonitor == nil else { return }
+        let interval = socketCheckInterval
+        socketMonitor = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: interval) } catch { return }
+                self?.rebindIfSocketWasRemoved()
+            }
+        }
+    }
+
+    private func rebindIfSocketWasRemoved() {
+        if !rebinding {
+            guard let bound = boundSocket, listener != nil,
+                !Self.isSocket(bound.path, device: bound.device, inode: bound.inode)
+            else { return }
+            if listenerPaused { listener?.resume(); listenerPaused = false }
+            listener?.cancel()
+            listener = nil
+            boundSocket = nil
+            rebinding = true
+        }
+        if (try? start()) != nil { rebinding = false }
+    }
+
+    nonisolated private static func isSocket(_ path: String, device: dev_t, inode: ino_t) -> Bool {
+        var info = stat()
+        return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFSOCK
+            && info.st_dev == device && info.st_ino == inode
     }
 
     public func shutdown() {
+        socketMonitor?.cancel()
+        socketMonitor = nil
+        boundSocket = nil
+        rebinding = false
         if listenerPaused { listener?.resume(); listenerPaused = false }
         listener?.cancel()
         listener = nil
