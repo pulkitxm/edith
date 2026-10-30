@@ -13,6 +13,7 @@ import Foundation
     private let relaunch: @MainActor () async throws -> HostCLIJSON
     private let quit: @MainActor () -> Void
     private let core: @MainActor () -> HostCoreServices?
+    private let terminalInputs: @MainActor () async -> [HostCLIJSON]
     private let startedAt = Date()
 
     init(
@@ -20,12 +21,14 @@ import Foundation
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        terminalInputs: @escaping @MainActor () async -> [HostCLIJSON] = { [] },
         quit: @escaping @MainActor () -> Void = { HostQuit.terminate() },
         relaunch: @escaping @MainActor () async throws -> HostCLIJSON
     ) {
         self.identity = identity; self.marketplace = marketplace; self.updater = updater
         self.showMainWindow = showMainWindow; self.navigation = navigation; self.relaunch = relaunch
         self.core = core
+        self.terminalInputs = terminalInputs
         self.quit = quit
     }
 
@@ -58,7 +61,8 @@ import Foundation
                     state: HostLoginItem.registration.rawValue,
                     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
                         ?? "development"),
-                extensionIDs: Array(marketplace.sessions.activeIDs))
+                extensionIDs: Array(marketplace.sessions.activeIDs),
+                terminalInputs: await terminalInputs())
         case "paths":
             return .array(
                 HostAppPathsCLI.entries(identity: identity).map { id, label, url in

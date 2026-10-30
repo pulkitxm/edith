@@ -29,6 +29,9 @@ final class HostTerminalInput {
     private var closing = false
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
     private(set) var failure: String?
+    private(set) var lastEvent: HostTerminalUIEvent?
+    private(set) var lastAccepted: Bool?
+    private(set) var rejectedEvents = 0
 
     init(
         presentationID: UUID, client: HostTerminalInputClient,
@@ -121,11 +124,11 @@ final class HostTerminalInput {
                     if pendingClose {
                         pendingClose = false
                         let event = try event(action: .windowClosed, closed: true)
-                        guard try await client.update(event) else { throw HostWorkerError.rejected }
+                        guard try await deliver(event) else { throw HostWorkerError.rejected }
                     } else if pendingState {
                         pendingState = false
                         let event = try event()
-                        guard try await client.update(event) else { throw HostWorkerError.rejected }
+                        guard try await deliver(event) else { throw HostWorkerError.rejected }
                     } else if !zooms.isEmpty {
                         let zoom = zooms.removeFirst()
                         guard let current = window(), current.isVisible, current.isKeyWindow,
@@ -133,7 +136,7 @@ final class HostTerminalInput {
                         else { continue }
                         if [.newTab, .closeTab, .nextTab, .previousTab].contains(zoom.action) {
                             let event = try event(action: zoom.action)
-                            guard try await client.update(event) else {
+                            guard try await deliver(event) else {
                                 throw HostWorkerError.rejected
                             }
                             continue
@@ -147,7 +150,7 @@ final class HostTerminalInput {
                         else { throw HostWorkerError.rejected }
                         if status.focused {
                             let event = try event(action: zoom.action)
-                            guard try await client.update(event) else {
+                            guard try await deliver(event) else {
                                 throw HostWorkerError.rejected
                             }
                         } else {
@@ -166,6 +169,48 @@ final class HostTerminalInput {
                 }
             }
         }
+    }
+
+    private func deliver(_ event: HostTerminalUIEvent) async throws -> Bool {
+        lastEvent = event
+        lastAccepted = nil
+        let accepted: Bool
+        do { accepted = try await client.update(event) } catch {
+            lastAccepted = false; rejectedEvents += 1; throw error
+        }
+        lastAccepted = accepted
+        if !accepted { rejectedEvents += 1 }
+        return accepted
+    }
+
+    func diagnostics() async -> HostCLIJSON {
+        var result: [String: HostCLIJSON] = [
+            "stopped": .bool(stopped), "available": .bool(available()),
+            "rejectedEvents": .integer(Int64(rejectedEvents)),
+            "failure": failure.map(HostCLIJSON.string) ?? .null,
+        ]
+        if let window = window() {
+            result["windowKey"] = .bool(window.isKeyWindow)
+            result["windowVisible"] = .bool(window.isVisible)
+            result["ownsResponder"] = .bool(ownsResponder(window))
+            result["firstResponder"] = .string(
+                window.firstResponder.map { String(describing: type(of: $0)) } ?? "none")
+        }
+        result["applicationActive"] = .bool(NSApp.isActive)
+        result["pageVisible"] = .bool(visible())
+        if let lastEvent {
+            result["lastEvent"] = .object([
+                "sequence": .integer(Int64(clamping: lastEvent.sequence)),
+                "active": .bool(lastEvent.active), "key": .bool(lastEvent.key),
+                "visible": .bool(lastEvent.visible),
+                "action": lastEvent.action.map { .string($0.rawValue) } ?? .null,
+                "accepted": lastAccepted.map(HostCLIJSON.bool) ?? .null,
+            ])
+        }
+        if available(), let status = try? await client.status() {
+            result["engineFocused"] = .bool(status.focused)
+        }
+        return .object(result)
     }
 
     private func event(action: HostTerminalUIAction? = nil, closed: Bool = false) throws

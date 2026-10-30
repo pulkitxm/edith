@@ -63,6 +63,9 @@ import SwiftUI
                 navigation: { action, route in
                     NavigationCommands.perform(action: action, route: route)
                 }, core: { [weak self] in self?.coreServices },
+                terminalInputs: { [weak self] in
+                    await self?.remotePresenter?.terminalDiagnostics() ?? []
+                },
                 changed: { [weak self] in
                     self?.coreServices?.panelShortcutChanged()
                     IPC.post(IPC.Name.settingsChanged)
