@@ -30,7 +30,7 @@ final class LimitsStatusItem {
         StatusItemMenu.handleClick(on: item) {
             if let store {
                 panel.show(
-                    from: item, title: "Rate Limits",
+                    from: item, title: "Rate Limits", choices: accountChoices(store),
                     actions: [
                         .init(
                             title: store.refreshingLimits ? "Refreshing…" : "Refresh",
@@ -45,6 +45,30 @@ final class LimitsStatusItem {
                 }
             }
         }
+    }
+
+    private func accountChoices(_ store: UsageStore) -> [StatusItemPanel.Choice] {
+        guard !UsagePresenterState.shared.hidesMenuBarNumbers, store.providerEnabled(.claude)
+        else { return [] }
+        return Self.accountChoice(store.claudeAccounts, defaults: SharedDefaults.store).map {
+            [$0]
+        } ?? []
+    }
+
+    static func accountChoice(
+        _ accounts: [ClaudeAccountLimits], defaults: UserDefaults
+    ) -> StatusItemPanel.Choice? {
+        guard accounts.count > 2 else { return nil }
+        let selectedID = defaults.string(forKey: MenuBarLimits.accountSelectionKey) ?? ""
+        let options = [("", "First account")] + accounts.map { ($0.id.uuidString, $0.name) }
+        return .init(
+            title: "Claude account",
+            options: options.map { id, name in
+                .init(title: name, selected: id == selectedID) {
+                    defaults.set(id, forKey: MenuBarLimits.accountSelectionKey)
+                    UsageWorkerOperations.controller?.settingsChanged()
+                }
+            })
     }
 
     func update(_ providers: [ProviderLimits]) {
@@ -553,8 +577,6 @@ final class StackedLimitsView: NSView {
 
 struct LimitsMenuPanel: View {
     let store: UsageStore
-    @AppStorage(MenuBarLimits.accountSelectionKey, store: SharedDefaults.store) private
-        var selectedID = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -563,14 +585,6 @@ struct LimitsMenuPanel: View {
             } else {
                 ForEach(store.enabledProviders) { provider in
                     if provider == .claude, !store.claudeAccounts.isEmpty {
-                        if store.claudeAccounts.count > 2 {
-                            Picker("Claude account", selection: $selectedID) {
-                                Text("First account").tag("")
-                                ForEach(store.claudeAccounts) {
-                                    Text($0.name).tag($0.id.uuidString)
-                                }
-                            }
-                        }
                         ForEach(store.claudeAccounts) { account in
                             Text("\(provider.label) · \(account.name)")
                                 .font(.edithText(.headline)).lineLimit(1)
@@ -624,6 +638,5 @@ struct LimitsMenuPanel: View {
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
-        .onChange(of: selectedID) { UsageWorkerOperations.controller?.settingsChanged() }
     }
 }
