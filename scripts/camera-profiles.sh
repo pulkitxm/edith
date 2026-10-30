@@ -46,4 +46,4 @@ for pair in "$application|com.apple.developer.system-extension.install" "$provid
   fi
 done
 [ "$missing" = 0 ] || exit 1
-echo "profiles ready; configure CAMERA_CARRIER_PROVISIONING_PROFILE and CAMERA_EXTENSION_PROVISIONING_PROFILE with base64 CMS bytes before publishing Camera"
+echo "profiles ready; pass them to scripts/build-camera-carrier.mjs as CAMERA_CARRIER_PROFILE and CAMERA_EXTENSION_PROFILE for a native transport build"

@@ -1,16 +1,16 @@
 # Camera package publication
 
-The Extensions workflow packages Camera inside a containing host signed with the imported `MACOS_CERT_P12` identity. It derives `CAMERA_SIGN_TEAM` from that host's signature and passes the matching profiles to the carrier builder. It never substitutes ad hoc signing for a release. Development checks use a separate synthetic test identity and do not activate the system extension.
+The Extensions workflow packages Camera inside a containing host signed with the imported `MACOS_CERT_P12` Developer ID Application identity, then notarizes the package with `NOTARY_KEY`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID`. It never substitutes ad hoc signing for a release. Development checks use a separate synthetic test identity and do not activate anything.
 
-Publication requires two repository secrets containing base64-encoded CMS provisioning profiles:
+Camera ships with the `obs` carrier transport (`systemExtensionCarrier.transport` in `Extensions/manifest.json`). The carrier relays frames to the OBS virtual camera, so the package contains no system extension, needs no provisioning profiles and requests no system extension entitlement. Publication needs no repository secrets beyond the signing and notarization ones above.
 
-- `CAMERA_CARRIER_PROVISIONING_PROFILE`: authorizes `com.pulkit.edith.cameraCarrier`, the system extension installation entitlement and the shared `<team>.com.pulkit.edith.camera` application group.
-- `CAMERA_EXTENSION_PROVISIONING_PROFILE`: authorizes `com.pulkit.edith.camera` and the same application group.
+## Native transport
 
-Both profiles must be unexpired, belong to the host's signing team, include the imported certificate and permit the build Mac when device restrictions apply. The workflow writes private profile files into its temporary directory, validates their metadata before packaging, and removes them at job completion. Missing secrets fail with their exact names.
+The native transport, which installs Edith's own `com.pulkit.edith.camera` system extension, is not published. Building it for release requires `CAMERA_SIGN_TEAM` plus two provisioning profile files passed to `scripts/build-camera-carrier.mjs`:
 
-`make camera-profiles` uses the existing signed-in Xcode account and configured `EDITH_TEAM_ID` and `EDITH_SIGN_IDENTITY` to request the carrier and provider profiles. It does not install or activate Camera. Local preparation can also receive existing files through `CAMERA_CARRIER_PROFILE` and `CAMERA_EXTENSION_PROFILE`.
+- `CAMERA_CARRIER_PROFILE`: authorizes `com.pulkit.edith.cameraCarrier`, the system extension installation entitlement and the shared `<team>.com.pulkit.edith.camera` application group.
+- `CAMERA_EXTENSION_PROFILE`: authorizes `com.pulkit.edith.camera` and the same application group.
 
-Apple Development signing can satisfy the marketplace's same-team signature check, but a device-restricted development profile does not authorize installation on arbitrary customer Macs. General distribution requires an appropriate distribution signing identity and profiles. Notarization additionally requires the workflow's `NOTARY_KEY`, `NOTARY_KEY_ID` and `NOTARY_ISSUER_ID` credentials. A successful package build alone does not establish Gatekeeper acceptance or Camera activation on another Mac.
+Both profiles must be unexpired Developer ID profiles that belong to the host's signing team and include its certificate; a device-restricted development profile does not authorize installation on customer Macs. `make camera-profiles` uses the signed-in Xcode account and the configured `EDITH_TEAM_ID` and `EDITH_SIGN_IDENTITY` to request them. It does not install or activate Camera. The Extensions workflow does not supply these profiles, so switching Camera to the native transport also needs workflow changes.
 
-After a real workflow publishes all packages and the signed catalog, verify the public catalog signature against the configured public key, download Camera through a production host signed by the same team, and verify the package and contained signatures. Camera activation, user approval, frame delivery and removal must then be tested on an authorized Mac with synthetic media. These OS operations are separate from the build fixtures.
+After publishing, download Camera through a production host signed by the same team and verify the package and contained signatures. Camera activation, frame delivery and removal must then be tested on a Mac with synthetic media.
