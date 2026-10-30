@@ -325,7 +325,7 @@ public enum HerdrListParser {
         } else if let previous, previous.title != previous.pane, !previous.title.isEmpty {
             title = previous.title
         } else {
-            title = record.title ?? previous?.title ?? record.pane
+            title = untitled(kind: kind, pane: record.pane)
         }
         let workspaceID = record.workspaceID ?? ""
         let workspace: String
@@ -408,12 +408,13 @@ public enum HerdrListParser {
             string(
                 in: object,
                 keys: ["display_agent", "agent", "kind", "name"]) ?? ""
+        let kind = HerdrKind.displayName(for: kindRaw)
         let title =
             string(
                 in: object,
                 keys: [
                     "terminal_title_stripped", "title", "name", "summary", "terminal_title",
-                ]) ?? pane
+                ]) ?? untitled(kind: kind, pane: pane)
         let workspaceID =
             string(in: object, keys: ["workspace_id", "workspace", "tab_id"]) ?? ""
         let workspace = workspaceLabels[workspaceID] ?? workspaceID
@@ -425,10 +426,14 @@ public enum HerdrListParser {
         return HerdrAgent.make(
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
             sshTarget: sshTarget, session: session, pane: pane,
-            kind: HerdrKind.displayName(for: kindRaw),
+            kind: kind,
             status: HerdrAgentStatus.parse(statusRaw), title: title, workspace: workspace,
             cwd: cwd, stateSequence: integer(in: object, keys: ["state_change_seq"]),
             nativeSession: nativeSession(in: object))
+    }
+
+    static func untitled(kind: String, pane: String) -> String {
+        kind == "Unknown" ? pane : kind
     }
 
     private static func nativeSession(in object: [String: Any]) -> HerdrNativeSession? {
