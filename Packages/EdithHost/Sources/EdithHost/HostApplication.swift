@@ -74,6 +74,7 @@ struct HostApplication: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
+            HostMainWindowCommands(delegate: delegate)
             CommandGroup(replacing: .appTermination) {
                 Button("Close Edith") { HostQuit.closeWindows() }.keyboardShortcut("q")
                 Button("Quit Edith") { HostQuit.terminate() }
@@ -82,5 +83,15 @@ struct HostApplication: App {
             CommandGroup(replacing: .newItem) {}
         }
         Settings { HostSettingsRedirect() }
+    }
+}
+
+private struct HostMainWindowCommands: Commands {
+    let delegate: HostApplicationDelegate
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        let _ = delegate.openMainWindow = { [openWindow] in openWindow(id: "main") }
+        CommandGroup(after: .windowArrangement) {}
     }
 }

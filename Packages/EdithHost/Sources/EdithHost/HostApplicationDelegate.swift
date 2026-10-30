@@ -95,13 +95,8 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
             window.attachedSheet?.makeKeyAndOrderFront(nil)
-        } else if let openMainWindow {
-            openMainWindow()
         } else {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            NSWorkspace.shared.openApplication(
-                at: Bundle.main.bundleURL, configuration: configuration)
+            openMainWindow?()
         }
         activate()
     }
@@ -133,6 +128,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if deferringQuit { quitCancelled = true }
+        guard mainWindow() != nil || openMainWindow != nil else { return true }
         showMainWindow()
         return false
     }
