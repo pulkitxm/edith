@@ -6,6 +6,18 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostWorkerTests {
+    @Test func aWorkerThatTimesOutIsNotReportedAsPendingCleanup() {
+        #expect(
+            HostWorkerError.timedOut.disableMessage
+                == "The extension process did not answer in time.")
+        #expect(
+            HostWorkerError.exited.disableMessage
+                == "The extension process exited before it finished starting.")
+        #expect(HostWorkerError.rejected.disableMessage.hasPrefix("Cleanup is pending."))
+        #expect(
+            HostWorkerError.disableRejected("Restore Wi-Fi.").disableMessage == "Restore Wi-Fi.")
+    }
+
     @Test func disablingWaitsForAnAdmittedSettingsRequest() async throws {
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.request-drain",

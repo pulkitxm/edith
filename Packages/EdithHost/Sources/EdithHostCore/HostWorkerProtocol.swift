@@ -367,8 +367,12 @@ extension HostWorkerError: LocalizedError {
 
 public extension HostWorkerError {
     var disableMessage: String {
-        if case .disableRejected(let message) = self { return message }
-        return
+        switch self {
+        case let .disableRejected(message), let .startRejected(message): message
+        case .rejected:
             "Cleanup is pending. Restore system settings or finish macOS approval, then try again."
+        case .exited, .timedOut, .invalidResponse, .stillRunning:
+            errorDescription ?? "The extension process stopped unexpectedly."
+        }
     }
 }
