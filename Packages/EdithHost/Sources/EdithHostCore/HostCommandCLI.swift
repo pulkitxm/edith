@@ -23,6 +23,10 @@ public struct HostCommandCLI: Sendable {
         self.commandWorkingDirectory = commandWorkingDirectory
     }
 
+    static func launchesHost(for arguments: [String]) -> Bool {
+        !arguments.starts(with: ["usage", "statusline", "record"])
+    }
+
     public static func main(arguments: [String]) -> Never {
         let work = Task {
             do {
@@ -46,7 +50,10 @@ public struct HostCommandCLI: Sendable {
                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                         as? String ?? "development",
                     tooling: tooling,
-                    invoke: { try await HostCommandCLITransport.invoke($0, identity: identity) })
+                    invoke: {
+                        try await HostCommandCLITransport.invoke(
+                            $0, identity: identity, launchesHost: launchesHost(for: arguments))
+                    })
                 if arguments == ["mcp"] {
                     let io = try HostMCPStdio()
                     let server = HostMCPCLI(

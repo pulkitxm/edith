@@ -139,17 +139,20 @@ public enum HostCLITransport {
         return payload
     }
 
-    static func connect(identity: HostIdentity, timeout: Double) throws -> HostCLIConnection {
+    static func connect(identity: HostIdentity, timeout: Double, launchesHost: Bool = true)
+        throws -> HostCLIConnection
+    {
         if let connection = try attempt(identity: identity, timeout: timeout) {
             return connection
         }
+        guard launchesHost else { throw HostCLIError.unavailable }
         for _ in 0..<10 {
             usleep(100_000)
             if let connection = try attempt(identity: identity, timeout: timeout) {
                 return connection
             }
         }
-        guard launchHostApp() else { throw HostCLIError.unavailable }
+        guard launchesHost, launchHostApp() else { throw HostCLIError.unavailable }
         let deadline = Date().addingTimeInterval(20)
         while Date() < deadline {
             usleep(200_000)
