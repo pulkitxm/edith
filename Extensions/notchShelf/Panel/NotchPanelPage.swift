@@ -45,6 +45,12 @@ struct NotchNativeSlotView: View {
             tile.height ?? (tile.widget == .music ? (tile.dense ? 62 : 92) : 160)
         }
     }
+    private var fillsShelfTile: Bool {
+        kind == .card && client.visibleSurfaceLayout.notchHorizontal
+    }
+    private var contentHeight: Double {
+        tile.height ?? client.slotHeight(tile: tile, kind: kind) ?? fallbackHeight
+    }
     private func collapseOnCopy() async {
         let pasteboard = NSPasteboard.general
         let baseline = pasteboard.changeCount
@@ -62,10 +68,7 @@ struct NotchNativeSlotView: View {
                 guard kind == .providerTab, tile.widget == .ability("clipboard") else { return }
                 await collapseOnCopy()
             }
-            .frame(
-                minHeight: tile.height ?? client.slotHeight(tile: tile, kind: kind)
-                    ?? fallbackHeight
-            )
+            .frame(minHeight: fillsShelfTile ? nil : contentHeight)
             .overlay {
                 if let failure = client.slotFailure(tile: tile, kind: kind)
                     ?? (client.supportsNative(tile: tile, kind: kind)

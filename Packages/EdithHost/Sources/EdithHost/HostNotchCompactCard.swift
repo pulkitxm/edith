@@ -24,6 +24,15 @@ struct HostNotchCompactCard: View {
     }
 
     var body: some View {
+        ScrollView {
+            card
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: model.admittedVersions) { model.invalidate() }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(tile.dense ? 8 : 12)) {
             if tile.showTitle || tile.showActions {
                 HStack {
@@ -74,7 +83,6 @@ struct HostNotchCompactCard: View {
         } action: {
             measured($0)
         }
-        .onChange(of: model.admittedVersions) { model.invalidate() }
     }
 
     @ViewBuilder private var content: some View {
