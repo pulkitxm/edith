@@ -620,7 +620,9 @@ public final class ExtensionBundleRuntime {
                 instance.object, key, uiOwnership, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         let input = NSMutableDictionary(dictionary: context)
-        if let uiOwnership { input["hostUIOwnership"] = uiOwnership }
+        if let uiOwnership, !["terminalUI", "terminalUIStatus"].contains(operation) {
+            input["hostUIOwnership"] = uiOwnership
+        }
         input["operation"] = operation
         guard
             let result = instance.object.perform(NSSelectorFromString("execute:"), with: input)?

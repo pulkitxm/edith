@@ -36,6 +36,9 @@ import Testing
                 case "stopUI":
                     title = nil
                     return ["ok": true] as NSDictionary
+                case "terminalUI", "terminalUIStatus":
+                    let keys = input.allKeys.compactMap { $0 as? String }.sorted()
+                    return ["ok": true, "keys": keys] as NSDictionary
                 default: return ["ok": false] as NSDictionary
                 }
             }
@@ -86,6 +89,13 @@ import Testing
             #expect(response["ok"] as? Bool == true)
             #expect(response["ownershipBound"] as? Bool == true)
         }
+        let terminal = try first.response(
+            id: package.id, operation: "terminalUI", context: event(firstID, 1))
+        #expect(terminal["keys"] as? [String] == ["operation", "payload", "presentationID"])
+        let status = try first.response(
+            id: package.id, operation: "terminalUIStatus",
+            context: ["presentationID": firstID.uuidString])
+        #expect(status["keys"] as? [String] == ["operation", "presentationID"])
         #expect(try first.viewController(id: package.id, context: [:])?.title == firstID.uuidString)
         #expect(
             try second.viewController(id: package.id, context: [:])?.title == secondID.uuidString)
