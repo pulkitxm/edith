@@ -119,7 +119,7 @@ import WorkerFixtureSupport
                     decider: { await MainActor.run { AgentJevDecider.configured() } },
                     appIsRunning: { true }), currentHosts: { ownedStore.hosts },
                 open: { request in
-                    HerdrWorkOwnership.start {
+                    HerdrWorkOwnership.worker.start {
                         await ownedStore.open(request)
                         guard !Task.isCancelled else { return }
                         ExtensionPresentation.showWindow()
@@ -281,7 +281,7 @@ import WorkerFixtureSupport
         await store.watch()
         guard !Task.isCancelled, !workSuspended else { return }
         await hooks.start { data in HerdrTopicFeed.publish(.hooks, data: data) }
-        maintenance = HerdrWorkOwnership.start { [weak self] in
+        maintenance = HerdrWorkOwnership.worker.start { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
                 await self.refreshDiscoveryDemand()
