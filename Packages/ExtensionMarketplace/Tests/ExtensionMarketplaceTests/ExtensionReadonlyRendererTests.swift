@@ -279,6 +279,34 @@ import Testing
         }
     }
 
+    @Test func stoppingOnePresentationKeepsOtherPresentationsBound() throws {
+        var gate = ExtensionBundleRuntime.RendererCallbacks()
+        let main = UUID()
+        let agent = UUID()
+        for (location, id) in [("main", main), ("herdr.agent", agent)] {
+            _ = try gate.response(
+                id: "herdr", role: .app, operation: "configureUI",
+                context: configuration("herdr", location, id)
+            ) { ["ok": true] }
+        }
+        _ = try gate.response(
+            id: "herdr", role: .app, operation: "stopUI",
+            context: ["presentationID": agent.uuidString]
+        ) { ["ok": true] }
+        var calls = 0
+        _ = try gate.response(
+            id: "herdr", role: .app, operation: "terminalUI", context: event(main, 1)
+        ) {
+            calls += 1; return ["ok": true]
+        }
+        #expect(calls == 1)
+        #expect(throws: MarketplaceError.invalidBundle) {
+            try gate.response(
+                id: "herdr", role: .app, operation: "terminalUI", context: event(agent, 1)
+            ) { ["ok": true] }
+        }
+    }
+
     private func configuration(_ owner: String, _ location: String, _ id: UUID) -> NSDictionary {
         let input = NSMutableDictionary(dictionary: [
             "remoteUI": true, "uiOnly": false, "extensionID": owner,
