@@ -462,7 +462,7 @@ final class HerdrStore {
             } ?? []
         restoringDefaults = false
         machinesObserver = HerdrIPC.observe(HerdrIPC.Name.machinesChanged) { [weak self] in
-            HerdrWorkOwnership.start { @MainActor in
+            self?.work.start { @MainActor in
                 await self?.machinesDidChange()
             }
         }
@@ -677,7 +677,7 @@ final class HerdrStore {
         let generation = watchGeneration
         let liveWatcher = liveWatcher
         watchTask?.cancel()
-        watchTask = HerdrWorkOwnership.start { [weak self] in
+        watchTask = work.start { [weak self] in
             await liveWatcher { hosts in
                 HerdrWorkOwnership.enqueue {
                     guard !Task.isCancelled else { return }
@@ -695,6 +695,10 @@ final class HerdrStore {
             + terminalPanels.terminals.values.map(\.holder)
     }
 
+    private var work: HerdrWorkScope {
+        uiClient == nil ? HerdrWorkOwnership.worker : HerdrWorkOwnership.interface
+    }
+
     func stopRendering() {
         workSuspended = true
         for task in terminalRequests.values { task.cancel() }
@@ -702,6 +706,7 @@ final class HerdrStore {
         for task in uiRequests.values { task.cancel() }
         terminalUI?.invalidate()
         guard let uiClient else { return }
+        HerdrWorkOwnership.unregisterInterface(self)
         uiClient.stop()
         uiPoll?.cancel()
         uiMutation?.cancel()
@@ -862,7 +867,7 @@ final class HerdrStore {
         guard settleTask == nil else { return }
         if !settling { flush() }
         let generation = watchGeneration
-        settleTask = HerdrWorkOwnership.start { [weak self] in
+        settleTask = work.start { [weak self] in
             try? await Task.sleep(for: Self.settleWindow)
             guard !Task.isCancelled else { return }
             guard let self, self.watchGeneration == generation else { return }
@@ -2422,7 +2427,7 @@ final class HerdrStore {
         let startAccount = accountAgentStarter
         let startRemoteAccount = remoteAccountAgentStarter
         let id = placeholder.id
-        agentStartupTasks[id] = HerdrWorkOwnership.start { [weak self] in
+        agentStartupTasks[id] = work.start { [weak self] in
             do {
                 if let account, let accountDirectory, let localAccountCommand {
                     if account.authentication == .browserLogin {
@@ -2626,7 +2631,7 @@ final class HerdrStore {
         guard uiClient == nil else { return }
         guard !terminalPanels.isEmpty, tabsBeforeRetarget == nil else { return }
         tabsBeforeRetarget = previous
-        HerdrWorkOwnership.start { @MainActor [weak self] in self?.retargetTerminals() }
+        work.start { @MainActor [weak self] in self?.retargetTerminals() }
     }
 
     func retargetTerminals() {
@@ -2659,7 +2664,7 @@ final class HerdrStore {
         NSPasteboard.general.setString(HerdrAttachCommand.line(for: agent), forType: .string)
         copiedID = agent.id
         let id = agent.id
-        HerdrWorkOwnership.start { @MainActor [self] in
+        work.start { @MainActor [self] in
             try? await Task.sleep(for: .seconds(1.2))
             if copiedID == id { copiedID = nil }
         }

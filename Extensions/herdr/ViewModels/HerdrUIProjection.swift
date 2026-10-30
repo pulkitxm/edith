@@ -657,6 +657,7 @@ final class HerdrUIDefaults: UserDefaults {
             agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },
             machinesProvider: { [] }, messaging: messaging)
         self.uiClient = uiClient
+        HerdrWorkOwnership.registerInterface(self)
         self.claudeAccounts = ClaudeAccountsModel(client: uiClient)
         configureRenderingOnly()
         terminalPanels.uiAction = { [weak self] operation, object in

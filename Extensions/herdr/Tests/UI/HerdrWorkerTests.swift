@@ -104,6 +104,31 @@ import Testing
         }
     }
 
+    @Test func preparingTheWorkerToStopLeavesInProcessInterfaceWorkAlone() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let interface = HerdrStore(
+            uiClient: HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable })
+        let worker = HerdrWorker(store: makeStore(), automaticActions: false)
+        var resume: CheckedContinuation<Void, Never>?
+        HerdrWorkOwnership.start {
+            await withCheckedContinuation { resume = $0 }
+        }
+        while resume == nil { await Task.yield() }
+        var prepared = false
+        let preparation = Task {
+            await worker.cancelPendingWork()
+            prepared = true
+        }
+        for _ in 0..<400 where !prepared { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(prepared)
+        #expect(!HerdrWorkOwnership.stopped)
+        resume?.resume()
+        await preparation.value
+        interface.stopRendering()
+        await worker.shutdown()
+        #expect(HerdrWorkOwnership.pendingCount == 0)
+    }
+
     @Test func shutdownCancelsAndAwaitsWorkAndReleasesTerminalAndTopicOwners() async throws {
         defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
