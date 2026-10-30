@@ -25,6 +25,28 @@ import Testing
         }.value
         #expect(result == request.payload)
     }
+    @Test func controlRebindsWhenItsSocketFileIsDeleted() async throws {
+        let identity = try identity()
+        let server = HostCLIServer(identity: identity, socketCheckInterval: .milliseconds(50)) {
+            $0.payload
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let path = try HostCLITransport.socketPath(identity: identity)
+        #expect(unlink(path) == 0)
+        let request = try HostCLIRequest(
+            action: .invoke, id: "sample", operation: "echo",
+            payload: Data("{\"synthetic\":true}".utf8))
+        var result: Data?
+        for _ in 0..<100 where result == nil {
+            try await Task.sleep(for: .milliseconds(50))
+            result = try? await Task.detached {
+                try HostCLITransport.invoke(request, identity: identity)
+            }.value
+        }
+        #expect(result == request.payload)
+    }
+
     @Test func maximumEnginePayloadAndStdinRoundTripOverAuthenticatedSocket() async throws {
         let identity = try identity()
         let server = HostCLIServer(identity: identity) {
