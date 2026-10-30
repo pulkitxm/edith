@@ -237,7 +237,8 @@ enum UsageNativeJSON {
         guard bytes[4] == 45, bytes[7] == 45, bytes[10] == 84, bytes[13] == 58, bytes[16] == 58,
             let year = digits(0..<4), let month = digits(5..<7), let day = digits(8..<10),
             let hour = digits(11..<13), let minute = digits(14..<16), let second = digits(17..<19),
-            year >= 1970, (1...12).contains(month), (1...31).contains(day), hour < 24, minute < 60, second < 60
+            year >= 1970, (1...12).contains(month), (1...31).contains(day), hour < 24, minute < 60,
+            second < 60
         else { return nil }
         var fraction = 0.0
         if bytes.count > 19 {
