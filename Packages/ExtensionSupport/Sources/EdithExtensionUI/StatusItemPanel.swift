@@ -15,6 +15,26 @@ public final class StatusItemPanel {
         }
     }
 
+    public struct Choice {
+        public struct Option {
+            public let title: String
+            public let selected: Bool
+            public let select: () -> Void
+            public init(title: String, selected: Bool, select: @escaping () -> Void) {
+                self.title = title
+                self.selected = selected
+                self.select = select
+            }
+        }
+
+        public let title: String
+        public let options: [Option]
+        public init(title: String, options: [Option]) {
+            self.title = title
+            self.options = options
+        }
+    }
+
     private var menu: NSMenu?
 
     public init() {}
@@ -24,7 +44,7 @@ public final class StatusItemPanel {
     }
 
     public func show<Content: View>(
-        from item: NSStatusItem, title: String, actions: [Action],
+        from item: NSStatusItem, title: String, choices: [Choice] = [], actions: [Action],
         @ViewBuilder content: () -> Content
     ) {
         guard let button = item.button else { return }
@@ -46,6 +66,22 @@ public final class StatusItemPanel {
         readings.view = view
         menu.addItem(readings)
         menu.addItem(.separator())
+        for choice in choices {
+            let options = NSMenu()
+            options.autoenablesItems = false
+            for option in choice.options {
+                let row = StatusPanelAction(title: option.title, perform: option.select)
+                row.state = option.selected ? .on : .off
+                options.addItem(row)
+            }
+            let selected = choice.options.first(where: \.selected)?.title
+            let row = NSMenuItem(
+                title: selected.map { "\(choice.title): \($0)" } ?? choice.title,
+                action: nil, keyEquivalent: "")
+            row.submenu = options
+            menu.addItem(row)
+        }
+        if !choices.isEmpty { menu.addItem(.separator()) }
         for action in actions {
             let row = StatusPanelAction(title: action.title, perform: action.perform)
             row.isEnabled = action.enabled

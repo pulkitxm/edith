@@ -42,6 +42,30 @@ import Testing
         #expect(store.limits(for: .claude).session?.percent == 64)
     }
 
+    @Test func claudeAccountChoiceSelectsTheMenuBarAccountFromANativeSubmenu() throws {
+        let suite = "edith.usage.tests.account-choice.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let accounts = ["Synthetic one", "Synthetic two", "Synthetic three"].map {
+            ClaudeAccountLimits(
+                id: UUID(), name: $0, limits: .init(provider: .claude, session: nil, week: nil),
+                refreshedAt: Date())
+        }
+
+        #expect(
+            LimitsStatusItem.accountChoice(Array(accounts.prefix(2)), defaults: defaults) == nil)
+        let choice = try #require(LimitsStatusItem.accountChoice(accounts, defaults: defaults))
+        #expect(choice.options.map(\.title) == ["First account"] + accounts.map(\.name))
+        #expect(choice.options.map(\.selected) == [true, false, false, false])
+
+        choice.options[2].select()
+        #expect(
+            defaults.string(forKey: MenuBarLimits.accountSelectionKey)
+                == accounts[1].id.uuidString)
+        let updated = try #require(LimitsStatusItem.accountChoice(accounts, defaults: defaults))
+        #expect(updated.options.map(\.selected) == [false, false, true, false])
+    }
+
     @Test func resetCountdownFormatsEveryUnitAndRollover() {
         let now = Date(timeIntervalSince1970: 0)
         let cases: [(TimeInterval, String)] = [
