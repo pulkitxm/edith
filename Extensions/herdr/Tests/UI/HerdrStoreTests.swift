@@ -139,6 +139,29 @@ private actor HerdrWatchHarness {
         #expect(store.kindFilter.isEmpty)
     }
 
+    @Test func anOpenPaneTakesTheAgentNameOnceItArrives() {
+        let store = HerdrStore()
+        let placeholder = agent("Claude Code", pane: "w1:p1")
+        store.hosts = [
+            HerdrHostSnapshot(
+                id: "local", name: "This Mac", isLocal: true, herdrPresent: true,
+                reachable: true, agents: [placeholder])
+        ]
+        let tab = HerdrTab(agentID: placeholder.id)
+        let layout = HerdrUILayoutState(tabs: [tab], selected: tab.id, views: [:], arrangements: [])
+        store.applyUILayout(layout)
+        #expect(store.sessions.first?.agent.title == "Claude Code")
+        var named = placeholder
+        named.title = "Review project handoff"
+        store.hosts = [
+            HerdrHostSnapshot(
+                id: "local", name: "This Mac", isLocal: true, herdrPresent: true,
+                reachable: true, agents: [named])
+        ]
+        store.applyUILayout(layout)
+        #expect(store.sessions.first?.agent.title == "Review project handoff")
+    }
+
     @Test func closeOthersKeepsTheClickedTab() {
         let store = seededStore()
         let keep = store.tabs[1].id

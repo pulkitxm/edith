@@ -2694,7 +2694,9 @@ final class HerdrStore {
             session.quinjet.stop()
         }
         sessions = ordered.compactMap { id in
-            var session = existing[id] ?? allowed.first(where: { $0.id == id }).map(makeTab)
+            let current = allowed.first(where: { $0.id == id })
+            var session = existing[id] ?? current.map(makeTab)
+            if let current, session?.agent != current { session?.agent = current }
             session?.view = layout.views[id] ?? .agent
             return session
         }
