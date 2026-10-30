@@ -75,7 +75,10 @@ final class HostNotchContainerController: NSViewController {
         }
         let target = rectangle ?? view.bounds
         let slot = controller.view
-        if native { slot.wantsLayer = true }
+        if native {
+            slot.wantsLayer = true
+            slot.clipsToBounds = true
+        }
         let wasPlaced = native && alreadyPlaced && slot.frame != target
         let layer = wasPlaced ? slot.layer : nil
         let fromPosition = layer.map { $0.presentation()?.position ?? $0.position }

@@ -67,7 +67,7 @@ struct HostNotchCompactCardTests {
                 .transaction { $0.animation = nil })
             host.frame = .init(x: 0, y: 0, width: width, height: 800)
             let panel = HostNotchPanel()
-            panel.contentView = host
+            panel.contentView = compactSlot(host)
             for _ in 0..<6 {
                 host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10))
             }
@@ -93,6 +93,37 @@ struct HostNotchCompactCardTests {
             panel.close()
         }
         #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
+    @Test func aCardTallerThanItsSlotStaysPinnedToTheTop() async throws {
+        _ = TestWindowHost.application
+        let accessibility = try HostAccessibilityFixture.enable()
+        defer {
+            for error in accessibility.restore() { Issue.record(error) }
+        }
+        let fixture = CompactCardFixture(
+            widget: .desk, versions: ["clipboard": "1", "emoji": "2"])
+        try await fixture.model.refresh()
+        let host = NSHostingView(
+            rootView: HostNotchCompactCard(
+                model: fixture.model, layout: .init(tiles: [fixture.origin.tile]),
+                measured: { _ in }
+            )
+            .environment(\.automaticViewActionsEnabled, false)
+            .transaction { $0.animation = nil })
+        host.frame = .init(x: 0, y: 0, width: 280, height: 48)
+        let panel = HostNotchPanel()
+        panel.contentView = compactSlot(host)
+        for _ in 0..<6 {
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10))
+        }
+        let open = try #require(compactControls(host, label: "Open Desk tools").first)
+        let control = try #require((open as AnyObject).accessibilityFrame?())
+        let slot = panel.convertToScreen(host.convert(host.bounds, to: nil))
+        #expect(control.maxY <= slot.maxY + 1)
+        #expect(control.minY >= slot.minY - 1)
+        await fixture.model.stop()
+        panel.close()
     }
 
     @Test func compactLeaseStopsOwnedRequestsWhenItsOriginalPanelDetaches() async throws {
@@ -341,6 +372,13 @@ private final class CompactCardFixture {
         for _ in 0..<100 { if condition() { return }; try? await Task.sleep(for: .milliseconds(5)) }
         #expect(condition())
     }
+}
+
+@MainActor
+private func compactSlot(_ card: NSView) -> NSView {
+    let slot = NSView(frame: card.frame)
+    slot.addSubview(card)
+    return slot
 }
 
 @MainActor
