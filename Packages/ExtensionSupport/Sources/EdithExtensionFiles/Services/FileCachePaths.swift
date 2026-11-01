@@ -2,9 +2,7 @@ import EdithExtensionCore
 import Foundation
 
 public enum FileCachePaths {
-    nonisolated(unsafe) public static var root: URL = ExtensionScope.installed.dataRoot()
-
-    public static var previewCacheDir: URL {
-        root.appendingPathComponent("previews")
+    public static func previewCacheDir(in scope: ExtensionScope) -> URL {
+        scope.dataRoot().appendingPathComponent("previews")
     }
 }

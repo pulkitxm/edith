@@ -122,7 +122,7 @@ private struct EdithButtonBody<Label: View>: View {
     let pressed: Bool
     let tint: Color?
 
-    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults())
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
     private var themeName = "accent"
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor

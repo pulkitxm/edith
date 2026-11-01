@@ -2,18 +2,21 @@ import Darwin
 import Foundation
 
 public enum ExtensionNativeTask {
-    public static func registerDescendant(_ pid: Int32) throws {
+    public static func registerDescendant(_ pid: Int32, image: UnsafeRawPointer = #dsohandle)
+        throws
+    {
         guard pid > 1, pid != getpid(), awaitGroupLeader(pid), isDescendant(pid, of: getpid())
         else {
             throw ExtensionPeerError.invalidRequest
         }
-        try ExtensionCommandOwnership.register(pid)
+        try ExtensionCommandOwnership.register(pid, owner: ExtensionCommandOwner(image: image))
     }
 
-    public static func registerChild(_ pid: Int32) throws {
-        guard ExtensionCommandOwnership.isWorker else { return }
-        guard let owner = ExtensionScope.installed["EDITH_EXTENSION_ID"],
-            let endpoint = ExtensionPeerEndpoint.current(owner: owner)
+    public static func registerChild(_ pid: Int32, image: UnsafeRawPointer = #dsohandle) throws {
+        let scope = ExtensionScope.resolve(image)
+        guard ExtensionCommandOwnership.isWorker(in: scope) else { return }
+        guard let owner = scope["EDITH_EXTENSION_ID"],
+            let endpoint = ExtensionPeerEndpoint.current(owner: owner, in: scope)
         else { throw ExtensionPeerError.unavailable }
         guard awaitGroupLeader(pid) else { throw ExtensionPeerError.invalidRequest }
         let result = NativeRegistration()

@@ -15,8 +15,8 @@ public struct ExtensionSharedState: Sendable {
         Notification.Name(namespace + ".extensionSharedStateChanged")
     }
 
-    public static var current: Self? {
-        let environment = ExtensionScope.installed.environment()
+    public static func current(in scope: ExtensionScope) -> Self? {
+        let environment = scope.environment()
         guard let path = environment["EDITH_EXTENSION_STATE_ROOT"], path.hasPrefix("/"),
             !path.utf8.contains(0), let namespace = environment["EDITH_APPLICATION_IDENTIFIER"],
             let owner = environment["EDITH_EXTENSION_ID"], validOwner(owner)

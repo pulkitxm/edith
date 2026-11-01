@@ -4,6 +4,7 @@ import Foundation
 public final class CLIChildProcess: @unchecked Sendable {
     let processIdentifier: pid_t
     let ownsProcessGroup: Bool
+    let owner: ExtensionCommandOwner
     private let lock = NSLock()
     private var status: Int32?
     private var exitSource: DispatchSourceProcess?
@@ -16,7 +17,8 @@ public final class CLIChildProcess: @unchecked Sendable {
         request: CLICommandRequest, input: Int32, output: Int32, error: Int32,
         onExit: @escaping @Sendable () -> Void
     ) throws {
-        ownsProcessGroup = ExtensionCommandOwnership.isWorker || request.terminatesProcessGroup
+        owner = request.owner
+        ownsProcessGroup = request.owner.isWorker || request.terminatesProcessGroup
         self.onExit = onExit
         processIdentifier = try Self.spawn(request, input: input, output: output, error: error)
         let source = DispatchSource.makeProcessSource(
@@ -72,7 +74,7 @@ public final class CLIChildProcess: @unchecked Sendable {
         _ request: CLICommandRequest, input: Int32,
         output: Int32, error: Int32
     ) throws -> pid_t {
-        let wrapped = ExtensionCommandOwnership.isWorker
+        let wrapped = request.owner.isWorker
         let ticket = wrapped ? Pipe() : nil
         defer {
             try? ticket?.fileHandleForReading.close()
@@ -168,7 +170,7 @@ public final class CLIChildProcess: @unchecked Sendable {
         try check(code)
         if let ticket {
             do {
-                try ExtensionCommandOwnership.register(pid)
+                try ExtensionCommandOwnership.register(pid, owner: request.owner)
                 try ExtensionCommandSpecification(
                     executable: request.executableURL.path,
                     arguments: request.arguments, environment: request.environment,
@@ -178,7 +180,7 @@ public final class CLIChildProcess: @unchecked Sendable {
                 kill(pid, SIGKILL)
                 var status: Int32 = 0
                 while waitpid(pid, &status, 0) == -1, errno == EINTR {}
-                ExtensionCommandOwnership.release(pid)
+                ExtensionCommandOwnership.release(pid, owner: request.owner)
                 throw CLICommandRunnerError.launchFailed
             }
         }

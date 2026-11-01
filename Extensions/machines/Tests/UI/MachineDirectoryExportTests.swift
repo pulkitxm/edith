@@ -32,7 +32,8 @@ import Testing
         let client = MachineUIClient(client: transport)
         let entry = RemoteFileEntry(
             name: source.lastPathComponent, path: source.path, kind: .directory, sizeBytes: 0)
-        let result = try await client.materializeDirectory(entry: entry, machineID: session.id)
+        let result = try await client.materializeDirectory(
+            entry: entry, machineID: session.id, dataRoot: MachinePaths.root)
         defer { try? FileManager.default.removeItem(at: result.deletingLastPathComponent()) }
         #expect(result.path != source.path)
         #expect(try Data(contentsOf: result.appendingPathComponent(".binary")) == bytes)

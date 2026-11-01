@@ -8,7 +8,10 @@ import Foundation
         let microseconds: UInt64
     }
     private var processes: [Int32: Identity] = [:]
-    public init() {}
+    private let owner: ExtensionCommandOwner
+    public init(image: UnsafeRawPointer = #dsohandle) {
+        owner = ExtensionCommandOwner(image: image)
+    }
     public func authorize(_ pid: Int32, token: String) throws {
         processes = processes.filter { identity($0.key) == $0.value }
         guard token == self.token, pid > 1, pid != getpid(), getpgid(pid) == pid,
@@ -16,7 +19,7 @@ import Foundation
             let identity = identity(pid), let current = executable(getpid()),
             executable(pid) == current
         else { throw ExtensionPeerError.invalidRequest }
-        try ExtensionCommandOwnership.register(pid)
+        try ExtensionCommandOwnership.register(pid, owner: owner)
         processes[pid] = identity
     }
     public func registerDescendant(_ pid: Int32) throws {
@@ -27,7 +30,7 @@ import Foundation
                         && ExtensionNativeTask.isDescendant(pid, of: $0.key)
                 })
         else { throw ExtensionPeerError.invalidRequest }
-        try ExtensionCommandOwnership.register(pid)
+        try ExtensionCommandOwnership.register(pid, owner: owner)
     }
     private func identity(_ pid: Int32) -> Identity? {
         var info = proc_bsdinfo()

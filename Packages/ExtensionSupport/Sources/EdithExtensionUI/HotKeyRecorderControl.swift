@@ -6,12 +6,16 @@ import SwiftUI
 public struct HotKeyRecorderControl: View {
     private let keyPrefix: String
     private let defaultLabel: String
+    private let scope: ExtensionScope
     @State private var recording = false
     @State private var label = ""
 
-    public init(keyPrefix: String, defaultLabel: String) {
+    public init(
+        keyPrefix: String, defaultLabel: String, image: UnsafeRawPointer = #dsohandle
+    ) {
         self.keyPrefix = keyPrefix
         self.defaultLabel = defaultLabel
+        self.scope = ExtensionScope.resolve(image)
     }
 
     public var body: some View {
@@ -29,7 +33,7 @@ public struct HotKeyRecorderControl: View {
         .onDisappear { if recording { stop() } }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: UserDefaults.didChangeNotification, object: ExtensionScope.installed.defaults()
+                for: UserDefaults.didChangeNotification, object: scope.defaults()
             )
         ) { _ in
             if !recording { label = currentLabel }
@@ -38,7 +42,7 @@ public struct HotKeyRecorderControl: View {
     }
 
     private var currentLabel: String {
-        ExtensionScope.installed.defaults().string(forKey: keyPrefix + "Label") ?? defaultLabel
+        scope.defaults().string(forKey: keyPrefix + "Label") ?? defaultLabel
     }
 
     private func start() {
@@ -80,9 +84,10 @@ public struct HotKeyRecorderControl: View {
         let label = HotKeyGlyph.label(
             modifiers: symbols, keyCode: Int(event.keyCode),
             characters: event.charactersIgnoringModifiers)
-        ExtensionScope.installed.defaults().set(Int(event.keyCode), forKey: keyPrefix + "Code")
-        ExtensionScope.installed.defaults().set(mods, forKey: keyPrefix + "Mods")
-        ExtensionScope.installed.defaults().set(label, forKey: keyPrefix + "Label")
+        let store = scope.defaults()
+        store.set(Int(event.keyCode), forKey: keyPrefix + "Code")
+        store.set(mods, forKey: keyPrefix + "Mods")
+        store.set(label, forKey: keyPrefix + "Label")
         IPC.post(IPC.Name.settingsChanged)
         stop()
     }

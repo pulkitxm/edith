@@ -26,10 +26,10 @@ public enum ExtensionEnvironment {
 
     public static func configure(_ values: [String: String]) {
         lock.withLock { overrides.merge(values) { $1 } }
-        ExtensionScope.install(scope)
+        ExtensionScope.register(scope, image: #dsohandle)
     }
 
-    private static let scope = ExtensionScope(
+    public static let scope = ExtensionScope(
         environment: { values },
         value: { ExtensionEnvironment[$0] },
         defaults: { SharedDefaults.store },

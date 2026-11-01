@@ -2,7 +2,7 @@ import EdithExtensionCore
 import SwiftUI
 
 private struct EdithFormStyle: ViewModifier {
-    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults())
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
     private var themeName = "accent"
 
     func body(content: Content) -> some View {

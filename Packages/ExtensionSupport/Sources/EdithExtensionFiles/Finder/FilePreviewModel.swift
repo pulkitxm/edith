@@ -39,16 +39,17 @@ final class FilePreviewModel {
 
     nonisolated static let textPreviewLimit = RemoteFileOperationExecution.previewLimit
 
-    init(materialize: Materialize? = nil, imageLoader: ImageLoader? = nil) {
+    init(scope: ExtensionScope, materialize: Materialize? = nil, imageLoader: ImageLoader? = nil) {
         materializeFile =
             materialize ?? { entry, session, maximumBytes in
                 if let client = session.remoteClient {
                     return try await client.materialize(
-                        entry: entry, machineID: session.id, maximumBytes: maximumBytes)
+                        entry: entry, machineID: session.id, maximumBytes: maximumBytes,
+                        dataRoot: scope.dataRoot())
                 }
                 return try await RemoteFileOperationExecution.materialize(
                     entry, machineID: session.id, isLocal: session.isLocal,
-                    maximumBytes: maximumBytes
+                    maximumBytes: maximumBytes, cacheRoot: FileCachePaths.previewCacheDir(in: scope)
                 ) { remotePath, destination in
                     guard let connection = session.shellConnection else {
                         throw FinderTransferError.notConnected
@@ -211,8 +212,14 @@ final class FilePreviewModel {
 struct FilePreviewPane: View {
     let entry: RemoteFileEntry?
     let session: any FinderSession
-    @State private var model = FilePreviewModel()
+    @State private var model: FilePreviewModel
     @Environment(\.colorScheme) private var scheme
+
+    init(entry: RemoteFileEntry?, session: any FinderSession, scope: ExtensionScope) {
+        self.entry = entry
+        self.session = session
+        _model = State(initialValue: FilePreviewModel(scope: scope))
+    }
 
     private var dark: Bool { scheme == .dark }
 

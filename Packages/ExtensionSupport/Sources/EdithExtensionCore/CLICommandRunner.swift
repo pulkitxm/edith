@@ -11,14 +11,37 @@ public struct CLICommandRequest: Codable, Equatable, Sendable {
     public let standardInputData: Data?
     public let discardsStandardError: Bool
     public let terminatesProcessGroup: Bool
+    public let owner: ExtensionCommandOwner
+
+    private enum CodingKeys: String, CodingKey {
+        case executableURL, arguments, environment, currentDirectoryURL, timeout
+        case maximumOutputBytes, standardInputData, discardsStandardError, terminatesProcessGroup
+    }
 
     public init(
         executableURL: URL, arguments: [String], environment: [String: String],
         currentDirectoryURL: URL? = nil, timeout: TimeInterval? = nil,
         maximumOutputBytes: Int? = nil,
         standardInputData: Data? = nil,
-        discardsStandardError: Bool = false, terminatesProcessGroup: Bool = false
+        discardsStandardError: Bool = false, terminatesProcessGroup: Bool = false,
+        image: UnsafeRawPointer = #dsohandle
     ) {
+        self.init(
+            executableURL: executableURL, arguments: arguments, environment: environment,
+            currentDirectoryURL: currentDirectoryURL, timeout: timeout,
+            maximumOutputBytes: maximumOutputBytes, standardInputData: standardInputData,
+            discardsStandardError: discardsStandardError,
+            terminatesProcessGroup: terminatesProcessGroup,
+            owner: ExtensionCommandOwner(image: image))
+    }
+
+    public init(
+        executableURL: URL, arguments: [String], environment: [String: String],
+        currentDirectoryURL: URL?, timeout: TimeInterval?, maximumOutputBytes: Int?,
+        standardInputData: Data?, discardsStandardError: Bool, terminatesProcessGroup: Bool,
+        owner: ExtensionCommandOwner
+    ) {
+        self.owner = owner
         self.executableURL = executableURL
         self.arguments = arguments
         self.environment = environment
@@ -28,6 +51,21 @@ public struct CLICommandRequest: Codable, Equatable, Sendable {
         self.standardInputData = standardInputData
         self.discardsStandardError = discardsStandardError
         self.terminatesProcessGroup = terminatesProcessGroup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            executableURL: container.decode(URL.self, forKey: .executableURL),
+            arguments: container.decode([String].self, forKey: .arguments),
+            environment: container.decode([String: String].self, forKey: .environment),
+            currentDirectoryURL: container.decodeIfPresent(URL.self, forKey: .currentDirectoryURL),
+            timeout: container.decodeIfPresent(TimeInterval.self, forKey: .timeout),
+            maximumOutputBytes: container.decodeIfPresent(Int.self, forKey: .maximumOutputBytes),
+            standardInputData: container.decodeIfPresent(Data.self, forKey: .standardInputData),
+            discardsStandardError: container.decode(Bool.self, forKey: .discardsStandardError),
+            terminatesProcessGroup: container.decode(Bool.self, forKey: .terminatesProcessGroup),
+            owner: .host)
     }
 }
 
@@ -504,7 +542,9 @@ public enum CLICommandRunner {
         }
 
         func finish(_ stop: CommandStop?) throws -> CLICommandResult {
-            defer { ExtensionCommandOwnership.release(process.processIdentifier) }
+            defer {
+                ExtensionCommandOwnership.release(process.processIdentifier, owner: process.owner)
+            }
             if let stop {
                 try? input?.fileHandleForWriting.close()
                 terminateProcessGroup(process, processFinished: processFinished)

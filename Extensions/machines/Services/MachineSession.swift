@@ -1267,7 +1267,7 @@ extension MachineSession {
             throw MachineUIError.invalidRequest
         }
         let url = try await RemoteFileOperationExecution.materialize(
-            entry, machineID: id, isLocal: isLocal
+            entry, machineID: id, isLocal: isLocal, cacheRoot: MachinePaths.previewCacheDir
         ) { path, destination in
             guard let connection = self.connectionRef else { throw MachineUIError.unavailable }
             try await connection.download(remotePath: path, to: destination)

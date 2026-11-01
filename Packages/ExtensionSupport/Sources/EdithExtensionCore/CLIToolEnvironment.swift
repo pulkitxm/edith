@@ -2,10 +2,21 @@ import Foundation
 
 public enum CLIToolEnvironment {
     public static func sanitized(
-        processEnvironment: [String: String] = ExtensionScope.installed.environment(),
+        processEnvironment: [String: String]? = nil,
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        image: UnsafeRawPointer = #dsohandle
     ) -> [String: String] {
+        sanitized(
+            processEnvironment: processEnvironment, shellEnvironment: shellEnvironment,
+            fileManager: fileManager, scope: ExtensionScope.resolve(image))
+    }
+
+    static func sanitized(
+        processEnvironment: [String: String]?, shellEnvironment: [String: String]?,
+        fileManager: FileManager, scope: ExtensionScope
+    ) -> [String: String] {
+        let processEnvironment = processEnvironment ?? scope.environment()
         var environment = processEnvironment
         for (key, value) in shellEnvironment ?? [:]
         where UserShellEnvironment.imports(key) && processEnvironment[key] == nil {
@@ -13,7 +24,8 @@ public enum CLIToolEnvironment {
         }
         environment["NO_COLOR"] = nil
         let directories = commonDirectories(
-            processEnvironment: processEnvironment, fileManager: fileManager)
+            processEnvironment: processEnvironment, fileManager: fileManager,
+            dataRoot: scope.dataRoot())
         let shellPath = shellEnvironment?["PATH"]?.split(separator: ":").map(String.init) ?? []
         let existing = processEnvironment["PATH"]?.split(separator: ":").map(String.init) ?? []
         environment["PATH"] = uniqueAllowedDirectories(
@@ -24,13 +36,16 @@ public enum CLIToolEnvironment {
 
     public static func executable(
         named name: String,
-        processEnvironment: [String: String] = ExtensionScope.installed.environment(),
+        processEnvironment: [String: String]? = nil,
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        image: UnsafeRawPointer = #dsohandle
     ) -> URL? {
+        let scope = ExtensionScope.resolve(image)
+        let processEnvironment = processEnvironment ?? scope.environment()
         let environment = sanitized(
             processEnvironment: processEnvironment, shellEnvironment: shellEnvironment,
-            fileManager: fileManager)
+            fileManager: fileManager, scope: scope)
         for directory in environment["PATH"]?.split(separator: ":").map(String.init) ?? [] {
             guard RestoredPathValidation.verdict(for: directory) == .keep else { continue }
             let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name)
@@ -72,7 +87,7 @@ public enum CLIToolEnvironment {
     }
 
     private static func commonDirectories(
-        processEnvironment: [String: String], fileManager: FileManager
+        processEnvironment: [String: String], fileManager: FileManager, dataRoot: URL
     ) -> [String] {
         let home: URL
         if let path = processEnvironment["HOME"], path.hasPrefix("/"), !path.utf8.contains(0) {
@@ -81,7 +96,7 @@ public enum CLIToolEnvironment {
             home = fileManager.homeDirectoryForCurrentUser
         }
         var directories = [
-            ExtensionScope.installed.dataRoot().appendingPathComponent("bin").path,
+            dataRoot.appendingPathComponent("bin").path,
             home.appendingPathComponent(".local/bin").path,
             home.appendingPathComponent(".cargo/bin").path,
             home.appendingPathComponent(".nvm/current/bin").path,

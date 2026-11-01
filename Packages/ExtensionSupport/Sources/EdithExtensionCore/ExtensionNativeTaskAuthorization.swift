@@ -2,13 +2,14 @@ import Darwin
 import Foundation
 
 public enum ExtensionNativeTaskAuthorization {
-    public static func request(parent: Int32) throws -> Data {
-        guard let owner = ExtensionScope.installed["EDITH_EXTENSION_ID"],
-            let endpoint = ExtensionPeerEndpoint.current(owner: owner)
+    public static func request(parent: Int32, image: UnsafeRawPointer = #dsohandle) throws -> Data {
+        let scope = ExtensionScope.resolve(image)
+        guard let owner = scope["EDITH_EXTENSION_ID"],
+            let endpoint = ExtensionPeerEndpoint.current(owner: owner, in: scope)
         else {
             throw ExtensionPeerError.unavailable
         }
-        guard let token = ExtensionScope.installed["EDITH_EXTENSION_NATIVE_TOKEN"],
+        guard let token = scope["EDITH_EXTENSION_NATIVE_TOKEN"],
             token.utf8.count == 72
         else { throw ExtensionPeerError.unavailable }
         return try request(endpoint: endpoint, parent: parent, token: token)

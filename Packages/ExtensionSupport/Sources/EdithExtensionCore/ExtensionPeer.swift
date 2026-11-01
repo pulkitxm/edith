@@ -43,10 +43,14 @@ public struct ExtensionPeerEndpoint: Sendable {
         name = "edith.extension.v1.\(getuid()).\(hash)"
     }
 
-    public static func current(owner: String) -> Self? {
-        guard let namespace = ExtensionScope.installed["EDITH_APPLICATION_IDENTIFIER"]
+    public static func current(owner: String, image: UnsafeRawPointer = #dsohandle) -> Self? {
+        current(owner: owner, in: ExtensionScope.resolve(image))
+    }
+
+    public static func current(owner: String, in scope: ExtensionScope) -> Self? {
+        guard let namespace = scope["EDITH_APPLICATION_IDENTIFIER"]
         else { return nil }
-        guard let channel = ExtensionSharedState.current else { return nil }
+        guard let channel = ExtensionSharedState.current(in: scope) else { return nil }
         return try? Self(
             namespace: namespace, owner: owner,
             directory: channel.root.appendingPathComponent("Commands"))

@@ -5,33 +5,63 @@ public enum ExtensionCommandOwnership {
     public static let registerNotification = Notification.Name(
         "edith.extension.registerProcessGroup")
     public static let releaseNotification = Notification.Name("edith.extension.releaseProcessGroup")
-    public static var isWorker: Bool {
-        ExtensionScope.installed["EDITH_EXTENSION_WORKER"] == "1"
+    public static func isWorker(in scope: ExtensionScope) -> Bool {
+        ExtensionCommandOwner(scope).isWorker
     }
 
-    private static var owner: String { ExtensionScope.installed["EDITH_EXTENSION_ID"] ?? "" }
-
-    public static func captureGroup(pid: Int32) throws -> ExtensionOwnedProcessGroup {
+    public static func captureGroup(pid: Int32, image: UnsafeRawPointer = #dsohandle) throws
+        -> ExtensionOwnedProcessGroup
+    {
         guard let birth = ExtensionProcessIdentity.read(pid),
             ExtensionNativeTask.isDescendant(pid, of: getpid())
         else { throw CocoaError(.executableLoad) }
-        return try ExtensionOwnedProcessGroup(leader: birth)
+        return try ExtensionOwnedProcessGroup(
+            leader: birth, owner: ExtensionCommandOwner(image: image))
     }
 
-    public static func register(_ pid: Int32) throws {
-        guard isWorker else { return }
+    public static func register(_ pid: Int32, image: UnsafeRawPointer = #dsohandle) throws {
+        try register(pid, owner: ExtensionCommandOwner(image: image))
+    }
+
+    public static func release(_ pid: Int32, image: UnsafeRawPointer = #dsohandle) {
+        release(pid, owner: ExtensionCommandOwner(image: image))
+    }
+
+    public static func register(_ pid: Int32, owner: ExtensionCommandOwner) throws {
+        guard owner.isWorker else { return }
         var accepted = false
         let accept: (Bool) -> Void = { accepted = $0 }
         NotificationCenter.default.post(
             name: registerNotification, object: nil,
-            userInfo: ["pid": pid, "accept": accept, "owner": owner])
+            userInfo: ["pid": pid, "accept": accept, "owner": owner.id])
         guard accepted else { throw CocoaError(.executableLoad) }
     }
 
-    public static func release(_ pid: Int32) {
-        guard isWorker else { return }
+    public static func release(_ pid: Int32, owner: ExtensionCommandOwner) {
+        guard owner.isWorker else { return }
         NotificationCenter.default.post(
-            name: releaseNotification, object: nil, userInfo: ["pid": pid, "owner": owner])
+            name: releaseNotification, object: nil, userInfo: ["pid": pid, "owner": owner.id])
+    }
+}
+
+public struct ExtensionCommandOwner: Equatable, Sendable {
+    public static let host = ExtensionCommandOwner(id: "", isWorker: false)
+
+    public let id: String
+    public let isWorker: Bool
+
+    public init(id: String, isWorker: Bool) {
+        self.id = id
+        self.isWorker = isWorker
+    }
+
+    public init(_ scope: ExtensionScope) {
+        self.init(
+            id: scope["EDITH_EXTENSION_ID"] ?? "", isWorker: scope["EDITH_EXTENSION_WORKER"] == "1")
+    }
+
+    public init(image: UnsafeRawPointer) {
+        self.init(ExtensionScope.resolve(image))
     }
 }
 
@@ -43,6 +73,7 @@ public final class ExtensionOwnedProcessGroup: @unchecked Sendable {
     }
 
     public let leader: ExtensionProcessIdentity
+    public let owner: ExtensionCommandOwner
     private let lock = NSLock()
     private var births: [ExtensionProcessIdentity]
     private var attempts: [SignalAttempt] = []
@@ -63,6 +94,7 @@ public final class ExtensionOwnedProcessGroup: @unchecked Sendable {
 
     init(
         leader: ExtensionProcessIdentity,
+        owner: ExtensionCommandOwner = .host,
         read: @escaping @Sendable (Int32) -> ExtensionProcessIdentity? = {
             ExtensionProcessIdentity.read($0)
         },
@@ -76,6 +108,7 @@ public final class ExtensionOwnedProcessGroup: @unchecked Sendable {
         exists: @escaping @Sendable (Int32) -> Bool = { kill($0, 0) == 0 || errno != ESRCH },
         send: @escaping @Sendable (Int32, Int32) -> Int32 = { kill($0, $1) }
     ) throws {
+        self.owner = owner
         guard leader.pid > 1, read(leader.pid) == leader, group(leader.pid) == leader.pid else {
             throw CocoaError(.executableLoad)
         }
@@ -193,7 +226,7 @@ public final class ExtensionOwnedProcessGroup: @unchecked Sendable {
                     guard try self.refreshLocked() else { throw CocoaError(.executableLoad) }
                     self.retired = true
                 }
-                ExtensionCommandOwnership.release(self.leader.pid)
+                ExtensionCommandOwnership.release(self.leader.pid, owner: self.owner)
             }
             retirement = task
             return task
@@ -256,7 +289,7 @@ public struct ExtensionCommandSpecification: Codable, Sendable {
     }
 
     public static func runWrapper() throws -> Never {
-        guard ExtensionCommandOwnership.isWorker, getpgrp() == getppid() else {
+        guard ExtensionCommandOwnership.isWorker(in: .process), getpgrp() == getppid() else {
             throw CocoaError(.executableLoad)
         }
         let handle = FileHandle(fileDescriptor: 3, closeOnDealloc: true)

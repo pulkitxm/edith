@@ -64,7 +64,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     var pasteboard: NSPasteboard = .general
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults()) private
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults()) private
         var themeName =
         "accent"
     @State private var index = 0

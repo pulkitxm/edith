@@ -37,7 +37,9 @@ public enum HotKeyRegistrar {
     }
 
     @discardableResult
-    public static func install(_ id: String, action: @escaping () -> Void) -> Bool {
+    public static func install(
+        _ id: String, image: UnsafeRawPointer = #dsohandle, action: @escaping () -> Void
+    ) -> Bool {
         guard let binding = bindings[id] else {
             NSLog("Edith has no shortcut configured for %@", id)
             return false
@@ -46,7 +48,7 @@ public enum HotKeyRegistrar {
             NSLog("Edith could not listen for shortcuts for %@", id)
             return false
         }
-        let defaults = ExtensionScope.installed.defaults()
+        let defaults = ExtensionScope.resolve(image).defaults()
         let code = defaults.object(forKey: binding.prefix + "Code") as? Int ?? binding.defaultCode
         let modifiers =
             defaults.object(forKey: binding.prefix + "Mods") as? Int ?? binding.defaultModifiers
