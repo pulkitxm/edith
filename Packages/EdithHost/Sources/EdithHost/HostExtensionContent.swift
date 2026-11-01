@@ -37,6 +37,7 @@ struct HostExtensionContent: View {
     var initialHeight: Double? = nil
     var navigation: HostSettingsNavigation? = nil
     @State private var controller: NSViewController?
+    @State private var contentIdentity = ""
     @State private var presentationID = UUID()
     @State private var error: String?
     @State private var retry = 0
@@ -47,18 +48,29 @@ struct HostExtensionContent: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
+    private var transitioning: Bool {
+        marketplace.sessions.states[extensionID] == .starting
+            || marketplace.sessions.states[extensionID] == .stopping
+    }
+    private var failure: String? {
+        marketplace.failures[extensionID] ?? marketplace.sessions.failureReasons[extensionID]
+    }
     private var eligible: Bool {
-        active
-            || (location == "settings" && surface == nil
-                && marketplace.installed[extensionID] != nil
-                && !marketplace.pendingRemovalIDs.contains(extensionID)
-                && !marketplace.sessions.pendingDisableIDs.contains(extensionID))
+        !transitioning
+            && (active
+                || (location == "settings" && surface == nil
+                    && marketplace.installed[extensionID] != nil
+                    && !marketplace.pendingRemovalIDs.contains(extensionID)
+                    && !marketplace.sessions.pendingDisableIDs.contains(extensionID)))
     }
     private var parkingKey: String? {
         guard location == "main", surface == nil, navigation == nil else { return nil }
         return extensionID + "\u{0}" + (section ?? "")
     }
-    private var installedVersion: String { marketplace.installed[extensionID]?.version ?? "" }
+    private var installedVersion: String {
+        (marketplace.installed[extensionID]?.version ?? "") + ":"
+            + (marketplace.sessions.generations[extensionID]?.uuidString ?? "settings")
+    }
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
@@ -68,15 +80,25 @@ struct HostExtensionContent: View {
                 HostEmbeddedController(controller: controller, compact: compact, visible: visible)
                     .frame(height: contentHeight.map { CGFloat($0) })
                     .id(ObjectIdentifier(controller))
+            } else if transitioning {
+                PageLoading(state: .loading, title: "Preparing " + title) { EmptyView() }
             } else if !eligible {
                 ContentUnavailableView {
                     Label(title, systemImage: "puzzlepiece.extension")
                 } description: {
                     Text(
-                        marketplace.downloadedIDs.contains(extensionID)
-                            ? "Enable this extension to open its page."
-                            : "Download this extension to open its page.")
+                        failure
+                            ?? (marketplace.downloadedIDs.contains(extensionID)
+                                ? "Enable this extension to open its page."
+                                : "Download this extension to open its page."))
                 } actions: {
+                    if marketplace.installed[extensionID] != nil,
+                        !marketplace.pendingRemovalIDs.contains(extensionID)
+                    {
+                        Button(failure == nil ? "Enable" : "Try again") {
+                            Task { await marketplace.enable(id: extensionID) }
+                        }.buttonStyle(.edith(.primary)).disabled(marketplace.isBusy(extensionID))
+                    }
                     Button("Extensions", action: openMarketplace).buttonStyle(.edith(.secondary))
                 }
             } else if presenter == nil {
@@ -98,7 +120,8 @@ struct HostExtensionContent: View {
         .frame(height: (contentHeight ?? initialHeight).map { CGFloat($0) })
         .task(
             id: Request(
-                version: marketplace.installed[extensionID]?.version, active: active,
+                version: installedVersion, active: active,
+                transitioning: transitioning,
                 location: location,
                 section: section, surface: surface, retry: retry,
                 deliveryID: navigation?.delivery.id,
@@ -108,12 +131,14 @@ struct HostExtensionContent: View {
             release = nil
             guard eligible, automaticActions, let presenter, !Task.isCancelled else { return }
             release = clear
+            contentIdentity = installedVersion
             if let parkingKey,
                 let parked = presenter.unpark(key: parkingKey, version: installedVersion)
             {
                 presentationID = parked.presentationID
                 if let remote = parked.controller as? HostRemoteViewController {
                     remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
+                    remote.retry = { retry += 1 }
                     contentHeight = remote.contentHeight
                 }
                 controller = parked.controller
@@ -131,6 +156,7 @@ struct HostExtensionContent: View {
                 }
                 if let remote = loaded as? HostRemoteViewController {
                     remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
+                    remote.retry = { retry += 1 }
                     contentHeight = remote.contentHeight
                 }
                 controller = loaded
@@ -175,7 +201,11 @@ struct HostExtensionContent: View {
             } catch {
                 navigation?.delivery.reject(error)
                 guard !Task.isCancelled else { return }
-                self.error = "The extension page could not open."
+                presenter.endPresentation(id: token)
+                controller = nil
+                self.error =
+                    (error as? LocalizedError)?.errorDescription
+                    ?? "The extension page could not open. Try again."
             }
         }
         .onDisappear {
@@ -184,7 +214,8 @@ struct HostExtensionContent: View {
         }
     }
     private struct Request: Equatable {
-        let version: String?; let active: Bool; let location: String; let section: String?
+        let version: String; let active: Bool; let transitioning: Bool
+        let location: String; let section: String?
         let surface: SurfaceSnapshotRequest?; let retry: Int
         let deliveryID: UUID?; let presentable: Bool
     }
@@ -192,7 +223,7 @@ struct HostExtensionContent: View {
         navigation?.delivery.reject()
         if let parkingKey, let controller, error == nil {
             presenter?.park(
-                key: parkingKey, version: installedVersion, presentationID: presentationID,
+                key: parkingKey, version: contentIdentity, presentationID: presentationID,
                 controller: controller)
         } else {
             presenter?.endPresentation(id: presentationID)
