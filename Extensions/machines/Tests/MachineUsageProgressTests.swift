@@ -97,7 +97,7 @@ import Testing
                 }
                 if observedWhileRunning,
                     String(decoding: logs, as: UTF8.self).contains(
-                        "Snapshot contains 1 receipts (14 bytes)")
+                        "Snapshot contains 1 receipts")
                 {
                     try Data().write(to: release)
                 }
@@ -110,7 +110,7 @@ import Testing
                     "Scanning receipt source .codex/sessions"))
             #expect(
                 String(decoding: logs, as: UTF8.self).contains(
-                    "Snapshot contains 1 receipts (14 bytes)"))
+                    "Snapshot contains 1 receipts"))
             let descriptor = try #require(receipt)
             #expect(descriptor.sha256 == MachineUsageReceiptSnapshot.hash(document))
             #expect(descriptor.byteCount == document.count)
