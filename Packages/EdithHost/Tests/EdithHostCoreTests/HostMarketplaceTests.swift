@@ -139,6 +139,16 @@ import HostWorkerFixtureSupport
         #expect(await fixture.network.count == 1)
     }
 
+    @Test func downloadingAnIncompatiblePackageNamesTheCause() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [fixture.package("1.0.0", abi: "other-host")]))
+        let marketplace = try fixture.marketplace()
+        let message = await marketplace.download(id: "sample")
+        #expect(message == MarketplaceError.incompatiblePackage.errorDescription)
+    }
+
     @Test func aRateLimitedRefreshKeepsTheCachedCatalogAndNamesTheCause() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
