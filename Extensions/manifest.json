@@ -2261,6 +2261,7 @@
       "app": [
         "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
         "Extensions/machines/CLI/CLIProgress.swift",
+        "Extensions/machines/CLI/CapturedCLIOutput.swift",
         "Extensions/machines/CLI/CommandTree.swift",
         "Extensions/machines/CLI/CompletionEngine.swift",
         "Extensions/machines/CLI/ConfigCatalog.swift",
