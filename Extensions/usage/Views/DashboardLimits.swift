@@ -471,8 +471,12 @@ struct LimitsCardView: View {
         _selectedProviderRaw = AppStorage(
             wrappedValue: initialSnapshot?.provider.rawValue ?? LimitProvider.claude.rawValue,
             AppStorageKeys.Limits.provider, store: defaults)
+        let initialScope =
+            initialSnapshot.map {
+                $0.accountID?.uuidString ?? ($0.hasUnassignedHistory ? "unassigned" : "")
+            } ?? ""
         _selectedAccountRaw = AppStorage(
-            wrappedValue: initialSnapshot?.accountID?.uuidString ?? "",
+            wrappedValue: initialScope,
             LimitsHistory.accountSelectionKey, store: defaults)
         if let snapshot = initialSnapshot {
             let points = LimitsHistory.downsample(
@@ -489,7 +493,7 @@ struct LimitsCardView: View {
             _providers = State(initialValue: snapshot.providers)
             _accounts = State(initialValue: snapshot.accounts)
             _hasUnassignedHistory = State(initialValue: snapshot.hasUnassignedHistory)
-            _loadedAccountScope = State(initialValue: snapshot.accountID?.uuidString ?? "")
+            _loadedAccountScope = State(initialValue: initialScope)
         }
     }
 
@@ -549,8 +553,9 @@ struct LimitsCardView: View {
                         Spacer(minLength: 0)
                     }
                 }
-                if let failure = reloadLoad.errorMessage {
-                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                if reloadLoad.errorMessage != nil {
+                    Text("Limit history could not be refreshed. Try again.")
+                        .font(.edithText(.caption)).foregroundStyle(.red)
                 }
                 if selectedProvider == .claude, let accountFailure {
                     Text(accountFailure).font(.edithText(.caption)).foregroundStyle(.red)

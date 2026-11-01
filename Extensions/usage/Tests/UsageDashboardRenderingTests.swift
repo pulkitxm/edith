@@ -94,6 +94,60 @@ import Vision
         }
     }
 
+    @Test func newAndUnassignedHistoryRenderWithoutIndefiniteLoadingOrAnIncorrectAccountLabel()
+        async throws
+    {
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_793_534_400)
+        for mode in ["empty", "single", "unassigned"] {
+            let suite = "history-state-" + UUID().uuidString
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let points: [LimitPoint] =
+                mode == "empty"
+                ? []
+                : [
+                    .init(date: now, s: 11, w: 72, sessionReset: nil, weekReset: nil)
+                ]
+            let snapshot = LimitsHistory.Snapshot(
+                providers: [.claude], provider: .claude, latest: [:],
+                points: points, accounts: [.init(id: id, name: "Sample new account")],
+                accountID: mode == "unassigned" ? nil : id,
+                hasUnassignedHistory: mode == "unassigned")
+            let host = NSHostingView(
+                rootView: LimitsCardView(
+                    theme: .cyan, dark: true,
+                    initialSnapshot: snapshot, defaults: defaults
+                )
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.compactLayout, true)
+                .environment(\.colorScheme, .dark)
+                .frame(width: 430, height: 430).background(DashSkin.paper(true)))
+            host.sizingOptions = []
+            host.frame = CGRect(x: 0, y: 0, width: 430, height: 430)
+            for _ in 0..<3 {
+                host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20))
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let recognition = VNRecognizeTextRequest(); recognition.recognitionLevel = .accurate
+            try VNImageRequestHandler(cgImage: #require(bitmap.cgImage)).perform([recognition])
+            let text =
+                recognition.results?.compactMap { $0.topCandidates(1).first?.string }.joined(
+                    separator: " ") ?? ""
+            #expect(!text.contains("Loading limit history"))
+            if mode == "empty" { #expect(text.contains("No limit history")) }
+            if mode == "single" { #expect(text.contains("72%")) }
+            if mode == "unassigned" {
+                #expect(text.contains("Unassigned history"))
+                #expect(text.contains("Older samples"))
+                #expect(!text.contains("Sample new account"))
+            } else {
+                #expect(text.contains("Sample new account"))
+            }
+        }
+    }
+
     @Test func limitsMenuRendersAccountRecoveryAndWeeklyOnlyLimitsAtEverySize() async throws {
         let previousZoom = UIScale.current
         defer { UIScale.apply(previousZoom) }
