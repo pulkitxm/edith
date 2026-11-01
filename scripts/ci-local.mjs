@@ -1,5 +1,10 @@
 import { execFileSync, spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, readFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -184,6 +189,13 @@ async function main() {
         `${job.lane}\t${(job.command ?? ["make", ...job.make]).join(" ")}`,
       );
     return;
+  }
+  if (!existsSync(resolve(root, "node_modules/.bin/biome"))) {
+    console.log("installing JavaScript dependencies");
+    execFileSync("bun", ["install", "--frozen-lockfile"], {
+      cwd: root,
+      stdio: "inherit",
+    });
   }
   const logDirectory = resolve(root, "local/ci-logs");
   mkdirSync(logDirectory, { recursive: true });
