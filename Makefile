@@ -223,6 +223,18 @@ extension-sideload:
 		bun scripts/build-extension-package.mjs $(EXTENSION) --development
 	dist/Edith.app/Contents/MacOS/ed extensions sideload dist/extensions/$(EXTENSION).zip
 
+.PHONY: dev-extension dev-extension-watch dev-catalog
+dev-extension:
+	@test -n "$(EXTENSION)" || { echo "usage: make dev-extension EXTENSION=<id>" >&2; exit 2; }
+	bun scripts/dev-extension.mjs $(EXTENSION)
+
+dev-extension-watch:
+	@test -n "$(EXTENSION)" || { echo "usage: make dev-extension-watch EXTENSION=<id>" >&2; exit 2; }
+	bun scripts/dev-extension.mjs $(EXTENSION) --watch
+
+dev-catalog:
+	bun scripts/dev-catalog.mjs serve --production --launch
+
 .PHONY: dev-extension-timings
 dev-extension-timings:
 	scripts/dev-extension-timings.sh $(or $(RUNS),3)
