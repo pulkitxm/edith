@@ -24,16 +24,35 @@ public enum HostContract {
 }
 
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
+    public enum Activation: String, Codable, Hashable, Sendable {
+        case launch
+        case demand
+    }
+
     public let id: String
     public let title: String
     public let symbolName: String
     public let category: String
+    public let activation: Activation
 
-    public init(id: String, title: String, symbolName: String, category: String) {
+    public init(
+        id: String, title: String, symbolName: String, category: String,
+        activation: Activation = .launch
+    ) {
         self.id = id
         self.title = title
         self.symbolName = symbolName
         self.category = category
+        self.activation = activation
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        symbolName = try values.decode(String.self, forKey: .symbolName)
+        category = try values.decode(String.self, forKey: .category)
+        activation = try values.decodeIfPresent(Activation.self, forKey: .activation) ?? .launch
     }
 }
 

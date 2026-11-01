@@ -7,6 +7,62 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostExtensionSessionTests {
+    @Test func onDemandExtensionsStayIdleAtLaunchAndStartOnceWhenUsed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(
+            ["sample", "other"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.sessions.startsAtLaunch = { $0 != "sample" }
+        await fixture.sessions.restore(
+            packages: [
+                "sample": fixture.package("1.0.0"), "other": fixture.package("1.0.0", id: "other"),
+            ])
+        #expect(fixture.sessions.states["sample"] == .idle)
+        #expect(fixture.sessions.states["other"] == .active)
+        #expect(fixture.sessions.idleIDs == ["sample"])
+        #expect(fixture.sessions.availableIDs == ["sample", "other"])
+        #expect(fixture.records.workers.map(\.configuration.extensionID) == ["other"])
+        async let first: Void = fixture.sessions.activate("sample")
+        async let second: Void = fixture.sessions.activate("sample")
+        _ = try await (first, second)
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(
+            fixture.records.workers.filter { $0.configuration.extensionID == "sample" }.count == 1)
+        try await fixture.sessions.activate("sample")
+        #expect(fixture.records.workers.count == 2)
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func disablingAnIdleExtensionLoadsNoCode() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.sessions.startsAtLaunch = { _ in false }
+        await fixture.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        try await fixture.sessions.disable(id: "sample")
+        #expect(fixture.sessions.states["sample"] == .disabled)
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+        #expect(fixture.records.workers.isEmpty)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await fixture.sessions.activate("sample")
+        }
+    }
+
+    @Test func updatingAnIdleExtensionKeepsItIdleAndStartsTheNewVersion() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.sessions.startsAtLaunch = { _ in false }
+        await fixture.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(fixture.sessions.replaceIdle(fixture.package("1.1.0")))
+        #expect(fixture.sessions.states["sample"] == .idle)
+        #expect(fixture.records.workers.isEmpty)
+        try await fixture.sessions.activate("sample")
+        #expect(fixture.sessions.versions["sample"] == "1.1.0")
+        #expect(!fixture.sessions.replaceIdle(fixture.package("1.2.0")))
+        #expect(await fixture.sessions.shutdown())
+    }
+
     @Test func firstEnableFailureRetainsIntentAndRecoversWithoutAnotherClick() async throws {
         let fixture = try Fixture(failingWorkers: 0..<1)
         defer { fixture.clean() }

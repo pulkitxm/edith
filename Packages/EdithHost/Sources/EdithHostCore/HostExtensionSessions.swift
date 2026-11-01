@@ -49,6 +49,8 @@ public final class HostExtensionSessions {
     }
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let create: @MainActor (ExtensionPackage) throws -> HostWorker
+    @ObservationIgnored public var startsAtLaunch: @MainActor (String) -> Bool = { _ in true }
+    @ObservationIgnored private var activations: [String: Task<Void, any Error>] = [:]
     @ObservationIgnored private var workers: [String: HostWorker] = [:]
     @ObservationIgnored private var packages: [String: ExtensionPackage] = [:]
     @ObservationIgnored private var retryPackages: [String: ExtensionPackage] = [:]
@@ -84,6 +86,11 @@ public final class HostExtensionSessions {
         Set(states.keys.filter { states[$0] == .active }).subtracting(pendingDisableIDs)
             .subtracting(pendingRecoveryIDs)
     }
+    public var idleIDs: Set<String> {
+        Set(states.keys.filter { states[$0] == .idle }).subtracting(pendingDisableIDs)
+            .subtracting(pendingRecoveryIDs)
+    }
+    public var availableIDs: Set<String> { activeIDs.union(idleIDs) }
     public var processIdentifiers: [String: Int32] {
         workers.compactMapValues(\.processIdentifier)
     }
@@ -123,9 +130,30 @@ public final class HostExtensionSessions {
                 try await stop(id: id, remember: false, reason: .shutdown)
                 if enabledIDs.contains(id) { try await enable(package) }
             } catch { failures.insert(id) }
+        } else if !startsAtLaunch(id) {
+            packages[id] = package
+            states[id] = .idle
         } else {
             do { try await enable(package) } catch { failures.insert(id) }
         }
+    }
+
+    public func activate(_ id: String) async throws {
+        if states[id] == .active { return }
+        if let running = activations[id] { return try await running.value }
+        guard states[id] == .idle, let package = packages[id] else {
+            throw HostWorkerError.rejected
+        }
+        let activation = Task { try await enable(package) }
+        activations[id] = activation
+        defer { activations[id] = nil }
+        try await activation.value
+    }
+
+    public func replaceIdle(_ package: ExtensionPackage) -> Bool {
+        guard states[package.id] == .idle else { return false }
+        packages[package.id] = package
+        return true
     }
 
     public func enable(_ package: ExtensionPackage) async throws {
@@ -321,6 +349,14 @@ public final class HostExtensionSessions {
     private func stop(id: String, remember: Bool, reason: HostWorkerStopReason) async throws {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
+        }
+        if states[id] == .idle, workers[id] == nil {
+            if remember { save(enabledIDs.subtracting([id])) }
+            packages[id] = nil
+            states[id] = .disabled
+            ambientPolicyCoordinator.release(owner: id)
+            ambientPolicyCoordinator.invalidate()
+            return
         }
         cancelRetry(id)
         if remember, enabledIDs.contains(id) || workers[id] != nil { pendingDisableIDs.insert(id) }

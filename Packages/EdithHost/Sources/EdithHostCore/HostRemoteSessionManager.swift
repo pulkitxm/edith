@@ -48,6 +48,12 @@ public final class HostRemoteSessionManager {
         -> HostLocalSceneHandle
     {
         try Task.checkCancellation()
+        if marketplace.sessions.states[request.extensionID] == .idle,
+            request.location != "settings" || request.surface != nil
+        {
+            try await marketplace.sessions.activate(request.extensionID)
+            try Task.checkCancellation()
+        }
         let configuration = try selectedConfiguration(for: request)
         let id = request.extensionID
         let engine =

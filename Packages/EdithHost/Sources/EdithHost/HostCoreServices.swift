@@ -302,6 +302,10 @@ import SwiftUI
                     let process = try? HostRemoteKernelIdentity.read(pid)
                 else { return false }
                 return process.isRunning
+            }
+        ).union(
+            marketplace.sessions.idleIDs.filter { id in
+                !marketplace.pendingRemovalIDs.contains(id) && marketplace.installed[id] != nil
             })
     }
 

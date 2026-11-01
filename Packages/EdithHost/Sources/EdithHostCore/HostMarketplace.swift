@@ -139,8 +139,11 @@ public final class HostMarketplace {
                     identity: identity, extensionID: package.id, version: package.version,
                     publicLauncher: publicLauncher))
         }
+        let entries = try HostIndex.bundled()
+        let demand = Set(entries.filter { $0.activation == .demand }.map(\.id))
+        sessions.startsAtLaunch = { !demand.contains($0) }
         return try HostMarketplace(
-            identity: identity, entries: HostIndex.bundled(), store: store,
+            identity: identity, entries: entries, store: store,
             catalogClient: localCatalog?.client(
                 cache: identity.root.appendingPathComponent("development-catalog.json"))
                 ?? .live(cache: identity.root.appendingPathComponent("catalog.json")),
@@ -506,6 +509,10 @@ public final class HostMarketplace {
         _ package: ExtensionPackage, starting: Bool
     ) async -> String? {
         do {
+            if sessions.replaceIdle(package) {
+                try await mutateStore { [store] in try store.select(package) }
+                return nil
+            }
             if starting {
                 try await sessions.enable(package)
             } else if sessions.states[package.id] == .notInstalled {
