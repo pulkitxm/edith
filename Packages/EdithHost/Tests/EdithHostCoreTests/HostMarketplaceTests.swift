@@ -7,6 +7,117 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostMarketplaceTests {
+    @Test func successfulAutomaticRecoveryClearsTheMarketplaceStartupError() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        var attempts = 0
+        let marketplace = try fixture.marketplace { _ in
+            attempts += 1
+            return attempts == 1 ? "reject-start-with-reason" : "normal"
+        }
+        marketplace.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(20)) }
+        #expect(await marketplace.enable(id: "sample") != nil)
+        #expect(marketplace.failures["sample"] != nil)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !marketplace.sessions.activeIDs.contains("sample"), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.failures["sample"] == nil)
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func enablingAMissingPackageReportsFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace()
+        #expect(await marketplace.enable(id: "sample") != nil)
+        #expect(marketplace.sessions.enabledIDs.isEmpty)
+    }
+
+    @Test func dependencyUpdatesActivateAndPersistEverySelectedVersion() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let previous = fixture.package("1.0.0", id: "dependency")
+        try fixture.install([previous])
+        let dependency = try fixture.build("1.1.0", id: "dependency")
+        let root = try fixture.build("1.0.0", dependencies: ["dependency"])
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [root.package, dependency.package]))
+        let marketplace = try fixture.marketplace(
+            ids: ["sample", "dependency"], workerMode: { _ in "normal" },
+            serving: [
+                root.package.downloadURL: root.archive,
+                dependency.package.downloadURL: dependency.archive,
+            ])
+        #expect(await marketplace.enable(id: "dependency") == nil)
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(marketplace.installed["dependency"] == dependency.package)
+        #expect(marketplace.sessions.versions["dependency"] == "1.1.0")
+        #expect(!marketplace.sessions.enabledIDs.contains("sample"))
+        #expect(await marketplace.sessions.shutdown())
+        let restarted = try fixture.marketplace(ids: ["sample", "dependency"])
+        #expect(restarted.installed["dependency"] == dependency.package)
+    }
+
+    @Test func batchUpdatesWithOverlappingPlansUseOneCatalogAndDoNotConflict() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([
+            fixture.package("1.0.0"), fixture.package("1.0.0", id: "dependency"),
+        ])
+        let dependency = try fixture.build("1.1.0", id: "dependency")
+        let root = try fixture.build("1.1.0", dependencies: ["dependency"])
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [root.package, dependency.package]))
+        let marketplace = try fixture.marketplace(
+            ids: ["sample", "dependency"], workerMode: { _ in "normal" },
+            serving: [
+                root.package.downloadURL: root.archive,
+                dependency.package.downloadURL: dependency.archive,
+            ])
+        #expect(await marketplace.enable(id: "dependency") == nil)
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(await marketplace.install(ids: ["sample", "dependency"]).isEmpty)
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.installed["sample"] == root.package)
+        #expect(marketplace.installed["dependency"] == dependency.package)
+        #expect(marketplace.sessions.versions == ["sample": "1.1.0", "dependency": "1.1.0"])
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func failedDependencyActivationPreservesBothPreviousSelections() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let previous = fixture.package("1.0.0", id: "dependency")
+        let oldRoot = fixture.package("1.0.0")
+        try fixture.install([previous, oldRoot])
+        let dependency = try fixture.build("1.1.0", id: "dependency")
+        let root = try fixture.build("1.1.0", dependencies: ["dependency"])
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [root.package, dependency.package]))
+        let marketplace = try fixture.marketplace(
+            ids: ["sample", "dependency"],
+            workerMode: { $0.id == "dependency" && $0.version == "1.1.0" ? "reject" : "normal" },
+            serving: [
+                root.package.downloadURL: root.archive,
+                dependency.package.downloadURL: dependency.archive,
+            ])
+        #expect(await marketplace.enable(id: "dependency") == nil)
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(await marketplace.download(id: "sample") != nil)
+        #expect(marketplace.installed["dependency"] == previous)
+        #expect(marketplace.installed["sample"] == oldRoot)
+        #expect(marketplace.sessions.versions["dependency"] == "1.0.0")
+        #expect(marketplace.sessions.versions["sample"] == "1.0.0")
+        #expect(await marketplace.sessions.shutdown())
+        let restarted = try fixture.marketplace(ids: ["sample", "dependency"])
+        #expect(restarted.installed["dependency"] == previous)
+        #expect(restarted.installed["sample"] == oldRoot)
+    }
+
     @Test func aNewProtocolRefreshesTheCatalogEvenWhenThePreviousCheckIsRecent() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -194,7 +305,7 @@ import HostWorkerFixtureSupport
         while await fixture.network.count == 0 { await Task.yield() }
         for _ in 0..<20 { await Task.yield() }
         #expect(marketplace.isBusy("sample") && marketplace.isBusy("second"))
-        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(await marketplace.download(id: "sample") == HostMarketplace.operationInProgress)
         await fixture.network.release()
         let failures = [await first.value, await second.value]
         #expect(failures.allSatisfy { $0 != nil })
@@ -229,6 +340,7 @@ import HostWorkerFixtureSupport
         let failures = await marketplace.install(ids: ids)
         #expect(Set(failures.keys) == Set(ids))
         #expect(Set(await fixture.archives.urls).count == ids.count)
+        #expect(await fixture.network.count == 1)
         #expect(!marketplace.busy)
     }
 
@@ -1043,7 +1155,8 @@ import HostWorkerFixtureSupport
 
         func package(
             _ version: String, abi: String = HostContract.compatibility,
-            minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), id: String = "sample"
+            minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), id: String = "sample",
+            dependencies: [String] = []
         )
             -> ExtensionPackage
         {
@@ -1052,7 +1165,8 @@ import HostWorkerFixtureSupport
                 minimumSystemVersion: minimumSystemVersion,
                 downloadURL: URL(
                     string: "https://github.com/pulkitxm/edith/releases/download/fixture/\(id).zip"
-                )!, sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+                )!, sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1,
+                dependencies: dependencies)
         }
 
         func install(_ packages: [ExtensionPackage]) throws {
@@ -1071,7 +1185,8 @@ import HostWorkerFixtureSupport
         }
 
         func build(
-            _ version: String, abi: String = HostContract.compatibility, id: String = "sample"
+            _ version: String, abi: String = HostContract.compatibility, id: String = "sample",
+            dependencies: [String] = []
         ) throws
             -> ExtensionSideload
         {
@@ -1081,7 +1196,7 @@ import HostWorkerFixtureSupport
             try FileManager.default.createDirectory(
                 at: runtime.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("local runtime \(version)".utf8).write(to: runtime)
-            let placeholder = package(version, abi: abi, id: id)
+            let placeholder = package(version, abi: abi, id: id, dependencies: dependencies)
             try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder)).write(
                 to: payload.appendingPathComponent("package.json"))
             let archive = output.appendingPathComponent("\(id).zip")
@@ -1110,7 +1225,8 @@ import HostWorkerFixtureSupport
                 id: id, version: version, hostABI: abi,
                 downloadURL: placeholder.downloadURL,
                 sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
-                downloadBytes: Int64(bytes.count), installedBytes: installedBytes)
+                downloadBytes: Int64(bytes.count), installedBytes: installedBytes,
+                dependencies: dependencies)
             try JSONEncoder().encode(record).write(
                 to: output.appendingPathComponent("\(id).json"))
             return try ExtensionSideload(path: archive)
