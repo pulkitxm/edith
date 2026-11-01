@@ -7,6 +7,51 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostExtensionSessionTests {
+    @Test func firstEnableFailureRetainsIntentAndRecoversWithoutAnotherClick() async throws {
+        let fixture = try Fixture(failingWorkers: 0..<1)
+        defer { fixture.clean() }
+        fixture.sessions.sleep = { _ in try await Task.sleep(for: .milliseconds(20)) }
+        await #expect(throws: HostWorkerError.rejected) {
+            try await fixture.sessions.enable(fixture.package("1.0.0"))
+        }
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        try await fixture.waitUntil { fixture.sessions.states["sample"] == .active }
+        #expect(fixture.records.workers.count == 2)
+        #expect(fixture.sessions.generations["sample"] == fixture.worker("sample")?.generation)
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func aFailedFirstEnableCanBeDisabledAndDoesNotReturnOnRestart() async throws {
+        let fixture = try Fixture(failingWorkers: 0..<1)
+        defer { fixture.clean() }
+        await #expect(throws: HostWorkerError.rejected) {
+            try await fixture.sessions.enable(fixture.package("1.0.0"))
+        }
+        try await fixture.sessions.disable(id: "sample")
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+        #expect(fixture.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.sessions.generations.isEmpty)
+        #expect(fixture.sessions.states["sample"] == .disabled)
+        let restarted = try Fixture(suite: fixture.suite)
+        await restarted.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(restarted.records.workers.isEmpty)
+    }
+
+    @Test func enablingANewVersionReplacesTheEngineAndPresentationGeneration() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let generation = try #require(fixture.sessions.generations["sample"])
+        var closed = false
+        fixture.sessions.willDisable = { _ in closed = true }
+        try await fixture.sessions.enable(fixture.package("1.1.0"))
+        #expect(closed)
+        #expect(fixture.sessions.versions["sample"] == "1.1.0")
+        #expect(fixture.sessions.generations["sample"] != generation)
+        #expect(await fixture.sessions.shutdown())
+        #expect(fixture.sessions.generations.isEmpty)
+    }
+
     @Test func UIExitFailureKeepsTheEngineAndDisableIntentUntilRetry() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -196,13 +241,19 @@ import HostWorkerFixtureSupport
         #expect(await restarted.sessions.shutdown())
     }
 
-    @Test func aFailedRecoveryDoesNotKeepAnExtensionFromStarting() async throws {
+    @Test func aFailedRecoveryRemainsPendingUntilItCanBeRetried() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
         fixture.defaults.set(["sample"], forKey: "enabledExtensions")
         fixture.defaults.set(["sample"], forKey: "pendingStopRecoveryExtensions")
         let restarted = try Fixture(suite: fixture.suite, failingWorkers: 0..<1)
+        await #expect(throws: HostWorkerError.rejected) {
+            try await restarted.sessions.enable(fixture.package("1.0.0"))
+        }
+        #expect(restarted.sessions.pendingRecoveryIDs == ["sample"])
+        #expect(restarted.sessions.activeIDs.isEmpty)
         try await restarted.sessions.enable(fixture.package("1.0.0"))
+        #expect(restarted.sessions.pendingRecoveryIDs.isEmpty)
         #expect(restarted.sessions.activeIDs == ["sample"])
         #expect(restarted.sessions.failureReasons["sample"] == nil)
         #expect(await restarted.sessions.shutdown())
