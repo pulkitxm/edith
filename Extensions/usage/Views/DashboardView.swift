@@ -84,6 +84,11 @@ struct DashboardView: View {
                 Divider()
             }
         } content: {
+            if !model.loaded, model.contentLoad.state == .loading {
+                PageNotice(
+                    "Loading usage data. The first collection can take a few minutes.",
+                    tone: .information)
+            }
             if showLog { logView }
             if let notice = client?.notice
                 ?? UsageWorkerOperations.controller?.notice

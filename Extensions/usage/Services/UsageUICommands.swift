@@ -93,8 +93,16 @@ struct UsageUILimits: Codable, Sendable {
                 read.cancel()
             }
             try Task.checkCancellation()
-            guard !stopped, let data, UsageHistory.isValidDocument(data) else {
-                throw ExtensionPeerError.unavailable
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            guard let data else {
+                if controller.refreshing { return try encoder.encode(["pending": true]) }
+                throw ExtensionPeerError.rejected(
+                    controller.failure
+                        ?? "Usage has not collected any data yet. Refresh to try again.")
+            }
+            guard UsageHistory.isValidDocument(data) else {
+                throw ExtensionPeerError.rejected(
+                    "The saved usage data could not be read. Refresh to collect it again.")
             }
             cacheHomeUsage(data)
             return try receipt(data)

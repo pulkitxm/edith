@@ -120,28 +120,41 @@ import Observation
     private func checkedPayload(_ operation: String, object: [String: String] = [:]) async throws
         -> Data
     {
-        struct Receipt: Decodable { let id: UUID; let byteCount: Int; let sha256: String }
-        let receipt: Receipt = try await value(operation, object: object)
+        struct Receipt: Decodable {
+            let pending: Bool?
+            let id: UUID?
+            let byteCount: Int?
+            let sha256: String?
+        }
+        var receipt: Receipt
+        while true {
+            receipt = try await value(operation, object: object)
+            guard receipt.pending == true else { break }
+            guard operation == "usage.ui.document", receipt.id == nil,
+                receipt.byteCount == nil, receipt.sha256 == nil
+            else { throw ExtensionPeerError.invalidRequest }
+            try await Task.sleep(for: .seconds(1))
+        }
+        guard let id = receipt.id, let byteCount = receipt.byteCount, let sha256 = receipt.sha256,
+            (1...67_108_864).contains(byteCount), sha256.count == 64
+        else { throw ExtensionPeerError.invalidRequest }
         do {
-            guard (1...67_108_864).contains(receipt.byteCount), receipt.sha256.count == 64 else {
-                throw ExtensionPeerError.invalidRequest
-            }
             var document = Data()
-            while document.count < receipt.byteCount {
+            while document.count < byteCount {
                 let payload = try JSONSerialization.data(withJSONObject: [
-                    "id": receipt.id.uuidString, "offset": document.count,
+                    "id": id.uuidString, "offset": document.count,
                 ])
                 let chunk = try await JSONDecoder().decode(
                     UsageMachinesPeer.Chunk.self,
                     from: invoke("usage.ui.chunk", payload: payload))
                 guard chunk.offset == document.count, !chunk.data.isEmpty,
                     chunk.data.count <= 262_144,
-                    document.count + chunk.data.count <= receipt.byteCount,
-                    chunk.finished == (document.count + chunk.data.count == receipt.byteCount)
+                    document.count + chunk.data.count <= byteCount,
+                    chunk.finished == (document.count + chunk.data.count == byteCount)
                 else { throw ExtensionPeerError.invalidRequest }
                 document.append(chunk.data)
             }
-            guard UsageMachinesPeer.hash(document) == receipt.sha256 else {
+            guard UsageMachinesPeer.hash(document) == sha256 else {
                 throw ExtensionPeerError.invalidRequest
             }
             return document
@@ -149,7 +162,7 @@ import Observation
             let cleanup = Task {
                 _ = try? await self.value(
                     "usage.ui.release",
-                    object: ["id": receipt.id.uuidString], as: [String: String].self)
+                    object: ["id": id.uuidString], as: [String: String].self)
             }
             await cleanup.value
             throw error
