@@ -6,6 +6,15 @@ request runs the checks. A push to `main` runs them again, and a product
 change on `main` publishes the next release. Extension packages and the
 signed catalog publish from the Extensions workflow on the same push.
 
+## Required development workflow
+
+Read [Development workflow](docs/development.md) and
+[Testing and proof](docs/testing.md) before implementation. Use one worktree per
+worker and one build/test driver per checkout. Build the local host, sideload
+changed extensions and their dependencies, and verify through that slot's bundled
+CLI. A successful host build does not prove changed extension code is loaded.
+The integration owner repeats verification on the combined revision.
+
 ## Local checks
 
 `make ci-local` runs the same lanes GitHub would run for the current branch,
@@ -110,7 +119,9 @@ has not caught up to yet, plus a reservation for what it has not allocated:
 the full estimate for the first 20s, then at least half, or more when live
 usage is higher. Available memory already includes allocations, so that part
 is not reserved again. A quiet 14-core machine fits about three app builds.
-A busy one fits fewer. Set `EDITH_MAKE_GATE=skip` to run immediately.
+A busy one fits fewer. Keep the gate enabled during parallel development and
+coordinate direct build commands, which do not enter the Make gate. The gate
+limits resource use; it does not prevent output collisions within one worktree.
 
 When the budget is short, the gate waits and prints `make-resource-gate:`
 lines on stderr: the reason, the host budget, each running pid and target,

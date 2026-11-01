@@ -153,7 +153,10 @@ Thank you to everyone who has shipped a change in Edith.
 ## Contributing
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-building from source, the test suite, and how releases are cut. Participation is
+building from source, the test suite, and how releases are cut. The
+[development workflow](docs/development.md) covers parallel worktrees and local
+extension packages; [testing and proof](docs/testing.md) covers verification and
+review evidence. Participation is
 governed by the [Code of Conduct](CODE_OF_CONDUCT.md), and larger decisions follow
 the process in [GOVERNANCE.md](GOVERNANCE.md).
 
