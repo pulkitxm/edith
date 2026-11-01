@@ -282,8 +282,11 @@ final class HostRemoteViewController: NSViewController {
         if Self.measuresContent(request), let container = view as? HostRemoteContainerView {
             container.measuredContent = controller.view
             container.measured = { [weak self] height in self?.applyContentHeight(height) }
-            constraints.append(
-                controller.view.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor))
+            let fill = controller.view.heightAnchor.constraint(
+                greaterThanOrEqualTo: view.heightAnchor)
+            fill.priority = .defaultLow - 1
+            controller.view.setContentHuggingPriority(.defaultLow - 2, for: .vertical)
+            constraints.append(fill)
         } else {
             constraints.append(controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor))
         }
