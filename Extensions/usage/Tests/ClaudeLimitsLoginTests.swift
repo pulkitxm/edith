@@ -21,12 +21,14 @@ private actor LinkedLoginAuthority {
 @Suite struct ClaudeLimitsLoginTests {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
-    private func login(expiry: Date, token: String = "synthetic-access") throws -> Data {
+    private func login(
+        expiry: Date, token: String = "synthetic-access", scopes: [String] = ["user:profile"]
+    ) throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "preserved": "synthetic-metadata",
             "claudeAiOauth": [
                 "accessToken": token, "refreshToken": "synthetic-refresh",
-                "expiresAt": expiry.timeIntervalSince1970 * 1000, "scopes": ["user:profile"],
+                "expiresAt": expiry.timeIntervalSince1970 * 1000, "scopes": scopes,
             ],
         ])
     }
@@ -63,10 +65,12 @@ private actor LinkedLoginAuthority {
     }
 
     @Test func renewalPreservesMetadataRefreshCredentialsAndExactRequestContract() async throws {
-        let source = try login(expiry: now.addingTimeInterval(-1))
+        let scopes = ["user:profile", "user:inference", "user:sessions:claude_code"]
+        let source = try login(expiry: now.addingTimeInterval(-1), scopes: scopes)
         let reply = try JSONSerialization.data(withJSONObject: [
             "access_token": "synthetic-renewed", "refresh_token": "synthetic-rotated",
-            "expires_in": 3600, "scope": "user:profile user:inference",
+            "expires_in": 3600, "scope": scopes.joined(separator: " "),
+            "refresh_token_expires_in": 7200,
         ])
         let updated = try await ClaudeLimitsLogin.renew(source, now: now) { request in
             #expect(request.url?.absoluteString == "https://platform.claude.com/v1/oauth/token")
@@ -77,7 +81,7 @@ private actor LinkedLoginAuthority {
             let body = try #require(bodyObject as? [String: String])
             #expect(body["refresh_token"] == "synthetic-refresh")
             #expect(body["grant_type"] == "refresh_token")
-            #expect(body["scope"] == "user:profile")
+            #expect(body["scope"] == scopes.joined(separator: " "))
             #expect(body["client_id"] == "9d1c250a-e61b-44d9-88ed-5944d1962f5e")
             return (reply, try response(200))
         }
@@ -90,6 +94,20 @@ private actor LinkedLoginAuthority {
             oauth["expiresAt"] as? Double == now.addingTimeInterval(3600).timeIntervalSince1970
                 * 1000)
         #expect(ClaudeSavedLogin.token(data: updated, now: now) == "synthetic-renewed")
+        #expect(
+            oauth["refreshTokenExpiresAt"] as? Double == now.addingTimeInterval(7200)
+                .timeIntervalSince1970 * 1000)
+        let unchangedScope = try await ClaudeLimitsLogin.renew(source, now: now) { _ in
+            let data = try JSONSerialization.data(withJSONObject: [
+                "access_token": "synthetic-renewed", "expires_in": 3600,
+            ])
+            return (data, try response(200))
+        }
+        let unchanged = try #require(
+            JSONSerialization.jsonObject(with: unchangedScope) as? [String: Any])
+        let unchangedOAuth = try #require(unchanged["claudeAiOauth"] as? [String: Any])
+        #expect(unchangedOAuth["scopes"] as? [String] == scopes)
+        #expect(unchangedOAuth["refreshToken"] as? String == "synthetic-refresh")
     }
 
     @Test func renewalRejectsRejectedStatusScopeInvalidTokensAndOversizedResponses() async throws {
