@@ -34,7 +34,7 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
         tests = self.root / "Extensions/herdr/Tests/UI"
         tests.mkdir(parents=True, mode=0o700)
         for index, suite in enumerate(HELPER.SUITES):
-            methods = ["synthetic" + str(number) for number in range(19 if index == 0 else 6)]
+            methods = ["synthetic" + str(number) for number in range(21 if index == 0 else 6)]
             if suite == "HerdrSettingsTests":
                 methods += list(HELPER.HOSTED_METHODS)
             (tests / (suite + ".swift")).write_text(
@@ -79,7 +79,7 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
 
     def test_selection_contains_all13_suites_and_only_two_exact_window_method_skips(self):
         inventory = HELPER.source_inventory(self.root)
-        self.assertEqual(len(inventory["methods"]), 91)
+        self.assertEqual(len(inventory["methods"]), 93)
         self.assertEqual(len(inventory["pendingHostedMethods"]), 2)
         for method in HELPER.HOSTED_METHODS:
             self.assertRegex("HerdrUITests.HerdrSettingsTests/" + method + "()", HELPER.SKIP)
@@ -146,9 +146,9 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
             self.assertTrue(Path(environment[key]).is_relative_to(self.fixture))
 
     def test_zero_wrong_suite_duplicate_summary_and_native_failure_never_pass(self):
-        good = b"Test run with 91 tests in 13 suites passed after 0.1 seconds.\n"
-        self.assertEqual(HELPER.test_result(0, good), (0, 91, True))
-        for output in [b"", good.replace(b"91", b"0"), good.replace(b"13", b"12"), good + good]:
+        good = b"Test run with 93 tests in 13 suites passed after 0.1 seconds.\n"
+        self.assertEqual(HELPER.test_result(0, good), (0, 93, True))
+        for output in [b"", good.replace(b"93", b"0"), good.replace(b"13", b"12"), good + good]:
             self.assertNotEqual(HELPER.test_result(0, output)[0], 0)
         self.assertEqual(HELPER.test_result(2, good)[0], 2)
 
@@ -158,7 +158,7 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
             self.assertEqual(root, self.root)
             if on_dispatch:
                 on_dispatch(argv, driver, output.parent)
-            output.write_bytes(b"Test run with 91 tests in 13 suites passed after 0.1 seconds.\n")
+            output.write_bytes(b"Test run with 93 tests in 13 suites passed after 0.1 seconds.\n")
             output.chmod(0o600)
             if after_join:
                 after_join(driver)
@@ -190,7 +190,7 @@ class HerdrAccountLocalRouteTests(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(driver.validations, 2)
         self.assertEqual(fixtures, [])
-        self.assertEqual(receipt["expectedMethods"], 91)
+        self.assertEqual(receipt["expectedMethods"], 93)
         self.assertEqual(len(receipt["sourceInventory"]["pendingHostedMethods"]), 2)
 
     def test_failing_native_clean_retirement_and_swapped_driver_retain_fixtures(self):

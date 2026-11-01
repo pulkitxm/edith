@@ -9,6 +9,7 @@ struct ClaudeAccountSettings: View {
     var machineID: String? = nil
     var accountAdded: (ClaudeAccount) -> Void = { _ in }
     @State private var draft: ClaudeAccount?
+    @State private var removeRemoteLogin = false
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -110,6 +111,16 @@ struct ClaudeAccountSettings: View {
                             "Sign in for subscription limits while keeping this account's launch token."
                         )
                     }
+                    if draft?.remoteMachineID != nil {
+                        Toggle(
+                            "Also remove the login from the linked machine",
+                            isOn: $removeRemoteLogin)
+                        Text(
+                            "Local credentials can be removed while the machine is offline. Removing its remote login requires a connection."
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
                     HStack {
                         Button("Save account") { saveDraft() }
                             .buttonStyle(.edith(.toolbar))
@@ -117,7 +128,8 @@ struct ClaudeAccountSettings: View {
                         {
                             Button("Sign out account") {
                                 Task {
-                                    await accounts.logout(draft.id)
+                                    await accounts.logout(
+                                        draft.id, removeRemoteLogin: removeRemoteLogin)
                                     self.draft = accounts.account(draft.id)
                                 }
                             }
@@ -165,6 +177,7 @@ struct ClaudeAccountSettings: View {
         .onChange(of: accounts.state.accounts.map(\.id)) { _, _ in
             selectAccountIfNeeded()
         }
+        .onChange(of: draft?.id) { _, _ in removeRemoteLogin = false }
     }
 
     private func selectAccountIfNeeded() {
@@ -217,7 +230,7 @@ struct ClaudeAccountSettings: View {
     private func removeDraft() {
         guard let draft else { return }
         Task {
-            await accounts.forget(draft.id)
+            await accounts.forget(draft.id, removeRemoteLogin: removeRemoteLogin)
             if accounts.error == nil {
                 self.draft = nil
                 selectAccountIfNeeded()

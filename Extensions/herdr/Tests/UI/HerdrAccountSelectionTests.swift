@@ -18,11 +18,15 @@ private actor HerdrSelectionNotifications {
         defer { try? FileManager.default.removeItem(at: root) }
         let model = ClaudeAccountsModel(
             directory: root.appendingPathComponent("accounts"), eraseSecret: { _ in },
-            invalidateUsage: {}, refreshUsage: {})
+            invalidateUsage: {}, refreshUsage: {},
+            removeRemoteProfile: { _, _ in
+                throw ClaudeAccountError.rejected("Sample machine is offline")
+            })
         try await model.load()
         #expect(model.launchSelection("default") == "cli")
         let first = ClaudeAccount(name: "First", credential: "synthetic-first")
-        let second = ClaudeAccount(name: "Second", credential: "synthetic-second")
+        var second = ClaudeAccount(name: "Second", credential: "synthetic-second")
+        second.remoteMachineID = UUID().uuidString
         try await model.persist(.init(accounts: [first, second], defaultID: first.id))
         #expect(model.launchAccounts.map(\.id) == [first.id, second.id])
         #expect(model.launchAccounts.filter { $0.id == first.id }.count == 1)
@@ -36,7 +40,18 @@ private actor HerdrSelectionNotifications {
         #expect(restored.launchSelection(first.id.uuidString) == first.id.uuidString)
         #expect(await model.rememberLaunchSelection("cli"))
         #expect(model.state.defaultID == second.id)
+        await model.forget(second.id, removeRemoteLogin: true)
+        #expect(model.error == "Sample machine is offline")
+        #expect(model.account(second.id) == second)
+        #expect(
+            try await ClaudeAccountStorage(directory: model.directory).load().accounts.contains(
+                second))
+        await model.logout(second.id)
+        #expect(model.error == nil)
+        #expect(model.account(second.id)?.isLoggedOut == true)
         await model.forget(second.id)
+        #expect(model.error == nil)
+        #expect(model.account(second.id) == nil)
         #expect(model.launchSelection(second.id.uuidString) == first.id.uuidString)
         #expect(!(await model.rememberLaunchSelection(second.id.uuidString)))
         #expect(model.error != nil)
