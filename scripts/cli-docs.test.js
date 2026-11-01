@@ -116,7 +116,7 @@ test("feature workflows use shipped public routes and existing worker operations
       expect(["invoke", "extensions"]).toContain(match[1]);
     for (const match of text.matchAll(/\bed invoke (\w+) ([\w.]+)/g)) {
       const source = match[2].startsWith("surface.")
-        ? "Packages/ExtensionSupport/Sources/EdithExtensionSupport/SurfaceCommandService.swift"
+        ? "Packages/ExtensionSupport/Sources/EdithExtensionCore/SurfaceCommandService.swift"
         : sources[match[1]];
       expect(source).toBeDefined();
       expect(readFileSync(source, "utf8")).toContain(`"${match[2]}"`);

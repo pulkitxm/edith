@@ -18,6 +18,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "focusDim", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -34,6 +35,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "hinge", exclude: ["Tests", "Runtime.swift", "LICENSE"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -50,6 +52,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "windowSweaters", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -66,6 +69,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "colorPicker", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -82,6 +86,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "keystrokeHighlight", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -98,6 +103,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "micMute", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -114,6 +120,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
             ],
             path: "emoji", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -127,7 +134,10 @@ let package = Package(
             path: "emoji/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CalendarExtension",
-            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+            ],
             path: "calendar", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

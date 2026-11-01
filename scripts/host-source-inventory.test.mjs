@@ -108,7 +108,7 @@ test("a private ignored compiled source rejects while ignored output and Finder 
     for (const path of [
       "Packages/EdithHost/Sources/EdithHost/UntrackedFixture.swift",
       "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/UntrackedFixture.swift",
-      "Packages/ExtensionSupport/Sources/EdithExtensionSupport/UntrackedFixture.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCore/UntrackedFixture.swift",
       "Extensions/fixtureSupport/UntrackedFixture.swift",
       "Packages/EdithHost/Sources/EdithHostCore/Resources/UntrackedFixture.json",
     ]) {

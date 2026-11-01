@@ -16,6 +16,7 @@ export function supportModules(scope) {
     throw new Error("Invalid extension support scope");
   return Object.fromEntries(
     [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
@@ -32,7 +33,7 @@ export function supportModules(scope) {
 
 export function rewriteSupportImports(source, modules) {
   return source.replace(
-    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionFiles|EdithExtensionArchive|EdithExtensionCommands|EdithExtensionAccounts|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
+    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionFiles|EdithExtensionArchive|EdithExtensionCommands|EdithExtensionAccounts|ArgumentParserToolInfo|ArgumentParser)(?=\s|$)/gm,
     (_, prefix, name) => `${prefix}${modules[name]}`,
   );
 }
@@ -46,30 +47,43 @@ export function rewriteArgumentParserSource(source, modules, path) {
 
 export function supportProducts(product) {
   const products = {
-    EdithExtensionSupport: ["EdithExtensionSupport"],
-    EdithExtensionUI: ["EdithExtensionSupport", "EdithExtensionUI"],
+    EdithExtensionCore: ["EdithExtensionCore"],
+    EdithExtensionSupport: ["EdithExtensionCore", "EdithExtensionSupport"],
+    EdithExtensionUI: [
+      "EdithExtensionCore",
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+    ],
     EdithExtensionCommands: [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionCommands",
     ],
     EdithExtensionDocuments: [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
     ],
     EdithExtensionFiles: [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
       "EdithExtensionFiles",
     ],
     EdithExtensionArchive: [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionArchive",
     ],
-    EdithExtensionAccounts: ["EdithExtensionSupport", "EdithExtensionAccounts"],
+    EdithExtensionAccounts: [
+      "EdithExtensionCore",
+      "EdithExtensionSupport",
+      "EdithExtensionAccounts",
+    ],
   };
   const requested = Array.isArray(product) ? product : [product];
   if (
@@ -178,11 +192,15 @@ export function buildExtensionSupport(
     mkdirSync(resolve(target, ".."), { recursive: true });
     writeFileSync(target, source);
   }
-  const core = modules.EdithExtensionSupport;
+  const core = modules.EdithExtensionCore;
   const ui = modules.EdithExtensionUI;
   const targets = [
     `.target(name: "${core}", swiftSettings: [.swiftLanguageMode(.v5)])`,
   ];
+  if (selected.includes("EdithExtensionSupport"))
+    targets.push(
+      `.target(name: "${modules.EdithExtensionSupport}", dependencies: ["${core}"], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
   if (selected.includes("EdithExtensionUI"))
     targets.push(
       `.target(name: "${ui}", dependencies: ["${core}"], swiftSettings: [.swiftLanguageMode(.v5)])`,

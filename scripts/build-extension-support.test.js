@@ -39,8 +39,10 @@ test("each extension role has independent Swift and Objective-C support types", 
   const first = supportModules("calendar_app");
   const second = supportModules("presenter_helper");
   const helper = supportModules("calendar_helper");
+  expect(first.EdithExtensionCore).not.toBe(second.EdithExtensionCore);
   expect(first.EdithExtensionSupport).not.toBe(second.EdithExtensionSupport);
   expect(first.EdithExtensionUI).not.toBe(helper.EdithExtensionUI);
+  expect(Object.values(first)).not.toContain("EdithExtensionCore");
   expect(Object.values(first)).not.toContain("EdithExtensionSupport");
 });
 
@@ -54,21 +56,24 @@ test.each(["../escape", "invalid-role", "", "1invalid", "a".repeat(162)])(
 test("only imports change when compiling private support copies", () => {
   const modules = supportModules("calendar_app");
   const source =
-    'import Foundation\nimport EdithExtensionSupport\n@testable import EdithExtensionUI\nlet label = "EdithExtensionSupport"\n';
+    'import Foundation\nimport EdithExtensionSupport\n@_exported import EdithExtensionCore\n@testable import EdithExtensionUI\nlet label = "EdithExtensionSupport"\n';
   expect(rewriteSupportImports(source, modules)).toBe(
-    'import Foundation\nimport EdithExtensionSupport_calendar_app\n@testable import EdithExtensionUI_calendar_app\nlet label = "EdithExtensionSupport"\n',
+    'import Foundation\nimport EdithExtensionSupport_calendar_app\n@_exported import EdithExtensionCore_calendar_app\n@testable import EdithExtensionUI_calendar_app\nlet label = "EdithExtensionSupport"\n',
   );
 });
 
 test("optional document code and resources are excluded from core and UI products", () => {
   expect(supportProducts("EdithExtensionSupport")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
   ]);
   expect(supportProducts("EdithExtensionUI")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
   ]);
   expect(supportProducts("EdithExtensionDocuments")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionDocuments",
@@ -90,6 +95,7 @@ test("document imports also get private extension module names", () => {
 
 test("file browsing support builds on documents and gets private module names", () => {
   expect(supportProducts("EdithExtensionFiles")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionDocuments",
@@ -111,6 +117,7 @@ test("file browsing support builds on documents and gets private module names", 
 
 test("archive support stays separate from document rendering", () => {
   expect(supportProducts("EdithExtensionArchive")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionArchive",
@@ -136,6 +143,7 @@ test("archive dependency types are isolated from the host and other workers", ()
 
 test("terminal parser code belongs only to explicitly selected command products", () => {
   expect(supportProducts("EdithExtensionCommands")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionCommands",
@@ -169,6 +177,7 @@ test("terminal parser code belongs only to explicitly selected command products"
 test("composed products share one deterministic dependency closure", () => {
   const selection = ["EdithExtensionDocuments", "EdithExtensionCommands"];
   expect(supportProducts(selection)).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionCommands",
@@ -263,6 +272,7 @@ test("private parser migration leaves other declarations and text unchanged", ()
 
 test("account code is an optional dependency isolated from the empty host products", () => {
   expect(supportProducts("EdithExtensionAccounts")).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionAccounts",
   ]);
@@ -274,6 +284,7 @@ test("account code is an optional dependency isolated from the empty host produc
   }
   const selection = ["EdithExtensionUI", "EdithExtensionAccounts"];
   expect(supportProducts(selection)).toEqual([
+    "EdithExtensionCore",
     "EdithExtensionSupport",
     "EdithExtensionUI",
     "EdithExtensionAccounts",

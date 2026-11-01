@@ -256,7 +256,7 @@ class HostReleaseProofTests(unittest.TestCase):
         read.assert_not_called()
 
     def test_ignored_compiled_sources_reject_before_the_stamp_exception(self):
-        for path in ['Packages/EdithHost/Sources/EdithHost/Hidden.swift', 'Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Hidden.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionSupport/Hidden.swift', 'Extensions/fixtureSupport/Hidden.swift']:
+        for path in ['Packages/EdithHost/Sources/EdithHost/Hidden.swift', 'Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Hidden.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionCore/Hidden.swift', 'Extensions/fixtureSupport/Hidden.swift']:
             def run(arguments):
                 if arguments[1] == 'rev-parse':
                     return self.source + '\n'
