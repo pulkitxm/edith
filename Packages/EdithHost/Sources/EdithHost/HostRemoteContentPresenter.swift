@@ -282,6 +282,8 @@ final class HostRemoteViewController: NSViewController {
         if Self.measuresContent(request), let container = view as? HostRemoteContainerView {
             container.measuredContent = controller.view
             container.measured = { [weak self] height in self?.applyContentHeight(height) }
+            constraints.append(
+                controller.view.heightAnchor.constraint(greaterThanOrEqualTo: view.heightAnchor))
         } else {
             constraints.append(controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor))
         }
@@ -459,6 +461,8 @@ private final class HostRemoteContainerView: NSView {
     }
     override func layout() {
         super.layout()
-        if let measuredContent, let measured { measured(measuredContent.frame.height) }
+        guard let measuredContent, let measured else { return }
+        let natural = measuredContent.intrinsicContentSize.height
+        measured(natural == NSView.noIntrinsicMetric ? measuredContent.frame.height : natural)
     }
 }

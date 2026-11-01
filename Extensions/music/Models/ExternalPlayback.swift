@@ -10,6 +10,7 @@ struct ExternalPlayback: Equatable, Sendable {
     var repeating: Bool
     var canShuffle: Bool
     var canRepeat: Bool
+    var artworkURL: URL? = nil
     var sampledAt: Date = .now
 
     func elapsed(at date: Date = .now) -> Double {
@@ -54,6 +55,7 @@ enum ExternalPlaybackScript {
         let repeating = app == .spotify ? "repeating" : "(song repeat is not off)"
         let canShuffle = app == .spotify ? "shuffling enabled" : "true"
         let canRepeat = app == .spotify ? "repeating enabled" : "true"
+        let artwork = app == .spotify ? "artwork url of current track" : "\"\""
         return """
             with timeout of 4 seconds
                 if application id "\(app.bundleID)" is not running then return {}
@@ -62,14 +64,14 @@ enum ExternalPlaybackScript {
                     if player state is stopped then return {}
                     return {name of current track, artist of current track, player state is playing, \
             (duration of current track)\(scale), player position, sound volume, \
-            \(shuffle), \(repeating), \(canShuffle), \(canRepeat)}
+            \(shuffle), \(repeating), \(canShuffle), \(canRepeat), \(artwork)}
                 end tell
             end timeout
             """
     }
 
     static func parse(_ result: NSAppleEventDescriptor, app: ExternalApp) -> ExternalPlayback? {
-        guard result.numberOfItems == 10, let title = result.atIndex(1)?.stringValue,
+        guard result.numberOfItems == 11, let title = result.atIndex(1)?.stringValue,
             !title.isEmpty
         else { return nil }
         func number(_ index: Int) -> Double {
@@ -84,7 +86,9 @@ enum ExternalPlaybackScript {
             shuffling: result.atIndex(7)?.booleanValue ?? false,
             repeating: result.atIndex(8)?.booleanValue ?? false,
             canShuffle: result.atIndex(9)?.booleanValue ?? false,
-            canRepeat: result.atIndex(10)?.booleanValue ?? false)
+            canRepeat: result.atIndex(10)?.booleanValue ?? false,
+            artworkURL: result.atIndex(11)?.stringValue.flatMap(URL.init(string:))
+                .flatMap { $0.scheme == "https" ? $0 : nil })
     }
 }
 

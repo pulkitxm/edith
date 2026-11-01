@@ -347,8 +347,9 @@ import Observation
                             presentationID: presentationID, revision: snapshot.revision,
                             layout: snapshot.layout, slots: sorted)))
             } catch {
-                if !stopped, generation == token, !Task.isCancelled {
-                    self.error = error.localizedDescription
+                if !stopped, generation == token, !Task.isCancelled, reported == sorted {
+                    reported = []
+                    invalidate()
                 }
             }
         }
