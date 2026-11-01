@@ -3,6 +3,32 @@ import Foundation
 import Testing
 
 @Suite struct UsageHistoryRetentionTests {
+    @Test func refreshRetainsLargeHistoryAndPublishesNewDays() throws {
+        let historical: [String: Any] = [
+            "period": "2026-09-05",
+            "bySource": ["cli": [row(String(repeating: "s", count: 17 * 1_024 * 1_024), 100)]],
+            "hours": (0..<24).map { _ in
+                ["tokens": 0, "cost": 0, "bySource": [:], "byPath": [:]] as [String: Any]
+            }, "projects": [],
+        ]
+        let previous = try document([historical])
+        let fresh = try document([
+            day("2026-09-05", ["cli": [row("sample", 50)]]),
+            day("2026-09-06", ["cli": [row("sample", 7)]]),
+        ])
+        #expect(UsageHistory.isValidDocument(previous))
+        #expect(UsageHistory.isValidDocument(fresh))
+        let merged = try #require(UsageHistory.mergeRefresh(fresh: fresh, previous: previous))
+        #expect(merged.count < 64 * 1_024 * 1_024)
+        #expect(UsageHistory.isValidDocument(merged))
+        let result = try object(merged)
+        #expect(tokens(result) == 107)
+        #expect(try blocks(result).count == 1)
+        let repeated = try #require(UsageHistory.mergeRefresh(fresh: fresh, previous: merged))
+        #expect(UsageHistory.isValidDocument(repeated))
+        #expect(tokens(try object(repeated)) == 107)
+    }
+
     @Test(arguments: ["codex", "opencode"])
     func repricingPublishesRecoveredTokensAndResolvesOldPriceBlocks(source: String) throws {
         let baseline = day("2026-09-05", [source: [row("one", 100)]])

@@ -723,7 +723,7 @@ public enum UsageHistory {
     private static func validRetention(_ blocks: [[String: Any]]) -> Bool {
         guard blocks.count <= 4_096,
             blocks.reduce(0, { $0 + (($1["candidates"] as? [Any])?.count ?? 0) }) <= 8_192,
-            let data = encoded(["blocks": blocks]), data.count <= 16 * 1_024 * 1_024
+            let data = encoded(["blocks": blocks]), data.count <= 64 * 1_024 * 1_024
         else { return false }
         return blocks.allSatisfy { block in
             guard let period = block["period"] as? String, !period.isEmpty,
