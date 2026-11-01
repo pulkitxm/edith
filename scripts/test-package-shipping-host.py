@@ -44,6 +44,7 @@ class ShippingHostVersionTests(unittest.TestCase):
         self.before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         self.identity = 'Apple Development: Synthetic (SYNTHETIC1)'
         self.commands = []
+        self.signed_entitlements = {}
 
     def command(self, *arguments):
         self.commands.append(arguments)
@@ -53,6 +54,8 @@ class ShippingHostVersionTests(unittest.TestCase):
             return 'Mach-O' if Path(arguments[-1]).name == 'Edith' else 'data'
         if arguments[:2] == ('codesign', '-dvv'):
             return 'TeamIdentifier=SYNTHETIC1\n'
+        if arguments[0] == 'codesign' and '--entitlements' in arguments:
+            self.signed_entitlements = plistlib.loads(Path(arguments[arguments.index("--entitlements") + 1]).read_bytes())
         if arguments[0] == 'codesign' and '--force' in arguments:
             binary = Path(arguments[-1])
             if binary.name == 'Edith' and binary.is_file():
@@ -73,6 +76,16 @@ class ShippingHostVersionTests(unittest.TestCase):
     def unchanged_source(self):
         for name, data in self.before.items():
             self.assertEqual((self.root / name).read_bytes(), data, name)
+
+    def test_development_hosts_can_load_ad_hoc_packages_but_releases_require_publisher_trust(self):
+        self.identity = 'Developer ID Application: Synthetic (SYNTHETIC1)'
+        for options in [('--slot', 'synthetic'), ('--release',)]:
+            with self.subTest(options=options):
+                self.package(*options)
+                self.assertEqual(
+                    self.signed_entitlements.get('com.apple.security.cs.disable-library-validation', False),
+                    options[0] == '--slot')
+                self.assertIs(self.signed_entitlements['com.apple.security.app-sandbox'], False)
 
     def test_resolved_release_version_changes_only_copied_bundle_and_preserves_clean_source_receipt(self):
         self.package('--release', '--version', '1.2.4', '--build', '124')

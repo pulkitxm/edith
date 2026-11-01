@@ -6,6 +6,33 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostWorkerTests {
+    @Test func timedOutStartupCancelsItsOwnedExecution() async throws {
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.cancel-start",
+            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let engine = CancellableStartEngine()
+        let worker = HostWorker(
+            configuration: HostWorkerConfiguration(
+                identity: identity, extensionID: "sample", version: "1.0.0"),
+            requestTimeout: .milliseconds(20), engine: { _ in engine })
+        await #expect(throws: HostWorkerError.timedOut) { try await worker.start() }
+        for _ in 0..<100 where !engine.cancelled { await Task.yield() }
+        #expect(engine.cancelled)
+        #expect(!worker.ready)
+        #expect(worker.isStopped)
+    }
+
+    @MainActor private final class CancellableStartEngine: HostWorkerEngine {
+        var cancelled = false
+        func deliver(_ reply: HostWorkerNavigationReply) throws {}
+        func perform(_ request: HostWorkerRequest) async -> HostWorkerResponse {
+            if request.operation == "start" {
+                do { try await Task.sleep(for: .seconds(60)) } catch { cancelled = true }
+            }
+            return HostWorkerResponse(token: request.token, ok: true, version: "1.0.0")
+        }
+    }
+
     @Test func aWorkerThatTimesOutIsNotReportedAsPendingCleanup() {
         #expect(
             HostWorkerError.timedOut.disableMessage

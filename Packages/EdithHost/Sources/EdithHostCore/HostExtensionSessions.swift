@@ -26,6 +26,7 @@ public final class HostExtensionSessions {
         }
     @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { _ in }
     public private(set) var versions: [String: String] = [:]
+    public private(set) var generations: [String: UUID] = [:]
     public private(set) var failures: Set<String> = []
     public private(set) var failureReasons: [String: String] = [:]
     @ObservationIgnored public var retryDelays: [Duration] = [
@@ -132,7 +133,14 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
-        do { try await start(package) } catch {
+        save(enabledIDs.union([id]))
+        do {
+            if states[id] == .active, versions[id] != package.version {
+                try await applyUpdate(package)
+            } else {
+                try await start(package)
+            }
+        } catch {
             if failureReasons[id] == nil, states[id] != .starting, states[id] != .stopping {
                 failures.insert(id)
                 failureReasons[id] = Self.reason(error)
@@ -150,9 +158,7 @@ public final class HostExtensionSessions {
             try await disable(id: id, remember: false)
         } else if pendingRecoveryIDs.contains(id) {
             packages[id] = package
-            do { try await stop(id: id, remember: false, reason: .disable) } catch {
-                pendingRecoveryIDs.remove(id)
-            }
+            try await stop(id: id, remember: false, reason: .disable)
         }
         if let worker = workers[id], worker.ready {
             if worker.configuration.recoveryOnly {
@@ -175,6 +181,7 @@ public final class HostExtensionSessions {
             workers[id] = nil
         }
         pendingDisableIDs.remove(id)
+        packages[id] = package
         states[id] = .starting
         clearFailure(id)
         do {
@@ -187,6 +194,7 @@ public final class HostExtensionSessions {
                 guard let self, let worker, self.workers[id] === worker else { return }
                 self.workers[id] = nil
                 self.versions[id] = nil
+                self.generations[id] = nil
                 self.ambientPolicyCoordinator.release(owner: id)
                 self.ambientPolicyCoordinator.invalidate()
                 if self.states[id] != .stopping {
@@ -228,6 +236,7 @@ public final class HostExtensionSessions {
             try await worker.start()
             guard workers[id] === worker, worker.ready else { throw HostWorkerError.exited }
             versions[id] = package.version
+            generations[id] = worker.generation
             packages[id] = package
             states[id] = .active
             retryAttempts[id] = nil
@@ -236,7 +245,9 @@ public final class HostExtensionSessions {
         } catch {
             if let worker = workers[id] {
                 try? await worker.stop()
-                if worker.isStopped { workers[id] = nil; versions[id] = nil }
+                if worker.isStopped {
+                    workers[id] = nil; versions[id] = nil; generations[id] = nil
+                }
             }
             states[id] = .failed
             failures.insert(id)
@@ -353,6 +364,7 @@ public final class HostExtensionSessions {
         workers[id] = nil
         packages[id] = nil
         versions[id] = nil
+        generations[id] = nil
         states[id] = .disabled
         clearFailure(id)
         retryAttempts[id] = nil

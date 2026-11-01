@@ -375,9 +375,16 @@ public final class HostRemoteSessionManager {
         detach(extensionID)
         localSessions.removeValue(forKey: extensionID)?.stop()
         HostLocalSession.evict(extensionID)
-        terminalClients = terminalClients.filter {
-            presentations[$0.key]?.request.extensionID != extensionID
+        let retired = Set(
+            presentations.compactMap { id, handle in
+                handle.request.extensionID == extensionID ? id : nil
+            })
+        for id in retired {
+            presentations[id] = nil
+            terminalClients[id] = nil
+            pendingCleanup[id] = nil
         }
+        pendingCleanup = pendingCleanup.filter { $0.value != extensionID }
     }
 
     func selectedConfiguration(for request: HostExtensionContentRequest) throws

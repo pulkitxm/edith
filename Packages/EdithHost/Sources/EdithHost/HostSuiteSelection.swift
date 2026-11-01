@@ -50,8 +50,9 @@ import Observation
         guard !marketplace.isBusy(entry.id) else { return }
         if enabled {
             if marketplace.installed[entry.id] == nil {
-                await marketplace.download(id: entry.id)
-                guard marketplace.installed[entry.id] != nil else { return }
+                guard await marketplace.download(id: entry.id) == nil,
+                    marketplace.installed[entry.id] != nil
+                else { return }
             }
             await marketplace.enable(id: entry.id)
         } else {

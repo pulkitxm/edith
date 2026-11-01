@@ -18,14 +18,31 @@ public final class HostMarketplace {
     public private(set) var pendingRemovalIDs: Set<String> = []
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operations: [String: Double] = [:]
-    public private(set) var failures: [String: String] = [:]
+    public var failures: [String: String] {
+        sessions.failureReasons.merging(operationFailures) { _, operation in operation }
+    }
+    private var operationFailures: [String: String] = [:]
     public private(set) var restoring = false
     public private(set) var refreshingCatalog = false
-    public private(set) var error: String?
+    public private(set) var error: String? {
+        get {
+            if let startupErrorID, sessions.activeIDs.contains(startupErrorID),
+                sessions.failureReasons[startupErrorID] == nil
+            {
+                return nil
+            }
+            return errorMessage
+        }
+        set { errorMessage = newValue; startupErrorID = nil }
+    }
+    private var errorMessage: String?
+    private var startupErrorID: String?
     public private(set) var offline = false
     public var busy: Bool { restoring || !operations.isEmpty }
     public func isBusy(_ id: String) -> Bool { restoring || operations[id] != nil }
     public func progress(for id: String) -> Double { operations[id] ?? 0 }
+    public static let operationInProgress =
+        "Another operation is running for this extension. Try again when it finishes."
     public static let concurrentDownloads = 3
     public var automaticallyUpdatesExtensions: Bool {
         didSet {
@@ -131,7 +148,10 @@ public final class HostMarketplace {
     }
 
     public func restoreEnabledExtensions() async {
-        while busy { try? await Task.sleep(for: .milliseconds(100)) }
+        while busy {
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+        }
+        guard !Task.isCancelled else { return }
         restoring = true
         defer { restoring = false }
         await sessions.restore(packages: installed)
@@ -140,7 +160,7 @@ public final class HostMarketplace {
     private func begin(_ id: String) -> Bool {
         guard !isBusy(id) else { return false }
         operations[id] = 0
-        failures[id] = nil
+        operationFailures[id] = nil
         error = nil
         return true
     }
@@ -148,7 +168,7 @@ public final class HostMarketplace {
     private func finish(_ id: String) { operations[id] = nil }
 
     @discardableResult private func fail(_ id: String, _ message: String) -> String {
-        failures[id] = message
+        operationFailures[id] = message
         error = message
         return message
     }
@@ -227,7 +247,9 @@ public final class HostMarketplace {
     }
 
     @discardableResult public func enable(id: String) async -> String? {
-        guard let package = installed[id] else { return nil }
+        guard let package = installed[id] else {
+            return "Download a compatible version of this extension before enabling it."
+        }
         guard let failure = await start(package) else { return nil }
         guard updateAvailable(id: id), !offline else { return failure }
         guard await download(id: id) == nil, let updated = installed[id],
@@ -238,22 +260,24 @@ public final class HostMarketplace {
 
     private func start(_ package: ExtensionPackage) async -> String? {
         let id = package.id
-        guard begin(id) else { return nil }
+        guard begin(id) else { return Self.operationInProgress }
         defer { finish(id) }
         do { try await sessions.enable(package) } catch {
-            return fail(
-                id,
+            let message =
                 sessions.pendingDisableIDs.contains(id)
-                    ? (error as? HostWorkerError)?.disableMessage
-                        ?? "Cleanup is pending. Retry disable after finishing macOS approval."
-                    : sessions.failureReasons[id]
-                        ?? "The extension could not start. Try enabling it again.")
+                ? (error as? HostWorkerError)?.disableMessage
+                    ?? "Cleanup is pending. Retry disable after finishing macOS approval."
+                : sessions.failureReasons[id]
+                    ?? "The extension could not start. Try enabling it again."
+            self.error = message
+            startupErrorID = id
+            return message
         }
         return nil
     }
 
     @discardableResult public func disable(id: String) async -> String? {
-        guard begin(id) else { return nil }
+        guard begin(id) else { return Self.operationInProgress }
         defer { finish(id) }
         do {
             try await sessions.disable(id: id)
@@ -334,10 +358,39 @@ public final class HostMarketplace {
     }
 
     @discardableResult public func install(ids: [String]) async -> [String: String] {
-        let downloads = Set(ids).sorted().map { id in (id, Task { await download(id: id) }) }
+        let ids = Set(ids).sorted()
+        guard !ids.isEmpty else { return [:] }
+        let snapshot: ExtensionCatalog
+        do {
+            snapshot = try await fetchCatalog().catalog
+        } catch {
+            let message =
+                (error as? LocalizedError)?.errorDescription
+                ?? "Extension downloads are unavailable. Check your connection and try again."
+            return Dictionary(uniqueKeysWithValues: ids.map { ($0, fail($0, message)) })
+        }
+        var remaining = ids
         var failed: [String: String] = [:]
-        for (id, download) in downloads {
-            if let message = await download.value { failed[id] = message }
+        while !remaining.isEmpty {
+            var occupied = Set<String>()
+            var wave: [String] = []
+            for id in remaining {
+                let plan = try? snapshot.installationPlan(
+                    for: id, hostABI: HostContract.compatibility, architecture: "arm64",
+                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
+                let affected = Set(plan?.map(\.id) ?? [id])
+                guard affected.isDisjoint(with: occupied) else { continue }
+                wave.append(id)
+                occupied.formUnion(affected)
+                if wave.count == Self.concurrentDownloads { break }
+            }
+            let downloads = wave.map { id in
+                (id, Task { await download(id: id, expectedPackage: nil, catalog: snapshot) })
+            }
+            for (id, download) in downloads {
+                if let message = await download.value { failed[id] = message }
+            }
+            remaining.removeAll { wave.contains($0) }
         }
         return failed
     }
@@ -345,12 +398,27 @@ public final class HostMarketplace {
     @discardableResult public func download(
         id: String, expectedPackage: ExtensionPackage? = nil
     ) async -> String? {
-        guard begin(id) else { return nil }
-        defer { finish(id) }
+        await download(id: id, expectedPackage: expectedPackage, catalog: nil)
+    }
+
+    private func download(
+        id: String, expectedPackage: ExtensionPackage?, catalog snapshot: ExtensionCatalog?
+    ) async -> String? {
+        guard begin(id) else { return Self.operationInProgress }
+        var reserved: [String] = []
+        defer {
+            for dependency in reserved { finish(dependency) }
+            finish(id)
+        }
         await acquireDownloadSlot()
         defer { releaseDownloadSlot() }
         do {
-            _ = try await fetchCatalog()
+            let catalog: ExtensionCatalog
+            if let snapshot {
+                catalog = snapshot
+            } else {
+                catalog = try await fetchCatalog().catalog
+            }
             if let expectedPackage {
                 guard expectedPackage.id == id, available[id] == expectedPackage else {
                     return fail(
@@ -359,12 +427,16 @@ public final class HostMarketplace {
                     )
                 }
             }
-            guard let catalog else { throw MarketplaceError.invalidCatalog }
             let plan = try catalog.installationPlan(
                 for: id, hostABI: HostContract.compatibility, architecture: "arm64",
                 systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
-            if let previous = installed[id] {
-                try await mutateStore { [store] in try store.select(previous) }
+            for package in plan where package.id != id {
+                guard begin(package.id) else { return fail(id, Self.operationInProgress) }
+                reserved.append(package.id)
+            }
+            let previous = plan.compactMap { installed[$0.id] }
+            try await mutateStore { [store] in
+                for package in previous { try store.select(package) }
             }
             let report: @Sendable (Double) -> Void = { [weak self] value in
                 Task { @MainActor in
@@ -377,16 +449,24 @@ public final class HostMarketplace {
                     plan, repository: MarketplaceConfiguration.repository,
                     progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
             }
-            if let package = plan.first(where: { $0.id == id }) {
-                await activate(
+            var activationFailure: String?
+            for package in plan {
+                if let failure = await activate(
                     package,
-                    starting: sessions.automaticallyEnabledIDs.contains(id)
-                        && sessions.states[id] != .active)
+                    starting: sessions.automaticallyEnabledIDs.contains(package.id)
+                        && sessions.states[package.id] != .active)
+                {
+                    activationFailure =
+                        package.id == id
+                        ? failure : "The dependency \(package.id) could not update. " + failure
+                    break
+                }
             }
             try await mutateStore { [store] in
                 try store.prune(hostABI: HostContract.compatibility)
             }
             try reloadInstalled()
+            if let activationFailure { return fail(id, activationFailure) }
             return failures[id]
         } catch MarketplaceError.packageCleanupPending {
             try? reloadInstalled()
@@ -411,7 +491,9 @@ public final class HostMarketplace {
         }
     }
 
-    private func activate(_ package: ExtensionPackage, starting: Bool) async {
+    @discardableResult private func activate(
+        _ package: ExtensionPackage, starting: Bool
+    ) async -> String? {
         do {
             if starting {
                 try await sessions.enable(package)
@@ -426,12 +508,14 @@ public final class HostMarketplace {
                 try await mutateStore { [store] in try store.select(package) }
             }
         } catch {
-            fail(
+            return fail(
                 package.id,
-                (error as? HostWorkerError)?.disableMessage
+                sessions.failureReasons[package.id]
+                    ?? (error as? LocalizedError)?.errorDescription
                     ?? "The update could not start. The previous version will keep running if available."
             )
         }
+        return nil
     }
 
     public static func allowsSideload(identifier: String) -> Bool {
@@ -499,7 +583,7 @@ public final class HostMarketplace {
     }
 
     @discardableResult public func remove(id: String) async -> String? {
-        guard begin(id) else { return nil }
+        guard begin(id) else { return Self.operationInProgress }
         defer { finish(id) }
         do {
             try await sessions.disable(id: id)

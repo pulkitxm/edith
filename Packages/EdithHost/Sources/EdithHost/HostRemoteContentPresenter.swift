@@ -216,6 +216,7 @@ final class HostRemoteViewController: NSViewController {
     private var revision = UUID()
     private var statusView: NSView?
     var changed: (() -> Void)?
+    var retry: (() -> Void)?
 
     init(
         request: HostExtensionContentRequest, terminalUI: HostTerminalInputClient? = nil,
@@ -339,9 +340,15 @@ final class HostRemoteViewController: NSViewController {
         failure = "The extension interface could not connect."
         if let statusView { statusView.removeFromSuperview() }
         let notice = NSHostingView(
-            rootView: ContentUnavailableView(
-                "Extension unavailable", systemImage: "exclamationmark.triangle",
-                description: Text(failure!)))
+            rootView: ContentUnavailableView {
+                Label("Extension unavailable", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(failure!)
+            } actions: {
+                if let retry {
+                    Button("Try again", action: retry).buttonStyle(.edith(.secondary))
+                }
+            })
         notice.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(notice)
         NSLayoutConstraint.activate([
@@ -428,6 +435,7 @@ final class HostRemoteViewController: NSViewController {
         updates?.cancel(); updates = nil
         pending = nil; connected = false
         changed = nil
+        retry = nil
         statusView?.removeFromSuperview(); statusView = nil
         if isViewLoaded, let mounted = content {
             mounted.view.removeFromSuperview()
