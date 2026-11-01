@@ -168,7 +168,7 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
         return .init(
             metrics: metrics,
             rows: Array(rows.prefix(64)),
-            message: snapshot.failure
+            message: snapshot.generalFailure
                 ?? (inputs.isEmpty
                     ? "No providers match this widget. Connect a provider in Agent Usage or change the selection."
                     : nil),

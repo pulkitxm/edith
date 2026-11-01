@@ -8,6 +8,79 @@ import Vision
 @testable import UsageExtension
 
 @MainActor @Suite(.serialized) struct UsageDashboardRenderingTests {
+    @Test func limitsMenuRendersAccountRecoveryAndWeeklyOnlyLimitsAtEverySize() async throws {
+        let previousZoom = UIScale.current
+        defer { UIScale.apply(previousZoom) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = UsageStore(
+            showMenuBar: false, historyURL: root.appendingPathComponent("limits-history.jsonl"))
+        defer { store.shutdown() }
+        let rejected = ClaudeLimitsReader.Failure.unauthorized.localizedDescription
+        let accounts = ["Sample personal", "Sample retired", "Sample current"].enumerated().map {
+            index, name in
+            ClaudeAccountLimits(
+                id: UUID(), name: name,
+                limits: .init(
+                    provider: .claude, session: nil,
+                    week: index == 2 ? .init(percent: 35, resetsAt: nil) : nil,
+                    fable: index == 2 ? .init(percent: 0, resetsAt: nil) : nil,
+                    error: index == 2 ? nil : rejected), refreshedAt: Date())
+        }
+        await store.receiveLimitsSnapshot(
+            .init(
+                refreshedAt: Date(),
+                providers: [
+                    .init(
+                        provider: .codex, session: nil, week: .init(percent: 21, resetsAt: nil),
+                        credits: 0),
+                    .init(
+                        provider: .cursor, session: nil, week: nil,
+                        error: "Sample provider unavailable"),
+                    .init(provider: .grok, session: nil, week: .init(percent: 2, resetsAt: nil)),
+                ], failure: rejected, claudeAccounts: accounts))
+        for width in [310.0, 430.0] {
+            for scale in [1.0, 1.5] {
+                UIScale.apply(scale)
+                for scheme in [ColorScheme.light, .dark] {
+                    let host = NSHostingView(
+                        rootView: LimitsMenuPanel(store: store)
+                            .environment(\.colorScheme, scheme)
+                            .padding(14)
+                            .frame(width: width, height: 950, alignment: .topLeading)
+                            .background(scheme == .dark ? Color.black : Color.white))
+                    host.sizingOptions = []
+                    host.frame = CGRect(x: 0, y: 0, width: width, height: 950)
+                    for _ in 0..<3 {
+                        host.layoutSubtreeIfNeeded()
+                        try await Task.sleep(for: .milliseconds(20))
+                    }
+                    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    let image = try #require(bitmap.cgImage)
+                    let recognition = VNRecognizeTextRequest()
+                    recognition.recognitionLevel = .accurate
+                    try VNImageRequestHandler(cgImage: image).perform([recognition])
+                    let text =
+                        recognition.results?.compactMap { $0.topCandidates(1).first?.string }
+                        .joined(separator: " ") ?? ""
+                    #expect(text.contains("Sample personal"))
+                    #expect(text.contains("Sample current"))
+                    #expect(text.contains("Reconnect"))
+                    #expect(!text.contains("N/A"))
+                    #expect(!text.contains("CLAUDE_CODE_OAUTH_TOKEN"))
+                    if width == 310, scale == 1, scheme == .dark,
+                        let output = ProcessInfo.processInfo.environment[
+                            "EDITH_USAGE_RENDER_OUTPUT"]
+                    {
+                        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                        try png.write(to: URL(fileURLWithPath: output))
+                    }
+                }
+            }
+        }
+    }
+
     @Test func fullDashboardRendersSyntheticUsageAtCompactRegularAndZoomedSizes() async throws {
         let zoom = UIScale.current
         defer { UIScale.apply(zoom) }

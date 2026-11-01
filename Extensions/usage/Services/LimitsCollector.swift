@@ -43,7 +43,9 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
     }
 
     var unreportedSessionMessage: String? {
-        guard [.claude, .codex].contains(provider), session == nil, error == nil else {
+        guard [.claude, .codex].contains(provider), session == nil, error == nil,
+            week != nil || fable != nil || credits != nil
+        else {
             return nil
         }
         return "No 5-hour window reported by \(provider.label)."
@@ -128,6 +130,12 @@ public enum LimitsCollector {
     ) async -> LimitsTopicSnapshot {
         if UsageExecutionEnvironment.fixtureHome != nil {
             return LimitsTopicSnapshot(refreshedAt: Date(), providers: [], failure: nil)
+        }
+        if ExtensionEnvironment.values["EDITH_USAGE_OFFLINE"] == "1" {
+            return LimitsSnapshotCache.load()
+                ?? .init(
+                    refreshedAt: Date(), providers: [],
+                    failure: "No saved limits are available while usage collection is offline.")
         }
         return await collectConfigured(
             providers: enabledProviders(defaults: defaults), force: force,
