@@ -292,13 +292,15 @@ final class MetricsSink: @unchecked Sendable {
     private let json: Bool
     private let processes: Int
     private let follow: Bool
+    private let output: CapturedCLIOutput
     private var hello: MachineHello?
     private var samples = 0
 
-    init(json: Bool, processes: Int, follow: Bool) {
+    init(json: Bool, processes: Int, follow: Bool, output: CapturedCLIOutput = .current) {
         self.json = json
         self.processes = processes
         self.follow = follow
+        self.output = output
     }
 
     var sawSample: Bool {
@@ -314,7 +316,7 @@ final class MetricsSink: @unchecked Sendable {
         switch record {
         case let .hello(value):
             hello = value
-            if !json { CLIOut.out("\(value.host)  \(value.os)  \(value.cores) cores") }
+            if !json { output.line("\(value.host)  \(value.os)  \(value.cores) cores") }
         case let .sample(value):
             samples += 1
             emit(value)
@@ -328,7 +330,7 @@ final class MetricsSink: @unchecked Sendable {
             let memory = String(
                 format: "%.0f%% of %@", sample.mem.usedPercent,
                 ByteFormatter.string(sample.mem.totalKB * 1024))
-            CLIOut.out(
+            output.line(
                 String(
                     format: "cpu %5.1f%%   mem %@   load %@   net down %@ up %@",
                     sample.cpu.total, memory,
@@ -341,7 +343,7 @@ final class MetricsSink: @unchecked Sendable {
             "sample": MachineReports.sample(sample, processes: processes)
         ]
         if let hello { payload["host"] = MachineReports.hello(hello) }
-        CLIOut.out(JSONSerializer.string(.object(payload), pretty: !follow))
+        output.line(JSONSerializer.string(.object(payload), pretty: !follow))
     }
 }
 

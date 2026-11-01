@@ -91,22 +91,11 @@ public struct RemoteRunner {
             CLIOut.note("error: raw remote output requires an owning data sink")
             return 1
         }
-        let owner = owner
+        let output = CapturedCLIOutput(outputSink: outputSink, rawOutputSink: rawOutputSink)
         let stream = SSHLineStream(
             process: process, stdinData: ExtensionCLIContext.request?.standardInput,
             onLine: { _, _ in }, onExit: { _ in },
-            onData: { data, isStderr in
-                ExtensionCLIContext.$outputSink.withValue(outputSink) {
-                    ExtensionCLIContext.$rawOutputSink.withValue(rawOutputSink) {
-                        do {
-                            try CLIOut.raw(data, error: isStderr)
-                        } catch {
-                            CLIOut.note("error: \(error.localizedDescription)")
-                            owner.cancel()
-                        }
-                    }
-                }
-            })
+            onData: { data, isStderr in output.data(data, error: isStderr) })
         do {
             try owner.start(stream)
         } catch {
@@ -128,18 +117,8 @@ public struct RemoteRunner {
     public func stream(
         command: String, stdin: Data? = nil, onLine: @escaping @Sendable (String, Bool) -> Void
     ) throws -> SSHLineStream {
-        let process = makeProcess(command)
-        let outputSink = ExtensionCLIContext.outputSink
-        let rawOutputSink = ExtensionCLIContext.rawOutputSink
         let stream = SSHLineStream(
-            process: process, stdinData: stdin,
-            onLine: { line, error in
-                ExtensionCLIContext.$outputSink.withValue(outputSink) {
-                    ExtensionCLIContext.$rawOutputSink.withValue(rawOutputSink) {
-                        onLine(line, error)
-                    }
-                }
-            }, onExit: { _ in })
+            process: makeProcess(command), stdinData: stdin, onLine: onLine, onExit: { _ in })
         try owner.start(stream)
         return stream
     }
