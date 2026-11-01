@@ -145,6 +145,7 @@ import Foundation
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),
             "updateAvailable": marketplace.updateAvailable(id: id), "offline": marketplace.offline,
+            "timings": ExtensionLoadTimings.shared.json(id: id),
         ]
     }
 }

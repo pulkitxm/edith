@@ -196,15 +196,24 @@ public final class HostLocalSceneHandle: HostScenePresentation {
             try HostLocalEngineBridge(engine: $0, presentationID: request.presentationID)
         }
         let input = try session.configuration.uiContext(for: request, engineClient: bridge)
+        let started = ContinuousClock.now
         for runtime in runtimes {
             let response = try runtime.response(id: id, operation: "configureUI", context: input)
             guard response["ok"] as? Bool == true else { continue }
-            if let result = try runtime.presentation(
-                id: id, context: input, compact: compact, visible: visible,
-                width: width.isFinite ? min(16_384, max(0, width)) : 0, intrinsic: intrinsic)
+            if let result = try ExtensionLoadTimings.shared.measure(
+                id: id, role: runtime.role.rawValue, .presentation,
+                {
+                    try runtime.presentation(
+                        id: id, context: input, compact: compact, visible: visible,
+                        width: width.isFinite ? min(16_384, max(0, width)) : 0,
+                        intrinsic: intrinsic)
+                })
             {
                 content = result
                 self.runtime = runtime
+                ExtensionLoadTimings.shared.observeFirstFrame(
+                    id: id, role: runtime.role.rawValue, view: result.controller.view,
+                    started: started)
                 self.bridge = bridge
                 return result.controller
             }

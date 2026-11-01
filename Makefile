@@ -223,6 +223,10 @@ extension-sideload:
 		bun scripts/build-extension-package.mjs $(EXTENSION) --development
 	dist/Edith.app/Contents/MacOS/ed extensions sideload dist/extensions/$(EXTENSION).zip
 
+.PHONY: dev-extension-timings
+dev-extension-timings:
+	scripts/dev-extension-timings.sh $(or $(RUNS),3)
+
 .PHONY: ci-extension-keep-awake-compile ci-extension-keep-awake package-extension-keep-awake
 ci-extension-keep-awake-compile:
 	/usr/bin/time -p swift build --package-path Extensions/keepAwake --target KeepAwakeExtensionTests --build-system native --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"

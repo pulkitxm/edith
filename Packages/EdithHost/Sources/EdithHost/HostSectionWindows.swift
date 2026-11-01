@@ -67,6 +67,10 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
                 backing: .buffered, defer: false)
         },
         present: @escaping (NSWindow) -> Void = {
+            guard !HostBackgroundTesting.enabled else {
+                HostBackgroundTesting.present($0)
+                return
+            }
             if $0.isMiniaturized { $0.deminiaturize(nil) }
             $0.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

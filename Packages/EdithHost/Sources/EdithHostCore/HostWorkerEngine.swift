@@ -56,7 +56,13 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
             return HostWorkerResponse(token: request.token, ok: failure == nil, version: version)
         default:
             if request.operation == "start" {
+                let verifying = ContinuousClock.now
                 await verifyBundlesBeforeStart(request)
+                if let id = request.configuration?.extensionID {
+                    ExtensionLoadTimings.shared.reset(id: id)
+                    ExtensionLoadTimings.shared.record(
+                        id: id, role: "bundles", .verify, elapsed: ContinuousClock.now - verifying)
+                }
                 guard !stopping else { return HostWorkerResponse(token: request.token, ok: false) }
             }
             do {
@@ -270,7 +276,9 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
                 store: store, role: role, hostABI: HostContract.compatibility,
                 packageVersion: next.version, environment: environment, verify: verify)
             runtimes.append(runtime)
-            try runtime.start(id: package.id, context: context)
+            try ExtensionLoadTimings.shared.measure(id: package.id, role: role.rawValue, .start) {
+                try runtime.start(id: package.id, context: context)
+            }
         }
         if next.recoveryOnly { return }
         let endpoint = try ExtensionPeerEndpoint(
