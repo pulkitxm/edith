@@ -60,6 +60,7 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
                 guard !stopping else { return HostWorkerResponse(token: request.token, ok: false) }
             }
             do {
+                try Task.checkCancellation()
                 try execute(request)
                 return HostWorkerResponse(
                     token: request.token, ok: true, version: configuration?.version)

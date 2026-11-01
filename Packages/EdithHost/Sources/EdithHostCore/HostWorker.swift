@@ -244,13 +244,20 @@ public final class HostWorker {
             for waiter in waiters { waiter.resume() }
         }
         let limit = timeout ?? requestTimeout
+        try Task.checkCancellation()
         let outcome = HostWorkerOutcome()
+        var execution: Task<Void, Never>?
+        var deadline: Task<Void, Never>?
+        defer { execution?.cancel(); deadline?.cancel() }
         let response = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 outcome.begin(continuation)
-                Task { @MainActor in outcome.finish(.success(await engine.perform(request))) }
-                Task { @MainActor in
-                    try? await Task.sleep(for: limit)
+                execution = Task { @MainActor in
+                    guard !Task.isCancelled else { return }
+                    outcome.finish(.success(await engine.perform(request)))
+                }
+                deadline = Task { @MainActor in
+                    do { try await Task.sleep(for: limit) } catch { return }
                     outcome.finish(.failure(HostWorkerError.timedOut))
                 }
             }
