@@ -231,7 +231,8 @@ enum MachineFilePresentationCLI {
         let localURL: URL
         do {
             localURL = try await RemoteFileOperationExecution.materialize(
-                entry, machineID: runner.machine.id, isLocal: false
+                entry, machineID: runner.machine.id, isLocal: false,
+                cacheRoot: MachinePaths.previewCacheDir
             ) { remotePath, destination in
                 try await runner.ssh.download(remotePath: remotePath, to: destination)
             }

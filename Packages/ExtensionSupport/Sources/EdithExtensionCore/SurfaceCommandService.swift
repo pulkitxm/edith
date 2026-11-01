@@ -7,10 +7,14 @@ public enum SurfaceCommandService {
         snapshot: @MainActor (SurfaceTile) async throws -> SurfaceSnapshot,
         perform: @MainActor (String) async throws -> Void,
         adjust: (@MainActor (String, Double) async throws -> Void)? = nil,
-        privacyValues: @MainActor () -> [String: String] = {
-            ExtensionSharedState.current?.values(for: "presenter") ?? [:]
-        }
+        privacyValues: (@MainActor () -> [String: String])? = nil,
+        image: UnsafeRawPointer = #dsohandle
     ) async throws -> Data {
+        let scope = ExtensionScope.resolve(image)
+        let privacyValues =
+            privacyValues ?? {
+                ExtensionSharedState.current(in: scope)?.values(for: "presenter") ?? [:]
+            }
         let request: SurfaceSnapshotRequest
         switch command {
         case "surface.snapshot":

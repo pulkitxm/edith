@@ -472,7 +472,7 @@ struct QuickLookOverlay: View {
         if let entry, entry.isDirectory {
             folderSummary(entry)
         } else {
-            FilePreviewPane(entry: entry, session: model.session)
+            FilePreviewPane(entry: entry, session: model.session, scope: model.scope)
         }
     }
 

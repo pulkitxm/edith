@@ -82,7 +82,7 @@ enum ThemeColor {
 @MainActor
 @Observable
 public final class ThemeStore {
-    public static let shared = ThemeStore(defaults: ExtensionScope.installed.defaults())
+    public static let shared = ThemeStore(defaults: ExtensionScope.process.defaults())
 
     public internal(set) var theme: AppTheme
     @ObservationIgnored private let defaults: UserDefaults
@@ -109,7 +109,7 @@ public final class ThemeStore {
         if Thread.isMainThread {
             return MainActor.assumeIsolated { shared.theme }
         }
-        return stored(in: ExtensionScope.installed.defaults())
+        return stored(in: ExtensionScope.process.defaults())
     }
 }
 

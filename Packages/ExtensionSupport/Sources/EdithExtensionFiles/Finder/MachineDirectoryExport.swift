@@ -1,3 +1,4 @@
+import EdithExtensionCore
 import Foundation
 
 @MainActor public final class MachineDirectoryExport {
@@ -16,8 +17,14 @@ import Foundation
     private var reaper: Task<Void, Never>?
     private var stopped = false
     private var preparing = 0
+    private let scope: ExtensionScope
 
-    public init(session: @escaping (UUID) throws -> any FinderSession) { self.session = session }
+    public init(
+        session: @escaping (UUID) throws -> any FinderSession, image: UnsafeRawPointer = #dsohandle
+    ) {
+        self.session = session
+        scope = ExtensionScope.resolve(image)
+    }
 
     public func execute(_ request: MachineDirectoryExportRequest) async throws -> Data {
         guard !stopped, request.maximumBytes > 0,
@@ -33,7 +40,8 @@ import Foundation
             preparing += 1
             defer { preparing -= 1 }
             let session = try session(request.machineID)
-            let root = FileCachePaths.previewCacheDir.appendingPathComponent("directory-exports")
+            let root = FileCachePaths.previewCacheDir(in: scope)
+                .appendingPathComponent("directory-exports")
                 .appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             var items: [MachineDirectoryExportItem] = []

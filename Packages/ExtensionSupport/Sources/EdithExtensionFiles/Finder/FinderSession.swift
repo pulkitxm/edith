@@ -16,10 +16,12 @@ public protocol FinderRemoteClient: AnyObject {
         _ request: MachineFileRequest, progress: @escaping (FileOperationProgress?) -> Void
     ) async throws -> MachineFileState
 
-    func materialize(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64) async throws
-        -> URL
+    func materialize(
+        entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64, dataRoot: URL
+    ) async throws -> URL
 
-    func materializeDirectory(entry: RemoteFileEntry, machineID: UUID) async throws -> URL
+    func materializeDirectory(entry: RemoteFileEntry, machineID: UUID, dataRoot: URL)
+        async throws -> URL
 
     func listFiles(machineID: UUID, path: String) async throws -> [RemoteFileEntry]
     func homeDirectory(machineID: UUID) async throws -> String

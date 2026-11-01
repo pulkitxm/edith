@@ -21,12 +21,16 @@ public struct ExtensionScope: Sendable {
     public subscript(key: String) -> String? { value(key) }
 
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var current: ExtensionScope?
+    nonisolated(unsafe) private static var images: [UInt: ExtensionScope] = [:]
 
-    public static var installed: ExtensionScope { lock.withLock { current } ?? processScope }
+    public static var process: ExtensionScope { processScope }
 
-    public static func install(_ scope: ExtensionScope) {
-        lock.withLock { current = scope }
+    public static func resolve(_ image: UnsafeRawPointer) -> ExtensionScope {
+        lock.withLock { images[UInt(bitPattern: image)] } ?? processScope
+    }
+
+    public static func register(_ scope: ExtensionScope, image: UnsafeRawPointer) {
+        lock.withLock { images[UInt(bitPattern: image)] = scope }
     }
 
     public static func temporaryDataRoot() -> URL {

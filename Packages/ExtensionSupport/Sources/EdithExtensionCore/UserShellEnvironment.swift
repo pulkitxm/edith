@@ -52,7 +52,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     public init(
         shell: URL = UserShellEnvironment.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        baseEnvironment: [String: String] = ExtensionScope.installed.environment(),
+        baseEnvironment: [String: String] = ExtensionScope.process.environment(),
         now: @escaping @Sendable () -> Date = { Date() },
         capture: @escaping Capture = { shell, home, base in
             await UserShellEnvironment.captureLoginEnvironment(
@@ -129,9 +129,11 @@ public final class UserShellEnvironment: @unchecked Sendable {
     }
 
     public static func userEnvironment(
-        process: [String: String] = ExtensionScope.installed.environment(),
-        shell: [String: String]? = shared.current()
+        process: [String: String]? = nil,
+        shell: [String: String]? = shared.current(),
+        image: UnsafeRawPointer = #dsohandle
     ) -> [String: String] {
+        let process = process ?? ExtensionScope.resolve(image).environment()
         var environment = process
         for (key, value) in shell ?? [:]
         where key == "PATH" || (imports(key) && process[key] == nil) {

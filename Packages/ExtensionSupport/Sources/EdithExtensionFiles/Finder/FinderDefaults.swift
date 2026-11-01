@@ -1,32 +1,31 @@
-import EdithExtensionCore
 import EdithExtensionUI
 import Foundation
 
-enum FinderDefaults {
-    private static var store: UserDefaults { ExtensionScope.installed.defaults() }
+struct FinderDefaults {
+    let store: UserDefaults
 
-    static var viewMode: String {
+    var viewMode: String {
         get { store.string(forKey: "finderViewMode") ?? FileViewMode.list.rawValue }
-        set { store.set(newValue, forKey: "finderViewMode") }
+        nonmutating set { store.set(newValue, forKey: "finderViewMode") }
     }
 
-    static var sortKey: String {
+    var sortKey: String {
         get { store.string(forKey: "finderSortKey") ?? FileSortKey.name.rawValue }
-        set { store.set(newValue, forKey: "finderSortKey") }
+        nonmutating set { store.set(newValue, forKey: "finderSortKey") }
     }
 
-    static var sortAscending: Bool {
+    var sortAscending: Bool {
         get { store.object(forKey: "finderSortAscending") as? Bool ?? true }
-        set { store.set(newValue, forKey: "finderSortAscending") }
+        nonmutating set { store.set(newValue, forKey: "finderSortAscending") }
     }
 
-    static var showHidden: Bool {
+    var showHidden: Bool {
         get { store.object(forKey: "finderShowHidden") as? Bool ?? false }
-        set { store.set(newValue, forKey: "finderShowHidden") }
+        nonmutating set { store.set(newValue, forKey: "finderShowHidden") }
     }
 
-    static var iconSize: Double {
+    var iconSize: Double {
         get { store.object(forKey: "finderIconSize") as? Double ?? 72 }
-        set { store.set(newValue, forKey: "finderIconSize") }
+        nonmutating set { store.set(newValue, forKey: "finderIconSize") }
     }
 }

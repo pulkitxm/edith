@@ -5,7 +5,7 @@ import SwiftUI
 enum ExportCardStyle {
     private static var currentTheme: AppTheme {
         AppTheme(
-            storedName: ExtensionScope.installed.defaults().string(
+            storedName: ExtensionScope.process.defaults().string(
                 forKey: AppStorageKeys.General.theme)
                 ?? AppTheme.accent.rawValue)
     }

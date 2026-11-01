@@ -77,7 +77,7 @@ public enum RemoteFileOperationExecution {
 
     public static func cacheURL(
         for entry: RemoteFileEntry, machineID: UUID, createDirectory: Bool = true,
-        root: URL = FileCachePaths.previewCacheDir
+        root: URL
     ) throws -> URL {
         guard !entry.name.isEmpty, entry.name != ".", entry.name != "..",
             !entry.name.contains("\0"), (entry.name as NSString).lastPathComponent == entry.name
@@ -106,9 +106,11 @@ public enum RemoteFileOperationExecution {
     public static func materialize(
         _ entry: RemoteFileEntry, machineID: UUID, isLocal: Bool,
         maximumBytes: Int64 = cacheLimitBytes, cacheLimit: Int64 = cacheLimitBytes,
-        cacheRoot: URL = FileCachePaths.previewCacheDir,
+        cacheRoot: URL? = nil, image: UnsafeRawPointer = #dsohandle,
         download: (String, URL) async throws -> Void
     ) async throws -> URL {
+        let cacheRoot =
+            cacheRoot ?? FileCachePaths.previewCacheDir(in: ExtensionScope.resolve(image))
         if isLocal { return URL(fileURLWithPath: entry.path) }
         guard entry.sizeBytes <= maximumBytes else {
             throw RemoteFileOperationError.fileTooLarge(

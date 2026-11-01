@@ -2,13 +2,13 @@ import EdithExtensionCore
 import SwiftUI
 
 public struct ExtensionPageHost<Content: View>: View {
-    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults()) private
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults()) private
         var theme =
         "accent"
-    @AppStorage(AppStorageKeys.General.appearance, store: ExtensionScope.installed.defaults())
+    @AppStorage(AppStorageKeys.General.appearance, store: ExtensionScope.process.defaults())
     private
         var appearance = "system"
-    @AppStorage(WindowZoom.defaultsKey, store: ExtensionScope.installed.defaults()) private
+    @AppStorage(WindowZoom.defaultsKey, store: ExtensionScope.process.defaults()) private
         var zoom = 1.0
     @State private var router = WindowRouter()
     @State private var remotePresentation: ExtensionPresentationState?

@@ -63,24 +63,28 @@ extension FinderBridgeTransport {
         return try await bridgeJob(filesOperation, value: value, progress: progress)
     }
 
-    public func materialize(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64)
-        async throws -> URL
-    {
+    public func materialize(
+        entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64, dataRoot: URL
+    ) async throws -> URL {
         try await bridgeOwned { [self] in
             try await materializeOwned(
-                entry: entry, machineID: machineID, maximumBytes: maximumBytes)
+                entry: entry, machineID: machineID, maximumBytes: maximumBytes,
+                dataRoot: dataRoot)
         }
     }
 
-    public func materializeDirectory(entry: RemoteFileEntry, machineID: UUID) async throws -> URL {
-        try await bridgeOwned { [self] in
-            try await materializeDirectoryOwned(entry: entry, machineID: machineID)
-        }
-    }
-
-    private func materializeOwned(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64)
+    public func materializeDirectory(entry: RemoteFileEntry, machineID: UUID, dataRoot: URL)
         async throws -> URL
     {
+        try await bridgeOwned { [self] in
+            try await materializeDirectoryOwned(
+                entry: entry, machineID: machineID, dataRoot: dataRoot)
+        }
+    }
+
+    private func materializeOwned(
+        entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64, dataRoot: URL
+    ) async throws -> URL {
         let handle: MachinePreviewHandle = try await bridgeJob(
             previewOperation,
             value: MachinePreviewRequest(
@@ -90,7 +94,7 @@ extension FinderBridgeTransport {
         guard handle.count <= UInt64(maximumBytes), !handle.name.contains("/"),
             !handle.name.contains("\\"), !handle.name.utf8.contains(0)
         else { throw MachineUIError.invalidRequest }
-        let directory = ExtensionScope.installed.dataRoot().appendingPathComponent("ui-previews")
+        let directory = dataRoot.appendingPathComponent("ui-previews")
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent(handle.name)
@@ -128,9 +132,9 @@ extension FinderBridgeTransport {
         }
     }
 
-    private func materializeDirectoryOwned(entry: RemoteFileEntry, machineID: UUID) async throws
-        -> URL
-    {
+    private func materializeDirectoryOwned(
+        entry: RemoteFileEntry, machineID: UUID, dataRoot: URL
+    ) async throws -> URL {
         let handle: MachineDirectoryExportHandle = try await bridgeJob(
             exportOperation,
             value: MachineDirectoryExportRequest(
@@ -148,7 +152,7 @@ extension FinderBridgeTransport {
                 { $0 + min($1.count, UInt64(RemoteFileOperationExecution.cacheLimitBytes) + 1) })
                 == handle.count
         else { throw MachineUIError.invalidRequest }
-        let root = ExtensionScope.installed.dataRoot().appendingPathComponent("ui-previews")
+        let root = dataRoot.appendingPathComponent("ui-previews")
             .appendingPathComponent(
                 UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

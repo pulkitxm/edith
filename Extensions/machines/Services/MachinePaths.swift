@@ -1,13 +1,10 @@
-import EdithExtensionFiles
 import EdithExtensionSupport
 import CryptoKit
 import Darwin
 import Foundation
 
 public enum MachinePaths {
-    nonisolated(unsafe) public static var root: URL = ExtensionData.root {
-        didSet { FileCachePaths.root = root }
-    }
+    nonisolated(unsafe) public static var root: URL = ExtensionData.root
 
     public static var dir: URL {
         root

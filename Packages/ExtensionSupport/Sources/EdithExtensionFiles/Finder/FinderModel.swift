@@ -14,6 +14,8 @@ public final class FinderModel {
         >
     public typealias FreeSpaceLoader = @MainActor @Sendable (String) async -> Int64?
 
+    public let scope: ExtensionScope
+    @ObservationIgnored private let finderDefaults: FinderDefaults
     public var path: String
     public var entries: [RemoteFileEntry] = [] { didSet { updateEntryProjection() } }
     public let listingLoad = ContentLoad()
@@ -46,20 +48,20 @@ public final class FinderModel {
         public var names: [String]
     }
 
-    public var viewModeRaw = FinderDefaults.viewMode {
-        didSet { FinderDefaults.viewMode = viewModeRaw }
+    public var viewModeRaw: String {
+        didSet { finderDefaults.viewMode = viewModeRaw }
     }
-    public var sortKeyRaw = FinderDefaults.sortKey {
-        didSet { FinderDefaults.sortKey = sortKeyRaw; updateEntryProjection() }
+    public var sortKeyRaw: String {
+        didSet { finderDefaults.sortKey = sortKeyRaw; updateEntryProjection() }
     }
-    public var sortAscending = FinderDefaults.sortAscending {
-        didSet { FinderDefaults.sortAscending = sortAscending; updateEntryProjection() }
+    public var sortAscending: Bool {
+        didSet { finderDefaults.sortAscending = sortAscending; updateEntryProjection() }
     }
-    public var showHidden = FinderDefaults.showHidden {
-        didSet { FinderDefaults.showHidden = showHidden; updateEntryProjection() }
+    public var showHidden: Bool {
+        didSet { finderDefaults.showHidden = showHidden; updateEntryProjection() }
     }
-    public var iconSize = FinderDefaults.iconSize {
-        didSet { FinderDefaults.iconSize = iconSize }
+    public var iconSize: Double {
+        didSet { finderDefaults.iconSize = iconSize }
     }
 
     public let remoteViewID = UUID()
@@ -118,8 +120,18 @@ public final class FinderModel {
         session: any FinderSession, path: String? = nil,
         localSearch: (@Sendable (String, String) async -> [RemoteFileEntry])? = nil,
         directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil,
-        peerSession: @escaping @MainActor (UUID) -> (any FinderSession)? = { _ in nil }
+        peerSession: @escaping @MainActor (UUID) -> (any FinderSession)? = { _ in nil },
+        image: UnsafeRawPointer = #dsohandle
     ) {
+        let scope = ExtensionScope.resolve(image)
+        let finderDefaults = FinderDefaults(store: scope.defaults())
+        self.scope = scope
+        self.finderDefaults = finderDefaults
+        viewModeRaw = finderDefaults.viewMode
+        sortKeyRaw = finderDefaults.sortKey
+        sortAscending = finderDefaults.sortAscending
+        showHidden = finderDefaults.showHidden
+        iconSize = finderDefaults.iconSize
         self.session = session
         self.peerSession = peerSession
         self.localSearch =
@@ -594,7 +606,8 @@ public final class FinderModel {
         statusMessage = "Opening \(entry.name)…"
         do {
             let destination = try await RemoteFileOperationExecution.materialize(
-                entry, machineID: session.id, isLocal: false
+                entry, machineID: session.id, isLocal: false,
+                cacheRoot: FileCachePaths.previewCacheDir(in: scope)
             ) { remotePath, localURL in
                 guard let connection = session.shellConnection else {
                     throw FinderTransferError.notConnected
@@ -986,7 +999,8 @@ public final class FinderModel {
                 var materialized: [URL] = []
                 for entry in targets {
                     let destination = try await RemoteFileOperationExecution.materialize(
-                        entry, machineID: session.id, isLocal: false
+                        entry, machineID: session.id, isLocal: false,
+                        cacheRoot: FileCachePaths.previewCacheDir(in: scope)
                     ) { remotePath, localURL in
                         try await connection.downloadFile(
                             remotePath: remotePath, to: localURL, progress: nil)
@@ -1434,6 +1448,7 @@ public final class FinderModel {
                 entry.isDirectory
                 ? .folder : UTType(filenameExtension: entry.fileExtension) ?? .data
             let machineID = session.id
+            let dataRoot = scope.dataRoot()
             provider.registerFileRepresentation(
                 forTypeIdentifier: type.identifier, fileOptions: [], visibility: .all
             ) { completion in
@@ -1443,10 +1458,11 @@ public final class FinderModel {
                         let url =
                             entry.isDirectory
                             ? try await client.materializeDirectory(
-                                entry: entry, machineID: machineID)
+                                entry: entry, machineID: machineID, dataRoot: dataRoot)
                             : try await client.materialize(
                                 entry: entry, machineID: machineID,
-                                maximumBytes: RemoteFileOperationExecution.cacheLimitBytes)
+                                maximumBytes: RemoteFileOperationExecution.cacheLimitBytes,
+                                dataRoot: dataRoot)
                         completion(url, false, nil)
                         progress.completedUnitCount = progress.totalUnitCount
                     } catch { completion(nil, false, error) }

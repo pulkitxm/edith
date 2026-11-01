@@ -37,23 +37,28 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    public static func stored(forKey key: String) -> PopupPosition {
-        PopupPosition(rawValue: ExtensionScope.installed.defaults().string(forKey: key) ?? "")
+    public static func stored(forKey key: String, image: UnsafeRawPointer = #dsohandle)
+        -> PopupPosition
+    {
+        PopupPosition(
+            rawValue: ExtensionScope.resolve(image).defaults().string(forKey: key) ?? "")
             ?? .cursor
     }
 
     @MainActor
-    public func origin(size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys)
-        async -> NSPoint
-    {
+    public func origin(
+        size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys,
+        image: UnsafeRawPointer = #dsohandle
+    ) async -> NSPoint {
         let origin = await unclampedOrigin(
-            size: size, statusItemFrame: statusItemFrame, anchors: anchors)
+            size: size, statusItemFrame: statusItemFrame, anchors: anchors,
+            store: ExtensionScope.resolve(image).defaults())
         return Self.clampedToScreen(origin, size)
     }
 
     @MainActor
     private func unclampedOrigin(
-        size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys
+        size: NSSize, statusItemFrame: NSRect?, anchors: PopupAnchorKeys, store: UserDefaults
     ) async -> NSPoint {
         switch self {
         case .cursor:
@@ -87,7 +92,6 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
             return Self.centered(size)
         case .lastPosition:
             guard let screen = Self.popupScreen() else { return .zero }
-            let store = ExtensionScope.installed.defaults()
             let relX = store.object(forKey: anchors.positionX) as? Double ?? 0.5
             let relY = store.object(forKey: anchors.positionY) as? Double ?? 0.8
             let frame = screen.frame
@@ -111,12 +115,13 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
 
     @MainActor
     public static func saveLastPosition(
-        frame: NSRect, screen: NSScreen?, anchors: PopupAnchorKeys
+        frame: NSRect, screen: NSScreen?, anchors: PopupAnchorKeys,
+        image: UnsafeRawPointer = #dsohandle
     ) {
         guard let screen else { return }
         let bounds = screen.frame
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let store = ExtensionScope.installed.defaults()
+        let store = ExtensionScope.resolve(image).defaults()
         store.set(
             Double((frame.midX - bounds.minX) / bounds.width), forKey: anchors.positionX)
         store.set(

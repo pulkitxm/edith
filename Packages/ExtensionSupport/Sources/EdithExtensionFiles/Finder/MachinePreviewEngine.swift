@@ -1,3 +1,4 @@
+import EdithExtensionCore
 import Foundation
 
 @MainActor public final class MachinePreviewEngine {
@@ -10,10 +11,16 @@ import Foundation
     }
     private var previews: [UUID: Preview] = [:]
     private let session: (UUID) throws -> any FinderSession
+    private let scope: ExtensionScope
     private var stopped = false
     private var reaper: Task<Void, Never>?
 
-    public init(session: @escaping (UUID) throws -> any FinderSession) { self.session = session }
+    public init(
+        session: @escaping (UUID) throws -> any FinderSession, image: UnsafeRawPointer = #dsohandle
+    ) {
+        self.session = session
+        scope = ExtensionScope.resolve(image)
+    }
 
     public func execute(_ value: MachinePreviewRequest) async throws -> Data {
         guard !stopped, value.maximumBytes > 0,
@@ -27,7 +34,8 @@ import Foundation
             let session = try session(value.machineID)
             let url = try await RemoteFileOperationExecution.materialize(
                 entry, machineID: session.id, isLocal: session.isLocal,
-                maximumBytes: value.maximumBytes
+                maximumBytes: value.maximumBytes,
+                cacheRoot: FileCachePaths.previewCacheDir(in: scope)
             ) { path, destination in
                 guard let connection = session.shellConnection else {
                     throw FinderTransferError.notConnected
