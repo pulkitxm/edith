@@ -41,10 +41,14 @@ import Foundation
 
     static var selected: Set<UUID> {
         get {
-            Set(
+            let saved = Set(
                 (SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
                     ?? [])
                     .compactMap(UUID.init(uuidString:)))
+            let history = try? UsageDataFiles.readRegularFile(
+                at: Repo.usageJSON, maximumBytes: 67_108_864)
+            return UsageMachinesPeer.reconciledSelection(
+                saved, registry: UsageCLIEnvironment.machines(), history: history)
         }
         set {
             SharedDefaults.store.set(

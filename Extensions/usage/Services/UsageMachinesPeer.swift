@@ -218,10 +218,16 @@ struct UsageMachinesPeer: Sendable {
         directory: URL = Repo.dataDir, defaults: UserDefaults = SharedDefaults.store,
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
-        let selected = Set(
+        let saved = Set(
             (defaults.stringArray(forKey: selectedDefaultsKey) ?? []).prefix(128).compactMap(
                 UUID.init(uuidString:)))
         let registry = await MainActor.run { MachineRegistry.machines() }
+        let history = try? UsageDataFiles.readRegularFile(
+            at: directory.appendingPathComponent("usage.json"), maximumBytes: 67_108_864)
+        let selected = reconciledSelection(saved, registry: registry, history: history)
+        if selected != saved {
+            defaults.set(selected.map(\.uuidString).sorted(), forKey: selectedDefaultsKey)
+        }
         let machines = registry.filter { selected.contains($0.id) && $0.id != Machine.localID }
             .prefix(128)
         let peer = await current()
@@ -271,6 +277,41 @@ struct UsageMachinesPeer: Sendable {
             }
         }
         return merged
+    }
+
+    static func reconciledSelection(
+        _ selected: Set<UUID>, registry: [Machine], history: Data?
+    ) -> Set<UUID> {
+        guard let history,
+            let object = try? JSONSerialization.jsonObject(with: history) as? [String: Any],
+            let machines = object["machines"] as? [[String: Any]]
+        else { return selected }
+        let active = Set(registry.map(\.id))
+        func normalized(_ name: String) -> String {
+            name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        let missing = machines.compactMap { value -> (id: UUID, name: String)? in
+            guard let text = value["id"] as? String, let id = UUID(uuidString: text),
+                !active.contains(id), let name = value["name"] as? String,
+                !normalized(name).isEmpty
+            else { return nil }
+            return (id, normalized(name))
+        }
+        var result = selected
+        for old in missing where selected.contains(old.id) {
+            guard missing.filter({ $0.name == old.name }).count == 1 else { continue }
+            let matches = registry.filter { machine in
+                if normalized(machine.name) == old.name { return true }
+                if case let .sshConfigAlias(alias) = machine.source {
+                    return normalized(alias) == old.name
+                }
+                return false
+            }
+            guard matches.count == 1, let current = matches.first else { continue }
+            result.remove(old.id)
+            result.insert(current.id)
+        }
+        return result
     }
 
     static func forget(machineID: UUID, directory: URL = Repo.dataDir) throws {
