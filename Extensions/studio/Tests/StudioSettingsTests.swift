@@ -5,6 +5,7 @@ import Foundation
 import SwiftUI
 import Testing
 import ViewInspector
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 @testable import StudioExtension
 

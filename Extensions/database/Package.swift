@@ -11,6 +11,7 @@ let package = Package(
         .target(
             name: "DatabaseExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "DatabaseEngine", package: "DatabaseEngine"),
             ],

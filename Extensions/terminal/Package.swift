@@ -9,6 +9,7 @@ let package = Package(
         .target(
             name: "TerminalExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
             ],

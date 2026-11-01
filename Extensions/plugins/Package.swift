@@ -11,6 +11,7 @@ let package = Package(
             name: "PluginsExtension",
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
             ],

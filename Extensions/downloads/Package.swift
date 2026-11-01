@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .target(
             name: "DownloadsExtension",
-            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+            ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

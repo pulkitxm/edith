@@ -8,6 +8,7 @@ let package = Package(
         .target(
             name: "LaTeXExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionArchive", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
             ],

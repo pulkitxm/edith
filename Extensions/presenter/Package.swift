@@ -12,6 +12,7 @@ let package = Package(
             name: "PresenterExtension",
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
             ],
             path: ".", exclude: ["Tests", "Runtime.swift", "Package.swift"],

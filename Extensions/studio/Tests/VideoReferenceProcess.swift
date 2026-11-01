@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 struct CLIRun {

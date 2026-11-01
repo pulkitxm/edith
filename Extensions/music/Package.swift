@@ -11,6 +11,7 @@ let package = Package(
         .target(
             name: "MusicExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
             ],
@@ -19,7 +20,10 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "MusicEmbeddedUI",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
             path: "UI", swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "MusicEmbeddedUITests", dependencies: ["MusicEmbeddedUI", "MusicExtension"],

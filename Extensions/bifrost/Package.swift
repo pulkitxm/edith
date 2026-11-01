@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .target(
             name: "BifrostExtension",
-            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
+            ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "BifrostExtensionTests", dependencies: ["BifrostExtension"], path: "Tests",

@@ -27,6 +27,7 @@ let package = Package(
             dependencies: [
                 "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ],
             resources: [.copy("Resources/MarketplaceArtwork.lzma")],

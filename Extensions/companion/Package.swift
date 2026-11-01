@@ -10,6 +10,7 @@ let package = Package(
         .target(
             name: "CompanionExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
             ],
