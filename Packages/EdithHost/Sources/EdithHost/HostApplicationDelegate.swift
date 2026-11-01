@@ -13,7 +13,10 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var stopWorkers: (@MainActor () -> Void)?
     var preventsQuit: (@MainActor () async -> Bool)?
     var openMainWindow: (@MainActor () -> Void)?
-    var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
+    var activate: @MainActor () -> Void = {
+        guard !HostBackgroundTesting.enabled else { return }
+        NSApp.activate(ignoringOtherApps: true)
+    }
     var mainWindow: @MainActor () -> NSWindow? = {
         NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
     }
@@ -91,7 +94,9 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 
     func showMainWindow(_ ownedWindow: NSWindow? = nil) {
         if NSApp.activationPolicy() == .accessory { Self.applyConfiguredActivationPolicy() }
-        if let window = ownedWindow ?? mainWindow() {
+        if let window = ownedWindow ?? mainWindow(), HostBackgroundTesting.enabled {
+            HostBackgroundTesting.present(window)
+        } else if let window = ownedWindow ?? mainWindow() {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
             window.attachedSheet?.makeKeyAndOrderFront(nil)
@@ -102,6 +107,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        HostBackgroundTesting.install()
         Self.applyConfiguredActivationPolicy()
         let event = NSAppleEventManager.shared().currentAppleEvent
         launchedAtLogin =

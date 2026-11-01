@@ -196,6 +196,7 @@ public final class HostLocalSceneHandle: HostScenePresentation {
             try HostLocalEngineBridge(engine: $0, presentationID: request.presentationID)
         }
         let input = try session.configuration.uiContext(for: request, engineClient: bridge)
+        let started = ContinuousClock.now
         for runtime in runtimes {
             let response = try runtime.response(id: id, operation: "configureUI", context: input)
             guard response["ok"] as? Bool == true else { continue }
@@ -210,6 +211,9 @@ public final class HostLocalSceneHandle: HostScenePresentation {
             {
                 content = result
                 self.runtime = runtime
+                ExtensionLoadTimings.shared.observeFirstFrame(
+                    id: id, role: runtime.role.rawValue, view: result.controller.view,
+                    started: started)
                 self.bridge = bridge
                 return result.controller
             }

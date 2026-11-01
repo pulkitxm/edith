@@ -1,3 +1,4 @@
+import AppKit
 import Darwin
 import Foundation
 import os
@@ -5,7 +6,7 @@ import os
 @MainActor
 public final class ExtensionLoadTimings {
     public enum Phase: String, CaseIterable, Sendable {
-        case verify, start, presentation
+        case verify, start, presentation, firstFrame
     }
 
     public struct Entry: Equatable, Sendable {
@@ -40,7 +41,7 @@ public final class ExtensionLoadTimings {
         entry.milliseconds[phase] = milliseconds
         let sinceLaunch = Date().timeIntervalSince(launch) * 1000
         if phase == .start { entry.readyAfterLaunch = sinceLaunch }
-        if phase == .presentation, first { entry.presentedAfterLaunch = sinceLaunch }
+        if phase == .firstFrame, first { entry.presentedAfterLaunch = sinceLaunch }
         entries[id, default: [:]][role] = entry
         let rounded = String(format: "%.1f", milliseconds)
         logger.info(
@@ -49,6 +50,30 @@ public final class ExtensionLoadTimings {
     }
 
     public func reset(id: String) { entries[id] = nil }
+
+    public func observeFirstFrame(
+        id: String, role: String, view: NSView, started: ContinuousClock.Instant,
+        attempts: Int = 600
+    ) {
+        guard entries[id]?[role]?.milliseconds[.firstFrame] == nil else { return }
+        if view.window != nil {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard self.entries[id]?[role]?.milliseconds[.firstFrame] == nil else { return }
+                    self.record(
+                        id: id, role: role, .firstFrame, elapsed: ContinuousClock.now - started)
+                }
+            }
+        } else if attempts > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak view] in
+                MainActor.assumeIsolated {
+                    guard let view else { return }
+                    self.observeFirstFrame(
+                        id: id, role: role, view: view, started: started, attempts: attempts - 1)
+                }
+            }
+        }
+    }
 
     public func json(id: String) -> [String: Any] {
         guard let roles = entries[id] else { return [:] }
