@@ -6,6 +6,72 @@ import Testing
 @Suite struct LimitsHistoryTests {
     let now = Date(timeIntervalSince1970: 1_750_000_000)
 
+    @Test func accountHistoriesStaySeparateAcrossInterleavedSamplesRenamesAndIdenticalLimits()
+        throws
+    {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("limits-history.jsonl")
+        let personal = UUID(); let work = UUID()
+        var history = LimitsHistory(url: url)
+        let session = LimitWindow(percent: 25, resetsAt: now.addingTimeInterval(3600))
+        let written0 = history.append(
+            session: session, week: nil, accountID: personal, accountName: "Personal", now: now)
+        #expect(written0)
+        let written1 = history.append(
+            session: session, week: nil, accountID: work, accountName: "Work", now: now)
+        #expect(written1)
+        let written2 = history.append(
+            session: session, week: nil, accountID: personal, accountName: "Personal",
+            now: now.addingTimeInterval(30))
+        #expect(written2)
+        let written3 = history.append(
+            session: .init(percent: 80, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(60))
+        #expect(written3)
+        let written4 = history.append(
+            session: .init(percent: 40, resetsAt: nil), week: nil, accountID: personal,
+            accountName: "Renamed personal", now: now.addingTimeInterval(90))
+        #expect(written4)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.split(separator: "\n").count == 4)
+        #expect(LimitsHistory.parse(text, accountID: personal).map(\.s) == [25, 40])
+        #expect(LimitsHistory.parse(text, accountID: work).map(\.s) == [25])
+        #expect(LimitsHistory.parse(text).map(\.s) == [80])
+        let snapshot = LimitsHistory.snapshot(
+            preferredProvider: .claude, accountID: personal, url: url)
+        #expect(snapshot.accountID == personal)
+        #expect(snapshot.points.map(\.s) == [25, 40])
+        #expect(snapshot.accounts.first(where: { $0.id == personal })?.name == "Renamed personal")
+        #expect(Set(snapshot.accounts.map(\.id)) == [personal, work])
+        #expect(snapshot.hasUnassignedHistory)
+        #expect(snapshot.latest[.claude]?.session?.percent == 40)
+        #expect(LimitsHistory.latestProviders(url: url)[.claude]?.session?.percent == 80)
+        #expect(
+            LimitsHistory.alertSamples(since: .distantPast, url: url)[.init(.claude, .session)]?
+                .map(\.percent) == [80])
+    }
+
+    @Test func scopedHistoryDoesNotBecomeUnassignedOrAnotherProvidersHistory() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("limits-history.jsonl")
+        let account = UUID()
+        LimitsCollector.persistHistory(
+            provider: .claude, session: .init(percent: 10, resetsAt: nil), week: nil,
+            accountID: account, accountName: "Sample account", now: now, historyURL: url)
+        let snapshot = LimitsHistory.snapshot(preferredProvider: .claude, url: url)
+        #expect(snapshot.providers == [.claude])
+        #expect(snapshot.points.isEmpty)
+        #expect(!snapshot.hasUnassignedHistory)
+        #expect(snapshot.accounts.map(\.id) == [account])
+        #expect(LimitsHistory.latestProviders(url: url).isEmpty)
+        #expect(LimitsHistory.loadAll(provider: .codex, url: url).isEmpty)
+        #expect(LimitsHistory.loadAll(accountID: account, url: url).count == 1)
+    }
+
     @Test func rowIsOneJSONLineAndKeyIgnoresTimestamp() throws {
         let s = LimitWindow(percent: 42.14, resetsAt: now.addingTimeInterval(3600))
         let w = LimitWindow(percent: 67.3, resetsAt: now.addingTimeInterval(86400))

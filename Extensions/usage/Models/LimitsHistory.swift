@@ -10,11 +10,19 @@ public struct LimitsHistory {
         public let grok: GrokAllowance?
     }
 
+    public struct Account: Codable, Equatable, Identifiable, Sendable {
+        public let id: UUID
+        public let name: String
+    }
+
     public struct Snapshot: Sendable {
         public let providers: [LimitProvider]
         public let provider: LimitProvider
         public let latest: [LimitProvider: Latest]
         public let points: [LimitPoint]
+        public var accounts: [Account] = []
+        public var accountID: UUID? = nil
+        public var hasUnassignedHistory = false
     }
 
     public static var url: URL { Repo.limitsJSONL }
@@ -28,6 +36,8 @@ public struct LimitsHistory {
     private struct Row: Codable {
         let ts: String
         let p: LimitProvider?
+        let accountID: UUID?
+        let accountName: String?
         let s: Double?
         let w: Double?
         let f: Double?
@@ -71,14 +81,16 @@ public struct LimitsHistory {
 
     public static func row(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, now: Date
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, accountID: UUID? = nil,
+        accountName: String? = nil, now: Date
     ) -> (
         key: String, line: String
     ) {
         let round1 = { (v: Double) in (v * 10).rounded() / 10 }
         let r = Row(
             ts: iso.string(from: now),
-            p: provider,
+            p: provider, accountID: accountID,
+            accountName: accountName.map { String($0.prefix(256)) },
             s: session.map { round1($0.percent) },
             w: week.map { round1($0.percent) },
             f: fable.map { round1($0.percent) },
@@ -93,14 +105,17 @@ public struct LimitsHistory {
     @discardableResult
     public mutating func append(
         provider: LimitProvider = .claude, session: LimitWindow?, week: LimitWindow?,
-        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, now: Date = Date()
+        fable: LimitWindow? = nil, grok: GrokAllowance? = nil, accountID: UUID? = nil,
+        accountName: String? = nil, now: Date = Date()
     ) -> Bool {
         let (key, line) = Self.row(
-            provider: provider, session: session, week: week, fable: fable, grok: grok, now: now)
+            provider: provider, session: session, week: week, fable: fable, grok: grok,
+            accountID: accountID, accountName: accountName, now: now)
         do {
             try UsageDataLock.withLock(dataDirectory: fileURL.deletingLastPathComponent()) {
                 let needsNewline = try Self.repairTrailingRow(at: fileURL)
-                guard Self.latestKey(provider: provider, url: fileURL) != key else { return }
+                guard Self.latestKey(provider: provider, accountID: accountID, url: fileURL) != key
+                else { return }
                 var payload = Data(line.utf8)
                 if needsNewline { payload.insert(UInt8(ascii: "\n"), at: 0) }
                 try UsageDurableFile.append(payload, to: fileURL)
@@ -111,12 +126,12 @@ public struct LimitsHistory {
         }
     }
 
-    private static func latestKey(provider: LimitProvider, url: URL) -> String? {
+    private static func latestKey(provider: LimitProvider, accountID: UUID?, url: URL) -> String? {
         var result: String?
         FileTail.scanLinesReversed(url, maxScanBytes: maximumTailScanBytes) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
                 Self.parseTimestamp(row.ts) != nil,
-                (row.p ?? .claude) == provider
+                (row.p ?? .claude) == provider, row.accountID == accountID
             else { return true }
             result = key(for: row)
             return false
@@ -127,7 +142,7 @@ public struct LimitsHistory {
     private static func key(for row: Row) -> String {
         let provider = row.p ?? .claude
         return
-            "\(provider.rawValue)|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")|\(allowanceKey(row.ga))"
+            "\(provider.rawValue)|\(row.accountID?.uuidString ?? "")|\(row.accountName ?? "")|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")|\(allowanceKey(row.ga))"
     }
 
     private static func allowanceKey(_ allowance: GrokAllowance?) -> String {
@@ -184,26 +199,27 @@ public struct LimitsHistory {
     }
 
     public static func parse(
-        _ text: String, since: Date, provider: LimitProvider = .claude
+        _ text: String, since: Date, provider: LimitProvider = .claude, accountID: UUID? = nil
     ) -> [LimitPoint] {
-        parseRows(text, since: since, provider: provider)
+        parseRows(text, since: since, provider: provider, accountID: accountID)
     }
 
     public static func parse(
-        _ text: String, since: Date? = nil, provider: LimitProvider = .claude
+        _ text: String, since: Date? = nil, provider: LimitProvider = .claude,
+        accountID: UUID? = nil
     ) -> [LimitPoint] {
-        parseRows(text, since: since, provider: provider)
+        parseRows(text, since: since, provider: provider, accountID: accountID)
     }
 
     private static func parseRows(
-        _ text: String, since: Date?, provider: LimitProvider
+        _ text: String, since: Date?, provider: LimitProvider, accountID: UUID?
     ) -> [LimitPoint] {
         var out: [LimitPoint] = []
         for line in text.split(separator: "\n") {
             if Task.isCancelled { break }
             guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)),
                 let date = Self.parseTimestamp(row.ts), since.map({ date >= $0 }) ?? true,
-                (row.p ?? .claude) == provider
+                (row.p ?? .claude) == provider, row.accountID == accountID
             else { continue }
             out.append(
                 LimitPoint(
@@ -215,13 +231,14 @@ public struct LimitsHistory {
     }
 
     public static func loadAll(
-        provider: LimitProvider = .claude, url: URL = LimitsHistory.url
+        provider: LimitProvider = .claude, accountID: UUID? = nil, url: URL = LimitsHistory.url
     ) -> [LimitPoint] {
         guard
             let data = try? UsageDataFiles.readRegularFile(
                 at: url, maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
         else { return [] }
-        return parse(String(decoding: data, as: UTF8.self), provider: provider)
+        return parse(
+            String(decoding: data, as: UTF8.self), provider: provider, accountID: accountID)
     }
 
     public static func loadLatestPoint(
@@ -268,7 +285,7 @@ public struct LimitsHistory {
     }
 
     public static func loadSnapshot(
-        preferredProvider: LimitProvider, url: URL = LimitsHistory.url
+        preferredProvider: LimitProvider, accountID: UUID? = nil, url: URL = LimitsHistory.url
     ) async -> Snapshot {
         if let client = await UsageUIClient.current {
             if let snapshot = try? await client.limits(provider: preferredProvider) {
@@ -280,7 +297,7 @@ public struct LimitsHistory {
             return Snapshot(providers: [], provider: preferredProvider, latest: [:], points: [])
         }
         let load = Task.detached(priority: .utility) {
-            snapshot(preferredProvider: preferredProvider, url: url)
+            snapshot(preferredProvider: preferredProvider, accountID: accountID, url: url)
         }
         return await withTaskCancellationHandler {
             await load.value
@@ -297,7 +314,7 @@ public struct LimitsHistory {
             url, maxScanBytes: maximumTailScanBytes,
             shouldContinue: { !Task.isCancelled }
         ) { data in
-            guard let row = try? decoder.decode(Row.self, from: data),
+            guard let row = try? decoder.decode(Row.self, from: data), row.accountID == nil,
                 let date = Self.parseTimestamp(row.ts)
             else { return true }
             guard date >= since else { return false }
@@ -324,7 +341,7 @@ public struct LimitsHistory {
             url, maxScanBytes: maximumTailScanBytes,
             shouldContinue: { !Task.isCancelled }
         ) { data in
-            guard let row = try? decoder.decode(Row.self, from: data),
+            guard let row = try? decoder.decode(Row.self, from: data), row.accountID == nil,
                 Self.parseTimestamp(row.ts) != nil
             else { return true }
             let provider = row.p ?? .claude
@@ -334,9 +351,14 @@ public struct LimitsHistory {
         return rows
     }
 
-    private static func snapshot(preferredProvider: LimitProvider, url: URL) -> Snapshot {
+    static func snapshot(preferredProvider: LimitProvider, accountID: UUID? = nil, url: URL)
+        -> Snapshot
+    {
         var latest: [LimitProvider: Latest] = [:]
         var points: [LimitProvider: [LimitPoint]] = [:]
+        var accounts: [UUID: Account] = [:]
+        var hasUnassigned = false
+        var found: Set<LimitProvider> = []
         FileTail.scanLinesReversed(
             url, maxScanBytes: maximumTailScanBytes,
             shouldContinue: { !Task.isCancelled }
@@ -345,20 +367,27 @@ public struct LimitsHistory {
                 let date = Self.parseTimestamp(row.ts)
             else { return true }
             let provider = row.p ?? .claude
-            if latest[provider] == nil {
-                latest[provider] = self.latest(row: row)
+            found.insert(provider)
+            if provider == .claude, let id = row.accountID, accounts[id] == nil {
+                accounts[id] = Account(id: id, name: row.accountName ?? "Saved account")
             }
+            if provider == .claude, row.accountID == nil { hasUnassigned = true }
+            guard row.accountID == (provider == .claude ? accountID : nil) else { return true }
+            if latest[provider] == nil { latest[provider] = self.latest(row: row) }
             points[provider, default: []].append(point(row: row, date: date))
             return true
         }
-        let providers = LimitProvider.allCases.filter { latest[$0] != nil }
+        let providers = LimitProvider.allCases.filter(found.contains)
         let provider =
             providers.contains(preferredProvider)
-            ? preferredProvider
-            : providers.first ?? preferredProvider
+            ? preferredProvider : providers.first ?? preferredProvider
         return Snapshot(
             providers: providers, provider: provider, latest: latest,
-            points: points[provider, default: []].sorted { $0.date < $1.date })
+            points: points[provider, default: []].sorted { $0.date < $1.date },
+            accounts: accounts.values.sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            },
+            accountID: accountID, hasUnassignedHistory: hasUnassigned)
     }
 
     private static func latest(row: Row) -> Latest? {
