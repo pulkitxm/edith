@@ -6,6 +6,15 @@ request runs the checks. A push to `main` runs them again, and a product
 change on `main` publishes the next release. Extension packages and the
 signed catalog publish from the Extensions workflow on the same push.
 
+## Required development workflow
+
+Read [Development workflow](docs/development.md) and
+[Testing and proof](docs/testing.md) before implementation. Use one worktree per
+worker and one build/test driver per checkout. Build the local host, sideload
+changed extensions and their dependencies, and verify through that slot's bundled
+CLI. A successful host build does not prove changed extension code is loaded.
+The integration owner repeats verification on the combined revision.
+
 ## Local checks
 
 `make ci-local` runs the same lanes GitHub would run for the current branch,
