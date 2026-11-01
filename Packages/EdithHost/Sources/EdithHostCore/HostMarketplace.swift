@@ -91,6 +91,8 @@ public final class HostMarketplace {
 
     public static func live(identity: HostIdentity) throws -> HostMarketplace {
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        HostBundleVerification.receipts.configure(
+            file: identity.root.appendingPathComponent("ExtensionState/verified-bundles.json"))
         let localCatalog = HostDevelopmentCatalog(
             environment: ProcessInfo.processInfo.environment, development: identity.development)
         let installer: ExtensionPackageInstaller
