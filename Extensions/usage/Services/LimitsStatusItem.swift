@@ -588,35 +588,40 @@ struct LimitsMenuPanel: View {
                         ForEach(store.claudeAccounts) { account in
                             Text("\(provider.label) · \(account.name)")
                                 .font(.edithText(.headline)).lineLimit(1)
-                            ForEach(
-                                MenuBarLimits.slots(for: provider).filter { slot in
-                                    slot != .fable || account.limits.fable != nil
-                                }, id: \.self
-                            ) { slot in
+                            ForEach(account.limits.reportedSlots, id: \.self) { slot in
                                 let window = account.limits.window(for: slot)
                                 StatusProgressRow(
                                     title: slot.title(for: provider),
                                     percent: window.map { Double($0.shownPercent) },
                                     resetsAt: window?.resetsAt)
                             }
-                            if let error = account.limits.error {
+                            if let message = account.limits.unreportedSessionMessage {
+                                Text(message).font(.edithText(.caption))
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let error = account.errorMessage {
                                 Text(error).font(.edithText(.caption))
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     } else {
-                        let limits = store.limits(for: provider)
+                        let limits = store.snapshot(for: provider)
                         Text(provider.label).font(.edithText(.headline))
-                        let slots = MenuBarLimits.slots(for: provider).filter { slot in
-                            slot != .fable || limits.window(for: slot) != nil
-                        }
+                        let slots = limits.reportedSlots
                         ForEach(slots, id: \.self) { slot in
                             let window = limits.window(for: slot)
                             StatusProgressRow(
                                 title: slot.title(for: provider),
                                 percent: window.map { Double($0.shownPercent) },
                                 resetsAt: window?.resetsAt)
+                        }
+                        if let message = limits.unreportedSessionMessage {
+                            Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }
+                        if let error = limits.error {
+                            Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         if let credits = limits.credits {
                             HStack(alignment: .firstTextBaseline) {

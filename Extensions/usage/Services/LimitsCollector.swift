@@ -35,6 +35,19 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
         case .credits: nil
         }
     }
+
+    var reportedSlots: [LimitWindowSlot] {
+        MenuBarLimits.slots(for: provider).filter {
+            UsageCompactQuotaValue(window(for: $0)).percent != nil
+        }
+    }
+
+    var unreportedSessionMessage: String? {
+        guard [.claude, .codex].contains(provider), session == nil, error == nil else {
+            return nil
+        }
+        return "No 5-hour window reported by \(provider.label)."
+    }
 }
 
 public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
@@ -70,6 +83,14 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
         claudeUsesAccounts =
             try container.decodeIfPresent(Bool.self, forKey: .claudeUsesAccounts)
             ?? !claudeAccounts.isEmpty
+    }
+
+    var generalFailure: String? {
+        guard let failure,
+            !providers.contains(where: { $0.error == failure }),
+            !claudeAccounts.contains(where: { $0.limits.error == failure })
+        else { return nil }
+        return failure
     }
 }
 

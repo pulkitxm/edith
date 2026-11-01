@@ -683,21 +683,44 @@ public enum UsageAnalysis {
 public enum LimitsReport {
     public struct Observation: Sendable {
         public let provider: LimitProvider
+        public let label: String
+        public let accountID: UUID?
         public let observedAt: Date
         public let session: LimitWindow?
         public let week: LimitWindow?
         public let fable: LimitWindow?
         public let grok: GrokAllowance?
+        public let credits: Double?
+        public let error: String?
+        public let retryAt: Date?
     }
 
-    public static func providers() -> [Observation] {
-        let latest = LimitsHistory.latestProviders()
-        return LimitProvider.allCases.compactMap { provider in
-            guard let value = latest[provider] else { return nil }
-            return Observation(
-                provider: provider, observedAt: value.date, session: value.session,
-                week: value.week, fable: value.fable, grok: value.grok)
+    public static func providers(snapshot: LimitsTopicSnapshot?) -> [Observation] {
+        guard let snapshot else { return [] }
+        func observation(
+            _ value: LimitsProviderSnapshot, label: String, observedAt: Date,
+            accountID: UUID? = nil, error: String? = nil, retryAt: Date? = nil
+        ) -> Observation {
+            func fresh(_ window: LimitWindow?) -> LimitWindow? {
+                UsageCompactQuotaValue(window).percent == nil ? nil : window
+            }
+            return .init(
+                provider: value.provider, label: label, accountID: accountID,
+                observedAt: observedAt, session: fresh(value.session), week: fresh(value.week),
+                fable: fresh(value.fable), grok: value.grok, credits: value.credits,
+                error: error ?? value.error, retryAt: retryAt)
         }
+        let accounts = snapshot.claudeAccounts.map {
+            observation(
+                $0.limits, label: "Claude · " + $0.name, observedAt: $0.refreshedAt,
+                accountID: $0.id, error: $0.errorMessage, retryAt: $0.retryAt)
+        }
+        return accounts
+            + snapshot.providers.filter {
+                $0.provider != .claude || !snapshot.claudeUsesAccounts
+            }.map {
+                observation($0, label: $0.provider.label, observedAt: snapshot.refreshedAt)
+            }
     }
 
     public static func window(_ value: LimitWindow?) -> JSONValue {
@@ -732,7 +755,11 @@ public enum LimitsReport {
     public static func json(_ observation: Observation) -> JSONValue {
         var fields: [String: JSONValue] = [
             "provider": .string(observation.provider.rawValue),
-            "label": .string(observation.provider.label),
+            "label": .string(observation.label),
+            "accountID": .optional(observation.accountID?.uuidString),
+            "error": .optional(observation.error),
+            "retryAt": .date(observation.retryAt),
+            "credits": .optional(observation.credits),
             "observedAt": .date(observation.observedAt),
             "session": window(observation.session),
             "weekly": window(observation.week),

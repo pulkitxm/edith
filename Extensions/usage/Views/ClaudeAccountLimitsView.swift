@@ -34,28 +34,29 @@ private struct ClaudeAccountLimitsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(account.name).font(.edithText(.subheadline).weight(.semibold)).lineLimit(1)
-            ForEach(MenuBarLimits.slots(for: .claude), id: \.self) { slot in
-                if slot != .fable || account.limits.fable != nil {
-                    let window = account.limits.window(for: slot)
-                    let percent = UsageCompactQuotaValue(window).percent
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        HStack {
-                            Text(slot.settingsLabel(for: .claude))
-                            Spacer()
-                            Text(percent.map { "\(Int($0))%" } ?? "Unavailable")
-                                .monospacedDigit()
-                        }.font(.edithText(.caption))
-                        if let percent {
-                            LoadingProgress(value: percent, total: 100)
-                        }
-                        if let reset = window?.resetsAt, reset > Date() {
-                            Text("Resets \(reset, style: .relative)")
-                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
-                        }
+            ForEach(account.limits.reportedSlots, id: \.self) { slot in
+                let window = account.limits.window(for: slot)
+                let percent = UsageCompactQuotaValue(window).percent
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    HStack {
+                        Text(slot.settingsLabel(for: .claude))
+                        Spacer()
+                        Text(percent.map { "\(Int($0))%" } ?? "Unavailable")
+                            .monospacedDigit()
+                    }.font(.edithText(.caption))
+                    if let percent {
+                        LoadingProgress(value: percent, total: 100)
+                    }
+                    if let reset = window?.resetsAt, reset > Date() {
+                        Text("Resets \(reset, style: .relative)")
+                            .font(.edithText(.caption2)).foregroundStyle(.secondary)
                     }
                 }
             }
-            if let error = account.limits.error {
+            if let message = account.limits.unreportedSessionMessage {
+                Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            if let error = account.errorMessage {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if account.limits.session != nil || account.limits.week != nil

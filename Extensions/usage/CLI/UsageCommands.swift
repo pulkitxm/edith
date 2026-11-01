@@ -103,11 +103,12 @@ struct UsageLimitsCommand: AsyncParsableCommand {
             if refresh {
                 try await UsageCLIEnvironment.refreshLimits()
             }
-            let providers = LimitsReport.providers()
+            let providers = LimitsReport.providers(
+                snapshot: UsageCLIEnvironment.controller?.latestLimits)
             guard !providers.isEmpty else {
                 throw CLIFailure.unavailable(
-                    "no limit history yet",
-                    hint: "enable the Agent Usage extension and let Edith poll once")
+                    "no current rate limits yet",
+                    hint: "run ed usage limits --refresh to poll the configured accounts")
             }
             guard !json else {
                 CLIOut.json(.array(providers.map(LimitsReport.json)))
@@ -123,9 +124,10 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 }
                 var lines = slots.map { slot, window in
                     [
-                        observation.provider.label,
+                        observation.label,
                         slot.title(for: observation.provider, period: window?.period),
-                        window.map { String(format: "%.1f%%", $0.percent) } ?? "-",
+                        window.map { String(format: "%.1f%%", $0.percent) }
+                            ?? (observation.error == nil ? "Not reported" : "Unavailable"),
                         window?.resetsAt.map { resetText($0) } ?? "-",
                         JSONSerializer.iso.string(from: observation.observedAt),
                     ]
@@ -133,7 +135,7 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 if let allowance = observation.grok, allowance.products.count > 1 {
                     lines += allowance.products.map { product in
                         [
-                            observation.provider.label,
+                            observation.label,
                             product.name,
                             String(format: "%.1f%%", product.percent),
                             observation.week?.resetsAt.map { resetText($0) } ?? "-",
@@ -148,8 +150,10 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                     headers: ["PROVIDER", "LIMIT", "USED", "RESETS", "OBSERVED"],
                     rows: rows))
             for observation in providers {
-                guard let extra = observation.grok?.extraLine else { continue }
-                CLIOut.out("\(observation.provider.label): \(extra)")
+                if let error = observation.error { CLIOut.out("\(observation.label): \(error)") }
+                if let extra = observation.grok?.extraLine {
+                    CLIOut.out("\(observation.label): \(extra)")
+                }
             }
         }
     }
