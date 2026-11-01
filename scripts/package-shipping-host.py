@@ -93,6 +93,10 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
     entitlements = plistlib.loads(configured) if configured.strip() else {}
     required = plistlib.loads(Path('Resources/Host.entitlements').read_bytes())
     entitlements.update(required)
+    if args.release:
+        entitlements.pop("com.apple.security.cs.disable-library-validation", None)
+    else:
+        entitlements["com.apple.security.cs.disable-library-validation"] = True
     entitlement_path.write_bytes(plistlib.dumps(entitlements))
     entitlement_flags = ['--entitlements', str(entitlement_path)]
     requirement = []
