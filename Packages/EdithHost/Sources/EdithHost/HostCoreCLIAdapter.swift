@@ -68,7 +68,7 @@ import Foundation
                         return .ready
                     }
                     if marketplace.installed[id] == nil { return .notInstalled }
-                    return marketplace.sessions.activeIDs.contains(id) ? .ready : .off
+                    return marketplace.sessions.availableIDs.contains(id) ? .ready : .off
                 },
                 changed: changed),
             commandProvider: {

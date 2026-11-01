@@ -27,7 +27,8 @@
     "id": "plugins",
     "title": "Plugins",
     "symbolName": "square.stack.3d.up",
-    "category": "agents"
+    "category": "agents",
+    "activation": "demand"
   },
   {
     "id": "machines",
@@ -45,7 +46,8 @@
     "id": "docs",
     "title": "Docs",
     "symbolName": "book.closed",
-    "category": "agents"
+    "category": "agents",
+    "activation": "demand"
   },
   {
     "id": "appMaintenance",
@@ -57,19 +59,22 @@
     "id": "homebrew",
     "title": "Homebrew",
     "symbolName": "cube.box",
-    "category": "utilities"
+    "category": "utilities",
+    "activation": "demand"
   },
   {
     "id": "cleaner",
     "title": "Cleaner",
     "symbolName": "sparkles.rectangle.stack",
-    "category": "utilities"
+    "category": "utilities",
+    "activation": "demand"
   },
   {
     "id": "blitztree",
     "title": "Disk Map",
     "symbolName": "square.grid.3x3.fill",
-    "category": "utilities"
+    "category": "utilities",
+    "activation": "demand"
   },
   {
     "id": "system",
@@ -195,7 +200,8 @@
     "id": "socialManager",
     "title": "Social Manager",
     "symbolName": "person.crop.rectangle.stack",
-    "category": "media"
+    "category": "media",
+    "activation": "demand"
   },
   {
     "id": "database",
@@ -213,13 +219,15 @@
     "id": "seoAudit",
     "title": "Site Audit",
     "symbolName": "doc.text.magnifyingglass",
-    "category": "developer"
+    "category": "developer",
+    "activation": "demand"
   },
   {
     "id": "latex",
     "title": "LaTeX",
     "symbolName": "doc.richtext",
-    "category": "developer"
+    "category": "developer",
+    "activation": "demand"
   },
   {
     "id": "attention",
@@ -243,6 +251,7 @@
     "id": "jev",
     "title": "Jev",
     "symbolName": "sparkles",
-    "category": "labs"
+    "category": "labs",
+    "activation": "demand"
   }
 ]

@@ -74,7 +74,22 @@ import Foundation
             ], options: .sortedKeys)
     }
 
+    private func catalogCache(_ id: String, version: String) -> URL {
+        marketplace.identity.root.appendingPathComponent("ExtensionState/CommandCatalogs")
+            .appendingPathComponent("\(id)-\(version).json")
+    }
+
     private func invoke(_ request: HostCLIRequest, id: String) async throws -> Data {
+        let catalogRequest = request.operation == id + ".cli.catalog"
+        if marketplace.sessions.states[id] == .idle, let package = marketplace.installed[id] {
+            if catalogRequest,
+                let cached = try? Data(contentsOf: catalogCache(id, version: package.version))
+            {
+                return cached
+            }
+            try await marketplace.sessions.activate(id)
+            try Task.checkCancellation()
+        }
         guard let package = marketplace.installed[id],
             marketplace.sessions.activeIDs.contains(id),
             marketplace.sessions.versions[id] == package.version,
@@ -114,6 +129,12 @@ import Foundation
             throw HostCLIError.rejected(
                 "The worker changed during the command or returned invalid JSON.")
         }
+        if catalogRequest {
+            let cache = catalogCache(id, version: package.version)
+            try? FileManager.default.createDirectory(
+                at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? result.write(to: cache, options: .atomic)
+        }
         return result
     }
 
@@ -140,6 +161,7 @@ import Foundation
             "compatible": marketplace.installed[id] != nil || marketplace.available[id] != nil,
             "enabled": marketplace.sessions.enabledIDs.contains(id),
             "running": marketplace.sessions.activeIDs.contains(id),
+            "idle": marketplace.sessions.idleIDs.contains(id),
             "processIdentifier": marketplace.sessions.processIdentifiers[id] as Any? ?? NSNull(),
             "state": state(id).rawValue,
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),

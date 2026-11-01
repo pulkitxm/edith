@@ -298,14 +298,52 @@ public struct HostCLIProviderState: Codable, Equatable, Sendable {
     public let compatible: Bool
     public let enabled: Bool
     public let running: Bool
+    public let idle: Bool
     public let version: String?
     public let disablePending: Bool
     public let removalPending: Bool
     public let processIdentifier: Int32?
 
     public var available: Bool {
-        installed && compatible && enabled && running && version != nil
+        installed && compatible && enabled && (running || idle) && version != nil
             && !disablePending && !removalPending
+    }
+
+    public init(
+        id: String, installed: Bool, compatible: Bool, enabled: Bool, running: Bool,
+        idle: Bool = false, version: String?, disablePending: Bool, removalPending: Bool,
+        processIdentifier: Int32?
+    ) {
+        self.id = id
+        self.installed = installed
+        self.compatible = compatible
+        self.enabled = enabled
+        self.running = running
+        self.idle = idle
+        self.version = version
+        self.disablePending = disablePending
+        self.removalPending = removalPending
+        self.processIdentifier = processIdentifier
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        installed = try values.decode(Bool.self, forKey: .installed)
+        compatible = try values.decode(Bool.self, forKey: .compatible)
+        enabled = try values.decode(Bool.self, forKey: .enabled)
+        running = try values.decode(Bool.self, forKey: .running)
+        idle = try values.decodeIfPresent(Bool.self, forKey: .idle) ?? false
+        version = try values.decodeIfPresent(String.self, forKey: .version)
+        disablePending = try values.decode(Bool.self, forKey: .disablePending)
+        removalPending = try values.decode(Bool.self, forKey: .removalPending)
+        processIdentifier = try values.decodeIfPresent(Int32.self, forKey: .processIdentifier)
+    }
+
+    public func matches(_ current: Self) -> Bool {
+        self == current
+            || (idle && current.running && id == current.id && version == current.version
+                && installed == current.installed && enabled == current.enabled)
     }
 }
 
@@ -338,7 +376,7 @@ public struct HostCLIProviderRegistry: Sendable {
         }
         let current = try await Self.states(invoke: invoke)
         providers.removeAll { provider in
-            guard current.contains(provider.state) else {
+            guard current.contains(where: provider.state.matches) else {
                 issues[provider.state.id] = "The provider changed during discovery."
                 return true
             }
@@ -385,7 +423,7 @@ public struct HostCLIProviderRegistry: Sendable {
         guard let (provider, command) = selected,
             matching.count < 2 || matching[0].1.route.count != matching[1].1.route.count
         else { throw HostCLIError.rejected("No enabled extension provides this command.") }
-        guard try await Self.states(invoke: invoke).contains(provider.state) else {
+        guard try await Self.states(invoke: invoke).contains(where: provider.state.matches) else {
             throw HostCLIError.rejected("The command provider was disabled or changed.")
         }
         let isAlias = (provider.catalog.machineAliases ?? []).contains(prefix)

@@ -113,4 +113,51 @@ import ExtensionMarketplace
         }
         #expect(counter.count == 2)
     }
+
+    @Test func receiptsSurviveARelaunch() throws {
+        let bundle = try makeBundle()
+        let file = bundle.deletingLastPathComponent().appendingPathComponent("receipts.json")
+        defer { try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent()) }
+        let counter = Counter()
+        try HostBundleVerification.verify(
+            bundle, receipts: HostBundleVerificationReceipts(file: file)
+        ) { _ in counter.increment() }
+        try HostBundleVerification.verify(
+            bundle, receipts: HostBundleVerificationReceipts(file: file)
+        ) { _ in counter.increment() }
+        #expect(counter.count == 1)
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+    }
+
+    @Test func rewritingAFileWithItsOldTimestampIsVerifiedAgain() throws {
+        let bundle = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent()) }
+        let receipts = HostBundleVerificationReceipts()
+        let counter = Counter()
+        let executable = bundle.appendingPathComponent("Contents/MacOS/Runtime")
+        let original = try #require(
+            try FileManager.default.attributesOfItem(atPath: executable.path)[.modificationDate]
+                as? Date)
+        try HostBundleVerification.verify(bundle, receipts: receipts) { _ in counter.increment() }
+        Thread.sleep(forTimeInterval: 0.01)
+        try Data("BINARY".utf8).write(to: executable)
+        try FileManager.default.setAttributes(
+            [.modificationDate: original], ofItemAtPath: executable.path)
+        try HostBundleVerification.verify(bundle, receipts: receipts) { _ in counter.increment() }
+        #expect(counter.count == 2)
+    }
+
+    @Test func addedResourcesAreVerifiedAgain() throws {
+        let bundle = try makeBundle()
+        defer { try? FileManager.default.removeItem(at: bundle.deletingLastPathComponent()) }
+        let receipts = HostBundleVerificationReceipts()
+        let counter = Counter()
+        try HostBundleVerification.verify(bundle, receipts: receipts) { _ in counter.increment() }
+        let resources = bundle.appendingPathComponent("Contents/Resources")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: resources.appendingPathComponent("extra.json"))
+        try HostBundleVerification.verify(bundle, receipts: receipts) { _ in counter.increment() }
+        #expect(counter.count == 2)
+    }
 }

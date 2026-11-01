@@ -22,6 +22,14 @@ Downloads are verified before they replace installed state. An active version ke
 
 A verified cached catalog and installed packages remain usable offline; an offline cache does not establish that a new download is available.
 
+## When extensions start
+
+Extensions that own background work, a shortcut, or a Home or Notch card start when Edith launches. The others are on demand: an enabled on-demand extension stays idle at launch, with no code loaded, and starts the first time its page opens or one of its commands runs. Idle extensions appear in the sidebar, Settings and `ed` help like running ones, and `ed extensions ls` reports them as `idle`. The host index marks each extension `launch` or `demand`; the first on-demand set is Homebrew, Jev, Cleaner, Blitztree, Plugins, Docs, LaTeX, SEO Audit and Social Manager.
+
+If Edith quits unexpectedly while extensions are starting, the next launch starts those extensions one at a time after the others. An extension that is starting alone when Edith quits again is turned off and shows why; enabling it again retries.
+
+A full signature check runs the first time a package's exact files are seen. Later launches skip it while every file keeps the same identity, size, modification time and change time.
+
 ## Disable, remove and inspect storage
 
 Disabling stops an extension's work, native tasks, commands and registered descendants. Swift code remains mapped until Edith quits, and package versions still in use remain on disk. Each window and card owns its own interface state, so opening or closing another presentation does not reset it. Interface reuse is bound to the selected version and the running engine generation. Restarting an engine at the same version creates a fresh interface, and retired presentations leave the session registry. Pages distinguish startup, disabled state and startup failure, and failed interfaces offer a retry action. Shared interface services stay alive while another window or card uses the same package image. Closing a scene cancels its own requests; shared teardown waits for the final presentation. Pending cleanup remains visible until work has drained. Removing first disables the extension, then removes its package files when they are no longer in use. Removal retains extension user data, including agentic usage history.

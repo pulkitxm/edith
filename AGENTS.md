@@ -133,7 +133,9 @@ make dev-catalog                                   # serve and relaunch the dev 
 `make dev-catalog` signs a catalog with a worktree key, serves it on
 `127.0.0.1:47321` together with the production catalog, and relaunches the
 development build in the background with `EDITH_DEV_CATALOG` and
-`EDITH_DEV_CATALOG_KEY`. Local packages replace production entries with the
+`EDITH_DEV_CATALOG_KEY`. Wait for it to print `serving` before running `ed`:
+an `ed` call that finds no running build launches one without the catalog
+variables, and that build reads the production catalog. Local packages replace production entries with the
 same id; other packages still download from GitHub. Release builds ignore
 both variables. `make extension-sideload EXTENSION=<id>` remains for
 installing a package without relaunching.
