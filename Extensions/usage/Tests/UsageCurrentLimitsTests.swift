@@ -1,9 +1,46 @@
+import EdithExtensionAccounts
 import Foundation
 import Testing
 
 @testable import UsageExtension
 
 @Suite struct UsageCurrentLimitsTests {
+    @Test func offlineSnapshotsRespectRemovedRenamedLoggedOutAndDisabledAccounts() {
+        var account = ClaudeAccount(name: "Sample renamed", credential: "synthetic-token")
+        account.limitsProfileID = UUID()
+        let cachedAccount = ClaudeAccountLimits(
+            id: account.id, name: "Sample original",
+            limits: .init(provider: .claude, session: nil, week: .init(percent: 35, resetsAt: nil)),
+            refreshedAt: Date())
+        let removed = ClaudeAccountLimits(
+            id: UUID(), name: "Sample removed",
+            limits: .init(provider: .claude, session: nil, week: nil, error: "Sample rejection"),
+            refreshedAt: Date())
+        let cached = LimitsTopicSnapshot(
+            refreshedAt: Date(),
+            providers: [
+                .init(provider: .codex, session: nil, week: .init(percent: 21, resetsAt: nil))
+            ],
+            failure: removed.limits.error, claudeAccounts: [cachedAccount, removed])
+        let projected = LimitsCollector.offlineSnapshot(
+            cached, providers: [.claude], accounts: [account])
+        #expect(projected.claudeAccounts.map(\.name) == [account.name])
+        #expect(projected.claudeAccounts.first?.limits.week?.percent == 35)
+        #expect(projected.providers.isEmpty)
+        #expect(projected.failure == nil)
+        #expect(projected.refreshedAt == cached.refreshedAt)
+        account.isLoggedOut = true
+        #expect(
+            LimitsCollector.offlineSnapshot(cached, providers: [.claude], accounts: [account])
+                .claudeAccounts.isEmpty)
+        #expect(
+            LimitsCollector.offlineSnapshot(cached, providers: [.codex], accounts: [account])
+                .claudeAccounts.isEmpty)
+        #expect(
+            LimitsCollector.offlineSnapshot(cached, providers: [.claude], accounts: [])
+                .claudeAccounts.isEmpty)
+    }
+
     @Test @MainActor func failuresStayWithTheirAccountOrProviderAndDoNotRestoreHistory()
         async throws
     {
