@@ -154,17 +154,23 @@ final class MusicWorker {
         if let metadata = browserPresentation?.metadata { result.append(metadata) }
         if let track = external.current {
             let playback = external.playback
-            result.append(
-                .init(
-                    sourceID: "external." + track.app.rawValue, sourceTitle: track.app.displayName,
-                    trackKey: track.title + "\0" + track.artist, title: track.title,
-                    artist: track.artist,
-                    playing: track.isPlaying, elapsed: playback?.elapsed() ?? 0,
-                    duration: track.duration,
-                    volume: playback?.volume ?? 0.7, seekable: playback != nil,
-                    volumeAvailable: playback != nil,
-                    shuffle: playback?.canShuffle == true ? playback?.shuffling : nil,
-                    repeating: playback?.canRepeat == true ? playback?.repeating : nil))
+            let sourceID = "external." + track.app.rawValue
+            var value = MusicSurfacePlayback(
+                sourceID: sourceID, sourceTitle: track.app.displayName,
+                trackKey: track.title + "\0" + track.artist, title: track.title,
+                artist: track.artist,
+                playing: track.isPlaying, elapsed: playback?.elapsed() ?? 0,
+                duration: track.duration,
+                volume: playback?.volume ?? 0.7, seekable: playback != nil,
+                volumeAvailable: playback != nil,
+                shuffle: playback?.canShuffle == true ? playback?.shuffling : nil,
+                repeating: playback?.canRepeat == true ? playback?.repeating : nil)
+            if tile.shows("artwork"), let playback, playback.track.title == track.title,
+                playback.track.artist == track.artist, let url = playback.artworkURL
+            {
+                value.thumbnail = try? await streamingThumbnail(url)
+            }
+            result.append(value)
         }
         try Task.checkCancellation()
         guard !stopped, !isInertFixture else { throw ExtensionPeerError.unavailable }
