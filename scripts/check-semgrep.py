@@ -59,7 +59,7 @@ def main(arguments):
         with report_path.open("wb") as output:
             result = subprocess.run(
                 arguments + [
-                    "scan", "--error", "--json", "--config", "p/rust", "--config", "p/swift",
+                    "scan", "--error", "--json", "--timeout", "60", "--config", "p/rust", "--config", "p/swift",
                     "--config", "p/secrets", "--config", "p/github-actions", ".",
                 ],
                 cwd=root,

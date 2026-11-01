@@ -91,12 +91,17 @@ public final class HostMarketplace {
 
     public static func live(identity: HostIdentity) throws -> HostMarketplace {
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        let localCatalog = HostDevelopmentCatalog(
+            environment: ProcessInfo.processInfo.environment, development: identity.development)
         let installer: ExtensionPackageInstaller
         if identity.development {
             installer = ExtensionPackageInstaller(
                 store: store,
                 download: { url, count in
-                    let (temporary, response) = try await URLSession.shared.download(from: url)
+                    let source =
+                        localCatalog?.localURL(
+                            for: url, repository: MarketplaceConfiguration.repository) ?? url
+                    let (temporary, response) = try await URLSession.shared.download(from: source)
                     guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                         try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize == Int(count)
                     else {
@@ -134,7 +139,9 @@ public final class HostMarketplace {
         }
         return try HostMarketplace(
             identity: identity, entries: HostIndex.bundled(), store: store,
-            catalogClient: .live(cache: identity.root.appendingPathComponent("catalog.json")),
+            catalogClient: localCatalog?.client(
+                cache: identity.root.appendingPathComponent("development-catalog.json"))
+                ?? .live(cache: identity.root.appendingPathComponent("catalog.json")),
             installer: installer, sessions: sessions)
     }
 
@@ -471,8 +478,10 @@ public final class HostMarketplace {
         } catch MarketplaceError.packageCleanupPending {
             try? reloadInstalled()
             return fail(id, "The extension was downloaded. Package files are awaiting cleanup.")
-        } catch MarketplaceError.rateLimited {
-            return fail(id, MarketplaceError.rateLimited.errorDescription ?? "")
+        } catch let error as MarketplaceError
+            where error == .rateLimited || error == .incompatiblePackage
+        {
+            return fail(id, error.errorDescription ?? "")
         } catch {
             return fail(id, "The extension could not be downloaded. Try again.")
         }

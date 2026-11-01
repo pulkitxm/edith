@@ -77,12 +77,6 @@ run at once next to the installed Edith without touching it or each other.
 - Talk to a development build with its own CLI,
   `dist/Edith.app/Contents/MacOS/ed`. The `ed` on your `PATH` is the installed
   app's CLI and reaches the installed app.
-- Test an unpublished extension change with `make extension-sideload
-  EXTENSION=<id>`. It builds an ad-hoc signed development package and installs
-  it into this worktree's running development build through
-  `ed extensions sideload`, replacing the catalog version in that slot. Release
-  builds refuse sideloaded packages, and the package must match this build's
-  host ABI.
 - Test in the background. `./build.sh --background` launches the development
   build with `EDITH_BACKGROUND_TESTING=1`: it never activates, and its titled
   windows stay transparent and click-through, so `ed app reveal <section>`
@@ -107,6 +101,42 @@ run at once next to the installed Edith without touching it or each other.
 - Only `/Applications/Edith.app` runs as Edith. `./build.sh --release --install`
   is the only way to replace it; a Release build left in `dist/` is never opened
   and refuses to start there.
+
+## Extension development loop
+
+Develop and test extensions against this worktree's development build. Nothing
+in the loop needs GitHub or a merged pull request.
+
+1. Build the development app once: `./build.sh --no-open`.
+2. Run `make dev-extension EXTENSION=<id>`. It builds an ad-hoc signed
+   development package, sideloads it into this worktree's running development
+   build, relaunches that build in the background so only one copy of the
+   extension's code is loaded, and waits until the extension is active. It
+   prints the build and total seconds plus the extension's load timings. The
+   first build of an extension compiles its support libraries; later builds
+   take about ten seconds.
+3. Run `make dev-extension-watch EXTENSION=<id>` to repeat step 2 whenever the
+   extension's sources or the shared support sources change.
+4. Verify in the background with `ed extensions info <id> --json`,
+   `ed invoke <id> ...`, `ed app reveal <section>` and `ed app snapshot`, using
+   `dist/Edith.app/Contents/MacOS/ed`.
+
+Test marketplace flows (onboarding, install, update, remove and incompatible
+packages) with the local catalog:
+
+```sh
+bun scripts/dev-catalog.mjs add <id>...            # build into local/dev-catalog
+bun scripts/dev-catalog.mjs add <id> --host-abi edith-host-0   # an incompatible package
+make dev-catalog                                   # serve and relaunch the dev build
+```
+
+`make dev-catalog` signs a catalog with a worktree key, serves it on
+`127.0.0.1:47321` together with the production catalog, and relaunches the
+development build in the background with `EDITH_DEV_CATALOG` and
+`EDITH_DEV_CATALOG_KEY`. Local packages replace production entries with the
+same id; other packages still download from GitHub. Release builds ignore
+both variables. `make extension-sideload EXTENSION=<id>` remains for
+installing a package without relaunching.
 
 ## Make resource gate
 

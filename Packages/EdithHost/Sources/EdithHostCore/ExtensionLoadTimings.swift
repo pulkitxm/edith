@@ -108,5 +108,8 @@ public final class ExtensionLoadTimings {
         return Double(parts.seconds) * 1000 + Double(parts.attoseconds) / 1e15
     }
 
-    private static func rounded(_ value: Double) -> Double { (value * 10).rounded() / 10 }
+    private static func rounded(_ value: Double) -> NSDecimalNumber {
+        NSDecimalNumber(
+            string: String(format: "%.1f", value), locale: Locale(identifier: "en_US_POSIX"))
+    }
 }

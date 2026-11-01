@@ -223,6 +223,18 @@ extension-sideload:
 		bun scripts/build-extension-package.mjs $(EXTENSION) --development
 	dist/Edith.app/Contents/MacOS/ed extensions sideload dist/extensions/$(EXTENSION).zip
 
+.PHONY: dev-extension dev-extension-watch dev-catalog
+dev-extension:
+	@test -n "$(EXTENSION)" || { echo "usage: make dev-extension EXTENSION=<id>" >&2; exit 2; }
+	bun scripts/dev-extension.mjs $(EXTENSION)
+
+dev-extension-watch:
+	@test -n "$(EXTENSION)" || { echo "usage: make dev-extension-watch EXTENSION=<id>" >&2; exit 2; }
+	bun scripts/dev-extension.mjs $(EXTENSION) --watch
+
+dev-catalog:
+	bun scripts/dev-catalog.mjs serve --production --launch
+
 .PHONY: dev-extension-timings
 dev-extension-timings:
 	scripts/dev-extension-timings.sh $(or $(RUNS),3)
@@ -541,7 +553,7 @@ ci-trivy:
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
 	  --skip-dirs "**/.build" --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
-	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras .
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras --skip-dirs vendor --skip-dirs local .
 
 prepare-pdf-extract:
 	python3 -B apps/companion/prepare-pdf-extract.py

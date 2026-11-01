@@ -13,14 +13,22 @@ import Testing
         timings.record(id: "clipboard", role: "app", .presentation, elapsed: .milliseconds(8))
         timings.record(id: "clipboard", role: "app", .firstFrame, elapsed: .milliseconds(30))
         let json = timings.json(id: "clipboard")
-        let bundles = try #require(json["bundles"] as? [String: Double])
-        let app = try #require(json["app"] as? [String: Double])
+        let bundles = try #require(json["bundles"] as? [String: NSNumber]).mapValues(\.doubleValue)
+        let app = try #require(json["app"] as? [String: NSNumber]).mapValues(\.doubleValue)
         #expect(bundles["verifyMs"] == 12)
         #expect(app["startMs"] == 40)
         #expect(app["presentationMs"] == 8)
         #expect(app["firstFrameMs"] == 30)
         #expect((app["readyAfterLaunchMs"] ?? 0) >= 2000)
         #expect((app["presentedAfterLaunchMs"] ?? 0) >= 2000)
+    }
+
+    @Test func serializesOneDecimalPlace() throws {
+        let timings = ExtensionLoadTimings(launch: Date())
+        timings.record(id: "docs", role: "app", .start, elapsed: .microseconds(17_650_400))
+        let data = try JSONSerialization.data(withJSONObject: timings.json(id: "docs"))
+        let text = try #require(String(data: data, encoding: .utf8))
+        #expect(text.contains("\"startMs\":17650.4"))
     }
 
     @Test func keepsFirstPresentationOffsetAndResetsOnRestart() throws {
