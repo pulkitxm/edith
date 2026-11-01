@@ -1,6 +1,6 @@
 @testable import EdithExtensionFiles
 
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 import Testing
 

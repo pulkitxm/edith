@@ -1,5 +1,6 @@
 import Testing
 
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite struct CompactDurationTests {

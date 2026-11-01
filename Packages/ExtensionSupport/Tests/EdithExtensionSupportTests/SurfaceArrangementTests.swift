@@ -1,3 +1,4 @@
+import EdithExtensionCore
 import EdithExtensionSupport
 import Testing
 

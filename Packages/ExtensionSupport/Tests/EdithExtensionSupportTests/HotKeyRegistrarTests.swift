@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import Foundation
 import Testing
 
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite(.serialized) @MainActor struct HotKeyRegistrarTests {

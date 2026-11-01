@@ -6,6 +6,6 @@ public enum ExtensionWindowRequest {
     public static func post() {
         NotificationCenter.default.post(
             name: notification, object: nil,
-            userInfo: ["owner": ExtensionEnvironment["EDITH_EXTENSION_ID"] ?? ""])
+            userInfo: ["owner": ExtensionScope.installed["EDITH_EXTENSION_ID"] ?? ""])
     }
 }

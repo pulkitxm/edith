@@ -1,5 +1,5 @@
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 import Testing
 

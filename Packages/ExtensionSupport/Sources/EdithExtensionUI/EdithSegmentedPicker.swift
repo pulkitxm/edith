@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public struct EdithSegmentedPicker<Selection: Hashable>: View {
@@ -8,7 +8,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
     private let label: (Selection) -> String
     private let shortcut: (Selection) -> KeyboardShortcut?
 
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults())
     private var themeName = "accent"
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

@@ -2,7 +2,7 @@ import Foundation
 
 public enum CLIToolEnvironment {
     public static func sanitized(
-        processEnvironment: [String: String] = ExtensionEnvironment.values,
+        processEnvironment: [String: String] = ExtensionScope.installed.environment(),
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> [String: String] {
@@ -24,7 +24,7 @@ public enum CLIToolEnvironment {
 
     public static func executable(
         named name: String,
-        processEnvironment: [String: String] = ExtensionEnvironment.values,
+        processEnvironment: [String: String] = ExtensionScope.installed.environment(),
         shellEnvironment: [String: String]? = UserShellEnvironment.shared.current(),
         fileManager: FileManager = .default
     ) -> URL? {
@@ -81,7 +81,7 @@ public enum CLIToolEnvironment {
             home = fileManager.homeDirectoryForCurrentUser
         }
         var directories = [
-            ExtensionData.root.appendingPathComponent("bin").path,
+            ExtensionScope.installed.dataRoot().appendingPathComponent("bin").path,
             home.appendingPathComponent(".local/bin").path,
             home.appendingPathComponent(".cargo/bin").path,
             home.appendingPathComponent(".nvm/current/bin").path,

@@ -1,6 +1,6 @@
 import ArgumentParser
 import EdithExtensionCommands
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 import Testing
 

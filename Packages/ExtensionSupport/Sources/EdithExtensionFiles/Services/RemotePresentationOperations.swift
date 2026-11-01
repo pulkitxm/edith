@@ -1,5 +1,5 @@
 import CryptoKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 
 public enum FilePresentationAction: Equatable, Sendable {

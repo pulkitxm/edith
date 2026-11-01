@@ -1,5 +1,5 @@
 import Charts
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 struct SurfaceChartContent: View {

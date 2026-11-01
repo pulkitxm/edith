@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 
 @MainActor
@@ -90,7 +90,7 @@ extension FinderBridgeTransport {
         guard handle.count <= UInt64(maximumBytes), !handle.name.contains("/"),
             !handle.name.contains("\\"), !handle.name.utf8.contains(0)
         else { throw MachineUIError.invalidRequest }
-        let directory = ExtensionData.root.appendingPathComponent("ui-previews")
+        let directory = ExtensionScope.installed.dataRoot().appendingPathComponent("ui-previews")
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let destination = directory.appendingPathComponent(handle.name)
@@ -148,8 +148,9 @@ extension FinderBridgeTransport {
                 { $0 + min($1.count, UInt64(RemoteFileOperationExecution.cacheLimitBytes) + 1) })
                 == handle.count
         else { throw MachineUIError.invalidRequest }
-        let root = ExtensionData.root.appendingPathComponent("ui-previews").appendingPathComponent(
-            UUID().uuidString)
+        let root = ExtensionScope.installed.dataRoot().appendingPathComponent("ui-previews")
+            .appendingPathComponent(
+                UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let close = MachineDirectoryExportRequest(
             operation: .close, machineID: machineID, id: handle.id)

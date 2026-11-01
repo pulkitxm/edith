@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @MainActor @Suite struct SurfacePrivacyStateTests {

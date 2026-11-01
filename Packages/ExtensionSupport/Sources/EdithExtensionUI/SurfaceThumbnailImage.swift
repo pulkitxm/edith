@@ -1,5 +1,5 @@
 import CoreGraphics
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 struct SurfaceThumbnailImage: View {

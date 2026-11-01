@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public struct HotKeyRecorderControl: View {
@@ -29,7 +29,8 @@ public struct HotKeyRecorderControl: View {
         .onDisappear { if recording { stop() } }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: UserDefaults.didChangeNotification, object: SharedDefaults.store)
+                for: UserDefaults.didChangeNotification, object: ExtensionScope.installed.defaults()
+            )
         ) { _ in
             if !recording { label = currentLabel }
         }
@@ -37,7 +38,7 @@ public struct HotKeyRecorderControl: View {
     }
 
     private var currentLabel: String {
-        SharedDefaults.store.string(forKey: keyPrefix + "Label") ?? defaultLabel
+        ExtensionScope.installed.defaults().string(forKey: keyPrefix + "Label") ?? defaultLabel
     }
 
     private func start() {
@@ -79,9 +80,9 @@ public struct HotKeyRecorderControl: View {
         let label = HotKeyGlyph.label(
             modifiers: symbols, keyCode: Int(event.keyCode),
             characters: event.charactersIgnoringModifiers)
-        SharedDefaults.store.set(Int(event.keyCode), forKey: keyPrefix + "Code")
-        SharedDefaults.store.set(mods, forKey: keyPrefix + "Mods")
-        SharedDefaults.store.set(label, forKey: keyPrefix + "Label")
+        ExtensionScope.installed.defaults().set(Int(event.keyCode), forKey: keyPrefix + "Code")
+        ExtensionScope.installed.defaults().set(mods, forKey: keyPrefix + "Mods")
+        ExtensionScope.installed.defaults().set(label, forKey: keyPrefix + "Label")
         IPC.post(IPC.Name.settingsChanged)
         stop()
     }

@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 
 public enum FileEntryKind: String, Codable, Equatable, Sendable {

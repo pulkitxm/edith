@@ -11,8 +11,8 @@ public struct SurfaceHostContext {
     }
 
     public static var current: Self? {
-        guard let suite = ExtensionEnvironment.values["EDITH_SURFACE_DEFAULTS_SUITE"],
-            let defaults = SharedDefaults.applicationStore(identifier: suite),
+        guard let suite = ExtensionScope.installed["EDITH_SURFACE_DEFAULTS_SUITE"],
+            let defaults = ExtensionDefaults.applicationStore(identifier: suite),
             let state = ExtensionSharedState.current
         else { return nil }
         return Self(defaults: defaults, sharedState: state)

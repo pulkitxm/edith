@@ -6,10 +6,10 @@ public enum ExtensionCommandOwnership {
         "edith.extension.registerProcessGroup")
     public static let releaseNotification = Notification.Name("edith.extension.releaseProcessGroup")
     public static var isWorker: Bool {
-        ExtensionEnvironment["EDITH_EXTENSION_WORKER"] == "1"
+        ExtensionScope.installed["EDITH_EXTENSION_WORKER"] == "1"
     }
 
-    private static var owner: String { ExtensionEnvironment["EDITH_EXTENSION_ID"] ?? "" }
+    private static var owner: String { ExtensionScope.installed["EDITH_EXTENSION_ID"] ?? "" }
 
     public static func captureGroup(pid: Int32) throws -> ExtensionOwnedProcessGroup {
         guard let birth = ExtensionProcessIdentity.read(pid),
@@ -277,7 +277,7 @@ public struct ExtensionCommandSpecification: Codable, Sendable {
             throw CocoaError(.fileReadNoPermission)
         }
         let arguments = ([command.executable] + command.arguments).map { strdup($0) }
-        let environment = ExtensionEnvironment.childEnvironment(
+        let environment = ExtensionScope.childEnvironment(
             command.environment, executable: command.executable
         ).map { strdup($0.key + "=" + $0.value) }
         defer { for item in arguments + environment { free(item) } }

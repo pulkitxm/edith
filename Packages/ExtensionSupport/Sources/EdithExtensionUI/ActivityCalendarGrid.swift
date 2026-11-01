@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public struct ActivityCalendarGrid<Detail: View>: View {

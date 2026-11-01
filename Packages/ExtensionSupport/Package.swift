@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(
             name: "EdithExtensionAccounts", type: .static, targets: ["EdithExtensionAccounts"]),
+        .library(name: "EdithExtensionCore", type: .static, targets: ["EdithExtensionCore"]),
         .library(name: "EdithExtensionSupport", type: .static, targets: ["EdithExtensionSupport"]),
         .library(name: "EdithExtensionUI", type: .static, targets: ["EdithExtensionUI"]),
         .library(
@@ -28,31 +29,36 @@ let package = Package(
         .target(
             name: "EdithExtensionArchive",
             dependencies: [
-                "EdithExtensionUI", .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                "EdithExtensionCore", "EdithExtensionUI",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "EdithExtensionArchiveTests", dependencies: ["EdithExtensionArchive"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "EdithExtensionSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "EdithExtensionCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "EdithExtensionSupport", dependencies: ["EdithExtensionCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionCommands",
             dependencies: [
-                "EdithExtensionSupport", "EdithExtensionUI",
+                "EdithExtensionCore", "EdithExtensionUI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "EdithExtensionCommandsTests", dependencies: ["EdithExtensionCommands"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "EdithExtensionUI", dependencies: ["EdithExtensionSupport"],
+            name: "EdithExtensionUI", dependencies: ["EdithExtensionCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "EdithExtensionDocuments", dependencies: ["EdithExtensionUI"],
+            name: "EdithExtensionDocuments",
+            dependencies: ["EdithExtensionCore", "EdithExtensionUI"],
             resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionFiles",
-            dependencies: ["EdithExtensionUI", "EdithExtensionDocuments"],
+            dependencies: ["EdithExtensionCore", "EdithExtensionUI", "EdithExtensionDocuments"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "EdithExtensionFilesTests", dependencies: ["EdithExtensionFiles"],
@@ -61,7 +67,8 @@ let package = Package(
             name: "EdithExtensionDocumentsTests", dependencies: ["EdithExtensionDocuments"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "EdithExtensionSupportTests", dependencies: ["EdithExtensionSupport"],
+            name: "EdithExtensionSupportTests",
+            dependencies: ["EdithExtensionCore", "EdithExtensionSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "EdithExtensionUITests", dependencies: ["EdithExtensionUI"],

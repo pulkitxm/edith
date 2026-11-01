@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 
 public enum MachineFileOperation: String, CaseIterable, Equatable, Sendable {

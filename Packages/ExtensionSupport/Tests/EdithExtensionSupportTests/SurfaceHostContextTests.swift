@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite @MainActor struct SurfaceHostContextTests {

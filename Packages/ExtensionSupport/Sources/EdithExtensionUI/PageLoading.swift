@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public enum PageSkeletonLayout: CaseIterable, Sendable {

@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import EdithExtensionUI
 import Foundation
 import Observation

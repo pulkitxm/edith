@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import AppKit
 
 public func applyAppearance(_ value: String) {
