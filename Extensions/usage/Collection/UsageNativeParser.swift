@@ -16,6 +16,7 @@ final class UsageNativeParser {
     private var fallbackTimestamp = Date()
     private var hadModern = false
     private let source: String
+    private let originalOffsets: Bool
 
     private struct ResumeState: Codable {
         var session: String
@@ -45,7 +46,10 @@ final class UsageNativeParser {
         childTurn = state.childTurn; hadModern = state.hadModern
     }
 
-    init(source: String, model: String = "gpt-5", tier: String? = nil) {
+    init(
+        source: String, model: String = "gpt-5", tier: String? = nil, originalOffsets: Bool = false
+    ) {
+        self.originalOffsets = originalOffsets
         self.source = source;
         self.model = source == "codex" || model != "gpt-5" ? model : "unknown"; self.tier = tier
     }
@@ -197,7 +201,10 @@ final class UsageNativeParser {
         let event: UsageNativeEvent?
         switch source {
         case "cli", "cowork", "claude-cloud": event = try anthropic(row)
-        case "codex": event = try codex(row, offset: offset, end: end)
+        case "codex":
+            let receiptOffset = originalOffsets ? row["_receiptOffset"] as? Int : nil
+            event = try codex(
+                row, offset: receiptOffset.flatMap { $0 >= 0 ? $0 : nil } ?? offset, end: end)
         case "opencode": event = try openCode(row)
         case "cursor": event = try cursor(row)
         default: event = try generic(row)

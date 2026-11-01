@@ -205,6 +205,59 @@ import Testing
         await service.shutdown()
     }
 
+    @Test func compressedLargeReceiptsReachTheNativeCollectorAndRejectInvalidExpansion()
+        async throws
+    {
+        let directory = temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let machine = sampleMachine()
+        var value = try UsageNativeJSON.object(fixture(machine))
+        var files = value["files"] as! [[String: Any]]
+        let original = Data(base64Encoded: files[0]["data"] as! String)!
+        var journal = try UsageNativeJSON.object(original)
+        var message = journal["message"] as! [String: Any]
+        message["content"] = String(repeating: "x", count: 9_000_000)
+        journal["message"] = message
+        var raw = try object(journal); raw.append(10)
+        files[0]["data"] = try (raw as NSData).compressed(using: .zlib).base64EncodedString()
+        files[0]["compression"] = "deflate"; files[0]["byteCount"] = raw.count
+        value["files"] = files
+        let snapshot = try object(value)
+        #expect(
+            try UsageReceiptSnapshot.decode(snapshot, machineID: machine.id).files[0].data == raw)
+        let transport = Transport(data: snapshot, machine: machine)
+        let service = service(directory, transport: transport)
+        for _ in 0..<2 {
+            let receipt = try JSONDecoder().decode(
+                UsageMachinesPeer.Receipt.self,
+                from: await service.execute(
+                    "usage.machines.project", payload: request(machine, snapshot)))
+            let chunk = try JSONDecoder().decode(
+                UsageMachinesPeer.Chunk.self,
+                from: await service.execute(
+                    "usage.machines.result",
+                    payload: object([
+                        "collectionID": receipt.collectionID.uuidString, "offset": 0,
+                        "maximumBytes": 262_144,
+                    ])))
+            #expect(chunk.finished)
+            let totals = try UsageNativeJSON.object(chunk.data)["totals"] as! [String: Any]
+            #expect(totals["tokens"] as? Double == 12)
+        }
+        await service.shutdown()
+        for size in [1, raw.count - 1, raw.count + 1, 134_217_729] {
+            files[0]["byteCount"] = size; value["files"] = files
+            #expect(throws: ExtensionPeerError.self) {
+                _ = try UsageReceiptSnapshot.decode(object(value), machineID: machine.id)
+            }
+        }
+        files[0]["data"] = Data("invalid compressed receipt".utf8).base64EncodedString()
+        files[0]["byteCount"] = raw.count; value["files"] = files
+        #expect(throws: ExtensionPeerError.self) {
+            _ = try UsageReceiptSnapshot.decode(object(value), machineID: machine.id)
+        }
+    }
+
     @Test func receiptAdmissionRejectsTraversalCredentialsUnknownFieldsAndMachineSubstitution()
         throws
     {

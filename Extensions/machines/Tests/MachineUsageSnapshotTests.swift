@@ -137,6 +137,53 @@ import Testing
         #expect(throws: ExtensionPeerError.self) { try store.insert(bytes, machine: machine) }
     }
 
+    @Test func pythonProjectsLargeJournalsAndCompressesOtherReceiptsWithoutLosingUsage() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = try #require(
+            MachineResources.url(forResource: "usage-snapshot", withExtension: "py"))
+        let setup = """
+            import base64,json,os,pathlib,subprocess,sys,zlib
+            home=pathlib.Path(sys.argv[1]); directory=home/'.claude/projects/sample'; directory.mkdir(parents=True)
+            receipt=directory/'session.jsonl'
+            with receipt.open('w') as stream:
+                stream.write(json.dumps({'type':'assistant','message':{'id':'first','model':'sample','usage':{'input_tokens':10}}})+'\\n')
+                row=json.dumps({'type':'user','message':{'content':[{'type':'tool_result','content':'x'*8192}]}})+'\\n'
+                for _ in range(17000): stream.write(row)
+                offset=stream.tell()
+                stream.write(json.dumps({'type':'assistant','message':{'id':'last','model':'sample','usage':{'output_tokens':2}}})+'\\n')
+            other=home/'.pi/agent/sessions'; other.mkdir(parents=True)
+            (other/'large.jsonl').write_text(json.dumps({'usage':{'input':7},'content':'x'*9000000})+'\\n')
+            result=subprocess.run([sys.executable,sys.argv[2]],env={**os.environ,'HOME':str(home)},capture_output=True)
+            if result.returncode: sys.stderr.buffer.write(result.stderr); sys.exit(result.returncode)
+            snapshot=json.loads(result.stdout)
+            for entry in snapshot['files']:
+                data=base64.b64decode(entry['data'])
+                if entry.get('compression')=='deflate': data=zlib.decompress(data,-15)
+                if entry['path'].endswith('session.jsonl'):
+                    rows=[json.loads(line) for line in data.splitlines()]
+                    assert rows[0]['message']['usage']['input_tokens']==10
+                    assert rows[-1]['message']['usage']['output_tokens']==2
+                    assert rows[-1]['_receiptOffset']==offset
+                    assert len(data)<receipt.stat().st_size//100
+                else:
+                    assert entry['compression']=='deflate'
+                    assert json.loads(data)['usage']['input']==7
+            sys.stdout.buffer.write(result.stdout)
+            """
+        let output = Pipe(); let errors = Pipe()
+        let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = ["-c", setup, root.path, script.path]
+        process.standardOutput = output; process.standardError = errors
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let error = errors.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0, "\(String(decoding: error, as: UTF8.self))")
+        try MachineUsageReceiptSnapshot.validate(data)
+    }
+
     @Test func pythonSnapshotsSQLiteWALAndSkipsSecretsSymlinksAndSpecialFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

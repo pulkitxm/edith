@@ -13,9 +13,11 @@ import stat
 import sys
 import tempfile
 import time
+import zlib
 
-MAX_FILE = 8388608
-MAX_TOTAL = 41943040
+MAX_FILE = 134217728
+MAX_TOTAL = 536870912
+MAX_TRANSFER = 41943040
 MAX_COUNT = 10000
 windows = os.name == 'nt' or os.environ.get('EDITH_USAGE_SNAPSHOT_WINDOWS') == '1'
 home = pathlib.Path(os.environ.get('EDITH_USAGE_SNAPSHOT_HOME') or os.environ['HOME']).absolute()
@@ -106,10 +108,68 @@ def progress(message):
     print(message, file=sys.stderr, flush=True)
 
 
+def journal_metadata(stream, provider):
+    output = bytearray()
+    while True:
+        offset = stream.tell()
+        line = stream.readline(33554433)
+        if not line:
+            break
+        if len(line) > 33554432:
+            while line and not line.endswith(b'\n'):
+                line = stream.readline(33554433)
+            continue
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if not isinstance(row, dict):
+            continue
+        if provider == 'cli':
+            wrapper = row.get('data')
+            nested = wrapper.get('message') if isinstance(wrapper, dict) else None
+            if isinstance(nested, dict) and 'message' in nested:
+                row = nested
+        keys = ['type', 'timestamp', 'cwd', 'sessionId', 'sessionID', 'session_id', 'sid',
+                'title', 'aiTitle', 'requestId', 'isSidechain', 'isApiErrorMessage', 'costUSD']
+        projected = {key: row[key] for key in keys if key in row}
+        if provider == 'cli':
+            message = row.get('message')
+            if isinstance(message, dict):
+                projected['message'] = {key: message[key] for key in ['id', 'model', 'usage'] if key in message}
+                if row.get('type') == 'user':
+                    content = message.get('content')
+                    if isinstance(content, list):
+                        content = next((part.get('text') for part in content if isinstance(part, dict) and part.get('type') == 'text'), None)
+                    if isinstance(content, str):
+                        projected['message']['content'] = content.strip()[:80]
+        else:
+            payload = row.get('payload')
+            if isinstance(payload, dict):
+                keys = ['id', 'cwd', 'forked_from_id', 'model', 'service_tier', 'type',
+                        'usage', 'response_id', 'thread_id', 'model_name', 'costUSD', 'cost_usd']
+                selected = {key: payload[key] for key in keys if key in payload}
+                source = payload.get('source')
+                if isinstance(source, dict) and 'subagent' in source:
+                    selected['source'] = {'subagent': True}
+                for key, fields in [('info', ['total_token_usage', 'last_token_usage']), ('settings', ['service_tier'])]:
+                    if isinstance(payload.get(key), dict):
+                        selected[key] = {field: payload[key][field] for field in fields if field in payload[key]}
+                if payload.get('type') == 'user_message' and isinstance(payload.get('message'), str):
+                    selected['message'] = payload['message'].strip()[:80]
+                projected['payload'] = selected
+        projected['_receiptOffset'] = offset
+        output.extend(json.dumps(projected, separators=(',', ':'), ensure_ascii=False).encode() + b'\n')
+        if len(output) > MAX_FILE:
+            raise ValueError('Projected receipt exceeds the 128 MiB per-file limit')
+    return bytes(output)
+
+
 progress('Discovering supported receipt sources')
 files = []
 seen = set()
 total = 0
+transferred = 0
 inspected = 0
 workdirs = set()
 
@@ -118,14 +178,15 @@ with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(p
         os.chmod(temporary, 0o700)
 
     def add(path):
-        global total
+        global total, transferred
         relative = path.relative_to(home).as_posix()
         if relative in seen or not regular(path) or not admitted(path):
             return
         seen.add(relative)
         before = path.lstat()
-        if before.st_size > MAX_FILE:
-            raise ValueError('A receipt exceeds the 8 MiB per-file limit')
+        journal = path.suffix.lower() == '.jsonl' and (relative.startswith(('.claude/projects/', '.codex/sessions/', '.codex/archived_sessions/')) or 'local-agent-mode-sessions/' in relative)
+        if before.st_size > (2147483648 if journal else MAX_FILE):
+            raise ValueError('A receipt exceeds the 128 MiB per-file limit')
         if path.suffix.lower() in {'.db', '.sqlite'}:
             backup = None if windows else pathlib.Path(temporary) / 'snapshot.db'
             with contextlib.closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=10)) as source:
@@ -157,36 +218,48 @@ with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(p
                 opened = os.fstat(stream.fileno())
                 if not stat.S_ISREG(opened.st_mode) or opened.st_ino != before.st_ino or opened.st_dev != before.st_dev:
                     raise ValueError('Receipt changed while opening')
-                data = stream.read(MAX_FILE + 1)
+                data = journal_metadata(stream, 'codex' if relative.startswith('.codex/') else 'cli') if journal else stream.read(MAX_FILE + 1)
                 after = os.fstat(stream.fileno())
                 if after.st_size != opened.st_size or after.st_mtime_ns != opened.st_mtime_ns:
                     raise ValueError('Receipt changed during snapshot, retry collection')
         if len(data) > MAX_FILE or total + len(data) > MAX_TOTAL or len(files) >= MAX_COUNT:
             raise ValueError('Receipt snapshot exceeds its bounded capacity')
         total += len(data)
+        entry = {'path': relative, 'modifiedAt': before.st_mtime}
+        if len(data) > 65536:
+            compressor = zlib.compressobj(level=6, wbits=-15)
+            encoded = compressor.compress(data) + compressor.flush()
+            entry.update(compression='deflate', byteCount=len(data))
+        else:
+            encoded = data
+        transferred += len(encoded)
+        if transferred > MAX_TRANSFER:
+            raise ValueError('Compressed receipt snapshot exceeds the 40 MiB transfer limit')
+        entry['data'] = base64.b64encode(encoded).decode('ascii')
         if path.suffix.lower() in {'.json', '.jsonl'}:
             try:
-                records = [json.loads(data)] if path.suffix.lower() == '.json' else [json.loads(line) for line in data.splitlines() if line.strip()]
-                stack = records[:]
-                nodes = 0
-                while stack:
-                    record = stack.pop()
-                    nodes += 1
-                    if nodes > 100000:
-                        raise ValueError('Receipt context exceeds its bounded capacity')
-                    if isinstance(record, dict):
-                        for key in ['cwd', 'directory', 'projectPath']:
-                            cwd = record.get(key)
-                            if isinstance(cwd, str) and (cwd.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', cwd)) and len(cwd.encode()) <= 4096 and not any(ord(char) < 32 for char in cwd):
-                                workdirs.add(cwd)
-                                if len(workdirs) > MAX_COUNT:
-                                    raise ValueError('Receipt projects exceed their bounded capacity')
-                        stack.extend(record.values())
-                    elif isinstance(record, list):
-                        stack.extend(record)
+                records = [json.loads(data)] if path.suffix.lower() == '.json' else (json.loads(line) for line in data.splitlines() if line.strip())
+                for record in records:
+                    stack = [record]
+                    nodes = 0
+                    while stack:
+                        record = stack.pop()
+                        nodes += 1
+                        if nodes > 100000:
+                            raise ValueError('Receipt context exceeds its bounded capacity')
+                        if isinstance(record, dict):
+                            for key in ['cwd', 'directory', 'projectPath']:
+                                cwd = record.get(key)
+                                if isinstance(cwd, str) and (cwd.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', cwd)) and len(cwd.encode()) <= 4096 and not any(ord(char) < 32 for char in cwd):
+                                    workdirs.add(cwd)
+                                    if len(workdirs) > MAX_COUNT:
+                                        raise ValueError('Receipt projects exceed their bounded capacity')
+                            stack.extend(record.values())
+                        elif isinstance(record, list):
+                            stack.extend(record)
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
-        files.append({'path': relative, 'modifiedAt': before.st_mtime, 'data': base64.b64encode(data).decode('ascii')})
+        files.append(entry)
 
     for relative in roots:
         root = home / relative

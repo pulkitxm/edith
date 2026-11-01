@@ -1,5 +1,6 @@
 import Darwin
 import EdithExtensionSupport
+import Compression
 import Foundation
 
 struct UsageReceiptSnapshot: Sendable {
@@ -37,16 +38,24 @@ struct UsageReceiptSnapshot: Sendable {
         try context.validate()
         var paths: Set<String> = []
         var bytes = 0
+        var transferred = 0
         var files: [File] = []
         for file in rawFiles {
             try Task.checkCancellation()
-            guard Set(file.keys) == ["path", "modifiedAt", "data"],
+            guard
+                Set(file.keys) == ["path", "modifiedAt", "data"]
+                    || Set(file.keys) == [
+                        "path", "modifiedAt", "data", "compression", "byteCount",
+                    ],
                 let path = file["path"] as? String, allowed(path), paths.insert(path).inserted,
                 let modified = file["modifiedAt"] as? Double, modified.isFinite,
                 modified >= 0, modified <= 253_402_300_799,
-                let encoded = file["data"] as? String, encoded.utf8.count <= 11_184_812,
-                let payload = Data(base64Encoded: encoded), payload.count <= 8_388_608
+                let encoded = file["data"] as? String, encoded.utf8.count <= 55_924_056,
+                let encodedData = Data(base64Encoded: encoded)
             else { throw ExtensionPeerError.invalidRequest }
+            let payload = try decodedPayload(encodedData, file: file)
+            transferred += encodedData.count
+            guard transferred <= 41_943_040 else { throw ExtensionPeerError.invalidRequest }
             if path == ".codex/config.toml" {
                 guard let text = String(data: payload, encoding: .utf8),
                     ["fast", "flex", "default", "auto", "priority"].contains(where: {
@@ -55,7 +64,7 @@ struct UsageReceiptSnapshot: Sendable {
                 else { throw ExtensionPeerError.invalidRequest }
             }
             bytes += payload.count
-            guard bytes <= 41_943_040 else { throw ExtensionPeerError.invalidRequest }
+            guard bytes <= 536_870_912 else { throw ExtensionPeerError.invalidRequest }
             files.append(
                 File(path: path, modifiedAt: Date(timeIntervalSince1970: modified), data: payload))
         }
@@ -95,6 +104,35 @@ struct UsageReceiptSnapshot: Sendable {
                 [.modificationDate: file.modifiedAt], ofItemAtPath: destination.path)
         }
         try context.validateStagedHome(home)
+    }
+
+    private static func decodedPayload(_ data: Data, file: [String: Any]) throws -> Data {
+        guard file["compression"] != nil else {
+            guard data.count <= 8_388_608 else { throw ExtensionPeerError.invalidRequest }
+            return data
+        }
+        let header = try JSONDecoder().decode(
+            CompressionHeader.self, from: JSONSerialization.data(withJSONObject: file))
+        guard header.compression == "deflate", header.byteCount > 0,
+            header.byteCount <= 134_217_728, !data.isEmpty
+        else { throw ExtensionPeerError.invalidRequest }
+        var result = Data(count: header.byteCount + 1)
+        let count = result.withUnsafeMutableBytes { destination in
+            data.withUnsafeBytes { source in
+                compression_decode_buffer(
+                    destination.bindMemory(to: UInt8.self).baseAddress!, destination.count,
+                    source.bindMemory(to: UInt8.self).baseAddress!, source.count, nil,
+                    COMPRESSION_ZLIB)
+            }
+        }
+        guard count == header.byteCount else { throw ExtensionPeerError.invalidRequest }
+        result.count = count
+        return result
+    }
+
+    private struct CompressionHeader: Decodable {
+        let compression: String
+        let byteCount: Int
     }
 
     static func allowed(_ path: String) -> Bool {
