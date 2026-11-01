@@ -33,7 +33,8 @@ public final class GhosttyTerminalView: NSView {
     var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var pendingExitCode: Int32?
-    private var drawScheduled = false
+    private(set) var drawScheduled = false
+    private var appliedPixelSize: CGSize?
     private(set) var renderingActive = true
     private(set) var secureInputRequested = false
     private var hostApplicationActive: Bool?
@@ -209,6 +210,7 @@ public final class GhosttyTerminalView: NSView {
             self.themeConfig = nil
         }
         externalIO = nil
+        appliedPixelSize = nil
         TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
         temporaryDropFiles.removeAll()
     }
@@ -229,6 +231,7 @@ public final class GhosttyTerminalView: NSView {
         }
         syncFocus()
         applyPresentationState()
+        scheduleDraw()
     }
 
     private func startIfNeeded() {
@@ -300,13 +303,18 @@ public final class GhosttyTerminalView: NSView {
         _ = ghostty_config_get(config, &configuredMouseReporting, key, UInt(key.utf8.count))
     }
 
+    private var shouldDrawSurface: Bool {
+        !closed && surface != nil && renderingActive && !isHiddenOrHasHiddenAncestor
+            && window != nil
+    }
+
     func scheduleDraw() {
-        guard !drawScheduled else { return }
+        guard shouldDrawSurface, !drawScheduled else { return }
         drawScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.drawScheduled = false
-            guard let surface = self.surface, self.window != nil else { return }
+            guard self.shouldDrawSurface, let surface = self.surface else { return }
             ghostty_surface_draw(surface)
         }
     }
@@ -369,7 +377,11 @@ public final class GhosttyTerminalView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         let width = UInt32(max(1, bounds.width * scale))
         let height = UInt32(max(1, bounds.height * scale))
+        let size = CGSize(width: Int(width), height: Int(height))
+        guard appliedPixelSize != size else { return }
+        appliedPixelSize = size
         ghostty_surface_set_size(surface, width, height)
+        scheduleDraw()
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -401,6 +413,7 @@ public final class GhosttyTerminalView: NSView {
     public override func viewDidUnhide() {
         super.viewDidUnhide()
         applyPresentationState()
+        scheduleDraw()
     }
 
     public func setRenderingActive(_ active: Bool) {
@@ -413,6 +426,7 @@ public final class GhosttyTerminalView: NSView {
         }
         syncFocus()
         applyPresentationState()
+        scheduleDraw()
     }
 
     private func observeWindow(_ window: NSWindow) {
@@ -541,7 +555,6 @@ public final class GhosttyTerminalView: NSView {
         super.layout()
         startIfNeeded()
         applySize()
-        scheduleDraw()
         linkHoverView.frame = bounds
     }
 
