@@ -83,6 +83,17 @@ run at once next to the installed Edith without touching it or each other.
   `ed extensions sideload`, replacing the catalog version in that slot. Release
   builds refuse sideloaded packages, and the package must match this build's
   host ABI.
+- Test in the background. `./build.sh --background` launches the development
+  build with `EDITH_BACKGROUND_TESTING=1`: it never activates, and its titled
+  windows stay transparent and click-through, so `ed app reveal <section>`
+  opens pages without taking focus from the person using the Mac. Capture
+  them with `ed app snapshot`. Never `open` the bundle without `-g`.
+- `ed extensions ls --json` reports each extension's `timings` per role:
+  `verifyMs`, `startMs`, `presentationMs`, `firstFrameMs`, and when it became
+  ready (`readyAfterLaunchMs`) and first drew (`presentedAfterLaunchMs`).
+  `make dev-extension-timings RUNS=3` relaunches this worktree's development
+  build in the background and prints the median per extension. Compare
+  against `docs/extension-performance.md` before and after a loading change.
 - The app owns the core services and extension engines in process. Development builds never
   register login items or the lid-awake daemon, so never register or restart the
   production labels (`com.pulkit.edith.agent`, `com.pulkit.edith.helper.v2`,
