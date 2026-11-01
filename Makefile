@@ -553,7 +553,7 @@ ci-trivy:
 	trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
 	  --skip-dirs "**/.build" --skip-dirs build --skip-dirs dist \
 	  --skip-dirs node_modules --skip-dirs apps/promo-video/node_modules --skip-dirs apps/companion/target \
-	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras .
+	  --skip-dirs .wiki-build --skip-dirs .wiki-clone --skip-dirs extras --skip-dirs vendor --skip-dirs local .
 
 prepare-pdf-extract:
 	python3 -B apps/companion/prepare-pdf-extract.py
