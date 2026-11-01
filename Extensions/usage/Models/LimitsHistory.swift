@@ -25,6 +25,8 @@ public struct LimitsHistory {
         public var hasUnassignedHistory = false
     }
 
+    static let accountSelectionKey = "limitsHistoryAccountID"
+
     public static var url: URL { Repo.limitsJSONL }
 
     private let fileURL: URL
@@ -142,7 +144,7 @@ public struct LimitsHistory {
     private static func key(for row: Row) -> String {
         let provider = row.p ?? .claude
         return
-            "\(provider.rawValue)|\(row.accountID?.uuidString ?? "")|\(row.accountName ?? "")|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")|\(allowanceKey(row.ga))"
+            "\(provider.rawValue)|\(row.accountID?.uuidString ?? "")|\(row.s ?? -1)|\(row.w ?? -1)|\(row.f ?? -1)|\(row.sr ?? "-")|\(row.wr ?? "-")|\(row.fr ?? "-")|\(allowanceKey(row.ga))"
     }
 
     private static func allowanceKey(_ allowance: GrokAllowance?) -> String {
@@ -221,11 +223,7 @@ public struct LimitsHistory {
                 let date = Self.parseTimestamp(row.ts), since.map({ date >= $0 }) ?? true,
                 (row.p ?? .claude) == provider, row.accountID == accountID
             else { continue }
-            out.append(
-                LimitPoint(
-                    date: date, s: row.s, w: row.w,
-                    sessionReset: row.sr.flatMap(Self.parseTimestamp),
-                    weekReset: row.wr.flatMap(Self.parseTimestamp)))
+            out.append(point(row: row, date: date))
         }
         return out.sorted { $0.date < $1.date }
     }
@@ -285,19 +283,30 @@ public struct LimitsHistory {
     }
 
     public static func loadSnapshot(
-        preferredProvider: LimitProvider, accountID: UUID? = nil, url: URL = LimitsHistory.url
+        preferredProvider: LimitProvider, accountID: UUID? = nil,
+        configuredAccounts: [Account] = [], url: URL = LimitsHistory.url
     ) async -> Snapshot {
         if let client = await UsageUIClient.current {
-            if let snapshot = try? await client.limits(provider: preferredProvider) {
+            if let snapshot = try? await client.limits(
+                provider: preferredProvider, accountID: accountID)
+            {
                 return Snapshot(
-                    providers: LimitProvider.allCases.filter { snapshot.providers[$0] != nil },
-                    provider: snapshot.provider, latest: snapshot.providers, points: snapshot.points
+                    providers: LimitProvider.allCases.filter {
+                        snapshot.providers[$0] != nil
+                            || ($0 == .claude && !snapshot.accounts.isEmpty)
+                    },
+                    provider: snapshot.provider, latest: snapshot.providers,
+                    points: snapshot.points,
+                    accounts: snapshot.accounts, accountID: snapshot.accountID,
+                    hasUnassignedHistory: snapshot.hasUnassignedHistory
                 )
             }
             return Snapshot(providers: [], provider: preferredProvider, latest: [:], points: [])
         }
         let load = Task.detached(priority: .utility) {
-            snapshot(preferredProvider: preferredProvider, accountID: accountID, url: url)
+            snapshot(
+                preferredProvider: preferredProvider, accountID: accountID,
+                configuredAccounts: configuredAccounts, url: url)
         }
         return await withTaskCancellationHandler {
             await load.value
@@ -351,14 +360,17 @@ public struct LimitsHistory {
         return rows
     }
 
-    static func snapshot(preferredProvider: LimitProvider, accountID: UUID? = nil, url: URL)
+    static func snapshot(
+        preferredProvider: LimitProvider, accountID: UUID? = nil,
+        configuredAccounts: [Account] = [], url: URL
+    )
         -> Snapshot
     {
         var latest: [LimitProvider: Latest] = [:]
         var points: [LimitProvider: [LimitPoint]] = [:]
-        var accounts: [UUID: Account] = [:]
+        var accounts = Dictionary(configuredAccounts.map { ($0.id, $0) }) { first, _ in first }
         var hasUnassigned = false
-        var found: Set<LimitProvider> = []
+        var found: Set<LimitProvider> = configuredAccounts.isEmpty ? [] : [.claude]
         FileTail.scanLinesReversed(
             url, maxScanBytes: maximumTailScanBytes,
             shouldContinue: { !Task.isCancelled }
@@ -384,9 +396,10 @@ public struct LimitsHistory {
         return Snapshot(
             providers: providers, provider: provider, latest: latest,
             points: points[provider, default: []].sorted { $0.date < $1.date },
-            accounts: accounts.values.sorted {
-                $0.name.localizedStandardCompare($1.name) == .orderedAscending
-            },
+            accounts: configuredAccounts
+                + accounts.values.filter { account in
+                    !configuredAccounts.contains { $0.id == account.id }
+                }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
             accountID: accountID, hasUnassignedHistory: hasUnassigned)
     }
 

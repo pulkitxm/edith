@@ -86,6 +86,11 @@ enum UsageConfigCatalog {
             allowed: ["claude", "codex", "cursor", "grok"],
             fallback: .string("claude")),
         UsageSettingDefinition(
+            LimitsHistory.accountSelectionKey, .string, group: "limits",
+            summary:
+                "Saved account ID shown in the limits history chart, or unassigned for older samples.",
+            fallback: .string("")),
+        UsageSettingDefinition(
             AppStorageKeys.Limits.warnPercent, .int, group: "limits",
             summary: "Percentage at which a limit turns amber.", fallback: .int(60)),
         UsageSettingDefinition(

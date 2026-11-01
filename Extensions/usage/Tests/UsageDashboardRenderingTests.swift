@@ -8,6 +8,92 @@ import Vision
 @testable import UsageExtension
 
 @MainActor @Suite(.serialized) struct UsageDashboardRenderingTests {
+    @Test func accountHistoryChartRendersDistinctAccountsAtEverySize() async throws {
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("limits-history.jsonl")
+        let personal = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+        let studio = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
+        let now = Date(timeIntervalSince1970: 1_793_534_400)
+        var history = LimitsHistory(url: url)
+        _ = history.append(
+            session: .init(percent: 95, resetsAt: nil), week: nil,
+            now: now.addingTimeInterval(-10000))
+        for (id, name, base) in [
+            (personal, "Sample personal", 10.0), (studio, "Sample studio", 60.0),
+        ] {
+            for step in 0..<3 {
+                _ = history.append(
+                    session: .init(percent: base + Double(step * 10), resetsAt: nil),
+                    week: .init(percent: base + Double(step * 5), resetsAt: nil), accountID: id,
+                    accountName: name, now: now.addingTimeInterval(Double(step - 2) * 3600))
+            }
+        }
+        for width in [430.0, 1100.0] {
+            for scale in [1.0, 1.5] {
+                UIScale.apply(scale)
+                for scheme in [ColorScheme.light, .dark] {
+                    for (id, name) in [(personal, "Sample personal"), (studio, "Sample studio")] {
+                        let suite = "history-render-" + UUID().uuidString
+                        let defaults = try #require(UserDefaults(suiteName: suite))
+                        defer { defaults.removePersistentDomain(forName: suite) }
+                        defaults.set(
+                            id.uuidString.lowercased(), forKey: LimitsHistory.accountSelectionKey)
+                        let snapshot = LimitsHistory.snapshot(
+                            preferredProvider: .claude, accountID: id, url: url)
+                        let height = UIScale.pt(430)
+                        let host = NSHostingView(
+                            rootView: LimitsCardView(
+                                theme: .cyan, dark: scheme == .dark,
+                                initialSnapshot: snapshot, defaults: defaults
+                            )
+                            .environment(\.automaticViewActionsEnabled, false)
+                            .environment(\.compactLayout, width < 700)
+                            .environment(\.colorScheme, scheme)
+                            .padding(UIScale.pt(12))
+                            .frame(width: width, height: height)
+                            .background(DashSkin.paper(scheme == .dark)))
+                        host.sizingOptions = []
+                        host.frame = CGRect(x: 0, y: 0, width: width, height: height)
+                        for _ in 0..<3 {
+                            host.layoutSubtreeIfNeeded();
+                            try await Task.sleep(for: .milliseconds(20))
+                        }
+                        let bitmap = try #require(
+                            host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                        host.cacheDisplay(in: host.bounds, to: bitmap)
+                        let image = try #require(bitmap.cgImage)
+                        let recognition = VNRecognizeTextRequest();
+                        recognition.recognitionLevel = .accurate
+                        try VNImageRequestHandler(cgImage: image).perform([recognition])
+                        let text =
+                            recognition.results?.compactMap { $0.topCandidates(1).first?.string }
+                            .joined(separator: " ") ?? ""
+                        #expect(text.localizedCaseInsensitiveContains(name))
+                        #expect(!text.contains("Loading limit history"))
+                        #expect(!text.contains("Older samples"))
+                        #expect(host.window == nil)
+                        if let path = ProcessInfo.processInfo.environment[
+                            "EDITH_USAGE_ACCOUNT_RENDER_ROOT"],
+                            width == 1100, scale == 1, scheme == .dark
+                        {
+                            let directory = URL(fileURLWithPath: path)
+                            try FileManager.default.createDirectory(
+                                at: directory, withIntermediateDirectories: true)
+                            let png = try #require(
+                                bitmap.representation(using: .png, properties: [:]))
+                            try png.write(
+                                to: directory.appendingPathComponent(
+                                    id == personal ? "personal.png" : "studio.png"))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test func limitsMenuRendersAccountRecoveryAndWeeklyOnlyLimitsAtEverySize() async throws {
         let previousZoom = UIScale.current
         defer { UIScale.apply(previousZoom) }

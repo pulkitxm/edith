@@ -294,6 +294,68 @@ import Testing
         next.stop()
     }
 
+    @Test func ownedHistoryFiltersAccountsAndKeepsConfiguredAccountsWithoutSamplesSelectable()
+        async throws
+    {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let personal = UUID(); let work = UUID(); let empty = UUID()
+        let now = Date()
+        var history = LimitsHistory(url: directory.appendingPathComponent("limits-history.jsonl"))
+        for (id, name, percent) in [(personal, "Old personal", 10.0), (work, "Sample work", 70.0)] {
+            _ = history.append(
+                session: .init(percent: percent, resetsAt: nil), week: nil,
+                accountID: id, accountName: name, now: now)
+        }
+        _ = history.append(session: .init(percent: 90, resetsAt: nil), week: nil, now: now)
+        let accounts = [
+            (personal, "Renamed personal"), (work, "Sample work"), (empty, "New account"),
+        ].map { id, name in
+            ClaudeAccountLimits(
+                id: id, name: name, limits: .init(provider: .claude, session: nil, week: nil),
+                refreshedAt: now)
+        }
+        try LimitsSnapshotCache.save(
+            .init(refreshedAt: now, providers: [], failure: nil, claudeAccounts: accounts),
+            url: directory.appendingPathComponent("limits-snapshot.json"))
+        let suite = "account-history-ui-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let service = UsageUICommands(
+            controller: controller, directory: directory, defaults: defaults)
+        let client = UsageUIClient(invoke: { try await service.execute($0, payload: $1) })
+        defer { client.stop(); service.shutdown() }
+        let first = try await client.limits(provider: .claude, accountID: personal)
+        let second = try await client.limits(provider: .claude, accountID: work)
+        let missing = try await client.limits(provider: .claude, accountID: empty)
+        let unassigned = try await client.limits(provider: .claude)
+        #expect(first.accountID == personal && first.points.map(\.s) == [10])
+        #expect(second.accountID == work && second.points.map(\.s) == [70])
+        #expect(unassigned.accountID == nil && unassigned.points.map(\.s) == [90])
+        #expect(first.accounts.map(\.name) == ["Renamed personal", "Sample work", "New account"])
+        #expect(missing.provider == .claude && missing.points.isEmpty)
+        #expect(first.hasUnassignedHistory && missing.accounts.count == 3)
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await client.limits(provider: .codex, accountID: personal)
+        }
+        let preference = UsageUIPreferences(values: [
+            LimitsHistory.accountSelectionKey: .text(work.uuidString)
+        ])
+        _ = try await service.execute(
+            "usage.ui.preferences.set", payload: JSONEncoder().encode(preference))
+        #expect(defaults.string(forKey: LimitsHistory.accountSelectionKey) == work.uuidString)
+        #expect(throws: ExtensionPeerError.self) {
+            try UsageUIPreferences(values: [
+                LimitsHistory.accountSelectionKey: .text("invalid-account")
+            ]).validate()
+        }
+        await service.shutdownAndWait()
+        await controller.shutdown()
+    }
+
     @Test func ownedLimitsPreserveProviderWindowsAndHistory() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)

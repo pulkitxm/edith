@@ -444,6 +444,13 @@ struct LimitsCardView: View {
     @State private var samples: [Sample] = []
     @State private var marks: [LimitResetMarker] = []
     @State private var loadedProvider: LimitProvider?
+    @State private var accounts: [LimitsHistory.Account] = []
+    @State private var hasUnassignedHistory = false
+    @State private var loadedAccountScope = ""
+    @State private var accountFailure: String?
+    @AppStorage(LimitsHistory.accountSelectionKey, store: SharedDefaults.store)
+    private var selectedAccountRaw = ""
+    @Environment(\.compactLayout) private var compact
     @State private var range = "24h"
     @State private var selected: Date?
     @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
@@ -454,6 +461,42 @@ struct LimitsCardView: View {
     @State private var providers: [LimitProvider] = []
     @State private var reloadJob: Task<Void, Never>?
     @State private var reloadLoad = ContentLoad()
+
+    init(
+        theme: Color, dark: Bool, initialSnapshot: LimitsHistory.Snapshot? = nil,
+        defaults: UserDefaults = SharedDefaults.store
+    ) {
+        self.theme = theme
+        self.dark = dark
+        _selectedProviderRaw = AppStorage(
+            wrappedValue: initialSnapshot?.provider.rawValue ?? LimitProvider.claude.rawValue,
+            AppStorageKeys.Limits.provider, store: defaults)
+        _selectedAccountRaw = AppStorage(
+            wrappedValue: initialSnapshot?.accountID?.uuidString ?? "",
+            LimitsHistory.accountSelectionKey, store: defaults)
+        if let snapshot = initialSnapshot {
+            let points = LimitsHistory.downsample(
+                snapshot.points, now: snapshot.points.last?.date ?? Date())
+            let display = LimitsChartDisplay.build(
+                points, now: snapshot.points.last?.date ?? Date(),
+                window: 86400, sessionSeries: "Session", weekSeries: "Weekly")
+            _all = State(initialValue: snapshot.points)
+            _downsampled = State(initialValue: points)
+            _visible = State(initialValue: display.visible)
+            _samples = State(initialValue: display.samples)
+            _marks = State(initialValue: display.marks)
+            _loadedProvider = State(initialValue: snapshot.provider)
+            _providers = State(initialValue: snapshot.providers)
+            _accounts = State(initialValue: snapshot.accounts)
+            _hasUnassignedHistory = State(initialValue: snapshot.hasUnassignedHistory)
+            _loadedAccountScope = State(initialValue: snapshot.accountID?.uuidString ?? "")
+        }
+    }
+
+    private var accountScope: String {
+        selectedProvider == .claude
+            ? UUID(uuidString: selectedAccountRaw)?.uuidString ?? selectedAccountRaw : ""
+    }
 
     private var selectedProvider: LimitProvider {
         get {
@@ -494,11 +537,33 @@ struct LimitsCardView: View {
                 : selectedProvider == .grok ? "Grok allowance" : "Rate limits - session & weekly"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                ProviderSwitchButton(
-                    selection: Binding(
-                        get: { selectedProvider }, set: { selectedProvider = $0 }),
-                    providers: providers, color: DashSkin.ink(dark), size: 15)
-                if loadedProvider == selectedProvider, all.count > 1 {
+                if compact {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        providerPicker
+                        accountPicker
+                    }
+                } else {
+                    HStack(spacing: UIScale.pt(14)) {
+                        providerPicker
+                        accountPicker
+                        Spacer(minLength: 0)
+                    }
+                }
+                if let failure = reloadLoad.errorMessage {
+                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                }
+                if selectedProvider == .claude, let accountFailure {
+                    Text(accountFailure).font(.edithText(.caption)).foregroundStyle(.red)
+                }
+                if selectedProvider == .claude, hasUnassignedHistory,
+                    selectedAccountRaw == "unassigned" || accounts.isEmpty
+                {
+                    Text("Older samples have no account information and are shown separately.")
+                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+                }
+                if loadedProvider == selectedProvider, loadedAccountScope == accountScope,
+                    all.contains(where: { $0.s != nil || $0.w != nil })
+                {
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         HStack {
                             segmented
@@ -506,15 +571,22 @@ struct LimitsCardView: View {
                             readout
                             LimitsRefreshButton(dark: dark) { reloadAll() }
                         }
-                        chart.id(selectedProvider)
+                        chart.id(selectedProvider.rawValue + ":" + accountScope)
                     }
                 } else {
                     HStack {
-                        Text("Collecting limit history…")
-                            .font(.system(size: UIScale.pt(12))).foregroundStyle(
-                                DashSkin.inkFaint(dark)
-                            )
-                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(60))
+                        Text(
+                            reloadLoad.errorMessage != nil
+                                ? "Limit history is unavailable. Try Refresh."
+                                : loadedProvider == selectedProvider
+                                    && loadedAccountScope == accountScope
+                                    ? "No limit history yet. New readings will appear here."
+                                    : "Loading limit history…"
+                        )
+                        .font(.system(size: UIScale.pt(12))).foregroundStyle(
+                            DashSkin.inkFaint(dark)
+                        )
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(60))
                         LimitsRefreshButton(dark: dark) { reloadAll() }
                     }
                 }
@@ -528,28 +600,94 @@ struct LimitsCardView: View {
             selected = nil
             rebuildVisible()
         }
-        .onChange(of: selectedProviderRaw) { reloadAll() }
+        .onChange(of: selectedProviderRaw) {
+            accountFailure = nil; reloadAll()
+        }
+        .onChange(of: selectedAccountRaw) {
+            accountFailure = nil; reloadAll()
+        }
+    }
+
+    private var providerPicker: some View {
+        ProviderSwitchButton(
+            selection: Binding(get: { selectedProvider }, set: { selectedProvider = $0 }),
+            providers: providers, color: DashSkin.ink(dark), size: 15)
+    }
+
+    @ViewBuilder private var accountPicker: some View {
+        if selectedProvider == .claude, !accounts.isEmpty || hasUnassignedHistory {
+            Picker(
+                "Account",
+                selection: Binding(
+                    get: {
+                        accountScope.isEmpty
+                            ? accounts.first?.id.uuidString ?? "unassigned" : accountScope
+                    },
+                    set: { selectedAccountRaw = $0 })
+            ) {
+                ForEach(accounts) { account in Text(account.name).tag(account.id.uuidString) }
+                if hasUnassignedHistory { Text("Unassigned history").tag("unassigned") }
+            }
+            .pickerStyle(.menu)
+            .font(.edithText(.caption))
+            .frame(maxWidth: UIScale.pt(340), alignment: .leading)
+            .accessibilityIdentifier("limits-history-account")
+        }
     }
 
     private func reloadAll() {
         let client = client
         let preferred = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
+        let scope =
+            preferred == .claude
+            ? UUID(uuidString: selectedAccountRaw)?.uuidString ?? selectedAccountRaw : ""
+        let accountID = UUID(uuidString: scope)
         reloadJob?.cancel()
         reloadJob = Task {
             await reloadLoad.perform(operation: {
                 if let client {
-                    guard let value = try? await client.limits(provider: preferred) else {
-                        return LimitsHistory.Snapshot(
-                            providers: [], provider: preferred, latest: [:], points: [])
-                    }
-                    return LimitsHistory.Snapshot(
-                        providers: LimitProvider.allCases.filter { value.providers[$0] != nil },
-                        provider: value.provider, latest: value.providers, points: value.points)
+                    let value = try await client.limits(provider: preferred, accountID: accountID)
+                    let snapshot = LimitsHistory.Snapshot(
+                        providers: LimitProvider.allCases.filter {
+                            value.providers[$0] != nil || ($0 == .claude && !value.accounts.isEmpty)
+                        }, provider: value.provider, latest: value.providers, points: value.points,
+                        accounts: value.accounts, accountID: value.accountID,
+                        hasUnassignedHistory: value.hasUnassignedHistory)
+                    return (
+                        snapshot,
+                        value.current?.claudeAccounts.first { $0.id == accountID }?.errorMessage
+                    )
                 }
-                return await LimitsHistory.loadSnapshot(preferredProvider: preferred)
-            }) { snapshot in
+                let current = await UsageWorkerOperations.controller?.latestLimits
+                let accounts = (current?.claudeAccounts ?? []).map {
+                    LimitsHistory.Account(id: $0.id, name: $0.name)
+                }
+                let snapshot = await LimitsHistory.loadSnapshot(
+                    preferredProvider: preferred, accountID: accountID,
+                    configuredAccounts: accounts)
+                return (
+                    snapshot, current?.claudeAccounts.first { $0.id == accountID }?.errorMessage
+                )
+            }) { result in
+                let (snapshot, failure) = result
                 providers = snapshot.providers
+                accounts = snapshot.accounts
+                hasUnassignedHistory = snapshot.hasUnassignedHistory
+                if snapshot.provider == .claude {
+                    if scope.isEmpty, let first = accounts.first {
+                        selectedAccountRaw = first.id.uuidString
+                        return
+                    }
+                    if let accountID, !accounts.contains(where: { $0.id == accountID }) {
+                        selectedAccountRaw =
+                            accounts.first?.id.uuidString
+                            ?? (hasUnassignedHistory ? "unassigned" : "")
+                        return
+                    }
+                }
+                accountFailure = failure
                 loadedProvider = snapshot.provider
+                loadedAccountScope = snapshot.provider == .claude ? scope : ""
                 selected = nil
                 all = snapshot.points
                 let now = all.last?.date ?? Date()
@@ -578,7 +716,9 @@ struct LimitsCardView: View {
     }
 
     private var readout: some View {
-        let point = selected.flatMap { LimitsChartDisplay.nearest(in: visible, to: $0) }
+        let point =
+            selected.flatMap { LimitsChartDisplay.nearest(in: visible, to: $0) }
+            ?? (visible.count == 1 ? visible.first : nil)
         return Group {
             if let point {
                 HStack(spacing: UIScale.pt(10)) {
@@ -610,7 +750,7 @@ struct LimitsCardView: View {
 
     private var chart: some View {
         let now = all.last?.date ?? Date()
-        let start = visible.first?.date ?? now
+        let start = min(visible.first?.date ?? now, now.addingTimeInterval(-60))
         let spanDays = now.timeIntervalSince(start) / 86400
         return Chart {
             ForEach(marks) { m in
@@ -633,6 +773,10 @@ struct LimitsCardView: View {
                 .interpolationMethod(.stepEnd)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
                 .foregroundStyle(by: .value("Series", s.series))
+                if visible.count == 1 {
+                    PointMark(x: .value("Time", s.t), y: .value("Percent", s.v))
+                        .foregroundStyle(by: .value("Series", s.series))
+                }
             }
         }
         .chartForegroundStyleScale(

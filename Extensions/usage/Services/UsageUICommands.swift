@@ -20,6 +20,9 @@ struct UsageUILimits: Codable, Sendable {
     let points: [LimitPoint]
     let provider: LimitProvider
     let current: LimitsTopicSnapshot?
+    var accounts: [LimitsHistory.Account] = []
+    var accountID: UUID? = nil
+    var hasUnassignedHistory = false
 }
 
 @MainActor final class UsageUICommands {
@@ -204,19 +207,25 @@ struct UsageUILimits: Codable, Sendable {
             return try encoder.encode(
                 UsageUILimitsSummary(providers: providers, current: controller.latestLimits))
         case "usage.ui.limits":
-            guard Set(object.keys) == ["provider"], let text = object["provider"] as? String,
-                let provider = LimitProvider(rawValue: text)
+            guard Set(object.keys) == ["provider", "accountID"],
+                let text = object["provider"] as? String,
+                let provider = LimitProvider(rawValue: text),
+                let account = object["accountID"] as? String,
+                account.isEmpty || (provider == .claude && UUID(uuidString: account) != nil)
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let snapshot = try await prepareLimits(provider: provider)
+            let snapshot = try await prepareLimits(
+                provider: provider, accountID: UUID(uuidString: account))
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
             return try receipt(
                 encoder.encode(
                     UsageUILimits(
                         providers: snapshot.latest, points: snapshot.points,
-                        provider: snapshot.provider, current: controller.latestLimits
+                        provider: snapshot.provider, current: controller.latestLimits,
+                        accounts: snapshot.accounts, accountID: snapshot.accountID,
+                        hasUnassignedHistory: snapshot.hasUnassignedHistory
                     )))
         case "usage.ui.log":
             try empty(object)
@@ -300,11 +309,20 @@ struct UsageUILimits: Codable, Sendable {
         }
     }
 
-    private func prepareLimits(provider: LimitProvider) async throws -> LimitsHistory.Snapshot {
+    private func prepareLimits(provider: LimitProvider, accountID: UUID?) async throws
+        -> LimitsHistory.Snapshot
+    {
         guard !stopped, limitsPreparations.count < 8 else { throw ExtensionPeerError.unavailable }
         let id = UUID()
         let url = directory.appendingPathComponent("limits-history.jsonl")
-        let load = Task { await LimitsHistory.loadSnapshot(preferredProvider: provider, url: url) }
+        let accounts = (controller.latestLimits?.claudeAccounts ?? []).map {
+            LimitsHistory.Account(id: $0.id, name: $0.name)
+        }
+        let load = Task.detached(priority: .utility) {
+            LimitsHistory.snapshot(
+                preferredProvider: provider, accountID: accountID,
+                configuredAccounts: accounts, url: url)
+        }
         limitsPreparations[id] = load
         defer { limitsPreparations[id] = nil }
         let snapshot = await withTaskCancellationHandler {

@@ -140,7 +140,8 @@ import Testing
                     JSONSerialization.jsonObject(with: data) as? [String: Any])
                 receipts.append(
                     try #require((object["id"] as? String).flatMap(UUID.init(uuidString:))))
-                #expect(object["byteCount"] as? Int == 9_189_911)
+                #expect(
+                    (object["byteCount"] as? Int ?? 0) > ExtensionPeerEndpoint.maximumPayloadBytes)
             }
             if operation == "usage.ui.chunk" { chunks += 1 }
             return data
@@ -182,7 +183,7 @@ import Testing
         let controller = UsageWorkerController(
             dataDirectory: root, collect: { _, _ in throw ExtensionPeerError.unavailable })
         let service = UsageUICommands(controller: controller, directory: root)
-        let payload = Data(#"{"provider":"claude"}"#.utf8)
+        let payload = Data(#"{"provider":"claude","accountID":""}"#.utf8)
         let tasks = (0..<8).map { _ in
             Task { try await service.execute("usage.ui.limits", payload: payload) }
         }

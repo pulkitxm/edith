@@ -53,6 +53,26 @@ import Testing
                 .map(\.percent) == [80])
     }
 
+    @Test func accountRenamesAtTheSameReadingKeepOneChartPointAndTheCurrentName() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("limits-history.jsonl")
+        let id = UUID()
+        var history = LimitsHistory(url: url)
+        for name in ["Previous account name", "Current account name"] {
+            _ = history.append(
+                session: .init(percent: 25, resetsAt: nil), week: nil,
+                accountID: id, accountName: name, now: now)
+        }
+        let snapshot = LimitsHistory.snapshot(
+            preferredProvider: .claude, accountID: id,
+            configuredAccounts: [.init(id: id, name: "Current account name")], url: url)
+        #expect(snapshot.points.count == 1)
+        #expect(snapshot.accounts.first?.name == "Current account name")
+        #expect(LimitsHistory.loadAll(accountID: id, url: url).count == 1)
+    }
+
     @Test func scopedHistoryDoesNotBecomeUnassignedOrAnotherProvidersHistory() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
