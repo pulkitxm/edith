@@ -7,6 +7,52 @@ import Testing
 import HostWorkerFixtureSupport
 
 @Suite @MainActor struct HostExtensionSessionTests {
+    @Test func startingExtensionsAreRecordedOnlyWhileTheyStart() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        #expect(fixture.defaults.stringArray(forKey: HostExtensionSessions.startingKey) == [])
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func extensionsStartingDuringACrashRestartOneAtATime() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(
+            ["sample", "other"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.defaults.set(["sample"], forKey: HostExtensionSessions.startingKey)
+        await fixture.sessions.restore(
+            packages: [
+                "sample": fixture.package("1.0.0"), "other": fixture.package("1.0.0", id: "other"),
+            ])
+        #expect(fixture.records.workers.map(\.configuration.extensionID) == ["other", "sample"])
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.defaults.string(forKey: HostExtensionSessions.probationKey) == nil)
+        #expect(fixture.defaults.stringArray(forKey: HostExtensionSessions.startingKey) == [])
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func anExtensionThatCrashesEdithWhileStartingAloneIsTurnedOff() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(
+            ["sample", "other"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.defaults.set(["sample"], forKey: HostExtensionSessions.startingKey)
+        fixture.defaults.set("sample", forKey: HostExtensionSessions.probationKey)
+        await fixture.sessions.restore(
+            packages: [
+                "sample": fixture.package("1.0.0"), "other": fixture.package("1.0.0", id: "other"),
+            ])
+        #expect(fixture.sessions.enabledIDs == ["other"])
+        #expect(fixture.sessions.states["sample"] == .failed)
+        #expect(fixture.sessions.failureReasons["sample"] == HostExtensionSessions.crashReason)
+        #expect(fixture.records.workers.map(\.configuration.extensionID) == ["other"])
+        #expect(fixture.defaults.string(forKey: HostExtensionSessions.probationKey) == nil)
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(await fixture.sessions.shutdown())
+    }
+
     @Test func onDemandExtensionsStayIdleAtLaunchAndStartOnceWhenUsed() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

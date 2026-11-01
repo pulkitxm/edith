@@ -104,13 +104,42 @@ public final class HostExtensionSessions {
         ambientPolicyCoordinator.invalidate()
     }
 
+    public static let startingKey = "extensionsStarting"
+    public static let probationKey = "extensionStartProbation"
+    public static let crashReason =
+        "Edith quit unexpectedly while starting this extension, so it was turned off. Enable it to try again."
+
+    private var starting: Set<String> {
+        get { Set(defaults.stringArray(forKey: Self.startingKey) ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: Self.startingKey) }
+    }
+
     public func restore(packages: [String: ExtensionPackage]) async {
+        var suspects = starting
+        starting = []
+        if let probation = defaults.string(forKey: Self.probationKey) {
+            defaults.removeObject(forKey: Self.probationKey)
+            if suspects.contains(probation) {
+                suspects.remove(probation)
+                save(enabledIDs.subtracting([probation]))
+                states[probation] = .failed
+                failures.insert(probation)
+                failureReasons[probation] = Self.crashReason
+            }
+        }
         var restores: [Task<Void, Never>] = []
-        for id in enabledIDs.union(pendingDisableIDs).union(pendingRecoveryIDs).sorted() {
+        let ids = enabledIDs.union(pendingDisableIDs).union(pendingRecoveryIDs).sorted()
+        for id in ids where !suspects.contains(id) {
             guard let package = packages[id] else { states[id] = .notInstalled; continue }
             restores.append(Task { await restore(id: id, package: package) })
         }
         for restore in restores { await restore.value }
+        for id in ids where suspects.contains(id) {
+            guard let package = packages[id] else { states[id] = .notInstalled; continue }
+            defaults.set(id, forKey: Self.probationKey)
+            await restore(id: id, package: package)
+            defaults.removeObject(forKey: Self.probationKey)
+        }
     }
 
     public func restoreArrived(_ package: ExtensionPackage) async {
@@ -261,6 +290,8 @@ public final class HostExtensionSessions {
                 else { throw HostWorkerError.rejected }
                 return result
             }
+            starting.insert(id)
+            defer { starting.remove(id) }
             try await worker.start()
             guard workers[id] === worker, worker.ready else { throw HostWorkerError.exited }
             versions[id] = package.version
