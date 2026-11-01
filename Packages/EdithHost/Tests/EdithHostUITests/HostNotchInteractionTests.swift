@@ -133,4 +133,13 @@ struct HostNotchInteractionTests {
         #expect(container.chromeScrollTarget(at: onCard, deltaX: 1, deltaY: -18) == nil)
         #expect(container.chromeScrollTarget(at: offCard, deltaX: -24, deltaY: 0) == nil)
     }
+
+    @Test func fixedSizeChromeDoesNotShrinkThePanel() async throws {
+        let size = CGSize(width: 640, height: 320)
+        let remote = try await mounted(
+            chromeRequest(), size: size,
+            root: VStack { Color.red.frame(width: 580, height: 40) })
+        #expect(remote.view.frame.height == size.height)
+        #expect(remote.contentHeight == 40)
+    }
 }
