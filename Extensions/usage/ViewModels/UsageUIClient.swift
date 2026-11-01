@@ -111,10 +111,12 @@ import Observation
         return snapshot
     }
 
-    func limits(provider: LimitProvider) async throws -> UsageUILimits {
+    func limits(provider: LimitProvider, accountID: UUID? = nil) async throws -> UsageUILimits {
         try await JSONDecoder().decode(
             UsageUILimits.self,
-            from: checkedPayload("usage.ui.limits", object: ["provider": provider.rawValue]))
+            from: checkedPayload(
+                "usage.ui.limits",
+                object: ["provider": provider.rawValue, "accountID": accountID?.uuidString ?? ""]))
     }
 
     private func checkedPayload(_ operation: String, object: [String: String] = [:]) async throws

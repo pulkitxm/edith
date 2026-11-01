@@ -310,6 +310,12 @@ public enum LimitsCollector {
         else {
             return LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Cancelled")
         }
+        for account in accounts where account.limits.error == nil {
+            persistHistory(
+                provider: .claude, session: account.limits.session, week: account.limits.week,
+                fable: account.limits.fable, accountID: account.id, accountName: account.name,
+                now: account.refreshedAt)
+        }
         announce(UsageEvents.limitsUpdated)
         return snapshot
     }
@@ -558,6 +564,7 @@ public enum LimitsCollector {
     static func persistHistory(
         provider: LimitProvider, session: LimitWindow?, week: LimitWindow?,
         fable: LimitWindow? = nil, grok: GrokAllowance? = nil,
+        accountID: UUID? = nil, accountName: String? = nil, now: Date = Date(),
         attempts: Int = 5, historyURL: URL = LimitsHistory.url,
         pause: () -> Void = { Thread.sleep(forTimeInterval: 0.2) }
     ) {
@@ -565,7 +572,8 @@ public enum LimitsCollector {
         let tries = max(attempts, 1)
         for attempt in 0..<tries {
             if history.append(
-                provider: provider, session: session, week: week, fable: fable, grok: grok)
+                provider: provider, session: session, week: week, fable: fable, grok: grok,
+                accountID: accountID, accountName: accountName, now: now)
             {
                 return
             }
