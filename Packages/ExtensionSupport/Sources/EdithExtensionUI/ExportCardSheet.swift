@@ -1,5 +1,5 @@
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public struct ExportCardPresentation<Deck: ExportCardDeck>: Identifiable {
@@ -64,7 +64,8 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     var pasteboard: NSPasteboard = .general
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults()) private
+        var themeName =
         "accent"
     @State private var index = 0
     @State private var direction = 1

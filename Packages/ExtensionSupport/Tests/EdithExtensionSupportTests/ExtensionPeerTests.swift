@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Network
 import Testing
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite struct ExtensionPeerTests {

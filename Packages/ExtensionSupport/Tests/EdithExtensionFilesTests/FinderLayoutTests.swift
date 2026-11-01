@@ -1,7 +1,7 @@
 import Testing
 
 @testable import EdithExtensionFiles
-import EdithExtensionSupport
+import EdithExtensionCore
 
 @Suite struct FinderLayoutTests {
     private func layout(_ width: Double, sidebar: Bool = true) -> FinderLayout {

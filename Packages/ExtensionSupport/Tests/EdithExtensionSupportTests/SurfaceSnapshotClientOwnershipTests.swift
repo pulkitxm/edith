@@ -1,6 +1,7 @@
 import Foundation
 #if !SURFACE_OWNERSHIP_CHECKS
 import Testing
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 #endif
 

@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Testing
 
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 private final class PeerDiagnosticProbe: @unchecked Sendable {

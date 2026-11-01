@@ -86,7 +86,7 @@ public final class CLIChildProcess: @unchecked Sendable {
         var environment =
             wrapped
             ? request.environment
-            : ExtensionEnvironment.childEnvironment(
+            : ExtensionScope.childEnvironment(
                 request.environment, executable: request.executableURL.path)
         if wrapped { environment["EDITH_EXTENSION_WORKER"] = "1" }
         guard request.executableURL.isFileURL,

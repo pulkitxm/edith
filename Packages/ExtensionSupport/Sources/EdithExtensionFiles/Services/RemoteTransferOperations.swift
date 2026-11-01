@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import Darwin
 import Foundation
 

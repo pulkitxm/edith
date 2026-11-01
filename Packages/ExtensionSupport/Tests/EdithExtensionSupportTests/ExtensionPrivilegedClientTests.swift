@@ -1,6 +1,7 @@
 import Foundation
 import ServiceManagement
 import Testing
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @MainActor private final class PrivilegedTransportFixture: ExtensionPrivilegedTransport {

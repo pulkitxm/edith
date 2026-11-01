@@ -91,7 +91,7 @@ export function planSwiftTests(
   const include = [];
   if (
     matches(
-      /^Packages\/(EdithHost|ExtensionMarketplace)\/|^Packages\/ExtensionSupport\/(Package\.(swift|resolved)$|Sources\/(EdithExtensionSupport|EdithExtensionUI)\/)/,
+      /^Packages\/(EdithHost|ExtensionMarketplace)\/|^Packages\/ExtensionSupport\/(Package\.(swift|resolved)$|Sources\/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)\/)/,
     )
   ) {
     include.push({

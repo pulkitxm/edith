@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public enum ContentLoadingState: Equatable, Sendable {
@@ -303,7 +303,7 @@ private struct LoadingShimmer: View {
     @Environment(\.loadingAnimationsEnabled) private var animationsEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skeletonPhase) private var phase
-    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.installed.defaults())
     private var themeName = "accent"
 
     var body: some View {

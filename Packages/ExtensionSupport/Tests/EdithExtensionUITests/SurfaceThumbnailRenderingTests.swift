@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import EdithExtensionSupport
+import EdithExtensionCore
 import ImageIO
 import SwiftUI
 import Testing

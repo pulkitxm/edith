@@ -442,6 +442,7 @@ describe("independent extension releases", () => {
   test("rebuilds only consumers of changed support products", async () => {
     const root = await mkdtemp(join(tmpdir(), "extension-support-inputs-"));
     const products = [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
@@ -855,6 +856,7 @@ test("role overrides fingerprint the complete selected SDK without changing unre
   const definitions = [definition, coreOnly];
   try {
     for (const product of [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
@@ -951,6 +953,7 @@ test("native private SDK consumers invalidate on every selected support source",
   };
   try {
     for (const product of [
+      "EdithExtensionCore",
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionCommands",

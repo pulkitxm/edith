@@ -18,7 +18,7 @@ driver_spec = importlib.util.spec_from_file_location('local_navigation_driver', 
 drivers = importlib.util.module_from_spec(driver_spec)
 driver_spec.loader.exec_module(drivers)
 SOURCES = {
-    'Packages/ExtensionSupport/Sources/EdithExtensionSupport/AppStorageKeys.swift': 'Sources/EdithExtensionSupport/AppStorageKeys.swift',
+    'Packages/ExtensionSupport/Sources/EdithExtensionCore/AppStorageKeys.swift': 'Sources/EdithExtensionCore/AppStorageKeys.swift',
     'Packages/EdithHost/Sources/EdithHost/HostNavigationCatalog.swift': 'Sources/EdithHost/HostNavigationCatalog.swift',
     'Packages/EdithHost/Tests/EdithHostUITests/HostOptionalNavigationTests.swift': 'Tests/HostNavigationTests/HostOptionalNavigationTests.swift',
 }
@@ -28,8 +28,8 @@ let package = Package(
     name: "HostNavigationContracts",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "EdithExtensionSupport"),
-        .target(name: "EdithHost", dependencies: ["EdithExtensionSupport"]),
+        .target(name: "EdithExtensionCore"),
+        .target(name: "EdithHost", dependencies: ["EdithExtensionCore"]),
         .testTarget(name: "HostNavigationTests", dependencies: ["EdithHost"])
     ]
 )

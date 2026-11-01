@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Testing
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite struct ExtensionNativeTaskTests {

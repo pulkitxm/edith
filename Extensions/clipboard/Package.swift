@@ -9,6 +9,7 @@ let package = Package(
         .target(
             name: "ClipboardExtension",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ], path: ".", exclude: ["Tests", "Package.swift"],

@@ -3,7 +3,7 @@ import AppKit
 @testable import EdithExtensionUI
 import Testing
 
-import EdithExtensionSupport
+import EdithExtensionCore
 
 @MainActor
 @Suite struct FinderKeyOwnershipTests {

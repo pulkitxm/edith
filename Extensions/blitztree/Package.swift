@@ -7,7 +7,10 @@ let package = Package(
     targets: [
         .target(
             name: "BlitzTreeExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "BlitzTreeExtensionTests", dependencies: ["BlitzTreeExtension"], path: "Tests",

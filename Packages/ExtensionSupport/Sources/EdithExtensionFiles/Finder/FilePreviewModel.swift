@@ -1,6 +1,6 @@
 import AVKit
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import EdithExtensionUI
 import EdithExtensionDocuments
 import ImageIO

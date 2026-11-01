@@ -8,7 +8,7 @@ import {
 test("checks independent shipping modules and skips tests and vendored sources", () => {
   for (const path of [
     "Packages/EdithHost/Sources/EdithHostCore/HostIdentity.swift",
-    "Packages/ExtensionSupport/Sources/EdithExtensionSupport/Defaults.swift",
+    "Packages/ExtensionSupport/Sources/EdithExtensionCore/Defaults.swift",
     "Extensions/usage/Services/UsageMachinesPeer.swift",
     "Extensions/studio/NativeRuntime/Sources/VideoProject.swift",
   ])

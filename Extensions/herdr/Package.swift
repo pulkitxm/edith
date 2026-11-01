@@ -10,6 +10,7 @@ let package = Package(
         .target(
             name: "HerdrUI",
             dependencies: [
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionFiles", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionAccounts", package: "ExtensionSupport"),

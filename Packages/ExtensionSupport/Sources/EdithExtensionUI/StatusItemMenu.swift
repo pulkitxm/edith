@@ -1,5 +1,5 @@
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 
 public enum StatusItemMenu {
     private static let handler = StatusMenuHandler()

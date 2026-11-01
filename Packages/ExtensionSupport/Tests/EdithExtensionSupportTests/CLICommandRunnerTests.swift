@@ -1,4 +1,5 @@
 import Darwin
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 import Foundation
 import Testing

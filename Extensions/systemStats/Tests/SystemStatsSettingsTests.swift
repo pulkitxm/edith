@@ -6,6 +6,7 @@ import SwiftUI
 import Testing
 
 @testable import SystemStatsExtension
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @MainActor

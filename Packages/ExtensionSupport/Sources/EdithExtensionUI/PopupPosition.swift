@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import AppKit
 
 public struct PopupAnchorKeys: Sendable {
@@ -38,7 +38,8 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
     }
 
     public static func stored(forKey key: String) -> PopupPosition {
-        PopupPosition(rawValue: SharedDefaults.store.string(forKey: key) ?? "") ?? .cursor
+        PopupPosition(rawValue: ExtensionScope.installed.defaults().string(forKey: key) ?? "")
+            ?? .cursor
     }
 
     @MainActor
@@ -86,7 +87,7 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
             return Self.centered(size)
         case .lastPosition:
             guard let screen = Self.popupScreen() else { return .zero }
-            let store = SharedDefaults.store
+            let store = ExtensionScope.installed.defaults()
             let relX = store.object(forKey: anchors.positionX) as? Double ?? 0.5
             let relY = store.object(forKey: anchors.positionY) as? Double ?? 0.8
             let frame = screen.frame
@@ -115,7 +116,7 @@ public enum PopupPosition: String, CaseIterable, Identifiable, Sendable {
         guard let screen else { return }
         let bounds = screen.frame
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let store = SharedDefaults.store
+        let store = ExtensionScope.installed.defaults()
         store.set(
             Double((frame.midX - bounds.minX) / bounds.width), forKey: anchors.positionX)
         store.set(

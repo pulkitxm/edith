@@ -12,6 +12,7 @@ let package = Package(
             name: "KeepAwakeExtension",
             dependencies: [
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ],
             path: ".", exclude: ["Tests"]),

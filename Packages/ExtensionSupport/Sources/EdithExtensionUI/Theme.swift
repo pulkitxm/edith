@@ -1,5 +1,5 @@
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import Observation
 import SwiftUI
 
@@ -82,7 +82,7 @@ enum ThemeColor {
 @MainActor
 @Observable
 public final class ThemeStore {
-    public static let shared = ThemeStore(defaults: SharedDefaults.store)
+    public static let shared = ThemeStore(defaults: ExtensionScope.installed.defaults())
 
     public internal(set) var theme: AppTheme
     @ObservationIgnored private let defaults: UserDefaults
@@ -109,7 +109,7 @@ public final class ThemeStore {
         if Thread.isMainThread {
             return MainActor.assumeIsolated { shared.theme }
         }
-        return stored(in: SharedDefaults.store)
+        return stored(in: ExtensionScope.installed.defaults())
     }
 }
 

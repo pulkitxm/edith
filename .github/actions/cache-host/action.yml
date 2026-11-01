@@ -16,5 +16,5 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: Packages/EdithHost/.build
-        key: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/EdithHost/Package.*', 'Packages/EdithHost/Sources/**', 'Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionMarketplace/Sources/**', 'Packages/ExtensionSupport/Package.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionSupport/**', 'Packages/ExtensionSupport/Sources/EdithExtensionUI/**', 'scripts/build-minimal-host.mjs') }}
+        key: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/EdithHost/Package.*', 'Packages/EdithHost/Sources/**', 'Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionMarketplace/Sources/**', 'Packages/ExtensionSupport/Package.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionCore/**', 'Packages/ExtensionSupport/Sources/EdithExtensionSupport/**', 'Packages/ExtensionSupport/Sources/EdithExtensionUI/**', 'scripts/build-minimal-host.mjs') }}
         restore-keys: host-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.fingerprint }}-

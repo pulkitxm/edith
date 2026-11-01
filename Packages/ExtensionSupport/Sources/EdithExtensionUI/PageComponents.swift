@@ -1,4 +1,4 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 public struct PageCard<Content: View>: View {

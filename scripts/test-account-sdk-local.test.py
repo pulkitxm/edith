@@ -807,13 +807,13 @@ class OwnedProcessSDKLocalTests(unittest.TestCase):
         return ("\n".join("Test " + name + "() passed after 0.001 seconds." for name in self.names)
                 + "\nTest run with 5 tests in 1 suite passed after 0.1 seconds.\n").encode()
 
-    def test_actual_fifty_sources_and_original_five_methods_are_selected_without_other_targets(self):
+    def test_actual_fifty_two_sources_and_original_five_methods_are_selected_without_other_targets(self):
         unrelated = self.root / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/Unrelated.swift"
         unrelated.write_text("@Test func unrelated() {}\n")
         digests, count = HELPER.prepare_package(self.root, self.package, True)
         self.assertEqual(count, 5)
         self.assertEqual(tuple(HELPER.OWNED_METHODS), self.names)
-        self.assertEqual(len(digests), 50)
+        self.assertEqual(len(digests), 52)
         self.assertEqual(set(digests), set(self.bytes))
         for name, data in self.bytes.items():
             self.assertEqual((self.package / name).read_bytes(), data)
@@ -823,12 +823,12 @@ class OwnedProcessSDKLocalTests(unittest.TestCase):
         self.assertEqual(manifest.count(".target("), 1)
         self.assertEqual(manifest.count(".testTarget("), 1)
         self.assertEqual(manifest.count(".swiftLanguageMode(.v5)"), 2)
-        self.assertIn('dependencies: ["EdithExtensionSupport"]', manifest)
+        self.assertIn('dependencies: ["EdithExtensionCore"]', manifest)
         for excluded in [".package(", "Ghostty", "ZIP", "ArgumentParser", "EdithExtensionUI", "EdithExtensionAccounts"]:
             self.assertNotIn(excluded, manifest)
 
     def test_owned_inventory_missing_links_method_drift_and_generated_extras_fail_closed(self):
-        source = self.root / "Packages/ExtensionSupport/Sources/EdithExtensionSupport"
+        source = self.root / "Packages/ExtensionSupport/Sources/EdithExtensionCore"
         test = self.root / "Packages/ExtensionSupport/Tests/EdithExtensionSupportTests/ExtensionOwnedProcessGroupTests.swift"
         original = test.read_bytes()
         for kind in ["extra", "missing", "link", "method", "stale"]:
@@ -948,7 +948,7 @@ class OwnedProcessSDKLocalTests(unittest.TestCase):
                 self.assertFalse(receipt["isolatedAccountSDK"])
                 self.assertTrue(receipt["isolatedOwnedProcessGroupsSDK"])
                 self.assertEqual(receipt["expectedTests"], 5)
-                self.assertEqual(len(receipt["sourceSHA256"]), 50)
+                self.assertEqual(len(receipt["sourceSHA256"]), 52)
                 self.assertFalse((self.root / "local/account-contracts").exists())
 
     def test_real_make_route_invokes_only_the_fixed_sdk_mode(self):

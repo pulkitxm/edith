@@ -1,5 +1,5 @@
 import ArgumentParser
-import EdithExtensionSupport
+import EdithExtensionCore
 import Foundation
 
 @MainActor public final class ExtensionCLIStreams {

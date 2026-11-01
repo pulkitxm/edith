@@ -24,13 +24,16 @@ def write(module, name, content):
     directory.mkdir(parents=True, exist_ok=True)
     (directory / name).write_text(content)
 
+core = "Packages/ExtensionSupport/Sources/EdithExtensionCore/"
 support = "Packages/ExtensionSupport/Sources/EdithExtensionSupport/"
-for name in ["PersistentFileLease.swift", "ExtensionData.swift", "RestoredPathValidation.swift", "AppStorageKeys.swift"]:
-    write("EdithExtensionSupport", name, read(support + name))
-cli = read(support + "CLICommandRunner.swift")
+for name in ["PersistentFileLease.swift", "ExtensionDataLayout.swift", "ExtensionDefaults.swift", "ExtensionScope.swift", "RestoredPathValidation.swift", "AppStorageKeys.swift"]:
+    write("EdithExtensionCore", name, read(core + name))
+cli = read(core + "CLICommandRunner.swift")
 request = cli[cli.index("public struct CLICommandRequest:"):cli.index("public enum ToolVersionProbe")]
 result = cli[cli.index("public struct CLICommandResult:"):cli.index("public enum CLICommandRunnerError")]
-write("EdithExtensionSupport", "CLIValues.swift", "import Foundation\n" + request + result)
+write("EdithExtensionCore", "CLIValues.swift", "import Foundation\n" + request + result)
+for name in ["ExtensionData.swift", "ExtensionEnvironment.swift"]:
+    write("EdithExtensionSupport", name, read(support + name))
 write("EdithExtensionSupport", "DefaultsBoundary.swift", 'import Foundation\npublic enum SharedDefaults { public static var store: UserDefaults { fatalError("Defaults are outside this fixture") } }\n')
 for owner, module in [("music", "MusicHistory"), ("downloads", "DownloadsHistory")]:
     base = f"Extensions/{owner}/"
@@ -57,7 +60,8 @@ tests.mkdir(parents=True)
 (scratch / "Package.swift").write_text('''// swift-tools-version:6.0
 import PackageDescription
 let package = Package(name: "DownloadHistoryFixture", platforms: [.macOS(.v14)], targets: [
-    .target(name: "EdithExtensionSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
+    .target(name: "EdithExtensionCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+    .target(name: "EdithExtensionSupport", dependencies: ["EdithExtensionCore"], swiftSettings: [.swiftLanguageMode(.v5)]),
     .target(name: "MusicHistory", dependencies: ["EdithExtensionSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
     .target(name: "DownloadsHistory", dependencies: ["EdithExtensionSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
     .executableTarget(name: "HistoryChild", dependencies: ["MusicHistory", "DownloadsHistory", "EdithExtensionSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),

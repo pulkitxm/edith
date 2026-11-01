@@ -1,9 +1,9 @@
-import EdithExtensionSupport
+import EdithExtensionCore
 import EdithExtensionUI
 import Foundation
 
 enum FinderDefaults {
-    private static var store: UserDefaults { SharedDefaults.store }
+    private static var store: UserDefaults { ExtensionScope.installed.defaults() }
 
     static var viewMode: String {
         get { store.string(forKey: "finderViewMode") ?? FileViewMode.list.rawValue }

@@ -1,11 +1,12 @@
 import AppKit
-import EdithExtensionSupport
+import EdithExtensionCore
 import SwiftUI
 
 enum ExportCardStyle {
     private static var currentTheme: AppTheme {
         AppTheme(
-            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
+            storedName: ExtensionScope.installed.defaults().string(
+                forKey: AppStorageKeys.General.theme)
                 ?? AppTheme.accent.rawValue)
     }
 

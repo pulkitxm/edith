@@ -37,7 +37,7 @@ let package = Package(
 """
 
 OWNED_GROUPS = {
-    "Sources/EdithExtensionSupport": [
+    "Sources/EdithExtensionCore": [
         'AppStorageKeys.swift',
         'BlockingWork.swift',
         'CLIChildProcess.swift',
@@ -48,7 +48,10 @@ OWNED_GROUPS = {
         'ExtensionCLIStreamEnvelope.swift',
         'ExtensionCommandOwnership.swift',
         'ExtensionCommandRegistry.swift',
-        'ExtensionData.swift',
+        'ExtensionDataLayout.swift',
+        'ExtensionDefaults.swift',
+        'ExtensionScope.swift',
+        'IPC.swift',
         'ExtensionEngine.swift',
         'ExtensionEngineClient.swift',
         'ExtensionNativeTask.swift',
@@ -66,7 +69,6 @@ OWNED_GROUPS = {
         'HotKeyRegistrar.swift',
         'PersistentFileLease.swift',
         'RestoredPathValidation.swift',
-        'SharedDefaults.swift',
         'SurfaceArrangement.swift',
         'SurfaceCalendar.swift',
         'SurfaceChart.swift',
@@ -103,8 +105,8 @@ let package = Package(
     name: "OwnedProcessContracts",
     platforms: [.macOS(.v14)],
     targets: [
-        .target(name: "EdithExtensionSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(name: "EdithExtensionSupportTests", dependencies: ["EdithExtensionSupport"], swiftSettings: [.swiftLanguageMode(.v5)])
+        .target(name: "EdithExtensionCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "EdithExtensionSupportTests", dependencies: ["EdithExtensionCore"], swiftSettings: [.swiftLanguageMode(.v5)])
     ]
 )
 """

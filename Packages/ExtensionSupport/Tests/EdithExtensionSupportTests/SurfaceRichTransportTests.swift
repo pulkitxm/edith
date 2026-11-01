@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import Testing
+@testable import EdithExtensionCore
 @testable import EdithExtensionSupport
 
 @Suite @MainActor

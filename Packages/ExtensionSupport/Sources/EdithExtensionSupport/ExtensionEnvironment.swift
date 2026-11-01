@@ -1,3 +1,4 @@
+@_exported import EdithExtensionCore
 import Foundation
 
 public enum ExtensionEnvironment {
@@ -16,18 +17,23 @@ public enum ExtensionEnvironment {
     public static func childEnvironment(
         _ environment: [String: String], executable: String
     ) -> [String: String] {
-        guard executable != Bundle.main.executablePath else { return environment }
-        return environment.filter { !isPrivate($0.key) }
+        ExtensionScope.childEnvironment(environment, executable: executable)
     }
 
     public static func isPrivate(_ key: String) -> Bool {
-        key.hasPrefix("EDITH_EXTENSION_")
-            || ["EDITH_SHARED_DEFAULTS_SUITE", "EDITH_SURFACE_DEFAULTS_SUITE"].contains(key)
+        ExtensionScope.isPrivate(key)
     }
 
     public static func configure(_ values: [String: String]) {
         lock.withLock { overrides.merge(values) { $1 } }
+        ExtensionScope.install(scope)
     }
+
+    private static let scope = ExtensionScope(
+        environment: { values },
+        value: { ExtensionEnvironment[$0] },
+        defaults: { SharedDefaults.store },
+        dataRoot: { ExtensionData.root })
 }
 
 @_cdecl("edith_extension_configure_environment")
