@@ -43,7 +43,7 @@ SETTINGS_FILTER = r"^HerdrSettingsActionTests\." + SETTINGS_SUITE + "/" + SETTIN
 def expected_counts(settings_action):
     if type(settings_action) is not bool:
         raise ValueError("Local Herdr selection must be a boolean")
-    return (1, 1, 1) if settings_action else (91, 13, 116)
+    return (1, 1, 1) if settings_action else (93, 13, 118)
 
 
 def settings_action_requested(arguments):

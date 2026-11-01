@@ -35,6 +35,21 @@ public struct LimitsProviderSnapshot: Codable, Equatable, Sendable {
         case .credits: nil
         }
     }
+
+    var reportedSlots: [LimitWindowSlot] {
+        MenuBarLimits.slots(for: provider).filter {
+            UsageCompactQuotaValue(window(for: $0)).percent != nil
+        }
+    }
+
+    var unreportedSessionMessage: String? {
+        guard [.claude, .codex].contains(provider), session == nil, error == nil,
+            week != nil || fable != nil || credits != nil
+        else {
+            return nil
+        }
+        return "No 5-hour window reported by \(provider.label)."
+    }
 }
 
 public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
@@ -70,6 +85,14 @@ public struct LimitsTopicSnapshot: Codable, Equatable, Sendable {
         claudeUsesAccounts =
             try container.decodeIfPresent(Bool.self, forKey: .claudeUsesAccounts)
             ?? !claudeAccounts.isEmpty
+    }
+
+    var generalFailure: String? {
+        guard let failure,
+            !providers.contains(where: { $0.error == failure }),
+            !claudeAccounts.contains(where: { $0.limits.error == failure })
+        else { return nil }
+        return failure
     }
 }
 
@@ -108,6 +131,29 @@ public enum LimitsCollector {
         if UsageExecutionEnvironment.fixtureHome != nil {
             return LimitsTopicSnapshot(refreshedAt: Date(), providers: [], failure: nil)
         }
+        if ExtensionEnvironment.values["EDITH_USAGE_OFFLINE"] == "1" {
+            guard let cached = LimitsSnapshotCache.load() else {
+                return .init(
+                    refreshedAt: Date(), providers: [],
+                    failure: "No saved limits are available while usage collection is offline.")
+            }
+            let providers = enabledProviders(defaults: defaults)
+            do {
+                let accounts: [ClaudeAccount]
+                if providers.contains(.claude) {
+                    let directory = try ClaudeAccountStorage.directory(
+                        environment: ExtensionEnvironment.values)
+                    accounts = try await ClaudeAccountStorage(directory: directory).load().accounts
+                } else {
+                    accounts = []
+                }
+                return offlineSnapshot(cached, providers: providers, accounts: accounts)
+            } catch {
+                return .init(
+                    refreshedAt: Date(), providers: [],
+                    failure: "Account limits configuration could not be loaded.")
+            }
+        }
         return await collectConfigured(
             providers: enabledProviders(defaults: defaults), force: force,
             refreshSession: refreshSession, announce: announce,
@@ -128,6 +174,33 @@ public enum LimitsCollector {
                 return await fetchGrok()
             }
         }
+    }
+
+    static func offlineSnapshot(
+        _ cached: LimitsTopicSnapshot, providers: [LimitProvider], accounts: [ClaudeAccount]
+    ) -> LimitsTopicSnapshot {
+        let usesAccounts = providers.contains(.claude) && !accounts.isEmpty
+        let savedAccounts: [ClaudeAccountLimits] =
+            providers.contains(.claude)
+            ? cached.claudeAccounts.compactMap { saved in
+                guard
+                    let account = accounts.first(where: {
+                        $0.id == saved.id && $0.hasSubscriptionLimits
+                    })
+                else {
+                    return nil as ClaudeAccountLimits?
+                }
+                return ClaudeAccountLimits(
+                    id: account.id, name: account.name, limits: saved.limits,
+                    refreshedAt: saved.refreshedAt, retryAt: saved.retryAt)
+            } : []
+        return .init(
+            refreshedAt: cached.refreshedAt,
+            providers: cached.providers.filter {
+                providers.contains($0.provider)
+                    && ($0.provider != .claude || (!usesAccounts && !cached.claudeUsesAccounts))
+            }, failure: cached.generalFailure, claudeAccounts: savedAccounts,
+            claudeUsesAccounts: usesAccounts)
     }
 
     static func collectConfigured(

@@ -24,6 +24,7 @@ import Observation
     private let readState: @Sendable (ClaudeAccountStorage) async throws -> ClaudeAccountsState
     private let invalidateUsage: @Sendable () async -> Void
     private let refreshUsage: @Sendable () async -> Void
+    private let removeRemoteProfile: @Sendable (UUID, String) async throws -> Void
 
     var hasConfiguredStore: Bool {
         suppliedDirectory != nil
@@ -52,6 +53,9 @@ import Observation
         },
         refreshUsage: @escaping @Sendable () async -> Void = {
             await ClaudeAccountsModel.refreshEnabledUsage()
+        },
+        removeRemoteProfile: @escaping @Sendable (UUID, String) async throws -> Void = {
+            try await ClaudeAccountImport.removeRemoteProfile(accountID: $0, machineID: $1)
         }
     ) {
         suppliedDirectory = directory
@@ -61,6 +65,7 @@ import Observation
         self.eraseSecret = eraseSecret
         self.invalidateUsage = invalidateUsage
         self.refreshUsage = refreshUsage
+        self.removeRemoteProfile = removeRemoteProfile
     }
 
     private func ownedStorage() throws -> ClaudeAccountStorage {
@@ -159,7 +164,7 @@ import Observation
         }
     }
 
-    func forget(_ id: UUID) async {
+    func forget(_ id: UUID, removeRemoteLogin: Bool = false) async {
         guard ready, !saving, !stopped else { return }
         saving = true
         defer { saving = false }
@@ -167,15 +172,14 @@ import Observation
             if client != nil {
                 state = try await perform(
                     "herdr.ui.accounts.forget",
-                    payload: JSONSerialization.data(withJSONObject: ["id": id.uuidString]))
+                    payload: JSONSerialization.data(withJSONObject: [
+                        "id": id.uuidString, "removeRemoteLogin": removeRemoteLogin,
+                    ]))
             } else {
                 await limitsLoginOwner.cancel(accountID: id)
                 let previous = account(id)
-                state = try await ownedStorage().logout(
-                    id: id, eraseScopedSecret: eraseSecret)
-                if let machineID = previous?.remoteMachineID {
-                    try await ClaudeAccountImport.removeRemoteProfile(
-                        accountID: id, machineID: machineID)
+                if removeRemoteLogin, let machineID = previous?.remoteMachineID {
+                    try await removeRemoteProfile(id, machineID)
                 }
                 state = try await ownedStorage().forget(
                     id: id, eraseScopedSecret: eraseSecret)
@@ -193,7 +197,7 @@ import Observation
         }
     }
 
-    func logout(_ id: UUID) async {
+    func logout(_ id: UUID, removeRemoteLogin: Bool = false) async {
         guard ready, !saving, !stopped else { return }
         saving = true
         defer { saving = false }
@@ -201,16 +205,17 @@ import Observation
             if client != nil {
                 state = try await perform(
                     "herdr.ui.accounts.logout",
-                    payload: JSONSerialization.data(withJSONObject: ["id": id.uuidString]))
+                    payload: JSONSerialization.data(withJSONObject: [
+                        "id": id.uuidString, "removeRemoteLogin": removeRemoteLogin,
+                    ]))
             } else {
                 await limitsLoginOwner.cancel(accountID: id)
                 let previous = account(id)
+                if removeRemoteLogin, let machineID = previous?.remoteMachineID {
+                    try await removeRemoteProfile(id, machineID)
+                }
                 state = try await ownedStorage().logout(
                     id: id, eraseScopedSecret: eraseSecret)
-                if let machineID = previous?.remoteMachineID {
-                    try await ClaudeAccountImport.removeRemoteProfile(
-                        accountID: id, machineID: machineID)
-                }
             }
             await notifyChanged()
             error = nil

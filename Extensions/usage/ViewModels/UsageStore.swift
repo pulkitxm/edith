@@ -99,6 +99,7 @@ final class UsageStore {
     private(set) var claudeAccounts: [ClaudeAccountLimits] = []
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
+    private var providerSnapshots: [LimitProvider: LimitsProviderSnapshot] = [:]
 
     private let historyURL: URL
     private var claudeUnavailable = false
@@ -148,6 +149,14 @@ final class UsageStore {
         }
     }
 
+    func snapshot(for provider: LimitProvider) -> LimitsProviderSnapshot {
+        if let snapshot = providerSnapshots[provider] { return snapshot }
+        let limits = limits(for: provider)
+        return .init(
+            provider: provider, session: limits.session, week: limits.week,
+            fable: limits.fable, grok: limits.grok, credits: limits.credits)
+    }
+
     private nonisolated static func fresh(_ window: LimitWindow?) -> LimitWindow? {
         window.flatMap { ($0.resetsAt ?? .distantFuture) > Date() ? $0 : nil }
     }
@@ -171,6 +180,10 @@ final class UsageStore {
         {
             claudeUsesAccounts = cached.claudeUsesAccounts
             claudeAccounts = cached.claudeAccounts
+            providerSnapshots = Dictionary(
+                cached.providers.map { ($0.provider, $0) }, uniquingKeysWith: { _, last in last })
+            limitsError = cached.generalFailure
+            applyFetchedLimits(cached)
         }
         seedTask = Task { @MainActor [weak self] in
             let latest = await LimitsHistory.loadLatestProviders(url: historyURL)
@@ -213,23 +226,25 @@ final class UsageStore {
     }
 
     private func seedFromHistory(_ latest: [LimitProvider: LimitsHistory.Latest]) {
-        if !claudeUnavailable, !claudeUsesAccounts, let last = latest[.claude] {
+        if providerSnapshots[.claude] == nil, !claudeUnavailable, !claudeUsesAccounts,
+            let last = latest[.claude]
+        {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
-        if let last = latest[.codex] {
+        if providerSnapshots[.codex] == nil, let last = latest[.codex] {
             codexSession = Self.fresh(last.session)
             codexWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
-        if let last = latest[.cursor] {
+        if providerSnapshots[.cursor] == nil, let last = latest[.cursor] {
             cursorSession = Self.fresh(last.session)
             cursorWeek = Self.fresh(last.week)
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
         }
-        if let last = latest[.grok] {
+        if providerSnapshots[.grok] == nil, let last = latest[.grok] {
             grokWeek = Self.fresh(last.week)
             grokAllowance = grokWeek == nil ? nil : last.grok
             limitsUpdatedAt = max(limitsUpdatedAt ?? .distantPast, last.date)
@@ -318,9 +333,11 @@ final class UsageStore {
             fableWeek = Self.fresh(claude.fable)
         }
         claudeAccounts = snapshot.claudeAccounts
+        providerSnapshots = Dictionary(
+            snapshot.providers.map { ($0.provider, $0) }, uniquingKeysWith: { _, last in last })
         await reloadLimitsFromHistory()
         applyFetchedLimits(snapshot)
-        limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
+        limitsError = snapshot.generalFailure
         refreshingLimits = false
         limitsRequestTask?.cancel()
         limitsRequestTask = nil
@@ -339,24 +356,19 @@ final class UsageStore {
         for provider in snapshot.providers {
             switch provider.provider {
             case .claude:
-                guard !claudeUsesAccounts,
-                    provider.session != nil || provider.week != nil || provider.fable != nil
-                else { continue }
-                claudeUnavailable = false
+                guard !claudeUsesAccounts else { continue }
+                claudeUnavailable = provider.error != nil
                 session = Self.fresh(provider.session)
                 week = Self.fresh(provider.week)
                 fableWeek = Self.fresh(provider.fable)
             case .codex:
-                guard provider.session != nil || provider.week != nil else { continue }
                 codexSession = Self.fresh(provider.session)
                 codexWeek = Self.fresh(provider.week)
                 codexCredits = provider.credits
             case .cursor:
-                guard provider.session != nil || provider.week != nil else { continue }
                 cursorSession = Self.fresh(provider.session)
                 cursorWeek = Self.fresh(provider.week)
             case .grok:
-                guard provider.week != nil || provider.grok != nil else { continue }
                 grokWeek = Self.fresh(provider.week)
                 grokAllowance = grokWeek == nil ? nil : provider.grok
             }

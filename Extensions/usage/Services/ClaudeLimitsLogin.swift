@@ -75,7 +75,7 @@ enum ClaudeLimitsLogin {
         guard data.count <= 65_536,
             var object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             var oauth = object["claudeAiOauth"] as? [String: Any],
-            let scopes = oauth["scopes"] as? [String], scopes.contains("user:profile"),
+            let scopes = oauth["scopes"] as? [String], validScopes(scopes),
             let refresh = oauth["refreshToken"] as? String
         else { throw ClaudeLimitsReader.Failure.unauthorized }
         _ = try ClaudeLimitsReader.validatedToken(refresh)
@@ -88,7 +88,7 @@ enum ClaudeLimitsLogin {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "grant_type": "refresh_token", "refresh_token": refresh, "client_id": client,
-            "scope": "user:profile",
+            "scope": scopes.joined(separator: " "),
         ])
         let (responseData, response) = try await send(request)
         try Task.checkCancellation()
@@ -103,13 +103,20 @@ enum ClaudeLimitsLogin {
         }
         guard let value = try JSONSerialization.jsonObject(with: responseData) as? [String: Any],
             let access = value["access_token"] as? String,
-            let lifetime = value["expires_in"] as? Double, lifetime.isFinite, lifetime > 0,
-            let scope = value["scope"] as? String, scope.utf8.count <= 8192
+            let lifetime = value["expires_in"] as? Double, lifetime.isFinite, lifetime > 0
         else { throw ClaudeLimitsReader.Failure.unauthorized }
         _ = try ClaudeLimitsReader.validatedToken(access)
-        let granted = scope.split(separator: " ").map(String.init)
+        let granted: [String]
+        if let scope = value["scope"] {
+            guard let scope = scope as? String, scope.utf8.count <= 8192 else {
+                throw ClaudeLimitsReader.Failure.invalidToken
+            }
+            granted = scope.split(separator: " ").map(String.init)
+        } else {
+            granted = scopes
+        }
         let expiry = now.addingTimeInterval(lifetime).timeIntervalSince1970 * 1000
-        guard expiry.isFinite, granted.count <= 64, granted.contains("user:profile") else {
+        guard expiry.isFinite, validScopes(granted) else {
             throw ClaudeLimitsReader.Failure.missingProfileScope
         }
         oauth["accessToken"] = access
@@ -119,10 +126,25 @@ enum ClaudeLimitsLogin {
             _ = try ClaudeLimitsReader.validatedToken(rotated)
             oauth["refreshToken"] = rotated
         }
+        if let lifetime = value["refresh_token_expires_in"] as? Double {
+            let expiry = now.addingTimeInterval(lifetime).timeIntervalSince1970 * 1000
+            guard lifetime.isFinite, lifetime > 0, expiry.isFinite else {
+                throw ClaudeLimitsReader.Failure.invalidToken
+            }
+            oauth["refreshTokenExpiresAt"] = expiry
+        }
         object["claudeAiOauth"] = oauth
         let updated = try JSONSerialization.data(withJSONObject: object)
         guard updated.count <= 65_536 else { throw ClaudeLimitsReader.Failure.unavailable }
         return updated
+    }
+
+    private static func validScopes(_ scopes: [String]) -> Bool {
+        !scopes.isEmpty && scopes.count <= 64 && scopes.contains("user:profile")
+            && scopes.allSatisfy {
+                !$0.isEmpty && $0.utf8.count <= 128
+                    && $0.unicodeScalars.allSatisfy { 0x21...0x7E ~= $0.value }
+            }
     }
 
     static func service(_ folder: URL) -> String {

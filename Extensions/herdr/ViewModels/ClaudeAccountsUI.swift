@@ -117,13 +117,21 @@ struct ClaudeSharedLaunchMutation: Codable {
             }
             _ = await model.importCurrentCLIAccount(on: machine)
         case "herdr.ui.accounts.forget", "herdr.ui.accounts.logout":
-            guard Set(object.keys) == ["id"], let raw = object["id"] as? String,
+            guard Set(object.keys).isSubset(of: ["id", "removeRemoteLogin"]),
+                let raw = object["id"] as? String,
                 let id = UUID(uuidString: raw), model.account(id) != nil
             else { throw ExtensionPeerError.invalidRequest }
+            if let value = object["removeRemoteLogin"] {
+                guard let flag = value as? NSNumber,
+                    CFGetTypeID(flag) == CFBooleanGetTypeID()
+                else { throw ExtensionPeerError.invalidRequest }
+            }
             if command == "herdr.ui.accounts.forget" {
-                await model.forget(id)
+                await model.forget(
+                    id, removeRemoteLogin: object["removeRemoteLogin"] as? Bool ?? false)
             } else {
-                await model.logout(id)
+                await model.logout(
+                    id, removeRemoteLogin: object["removeRemoteLogin"] as? Bool ?? false)
             }
         default: throw ExtensionPeerError.invalidRequest
         }

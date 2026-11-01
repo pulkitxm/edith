@@ -7,6 +7,49 @@ import Testing
 @testable import UsageExtension
 
 @MainActor @Suite(.serialized) struct UsageCLIExecutionTests {
+    @Test func limitsReportTheRefreshedAccountsAndProviderFailuresWithoutHistoricalFallback()
+        async throws
+    {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let accountID = UUID()
+        let snapshot = LimitsTopicSnapshot(
+            refreshedAt: Date(),
+            providers: [
+                .init(provider: .codex, session: nil, week: .init(percent: 21, resetsAt: nil)),
+                .init(provider: .cursor, session: nil, week: nil, error: "Sample provider offline"),
+            ], failure: ClaudeLimitsReader.Failure.unauthorized.localizedDescription,
+            claudeAccounts: [
+                .init(
+                    id: accountID, name: "Sample subscription",
+                    limits: .init(
+                        provider: .claude, session: nil, week: nil,
+                        error: ClaudeLimitsReader.Failure.unauthorized.localizedDescription),
+                    refreshedAt: Date())
+            ])
+        let controller = UsageWorkerController(
+            dataDirectory: root, fetchLimits: { _ in snapshot }, collect: { _, _ in Data() })
+        let empty = try await run(["limits", "--json"], controller: controller)
+        #expect(empty.exitCode == 4)
+        let reply = try await run(["limits", "--refresh", "--json"], controller: controller)
+        #expect(reply.exitCode == 0)
+        let rows = try #require(
+            JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [[String: Any]])
+        #expect(rows.count == 3)
+        #expect(rows[0]["accountID"] as? String == accountID.uuidString)
+        #expect(rows[0]["label"] as? String == "Claude · Sample subscription")
+        #expect((rows[0]["error"] as? String)?.contains("Reconnect subscription limits") == true)
+        #expect(rows[0]["session"] is NSNull)
+        #expect((rows[1]["weekly"] as? [String: Any])?["percent"] as? Double == 21)
+        #expect(rows[1]["session"] is NSNull)
+        #expect(rows[2]["error"] as? String == "Sample provider offline")
+        let text = try await run(["limits"], controller: controller)
+        #expect(text.stdout.contains("Sample subscription"))
+        #expect(text.stdout.contains("Not reported"))
+        #expect(text.stdout.contains("Sample provider offline"))
+        await controller.shutdown()
+    }
+
     private func run(
         _ arguments: [String], controller: UsageWorkerController, input: Data = Data(),
         hooks: UsageCLIHookOwner? = nil,

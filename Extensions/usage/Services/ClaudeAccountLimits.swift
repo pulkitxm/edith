@@ -16,6 +16,18 @@ public struct ClaudeAccountLimits: Codable, Equatable, Identifiable, Sendable {
         self.id = id; self.name = name; self.limits = limits; self.refreshedAt = refreshedAt
         self.retryAt = retryAt
     }
+
+    var errorMessage: String? {
+        guard let error = limits.error else { return nil }
+        let authenticationFailures: [ClaudeLimitsReader.Failure] = [
+            .missingToken, .invalidToken, .unauthorized, .missingProfileScope, .forbidden,
+        ]
+        guard authenticationFailures.contains(where: { $0.localizedDescription == error }) else {
+            return error
+        }
+        return
+            "Reconnect this subscription in Agents > Agent Launch Settings. Edit this account and choose Reconnect subscription limits."
+    }
 }
 
 public enum ClaudeAccountLimitsLayout {
