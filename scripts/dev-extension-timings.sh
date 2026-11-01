@@ -14,7 +14,7 @@ wait_until_ready() {
     if "$ED" extensions ls --json 2>/dev/null | python3 -c '
 import json, sys
 rows = [e for e in json.load(sys.stdin) if e["installed"] and e["enabled"]]
-ready = all(e["state"] == "active" and any("startMs" in v for v in e["timings"].values()) for e in rows)
+ready = all(e["state"] == "idle" or (e["state"] == "active" and any("startMs" in v for v in e["timings"].values())) for e in rows)
 sys.exit(0 if ready else 1)'; then
       return 0
     fi
@@ -43,8 +43,10 @@ runs = [json.loads(path.read_text()) for path in sorted(Path(sys.argv[1]).glob("
 keys = ["verifyMs", "startMs", "readyAfterLaunchMs"]
 table = {}
 totals = []
+idle = set()
 for run in runs:
     starts, ready = [], []
+    idle.update(entry["id"] for entry in run if entry.get("state") == "idle")
     for entry in run:
         if not entry["installed"]:
             continue
@@ -65,5 +67,7 @@ for (identifier, role), row in sorted(table.items()):
     )
     print(f"{identifier:14}{role:9}{cells}")
 start, ready = statistics.median(t[0] for t in totals), statistics.median(t[1] for t in totals)
+if idle:
+    print(f"\nidle until first use: {', '.join(sorted(idle))}")
 print(f"\nmedian of {len(runs)} cold launches: total start {start:.0f} ms, all ready {ready:.0f} ms after launch")
 PY

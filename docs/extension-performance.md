@@ -7,7 +7,7 @@ loading and starting the code, the first presentation and its first frame.
 
 | Field | Meaning |
 | --- | --- |
-| `verifyMs` | Code signature checks for the extension's bundles, including time queued behind other extensions (four run at once). |
+| `verifyMs` | Code signature checks for the extension's bundles, including time queued behind other extensions (four run at once) and waiting for the main thread during launch. A bundle whose files are unchanged since its last full check skips the check itself. |
 | `startMs` | Loading the bundle, describing it and running its `start` on the main thread. |
 | `readyAfterLaunchMs` | When the role finished starting, measured from process launch. |
 | `presentationMs` | Creating the view controller for the first presentation. |
