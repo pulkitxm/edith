@@ -119,7 +119,9 @@ has not caught up to yet, plus a reservation for what it has not allocated:
 the full estimate for the first 20s, then at least half, or more when live
 usage is higher. Available memory already includes allocations, so that part
 is not reserved again. A quiet 14-core machine fits about three app builds.
-A busy one fits fewer. Set `EDITH_MAKE_GATE=skip` to run immediately.
+A busy one fits fewer. Keep the gate enabled during parallel development and
+coordinate direct build commands, which do not enter the Make gate. The gate
+limits resource use; it does not prevent output collisions within one worktree.
 
 When the budget is short, the gate waits and prints `make-resource-gate:`
 lines on stderr: the reason, the host budget, each running pid and target,

@@ -11,6 +11,14 @@ documentation, tests, and code all help.
 - Keep pull requests focused and separate unrelated changes.
 - Never include credentials, personal data, private repository contents, usage history, or generated build artifacts.
 
+## Development and testing guides
+
+Read the [development workflow](docs/development.md) for parallel worktrees,
+local host builds, unpublished extension sideloading and remote-to-Mac handoffs.
+Use [testing and proof](docs/testing.md) for change-selected checks, runtime
+acceptance and safe final evidence. These are the operating guides for workers
+and the integration owner.
+
 ## Build and run
 
 ### macOS
@@ -20,7 +28,7 @@ documentation, tests, and code all help.
 ./build.sh --release --install
 make ci-host
 make ci-extension-support
-make ci-extension-<id>
+make ci-local CI_LOCAL='--list'
 ```
 
 Default builds are development builds. Each worktree builds its own app,
@@ -110,13 +118,15 @@ end-user deployment and data model are in the
 ## Checks
 
 CI runs the applicable macOS, site, script and policy gates for every pull
-request and push to `main`. Run `make ci` when you want the full check suite on
-demand. Companion changes have additional commands below and a dedicated CI
-job.
+request and push to `main`. Start with `make ci-local CI_LOCAL='--list'`, then
+run `make ci-local` for change-selected product lanes and shared checks. Use
+`make ci-local-all` for all product lanes and development package builds when
+broad verification is needed. `make ci` runs the fixed aggregate below; it is
+not every product lane. Companion changes also have dedicated checks.
 
 | Target | What it does |
 | --- | --- |
-| `make ci` | All macOS, script, site, and policy checks below, after `bun install --frozen-lockfile`. |
+| `make ci` | Fixed aggregate of macOS, script, site, and policy checks, after `bun install --frozen-lockfile`. |
 | `make ci-comments` | Fails on any disallowed comment in tracked source. |
 | `make ci-secrets` | Scans every tracked file for leaked secrets. |
 | `make ci-duplicate-keys` | Fails when a `UserDefaults`/`SharedDefaults` key is spelled out as a raw string literal in more than one Swift file instead of going through one shared constant. |
@@ -128,7 +138,7 @@ job.
 | `make ci-host` | Format, build and test `Packages/EdithHost`. |
 | `make ci-extension-support` | Format and test `Packages/ExtensionSupport` and the shared `Extensions` package. |
 | `make ci-studio` | The EdithStudio test suite. |
-| `make ci-swift-test` | The host, marketplace, extension support and docs worker tests. |
+| `make ci-swift-test` | Marketplace/host aggregate, including support and docs, plus native Music tests. |
 | `make ci-swift-check` | Lint, build and test as one on-demand local target. |
 | `make ci-swift` | `ci-swift-check` plus a full `build.sh` and `make verify-bundle`. |
 | `make verify-bundle` | Bundle layout and codesign assertions against `dist/Edith.app`. |
@@ -149,9 +159,11 @@ if one slips in. Write names and structure that do not need prose.
 A pull request description is one line that states what changed and why. Use
 checkpoint commits for logical changes, add tests for changed behavior, and run
 the relevant checks before requesting review. After verification is complete,
-post one short evidence comment that shows the end result through a screenshot,
-recording, or clean terminal output when the change has something meaningful to
-demonstrate.
+post one short evidence comment through Pukbot that shows the finished result
+from the actual product running synthetic fixtures. Use a screenshot, recording
+or sanitized final terminal output as appropriate. Never upload captures or
+artifacts containing actual project data, including to private destinations.
+See the [proof requirements](docs/testing.md#review-evidence).
 
 Maintainers may request changes before merge. By contributing, you agree that
 your contribution is licensed under the repository's GNU General Public License
