@@ -130,13 +130,27 @@ final class TerminalSessionHolder {
         let focus = active && wantsFocus
         guard presentation?.0 != active || presentation?.1 != focus else { return }
         presentation = (active, focus); presentationGeneration += 1
-        ghosttyView?.setRenderingActive(active && (hostWindowState?.visible ?? true))
+        synchronizeRendering()
         if focus { ghosttyView?.requestFocus() } else { ghosttyView?.cancelFocusRequest() }
     }
     func setHostWindowState(active: Bool, key: Bool, visible: Bool) {
         hostWindowState = (active, key, visible)
         ghosttyView?.setHostWindowState(active: active, key: key && visible)
-        ghosttyView?.setRenderingActive(visible && (presentation?.0 ?? true))
+        synchronizeRendering()
+    }
+
+    private var renderingActive: Bool {
+        (presentation?.0 ?? true) && (hostWindowState?.visible ?? true)
+    }
+
+    private func synchronizeRendering() {
+        ghosttyView?.setRenderingActive(renderingActive)
+        if renderingActive {
+            if rendererReady { startReading(generation: generation) }
+        } else {
+            readTask?.cancel()
+            readTask = nil
+        }
     }
 
     func handleDropFiles(_ payload: TerminalDropPayload, generation expected: Int? = nil) -> Bool {
@@ -355,6 +369,7 @@ final class TerminalSessionHolder {
                 ?? terminalLaunch?.resetTerminalAfterInterrupt ?? false,
             theme: theme)
         view.fileLinks = fileLinks
+        view.setRenderingActive(renderingActive)
         if let hostWindowState {
             view.setHostWindowState(
                 active: hostWindowState.active, key: hostWindowState.key && hostWindowState.visible)
@@ -446,6 +461,7 @@ final class TerminalSessionHolder {
 
     func bind(_ client: OwnedTerminalClient) {
         if self.client != nil { retirePendingWork(closeSession: false) }
+        if descriptor != client.descriptor { offset = 0 }
         self.client = client
         descriptor = client.descriptor
         currentWorkingDirectory = client.descriptor.directory
@@ -479,14 +495,16 @@ final class TerminalSessionHolder {
         client?.stop()
         client = nil
         rendererReady = false
+        offset = 0
         ghosttyView?.shutdown()
         ghosttyView = nil
     }
 
     private func startReading(generation: Int) {
-        guard retirementTask == nil, readTask == nil, let client else { return }
+        guard renderingActive, retirementTask == nil, readTask == nil, let client else { return }
+        let initialOffset = offset
         readTask = Task { [weak self] in
-            var cursor: UInt64 = 0
+            var cursor = initialOffset
             while !Task.isCancelled {
                 do {
                     let output = try await client.read(after: cursor)

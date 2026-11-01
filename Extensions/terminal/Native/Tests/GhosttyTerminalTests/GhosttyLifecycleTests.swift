@@ -75,6 +75,65 @@ import Testing
         #expect(readySizes == [pane])
     }
 
+    @Test @MainActor func hiddenSurfacesDoNotQueueDrawsAndReactivationRepaints() async throws {
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
+        let container = NSView(frame: window.contentLayoutRect)
+        let view = GhosttyTerminalView(externalIO: TestWindowHost.inertIO())
+        view.frame = container.bounds
+        window.contentView = container
+        container.addSubview(view)
+        defer { view.shutdown(); window.contentView = nil }
+        _ = try #require(view.surface)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+
+        view.setRenderingActive(false)
+        #expect(view.receiveOutput(Data("hidden-output".utf8)))
+        view.layout()
+        #expect(!view.drawScheduled)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!view.drawScheduled)
+
+        view.setRenderingActive(true)
+        #expect(view.drawScheduled)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(view.performBindingAction("select_all"))
+        #expect(view.selectedText()?.contains("hidden-output") == true)
+
+        container.isHidden = true
+        view.scheduleDraw()
+        #expect(!view.drawScheduled)
+        container.isHidden = false
+        #expect(view.drawScheduled)
+    }
+
+    @Test @MainActor func repeatedLayoutDoesNotResizeOrRepaintAnUnchangedSurface() async throws {
+        var resizes = 0
+        let io = GhosttyExternalIO(
+            write: { _ in }, resize: { _, _, _, _ in resizes += 1 }, failure: {})
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
+        let view = GhosttyTerminalView(externalIO: io)
+        view.frame = window.contentLayoutRect
+        window.contentView = view
+        defer { view.shutdown(); window.contentView = nil }
+        _ = try #require(view.surface)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        let initial = resizes
+        #expect(initial > 0)
+
+        for _ in 0..<100 {
+            view.setFrameSize(view.frame.size)
+            view.layout()
+        }
+        #expect(!view.drawScheduled)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(resizes == initial)
+
+        view.setFrameSize(NSSize(width: 800, height: 600))
+        #expect(view.drawScheduled)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(resizes > initial)
+    }
+
     @Test @MainActor func exitedRendererRetainsScreenAndRejectsLateOutput() async throws {
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
         for _ in 0..<8 {
