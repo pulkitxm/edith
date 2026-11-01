@@ -156,6 +156,7 @@ public actor SSHConnection {
             return
         }
         MachinePaths.prepare()
+        try MachinePaths.prepareSockets()
         try? FileManager.default.removeItem(atPath: socketPath)
         if let process = masterProcess { await Self.stopProcess(process) }
         masterProcess = nil
