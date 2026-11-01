@@ -11,6 +11,15 @@ final class HostNotchPanel: NSPanel {
         if [.leftMouseDown, .leftMouseDragged].contains(event.type), event.window === self {
             transferEvent = event
         }
+        if event.type == .scrollWheel,
+            let target = (contentViewController as? HostNotchContainerController)?
+                .chromeScrollTarget(
+                    at: event.locationInWindow, deltaX: event.scrollingDeltaX,
+                    deltaY: event.scrollingDeltaY)
+        {
+            target.scrollWheel(with: event)
+            return
+        }
         super.sendEvent(event)
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -58,7 +67,19 @@ final class HostNotchContainerController: NSViewController {
         )
         nativeLayer.wantsLayer = true
         nativeLayer.layer?.mask = mask
+        nativeLayer.frame = view.bounds
+        nativeLayer.autoresizingMask = [.width, .height]
         view.addSubview(nativeLayer)
+    }
+
+    func chromeScrollTarget(at windowPoint: CGPoint, deltaX: CGFloat, deltaY: CGFloat) -> NSView? {
+        guard isViewLoaded, abs(deltaX) > abs(deltaY) else { return nil }
+        let point = root.convert(windowPoint, from: nil)
+        guard nativeLayer.hitTest(point) != nil else { return nil }
+        for chrome in root.subviews.reversed() where chrome !== nativeLayer {
+            if let target = chrome.hitTest(point) { return target }
+        }
+        return nil
     }
 
     func attach(_ controller: NSViewController, rectangle: CGRect?, native: Bool) {
