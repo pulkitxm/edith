@@ -3,6 +3,21 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageNativeParserTests {
+    @Test func projectedLegacyReceiptsKeepTheirOriginalJournalIdentity() throws {
+        let row: [String: Any] = [
+            "type": "event_msg", "timestamp": "2026-10-09T01:00:00Z", "_receiptOffset": 141_651_119,
+            "payload": [
+                "type": "token_count",
+                "info": ["total_token_usage": ["input_tokens": 10, "output_tokens": 2]],
+            ],
+        ]
+        let parser = UsageNativeParser(source: "codex", originalOffsets: true)
+        let event = try #require(parser.consume(row, offset: 42).first?.event)
+        #expect(event.identity?.hasSuffix(":141651119") == true)
+        let local = UsageNativeParser(source: "codex")
+        #expect(try local.consume(row, offset: 42).first?.event.identity?.hasSuffix(":42") == true)
+    }
+
     @Test func fastUTCTimestampParsingMatchesTheSystemFormatterAndIsFast() throws {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

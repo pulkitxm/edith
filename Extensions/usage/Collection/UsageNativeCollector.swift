@@ -123,7 +123,9 @@ public enum UsageNativeCollector {
                                     records: records),
                                 previous: previous)
                         } else {
-                            let parser = UsageNativeParser(source: root.source, tier: root.tier)
+                            let parser = UsageNativeParser(
+                                source: root.source, tier: root.tier,
+                                originalOffsets: remoteContext != nil)
                             let snapshot = try parser.snapshot(file, key: key, previous: previous)
                             try archive.admit(snapshot, previous: previous)
                             issues.skipped(source: root.source, lines: snapshot.skippedLines)

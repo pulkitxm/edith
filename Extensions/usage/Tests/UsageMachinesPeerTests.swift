@@ -33,6 +33,45 @@ import Testing
         }
     }
 
+    @Test func collectionSelectionFollowsARecreatedMachineWithAnUnambiguousNameOrAlias() throws {
+        let old = UUID()
+        let current = Machine(
+            name: "Remote workstation", host: "192.0.2.10", source: .sshConfigAlias("sample-box"))
+        let other = Machine(name: "Other workstation", host: "192.0.2.11")
+        let history = try JSONSerialization.data(withJSONObject: [
+            "machines": [["id": old.uuidString, "name": "Sample-Box", "host": "old-host"]]
+        ])
+        #expect(
+            UsageMachinesPeer.reconciledSelection(
+                [old, other.id], registry: [current, other], history: history) == [
+                    current.id, other.id,
+                ])
+        #expect(
+            UsageMachinesPeer.reconciledSelection(
+                [other.id], registry: [current, other], history: history) == [other.id])
+        #expect(
+            UsageMachinesPeer.reconciledSelection([old], registry: [other], history: history) == [
+                old
+            ])
+        var sameName = other; sameName.name = "sample-box"
+        #expect(
+            UsageMachinesPeer.reconciledSelection(
+                [old], registry: [current, sameName], history: history) == [old])
+        var retained = current; retained.id = old; retained.name = "Renamed workstation"
+        #expect(
+            UsageMachinesPeer.reconciledSelection(
+                [old], registry: [retained, current], history: history) == [old])
+        let duplicateHistory = try JSONSerialization.data(withJSONObject: [
+            "machines": [
+                ["id": old.uuidString, "name": "sample-box"],
+                ["id": UUID().uuidString, "name": "sample-box"],
+            ]
+        ])
+        #expect(
+            UsageMachinesPeer.reconciledSelection(
+                [old], registry: [current], history: duplicateHistory) == [old])
+    }
+
     @Test func chunkedResultIsValidatedAndReleasedBeforeReturning() async throws {
         let data = try fixture()
         let transport = Transport(data: data)
