@@ -11,6 +11,7 @@ private final class SyntheticService: ExtensionService {
     var drains = 0
     var teardowns = 0
     var invocations: [String] = []
+    var requiresOwnedDataDirectory = false
 
     func start() -> Bool {
         starts += 1
@@ -31,19 +32,27 @@ private final class SyntheticService: ExtensionService {
     }
 }
 
+private let syntheticSuite = "edith.synthetic.service.runtime"
+private let syntheticDataRoot = "/tmp/edith-synthetic-service-data"
+private let syntheticScope = [
+    "EDITH_SHARED_DEFAULTS_SUITE": syntheticSuite, "EDITH_EXTENSION_DATA_ROOT": syntheticDataRoot,
+]
+
 @MainActor
 @Suite(.serialized) struct ExtensionServiceRuntimeTests {
-    private static let suite = "edith.synthetic.service.runtime"
+    private static let suite = syntheticSuite
+    private static let dataRoot = syntheticDataRoot
 
-    private func runtime() -> (ExtensionServiceRuntime, SyntheticService) {
+    private func runtime(owningData: Bool = false) -> (ExtensionServiceRuntime, SyntheticService) {
         ExtensionScope.register(
             ExtensionScope(
-                environment: { ["EDITH_SHARED_DEFAULTS_SUITE": Self.suite] },
-                value: { $0 == "EDITH_SHARED_DEFAULTS_SUITE" ? Self.suite : nil },
+                environment: { syntheticScope },
+                value: { syntheticScope[$0] },
                 defaults: { .standard },
                 dataRoot: { ExtensionScope.temporaryDataRoot() }),
             image: #dsohandle)
         let service = SyntheticService()
+        service.requiresOwnedDataDirectory = owningData
         let runtime = ExtensionServiceRuntime(id: "synthetic", role: "app", bundle: .main) { _ in
             service
         }
@@ -77,6 +86,20 @@ private final class SyntheticService: ExtensionService {
         #expect(service.starts == 1)
         let status = runtime.execute(["operation": "status"]) as? NSDictionary
         #expect(status?["running"] as? Bool == true)
+    }
+
+    @Test func startNeedsTheScopedDataDirectoryWhenTheServiceOwnsData() {
+        let (runtime, service) = runtime(owningData: true)
+        #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == false)
+        #expect(
+            ok(runtime.execute([
+                "operation": "start", "defaultsSuite": Self.suite, "dataDirectory": "/tmp/other",
+            ])) == false)
+        #expect(
+            ok(runtime.execute([
+                "operation": "start", "defaultsSuite": Self.suite, "dataDirectory": Self.dataRoot + "/",
+            ])) == true)
+        #expect(service.starts == 1)
     }
 
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {

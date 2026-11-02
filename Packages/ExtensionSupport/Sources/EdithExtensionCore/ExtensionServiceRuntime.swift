@@ -3,6 +3,7 @@ import Foundation
 
 @MainActor
 public protocol ExtensionService: AnyObject {
+    var requiresOwnedDataDirectory: Bool { get }
     func start() -> Bool
     func synchronize()
     func invoke(_ command: String, payload: Data) async throws -> Data
@@ -17,6 +18,7 @@ public protocol ExtensionService: AnyObject {
 }
 
 extension ExtensionService {
+    public var requiresOwnedDataDirectory: Bool { false }
     public func start() -> Bool { true }
     public func synchronize() {}
     public func invoke(_ command: String, payload: Data) async throws -> Data {
@@ -102,7 +104,8 @@ public final class ExtensionServiceRuntime: NSObject {
         case "start":
             guard suspension == nil, teardownTask == nil, let service,
                 let suite = input["defaultsSuite"] as? String,
-                suite == scope["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == scope["EDITH_SHARED_DEFAULTS_SUITE"],
+                !service.requiresOwnedDataDirectory || ownsDataDirectory(input)
             else { return Self.result(false) }
             guard started || service.start() else { return Self.result(false) }
             started = true
@@ -138,6 +141,14 @@ public final class ExtensionServiceRuntime: NSObject {
             return service?.perform(operation, context: input) ?? Self.result(false)
         }
         return Self.result(true)
+    }
+
+    private func ownsDataDirectory(_ input: NSDictionary) -> Bool {
+        guard let path = input["dataDirectory"] as? String,
+            let root = scope["EDITH_EXTENSION_DATA_ROOT"]
+        else { return false }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
+            == URL(fileURLWithPath: root).standardizedFileURL.path
     }
 
     private func beginSuspension() -> Task<Void, Never> {
