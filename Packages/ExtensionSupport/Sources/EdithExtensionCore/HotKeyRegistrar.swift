@@ -30,10 +30,14 @@ public enum HotKeyRegistrar {
     private static var actions: [String: () -> Void] = [:]
     private static var references: [String: EventHotKeyRef] = [:]
     private static var combinations: [String: Combination] = [:]
+    private static var owners: [String: UInt] = [:]
     private static var handler: EventHandlerRef?
 
-    public static func configure(_ binding: ExtensionHotKeyBinding) {
+    public static func configure(
+        _ binding: ExtensionHotKeyBinding, image: UnsafeRawPointer = #dsohandle
+    ) {
         bindings[binding.id] = binding
+        owners[binding.id] = UInt(bitPattern: image)
     }
 
     @discardableResult
@@ -81,11 +85,20 @@ public enum HotKeyRegistrar {
         actions[id] = nil
     }
 
-    public static func shutdown() {
-        for id in Array(references.keys) { clear(id) }
-        if let handler { RemoveEventHandler(handler) }
-        handler = nil
-        bindings.removeAll()
+    public static func shutdown(image: UnsafeRawPointer = #dsohandle) {
+        let owner = UInt(bitPattern: image)
+        for id in owners.filter({ $0.value == owner }).map(\.key) {
+            clear(id)
+            bindings[id] = nil
+            owners[id] = nil
+        }
+        removeHandlerWhenUnused()
+    }
+
+    private static func removeHandlerWhenUnused() {
+        guard references.isEmpty, let handler else { return }
+        RemoveEventHandler(handler)
+        self.handler = nil
     }
 
     private static func installHandler() -> Bool {
