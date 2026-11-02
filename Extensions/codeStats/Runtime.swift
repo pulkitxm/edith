@@ -8,13 +8,16 @@ import EdithExtensionUI
 import Foundation
 import SwiftUI
 
-@MainActor @objc(EdithCodeStatsExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+private final class CodeStatsBundleAnchor {}
+
+@MainActor
+final class CodeStatsService: ExtensionService {
     private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
     private let settingsWake: (@MainActor () -> Void)?
     private var fixtureMode = false
     private var workflow: CodeStatsWorkflow?
     private var uiModel: CodeStatsModel?
+    private var uiSettings = false
     private var engineClient: ExtensionEngineClient?
     private var surface: CodeStatsSurface?
     private var operations: CodeStatsCommands?
@@ -26,7 +29,6 @@ final class ExtensionRuntime: NSObject {
     private var wake: Task<Void, Never>?
     private var volumeWatch: CodeStatsVolumeWatch?
     private var defaultsObserver: NSObjectProtocol?
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
     init(
@@ -34,179 +36,178 @@ final class ExtensionRuntime: NSObject {
         fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
             try WorkerFixtureAdmission.current(
                 extensionID: "codeStats", context: $0,
-                roleBundle: Bundle(for: ExtensionRuntime.self))
+                roleBundle: Bundle(for: CodeStatsBundleAnchor.self))
         }
     ) {
         self.fixtureAdmission = fixtureAdmission
         self.settingsWake = settingsWake
-        super.init()
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, self.workflow != nil else { throw ExtensionPeerError.unavailable }
-            await self.startup?.value
-            try Task.checkCancellation()
-            if command == "codeStats.cli.catalog" {
-                return try ExtensionCLICatalog.data(
-                    CodeStatsCLICommand.self, owner: "codeStats", payload: payload, streaming: true)
+    var isRunning: Bool { workflow != nil }
+    var allowsUIDuringRetirement: Bool { true }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        let fixture: Bool
+        do { fixture = try fixtureAdmission(input) != nil } catch { return false }
+        do { try ambientPolicy.apply(context: input) } catch { return false }
+        guard workflow == nil else { return true }
+        fixtureMode = fixture
+        if !fixture {
+            do { try ambientPolicy.start { [weak self] in self?.schedule?.reschedule() } } catch {
+                return false
             }
-            if command.hasPrefix("codeStats.cli.") {
-                if self.cliStreams == nil {
-                    self.cliStreams = try ExtensionCLIStreams(owner: "codeStats")
+        }
+        CodeStatsPaths.prepare()
+        let store = CodeStatsStore()
+        let workflow = CodeStatsWorkflow(environment: .live)
+        self.workflow = workflow
+        CodeStatsWorkerOperations.workflow = workflow
+        surface = CodeStatsSurface(store: store, workflow: workflow)
+        operations = CodeStatsCommands(workflow: workflow, store: store)
+        Task { await workflow.preload() }
+        startup = Task {
+            await workflow.recoverInterruptedRun()
+            if fixture, !Task.isCancelled {
+                await CodeStatsModel.shared.loadReport()
+            }
+        }
+        if !fixture {
+            let watcher = CodeStatsVolumeWatch()
+            volumeWatch = watcher
+            watcher.start { [weak self] in Task { @MainActor in self?.wakeSchedule() } }
+            defaultsObserver = NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: SharedDefaults.store, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.wakeSchedule() }
+            }
+            let policy = ambientPolicy
+            let schedule = CodeStatsScheduleLifecycle(
+                interval: { policy.interval(for: CodeStatsScheduleLifecycle.jobID) },
+                ready: { [weak self] in await self?.startup?.value },
+                check: { _ = await workflow.scheduledCheck() })
+            self.schedule = schedule
+            schedule.start()
+        }
+        return true
+    }
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        do { _ = try fixtureAdmission(input) } catch { return false }
+        do { try ambientPolicy.apply(context: input) } catch { return false }
+        if input["ambientPolicyOnly"] as? Bool != true {
+            if let settingsWake { settingsWake() } else { wakeSchedule() }
+        }
+        return true
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard workflow != nil else { throw ExtensionPeerError.unavailable }
+        await startup?.value
+        try Task.checkCancellation()
+        if command == "codeStats.cli.catalog" {
+            return try ExtensionCLICatalog.data(
+                CodeStatsCLICommand.self, owner: "codeStats", payload: payload, streaming: true)
+        }
+        if command.hasPrefix("codeStats.cli.") {
+            if cliStreams == nil {
+                cliStreams = try ExtensionCLIStreams(owner: "codeStats")
+            }
+            guard let streams = cliStreams else { throw ExtensionPeerError.unavailable }
+            return try streams.invoke(
+                CodeStatsCLICommand.self, operation: command, prefix: "codeStats.cli",
+                payload: payload)
+        }
+        if command == "codeStats.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(try await CodeStatsCLIExecution.run(request))
+        }
+        if command.hasPrefix("codeStats.ui."), let workflow {
+            return try await CodeStatsUIBridge.execute(
+                command, payload: payload, workflow: workflow)
+        }
+        if command.hasPrefix("surface."), let surface {
+            return try await surface.execute(command, payload: payload)
+        }
+        guard let operations else { throw ExtensionPeerError.unavailable }
+        return try await operations.execute(command, payload: payload)
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard engineClient == nil, let client = configuration.engineClient else { return false }
+        engineClient = client
+        uiSettings = configuration.isSettings
+        let bridge = CodeStatsUIBridge(client: client)
+        uiModel = CodeStatsModel(service: bridge.service, remote: bridge)
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let model = uiModel else { return nil }
+        let settings = uiSettings
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                if settings {
+                    Form { CodeStatsRows(model: model) }.formStyle(.grouped)
+                } else {
+                    CodeStatsPage(model: model)
                 }
-                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try streams.invoke(
-                    CodeStatsCLICommand.self, operation: command, prefix: "codeStats.cli",
-                    payload: payload)
-            }
-            if command == "codeStats.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(try await CodeStatsCLIExecution.run(request))
-            }
-            if command.hasPrefix("codeStats.ui."), let workflow = self.workflow {
-                return try await CodeStatsUIBridge.execute(
-                    command, payload: payload, workflow: workflow)
-            }
-            if command.hasPrefix("surface."), let surface = self.surface {
-                return try await surface.execute(command, payload: payload)
-            }
-            guard let operations = self.operations else { throw ExtensionPeerError.unavailable }
-            return try await operations.execute(command, payload: payload)
-        }
+            })
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
+    func stopUI() -> [Task<Void, Never>] {
+        releaseUI()
+        return []
+    }
+
+    func cancelPendingWork() {
+        cliStreams?.stop()
+    }
+
+    func drain() async {
+        await cliStreams?.stopAndWait()
+    }
+
+    func teardown() async {
+        releaseUI()
         let streams = cliStreams
+        cliStreams = nil
         streams?.stop()
-        Task { [self, streams] in
-            await commands.suspendAndWait()
-            await streams?.stopAndWait()
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        commands.shutdown()
         ambientPolicy.stop()
-        schedule?.cancel(); wake?.cancel(); startup?.cancel()
-        volumeWatch?.stop(); volumeWatch = nil
+        schedule?.cancel()
+        wake?.cancel()
+        startup?.cancel()
+        volumeWatch?.stop()
+        volumeWatch = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
         defaultsObserver = nil
         CodeStatsModel.shared.cancelLoading()
         CodeStatsWorkerOperations.workflow = nil
-        let workflow = workflow; self.workflow = nil
-        let operations = operations; self.operations = nil
-        let schedule = schedule; self.schedule = nil
-        let jobs = [startup, wake]; startup = nil; wake = nil
+        let workflow = workflow
+        self.workflow = nil
+        let operations = operations
+        self.operations = nil
+        let schedule = schedule
+        self.schedule = nil
+        let jobs = [startup, wake]
+        startup = nil
+        wake = nil
         surface = nil
-        Task {
-            await schedule?.shutdown()
-            await workflow?.shutdown()
-            await operations?.shutdown()
-            for job in jobs { await job?.value }
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            completion()
-        }
+        await schedule?.shutdown()
+        await workflow?.shutdown()
+        await operations?.shutdown()
+        for job in jobs { await job?.value }
+        await streams?.stopAndWait()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "codeStats", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "codeStats", let client = configuration.engineClient
-            else { return ["ok": false] as NSDictionary }
-            engineClient = client
-            let bridge = CodeStatsUIBridge(client: client)
-            uiModel = CodeStatsModel(service: bridge.service, remote: bridge)
-        case "stopUI":
-            uiModel?.cancelLoading(); uiModel = nil
-            engineClient?.invalidate(); engineClient = nil
-        case "start":
-            let fixture: Bool
-            do { fixture = try fixtureAdmission(input) != nil } catch {
-                return ["ok": false] as NSDictionary
-            }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            do { try ambientPolicy.apply(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            guard workflow == nil else { return ["ok": true] as NSDictionary }
-            fixtureMode = fixture
-            if !fixture {
-                do { try ambientPolicy.start { [weak self] in self?.schedule?.reschedule() } } catch
-                { return ["ok": false] as NSDictionary }
-            }
-            CodeStatsPaths.prepare()
-            let store = CodeStatsStore()
-            let workflow = CodeStatsWorkflow(environment: .live)
-            self.workflow = workflow; CodeStatsWorkerOperations.workflow = workflow
-            surface = CodeStatsSurface(store: store, workflow: workflow)
-            operations = CodeStatsCommands(workflow: workflow, store: store)
-            Task { await workflow.preload() }
-            startup = Task {
-                await workflow.recoverInterruptedRun()
-                if fixture, !Task.isCancelled {
-                    await CodeStatsModel.shared.loadReport()
-                }
-            }
-            if !fixture {
-                let watcher = CodeStatsVolumeWatch(); volumeWatch = watcher
-                watcher.start { [weak self] in Task { @MainActor in self?.wakeSchedule() } }
-                defaultsObserver = NotificationCenter.default.addObserver(
-                    forName: UserDefaults.didChangeNotification,
-                    object: SharedDefaults.store, queue: .main
-                ) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.wakeSchedule() }
-                }
-                let policy = ambientPolicy
-                let schedule = CodeStatsScheduleLifecycle(
-                    interval: { policy.interval(for: CodeStatsScheduleLifecycle.jobID) },
-                    ready: { [weak self] in await self?.startup?.value },
-                    check: { _ = await workflow.scheduledCheck() })
-                self.schedule = schedule
-                schedule.start()
-            }
-        case "view":
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            let settings = input["location"] as? String == "settings"
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    if settings {
-                        Form { CodeStatsRows(model: model) }.formStyle(.grouped)
-                    } else {
-                        CodeStatsPage(model: model)
-                    }
-                })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
-            do { try ambientPolicy.apply(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            if input["ambientPolicyOnly"] as? Bool != true {
-                if let settingsWake { settingsWake() } else { wakeSchedule() }
-            }
-        case "stop": prepareToStop(completion: {})
-        case "status": return ["ok": true, "running": workflow != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
+    private func releaseUI() {
+        uiModel?.cancelLoading()
+        uiModel = nil
+        uiSettings = false
+        engineClient?.invalidate()
+        engineClient = nil
     }
 
     private func wakeSchedule() {
@@ -226,10 +227,25 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeCodeStatsRuntime(
+    settingsWake: (@MainActor () -> Void)? = nil,
+    fixtureAdmission: ((NSDictionary) throws -> WorkerFixtureAdmission?)? = nil
+) -> ExtensionServiceRuntime {
+    ExtensionServiceRuntime(
+        id: "codeStats", role: "app", bundle: Bundle(for: CodeStatsBundleAnchor.self)
+    ) { _ in
+        if let fixtureAdmission {
+            return CodeStatsService(settingsWake: settingsWake, fixtureAdmission: fixtureAdmission)
+        }
+        return CodeStatsService(settingsWake: settingsWake)
+    }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCodeStatsRuntime()).toOpaque())
         })
 }
