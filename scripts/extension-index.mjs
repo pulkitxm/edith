@@ -91,6 +91,7 @@ export function validateDeclaration(declaration, directory) {
     "background",
     "commands",
     "hotkeys",
+    "launchWhen",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
@@ -112,8 +113,25 @@ export function validateDeclaration(declaration, directory) {
     throw new Error(`${directory}: commands must be unique command words`);
   if (!Array.isArray(declaration.hotkeys ?? []))
     throw new Error(`${directory}: hotkeys must be a list`);
+  const launchWhen = declaration.launchWhen ?? [];
+  if (
+    !Array.isArray(launchWhen) ||
+    launchWhen.some(
+      (condition) =>
+        Object.keys(condition).some(
+          (key) => !["key", "default"].includes(key),
+        ) ||
+        typeof condition.key !== "string" ||
+        !condition.key ||
+        typeof condition.default !== "boolean",
+    )
+  )
+    throw new Error(`${directory}: launchWhen needs key and boolean default`);
+  if (declaration.background && launchWhen.length)
+    throw new Error(`${directory}: background already starts at launch`);
   return {
     ...declaration,
+    launchWhen,
     hotkeys: (declaration.hotkeys ?? []).map((entry) =>
       hotkey(entry, directory),
     ),

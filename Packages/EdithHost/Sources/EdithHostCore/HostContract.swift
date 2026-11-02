@@ -46,6 +46,20 @@ public struct HostHotKey: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+public struct HostLaunchCondition: Codable, Hashable, Sendable {
+    public let key: String
+    public let `default`: Bool
+
+    public init(key: String, default: Bool) {
+        self.key = key
+        self.default = `default`
+    }
+
+    public func holds(in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: key) as? Bool ?? self.default
+    }
+}
+
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -54,10 +68,12 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let background: Bool
     public let commands: [String]
     public let hotkeys: [HostHotKey]
+    public let launchWhen: [HostLaunchCondition]
 
     public init(
         id: String, title: String, symbolName: String, category: String,
-        background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = []
+        background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
+        launchWhen: [HostLaunchCondition] = []
     ) {
         self.id = id
         self.title = title
@@ -66,6 +82,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.background = background
         self.commands = commands
         self.hotkeys = hotkeys
+        self.launchWhen = launchWhen
     }
 }
 

@@ -3,6 +3,12 @@
   "title": "Keep Awake",
   "symbolName": "moon.zzz",
   "category": "utilities",
-  "background": true,
-  "commands": []
+  "background": false,
+  "commands": [],
+  "launchWhen": [
+    {
+      "key": "preventSleep",
+      "default": false
+    }
+  ]
 }
