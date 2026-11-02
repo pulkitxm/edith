@@ -3,7 +3,7 @@
   "title": "Focus Dim",
   "symbolName": "circle.lefthalf.filled",
   "category": "desk",
-  "background": true,
+  "background": false,
   "commands": [],
   "hotkeys": [
     {
@@ -12,6 +12,12 @@
       "title": "Focus dim",
       "subtitle": "Toggles background-window dimming",
       "shortcut": "option+command+f"
+    }
+  ],
+  "launchWhen": [
+    {
+      "key": "focusDimActive",
+      "default": false
     }
   ]
 }

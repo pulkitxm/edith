@@ -3,7 +3,7 @@
   "title": "Hinge",
   "symbolName": "laptopcomputer.and.arrow.down",
   "category": "labs",
-  "background": true,
+  "background": false,
   "commands": [],
   "hotkeys": [
     {
@@ -12,6 +12,12 @@
       "title": "Hinge",
       "subtitle": "Turns the desktop fold on or off",
       "shortcut": "control+option+h"
+    }
+  ],
+  "launchWhen": [
+    {
+      "key": "hingeActive",
+      "default": false
     }
   ]
 }

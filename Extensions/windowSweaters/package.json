@@ -3,6 +3,12 @@
   "title": "Window Sweaters",
   "symbolName": "square.dashed",
   "category": "labs",
-  "background": true,
-  "commands": []
+  "background": false,
+  "commands": [],
+  "launchWhen": [
+    {
+      "key": "windowSweatersActive",
+      "default": true
+    }
+  ]
 }
