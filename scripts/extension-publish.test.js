@@ -14,12 +14,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import {
   extensionChecksum,
   mergeExtensionCatalog,
   preflightExtensionBuilds,
   publishExtensionAssets,
   publishStableCatalog,
+  readPublicationCatalog,
   restorePublishedExtension,
   runBounded,
   validateExtensionChecksum,
@@ -721,4 +723,25 @@ test("the catalog is also published under the stable unauthenticated asset name"
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("a failed catalog pointer download is retried before publication gives up", async () => {
+  const data = Buffer.from('{"schemaVersion":1,"revision":7,"packages":[]}');
+  const pointer = catalogPointer(data, 7);
+  let attempts = 0;
+  const result = await readPublicationCatalog("synthetic/fixture", "catalog", {
+    loadRelease: () => ({
+      id: 1,
+      body: JSON.stringify(pointer),
+      assets: [{ id: 2, name: pointer.assetName, size: pointer.bytes }],
+    }),
+    downloadAsset: async ({ destination }) => {
+      attempts++;
+      if (attempts === 1) throw new Error("Release asset download failed");
+      writeFileSync(destination, data);
+      return { size: data.length };
+    },
+  });
+  expect(attempts).toBe(2);
+  expect(result.data).toEqual(data);
 });

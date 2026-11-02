@@ -34,7 +34,11 @@ import {
 
 export { publishExtensionAssets } from "./immutable-release-assets.mjs";
 
-import { withGitHubRetrySync } from "./github-retry.mjs";
+import {
+  TransientGitHubError,
+  withGitHubRetry,
+  withGitHubRetrySync,
+} from "./github-retry.mjs";
 import {
   listReleases,
   lookupRelease,
@@ -371,13 +375,20 @@ async function readPointerAsset(
   const directory = await mkdtemp(resolve(tmpdir(), "edith-release-catalog-"));
   try {
     const destination = resolve(directory, "catalog.json");
-    await downloadAsset({
-      repository,
-      asset,
-      maximumBytes: maximumEnvelopeBytes,
-      expectedBytes: pointer.bytes,
-      expectedSHA256: pointer.sha256,
-      destination,
+    await withGitHubRetry(async () => {
+      try {
+        await downloadAsset({
+          repository,
+          asset,
+          maximumBytes: maximumEnvelopeBytes,
+          expectedBytes: pointer.bytes,
+          expectedSHA256: pointer.sha256,
+          destination,
+        });
+      } catch (error) {
+        if (error?.message !== "Release asset download failed") throw error;
+        throw new TransientGitHubError(error.message, { cause: error });
+      }
     });
     const data = await readFile(destination);
     verifyCatalogPointerData(data, pointer);
