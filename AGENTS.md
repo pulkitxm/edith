@@ -122,6 +122,13 @@ After editing it, run `bun scripts/extension-index.mjs --write` and rebuild the 
 app, since the host index ships inside the app. Set `background` only when the
 extension must run before anything opens it.
 
+An extension role's `edith_extension_create` returns an `ExtensionServiceRuntime`
+wrapping a typed `ExtensionService` (see `Extensions/docs/Runtime.swift`). The
+runtime owns the host bridge, command admission, suspension and a single
+teardown; the service implements only `start`, `invoke`, UI presentation,
+`cancelPendingWork`, `drain` and `teardown`, releasing every timer, task, view
+and subprocess it owns.
+
 1. Build the development app once: `./build.sh --no-open`.
 2. Run `make dev-extension EXTENSION=<id>`. It builds an ad-hoc signed
    development package, sideloads it into this worktree's running development
