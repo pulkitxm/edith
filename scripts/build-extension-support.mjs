@@ -453,3 +453,19 @@ export function buildExtensionContext(root, kit, scope, directory, sourceEnviron
   ]);
   return { directory, module };
 }
+
+export function prepareNativeContext(root, scope) {
+  const module = contextModule(scope);
+  const directory = resolve(root, "local/extension-support", scope);
+  const sourceRoot = resolve(root, "Packages/ExtensionSupport/Sources/EdithExtensionSupport");
+  const target = join(directory, "Sources", module);
+  rmSync(join(directory, "Sources"), { recursive: true, force: true });
+  mkdirSync(target, { recursive: true });
+  for (const name of readdirSync(sourceRoot).filter((entry) => entry.endsWith(".swift")).sort())
+    writeFileSync(join(target, name), readFileSync(join(sourceRoot, name), "utf8"));
+  const kit = resolve(root, "Packages/ExtensionSupport");
+  const manifest = `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${module}", type: .static, targets: ["${module}"])], dependencies: [.package(name: "ExtensionSupport", path: ${JSON.stringify(kit)})], targets: [.target(name: "${module}", dependencies: [.product(name: "EdithExtensionKit", package: "ExtensionSupport")], swiftSettings: [.swiftLanguageMode(.v5)])])\n`;
+  const path = join(directory, "Package.swift");
+  if (!existsSync(path) || readFileSync(path, "utf8") !== manifest) writeFileSync(path, manifest);
+  return { directory, module };
+}

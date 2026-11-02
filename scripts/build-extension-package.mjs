@@ -15,7 +15,6 @@ import { basename, resolve } from "node:path";
 import {
   buildExtensionContext,
   buildExtensionKit,
-  buildExtensionSupport,
   rewriteContextImports,
   supportProducts,
 } from "./build-extension-support.mjs";
@@ -362,9 +361,7 @@ export async function buildExtensionPackage({
   const payload = resolve(staging, id);
   await mkdir(payload);
   if (definition.nativePackage) {
-    prepareNativeSupport(root, definition, (supportRoot, product, scope) =>
-      buildExtensionSupport(supportRoot, product, scope, environment),
-    );
+    prepareNativeSupport(root, definition);
     run(
       "swift",
       nativeSwiftPackageArguments(root, definition, developer, environment),
@@ -559,14 +556,11 @@ export async function buildExtensionPackage({
       );
       if (
         nativePolicy.presentations.includes(role) &&
-        !run("nm", ["-gUj", library], {
-          encoding: "utf8",
-          maxBuffer: 16 * 1024 * 1024,
-        })
-          .split("\n")
-          .includes("_edith_extension_presentation_create")
+        !run("otool", ["-L", library], { encoding: "utf8" }).includes(
+          "@rpath/libEdithExtensionKit.dylib",
+        )
       )
-        throw new Error("Native presentation entry point was not exported");
+        throw new Error("A native presentation role does not link the shared kit");
       run("install_name_tool", ["-id", `@rpath/${libraryName}`, library]);
       const dependencies = run("otool", ["-L", library], {
         encoding: "utf8",
@@ -728,12 +722,24 @@ export async function buildExtensionPackage({
       if (support) {
         if (!linkage.includes("@rpath/libEdithExtensionKit.dylib"))
           throw new Error("An extension role does not link the shared kit");
-        const embedded = run("nm", ["-U", executable], {
+        const candidates = run("nm", ["-U", executable], {
           encoding: "utf8",
           maxBuffer: 256 * 1024 * 1024,
         })
           .split("\n")
-          .filter((line) => / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line));
+          .filter((line) => / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line))
+          .join("\n");
+        const embedded = candidates
+          ? run("xcrun", ["swift-demangle"], {
+              input: candidates,
+              encoding: "utf8",
+              maxBuffer: 256 * 1024 * 1024,
+            })
+              .split("\n")
+              .filter(
+                (line) => line && !line.includes("(extension in EdithExtensionSupport_"),
+              )
+          : [];
         if (embedded.length > 0)
           throw new Error("Shared support code was embedded in an extension role");
       }

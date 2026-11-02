@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import {
-  buildExtensionSupport,
+  prepareNativeContext,
   supportModules,
   supportProducts,
 } from "./build-extension-support.mjs";
@@ -9,7 +9,7 @@ import {
 export function prepareNativeSupport(
   root,
   definition,
-  build = buildExtensionSupport,
+  build = (supportRoot, _product, scope) => prepareNativeContext(supportRoot, scope),
 ) {
   if (definition.nativeSupportProduct == null) return undefined;
   if (

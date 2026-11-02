@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
-import EdithExtensionUI_attention_native
+import EdithExtensionUI
 
 @testable import AttentionNative
 

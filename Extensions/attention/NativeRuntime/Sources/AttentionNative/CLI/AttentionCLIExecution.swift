@@ -1,4 +1,4 @@
-internal import EdithExtensionCommands_attention_native
+internal import EdithExtensionCommands
 internal import EdithExtensionSupport_attention_native
 import Foundation
 

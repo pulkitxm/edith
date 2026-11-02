@@ -1,6 +1,6 @@
-import ArgumentParser_attention_native
+import ArgumentParser
 import AppKit
-internal import EdithExtensionCommands_attention_native
+internal import EdithExtensionCommands
 import Foundation
 
 enum AttentionExtensionCLI {

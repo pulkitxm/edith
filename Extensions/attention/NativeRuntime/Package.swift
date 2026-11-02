@@ -8,6 +8,7 @@ let package = Package(
     dependencies: [
         .package(path: "../../fixtureSupport"),
         .package(path: "../../../local/extension-support/attention_native"),
+        .package(path: "../../../Packages/ExtensionSupport"),
         .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
     ],
     targets: [
@@ -18,8 +19,8 @@ let package = Package(
                     name: "WorkerFixtureSupport", package: "fixtureSupport",
                     moduleAliases: ["WorkerFixtureSupport": "AttentionWorkerFixtureSupport"]),
                 .product(
-                    name: "EdithExtensionCommands_attention_native",
-                    package: "attention_native"),
+                    name: "EdithExtensionSupport_attention_native", package: "attention_native"),
+                .product(name: "EdithExtensionKit", package: "ExtensionSupport"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [.copy("Resources/ChromeExtension")],
@@ -27,7 +28,10 @@ let package = Package(
                 .swiftLanguageMode(.v5), .enableExperimentalFeature("CheckImplementationOnly"),
             ],
             linkerSettings: [
-                .unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_edith_extension_presentation_create"])
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../../../../Frameworks",
+                ])
             ]),
         .testTarget(
             name: "AttentionNativeTests",
