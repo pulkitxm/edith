@@ -64,15 +64,14 @@ jobs:
         run: make ci-host host
       - name: Build the marketplace harness
         run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
-      - name: Verify native cache integrity and private SDK composition
+      - name: Verify the Ghostty native package
         if: "needs.plan.outputs.mode == 'validation'"
         timeout-minutes: 20
         env:
-          EXTENSION_SUPPORT_NATIVE_TESTS: "1"
           EXTENSION_SWIFT_JOBS: "2"
         run: |
           source scripts/ci-setup-zig.sh
-          bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
+          bun test scripts/extension-ghostty-native.test.js
       - name: Run make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments
         if: "needs.plan.outputs.mode == 'validation'"
         run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-comments

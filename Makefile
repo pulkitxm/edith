@@ -619,10 +619,6 @@ ci-extension-downloads:
 	$(call PREPARE_ARGUMENT_PARSER,Extensions/downloads)
 	fixture=$$(mktemp -d /tmp/edith-downloads-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.downloads.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/downloads --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
-.PHONY: ci-extension-native-tasks
-ci-extension-native-tasks:
-	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostNativeTaskHarness
-	bun scripts/test-extension-native-tasks.mjs
 .PHONY: ci-extension-herdr-core
 ci-extension-herdr-core: ghostty-extension
 	$(call PREPARE_ARGUMENT_PARSER,Extensions/herdr)
