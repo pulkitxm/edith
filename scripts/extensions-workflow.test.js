@@ -629,8 +629,7 @@ test("shipping tests exclude unrelated native models while all-extension validat
   expect(allModels.if).toBe("needs.plan.outputs.mode == 'validation'");
   expect(allModels.run).toContain("ci-extension-support ci-extension-docs");
   const cache = checks.steps.find(
-    (step) =>
-      step.name === "Verify native cache integrity and private SDK composition",
+    (step) => step.name === "Verify the Ghostty native package",
   );
   expect(cache.if).toBe(allModels.if);
   const fullHost = checks.steps.find(

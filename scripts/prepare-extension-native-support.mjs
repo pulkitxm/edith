@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import {
+  contextModule,
   prepareNativeContext,
-  supportModules,
   supportProducts,
 } from "./build-extension-support.mjs";
 
@@ -26,7 +26,7 @@ export function prepareNativeSupport(
       "Native support requires an owned native package and product",
     );
   const scope = `${definition.id}_native`;
-  supportModules(scope);
+  contextModule(scope);
   supportProducts(definition.nativeSupportProduct);
   return build(root, definition.nativeSupportProduct, scope);
 }

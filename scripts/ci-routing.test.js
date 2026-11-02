@@ -571,12 +571,10 @@ test("full native extension contracts run on macOS with private SDK execution en
   ).jobs;
   const job = jobs.tests;
   const proof = job.steps.find((step) =>
-    step.run?.includes("scripts/build-extension-support.native.test.js"),
+    step.run?.includes("scripts/extension-ghostty-native.test.js"),
   );
   expect(job["runs-on"]).toBe("macos-26");
   expect(job.needs).toContain("plan");
-  expect(proof.env.EXTENSION_SUPPORT_NATIVE_TESTS).toBe("1");
-  expect(proof.run).toContain("scripts/extension-ghostty-native.test.js");
   expect(proof.if).toBe("needs.plan.outputs.mode == 'validation'");
   expect(proof["timeout-minutes"]).toBeGreaterThan(0);
   const host = job.steps.findIndex((step) => step.run === "make ci-host host");
