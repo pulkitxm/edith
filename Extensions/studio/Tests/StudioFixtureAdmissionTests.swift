@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Testing
 import WorkerFixtureSupport
@@ -30,6 +31,26 @@ import EdithStudio
             values = try #require(
                 try JSONSerialization.jsonObject(with: Data(contentsOf: marker))
                     as? [String: Any])
+        }
+        @MainActor func runtime(
+            fixtureDefaults: @escaping (String) -> UserDefaults?
+        ) -> ExtensionServiceRuntime {
+            final class Anchor {}
+            let anchor = Anchor()
+            let image = UnsafeRawPointer(Unmanaged.passUnretained(anchor).toOpaque())
+            let suite = (values["hostIdentifier"] as! String) + ".extensions.studio"
+            ExtensionScope.register(
+                ExtensionScope(
+                    environment: { ProcessInfo.processInfo.environment },
+                    value: {
+                        $0 == "EDITH_SHARED_DEFAULTS_SUITE"
+                            ? suite : ProcessInfo.processInfo.environment[$0]
+                    },
+                    defaults: { ExtensionScope.process.defaults() },
+                    dataRoot: { ExtensionScope.process.dataRoot() }),
+                image: image)
+            return makeStudioRuntime(
+                admitFixture: admit, fixtureDefaults: fixtureDefaults, image: image)
         }
         func admit(_ context: NSDictionary) throws -> WorkerFixtureAdmission? {
             let identifier = values["hostIdentifier"] as! String
@@ -82,9 +103,7 @@ import EdithStudio
         #expect(model.notice == nil)
         #expect(model.message == "Installation is unavailable in the worker fixture.")
         await model.stopAndWait()
-        let runtime = ExtensionRuntime(
-            uiConfiguration: { _ in nil }, admitFixture: input.admit,
-            fixtureDefaults: { _ in defaults })
+        let runtime = input.runtime(fixtureDefaults: { _ in defaults })
         #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool == true
@@ -133,11 +152,9 @@ import EdithStudio
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o644], ofItemAtPath: input.marker.path)
         }
-        let runtime = ExtensionRuntime(
-            uiConfiguration: { _ in nil }, admitFixture: input.admit,
-            fixtureDefaults: { _ in
-                Issue.record("Invalid admission reached defaults construction"); return nil
-            })
+        let runtime = input.runtime(fixtureDefaults: { _ in
+            Issue.record("Invalid admission reached defaults construction"); return nil
+        })
         #expect((runtime.execute(input.context) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
