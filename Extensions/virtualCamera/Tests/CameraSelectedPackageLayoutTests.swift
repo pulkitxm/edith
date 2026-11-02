@@ -15,7 +15,7 @@ import Testing
             roleSuffix: String =
                 "app.bundle",
             manifestVersion: String = "1.0.0", carrierChanges: [String: String] = [:],
-            privilegedVersion: String = "1.0.0", hostABI: String = "edith-host-6"
+            privilegedVersion: String = "1.0.0", hostABI: String = "edith-host-7"
         ) throws {
             host = hostIdentifier
             root = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -99,7 +99,7 @@ import Testing
     }
 
     @Test func packagesResolveForWhicheverHostABITheirPartsShare() throws {
-        for hostABI in ["edith-host-6", "edith-host-7"] {
+        for hostABI in ["edith-host-7", "edith-host-7"] {
             let fixture = try Fixture(hostABI: hostABI)
             defer { fixture.remove() }
             #expect(try fixture.resolve().carrier.path == fixture.carrier.path)

@@ -15,7 +15,7 @@ import {
 const built = {
   id: "jev",
   version: "1.0.1761955200",
-  hostABI: "edith-host-6",
+  hostABI: "edith-host-7",
   architecture: "arm64",
   minimumSystemVersion: "14.0.0",
   dependencies: [],
@@ -41,7 +41,7 @@ describe("development catalog", () => {
     expect(record.downloadURL).toBe(
       "https://github.com/pulkitxm/edith/releases/download/dev-jev-1.0.1761955200/jev.zip",
     );
-    expect(record.hostABI).toBe("edith-host-6");
+    expect(record.hostABI).toBe("edith-host-7");
     expect(
       localRecord(built, { tag: "t", hostABI: "edith-host-0" }).hostABI,
     ).toBe("edith-host-0");

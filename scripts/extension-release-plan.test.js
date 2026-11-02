@@ -318,7 +318,7 @@ describe("independent extension releases", () => {
       entry("herdr", "edith-host-5"),
       entry("music", "edith-host-5"),
     ];
-    const bumped = previous.map(({ id }) => entry(id, "edith-host-6"));
+    const bumped = previous.map(({ id }) => entry(id, "edith-host-7"));
     try {
       for (const { id } of previous) {
         await mkdir(join(root, `Extensions/${id}`), { recursive: true });
