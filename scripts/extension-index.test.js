@@ -92,7 +92,9 @@ test("pages default to detachable and sections name a known page", () => {
   const paged = {
     ...declaration,
     category: "agents",
-    pages: [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1 }],
+    pages: [
+      { id: "samplePage", title: "Sample", symbolName: "star", order: 1 },
+    ],
     sections: [
       {
         page: "appMaintenance",
@@ -118,12 +120,26 @@ test("pages default to detachable and sections name a known page", () => {
   for (const pages of [
     [{ id: "samplePage", title: "Sample", symbolName: "star" }],
     [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1.5 }],
-    [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1, extra: 1 }],
-    [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1, detachable: "no" }],
+    [
+      {
+        id: "samplePage",
+        title: "Sample",
+        symbolName: "star",
+        order: 1,
+        extra: 1,
+      },
+    ],
+    [
+      {
+        id: "samplePage",
+        title: "Sample",
+        symbolName: "star",
+        order: 1,
+        detachable: "no",
+      },
+    ],
   ])
-    expect(() =>
-      validateDeclaration({ ...paged, pages }, "sample"),
-    ).toThrow();
+    expect(() => validateDeclaration({ ...paged, pages }, "sample")).toThrow();
   expect(() =>
     validateDeclaration(
       { ...paged, sections: [{ ...paged.sections[0], page: "settings" }] },
