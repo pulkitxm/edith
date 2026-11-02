@@ -9,6 +9,23 @@ public final class HostSurfaces {
     public let requests: SurfaceSnapshotClient
     public let privacy: SurfacePrivacyState
     public let navigation: HostSurfaceNavigation
+    public var layoutsChanged: @MainActor () -> Void {
+        get { layoutObserver.action }
+        set { layoutObserver.action = newValue }
+    }
+    private let layoutObserver: LayoutObserver
+
+    private final class LayoutObserver {
+        var action: @MainActor () -> Void = {}
+    }
+
+    private weak var sessions: HostExtensionSessions?
+
+    public var demandedProviderIDs: Set<String> {
+        HostSurfaceDemand.providerIDs(
+            home: layouts.home, notch: layouts.notch,
+            notchEnabled: sessions?.enabledIDs.contains("notchShelf") == true)
+    }
 
     public init(identity: HostIdentity, entries: [HostExtension], sessions: HostExtensionSessions)
         throws
@@ -17,6 +34,7 @@ public final class HostSurfaces {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
         preferences = defaults
+        self.sessions = sessions
         let channel = ExtensionSharedState(
             root: identity.root.appendingPathComponent("ExtensionState"),
             namespace: identity.identifier, owner: "host")
@@ -55,7 +73,12 @@ public final class HostSurfaces {
                 "surface.revision": UUID().uuidString,
             ])
         }
-        layouts = SurfaceLayoutStore(defaults: defaults, changed: publish)
+        let observer = LayoutObserver()
+        layoutObserver = observer
+        layouts = SurfaceLayoutStore(defaults: defaults) {
+            publish()
+            observer.action()
+        }
         sessions.didChange = { [weak requests] in
             requests?.retain(activeVersions: activeVersions())
             publish()

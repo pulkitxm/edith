@@ -81,8 +81,19 @@ public final class HostMarketplace {
         guard let preferences = UserDefaults(suiteName: identity.defaultsSuite) else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
-        surfaces = try HostSurfaces(identity: identity, entries: entries, sessions: sessions)
+        let surfaces = try HostSurfaces(identity: identity, entries: entries, sessions: sessions)
+        self.surfaces = surfaces
         self.preferences = preferences
+        let background = Set(entries.filter(\.background).map(\.id))
+        sessions.startsAtLaunch = { [weak surfaces] id in
+            background.contains(id) || surfaces?.demandedProviderIDs.contains(id) == true
+        }
+        surfaces.layoutsChanged = { [weak sessions, weak surfaces] in
+            guard let sessions, let surfaces else { return }
+            for id in surfaces.demandedProviderIDs.intersection(sessions.idleIDs) {
+                Task { try? await sessions.activate(id) }
+            }
+        }
         let shortcuts = HostIdleShortcuts(entries: entries, identity: identity, sessions: sessions)
         idleShortcuts = shortcuts
         let surfacesChanged = sessions.didChange
@@ -148,8 +159,6 @@ public final class HostMarketplace {
                     publicLauncher: publicLauncher))
         }
         let entries = try HostIndex.bundled()
-        let background = Set(entries.filter(\.background).map(\.id))
-        sessions.startsAtLaunch = { background.contains($0) }
         return try HostMarketplace(
             identity: identity, entries: entries, store: store,
             catalogClient: localCatalog?.client(
