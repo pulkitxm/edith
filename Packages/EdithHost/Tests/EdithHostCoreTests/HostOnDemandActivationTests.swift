@@ -47,9 +47,24 @@ import Testing
             demand == [
                 "homebrew", "jev", "cleaner", "blitztree", "plugins", "docs", "latex", "seoAudit",
                 "socialManager", "quinjet", "audioMixer", "calendar", "database", "colorPicker",
-                "emoji", "studio", "system", "terminal", "timeLapse",
+                "emoji", "studio", "system", "terminal", "timeLapse", "focusDim", "hinge",
+                "keepAwake", "lidAwake", "windowSweaters",
             ])
         #expect(entries.first { $0.id == "notchShelf" }?.background == true)
         #expect(entries.first { $0.id == "colorPicker" }?.commands == ["color", "colour"])
+    }
+
+    @Test func launchConditionsReadTheExtensionSuiteAndFallBackToTheirDefault() throws {
+        let name = "com.pulkit.edith.tests.launch-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let off = HostLaunchCondition(key: "sampleActive", default: false)
+        let on = HostLaunchCondition(key: "sampleActive", default: true)
+        #expect(!off.holds(in: defaults))
+        #expect(on.holds(in: defaults))
+        defaults.set(true, forKey: "sampleActive")
+        #expect(off.holds(in: defaults))
+        defaults.set(false, forKey: "sampleActive")
+        #expect(!on.holds(in: defaults))
     }
 }

@@ -85,8 +85,18 @@ public final class HostMarketplace {
         self.surfaces = surfaces
         self.preferences = preferences
         let background = Set(entries.filter(\.background).map(\.id))
+        let conditions = Dictionary(
+            uniqueKeysWithValues: entries.filter { !$0.launchWhen.isEmpty }.map {
+                ($0.id, $0.launchWhen)
+            })
         sessions.startsAtLaunch = { [weak surfaces] id in
-            background.contains(id) || surfaces?.demandedProviderIDs.contains(id) == true
+            if background.contains(id) || surfaces?.demandedProviderIDs.contains(id) == true {
+                return true
+            }
+            guard let conditions = conditions[id],
+                let defaults = UserDefaults(suiteName: identity.extensionDefaultsSuite(id))
+            else { return false }
+            return conditions.contains { $0.holds(in: defaults) }
         }
         surfaces.layoutsChanged = { [weak sessions, weak surfaces] in
             guard let sessions, let surfaces else { return }

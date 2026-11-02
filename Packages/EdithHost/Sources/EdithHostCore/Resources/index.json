@@ -8,6 +8,7 @@
     "commands": [
       "usage"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -19,6 +20,7 @@
     "commands": [
       "herdr"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -30,6 +32,7 @@
     "commands": [
       "quinjet"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -41,6 +44,7 @@
     "commands": [
       "companion"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -52,6 +56,7 @@
     "commands": [
       "skills"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -63,6 +68,7 @@
     "commands": [
       "machines"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -72,6 +78,7 @@
     "category": "agents",
     "background": false,
     "commands": [],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -83,6 +90,7 @@
     "commands": [
       "docs"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -94,6 +102,7 @@
     "commands": [
       "maintenance"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -105,6 +114,7 @@
     "commands": [
       "brew"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -116,6 +126,7 @@
     "commands": [
       "cleaner"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -125,6 +136,7 @@
     "category": "utilities",
     "background": false,
     "commands": [],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -138,6 +150,7 @@
       "apps",
       "tools"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -145,8 +158,14 @@
     "title": "Keep Awake",
     "symbolName": "moon.zzz",
     "category": "utilities",
-    "background": true,
+    "background": false,
     "commands": [],
+    "launchWhen": [
+      {
+        "key": "preventSleep",
+        "default": false
+      }
+    ],
     "hotkeys": []
   },
   {
@@ -154,9 +173,15 @@
     "title": "Lid Awake",
     "symbolName": "laptopcomputer",
     "category": "utilities",
-    "background": true,
+    "background": false,
     "commands": [
       "lid-awake"
+    ],
+    "launchWhen": [
+      {
+        "key": "lidAwakeActive",
+        "default": false
+      }
     ],
     "hotkeys": []
   },
@@ -169,6 +194,7 @@
     "commands": [
       "system"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -188,7 +214,8 @@
         "modifiers": 768,
         "label": "⇧⌘M"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "presenter",
@@ -209,7 +236,8 @@
         "modifiers": 2816,
         "label": "⌥⇧⌘P"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "calendar",
@@ -220,6 +248,7 @@
     "commands": [
       "calendar"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -241,7 +270,8 @@
         "modifiers": 2048,
         "label": "⌥␣"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "clipboard",
@@ -262,7 +292,8 @@
         "modifiers": 4608,
         "label": "⌃⇧C"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "emoji",
@@ -283,7 +314,8 @@
         "modifiers": 4608,
         "label": "⌃⇧E"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "colorPicker",
@@ -305,7 +337,8 @@
         "modifiers": 6400,
         "label": "⌃⌥⌘C"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "keystrokeHighlight",
@@ -324,14 +357,15 @@
         "modifiers": 6400,
         "label": "⌃⌥⌘K"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "focusDim",
     "title": "Focus Dim",
     "symbolName": "circle.lefthalf.filled",
     "category": "desk",
-    "background": true,
+    "background": false,
     "commands": [],
     "hotkeys": [
       {
@@ -342,6 +376,12 @@
         "code": 3,
         "modifiers": 2304,
         "label": "⌥⌘F"
+      }
+    ],
+    "launchWhen": [
+      {
+        "key": "focusDimActive",
+        "default": false
       }
     ]
   },
@@ -355,6 +395,7 @@
       "shelf",
       "browser"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -366,6 +407,7 @@
     "commands": [
       "audio"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -377,6 +419,7 @@
     "commands": [
       "studio"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -386,6 +429,7 @@
     "category": "media",
     "background": false,
     "commands": [],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -407,7 +451,8 @@
         "modifiers": 6400,
         "label": "⌃⌥⌘V"
       }
-    ]
+    ],
+    "launchWhen": []
   },
   {
     "id": "music",
@@ -418,6 +463,7 @@
     "commands": [
       "music"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -431,6 +477,7 @@
       "downloads",
       "dl"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -440,6 +487,7 @@
     "category": "media",
     "background": false,
     "commands": [],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -451,6 +499,7 @@
     "commands": [
       "database"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -462,6 +511,7 @@
     "commands": [
       "code-stats"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -473,6 +523,7 @@
     "commands": [
       "seo"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -484,6 +535,7 @@
     "commands": [
       "latex"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -495,6 +547,7 @@
     "commands": [
       "attention"
     ],
+    "launchWhen": [],
     "hotkeys": []
   },
   {
@@ -502,7 +555,7 @@
     "title": "Hinge",
     "symbolName": "laptopcomputer.and.arrow.down",
     "category": "labs",
-    "background": true,
+    "background": false,
     "commands": [],
     "hotkeys": [
       {
@@ -514,6 +567,12 @@
         "modifiers": 6144,
         "label": "⌃⌥H"
       }
+    ],
+    "launchWhen": [
+      {
+        "key": "hingeActive",
+        "default": false
+      }
     ]
   },
   {
@@ -521,8 +580,14 @@
     "title": "Window Sweaters",
     "symbolName": "square.dashed",
     "category": "labs",
-    "background": true,
+    "background": false,
     "commands": [],
+    "launchWhen": [
+      {
+        "key": "windowSweatersActive",
+        "default": true
+      }
+    ],
     "hotkeys": []
   },
   {
@@ -534,6 +599,7 @@
     "commands": [
       "jev"
     ],
+    "launchWhen": [],
     "hotkeys": []
   }
 ]
