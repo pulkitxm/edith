@@ -13,8 +13,10 @@ import {
 } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import {
+  buildExtensionContext,
+  buildExtensionKit,
   buildExtensionSupport,
-  rewriteSupportImports,
+  rewriteContextImports,
   supportProducts,
 } from "./build-extension-support.mjs";
 import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
@@ -25,17 +27,6 @@ import {
 } from "./extension-release-plan.mjs";
 import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 import { prepareNativeSupport } from "./prepare-extension-native-support.mjs";
-
-export function presentationLinkerFlags(product) {
-  return product && supportProducts(product).includes("EdithExtensionUI")
-    ? [
-        "-Xlinker",
-        "-exported_symbol",
-        "-Xlinker",
-        "_edith_extension_presentation_create",
-      ]
-    : [];
-}
 
 export function nativeTaskLinkerFlags(definition, role) {
   const roles = definition.nativeTaskRoles ?? [];
@@ -380,6 +371,7 @@ export async function buildExtensionPackage({
       { stdio: "inherit" },
     );
   }
+  let kit;
   let cargoLibrary;
   if (definition.nativeCargo) {
     const cargoTarget = resolve(root, "dist/native", id);
@@ -431,11 +423,14 @@ export async function buildExtensionPackage({
       Object.hasOwn(definition.supportProducts, role)
         ? definition.supportProducts[role]
         : definition.supportProduct;
+    const scope = `${id}_${role}`;
+    if (supportProduct) kit ??= buildExtensionKit(root, environment);
     const support = supportProduct
-      ? buildExtensionSupport(
+      ? buildExtensionContext(
           root,
-          supportProduct,
-          `${id}_${role}`,
+          kit,
+          scope,
+          resolve(staging, "context", role),
           environment,
         )
       : undefined;
@@ -450,9 +445,9 @@ export async function buildExtensionPackage({
       const target = resolve(sourceDirectory, `${index}-${basename(path)}`);
       await writeFile(
         target,
-        rewriteSupportImports(
+        rewriteContextImports(
           await readFile(resolve(root, path), "utf8"),
-          support.modules,
+          scope,
         ),
       );
       compileSources.push(target);
@@ -648,19 +643,31 @@ export async function buildExtensionPackage({
               "-swift-version",
               "5",
               "-I",
-              resolve(support.products, "Modules"),
+              kit.modules,
               "-I",
-              support.products,
+              kit.products,
+              "-I",
+              support.directory,
               "-L",
-              support.products,
-              `-l${support.product}`,
+              kit.products,
+              `-l${kit.library}`,
+              "-L",
+              support.directory,
+              `-l${support.module}`,
+              "-Xlinker",
+              "-rpath",
+              "-Xlinker",
+              "@executable_path/../Frameworks",
+              "-Xlinker",
+              "-rpath",
+              "-Xlinker",
+              "@executable_path/../../../../Frameworks",
               "-Xlinker",
               "-dead_strip",
             ]
           : []),
         ...nativeFlags,
         ...nativeTaskLinkerFlags(definition, role),
-        ...presentationLinkerFlags(supportProduct),
         "-Xlinker",
         "-install_name",
         "-Xlinker",
@@ -718,6 +725,18 @@ export async function buildExtensionPackage({
         )
           throw new Error("A worker package links a private build path");
       }
+      if (support) {
+        if (!linkage.includes("@rpath/libEdithExtensionKit.dylib"))
+          throw new Error("An extension role does not link the shared kit");
+        const embedded = run("nm", ["-U", executable], {
+          encoding: "utf8",
+          maxBuffer: 256 * 1024 * 1024,
+        })
+          .split("\n")
+          .filter((line) => / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line));
+        if (embedded.length > 0)
+          throw new Error("Shared support code was embedded in an extension role");
+      }
     }
     const infoJSON = resolve(staging, `${role}-info.json`);
     await writeFile(infoJSON, JSON.stringify(info));
@@ -733,11 +752,6 @@ export async function buildExtensionPackage({
     });
     if (!symbols.includes(" T _edith_extension_create"))
       throw new Error("Extension entry point was not exported");
-    if (
-      presentationLinkerFlags(supportProduct).length > 0 &&
-      !symbols.includes(" T _edith_extension_presentation_create")
-    )
-      throw new Error("Extension presentation entry point was not exported");
     const flags = development ? [] : ["--options", "runtime", "--timestamp"];
     run(
       "codesign",

@@ -339,3 +339,117 @@ export function buildExtensionSupport(
   writeFileSync(receipt, `${JSON.stringify({ fingerprint, products })}\n`);
   return { products, modules, product: library };
 }
+
+export function contextModule(scope) {
+  return supportModules(scope).EdithExtensionSupport;
+}
+
+export function rewriteContextImports(source, scope) {
+  const module = contextModule(scope);
+  return source.replace(
+    /^(\s*(?:(?:@testable|@_implementationOnly|@_exported|@preconcurrency)\s+)*(?:(?:public|internal|private|fileprivate|package)\s+)?import\s+)EdithExtensionSupport(?=\s|$)/gm,
+    (_, prefix) => `${prefix}${module}`,
+  );
+}
+
+export function buildExtensionKit(root, sourceEnvironment = process.env) {
+  const developer =
+    sourceEnvironment.DEVELOPER_DIR ??
+    "/Applications/Xcode.app/Contents/Developer";
+  const environment = { ...sourceEnvironment, DEVELOPER_DIR: developer };
+  const packagePath = resolve(root, "Packages/ExtensionSupport");
+  execFileSync("python3", ["-I", "-B", "scripts/prepare-argument-parser.py", packagePath], {
+    cwd: root,
+    env: environment,
+    stdio: "inherit",
+  });
+  const common = [
+    "--package-path",
+    packagePath,
+    "--build-system",
+    "native",
+    "--configuration",
+    "release",
+  ];
+  execFileSync(
+    "swift",
+    [
+      "build",
+      ...common,
+      "--jobs",
+      environment.EXTENSION_SWIFT_JOBS ?? "2",
+      "--product",
+      "EdithExtensionKit",
+      "-Xswiftc",
+      "-Osize",
+      "-Xswiftc",
+      "-plugin-path",
+      "-Xswiftc",
+      `${developer}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
+    ],
+    { env: environment, stdio: "inherit" },
+  );
+  const products = execFileSync(
+    "swift",
+    ["build", ...common, "--show-bin-path"],
+    { env: environment, encoding: "utf8" },
+  ).trim();
+  return { products, modules: resolve(products, "Modules"), library: "EdithExtensionKit" };
+}
+
+export function buildExtensionContext(root, kit, scope, directory, sourceEnvironment = process.env) {
+  const module = contextModule(scope);
+  const environment = {
+    ...sourceEnvironment,
+    DEVELOPER_DIR:
+      sourceEnvironment.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer",
+  };
+  const sourceRoot = resolve(root, "Packages/ExtensionSupport/Sources/EdithExtensionSupport");
+  const sources = resolve(directory, "sources");
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(sources, { recursive: true });
+  const files = readdirSync(sourceRoot)
+    .filter((name) => name.endsWith(".swift"))
+    .sort()
+    .map((name) => {
+      const target = join(sources, name);
+      writeFileSync(target, readFileSync(join(sourceRoot, name), "utf8"));
+      return target;
+    });
+  const objects = resolve(directory, "objects");
+  mkdirSync(objects, { recursive: true });
+  execFileSync(
+    "xcrun",
+    [
+      "swiftc",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-Osize",
+      "-whole-module-optimization",
+      "-module-name",
+      module,
+      "-target",
+      "arm64-apple-macos14.0",
+      "-I",
+      kit.modules,
+      "-I",
+      kit.products,
+      "-emit-module",
+      "-emit-module-path",
+      resolve(directory, `${module}.swiftmodule`),
+      "-c",
+      ...files,
+      "-o",
+      resolve(objects, `${module}.o`),
+    ],
+    { env: environment, stdio: "inherit" },
+  );
+  execFileSync("libtool", [
+    "-static",
+    "-o",
+    resolve(directory, `lib${module}.a`),
+    resolve(objects, `${module}.o`),
+  ]);
+  return { directory, module };
+}

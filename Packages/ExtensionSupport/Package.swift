@@ -30,8 +30,7 @@ let package = Package(
         .library(name: "EdithExtensionArchive", type: .static, targets: ["EdithExtensionArchive"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
-        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
+        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2")
     ],
     targets: [
         .target(name: "EdithExtensionAccounts", swiftSettings: shared),
@@ -40,10 +39,7 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionArchive",
-            dependencies: [
-                "EdithExtensionCore", "EdithExtensionUI",
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            ],
+            dependencies: ["EdithExtensionCore", "EdithExtensionUI"],
             swiftSettings: shared),
         .testTarget(
             name: "EdithExtensionArchiveTests", dependencies: ["EdithExtensionArchive"],
