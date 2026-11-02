@@ -6,5 +6,31 @@
   "background": true,
   "commands": [
     "maintenance"
+  ],
+  "sections": [
+    {
+      "page": "appMaintenance",
+      "id": "Updates",
+      "title": "Updates",
+      "symbolName": "arrow.up.circle",
+      "summary": "Review and run available application updates.",
+      "order": 1
+    },
+    {
+      "page": "appMaintenance",
+      "id": "Remove",
+      "title": "Remove",
+      "symbolName": "trash",
+      "summary": "Review applications and their related files before removal.",
+      "order": 3
+    },
+    {
+      "page": "appMaintenance",
+      "id": "History",
+      "title": "History",
+      "symbolName": "clock.arrow.circlepath",
+      "summary": "Review completed maintenance operations.",
+      "order": 5
+    }
   ]
 }

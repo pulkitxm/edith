@@ -15,5 +15,13 @@
       "subtitle": "Pauses Edith Camera behind a card, or goes live again",
       "shortcut": "control+option+command+v"
     }
+  ],
+  "pages": [
+    {
+      "id": "virtualCamera",
+      "title": "Virtual Camera",
+      "symbolName": "web.camera",
+      "order": 6
+    }
   ]
 }

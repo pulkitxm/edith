@@ -4,5 +4,14 @@
   "symbolName": "person.crop.rectangle.stack",
   "category": "media",
   "background": false,
-  "commands": []
+  "commands": [],
+  "pages": [
+    {
+      "id": "socialManager",
+      "title": "Social Manager",
+      "symbolName": "person.crop.rectangle.stack",
+      "order": 2,
+      "detachable": false
+    }
+  ]
 }

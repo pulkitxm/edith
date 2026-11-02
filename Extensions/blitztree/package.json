@@ -4,5 +4,13 @@
   "symbolName": "square.grid.3x3.fill",
   "category": "utilities",
   "background": false,
-  "commands": []
+  "commands": [],
+  "pages": [
+    {
+      "id": "blitztree",
+      "title": "Disk Map",
+      "symbolName": "square.grid.3x3.fill",
+      "order": 2
+    }
+  ]
 }

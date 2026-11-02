@@ -6,5 +6,13 @@
   "background": false,
   "commands": [
     "docs"
+  ],
+  "pages": [
+    {
+      "id": "docs",
+      "title": "Docs",
+      "symbolName": "book.closed",
+      "order": 7
+    }
   ]
 }

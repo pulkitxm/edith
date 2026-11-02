@@ -60,6 +60,47 @@ public struct HostLaunchCondition: Codable, Hashable, Sendable {
     }
 }
 
+public struct HostPage: Codable, Hashable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let symbolName: String
+    public let order: Int
+    public let detachable: Bool
+    public let logoName: String?
+
+    public init(
+        id: String, title: String, symbolName: String, order: Int, detachable: Bool = true,
+        logoName: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.symbolName = symbolName
+        self.order = order
+        self.detachable = detachable
+        self.logoName = logoName
+    }
+}
+
+public struct HostPageSection: Codable, Hashable, Sendable, Identifiable {
+    public let page: String
+    public let id: String
+    public let title: String
+    public let symbolName: String
+    public let summary: String
+    public let order: Int
+
+    public init(
+        page: String, id: String, title: String, symbolName: String, summary: String, order: Int
+    ) {
+        self.page = page
+        self.id = id
+        self.title = title
+        self.symbolName = symbolName
+        self.summary = summary
+        self.order = order
+    }
+}
+
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -69,11 +110,14 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let commands: [String]
     public let hotkeys: [HostHotKey]
     public let launchWhen: [HostLaunchCondition]
+    public let pages: [HostPage]
+    public let sections: [HostPageSection]
 
     public init(
         id: String, title: String, symbolName: String, category: String,
         background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
-        launchWhen: [HostLaunchCondition] = []
+        launchWhen: [HostLaunchCondition] = [], pages: [HostPage] = [],
+        sections: [HostPageSection] = []
     ) {
         self.id = id
         self.title = title
@@ -83,6 +127,8 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.commands = commands
         self.hotkeys = hotkeys
         self.launchWhen = launchWhen
+        self.pages = pages
+        self.sections = sections
     }
 }
 

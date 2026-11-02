@@ -6,5 +6,13 @@
   "background": true,
   "commands": [
     "attention"
+  ],
+  "pages": [
+    {
+      "id": "attention",
+      "title": "Attention",
+      "symbolName": "hourglass",
+      "order": 5
+    }
   ]
 }
