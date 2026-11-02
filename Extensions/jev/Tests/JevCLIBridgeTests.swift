@@ -152,16 +152,14 @@ import Testing
                     ExtensionEngineRequest.self, from: data)
             else { completion(Data()); return }
             operations.append(request.operation)
-            commands.invoke([
-                "token": request.token.uuidString, "command": request.operation,
-                "payload": request.payload,
-            ]) { bytes, error in
+            let commands = commands
+            Task { @MainActor in
+                let bytes = try? await commands.execute(request.operation, payload: request.payload)
                 let reply = ExtensionEngineReply(
-                    token: request.token, ok: error == nil && bytes != nil,
-                    payload: bytes as Data? ?? Data("{}".utf8))
+                    token: request.token, ok: bytes != nil, payload: bytes ?? Data("{}".utf8))
                 completion((try? ExtensionEngineWire.encode(reply)) ?? Data())
             }
         }
-        @MainActor @objc func cancel(_ token: String) { commands.cancel(token) }
+        @MainActor @objc func cancel(_ token: String) {}
     }
 }
