@@ -4,26 +4,30 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  buildExtensionSupport,
-  rewriteSupportImports,
+  buildExtensionContext,
+  buildExtensionKit,
+  rewriteContextImports,
 } from "./build-extension-support.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "extension-native-task-fixture-"));
 try {
-  const products = buildExtensionSupport(
+  const scope = "NativeTaskFixture_app";
+  const kit = buildExtensionKit(process.cwd());
+  const context = buildExtensionContext(
     process.cwd(),
-    "EdithExtensionSupport",
-    "NativeTaskFixture_app",
+    kit,
+    scope,
+    join(root, "context"),
   );
   const source = join(root, "Runtime.swift");
   await writeFile(
     source,
-    rewriteSupportImports(
+    rewriteContextImports(
       await readFile(
         "Packages/EdithHost/Tests/NativeTaskFixture/Runtime.swift",
         "utf8",
       ),
-      products.modules,
+      scope,
     ),
   );
   const bundle = join(root, "app.bundle");
@@ -46,10 +50,17 @@ try {
       "arm64-apple-macos14.0",
       source,
       "-I",
-      join(products.products, "Modules"),
+      kit.modules,
+      "-I",
+      kit.products,
+      "-I",
+      context.directory,
       "-L",
-      products.products,
-      `-l${products.product}`,
+      kit.products,
+      `-l${kit.library}`,
+      "-L",
+      context.directory,
+      `-l${context.module}`,
       "-Xlinker",
       "-dead_strip",
       "-Xlinker",
