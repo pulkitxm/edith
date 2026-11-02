@@ -25,9 +25,9 @@ const routes = (path) => extensionArea.test(path);
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
 test("portable planning uses Ubuntu while native checks and publication keep macOS", () => {
-  expect(plan["runs-on"]).toBe("ubuntu-latest");
+  expect(plan["runs-on"]).toBe("depot-ubuntu-24.04");
   for (const job of [workflow.jobs.tests, build, publish])
-    expect(job["runs-on"]).toBe("macos-26");
+    expect(job["runs-on"]).toBe("depot-macos-26");
   expect(text(plan)).toContain(
     "node scripts/extension-publish.mjs --read-catalog",
   );

@@ -15,7 +15,7 @@ permissions:
 jobs:
   refresh:
     name: Refresh contributors
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: write
     steps:

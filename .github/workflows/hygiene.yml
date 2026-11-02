@@ -17,7 +17,7 @@ concurrency:
 jobs:
   community:
     name: Community health
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -40,7 +40,7 @@ jobs:
 
   yaml:
     name: YAML
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -49,7 +49,7 @@ jobs:
 
   markdown:
     name: Markdown
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -58,7 +58,7 @@ jobs:
 
   actions:
     name: Workflows
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -78,7 +78,7 @@ jobs:
   links:
     name: Links
     if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -92,7 +92,7 @@ jobs:
     name: Hygiene
     if: always()
     needs: [community, yaml, markdown, actions, links]
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     steps:
       - name: Fail when a check failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

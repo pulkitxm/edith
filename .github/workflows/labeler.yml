@@ -12,7 +12,7 @@ concurrency:
 jobs:
   area:
     name: Area labels
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write
@@ -23,7 +23,7 @@ jobs:
 
   size:
     name: Size label
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write

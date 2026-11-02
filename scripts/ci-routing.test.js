@@ -122,7 +122,7 @@ test("Spotify catalog changes run native and locked Rust checks", () => {
       ).toBe(selected);
     }
   }
-  expect(job["runs-on"]).toBe("macos-26");
+  expect(job["runs-on"]).toBe("depot-macos-26");
   const checks = job.steps.find(
     (step) => step["working-directory"] === "apps/music-player",
   );
@@ -534,7 +534,7 @@ test("backend changes run the companion job", () => {
   expect(ciWorkflow).toContain("area companion '^apps/companion/'");
   expect(ciWorkflow).toContain("needs.changes.outputs.companion == 'true'");
   expect(ciWorkflow).toMatch(/pgvector\/pgvector:pg18@sha256:[a-f0-9]{64}/);
-  expect(ciWorkflow).toContain("runs-on: ubuntu-latest");
+  expect(ciWorkflow).toContain("runs-on: depot-ubuntu-24.04");
   expect(ciWorkflow).toContain("cargo test --locked");
   expect(ciWorkflow).toContain(
     "cargo clippy --all-targets --locked -- -D warnings",
@@ -573,7 +573,7 @@ test("full native extension contracts run on macOS with private SDK execution en
   const proof = job.steps.find((step) =>
     step.run?.includes("scripts/extension-ghostty-native.test.js"),
   );
-  expect(job["runs-on"]).toBe("macos-26");
+  expect(job["runs-on"]).toBe("depot-macos-26");
   expect(job.needs).toContain("plan");
   expect(proof.if).toBe("needs.plan.outputs.mode == 'validation'");
   expect(proof["timeout-minutes"]).toBeGreaterThan(0);

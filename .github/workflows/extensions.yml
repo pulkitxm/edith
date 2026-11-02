@@ -46,7 +46,7 @@ jobs:
     if: "!cancelled() && needs.plan.result == 'success' && (needs.plan.outputs.changed == 'true' || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true'))"
     needs:
       - plan
-    runs-on: macos-26
+    runs-on: depot-macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,7 +81,7 @@ jobs:
       - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
   plan:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     outputs:
       matrix: "${{ steps.plan.outputs.matrix }}"
       batches: "${{ steps.plan.outputs.batches }}"
@@ -157,7 +157,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: "${{ fromJSON(needs.plan.outputs.batches) }}"
-    runs-on: macos-26
+    runs-on: depot-macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -306,7 +306,7 @@ jobs:
       - plan
       - build
     if: "!cancelled() && needs.build.result == 'success' && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 330
     permissions:
       contents: read
@@ -349,7 +349,7 @@ jobs:
       - notarize
       - tests
     if: "!cancelled() && !inputs.validation_sha && needs.plan.outputs.mode != 'validation' && github.repository == 'pulkitxm/edith' && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.tests.result == 'success' && ((needs.plan.outputs.changed == 'true' && needs.build.result == 'success' && needs.notarize.result == 'success') || (needs.plan.outputs.changed == 'false' && needs.plan.outputs.draft == 'true' && needs.build.result == 'skipped')) && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
-    runs-on: macos-26
+    runs-on: depot-macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"
       GITHUB_TOKEN: "${{ github.token }}"

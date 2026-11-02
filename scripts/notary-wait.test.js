@@ -192,7 +192,7 @@ test("extension publication waits for notarization that runs off macOS", () => {
   expect(extensions.publish.needs).toContain("notarize");
   expect(extensions.publish.if).toContain("needs.notarize.result == 'success'");
   expect(extensions.notarize.needs).toContain("build");
-  expect(extensions.notarize["runs-on"]).toBe("ubuntu-latest");
+  expect(extensions.notarize["runs-on"]).toBe("depot-ubuntu-24.04");
   expect(JSON.stringify(extensions.notarize)).toContain("notary_wait.py");
   expect(JSON.stringify(extensions.build)).toContain("notary-submit.sh");
   expect(JSON.stringify(extensions.build)).not.toContain("--wait");
