@@ -4,5 +4,14 @@
   "symbolName": "mic.slash.fill",
   "category": "utilities",
   "background": true,
-  "commands": []
+  "commands": [],
+  "hotkeys": [
+    {
+      "id": "micMute",
+      "prefix": "micHotKey",
+      "title": "Mic mute",
+      "subtitle": "Mutes or unmutes every microphone system-wide",
+      "shortcut": "shift+command+m"
+    }
+  ]
 }

@@ -4,5 +4,14 @@
   "symbolName": "laptopcomputer.and.arrow.down",
   "category": "labs",
   "background": true,
-  "commands": []
+  "commands": [],
+  "hotkeys": [
+    {
+      "id": "hinge",
+      "prefix": "hingeHotKey",
+      "title": "Hinge",
+      "subtitle": "Turns the desktop fold on or off",
+      "shortcut": "control+option+h"
+    }
+  ]
 }

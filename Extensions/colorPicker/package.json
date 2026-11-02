@@ -7,5 +7,14 @@
   "commands": [
     "color",
     "colour"
+  ],
+  "hotkeys": [
+    {
+      "id": "colorPicker",
+      "prefix": "colorPickerHotKey",
+      "title": "Pick a color",
+      "subtitle": "Summons the color picker loupe",
+      "shortcut": "control+option+command+c"
+    }
   ]
 }

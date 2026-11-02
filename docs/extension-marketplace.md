@@ -24,7 +24,7 @@ A verified cached catalog and installed packages remain usable offline; an offli
 
 ## When extensions start
 
-Extensions that own background work, a shortcut, or a Home or Notch card start when Edith launches. The others are on demand: an enabled on-demand extension stays idle at launch, with no code loaded, and starts the first time its page opens or one of its commands runs. Idle extensions appear in the sidebar, Settings and `ed` help like running ones, and `ed extensions ls` reports them as `idle`. Each extension declares `background` in `Extensions/<id>/package.json`; the on-demand set is Homebrew, Jev, Cleaner, Blitztree, Plugins, Docs, LaTeX, SEO Audit and Social Manager.
+Extensions that own background work or a Home or Notch card start when Edith launches. Shortcuts declared in `Extensions/<id>/package.json` are registered by the host while their extension is idle, and the first press starts it. The others are on demand: an enabled on-demand extension stays idle at launch, with no code loaded, and starts the first time its page opens or one of its commands runs. Idle extensions appear in the sidebar, Settings and `ed` help like running ones, and `ed extensions ls` reports them as `idle`. Each extension declares `background` in `Extensions/<id>/package.json`; the on-demand set is Homebrew, Jev, Cleaner, Blitztree, Plugins, Docs, LaTeX, SEO Audit and Social Manager.
 
 If Edith quits unexpectedly while extensions are starting, the next launch starts those extensions one at a time after the others. An extension that is starting alone when Edith quits again is turned off and shows why; enabling it again retries.
 

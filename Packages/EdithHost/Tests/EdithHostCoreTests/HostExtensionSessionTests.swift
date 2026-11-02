@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
@@ -77,6 +78,39 @@ import HostWorkerFixtureSupport
         try await fixture.sessions.activate("sample")
         #expect(fixture.records.workers.count == 2)
         #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func idleExtensionShortcutsStartTheExtensionWhenPressed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.shortcuts." + UUID().uuidString,
+            supportDirectory: directory)
+        let hotkey = HostHotKey(
+            id: "sampleShortcut" + UUID().uuidString, prefix: "sampleShortcut", title: "Sample",
+            subtitle: "Synthetic", code: kVK_F15, modifiers: cmdKey | controlKey | optionKey,
+            label: "F15")
+        defer { HotKeyRegistrar.clear(hotkey.id) }
+        let entry = HostExtension(
+            id: "sample", title: "Synthetic", symbolName: "square", category: "desk",
+            background: false, hotkeys: [hotkey])
+        let shortcuts = HostIdleShortcuts(
+            entries: [entry], identity: identity, sessions: fixture.sessions)
+        fixture.defaults.set(["sample"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        fixture.sessions.startsAtLaunch = { _ in false }
+        await fixture.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        shortcuts.synchronize()
+        #expect(HotKeyRegistrar.isRegistered(hotkey.id))
+        #expect(fixture.records.workers.isEmpty)
+        #expect(HotKeyRegistrar.trigger(hotkey.id))
+        try await fixture.waitUntil { fixture.sessions.states["sample"] == .active }
+        #expect(fixture.records.workers.count == 1)
+        try await fixture.sessions.disable(id: "sample")
+        shortcuts.synchronize()
+        #expect(!HotKeyRegistrar.isRegistered(hotkey.id))
     }
 
     @Test func disablingAnIdleExtensionLoadsNoCode() async throws {

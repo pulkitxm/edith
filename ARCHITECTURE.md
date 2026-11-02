@@ -35,8 +35,8 @@ processes are short-lived native task and CLI children, the virtual camera
 system extension carrier, the lid-awake helper, and the `ed` launcher.
 
 Each extension declares what the host registers for it in
-`Extensions/<id>/package.json`: its title, symbol, category, `ed` command words
-and whether it has `background` work. `scripts/extension-index.mjs --write`
+`Extensions/<id>/package.json`: its title, symbol, category, `ed` command words,
+global shortcuts and whether it has `background` work. `scripts/extension-index.mjs --write`
 renders those declarations into the host index
 (`Packages/EdithHost/Sources/EdithHostCore/Resources/index.json`), and
 `make ci-extension-index` fails when the index is stale. The host registers

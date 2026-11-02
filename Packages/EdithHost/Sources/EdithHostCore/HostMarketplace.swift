@@ -22,6 +22,7 @@ public final class HostMarketplace {
         sessions.failureReasons.merging(operationFailures) { _, operation in operation }
     }
     private var operationFailures: [String: String] = [:]
+    @ObservationIgnored private var idleShortcuts: HostIdleShortcuts?
     public private(set) var restoring = false
     public private(set) var refreshingCatalog = false
     public private(set) var error: String? {
@@ -82,6 +83,13 @@ public final class HostMarketplace {
         }
         surfaces = try HostSurfaces(identity: identity, entries: entries, sessions: sessions)
         self.preferences = preferences
+        let shortcuts = HostIdleShortcuts(entries: entries, identity: identity, sessions: sessions)
+        idleShortcuts = shortcuts
+        let surfacesChanged = sessions.didChange
+        sessions.didChange = {
+            surfacesChanged()
+            shortcuts.synchronize()
+        }
         automaticallyUpdatesExtensions =
             preferences.object(forKey: "automaticallyUpdatesExtensions") as? Bool ?? true
         try store.completePendingRemovals()

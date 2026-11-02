@@ -1,5 +1,6 @@
 import Carbon.HIToolbox
 import Foundation
+import EdithHostCore
 import Testing
 
 @testable import EdithHost
@@ -12,10 +13,10 @@ import Testing
                 title: panel.title, prefix: panel.prefix, defaultCode: panel.code,
                 defaultModifiers: panel.modifiers, defaults: defaults)
         ]
-            + HostExtensionShortcut.allCases.map {
+            + ((try? HostIndex.bundled()) ?? []).flatMap(\.hotkeys).map {
                 HostShortcutConflicts.owner(
-                    title: $0.title, prefix: $0.prefix, defaultCode: $0.defaultCode,
-                    defaultModifiers: $0.defaultModifiers, defaults: defaults)
+                    title: $0.title, prefix: $0.prefix, defaultCode: $0.code,
+                    defaultModifiers: $0.modifiers, defaults: defaults)
             }
     }
 
