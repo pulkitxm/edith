@@ -3,7 +3,7 @@
   "title": "Calendar",
   "symbolName": "calendar",
   "category": "utilities",
-  "background": true,
+  "background": false,
   "commands": [
     "calendar"
   ]

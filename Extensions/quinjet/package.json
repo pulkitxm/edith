@@ -3,7 +3,7 @@
   "title": "Code Review",
   "symbolName": "arrow.triangle.branch",
   "category": "agents",
-  "background": true,
+  "background": false,
   "commands": [
     "quinjet"
   ]

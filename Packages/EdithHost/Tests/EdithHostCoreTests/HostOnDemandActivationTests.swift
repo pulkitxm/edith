@@ -46,7 +46,8 @@ import Testing
         #expect(
             demand == [
                 "homebrew", "jev", "cleaner", "blitztree", "plugins", "docs", "latex", "seoAudit",
-                "socialManager",
+                "socialManager", "quinjet", "audioMixer", "calendar", "database", "colorPicker",
+                "emoji", "studio", "system", "terminal", "timeLapse",
             ])
         #expect(entries.first { $0.id == "notchShelf" }?.background == true)
         #expect(entries.first { $0.id == "colorPicker" }?.commands == ["color", "colour"])

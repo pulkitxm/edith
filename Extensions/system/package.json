@@ -3,7 +3,7 @@
   "title": "Running Apps",
   "symbolName": "switch.2",
   "category": "utilities",
-  "background": true,
+  "background": false,
   "commands": [
     "system",
     "apps",

@@ -3,6 +3,6 @@
   "title": "Terminal",
   "symbolName": "terminal",
   "category": "agents",
-  "background": true,
+  "background": false,
   "commands": []
 }

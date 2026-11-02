@@ -3,7 +3,7 @@
   "title": "Database",
   "symbolName": "cylinder.fill",
   "category": "developer",
-  "background": true,
+  "background": false,
   "commands": [
     "database"
   ]

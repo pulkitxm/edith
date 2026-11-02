@@ -3,6 +3,6 @@
   "title": "Screen Recorder",
   "symbolName": "record.circle",
   "category": "media",
-  "background": true,
+  "background": false,
   "commands": []
 }

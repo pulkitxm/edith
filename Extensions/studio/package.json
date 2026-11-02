@@ -3,7 +3,7 @@
   "title": "Studio",
   "symbolName": "wand.and.stars",
   "category": "media",
-  "background": true,
+  "background": false,
   "commands": [
     "studio"
   ]
