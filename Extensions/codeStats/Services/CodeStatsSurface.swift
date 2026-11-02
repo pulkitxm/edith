@@ -102,7 +102,7 @@ import Foundation
             guard let date = cell.date else { return nil }
             let day = CodeStatsDay(date: date, calendar: calendar).string
             return .init(
-                day, date: day, level: cell.level,
+                day, date: day, level: surfaceLevel(cell.level),
                 value:
                     "\(CodeStatsNumberFormat.grouped(cell.commits)) commits, \(CodeStatsNumberFormat.compact(cell.lines)) lines",
                 action: .init("day:" + day, "Open Code Stats", "calendar"))
@@ -132,6 +132,10 @@ import Foundation
             message: "\(report.startDay) to \(report.endDay) · \(totals.repositories) repositories"
                 + (tile.sourceIDs == nil ? "" : " · Selected repositories only"),
             updatedAt: store.loadState().reportedAt)
+    }
+
+    private func surfaceLevel(_ level: Int) -> Int {
+        level <= 0 ? 0 : min(4, (level * 4 + 5) / 6)
     }
 
     private func digest(_ value: String) -> String {

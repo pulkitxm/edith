@@ -107,7 +107,7 @@ public struct ActivityCalendarGrid<Detail: View>: View {
                 HStack(spacing: UIScale.pt(3)) {
                     Spacer()
                     Text("Less")
-                    ForEach(0..<5, id: \.self) { level in
+                    ForEach(0...ActivityCalendar.levels, id: \.self) { level in
                         RoundedRectangle(cornerRadius: UIScale.pt(2))
                             .fill(ActivityCalendarStyle.color(level, dark: dark))
                             .frame(width: UIScale.pt(10), height: UIScale.pt(10))
@@ -140,9 +140,15 @@ public enum ActivityCalendarStyle {
         switch level {
         case ..<0: .clear
         case 0: DashSkin.grid(dark)
-        default: DashSkin.heat(level - 1, dark)
+        default:
+            DashSkin.shifted(
+                DashSkin.accent(dark), toward: level <= 3 ? .black : .white,
+                by: (dark ? darkRamp : lightRamp)[min(level, ActivityCalendar.levels) - 1])
         }
     }
+
+    private static let lightRamp: [CGFloat] = [0.35, 0.2, 0.05, 0.15, 0.35, 0.55]
+    private static let darkRamp: [CGFloat] = [0.5, 0.3, 0.1, 0.1, 0.3, 0.5]
 }
 
 public struct ActivityCalendarSkeleton: View {

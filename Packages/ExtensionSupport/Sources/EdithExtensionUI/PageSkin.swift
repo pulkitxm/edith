@@ -5,7 +5,7 @@ import SwiftUI
 public enum DashSkin {
     private static var currentTheme: AppTheme { ThemeStore.current }
 
-    private static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)
+    static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)
         -> Color
     {
         let base = NSColor(color).usingColorSpace(.sRGB) ?? .black
