@@ -5,149 +5,111 @@ import Foundation
 import SwiftUI
 
 @MainActor
-@objc(EdithBlitzTreeExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+final class BlitzTreeService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var model: BlitzTreeModel?
     private var uiModel: BlitzTreeModel?
     private var uiClient: ExtensionEngineClient?
     private var uiSettings = false
-    private var commandDrain: Task<Void, Never>?
-    private var resourceStop: Task<Void, Never>?
-    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
-    private let commands = ExtensionCommandRegistry()
+    private var suspended = false
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let model = self?.model else { throw ExtensionPeerError.unavailable }
-            if command == "surface.snapshot" || command == "surface.perform" {
-                return try await SurfaceCommandService.execute(
-                    providerID: "blitztree", command: command, payload: payload,
-                    snapshot: { _ in BlitzTreeSurface.snapshot() },
-                    perform: { _ in throw ExtensionPeerError.invalidRequest })
-            }
-            return try await BlitzTreeCommands.execute(command, payload: payload, model: model)
-        }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { model != nil }
+    var allowsUIDuringRetirement: Bool { true }
+
+    func start() -> Bool {
+        if model == nil { model = BlitzTreeModel() }
+        return true
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        Task { [self] in
-            await drain.value
-            await resourceStop?.value
-            withExtendedLifetime(self) { completion() }
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let model else { throw ExtensionPeerError.unavailable }
+        if command == "surface.snapshot" || command == "surface.perform" {
+            return try await SurfaceCommandService.execute(
+                providerID: "blitztree", command: command, payload: payload,
+                snapshot: { _ in BlitzTreeSurface.snapshot() },
+                perform: { _ in throw ExtensionPeerError.invalidRequest })
         }
+        return try await BlitzTreeCommands.execute(command, payload: payload, model: model)
     }
 
-    private func beginCommandDrain() -> Task<Void, Never> {
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard uiDrains.count < 8, let client = configuration.engineClient else { return false }
+        releaseUI()
+        uiClient = client
+        uiModel = BlitzTreeModel(engineClient: client)
+        uiSettings = configuration.isSettings
+        TextEditingCommands.install()
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard !suspended, let model = uiModel else { return nil }
+        if uiSettings {
+            return NSHostingController(rootView: ExtensionPageHost { BlitzTreeSettings() })
+        }
+        return NSHostingController(rootView: ExtensionPageHost { BlitzTreePage(model: model) })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        [releaseUI()]
+    }
+
+    func cancelPendingWork() {
+        suspended = true
+        model?.cancelPendingCommands()
+        uiModel?.cancelPendingCommands()
+    }
+
+    func drain() async {
+        await model?.cancelAndWait()
+        await uiModel?.cancelAndWait()
+        while let task = uiDrains.values.first { await task.value }
+    }
+
+    func teardown() async {
+        let release = releaseUI()
         let owner = model
-        let uiOwner = uiModel
-        commandsSuspended = true
-        _ = commands.suspend()
-        if let commandDrain { return commandDrain }
-        owner?.cancelPendingCommands()
-        uiOwner?.cancelPendingCommands()
-        if let commandDrain { return commandDrain }
-        let task = Task { [self] in
-            _ = await commands.suspendAndWait()
-            await owner?.cancelAndWait()
-            await uiOwner?.cancelAndWait()
-            while let task = uiDrains.values.first { await task.value }
-        }
-        commandDrain = task
-        return task
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let stop = beginResourceStop()
-        Task { [self] in
-            await stop.value
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-
-    private func beginResourceStop() -> Task<Void, Never> {
-        if let resourceStop { return resourceStop }
-        let owner = model
-        let drain = beginCommandDrain()
-        if let resourceStop { return resourceStop }
-        stopUI()
         model = nil
-        let task = Task { [self] in
-            await drain.value
-            await commands.shutdownAndWait()
-            await owner?.shutdown()
-        }
-        resourceStop = task
-        return task
+        await release.value
+        await owner?.shutdown()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "blitztree", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if model == nil { model = BlitzTreeModel() }
-        case "configureUI":
-            guard !commandsSuspended, uiDrains.count < 8 else {
-                return ["ok": false] as NSDictionary
-            }
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                let client = configuration.engineClient
-            else { return ["ok": false] as NSDictionary }
-            stopUI(); uiClient = client; uiModel = BlitzTreeModel(engineClient: client)
-            uiSettings = input["location"] as? String == "settings"
-            TextEditingCommands.install()
-        case "stopUI": stopUI()
-        case "view":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            if uiSettings {
-                return NSHostingController(rootView: ExtensionPageHost { BlitzTreeSettings() })
-            }
-            return NSHostingController(
-                rootView: ExtensionPageHost { BlitzTreePage(model: model) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
-        case "stop":
-            _ = beginResourceStop()
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
-
-    private func stopUI() {
-        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+    @discardableResult
+    private func releaseUI() -> Task<Void, Never> {
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
             TextEditingCommands.shutdown()
         }
-        let model = uiModel; uiModel = nil
-        uiClient?.invalidate(); uiClient = nil
-        model?.cancelPendingCommands()
+        uiSettings = false
+        let stopping = uiModel
+        uiModel = nil
+        uiClient?.invalidate()
+        uiClient = nil
+        stopping?.cancelPendingCommands()
         let id = UUID()
-        uiDrains[id] = Task { [self] in
+        let task = Task { [self] in
             defer { uiDrains[id] = nil }
-            await model?.shutdown()
+            await stopping?.shutdown()
         }
+        uiDrains[id] = task
+        return task
     }
+}
+
+@MainActor
+func makeBlitzTreeRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "blitztree", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { BlitzTreeService(runtime: $0) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeBlitzTreeRuntime()).toOpaque())
         })
 }

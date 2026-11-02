@@ -1,171 +1,122 @@
 import AppKit
-import EdithExtensionSupport
 import EdithExtensionCommands
+import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-@MainActor @objc(EdithLaTeXExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+@MainActor
+final class LaTeXExtensionService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var worker: LaTeXWorker?
     private var uiModel: LaTeXModel?
     private var settingsTools: LaTeXToolOwner?
     private var engineClient: ExtensionEngineClient?
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
-    private var suspended = false
-    private var suspension: Task<Void, Never>?
-    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
-            if command == "latex.cli.catalog" {
-                return try LaTeXCLIExecution.catalog(payload)
-            }
-            if command.hasPrefix("latex.cli.") {
-                if self.cliStreams == nil {
-                    self.cliStreams = try ExtensionCLIStreams(owner: "latex")
-                }
-                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try LaTeXCLIExecution.stream(
-                    streams, operation: command, payload: payload, store: worker.model.store)
-            }
-            if command == "latex.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await LaTeXCLIExecution.run(request, store: worker.model.store))
-            }
-            if command.hasPrefix("latex.ui.") {
-                return try await LaTeXUIBridge.execute(
-                    command, payload: payload, model: worker.model)
-            }
-            return try await worker.execute(command, payload: payload)
-        }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { worker?.isStopped == false }
+
+    func start() -> Bool {
+        guard Self.hasEditorResources else { return false }
+        if worker == nil { worker = LaTeXWorker() }
+        return true
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        suspended = true
-        let worker = worker
-        let model = uiModel
-        let streams = cliStreams
-        worker?.cancelPendingWork()
-        model?.cancelPendingWork()
-        streams?.stop()
-        if suspension == nil {
-            let retired = Array(uiRetirements.values)
-            suspension = Task { [self, worker, model, streams] in
-                await worker?.model.drainTools()
-                await model?.drainTools()
-                await commands.suspendAndWait()
-                await worker?.drain()
-                await model?.drain()
-                await streams?.stopAndWait()
-                for task in retired { await task.value }
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let worker else { throw ExtensionPeerError.unavailable }
+        if command == "latex.cli.catalog" {
+            return try LaTeXCLIExecution.catalog(payload)
+        }
+        if command.hasPrefix("latex.cli.") {
+            if cliStreams == nil {
+                cliStreams = try ExtensionCLIStreams(owner: "latex")
             }
+            guard let streams = cliStreams else { throw ExtensionPeerError.unavailable }
+            return try LaTeXCLIExecution.stream(
+                streams, operation: command, payload: payload, store: worker.model.store)
         }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
+        if command == "latex.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await LaTeXCLIExecution.run(request, store: worker.model.store))
         }
+        if command.hasPrefix("latex.ui.") {
+            return try await LaTeXUIBridge.execute(
+                command, payload: payload, model: worker.model)
+        }
+        return try await worker.execute(command, payload: payload)
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands(completion: {})
-        stopUI()
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        commands.shutdown()
-        let worker = worker
-        Task { [self, worker, streams] in
-            await suspension?.value
-            await worker?.shutdown()
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            for task in Array(uiRetirements.values) { await task.value }
-            completion()
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard engineClient == nil, let client = configuration.engineClient,
+            Self.hasEditorResources
+        else { return false }
+        engineClient = client
+        if configuration.isSettings {
+            settingsTools = LaTeXToolOwner(remote: LaTeXUIBridge(client: client))
+            return true
         }
+        uiModel = LaTeXModel(remote: LaTeXUIBridge(client: client))
+        TextEditingCommands.install()
+        return true
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "latex", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "latex", let client = configuration.engineClient,
-                Self.hasEditorResources
-            else { return ["ok": false] as NSDictionary }
-            engineClient = client
-            if input["location"] as? String == "settings" {
-                settingsTools = LaTeXToolOwner(remote: LaTeXUIBridge(client: client))
-                return ["ok": true] as NSDictionary
-            }
-            uiModel = LaTeXModel(remote: LaTeXUIBridge(client: client))
-            TextEditingCommands.install()
-        case "stopUI": stopUI()
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
-                Self.hasEditorResources
-            else { return ["ok": false] as NSDictionary }
-            if worker == nil { worker = LaTeXWorker() }
-        case "view":
-            if let tools = settingsTools {
-                return NSHostingController(
-                    rootView: ExtensionPageHost { LaTeXSettings(owner: tools) })
-            }
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
+    func view(for presentation: UUID) -> NSViewController? {
+        if let tools = settingsTools {
             return NSHostingController(
-                rootView: ExtensionPageHost { LaTeXPage(model: model) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": break
-        case "stop":
-            suspendCommands(completion: {})
-            let streams = cliStreams; cliStreams = nil; streams?.stop()
-            Task { await streams?.stopAndWait() }
-            commands.shutdown()
-            let stopping = worker; worker = nil
-            Task { await stopping?.shutdown() }
-            stopUI()
-        case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
-        default: return ["ok": false] as NSDictionary
+                rootView: ExtensionPageHost { LaTeXSettings(owner: tools) })
         }
-        return ["ok": true] as NSDictionary
+        guard let model = uiModel else { return nil }
+        return NSHostingController(
+            rootView: ExtensionPageHost { LaTeXPage(model: model) })
     }
 
-    private func stopUI() {
-        engineClient?.invalidate(); engineClient = nil
-        let model = uiModel; uiModel = nil
-        let tools = settingsTools; settingsTools = nil
+    func stopUI() -> [Task<Void, Never>] {
+        engineClient?.invalidate()
+        engineClient = nil
+        let model = uiModel
+        uiModel = nil
+        let tools = settingsTools
+        settingsTools = nil
+        var retirements: [Task<Void, Never>] = []
         if let tools {
-            let id = UUID()
-            uiRetirements[id] = Task { [self, tools] in
-                await tools.shutdown()
-                uiRetirements[id] = nil
-            }
+            retirements.append(Task { await tools.shutdown() })
         }
         if let model {
             model.cancelPendingWork()
-            let id = UUID()
-            uiRetirements[id] = Task { [self, model] in
-                await model.shutdown()
-                uiRetirements[id] = nil
-            }
+            retirements.append(Task { await model.shutdown() })
         }
-        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
             TextEditingCommands.shutdown()
         }
+        return retirements
+    }
+
+    func cancelPendingWork() {
+        worker?.cancelPendingWork()
+        uiModel?.cancelPendingWork()
+        cliStreams?.stop()
+    }
+
+    func drain() async {
+        await worker?.model.drainTools()
+        await uiModel?.drainTools()
+        await worker?.drain()
+        await uiModel?.drain()
+        await cliStreams?.stopAndWait()
+    }
+
+    func teardown() async {
+        let retirements = stopUI()
+        let streams = cliStreams
+        cliStreams = nil
+        streams?.stop()
+        let stopping = worker
+        worker = nil
+        await stopping?.shutdown()
+        await streams?.stopAndWait()
+        for task in retirements { await task.value }
     }
 
     private static var hasEditorResources: Bool {
@@ -185,10 +136,17 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeLaTeXRuntime() -> ExtensionServiceRuntime {
+    ExtensionServiceRuntime(
+        id: "latex", role: "app", bundle: Bundle(for: LaTeXExtensionService.self)
+    ) { LaTeXExtensionService(runtime: $0) }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeLaTeXRuntime()).toOpaque())
         })
 }
