@@ -9,7 +9,8 @@ import {
 export function prepareNativeSupport(
   root,
   definition,
-  build = (supportRoot, _product, scope) => prepareNativeContext(supportRoot, scope),
+  build = (supportRoot, _product, scope) =>
+    prepareNativeContext(supportRoot, scope),
 ) {
   if (definition.nativeSupportProduct == null) return undefined;
   if (

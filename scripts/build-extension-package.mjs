@@ -560,7 +560,9 @@ export async function buildExtensionPackage({
           "@rpath/libEdithExtensionKit.dylib",
         )
       )
-        throw new Error("A native presentation role does not link the shared kit");
+        throw new Error(
+          "A native presentation role does not link the shared kit",
+        );
       run("install_name_tool", ["-id", `@rpath/${libraryName}`, library]);
       const dependencies = run("otool", ["-L", library], {
         encoding: "utf8",
@@ -727,7 +729,9 @@ export async function buildExtensionPackage({
           maxBuffer: 256 * 1024 * 1024,
         })
           .split("\n")
-          .filter((line) => / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line))
+          .filter((line) =>
+            / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line),
+          )
           .join("\n");
         const embedded = candidates
           ? run("xcrun", ["swift-demangle"], {
@@ -737,11 +741,15 @@ export async function buildExtensionPackage({
             })
               .split("\n")
               .filter(
-                (line) => line && !line.includes("(extension in EdithExtensionSupport_"),
+                (line) =>
+                  line &&
+                  !line.includes("(extension in EdithExtensionSupport_"),
               )
           : [];
         if (embedded.length > 0)
-          throw new Error("Shared support code was embedded in an extension role");
+          throw new Error(
+            "Shared support code was embedded in an extension role",
+          );
       }
     }
     const infoJSON = resolve(staging, `${role}-info.json`);

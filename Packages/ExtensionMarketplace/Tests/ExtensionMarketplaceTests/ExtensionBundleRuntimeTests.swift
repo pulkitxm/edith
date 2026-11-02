@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import ExtensionMarketplace
@@ -42,6 +43,8 @@ import Testing
         let archive = output.appendingPathComponent("keepAwake.zip")
         _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
             [package], repository: "pulkitxm/edith")
+        let kit = host.appendingPathComponent("Contents/Frameworks/libEdithExtensionKit.dylib")
+        try #require(dlopen(kit.path, RTLD_NOW | RTLD_GLOBAL) != nil)
         let suite = "marketplace-runtime-\(UUID().uuidString)"
         let runtime = ExtensionBundleRuntime(
             store: fixture.store, role: .helper, hostABI: package.hostABI,
@@ -178,7 +181,7 @@ struct MarketplaceRuntimeBuildFixture {
 
     static func containingHost(repositoryRoot: URL, environment: [String: String]) -> URL {
         if let path = environment["EXTENSION_CONTAINING_HOST_APP"] {
-            return URL(fileURLWithPath: path)
+            return URL(fileURLWithPath: path, relativeTo: repositoryRoot).absoluteURL
         }
         return repositoryRoot.appendingPathComponent("local/minimal-host/Edith.app")
     }

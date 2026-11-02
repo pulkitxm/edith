@@ -30,7 +30,10 @@ function verify({ missing, extra, artwork = "valid", carrier = "valid" } = {}) {
     for (const name of ["AppIcon.icns", "index.json"])
       writeFileSync(join(contents, "Resources", name), "synthetic resource");
     mkdirSync(
-      join(contents, "Resources/ExtensionSupport_EdithExtensionDocuments.bundle"),
+      join(
+        contents,
+        "Resources/ExtensionSupport_EdithExtensionDocuments.bundle",
+      ),
     );
     if (artwork !== "missing") {
       const artworkBundle = join(

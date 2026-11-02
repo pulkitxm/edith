@@ -358,11 +358,15 @@ export function buildExtensionKit(root, sourceEnvironment = process.env) {
     "/Applications/Xcode.app/Contents/Developer";
   const environment = { ...sourceEnvironment, DEVELOPER_DIR: developer };
   const packagePath = resolve(root, "Packages/ExtensionSupport");
-  execFileSync("python3", ["-I", "-B", "scripts/prepare-argument-parser.py", packagePath], {
-    cwd: root,
-    env: environment,
-    stdio: "inherit",
-  });
+  execFileSync(
+    "python3",
+    ["-I", "-B", "scripts/prepare-argument-parser.py", packagePath],
+    {
+      cwd: root,
+      env: environment,
+      stdio: "inherit",
+    },
+  );
   const common = [
     "--package-path",
     packagePath,
@@ -394,17 +398,31 @@ export function buildExtensionKit(root, sourceEnvironment = process.env) {
     ["build", ...common, "--show-bin-path"],
     { env: environment, encoding: "utf8" },
   ).trim();
-  return { products, modules: resolve(products, "Modules"), library: "EdithExtensionKit" };
+  return {
+    products,
+    modules: resolve(products, "Modules"),
+    library: "EdithExtensionKit",
+  };
 }
 
-export function buildExtensionContext(root, kit, scope, directory, sourceEnvironment = process.env) {
+export function buildExtensionContext(
+  root,
+  kit,
+  scope,
+  directory,
+  sourceEnvironment = process.env,
+) {
   const module = contextModule(scope);
   const environment = {
     ...sourceEnvironment,
     DEVELOPER_DIR:
-      sourceEnvironment.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer",
+      sourceEnvironment.DEVELOPER_DIR ??
+      "/Applications/Xcode.app/Contents/Developer",
   };
-  const sourceRoot = resolve(root, "Packages/ExtensionSupport/Sources/EdithExtensionSupport");
+  const sourceRoot = resolve(
+    root,
+    "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+  );
   const sources = resolve(directory, "sources");
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(sources, { recursive: true });
@@ -457,15 +475,24 @@ export function buildExtensionContext(root, kit, scope, directory, sourceEnviron
 export function prepareNativeContext(root, scope) {
   const module = contextModule(scope);
   const directory = resolve(root, "local/extension-support", scope);
-  const sourceRoot = resolve(root, "Packages/ExtensionSupport/Sources/EdithExtensionSupport");
+  const sourceRoot = resolve(
+    root,
+    "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+  );
   const target = join(directory, "Sources", module);
   rmSync(join(directory, "Sources"), { recursive: true, force: true });
   mkdirSync(target, { recursive: true });
-  for (const name of readdirSync(sourceRoot).filter((entry) => entry.endsWith(".swift")).sort())
-    writeFileSync(join(target, name), readFileSync(join(sourceRoot, name), "utf8"));
+  for (const name of readdirSync(sourceRoot)
+    .filter((entry) => entry.endsWith(".swift"))
+    .sort())
+    writeFileSync(
+      join(target, name),
+      readFileSync(join(sourceRoot, name), "utf8"),
+    );
   const kit = resolve(root, "Packages/ExtensionSupport");
   const manifest = `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${module}", type: .static, targets: ["${module}"])], dependencies: [.package(name: "ExtensionSupport", path: ${JSON.stringify(kit)})], targets: [.target(name: "${module}", dependencies: [.product(name: "EdithExtensionKit", package: "ExtensionSupport")], swiftSettings: [.swiftLanguageMode(.v5)])])\n`;
   const path = join(directory, "Package.swift");
-  if (!existsSync(path) || readFileSync(path, "utf8") !== manifest) writeFileSync(path, manifest);
+  if (!existsSync(path) || readFileSync(path, "utf8") !== manifest)
+    writeFileSync(path, manifest);
   return { directory, module };
 }
