@@ -245,8 +245,8 @@ test.each(["legacy source", "worker source", "worker manifest"])(
   },
 );
 
-test("the worker contract is bumped for the Developer ID signing team and every package follows it", async () => {
-  expect(workerHostABI).toBe("edith-host-6");
+test("every package follows the current worker contract", async () => {
+  expect(workerHostABI).toBe("edith-host-7");
   const root = fileURLToPath(new URL("..", import.meta.url));
   const manifest = JSON.parse(
     await readFile(join(root, "Extensions/manifest.json"), "utf8"),

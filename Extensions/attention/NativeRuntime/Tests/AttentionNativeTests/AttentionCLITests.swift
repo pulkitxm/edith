@@ -1,4 +1,4 @@
-import EdithExtensionCommands_attention_native
+import EdithExtensionCommands
 import EdithExtensionSupport_attention_native
 import Foundation
 import Testing

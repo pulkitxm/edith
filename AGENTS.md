@@ -113,8 +113,9 @@ in the loop needs GitHub or a merged pull request.
    build, relaunches that build in the background so only one copy of the
    extension's code is loaded, and waits until the extension is active. It
    prints the build and total seconds plus the extension's load timings. The
-   first build of an extension compiles its support libraries; later builds
-   take about ten seconds.
+   first build in a worktree compiles the shared extension kit; later builds
+   take about ten seconds. Rebuild the development app after changing
+   `Packages/ExtensionSupport`, since roles link the kit inside the app.
 3. Run `make dev-extension-watch EXTENSION=<id>` to repeat step 2 whenever the
    extension's sources or the shared support sources change.
 4. Verify in the background with `ed extensions info <id> --json`,

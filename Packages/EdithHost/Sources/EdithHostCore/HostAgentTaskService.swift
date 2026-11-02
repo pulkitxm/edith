@@ -532,6 +532,7 @@ public actor HostAgentTaskService {
         case .timedOut: "timedOut"
         case .outputLimitExceeded: "outputLimitExceeded"
         case .streamFailed: "streamFailed"
+        @unknown default: nil
         }
     }
 }

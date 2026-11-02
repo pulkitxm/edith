@@ -6,6 +6,8 @@ import re
 import subprocess
 
 
+EXTENSION_KIT = 'libEdithExtensionKit.dylib'
+
 def run(*arguments):
     result = subprocess.run(arguments, capture_output=True, text=True, check=True)
     return result.stdout + result.stderr
@@ -40,9 +42,9 @@ def inspect_layout(bundle, release=False, launcher_required=True):
         assert (library / 'LaunchDaemons' / CARRIER_PLIST).read_bytes() == (Path(__file__).resolve().parents[1] / 'Resources' / CARRIER_PLIST).read_bytes(), 'Invalid carrier daemon'
     assert {path.name for path in (bundle / 'Contents').iterdir()} <= allowed, 'Unexpected host payload directory'
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
-    assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework'}, 'Feature framework in host'
+    assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework', EXTENSION_KIT}, 'Feature framework in host'
     resources = {'AppIcon.icns', 'index.json', 'ed-launcher'} if launcher_required else {'AppIcon.icns', 'index.json'}
-    resources.add('EdithHost_EdithHost.bundle')
+    resources.update({'EdithHost_EdithHost.bundle', 'ExtensionSupport_EdithExtensionDocuments.bundle'})
     artwork = bundle / 'Contents/Resources/EdithHost_EdithHost.bundle'
     assert artwork.is_dir() and not artwork.is_symlink(), 'Invalid artwork resource bundle'
     assert {path.name for path in artwork.iterdir()} == {'MarketplaceArtwork.lzma'}, 'Unexpected artwork resources'
@@ -62,14 +64,19 @@ def inspect_host(bundle, release=False, launcher_required=True):
     plist = inspect_layout(bundle, release=release, launcher_required=launcher_required)
     executable = bundle / 'Contents/MacOS/Edith'
     bytes_installed = 0
+    kit_bytes = 0
     binaries = []
+    kit = bundle / 'Contents/Frameworks' / EXTENSION_KIT
     for path in bundle.rglob('*'):
         if path.is_symlink():
             assert path.resolve().is_relative_to(bundle) and path.resolve().exists(), f'Invalid bundle link: {path.name}'
             continue
         if not path.is_file():
             continue
-        bytes_installed += path.stat().st_size
+        if path == kit:
+            kit_bytes = path.stat().st_size
+        else:
+            bytes_installed += path.stat().st_size
         assert not path.name.startswith('._'), 'AppleDouble metadata in host'
         if 'Mach-O' not in run('file', '-b', str(path)):
             continue
@@ -90,7 +97,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
         assert not any(path.is_symlink() for path in sparkle_root.rglob('*')), 'Shipping Sparkle contains symbolic links'
         assert '/Sparkle.framework/Versions/' not in run('otool', '-L', str(executable)), 'Versioned Sparkle dependency in shipping host'
     expected_binaries = {
-        executable,
+        executable, kit,
         sparkle / 'Sparkle', sparkle / 'Autoupdate',
         sparkle / 'Updater.app/Contents/MacOS/Updater',
         sparkle / 'XPCServices/Downloader.xpc/Contents/MacOS/Downloader',
@@ -101,6 +108,8 @@ def inspect_host(bundle, release=False, launcher_required=True):
     for feature in ('HerdrStore', 'MusicPlayerEngine', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
     assert bytes_installed < 10_000_000, f'Empty host exceeds 10 MB: {bytes_installed}'
+    assert kit_bytes < 14_000_000, f'Extension kit exceeds 14 MB: {kit_bytes}'
+    assert '@rpath/libEdithExtensionKit.dylib' in run('otool', '-L', str(executable)), 'Host does not link the extension kit'
     closure = run('otool', '-L', str(executable))
     for feature in ('EdithKit', 'EdithShared', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'
@@ -115,4 +124,4 @@ def inspect_host(bundle, release=False, launcher_required=True):
     catalog = json.loads((bundle / 'Contents/Resources/index.json').read_text())
     assert len(catalog) >= 35
     inspect_cli(executable, plist['CFBundleShortVersionString'])
-    return {'installedBytes': bytes_installed, 'extensionPayloadBytes': 0, 'indexedExtensions': len(catalog), 'signature': 'verified', 'machOBinaries': len(binaries)}
+    return {'installedBytes': bytes_installed, 'extensionKitBytes': kit_bytes, 'extensionPayloadBytes': 0, 'indexedExtensions': len(catalog), 'signature': 'verified', 'machOBinaries': len(binaries)}

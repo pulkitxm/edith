@@ -1,6 +1,6 @@
 import AppKit
 import EdithExtensionSupport_attention_native
-import EdithExtensionUI_attention_native
+import EdithExtensionUI
 import SwiftUI
 import Testing
 @testable import AttentionNative

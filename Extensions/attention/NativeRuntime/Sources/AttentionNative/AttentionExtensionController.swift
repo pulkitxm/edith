@@ -1,6 +1,6 @@
-internal import EdithExtensionCommands_attention_native
+internal import EdithExtensionCommands
 internal import EdithExtensionSupport_attention_native
-internal import EdithExtensionUI_attention_native
+internal import EdithExtensionUI
 import AppKit
 import CoreFoundation
 import Foundation

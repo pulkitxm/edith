@@ -1545,6 +1545,8 @@ private struct SurfaceWidgetPreview: View {
                 systemImage: "arrow.up.right"
             )
             .font(.edithText(.callout))
+        @unknown default:
+            EmptyView()
         }
     }
 

@@ -38,7 +38,8 @@ test("development and release builds route through the empty host", () => {
   expect(build).not.toContain("EdithAgentRuntime");
   expect(build).not.toContain("EdithDatabaseRuntime");
   expect(minimal).toContain('"-Osize"');
-  expect(minimal).toContain('"strip", ["-rSTx", file]');
+  expect(minimal).toContain('file === kit ? ["-x", file] : ["-rSTx", file]');
+  expect(minimal).toContain("libEdithExtensionKit.dylib");
   expect(minimal).toContain("10_000_000");
 });
 

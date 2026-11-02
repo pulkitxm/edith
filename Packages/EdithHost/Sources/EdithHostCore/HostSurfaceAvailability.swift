@@ -72,6 +72,7 @@ public struct HostSurfaceAvailability: Sendable {
         case .focus: provider = "attention"
         case .limits: provider = "usage"
         case .nextMeeting: provider = "calendar"
+        @unknown default: provider = nil
         }
         return provider.map { activeIDs.contains($0) ? source : .none } ?? source
     }

@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const required = ["Sparkle.framework"];
+const required = ["Sparkle.framework", "libEdithExtensionKit.dylib"];
 
 function verify({ missing, extra, artwork = "valid", carrier = "valid" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
@@ -29,6 +29,12 @@ function verify({ missing, extra, artwork = "valid", carrier = "valid" } = {}) {
     }
     for (const name of ["AppIcon.icns", "index.json"])
       writeFileSync(join(contents, "Resources", name), "synthetic resource");
+    mkdirSync(
+      join(
+        contents,
+        "Resources/ExtensionSupport_EdithExtensionDocuments.bundle",
+      ),
+    );
     if (artwork !== "missing") {
       const artworkBundle = join(
         contents,
@@ -82,7 +88,7 @@ inspect_layout(app, release=True)
   }
 }
 
-test("empty release bundle accepts only Sparkle", () => {
+test("empty release bundle accepts only Sparkle and the extension kit", () => {
   const result = verify();
   expect(result.status, result.stderr).toBe(0);
 });

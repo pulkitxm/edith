@@ -1,5 +1,5 @@
 internal import EdithExtensionSupport_attention_native
-internal import EdithExtensionUI_attention_native
+internal import EdithExtensionUI
 import Foundation
 
 struct AttentionJevDecision: Codable, Equatable, Sendable {

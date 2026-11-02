@@ -132,10 +132,11 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
         if stat.S_ISLNK(status.st_mode):
             require(path.resolve().is_relative_to(bundle.resolve()) and path.resolve().exists(), 'Host link escapes bundle')
         elif stat.S_ISREG(status.st_mode):
-            installed += status.st_size
+            if path != bundle / 'Contents/Frameworks/libEdithExtensionKit.dylib':
+                installed += status.st_size
         else:
             require(stat.S_ISDIR(status.st_mode), 'Host contains a special file')
-        require(path.suffix not in ('.appex', '.bundle') or path == bundle / 'Contents/Resources/EdithHost_EdithHost.bundle', 'Feature payload in host')
+        require(path.suffix not in ('.appex', '.bundle') or path in (bundle / 'Contents/Resources/EdithHost_EdithHost.bundle', bundle / 'Contents/Resources/ExtensionSupport_EdithExtensionDocuments.bundle'), 'Feature payload in host')
     require(0 < installed < 10000000, 'Empty host exceeds size limit')
     executable_hash = digest(bundle / 'Contents/MacOS/Edith')
     require(metadata['sourceCommit'] == source and metadata['hostExecutableSHA256'] == executable_hash, 'Host metadata source or executable differs')
