@@ -26,7 +26,7 @@
     "title": "Code Review",
     "symbolName": "arrow.triangle.branch",
     "category": "agents",
-    "background": true,
+    "background": false,
     "commands": [
       "quinjet"
     ],
@@ -70,7 +70,7 @@
     "title": "Terminal",
     "symbolName": "terminal",
     "category": "agents",
-    "background": true,
+    "background": false,
     "commands": [],
     "hotkeys": []
   },
@@ -132,7 +132,7 @@
     "title": "Running Apps",
     "symbolName": "switch.2",
     "category": "utilities",
-    "background": true,
+    "background": false,
     "commands": [
       "system",
       "apps",
@@ -216,7 +216,7 @@
     "title": "Calendar",
     "symbolName": "calendar",
     "category": "utilities",
-    "background": true,
+    "background": false,
     "commands": [
       "calendar"
     ],
@@ -269,7 +269,7 @@
     "title": "Emoji Picker",
     "symbolName": "face.smiling",
     "category": "desk",
-    "background": true,
+    "background": false,
     "commands": [
       "emoji"
     ],
@@ -290,7 +290,7 @@
     "title": "Color Picker",
     "symbolName": "eyedropper",
     "category": "desk",
-    "background": true,
+    "background": false,
     "commands": [
       "color",
       "colour"
@@ -362,7 +362,7 @@
     "title": "Audio Mixer",
     "symbolName": "slider.horizontal.3",
     "category": "desk",
-    "background": true,
+    "background": false,
     "commands": [
       "audio"
     ],
@@ -373,7 +373,7 @@
     "title": "Studio",
     "symbolName": "wand.and.stars",
     "category": "media",
-    "background": true,
+    "background": false,
     "commands": [
       "studio"
     ],
@@ -384,7 +384,7 @@
     "title": "Screen Recorder",
     "symbolName": "record.circle",
     "category": "media",
-    "background": true,
+    "background": false,
     "commands": [],
     "hotkeys": []
   },
@@ -447,7 +447,7 @@
     "title": "Database",
     "symbolName": "cylinder.fill",
     "category": "developer",
-    "background": true,
+    "background": false,
     "commands": [
       "database"
     ],

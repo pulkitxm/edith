@@ -3,7 +3,7 @@
   "title": "Audio Mixer",
   "symbolName": "slider.horizontal.3",
   "category": "desk",
-  "background": true,
+  "background": false,
   "commands": [
     "audio"
   ]

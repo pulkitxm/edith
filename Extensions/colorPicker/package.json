@@ -3,7 +3,7 @@
   "title": "Color Picker",
   "symbolName": "eyedropper",
   "category": "desk",
-  "background": true,
+  "background": false,
   "commands": [
     "color",
     "colour"
