@@ -191,7 +191,7 @@ struct ExtensionEngineTests {
             ExtensionUIConfiguration(
                 context: context, hostIdentifier: "synthetic.host", extensionID: "sample",
                 defaultsSuite: suite))
-        #expect(main.engineClient != nil && !main.isSettings)
+        #expect(main.engineClient != nil && !main.isSettings && main.location == "main")
         let activeSettings = NSMutableDictionary(dictionary: context)
         activeSettings["location"] = "settings"
         let active = try #require(

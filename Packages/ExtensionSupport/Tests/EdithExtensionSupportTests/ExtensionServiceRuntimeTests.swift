@@ -21,8 +21,13 @@ private final class SyntheticService: ExtensionService {
     }
 
     var startInputs: [String] = []
+    var synchronizations: [String] = []
 
-    func start(_ context: ExtensionStartContext) -> Bool {
+    func synchronize(_ context: ExtensionHostContext) {
+        synchronizations.append(context.input["policy"] as? String ?? "")
+    }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
         starts += 1
         startInputs.append(context.dataDirectory ?? "")
         return !context.isHostedFunctionalFixture
@@ -127,6 +132,8 @@ private let syntheticScope = [
                 ])) == false)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
         #expect(service.starts == 2)
+        _ = runtime.execute(["operation": "synchronize", "policy": "ambient"])
+        #expect(service.synchronizations == ["ambient"])
     }
 
     @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {

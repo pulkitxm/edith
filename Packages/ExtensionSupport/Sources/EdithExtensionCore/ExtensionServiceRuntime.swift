@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-public struct ExtensionStartContext {
+public struct ExtensionHostContext {
     public let input: NSDictionary
 
     public var dataDirectory: String? { input["dataDirectory"] as? String }
@@ -14,8 +14,9 @@ public protocol ExtensionService: AnyObject {
     var preparesForDisable: Bool { get }
     func prepareDisable() async throws
     func start() -> Bool
-    func start(_ context: ExtensionStartContext) -> Bool
+    func start(_ context: ExtensionHostContext) -> Bool
     func synchronize()
+    func synchronize(_ context: ExtensionHostContext)
     func invoke(_ command: String, payload: Data) async throws -> Data
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool
     func view(for presentation: UUID) -> NSViewController?
@@ -32,8 +33,9 @@ extension ExtensionService {
     public var preparesForDisable: Bool { false }
     public func prepareDisable() async throws {}
     public func start() -> Bool { true }
-    public func start(_ context: ExtensionStartContext) -> Bool { start() }
+    public func start(_ context: ExtensionHostContext) -> Bool { start() }
     public func synchronize() {}
+    public func synchronize(_ context: ExtensionHostContext) { synchronize() }
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         throw ExtensionPeerError.unavailable
     }
@@ -147,11 +149,11 @@ public final class ExtensionServiceRuntime: NSObject {
                 suite == scope["EDITH_SHARED_DEFAULTS_SUITE"],
                 !service.requiresOwnedDataDirectory || ownsDataDirectory(input)
             else { return Self.result(false) }
-            guard started || service.start(ExtensionStartContext(input: input)) else {
+            guard started || service.start(ExtensionHostContext(input: input)) else {
                 return Self.result(false)
             }
             started = true
-        case "synchronize": service?.synchronize()
+        case "synchronize": service?.synchronize(ExtensionHostContext(input: input))
         case "configureUI":
             guard suspension == nil, teardownTask == nil, uiRetirements.isEmpty,
                 let configuration = ExtensionUIConfiguration(context: input),

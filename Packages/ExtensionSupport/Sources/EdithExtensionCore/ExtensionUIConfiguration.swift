@@ -6,7 +6,9 @@ public struct ExtensionUIConfiguration {
     public let extensionID: String
     public let defaultsSuite: String
     public let uiOnly: Bool
-    public let isSettings: Bool
+    public let location: String?
+    public let section: String?
+    public var isSettings: Bool { location == "settings" }
     public let engineClient: ExtensionEngineClient?
 
     public init?(context: NSDictionary) {
@@ -49,7 +51,8 @@ public struct ExtensionUIConfiguration {
         self.extensionID = extensionID
         self.defaultsSuite = defaultsSuite
         self.uiOnly = uiOnly
-        isSettings = context["location"] as? String == "settings"
+        location = context["location"] as? String
+        section = context["section"] as? String
         if uiOnly {
             guard context["location"] as? String == "settings", context["tile"] == nil,
                 context["target"] == nil, context["engineClient"] == nil
