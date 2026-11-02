@@ -64,7 +64,7 @@ actor CodeStatsCommands {
             await workflow.settingsChanged()
             data = try JSONEncoder().encode(selection)
         case "codeStats.schedule":
-            guard Set(object.keys).isSubset(of: ["kind", "hour", "weekday"]),
+            guard Set(object.keys).isSubset(of: ["kind", "every", "hour", "weekday"]),
                 let kind = object["kind"] as? String,
                 let value = CodeStatsScheduleKind(rawValue: kind)
             else { throw ExtensionPeerError.invalidRequest }
@@ -72,10 +72,18 @@ actor CodeStatsCommands {
                 object["hour"], default: CodeStatsPreferences.defaultHour, range: 0...23)
             let weekday = try integer(
                 object["weekday"], default: CodeStatsPreferences.defaultWeekday, range: 1...7)
+            let every = try integer(
+                object["every"], default: CodeStatsPreferences.defaultEveryHours, range: 1...12)
+            guard CodeStatsPreferences.everyHours.contains(every) else {
+                throw ExtensionPeerError.invalidRequest
+            }
             let schedule: CodeStatsSchedule =
-                value == .manual
-                ? .manual
-                : value == .daily ? .daily(hour: hour) : .weekly(weekday: weekday, hour: hour)
+                switch value {
+                case .manual: .manual
+                case .hourly: .hourly(every: every)
+                case .daily: .daily(hour: hour)
+                case .weekly: .weekly(weekday: weekday, hour: hour)
+                }
             CodeStatsPreferences.setSchedule(schedule, in: defaults)
             await workflow.settingsChanged()
             data = try JSONEncoder().encode(schedule)

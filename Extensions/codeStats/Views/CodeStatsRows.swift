@@ -13,6 +13,8 @@ struct CodeStatsRows: View {
         var hour = CodeStatsPreferences.defaultHour
     @AppStorage(AppStorageKeys.CodeStats.scheduleWeekday, store: SharedDefaults.store) private
         var weekday = CodeStatsPreferences.defaultWeekday
+    @AppStorage(AppStorageKeys.CodeStats.scheduleEveryHours, store: SharedDefaults.store) private
+        var every = CodeStatsPreferences.defaultEveryHours
     @AppStorage(AppStorageKeys.CodeStats.includeForks, store: SharedDefaults.store) private
         var includeForks = false
     @AppStorage(AppStorageKeys.CodeStats.includeArchived, store: SharedDefaults.store) private
@@ -67,8 +69,16 @@ struct CodeStatsRows: View {
                     selection: $scheduleKind
                 ) {
                     Text("Manually").tag(CodeStatsScheduleKind.manual.rawValue)
+                    Text("Hourly").tag(CodeStatsScheduleKind.hourly.rawValue)
                     Text("Daily").tag(CodeStatsScheduleKind.daily.rawValue)
                     Text("Weekly").tag(CodeStatsScheduleKind.weekly.rawValue)
+                }
+                if scheduleKind == CodeStatsScheduleKind.hourly.rawValue {
+                    Picker("Every", selection: $every) {
+                        ForEach(CodeStatsPreferences.everyHours, id: \.self) { value in
+                            Text(CodeStatsPreferences.everyLabel(value)).tag(value)
+                        }
+                    }
                 }
                 if scheduleKind == CodeStatsScheduleKind.weekly.rawValue {
                     Picker(
@@ -80,7 +90,9 @@ struct CodeStatsRows: View {
                         }
                     }
                 }
-                if scheduleKind != CodeStatsScheduleKind.manual.rawValue {
+                if scheduleKind == CodeStatsScheduleKind.daily.rawValue
+                    || scheduleKind == CodeStatsScheduleKind.weekly.rawValue
+                {
                     Picker(
                         "Time", selection: $hour
                     ) {
@@ -115,7 +127,7 @@ struct CodeStatsRows: View {
         }
         .pageTask(
             id:
-                "\(folder):\(includeForks):\(includeArchived):\(scheduleKind):\(hour):\(weekday):\(identity.labels)"
+                "\(folder):\(includeForks):\(includeArchived):\(scheduleKind):\(every):\(hour):\(weekday):\(identity.labels)"
         ) {
             await model.settingsChanged()
         }

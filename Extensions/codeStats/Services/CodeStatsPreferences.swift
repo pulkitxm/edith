@@ -3,12 +3,14 @@ import Foundation
 
 public enum CodeStatsScheduleKind: String, CaseIterable, Codable, Sendable {
     case manual
+    case hourly
     case daily
     case weekly
 
     public init(_ schedule: CodeStatsSchedule) {
         switch schedule {
         case .manual: self = .manual
+        case .hourly: self = .hourly
         case .daily: self = .daily
         case .weekly: self = .weekly
         }
@@ -38,10 +40,16 @@ public struct CodeStatsFolderSelection: Codable, Equatable, Sendable {
 public enum CodeStatsPreferences {
     public static let defaultHour = 9
     public static let defaultWeekday = 2
+    public static let defaultEveryHours = 4
+    public static let everyHours = [1, 2, 3, 4, 6, 8, 12]
     public static let hours = 0...23
     public static let weekdays = 1...7
 
     private typealias Keys = AppStorageKeys.CodeStats
+
+    public static func everyLabel(_ hours: Int) -> String {
+        hours == 1 ? "Every hour" : "Every \(hours) hours"
+    }
 
     public static func load(
         from defaults: UserDefaults = SharedDefaults.store,
@@ -66,7 +74,9 @@ public enum CodeStatsPreferences {
     public static func schedule(in defaults: UserDefaults) -> CodeStatsSchedule {
         let hour = defaults.object(forKey: Keys.scheduleHour) as? Int ?? defaultHour
         let weekday = defaults.object(forKey: Keys.scheduleWeekday) as? Int ?? defaultWeekday
+        let every = defaults.object(forKey: Keys.scheduleEveryHours) as? Int ?? defaultEveryHours
         switch CodeStatsScheduleKind(rawValue: defaults.string(forKey: Keys.scheduleKind) ?? "") {
+        case .hourly: return .hourly(every: everyHours.contains(every) ? every : defaultEveryHours)
         case .daily: return .daily(hour: hour)
         case .weekly: return .weekly(weekday: weekday, hour: hour)
         case .manual, nil: return .manual
@@ -78,6 +88,8 @@ public enum CodeStatsPreferences {
         switch schedule {
         case .manual:
             break
+        case .hourly(let every):
+            defaults.set(every, forKey: Keys.scheduleEveryHours)
         case .daily(let hour):
             defaults.set(hour, forKey: Keys.scheduleHour)
         case .weekly(let weekday, let hour):

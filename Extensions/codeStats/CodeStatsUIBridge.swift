@@ -187,6 +187,10 @@ struct CodeStatsUIBridge: Sendable {
             let request = try JSONDecoder().decode(CodeStatsUIPreferences.self, from: payload)
             switch request.schedule {
             case .manual: break
+            case .hourly(let every):
+                guard CodeStatsPreferences.everyHours.contains(every) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
             case .daily(let hour):
                 guard (0...23).contains(hour) else { throw ExtensionPeerError.invalidRequest }
             case .weekly(let weekday, let hour):

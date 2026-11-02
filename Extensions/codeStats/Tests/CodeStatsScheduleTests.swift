@@ -29,7 +29,9 @@ import Testing
     @Test func aScheduleThatNeverRanWaitsForTheFirstExplicitRun() {
         let now = date("2026-06-01 09:30")
         let later = date("2026-06-09 03:00")
-        for schedule in [CodeStatsSchedule.daily(hour: 3), .weekly(weekday: 2, hour: 3)] {
+        for schedule in [
+            CodeStatsSchedule.hourly(every: 2), .daily(hour: 3), .weekly(weekday: 2, hour: 3),
+        ] {
             #expect(schedule.nextRun(after: nil, calendar: calendar()) == nil)
             #expect(!schedule.isDue(lastRun: nil, now: now, calendar: calendar()))
             #expect(!schedule.isDue(lastRun: nil, now: later, calendar: calendar()))
@@ -44,6 +46,14 @@ import Testing
                 == date("2026-06-02 09:00"))
         #expect(!schedule.isDue(lastRun: last, now: date("2026-06-02 08:59"), calendar: calendar()))
         #expect(schedule.isDue(lastRun: last, now: date("2026-06-02 09:00"), calendar: calendar()))
+    }
+
+    @Test func hourlyRunsTheChosenHoursAfterTheLastRun() {
+        let schedule = CodeStatsSchedule.hourly(every: 4)
+        let last = date("2026-06-01 09:05")
+        #expect(schedule.nextRun(after: last, calendar: calendar()) == date("2026-06-01 13:05"))
+        #expect(!schedule.isDue(lastRun: last, now: date("2026-06-01 13:04"), calendar: calendar()))
+        #expect(schedule.isDue(lastRun: last, now: date("2026-06-03 00:00"), calendar: calendar()))
     }
 
     @Test func weeklyRunsOnTheChosenWeekday() {

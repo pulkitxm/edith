@@ -92,17 +92,29 @@ struct CodeStatsCLICommand: AsyncParsableCommand {
     static func schedule(_ schedule: CodeStatsSchedule) -> JSONValue {
         switch schedule {
         case .manual:
-            .object(["kind": .string("manual"), "hour": .null, "weekday": .null])
+            .object([
+                "kind": .string("manual"), "every": .null, "hour": .null, "weekday": .null,
+            ])
+        case .hourly(let every):
+            .object([
+                "kind": .string("hourly"), "every": .int(every), "hour": .null, "weekday": .null,
+            ])
         case .daily(let hour):
-            .object(["kind": .string("daily"), "hour": .int(hour), "weekday": .null])
+            .object([
+                "kind": .string("daily"), "every": .null, "hour": .int(hour), "weekday": .null,
+            ])
         case .weekly(let weekday, let hour):
-            .object(["kind": .string("weekly"), "hour": .int(hour), "weekday": .int(weekday)])
+            .object([
+                "kind": .string("weekly"), "every": .null, "hour": .int(hour),
+                "weekday": .int(weekday),
+            ])
         }
     }
 
     static func describe(_ schedule: CodeStatsSchedule) -> String {
         switch schedule {
         case .manual: "manual"
+        case .hourly(let every): every == 1 ? "every hour" : "every \(every) hours"
         case .daily(let hour): String(format: "daily at %02d:00", hour)
         case .weekly(let weekday, let hour):
             Calendar.current.weekdaySymbols[min(max(weekday, 1), 7) - 1]
@@ -462,15 +474,18 @@ struct CodeStatsScheduleCommand: AsyncParsableCommand {
         commandName: "schedule",
         abstract: "Choose how often code stats refresh on their own.",
         discussion: """
-            Changes the refresh schedule: manual, daily at an hour, or weekly on a weekday \
-            (1 is Sunday, 7 is Saturday) at an hour. Scheduling starts after the first \
+            Changes the refresh schedule: manual, hourly every 1, 2, 3, 4, 6, 8 or 12 hours, \
+            daily at an hour, or weekly on a weekday (1 is Sunday, 7 is Saturday) at an hour. Scheduling starts after the first \
             refresh, and a refresh missed while the Mac slept or the drive was unplugged \
             runs once as soon as it can.
-            Example: ed code-stats schedule weekly --weekday 2 --hour 9
+            Example: ed code-stats schedule hourly --every 4
             """)
 
-    @Argument(help: "manual, daily or weekly.")
+    @Argument(help: "manual, hourly, daily or weekly.")
     var kind: String
+
+    @Option(name: .long, help: "Hours between hourly refreshes: 1, 2, 3, 4, 6, 8 or 12.")
+    var every: Int?
 
     @Option(name: .long, help: "Hour of the day from 0 to 23.")
     var hour: Int?
@@ -485,7 +500,10 @@ struct CodeStatsScheduleCommand: AsyncParsableCommand {
         try await execute {
             guard let kind = CodeStatsScheduleKind(rawValue: kind.lowercased()) else {
                 throw CLIFailure.usage(
-                    "\(self.kind) is not a schedule", hint: "use manual, daily or weekly")
+                    "\(self.kind) is not a schedule", hint: "use manual, hourly, daily or weekly")
+            }
+            if let every, !CodeStatsPreferences.everyHours.contains(every) {
+                throw CLIFailure.usage("--every must be 1, 2, 3, 4, 6, 8 or 12")
             }
             if let hour, !CodeStatsPreferences.hours.contains(hour) {
                 throw CLIFailure.usage("--hour must be between 0 and 23")
@@ -495,10 +513,15 @@ struct CodeStatsScheduleCommand: AsyncParsableCommand {
             }
             let defaults = CodeStatsCLI.defaults
             let current = CodeStatsPreferences.schedule(in: defaults)
+            var currentEvery = CodeStatsPreferences.defaultEveryHours
             let currentHour: Int
             let currentWeekday: Int
             switch current {
             case .manual:
+                currentHour = CodeStatsPreferences.defaultHour
+                currentWeekday = CodeStatsPreferences.defaultWeekday
+            case .hourly(let every):
+                currentEvery = every
                 currentHour = CodeStatsPreferences.defaultHour
                 currentWeekday = CodeStatsPreferences.defaultWeekday
             case .daily(let hour):
@@ -511,6 +534,7 @@ struct CodeStatsScheduleCommand: AsyncParsableCommand {
             let schedule: CodeStatsSchedule =
                 switch kind {
                 case .manual: .manual
+                case .hourly: .hourly(every: every ?? currentEvery)
                 case .daily: .daily(hour: hour ?? currentHour)
                 case .weekly: .weekly(weekday: weekday ?? currentWeekday, hour: hour ?? currentHour)
                 }

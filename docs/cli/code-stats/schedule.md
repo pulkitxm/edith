@@ -5,7 +5,7 @@
 [The `ed` command line](../README.md)
 
 ```bash
-ed code-stats schedule manual|daily|weekly [--hour 0-23] [--weekday 1-7] [--json]
+ed code-stats schedule manual|hourly|daily|weekly [--every 1|2|3|4|6|8|12] [--hour 0-23] [--weekday 1-7] [--json]
 ```
 
-Chooses how often the agent refreshes on its own. `daily` runs at `--hour`, and `weekly` runs on `--weekday` (1 is Sunday, 7 is Saturday) at `--hour`. Options you leave out keep their current values, 09:00 on Monday by default. Scheduling starts after the first refresh you run yourself. A refresh missed while the Mac slept or the drive was unplugged runs once as soon as it can, and a due refresh is skipped while the Mac is under serious thermal pressure.
+Chooses how often the agent refreshes on its own. `hourly` runs `--every` hours after the last refresh, `daily` runs at `--hour`, and `weekly` runs on `--weekday` (1 is Sunday, 7 is Saturday) at `--hour`. Options you leave out keep their current values, every 4 hours or 09:00 on Monday by default. Scheduling starts after the first refresh you run yourself. A refresh missed while the Mac slept or the drive was unplugged runs once as soon as it can, and a due refresh is skipped while the Mac is under serious thermal pressure.

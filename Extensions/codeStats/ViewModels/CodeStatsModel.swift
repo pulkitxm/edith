@@ -527,9 +527,11 @@ final class CodeStatsModel {
     func setSchedule(_ kind: CodeStatsScheduleKind) async {
         let hour = defaults.object(forKey: AppStorageKeys.CodeStats.scheduleHour) as? Int
         let weekday = defaults.object(forKey: AppStorageKeys.CodeStats.scheduleWeekday) as? Int
+        let every = defaults.object(forKey: AppStorageKeys.CodeStats.scheduleEveryHours) as? Int
         let next: CodeStatsSchedule
         switch kind {
         case .manual: next = .manual
+        case .hourly: next = .hourly(every: every ?? CodeStatsPreferences.defaultEveryHours)
         case .daily: next = .daily(hour: hour ?? CodeStatsPreferences.defaultHour)
         case .weekly:
             next = .weekly(
