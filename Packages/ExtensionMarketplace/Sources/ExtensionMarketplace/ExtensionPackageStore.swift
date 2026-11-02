@@ -281,7 +281,8 @@ public struct ExtensionPackageStore: Sendable {
                 $0.version.compare($1.version, options: .numeric) == .orderedDescending
             }
             let compatible = ordered.filter {
-                $0.hostABI == hostABI && $0.minimumSystemVersion <= systemVersion
+                ExtensionHostABI.accepts($0.hostABI, host: hostABI)
+                    && $0.minimumSystemVersion <= systemVersion
             }
             let keep =
                 (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))

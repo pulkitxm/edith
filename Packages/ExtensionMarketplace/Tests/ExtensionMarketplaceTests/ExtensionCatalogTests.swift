@@ -118,3 +118,42 @@ func foreignOrUnexpectedAssetsAreRejected(_ url: String) {
             publicKey: publicKey, repository: "example/app")
     }
 }
+
+@Test func hostVersionsAcceptPackagesFromTheMinimumUpToTheHost() {
+    #expect(ExtensionHostABI.accepts("edith-host-8", host: "edith-host-9", minimum: "edith-host-8"))
+    #expect(ExtensionHostABI.accepts("edith-host-9", host: "edith-host-9", minimum: "edith-host-8"))
+    #expect(
+        !ExtensionHostABI.accepts("edith-host-7", host: "edith-host-9", minimum: "edith-host-8"))
+    #expect(
+        !ExtensionHostABI.accepts("edith-host-10", host: "edith-host-9", minimum: "edith-host-8"))
+    #expect(ExtensionHostABI.accepts("host-1", host: "host-1"))
+    #expect(!ExtensionHostABI.accepts("host-1", host: "host-2"))
+    #expect(
+        ExtensionHostABI.accepted(host: "edith-host-10", minimum: "edith-host-8") == [
+            "edith-host-8", "edith-host-9", "edith-host-10",
+        ])
+}
+
+@Test func theNewestPackageInsideTheHostRangeIsInstalled() throws {
+    let host =
+        "edith-host-"
+        + String(
+            Int(MarketplaceConfiguration.workerHostABI.dropFirst("edith-host-".count))! + 1)
+    let catalog = ExtensionCatalog(
+        revision: 1,
+        packages: [
+            fixturePackage("shelf", version: "2.0.0", hostABI: host, dependencies: ["music"]),
+            fixturePackage(
+                "music", version: "1.0.0", hostABI: MarketplaceConfiguration.minimumWorkerHostABI),
+            fixturePackage("music", version: "0.9.0", hostABI: "edith-host-1"),
+        ])
+    #expect(
+        try catalog.installationPlan(
+            for: "shelf", hostABI: host, architecture: "arm64", systemVersion: .init(major: 14)
+        ).map { "\($0.id)@\($0.version)" } == ["music@1.0.0", "shelf@2.0.0"])
+    #expect(throws: MarketplaceError.self) {
+        try catalog.installationPlan(
+            for: "shelf", hostABI: MarketplaceConfiguration.workerHostABI, architecture: "arm64",
+            systemVersion: .init(major: 14))
+    }
+}

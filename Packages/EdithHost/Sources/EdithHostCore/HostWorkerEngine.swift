@@ -95,7 +95,7 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
         guard
             let package = try? store.installedPackages().first(where: {
-                $0.id == next.extensionID && $0.hostABI == HostContract.compatibility
+                $0.id == next.extensionID && HostContract.accepts($0.hostABI)
                     && $0.architecture == "arm64" && $0.version == next.version
             })
         else { return }
@@ -219,7 +219,7 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
         guard
             let package = try store.installedPackages().first(where: {
-                $0.id == next.extensionID && $0.hostABI == HostContract.compatibility
+                $0.id == next.extensionID && HostContract.accepts($0.hostABI)
                     && $0.architecture == "arm64" && $0.version == next.version
             })
         else { throw HostWorkerError.rejected }

@@ -72,8 +72,8 @@ public struct HostPrivilegedAdmission {
         guard let bundle = Bundle(url: url),
             bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(owner).privileged",
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == version,
-            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
-                == HostContract.compatibility
+            (bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String).map(
+                HostContract.accepts) == true
         else { throw MarketplaceError.invalidBundle }
     }
 

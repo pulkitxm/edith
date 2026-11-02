@@ -20,7 +20,7 @@ public struct HostRemoteConfiguration: Codable, Sendable {
         guard worker.identifier == hostIdentifier, worker.extensionID == extensionID,
             worker.version == version, !worker.recoveryOnly,
             package.id == extensionID, package.version == version,
-            package.hostABI == HostContract.compatibility, package.architecture == "arm64",
+            HostContract.accepts(package.hostABI), package.architecture == "arm64",
             package.minimumSystemVersion
                 <= .init(ProcessInfo.processInfo.operatingSystemVersion),
             worker.zoom.isFinite, (0.8...1.6).contains(worker.zoom),

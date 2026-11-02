@@ -74,7 +74,8 @@ public final class ExtensionBundleRuntime {
         hostABI: String, environment: [String: String] = [:],
         verify: @escaping (URL) throws -> Void
     ) throws {
-        guard [.app, .helper, .agent].contains(role), package.hostABI == hostABI,
+        guard [.app, .helper, .agent].contains(role),
+            ExtensionHostABI.accepts(package.hostABI, host: hostABI),
             package.architecture == "arm64",
             package.minimumSystemVersion
                 <= .init(ProcessInfo.processInfo.operatingSystemVersion)
@@ -536,7 +537,8 @@ public final class ExtensionBundleRuntime {
         guard bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(id).\(role.rawValue)",
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 == package.version,
-            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI
+            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == package.hostABI,
+            ExtensionHostABI.accepts(package.hostABI, host: hostABI)
         else { throw MarketplaceError.invalidBundle }
         try bundle.loadAndReturnError()
         guard let handle = dlopen(executable.path, RTLD_NOW | RTLD_LOCAL) else {
@@ -570,7 +572,7 @@ public final class ExtensionBundleRuntime {
         let description = try execute(instance, operation: "describe", context: [:])
         guard description["id"] as? String == id,
             description["version"] as? String == package.version,
-            description["hostABI"] as? String == hostABI,
+            description["hostABI"] as? String == package.hostABI,
             description["role"] as? String == role.rawValue
         else {
             throw MarketplaceError.invalidBundle
