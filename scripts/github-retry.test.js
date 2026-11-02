@@ -51,6 +51,12 @@ test("backoff doubles to a 30 second cap and parses Retry-After", () => {
     true,
   );
   expect(isTransientFailure(new Error("HTTP 404: Not Found"))).toBe(false);
+  expect(
+    isTransientFailure(new Error("failed to inspect the Pukbot workflow run")),
+  ).toBe(true);
+  expect(
+    isTransientFailure(new Error("failed to list Pukbot workflow runs")),
+  ).toBe(true);
 });
 
 const tag = "v9.9.9";
