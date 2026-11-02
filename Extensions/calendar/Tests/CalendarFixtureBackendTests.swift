@@ -208,14 +208,15 @@ import Testing
         #expect(backend.store.events.map(\.id) == ["synthetic-calendar-meeting"])
     }
 
-    private func makeRuntime(_ backend: CalendarFixtureBackend) -> ExtensionRuntime {
-        ExtensionRuntime(
+    private func makeRuntime(_ backend: CalendarFixtureBackend) -> ExtensionServiceRuntime {
+        CalendarTestRuntime.make(
             store: backend.store, presentation: backend.presentation,
             uiEngine: backend.makeUIEngine(navigate: { _ in throw ExtensionPeerError.unavailable }),
             fixture: backend)
     }
 
-    private func cli(_ runtime: ExtensionRuntime, _ request: ExtensionCLIRequest) async throws
+    private func cli(_ runtime: ExtensionServiceRuntime, _ request: ExtensionCLIRequest)
+        async throws
         -> ExtensionCLIReply
     {
         let payload = try JSONEncoder().encode(request)
@@ -238,9 +239,9 @@ import Testing
 @MainActor
 private final class CalendarFixtureRuntimeBridge: NSObject {
     let presentationID = UUID()
-    private let runtime: ExtensionRuntime
+    private let runtime: ExtensionServiceRuntime
 
-    init(runtime: ExtensionRuntime) { self.runtime = runtime }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
 
     @objc(invoke:completion:)
     func invoke(_ data: NSData, completion: @escaping @convention(block) (NSData) -> Void) {

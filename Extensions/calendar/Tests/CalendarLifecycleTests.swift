@@ -45,7 +45,8 @@ import Testing
         let engine = CalendarUIEngine(
             store: store, presentation: presentation, authorized: { false },
             grant: { _ = await gate.read() })
-        let runtime = ExtensionRuntime(store: store, presentation: presentation, uiEngine: engine)
+        let runtime = CalendarTestRuntime.make(
+            store: store, presentation: presentation, uiEngine: engine)
         var commandCompleted = false
         runtime.invoke(
             [
@@ -59,6 +60,7 @@ import Testing
         await gate.entered(1)
         var drained = false
         runtime.prepareToStop { drained = true }
+        while !commandCompleted { await Task.yield() }
         #expect(commandCompleted)
         runtime.invoke(
             [
