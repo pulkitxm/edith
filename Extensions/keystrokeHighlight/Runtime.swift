@@ -123,7 +123,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.keystrokeHighlight, carbonID: 9,
+                    id: HotKeyCatalog.keystrokeHighlight,
                     prefix: "keystrokeHighlightHotKey", defaultCode: kVK_ANSI_K,
                     defaultModifiers: controlKey | optionKey | cmdKey))
         }

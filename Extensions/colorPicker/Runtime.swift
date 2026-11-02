@@ -251,7 +251,7 @@ final class ExtensionRuntime: NSObject {
                     if namespace == nil {
                         HotKeyRegistrar.configure(
                             ExtensionHotKeyBinding(
-                                id: HotKeyCatalog.colorPicker, carbonID: 5,
+                                id: HotKeyCatalog.colorPicker,
                                 prefix: "colorPickerHotKey", defaultCode: kVK_ANSI_C,
                                 defaultModifiers: cmdKey | optionKey | controlKey))
                     }

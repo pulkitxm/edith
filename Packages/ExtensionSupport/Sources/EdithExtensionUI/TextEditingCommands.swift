@@ -5,8 +5,21 @@ import SwiftUI
 public enum TextEditingCommands {
     private static var monitor: Any?
     private static var handledStamp: (TimeInterval, UInt16, Int)?
+    private static var owners: Set<UInt> = []
 
-    public static func install() {
+    public static var isInstalled: Bool { monitor != nil }
+
+    public static func install(image: UnsafeRawPointer = #dsohandle) {
+        owners.insert(UInt(bitPattern: image))
+        installMonitor()
+    }
+
+    public static func shutdown(image: UnsafeRawPointer = #dsohandle) {
+        owners.remove(UInt(bitPattern: image))
+        if owners.isEmpty { removeMonitor() }
+    }
+
+    private static func installMonitor() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let handled = MainActor.assumeIsolated { handle(event) }
@@ -14,7 +27,7 @@ public enum TextEditingCommands {
         }
     }
 
-    public static func shutdown() {
+    private static func removeMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         handledStamp = nil

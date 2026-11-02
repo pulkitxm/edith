@@ -18,7 +18,7 @@ import Testing
         var invoked = 0
         let panel = HostPanelService(defaults: defaults) { opened += 1 }
         let binding = ExtensionHotKeyBinding(
-            id: name, carbonID: 91, prefix: name, defaultCode: kVK_F18,
+            id: name, prefix: name, defaultCode: kVK_F18,
             defaultModifiers: cmdKey | controlKey | optionKey)
         defer {
             panel.shutdown()
@@ -29,17 +29,18 @@ import Testing
         if panelFirst { try panel.install() }
         HotKeyRegistrar.install(binding.id) { invoked += 1 }
         if !panelFirst { try panel.install() }
+        let carbonID = try #require(HotKeyRegistrar.carbonID(binding.id))
         #expect(try sendHotKey(signature: 0x4544_4350, id: 1) == noErr)
         #expect(opened == 1)
         #expect(invoked == 0)
-        #expect(try sendHotKey(signature: 0x4544_4954, id: 91) == noErr)
+        #expect(try sendHotKey(signature: 0x4544_4954, id: carbonID) == noErr)
         #expect(invoked == 1)
-        #expect(try sendHotKey(signature: 0x5445_5354, id: 91) == eventNotHandledErr)
-        #expect(try sendHotKey(signature: 0x4544_4954, id: 92) == eventNotHandledErr)
+        #expect(try sendHotKey(signature: 0x5445_5354, id: carbonID) == eventNotHandledErr)
+        #expect(try sendHotKey(signature: 0x4544_4954, id: carbonID + 1000) == eventNotHandledErr)
         #expect(opened == 1)
         #expect(invoked == 1)
         HotKeyRegistrar.clear(binding.id)
-        #expect(try sendHotKey(signature: 0x4544_4954, id: 91) == eventNotHandledErr)
+        #expect(try sendHotKey(signature: 0x4544_4954, id: carbonID) == eventNotHandledErr)
     }
 
     private func sendHotKey(signature: OSType, id: UInt32) throws -> OSStatus {

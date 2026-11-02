@@ -10,10 +10,10 @@ import Testing
     private let modifiers = cmdKey | controlKey | optionKey
 
     private func binding(
-        _ name: String, carbonID: UInt32, code: Int, prefix: String? = nil
+        _ name: String, code: Int, prefix: String? = nil
     ) -> ExtensionHotKeyBinding {
         ExtensionHotKeyBinding(
-            id: name, carbonID: carbonID, prefix: prefix ?? "lifecycleTest" + name,
+            id: name, prefix: prefix ?? "lifecycleTest" + name,
             defaultCode: code, defaultModifiers: modifiers)
     }
 
@@ -30,7 +30,8 @@ import Testing
         return result == OSStatus(eventHotKeyExistsErr)
     }
 
-    private func press(carbonID: UInt32) -> OSStatus {
+    private func press(_ id: String) -> OSStatus {
+        guard let carbonID = HotKeyRegistrar.carbonID(id) else { return OSStatus(paramErr) }
         var reference: EventRef?
         CreateEvent(
             nil, OSType(kEventClassKeyboard), UInt32(kEventHotKeyPressed), 0,
@@ -52,18 +53,18 @@ import Testing
     @Test func aShortcutIsLiveRightAfterInstallAndReleasedOnClear() {
         prepare()
         defer { HotKeyRegistrar.shutdown() }
-        HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
+        HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
         #expect(!isHeld(code: kVK_F16, modifiers: modifiers))
         var fired = 0
         #expect(HotKeyRegistrar.install("alpha") { fired += 1 })
         #expect(HotKeyRegistrar.isRegistered("alpha"))
         #expect(isHeld(code: kVK_F16, modifiers: modifiers))
-        #expect(press(carbonID: 71) == noErr)
+        #expect(press("alpha") == noErr)
         #expect(fired == 1)
         HotKeyRegistrar.clear("alpha")
         #expect(!HotKeyRegistrar.isRegistered("alpha"))
         #expect(!isHeld(code: kVK_F16, modifiers: modifiers))
-        #expect(press(carbonID: 71) == OSStatus(eventNotHandledErr))
+        #expect(press("alpha") == OSStatus(eventNotHandledErr))
         #expect(fired == 1)
     }
 
@@ -71,11 +72,11 @@ import Testing
         prepare()
         defer { HotKeyRegistrar.shutdown() }
         for round in 1...3 {
-            HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
+            HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
             var fired = 0
             #expect(HotKeyRegistrar.install("alpha") { fired += 1 }, "round \(round)")
             #expect(isHeld(code: kVK_F16, modifiers: modifiers), "round \(round)")
-            #expect(press(carbonID: 71) == noErr, "round \(round)")
+            #expect(press("alpha") == noErr, "round \(round)")
             #expect(fired == 1, "round \(round)")
             HotKeyRegistrar.shutdown()
             #expect(!isHeld(code: kVK_F16, modifiers: modifiers), "round \(round)")
@@ -91,7 +92,7 @@ import Testing
             defaults.removeObject(forKey: prefix + "Code")
             defaults.removeObject(forKey: prefix + "Mods")
         }
-        HotKeyRegistrar.configure(binding("moving", carbonID: 72, code: kVK_F16, prefix: prefix))
+        HotKeyRegistrar.configure(binding("moving", code: kVK_F16, prefix: prefix))
         HotKeyRegistrar.install("moving") {}
         #expect(isHeld(code: kVK_F16, modifiers: modifiers))
         defaults.set(kVK_F17, forKey: prefix + "Code")
@@ -111,8 +112,8 @@ import Testing
             defaults.removeObject(forKey: prefix + "Code")
             defaults.removeObject(forKey: prefix + "Mods")
         }
-        HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
-        HotKeyRegistrar.configure(binding("moving", carbonID: 72, code: kVK_F17, prefix: prefix))
+        HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
+        HotKeyRegistrar.configure(binding("moving", code: kVK_F17, prefix: prefix))
         var moving = 0
         HotKeyRegistrar.install("alpha") {}
         HotKeyRegistrar.install("moving") { moving += 1 }
@@ -121,55 +122,55 @@ import Testing
         #expect(!HotKeyRegistrar.install("moving") { moving += 10 })
         #expect(HotKeyRegistrar.isRegistered("moving"))
         #expect(isHeld(code: kVK_F17, modifiers: modifiers))
-        #expect(press(carbonID: 72) == noErr)
+        #expect(press("moving") == noErr)
         #expect(moving == 1)
     }
 
     @Test func installingTheSameShortcutAgainOnlyReplacesTheAction() {
         prepare()
         defer { HotKeyRegistrar.shutdown() }
-        HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
+        HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
         var first = 0
         var second = 0
         #expect(HotKeyRegistrar.install("alpha") { first += 1 })
         #expect(HotKeyRegistrar.install("alpha") { second += 1 })
         #expect(isHeld(code: kVK_F16, modifiers: modifiers))
-        #expect(press(carbonID: 71) == noErr)
+        #expect(press("alpha") == noErr)
         #expect((first, second) == (0, 1))
     }
 
     @Test func extensionsKeepIndependentShortcutsWhenOneStops() {
         prepare()
         defer { HotKeyRegistrar.shutdown() }
-        HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
-        HotKeyRegistrar.configure(binding("beta", carbonID: 73, code: kVK_F17))
+        HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
+        HotKeyRegistrar.configure(binding("beta", code: kVK_F17))
         var alpha = 0
         var beta = 0
         HotKeyRegistrar.install("alpha") { alpha += 1 }
         HotKeyRegistrar.install("beta") { beta += 1 }
-        #expect(press(carbonID: 73) == noErr)
-        #expect(press(carbonID: 71) == noErr)
+        #expect(press("beta") == noErr)
+        #expect(press("alpha") == noErr)
         #expect((alpha, beta) == (1, 1))
         HotKeyRegistrar.clear("alpha")
         #expect(isHeld(code: kVK_F17, modifiers: modifiers))
-        #expect(press(carbonID: 73) == noErr)
-        #expect(press(carbonID: 71) == OSStatus(eventNotHandledErr))
+        #expect(press("beta") == noErr)
+        #expect(press("alpha") == OSStatus(eventNotHandledErr))
         #expect((alpha, beta) == (1, 2))
     }
 
     @Test func twoExtensionsOnTheSameKeysKeepTheFirstAndReportTheSecondAsFailed() {
         prepare()
         defer { HotKeyRegistrar.shutdown() }
-        HotKeyRegistrar.configure(binding("alpha", carbonID: 71, code: kVK_F16))
-        HotKeyRegistrar.configure(binding("beta", carbonID: 73, code: kVK_F16))
+        HotKeyRegistrar.configure(binding("alpha", code: kVK_F16))
+        HotKeyRegistrar.configure(binding("beta", code: kVK_F16))
         var alpha = 0
         var beta = 0
         #expect(HotKeyRegistrar.install("alpha") { alpha += 1 })
         #expect(!HotKeyRegistrar.install("beta") { beta += 1 })
         #expect(HotKeyRegistrar.isRegistered("alpha"))
         #expect(!HotKeyRegistrar.isRegistered("beta"))
-        #expect(press(carbonID: 71) == noErr)
-        #expect(press(carbonID: 73) == OSStatus(eventNotHandledErr))
+        #expect(press("alpha") == noErr)
+        #expect(press("beta") == OSStatus(eventNotHandledErr))
         #expect((alpha, beta) == (1, 0))
     }
 
@@ -177,5 +178,26 @@ import Testing
         prepare()
         #expect(!HotKeyRegistrar.install("unconfigured") {})
         #expect(!HotKeyRegistrar.isRegistered("unconfigured"))
+    }
+
+    @Test func anExplicitSuiteChoosesTheShortcutAndTriggerRunsTheCurrentAction() throws {
+        prepare()
+        let name = "lifecycleTestSuite" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer {
+            HotKeyRegistrar.shutdown()
+            defaults.removePersistentDomain(forName: name)
+        }
+        defaults.set(kVK_F17, forKey: "suitedCode")
+        defaults.set(modifiers, forKey: "suitedMods")
+        HotKeyRegistrar.configure(binding("suited", code: kVK_F16, prefix: "suited"))
+        var fired = 0
+        #expect(HotKeyRegistrar.install("suited", defaults: defaults) { fired += 1 })
+        #expect(isHeld(code: kVK_F17, modifiers: modifiers))
+        #expect(!isHeld(code: kVK_F16, modifiers: modifiers))
+        #expect(HotKeyRegistrar.trigger("suited"))
+        #expect(fired == 1)
+        HotKeyRegistrar.clear("suited")
+        #expect(!HotKeyRegistrar.trigger("suited"))
     }
 }

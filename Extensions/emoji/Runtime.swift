@@ -137,7 +137,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.emoji, carbonID: 8, prefix: "emojiHotKey",
+                    id: HotKeyCatalog.emoji, prefix: "emojiHotKey",
                     defaultCode: kVK_ANSI_E, defaultModifiers: controlKey | shiftKey))
         }
         registerHotKey()

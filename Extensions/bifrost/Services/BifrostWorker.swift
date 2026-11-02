@@ -106,7 +106,7 @@ extension BifrostPanel: BifrostWorkerPanel {}
         guard !stopped, !recoveryOnly, !fixture else { return }
         HotKeyRegistrar.configure(
             .init(
-                id: "bifrost", carbonID: 3, prefix: "bifrostHotKey", defaultCode: 49,
+                id: "bifrost", prefix: "bifrostHotKey", defaultCode: 49,
                 defaultModifiers: Int(optionKey)))
         HotKeyRegistrar.install("bifrost") { [weak panel] in panel?.toggle() }
         ownsHotKey = true

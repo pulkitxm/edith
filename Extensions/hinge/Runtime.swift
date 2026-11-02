@@ -118,7 +118,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: "hinge", carbonID: 12, prefix: "hingeHotKey",
+                    id: "hinge", prefix: "hingeHotKey",
                     defaultCode: kVK_ANSI_H,
                     defaultModifiers: controlKey | optionKey))
         }

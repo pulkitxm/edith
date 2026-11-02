@@ -428,7 +428,7 @@ enum CameraCarrierLaunchEnvironment {
         guard !fixture, !draining else { return }
         HotKeyRegistrar.configure(
             ExtensionHotKeyBinding(
-                id: HotKeyCatalog.virtualCamera, carbonID: 11,
+                id: HotKeyCatalog.virtualCamera,
                 prefix: "virtualCameraHotKey", defaultCode: kVK_ANSI_V,
                 defaultModifiers: controlKey | optionKey | cmdKey))
         HotKeyRegistrar.install(HotKeyCatalog.virtualCamera) { [engine] in

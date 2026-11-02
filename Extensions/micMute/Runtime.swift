@@ -179,7 +179,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.micMute, carbonID: 6, prefix: "micHotKey",
+                    id: HotKeyCatalog.micMute, prefix: "micHotKey",
                     defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
         }
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Mic.muteEnabled)
