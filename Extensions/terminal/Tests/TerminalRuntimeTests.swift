@@ -4,7 +4,9 @@ import Testing
 @testable import TerminalExtension
 
 @Suite(.serialized) @MainActor struct TerminalRuntimeTests {
-    private func invoke(_ runtime: ExtensionRuntime, _ command: String, payload: Data = Data())
+    private func invoke(
+        _ runtime: ExtensionServiceRuntime, _ command: String, payload: Data = Data()
+    )
         async throws -> Data
     {
         try await withCheckedThrowingContinuation { continuation in
@@ -25,7 +27,7 @@ import Testing
 
     @Test func runtimeUsesOwnedEngineAndUIStopDoesNotStopPTYs() async throws {
         let engine = TerminalTestFixture.engine()
-        let runtime = ExtensionRuntime(makeEngine: { engine })
+        let runtime = makeTerminalRuntime(makeEngine: { engine })
         defer { _ = runtime.execute(["operation": "stop"]) }
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         let started = try #require(
@@ -50,7 +52,7 @@ import Testing
 
     @Test func prepareToStopCancelsPendingRegistryReadBeforeReleasingEngine() async throws {
         let engine = TerminalTestFixture.engine()
-        let runtime = ExtensionRuntime(makeEngine: { engine })
+        let runtime = makeTerminalRuntime(makeEngine: { engine })
         defer { _ = runtime.execute(["operation": "stop"]) }
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         _ = runtime.execute(["operation": "start", "defaultsSuite": suite])
