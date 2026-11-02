@@ -10,27 +10,44 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ExtensionRuntime: NSObject {
-    private var service: EmojiStore?
+final class EmojiService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
+    private var store: EmojiStore?
     private var observers: [NSObjectProtocol] = []
-
     private var presentation: ControlPresentation?
-
     private var fixture: WorkerFixtureAdmission?
-    private let commands = ExtensionCommandRegistry()
     private var suspended = false
-    private var suspension: Task<Void, Never>?
     private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
-            let reply = try await self.executeCommand(command, payload: payload)
-            return reply
-        }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { store != nil }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        do {
+            guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                !context.isHostedFunctionalFixture
+            else { return false }
+            fixture = try WorkerFixtureAdmission.current(
+                extensionID: "emoji", context: context.input,
+                roleBundle: Bundle(for: EmojiService.self))
+            return startStore()
+        } catch { return false }
     }
 
-    private func executeCommand(_ command: String, payload: Data) async throws -> Data {
+    func synchronize() {
+        registerHotKey()
+        IPC.post(IPC.Name.settingsChanged)
+    }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        if operation == "prepareToStop" { return runtime.execute(["operation": "stop"]) }
+        guard operation == "pick" else { return nil }
+        showPanel()
+        return ["ok": true] as NSDictionary
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
         if command == "emoji.cli.catalog" {
             return try EmojiCLIExecution.catalog(payload)
         }
@@ -39,17 +56,16 @@ final class ExtensionRuntime: NSObject {
             if let help = try await EmojiCLIExecution.help(request) {
                 return try JSONEncoder().encode(help)
             }
-            guard self.service != nil else { throw ExtensionPeerError.unavailable }
-            guard let service = self.service else { throw ExtensionPeerError.unavailable }
+            guard let store = self.store else { throw ExtensionPeerError.unavailable }
             let reply = try await EmojiCLIExecution.run(
                 request, defaults: SharedDefaults.store,
-                catalog: service.catalog, pick: { self.showPanel() },
-                insert: { try await service.insertAndWait(character: $0) },
-                changed: { service.adoptSettings() })
+                catalog: store.catalog, pick: { self.showPanel() },
+                insert: { try await store.insertAndWait(character: $0) },
+                changed: { store.adoptSettings() })
             return try JSONEncoder().encode(reply)
         }
         if command.hasPrefix("emoji.ui.") {
-            guard self.service != nil else { throw ExtensionPeerError.unavailable }
+            guard self.store != nil else { throw ExtensionPeerError.unavailable }
             let defaults = SharedDefaults.store
             switch command {
             case "emoji.ui.read":
@@ -63,12 +79,12 @@ final class ExtensionRuntime: NSObject {
             case "emoji.ui.action":
                 let action = try JSONDecoder().decode(
                     ControlPresentationAction.self, from: payload)
-                guard action.value.isEmpty, let service = self.service else {
+                guard action.value.isEmpty, let store = self.store else {
                     throw ExtensionPeerError.invalidRequest
                 }
                 switch action.action {
                 case "pick": self.showPanel()
-                case "clear": service.clearFrequent()
+                case "clear": store.clearFrequent()
                 default: throw ExtensionPeerError.invalidRequest
                 }
             default: throw ExtensionPeerError.invalidRequest
@@ -76,64 +92,82 @@ final class ExtensionRuntime: NSObject {
             return try ControlPresentationContract.snapshot(
                 defaults: defaults, state: ControlPresentationState())
         }
-        guard let service = self.service else { throw ExtensionPeerError.unavailable }
+        guard let store = self.store else { throw ExtensionPeerError.unavailable }
         return try await EmojiSurface.execute(
-            command, payload: payload, store: service, pick: { self.showPanel() })
+            command, payload: payload, store: store, pick: { self.showPanel() })
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard !suspended, retiredPresentations.isEmpty,
+            configuration.defaultsSuite
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        _ = retirePresentation()
+        presentation = ControlPresentation(client: configuration.engineClient)
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let presentation = self.presentation else { return nil }
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                ControlSettingsHost(presentation: presentation) {
+                    PageWorkspace {
+                        PageHeader("Emoji Picker")
+                    } content: {
+                        Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
+                            .grouped)
+                    }
+                }
+            })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        retirePresentation().map { [$0] } ?? []
+    }
+
+    func cancelPendingWork() {
         suspended = true
-        let service = service
-        let presentation = presentation
         presentation?.stop()
         let panel = fixture == nil ? EmojiPanel.shared : nil
-        service?.shutdown()
+        store?.shutdown()
         panel?.cancelPendingWork()
-        if suspension == nil {
-            let presentations = Array(retiredPresentations.values)
-            suspension = Task { [self, service, panel, presentation] in
-                await commands.suspendAndWait()
-                await service?.drain()
-                await panel?.drain()
-                await presentation?.stopAndWait()
-                for task in presentations { await task.value }
-            }
-        }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
-        }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands { [self] in
-            Task { [self] in
-                await self.commands.shutdownAndWait()
-                _ = self.execute(["operation": "stop"])
-                for task in Array(self.retiredPresentations.values) { await task.value }
-                completion()
-            }
+    func drain() async {
+        let panel = fixture == nil ? EmojiPanel.shared : nil
+        await store?.drain()
+        await panel?.drain()
+        await presentation?.stopAndWait()
+        await finishRetiredPresentations()
+    }
+
+    func teardown() async {
+        let retiring = retirePresentation()
+        if fixture == nil {
+            EmojiPanel.shared.hide()
+            EmojiPanel.shared.store = nil
         }
+        store?.shutdown()
+        store = nil
+        observers.forEach(IPC.stopObserving)
+        observers.removeAll()
+        HotKeyRegistrar.shutdown()
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
+            TextEditingCommands.shutdown()
+        }
+        await retiring?.value
+        await finishRetiredPresentations()
     }
 
-    private func requireEngineCurrent() throws {
-    }
-
-    private func startService(_ input: NSDictionary) -> Bool {
+    private func startStore() -> Bool {
         guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
         else { return false }
-        guard let suite = input["defaultsSuite"] as? String,
-            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return false }
-        guard service == nil else { return true }
-        let store = EmojiStore(fixture: fixture)
-        guard !store.catalog.emoji.isEmpty else { return false }
-        service = store
-        if fixture == nil { EmojiPanel.shared.store = store }
+        guard store == nil else { return true }
+        let created = EmojiStore(fixture: fixture)
+        guard !created.catalog.emoji.isEmpty else { return false }
+        store = created
+        if fixture == nil { EmojiPanel.shared.store = created }
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
@@ -162,7 +196,7 @@ final class ExtensionRuntime: NSObject {
                     let requestID =
                         notification.userInfo?[EmojiInsertIPC.requestIDKey] as? String
                     MainActor.assumeIsolated {
-                        self?.service?.insert(character: character) { inserted in
+                        self?.store?.insert(character: character) { inserted in
                             guard let requestID else { return }
                             IPC.post(
                                 IPC.Name.emojiInsertResult,
@@ -175,96 +209,21 @@ final class ExtensionRuntime: NSObject {
         return true
     }
 
-    private func retirePresentation() {
-        guard let presentation else { return }
+    private func retirePresentation() -> Task<Void, Never>? {
+        guard let presentation else { return nil }
         presentation.stop()
         let id = UUID()
-        retiredPresentations[id] = Task { [self, presentation] in
+        let task = Task { [self, presentation] in
+            defer { retiredPresentations[id] = nil }
             await presentation.stopAndWait()
-            retiredPresentations[id] = nil
         }
+        retiredPresentations[id] = task
         self.presentation = nil
+        return task
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "emoji", "role": "helper",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended, retiredPresentations.isEmpty,
-                let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "emoji",
-                configuration.defaultsSuite
-                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            retirePresentation()
-            presentation = ControlPresentation(client: configuration.engineClient)
-            return ["ok": true] as NSDictionary
-        case "stopUI":
-            retirePresentation()
-            return ["ok": true] as NSDictionary
-        case "prepareToStop":
-            commands.shutdown()
-            return ["ok": true] as NSDictionary
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            do {
-                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-                    input["hostedFunctionalFixture"] == nil
-                else { return ["ok": false] as NSDictionary }
-                fixture = try WorkerFixtureAdmission.current(
-                    extensionID: "emoji", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                return ["ok": startService(input)] as NSDictionary
-            } catch { return ["ok": false] as NSDictionary }
-        case "view":
-            guard let presentation else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("Emoji Picker")
-                        } content: {
-                            Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
-                                .grouped)
-                        }
-                    }
-                })
-        case "pick":
-            do { try requireEngineCurrent() } catch {
-                return ["ok": false] as NSDictionary
-            }
-            self.showPanel()
-        case "synchronize":
-            do { try requireEngineCurrent() } catch {
-                return ["ok": false] as NSDictionary
-            }
-            registerHotKey()
-            IPC.post(IPC.Name.settingsChanged)
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "stop":
-            suspendCommands(completion: {})
-            retirePresentation()
-            commands.shutdown()
-            if fixture == nil { EmojiPanel.shared.hide(); EmojiPanel.shared.store = nil }
-            service?.shutdown()
-            service = nil
-            observers.forEach(IPC.stopObserving)
-            observers.removeAll()
-            HotKeyRegistrar.shutdown()
-            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
-                TextEditingCommands.shutdown()
-            }
-        case "status": return ["ok": true, "running": service != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
+    private func finishRetiredPresentations() async {
+        while let task = retiredPresentations.values.first { await task.value }
     }
 
     private func showPanel() {
@@ -281,10 +240,18 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeEmojiRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "emoji", role: "helper", bundle: Bundle(for: BundleAnchor.self)
+    ) { EmojiService(runtime: $0) }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeEmojiRuntime()).toOpaque())
         })
 }
