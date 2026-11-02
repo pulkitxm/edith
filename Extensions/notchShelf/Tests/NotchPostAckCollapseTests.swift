@@ -14,7 +14,7 @@ struct NotchPostAckCollapseTests {
         defer { fixture.clean() }
         let otherPresentation = UUID()
         var owner: NotchShelfController?
-        let runtime = ExtensionRuntime(
+        let runtime = NotchTestRuntime.make(
             admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: {
@@ -145,7 +145,8 @@ struct NotchPostAckCollapseTests {
         #expect(controller.ownedPanelCount == 0)
     }
 
-    private func read(_ runtime: ExtensionRuntime, display: UInt32, presentation: UUID) async throws
+    private func read(_ runtime: ExtensionServiceRuntime, display: UInt32, presentation: UUID)
+        async throws
         -> NotchChromeSnapshot
     {
         try JSONDecoder().decode(
@@ -155,7 +156,9 @@ struct NotchPostAckCollapseTests {
                 NotchChromeRead(displayID: display, presentationID: presentation)))
     }
 
-    private func invoke<T: Encodable>(_ runtime: ExtensionRuntime, _ command: String, _ request: T)
+    private func invoke<T: Encodable>(
+        _ runtime: ExtensionServiceRuntime, _ command: String, _ request: T
+    )
         async throws -> Data
     {
         let payload = try JSONEncoder().encode(request)

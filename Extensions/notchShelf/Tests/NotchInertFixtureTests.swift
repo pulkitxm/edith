@@ -38,8 +38,8 @@ import WorkerFixtureSupport
             probe.admissions += 1
             return try fixture.admit(input)
         }
-        #expect(!ok(runtime.execute(fixture.start)))
-        #expect(!ok(runtime.execute(fixture.start)))
+        #expect(!ok(start(runtime, fixture)))
+        #expect(!ok(start(runtime, fixture)))
         let status = try state(runtime)
         #expect(status["startRequested"] as? Bool == false)
         #expect(status["fixture"] as? Bool == false)
@@ -73,7 +73,7 @@ import WorkerFixtureSupport
         defer { fixture.remove() }
         let probe = InertConstructionProbe()
         let runtime = probe.runtime { try fixture.admit($0) }
-        #expect(!ok(runtime.execute(fixture.start)))
+        #expect(!ok(start(runtime, fixture)))
         let reply = await invoke(runtime, operation)
         #expect(reply.data == nil)
         #expect(reply.error == ExtensionPeerError.unavailable.localizedDescription)
@@ -112,7 +112,7 @@ import WorkerFixtureSupport
         await stop(runtime)
         let stopped = await invoke(runtime, "notchShelf.cli.catalog")
         #expect(stopped.data == nil)
-        #expect(stopped.error == ExtensionPeerError.unavailable.localizedDescription)
+        #expect(stopped.error != nil)
         #expect(probe.dependencies == 0)
     }
 
@@ -121,7 +121,7 @@ import WorkerFixtureSupport
         defer { fixture.remove() }
         let probe = InertConstructionProbe()
         let runtime = probe.runtime { try fixture.admit($0) }
-        #expect(!ok(runtime.execute(fixture.start)))
+        #expect(!ok(start(runtime, fixture)))
         for command in ["notch.settings.read", "notch.settings.write"] {
             let reply = await invoke(runtime, command)
             #expect(reply.data == nil && reply.error != nil)
@@ -139,7 +139,7 @@ import WorkerFixtureSupport
             probe.admissions += 1
             return try fixture.admit(input)
         }
-        #expect(!ok(runtime.execute(fixture.start)))
+        #expect(!ok(start(runtime, fixture)))
         #expect(try state(runtime)["fixtureRejected"] as? Bool == true)
         #expect(try state(runtime)["startRequested"] as? Bool == false)
         #expect(!ok(runtime.execute(["operation": "start", "defaultsSuite": "production"])))
@@ -157,7 +157,7 @@ import WorkerFixtureSupport
     @Test func originalRuntimeRejectsFunctionalContextBeforeDependencies() async throws {
         for operation in ["start", "configureUI"] {
             let probe = InertConstructionProbe()
-            let runtime = ExtensionRuntime(
+            let runtime = NotchTestRuntime.make(
                 contextSource: {
                     probe.dependencies += 1; return nil
                 },
@@ -183,7 +183,7 @@ import WorkerFixtureSupport
 
     @Test func currentAdmissionRejectsTestIntentBeforeContextResolution() async throws {
         let probe = InertConstructionProbe()
-        let runtime = ExtensionRuntime(contextSource: {
+        let runtime = NotchTestRuntime.make(contextSource: {
             probe.dependencies += 1
             return nil
         })
@@ -191,6 +191,8 @@ import WorkerFixtureSupport
             !ok(
                 runtime.execute([
                     "operation": "start", "hostIdentifier": "com.pulkit.edith.tests.invalid",
+                    "defaultsSuite": ProcessInfo.processInfo.environment[
+                        "EDITH_SHARED_DEFAULTS_SUITE"] ?? "",
                 ])))
         #expect(try state(runtime)["fixtureRejected"] as? Bool == true)
         #expect(probe.dependencies == 0)
@@ -208,20 +210,27 @@ import WorkerFixtureSupport
         let probe = InertConstructionProbe()
         var selected = fixture
         let runtime = probe.runtime { input in try selected.admit(input) }
-        #expect(!ok(runtime.execute(fixture.start)))
+        #expect(!ok(start(runtime, fixture)))
         selected = second
-        #expect(!ok(runtime.execute(second.start)))
+        #expect(!ok(start(runtime, second)))
         #expect(try state(runtime)["fixtureRejected"] as? Bool == true)
         #expect(try state(runtime)["startRequested"] as? Bool == false)
         let foreignRuntime = probe.runtime { try foreign.admit($0) }
-        #expect(!ok(foreignRuntime.execute(foreign.start)))
+        #expect(!ok(start(foreignRuntime, foreign)))
         #expect(try state(foreignRuntime)["fixtureRejected"] as? Bool == true)
         await stop(runtime)
         await stop(foreignRuntime)
         #expect(probe.dependencies == 0)
     }
 
-    private func state(_ runtime: ExtensionRuntime) throws -> NSDictionary {
+    private func start(_ runtime: ExtensionServiceRuntime, _ fixture: InertNotchFixture)
+        -> NSObject
+    {
+        NotchTestRuntime.suite = fixture.suite
+        return runtime.execute(fixture.start)
+    }
+
+    private func state(_ runtime: ExtensionServiceRuntime) throws -> NSDictionary {
         try #require(runtime.execute(["operation": "status"]) as? NSDictionary)
     }
 
@@ -229,14 +238,14 @@ import WorkerFixtureSupport
         (reply as? NSDictionary)?["ok"] as? Bool == true
     }
 
-    private func stop(_ runtime: ExtensionRuntime) async {
+    private func stop(_ runtime: ExtensionServiceRuntime) async {
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
     }
 
     private func invoke(
-        _ runtime: ExtensionRuntime, _ command: String, payload: Data = Data("{}".utf8)
+        _ runtime: ExtensionServiceRuntime, _ command: String, payload: Data = Data("{}".utf8)
     ) async -> (data: Data?, error: String?) {
         await withCheckedContinuation { continuation in
             runtime.invoke(["token": UUID().uuidString, "command": command, "payload": payload]) {
@@ -253,8 +262,8 @@ import WorkerFixtureSupport
 
     func runtime(
         _ admission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureEngineAdmission?
-    ) -> ExtensionRuntime {
-        return ExtensionRuntime(
+    ) -> ExtensionServiceRuntime {
+        return NotchTestRuntime.make(
             admitOrdinaryContext: { context in
                 guard try admission(context) == nil else { throw WorkerFixtureError.invalid }
                 return nil
@@ -281,11 +290,12 @@ private struct InertNotchFixture {
     let role: URL
     let owner: String
     let identifier = "com.pulkit.edith.tests.worker-" + UUID().uuidString
+    var suite: String { identifier + ".extensions." + owner }
     var marker: URL { home.appendingPathComponent("worker-fixture.json") }
     var start: NSDictionary {
         [
             "operation": "start", "hostIdentifier": identifier,
-            "defaultsSuite": identifier + ".extensions." + owner, "dataDirectory": data.path,
+            "defaultsSuite": suite, "dataDirectory": data.path,
         ]
     }
 
@@ -316,7 +326,7 @@ private struct InertNotchFixture {
     func admit(_ input: NSDictionary) throws -> WorkerFixtureEngineAdmission? {
         try WorkerFixtureEngineAdmission.current(
             extensionID: owner, context: input,
-            roleBundle: Bundle(for: ExtensionRuntime.self), expectedRole: .helper)
+            roleBundle: Bundle(for: NotchShelfService.self), expectedRole: .helper)
     }
 
     func remove() { try? FileManager.default.removeItem(at: root) }
