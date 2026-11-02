@@ -45,6 +45,23 @@ private actor CommandCleanupGate {
         await registry.shutdownAndWait()
     }
 
+    @Test func commandsAfterSuspensionOrStopReportTheExtensionAsUnavailable() async {
+        let registry = ExtensionCommandRegistry()
+        let message: () async -> String? = {
+            await withCheckedContinuation { continuation in
+                registry.invoke(
+                    ["token": UUID().uuidString, "command": "read", "payload": Data("{}".utf8)],
+                    completion: { _, message in continuation.resume(returning: message as String?) }
+                ) { _, payload in payload }
+            }
+        }
+        let suspension = registry.suspend()
+        #expect(await message() == ExtensionPeerError.unavailable.localizedDescription)
+        #expect(registry.resume(suspension))
+        await registry.shutdownAndWait()
+        #expect(await message() == ExtensionPeerError.unavailable.localizedDescription)
+    }
+
     @Test(arguments: [false, true])
     func shutdownAwaitsCancelledCommandCleanup(cancelFirst: Bool) async throws {
         let registry = ExtensionCommandRegistry()
