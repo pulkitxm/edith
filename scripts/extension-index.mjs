@@ -118,7 +118,9 @@ export function validateDeclaration(declaration, directory) {
     !Array.isArray(launchWhen) ||
     launchWhen.some(
       (condition) =>
-        Object.keys(condition).some((key) => !["key", "default"].includes(key)) ||
+        Object.keys(condition).some(
+          (key) => !["key", "default"].includes(key),
+        ) ||
         typeof condition.key !== "string" ||
         !condition.key ||
         typeof condition.default !== "boolean",
