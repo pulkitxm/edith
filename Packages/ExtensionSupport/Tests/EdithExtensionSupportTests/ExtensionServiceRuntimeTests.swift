@@ -13,9 +13,12 @@ private final class SyntheticService: ExtensionService {
     var invocations: [String] = []
     var requiresOwnedDataDirectory = false
 
-    func start() -> Bool {
+    var startInputs: [String] = []
+
+    func start(_ context: ExtensionStartContext) -> Bool {
         starts += 1
-        return true
+        startInputs.append(context.dataDirectory ?? "")
+        return !context.isHostedFunctionalFixture
     }
 
     func invoke(_ command: String, payload: Data) async throws -> Data {
@@ -92,14 +95,31 @@ private let syntheticScope = [
         let (runtime, service) = runtime(owningData: true)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == false)
         #expect(
-            ok(runtime.execute([
-                "operation": "start", "defaultsSuite": Self.suite, "dataDirectory": "/tmp/other",
-            ])) == false)
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "dataDirectory": "/tmp/other",
+                ])) == false)
         #expect(
-            ok(runtime.execute([
-                "operation": "start", "defaultsSuite": Self.suite, "dataDirectory": Self.dataRoot + "/",
-            ])) == true)
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "dataDirectory": Self.dataRoot + "/",
+                ])) == true)
         #expect(service.starts == 1)
+        #expect(service.startInputs == [Self.dataRoot + "/"])
+    }
+
+    @Test func serviceStartSeesTheHostInputAndCanRefuseIt() {
+        let (runtime, service) = runtime()
+        #expect(
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "hostedFunctionalFixture": true,
+                ])) == false)
+        #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
+        #expect(service.starts == 2)
     }
 
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {

@@ -1,10 +1,18 @@
 import AppKit
 import Foundation
 
+public struct ExtensionStartContext {
+    public let input: NSDictionary
+
+    public var dataDirectory: String? { input["dataDirectory"] as? String }
+    public var isHostedFunctionalFixture: Bool { input["hostedFunctionalFixture"] != nil }
+}
+
 @MainActor
 public protocol ExtensionService: AnyObject {
     var requiresOwnedDataDirectory: Bool { get }
     func start() -> Bool
+    func start(_ context: ExtensionStartContext) -> Bool
     func synchronize()
     func invoke(_ command: String, payload: Data) async throws -> Data
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool
@@ -20,6 +28,7 @@ public protocol ExtensionService: AnyObject {
 extension ExtensionService {
     public var requiresOwnedDataDirectory: Bool { false }
     public func start() -> Bool { true }
+    public func start(_ context: ExtensionStartContext) -> Bool { start() }
     public func synchronize() {}
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         throw ExtensionPeerError.unavailable
@@ -107,7 +116,9 @@ public final class ExtensionServiceRuntime: NSObject {
                 suite == scope["EDITH_SHARED_DEFAULTS_SUITE"],
                 !service.requiresOwnedDataDirectory || ownsDataDirectory(input)
             else { return Self.result(false) }
-            guard started || service.start() else { return Self.result(false) }
+            guard started || service.start(ExtensionStartContext(input: input)) else {
+                return Self.result(false)
+            }
             started = true
         case "synchronize": service?.synchronize()
         case "configureUI":

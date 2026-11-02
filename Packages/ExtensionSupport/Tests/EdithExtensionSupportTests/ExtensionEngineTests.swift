@@ -187,10 +187,18 @@ struct ExtensionEngineTests {
             "defaultsSuite": suite, "presentationID": UUID().uuidString, "uiOnly": false,
             "location": "main", "engineClient": bridge,
         ]
-        #expect(
+        let main = try #require(
             ExtensionUIConfiguration(
                 context: context, hostIdentifier: "synthetic.host", extensionID: "sample",
-                defaultsSuite: suite)?.engineClient != nil)
+                defaultsSuite: suite))
+        #expect(main.engineClient != nil && !main.isSettings)
+        let activeSettings = NSMutableDictionary(dictionary: context)
+        activeSettings["location"] = "settings"
+        let active = try #require(
+            ExtensionUIConfiguration(
+                context: activeSettings, hostIdentifier: "synthetic.host", extensionID: "sample",
+                defaultsSuite: suite))
+        #expect(active.isSettings && !active.uiOnly && active.engineClient != nil)
         #expect(
             ExtensionUIConfiguration(
                 context: context, hostIdentifier: "other.host", extensionID: "sample",
@@ -207,7 +215,7 @@ struct ExtensionEngineTests {
             ExtensionUIConfiguration(
                 context: settings, hostIdentifier: "synthetic.host", extensionID: "sample",
                 defaultsSuite: suite))
-        #expect(admitted.uiOnly)
+        #expect(admitted.uiOnly && admitted.isSettings)
         #expect(admitted.engineClient == nil)
         settings["location"] = "home"
         #expect(
