@@ -22,6 +22,7 @@ public protocol ExtensionService: AnyObject {
     func synchronize()
     func synchronize(_ context: ExtensionHostContext) -> Bool
     func invoke(_ command: String, payload: Data) async throws -> Data
+    func invoke(_ command: String, token: UUID, payload: Data) async throws -> Data
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool
     func view(for presentation: UUID) -> NSViewController?
     func stopUI() -> [Task<Void, Never>]
@@ -52,6 +53,9 @@ extension ExtensionService {
     }
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         throw ExtensionPeerError.unavailable
+    }
+    public func invoke(_ command: String, token: UUID, payload: Data) async throws -> Data {
+        try await invoke(command, payload: payload)
     }
     public func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool { false }
     public func view(for presentation: UUID) -> NSViewController? { nil }
@@ -95,11 +99,12 @@ public final class ExtensionServiceRuntime: NSObject {
     @objc public func invoke(
         _ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void
     ) {
+        let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, self.teardownTask == nil, let service = self.service else {
+            guard let self, self.teardownTask == nil, let service = self.service, let token else {
                 throw ExtensionPeerError.unavailable
             }
-            return try await service.invoke(command, payload: payload)
+            return try await service.invoke(command, token: token, payload: payload)
         }
     }
 

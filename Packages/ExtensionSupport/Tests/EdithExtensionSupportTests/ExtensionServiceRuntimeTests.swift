@@ -41,6 +41,13 @@ private final class SyntheticService: ExtensionService {
         return !context.isHostedFunctionalFixture
     }
 
+    var tokens: [UUID] = []
+
+    func invoke(_ command: String, token: UUID, payload: Data) async throws -> Data {
+        tokens.append(token)
+        return try await invoke(command, payload: payload)
+    }
+
     func invoke(_ command: String, payload: Data) async throws -> Data {
         invocations.append(command)
         return Data(command.utf8)
@@ -101,11 +108,13 @@ private let syntheticScope = [
         return (runtime, service)
     }
 
-    private func invoke(_ runtime: ExtensionServiceRuntime, _ command: String) async -> String? {
+    private func invoke(
+        _ runtime: ExtensionServiceRuntime, _ command: String, token: UUID = UUID()
+    ) async -> String? {
         await withCheckedContinuation { continuation in
             runtime.invoke(
                 [
-                    "token": UUID().uuidString, "command": command, "payload": Data(),
+                    "token": token.uuidString, "command": command, "payload": Data(),
                 ] as NSDictionary
             ) { data, message in
                 continuation.resume(
@@ -225,7 +234,9 @@ private let syntheticScope = [
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {
         let (runtime, service) = runtime()
         _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
-        #expect(await invoke(runtime, "synthetic.ping") == "synthetic.ping")
+        let token = UUID()
+        #expect(await invoke(runtime, "synthetic.ping", token: token) == "synthetic.ping")
+        #expect(service.tokens == [token])
         let toggled = runtime.execute(["operation": "toggle"]) as? NSDictionary
         #expect(toggled?["toggled"] as? Bool == true)
         #expect(ok(runtime.execute(["operation": "unknown"])) == false)
