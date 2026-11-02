@@ -11,7 +11,7 @@ import Testing
         _ = try await fixture.worker.perform(.on(.indefinite))
         _ = try await fixture.worker.perform(.setRestoreOnQuit(false))
         fixture.blockQuit = true
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         #expect((runtime.execute(try context()) as? NSDictionary)?["ok"] as? Bool == true)
         var completed = false
         runtime.prepareToStop { completed = true }
@@ -37,7 +37,7 @@ import Testing
         let fixture = try Fixture()
         defer { fixture.clean() }
         _ = try await fixture.worker.perform(.on(.indefinite))
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         #expect((runtime.execute(try context()) as? NSDictionary)?["ok"] as? Bool == true)
         await stop(runtime)
         #expect(fixture.events == ["setSleepDisabled", "release"])
@@ -49,7 +49,7 @@ import Testing
         defer { fixture.clean() }
         _ = try await fixture.worker.perform(.on(.indefinite))
         _ = try await fixture.worker.perform(.setRestoreOnQuit(false))
-        await stop(ExtensionRuntime(worker: fixture.worker))
+        await stop(makeRuntime(fixture.worker))
         #expect(fixture.events == ["setSleepDisabled", "release"])
     }
 
@@ -60,7 +60,7 @@ import Testing
             _ = try await fixture.worker.perform(.on(.indefinite))
             _ = try await fixture.worker.perform(.setRestoreOnQuit(false))
             fixture.quitError = cancelled ? CancellationError() : CocoaError(.fileReadUnknown)
-            let runtime = ExtensionRuntime(worker: fixture.worker)
+            let runtime = makeRuntime(fixture.worker)
             _ = runtime.execute(try context())
             await stop(runtime)
             #expect(
@@ -80,7 +80,7 @@ import Testing
         let deadline = ContinuousClock.now + .seconds(2)
         while fixture.mutationReply == nil, ContinuousClock.now < deadline { await Task.yield() }
         #expect(fixture.mutationReply != nil)
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         _ = runtime.execute(try context())
         var completed = false
         runtime.prepareToStop { completed = true }
@@ -101,7 +101,7 @@ import Testing
         fixture.quitError = CocoaError(.fileReadUnknown)
         fixture.failFirstRelease = true
         fixture.blockRelease = true
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         _ = runtime.execute(try context())
         var completed = false
         runtime.prepareToStop { completed = true }
@@ -118,7 +118,7 @@ import Testing
         let fixture = try Fixture()
         defer { fixture.clean() }
         _ = try await fixture.worker.perform(.setRestoreOnQuit(false))
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         _ = runtime.execute(try context())
         await stop(runtime)
         #expect(!fixture.events.contains("extension.lifecycle.applicationQuit"))
@@ -133,7 +133,7 @@ import Testing
             defer { fixture.clean() }
             _ = try await fixture.worker.perform(.setRestoreOnQuit(false))
             if quit {
-                let runtime = ExtensionRuntime(worker: fixture.worker)
+                let runtime = makeRuntime(fixture.worker)
                 _ = runtime.execute(try context())
                 await stop(runtime)
                 #expect(fixture.events.isEmpty)
@@ -155,7 +155,7 @@ import Testing
         case "parent": input["hostPID"] = getpid()
         default: input["skipRestoration"] = true
         }
-        let runtime = ExtensionRuntime(worker: fixture.worker)
+        let runtime = makeRuntime(fixture.worker)
         #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(fixture.events.isEmpty)
     }
@@ -168,7 +168,13 @@ import Testing
         ]
     }
 
-    private func stop(_ runtime: ExtensionRuntime) async {
+    private func makeRuntime(_ worker: LidAwakeWorker) -> ExtensionServiceRuntime {
+        ExtensionServiceRuntime(id: "lidAwake", role: "app", bundle: .main) {
+            LidAwakeService(runtime: $0, worker: worker)
+        }
+    }
+
+    private func stop(_ runtime: ExtensionServiceRuntime) async {
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
