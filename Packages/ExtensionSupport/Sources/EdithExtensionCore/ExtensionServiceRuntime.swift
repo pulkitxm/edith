@@ -13,6 +13,9 @@ public protocol ExtensionService: AnyObject {
     var requiresOwnedDataDirectory: Bool { get }
     var preparesForDisable: Bool { get }
     var preparesUIToClose: Bool { get }
+    var allowsUIDuringRetirement: Bool { get }
+    var statusDetails: [String: Any] { get }
+    func acceptsStopUI(for presentation: UUID?) -> Bool
     func prepareUIToClose(_ presentation: UUID) async -> String?
     func finishBeforeStop() async
     func view(for presentation: UUID, context: ExtensionHostContext) -> NSViewController?
@@ -38,6 +41,9 @@ extension ExtensionService {
     public var requiresOwnedDataDirectory: Bool { false }
     public var preparesForDisable: Bool { false }
     public var preparesUIToClose: Bool { false }
+    public var allowsUIDuringRetirement: Bool { false }
+    public var statusDetails: [String: Any] { [:] }
+    public func acceptsStopUI(for presentation: UUID?) -> Bool { true }
     public func prepareUIToClose(_ presentation: UUID) async -> String? { nil }
     public func finishBeforeStop() async {}
     public func view(for presentation: UUID, context: ExtensionHostContext) -> NSViewController? {
@@ -197,7 +203,8 @@ public final class ExtensionServiceRuntime: NSObject {
                 return Self.result(false)
             }
         case "configureUI":
-            guard suspension == nil, teardownTask == nil, uiRetirements.isEmpty,
+            guard suspension == nil, teardownTask == nil,
+                uiRetirements.isEmpty || service?.allowsUIDuringRetirement == true,
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == id,
                 service?.configureUI(configuration) == true
@@ -210,7 +217,11 @@ public final class ExtensionServiceRuntime: NSObject {
             else { return Self.result(false) }
             return controller
         case "stopUI":
-            let presentation = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
+            let requested = input["presentationID"]
+            let presentation = (requested as? String).flatMap(UUID.init(uuidString:))
+            guard requested == nil || presentation != nil,
+                service?.acceptsStopUI(for: presentation) != false
+            else { return Self.result(false) }
             for task in service?.stopUI(for: presentation) ?? [] {
                 let identifier = UUID()
                 uiRetirements[identifier] = Task { [self] in
@@ -221,10 +232,10 @@ public final class ExtensionServiceRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop": _ = beginTeardown()
         case "status":
-            return [
-                "ok": true,
-                "running": started && teardownTask == nil && service?.isRunning == true,
-            ] as NSDictionary
+            var status = service?.statusDetails ?? [:]
+            status["ok"] = true
+            status["running"] = started && teardownTask == nil && service?.isRunning == true
+            return status as NSDictionary
         default:
             return service?.perform(operation, context: input) ?? Self.result(false)
         }

@@ -30,9 +30,24 @@ private final class SyntheticService: ExtensionService {
         return context.input["policy"] as? String != "refused"
     }
 
+    var allowsUIDuringRetirement = false
+    var statusDetails: [String: Any] = [:]
+    var refusedStop: UUID?
+    var retirement: Task<Void, Never>?
+    var configurations = 0
+
+    func acceptsStopUI(for presentation: UUID?) -> Bool {
+        presentation == nil || presentation != refusedStop
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        configurations += 1
+        return true
+    }
+
     func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
         stoppedPresentations.append(presentation)
-        return []
+        return retirement.map { [$0] } ?? []
     }
 
     func start(_ context: ExtensionHostContext) -> Bool {
@@ -175,6 +190,52 @@ private let syntheticScope = [
         _ = runtime.execute(["operation": "stopUI", "presentationID": presentation.uuidString])
         _ = runtime.execute(["operation": "stopUI"])
         #expect(service.stoppedPresentations == [presentation, nil])
+    }
+
+    @Test func stopUIRefusesMalformedAndUnacceptedPresentations() {
+        let (runtime, service) = runtime()
+        let refused = UUID()
+        service.refusedStop = refused
+        #expect(ok(runtime.execute(["operation": "stopUI", "presentationID": "bad"])) == false)
+        #expect(
+            ok(runtime.execute(["operation": "stopUI", "presentationID": refused.uuidString]))
+                == false)
+        #expect(service.stoppedPresentations.isEmpty)
+        #expect(ok(runtime.execute(["operation": "stopUI"])) == true)
+        #expect(service.stoppedPresentations == [nil])
+    }
+
+    @Test func statusCarriesServiceDetailsUnderTheRuntimeFields() {
+        let (runtime, service) = runtime()
+        service.statusDetails = ["preventsQuit": true, "ok": false]
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let status = runtime.execute(["operation": "status"]) as? NSDictionary
+        #expect(status?["preventsQuit"] as? Bool == true)
+        #expect(status?["ok"] as? Bool == true)
+        #expect(status?["running"] as? Bool == true)
+    }
+
+    @Test func configureUIWaitsForRetirementsUnlessTheServiceAllowsOverlap() {
+        let (runtime, service) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let (stream, finish) = AsyncStream<Void>.makeStream()
+        service.retirement = Task { for await _ in stream {} }
+        _ = runtime.execute(["operation": "stopUI"])
+        let configure: () -> Bool? = {
+            self.ok(
+                runtime.execute([
+                    "operation": "configureUI", "inProcess": true, "remoteUI": true,
+                    "hostIdentifier": "com.pulkit.edith", "extensionID": "synthetic",
+                    "defaultsSuite": "com.pulkit.edith.shared", "uiOnly": true,
+                    "location": "settings",
+                    "presentationID": UUID().uuidString,
+                ]))
+        }
+        #expect(configure() == false)
+        service.allowsUIDuringRetirement = true
+        #expect(configure() == true)
+        #expect(service.configurations == 1)
+        finish.finish()
     }
 
     @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {
