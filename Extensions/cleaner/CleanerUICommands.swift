@@ -14,6 +14,7 @@ struct CleanerUISnapshot: Codable {
     let driveSelection: Set<String>?
     let operationTitle: String
     let loadingDriveOptions: Bool
+    let filters: CleanerFilters
 }
 struct CleanerUIAction: Codable {
     let operation: String; let value: String?; let item: String?; let previewToken: UUID
@@ -64,6 +65,12 @@ struct CleanerUIAction: Codable {
                 } else {
                     model.removeCustomFolder(path)
                 }
+            case "filters":
+                guard let value = action.value, value.utf8.count <= 1_024,
+                    let filters = try? JSONDecoder().decode(
+                        CleanerFilters.self, from: Data(value.utf8))
+                else { throw ExtensionPeerError.invalidRequest }
+                model.updateFilters(filters)
             case "clean":
                 guard action.previewToken == model.previewToken, !model.scanning, model.scanned
                 else { throw ExtensionPeerError.rejected("Review a current scan before cleaning.") }

@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
+import { buildExtensionKit } from "./build-extension-support.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "extension-lifecycle-"));
 try {
@@ -31,6 +32,7 @@ try {
     ...process.env,
     EXTENSION_CATALOG_PRIVATE_KEY: (await readFile(privateKey, "utf8")).trim(),
     EXTENSION_FIXTURE_DOWNLOADS: join(root, "downloads.json"),
+    DYLD_FALLBACK_LIBRARY_PATH: buildExtensionKit(resolve(".")).products,
   };
   await writeFile(
     environment.EXTENSION_FIXTURE_DOWNLOADS,
