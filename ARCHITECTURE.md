@@ -36,11 +36,12 @@ system extension carrier, the lid-awake helper, and the `ed` launcher.
 
 Each extension declares what the host registers for it in
 `Extensions/<id>/package.json`: its title, symbol, category, `ed` command words,
-global shortcuts and whether it has `background` work. `scripts/extension-index.mjs --write`
+global shortcuts, settings that start it at launch, sidebar pages, Maintenance
+sections and whether it has `background` work. `scripts/extension-index.mjs --write`
 renders those declarations into the host index
 (`Packages/EdithHost/Sources/EdithHostCore/Resources/index.json`), and
 `make ci-extension-index` fails when the index is stale. The host registers
-commands from the index without loading extension code. Background extensions
+commands, shortcuts and pages from the index without loading extension code. Background extensions
 start with the app; the others stay idle until a page, setting or command
 needs them.
 

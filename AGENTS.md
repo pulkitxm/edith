@@ -114,8 +114,11 @@ default `shortcut` such as `control+shift+e`; the host registers it while the
 extension is idle and starts the extension on the first press. `launchWhen`
 lists preference keys (`key`, `default`) that start a non-background extension
 at launch while any of them is true, for a toggle such as Focus Dim that must
-be restored. After editing
-it, run `bun scripts/extension-index.mjs --write` and rebuild the development
+be restored. `pages` adds sidebar pages (`id`, `title`, `symbolName`, `order`,
+optional `detachable` and `logoName`) under the landing page of the
+extension's category, sorted by `order`. `sections` adds Maintenance sections
+(`page: "appMaintenance"`, `id`, `title`, `symbolName`, `summary`, `order`).
+After editing it, run `bun scripts/extension-index.mjs --write` and rebuild the development
 app, since the host index ships inside the app. Set `background` only when the
 extension must run before anything opens it.
 
