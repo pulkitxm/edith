@@ -73,7 +73,9 @@ function hotkey(declaration, directory) {
   const keys = ["id", "prefix", "title", "subtitle", "shortcut"];
   if (
     Object.keys(declaration).some((key) => !keys.includes(key)) ||
-    keys.some((key) => typeof declaration[key] !== "string" || !declaration[key])
+    keys.some(
+      (key) => typeof declaration[key] !== "string" || !declaration[key],
+    )
   )
     throw new Error(`${directory}: hotkeys need ${keys.join(", ")}`);
   const { shortcut, ...rest } = declaration;
@@ -112,7 +114,9 @@ export function validateDeclaration(declaration, directory) {
     throw new Error(`${directory}: hotkeys must be a list`);
   return {
     ...declaration,
-    hotkeys: (declaration.hotkeys ?? []).map((entry) => hotkey(entry, directory)),
+    hotkeys: (declaration.hotkeys ?? []).map((entry) =>
+      hotkey(entry, directory),
+    ),
   };
 }
 
@@ -150,7 +154,9 @@ export async function renderIndex(root = process.cwd()) {
   const previous = JSON.parse(await readFile(resolve(root, indexPath), "utf8"));
   const index = orderedIndex(await extensionDeclarations(root), previous);
   for (const field of ["id", "prefix"]) {
-    const values = index.flatMap(({ hotkeys }) => hotkeys.map((entry) => entry[field]));
+    const values = index.flatMap(({ hotkeys }) =>
+      hotkeys.map((entry) => entry[field]),
+    );
     if (new Set(values).size !== values.length)
       throw new Error(`Two hotkeys declare the same ${field}`);
   }
