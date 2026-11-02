@@ -6,8 +6,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-@objc(EdithSystemExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+final class SystemService: ExtensionService {
     private var model: RunningAppsModel?
     private var uiModel: RunningAppsModel?
     private var uiPresentation: SystemPresentationState?
@@ -29,184 +28,157 @@ final class ExtensionRuntime: NSObject {
             }, perform: { _, _ in 0 },
             resource: { _ in .init(cpuNanoseconds: 0, memoryMB: 0) })
     }()
-    private let commands = ExtensionCommandRegistry()
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, self.model != nil else { throw ExtensionPeerError.unavailable }
-            if command == "surface.snapshot" || command == "surface.perform" {
-                return try await SurfaceCommandService.execute(
-                    providerID: "system", command: command, payload: payload,
-                    snapshot: { tile in
-                        SystemSurface.snapshot(
-                            apps: self.operations.list(), tile: tile,
-                            cleaning: self.cleaning?.status)
-                    },
-                    perform: { action in
-                        if action == "cleanKeys" || action == "stopCleaning" {
-                            guard let cleaning = self.cleaning else {
-                                throw ExtensionPeerError.unavailable
-                            }
-                            _ = try cleaning.execute("system." + action, payload: Data())
-                            return
+    var isRunning: Bool { model != nil }
+    var allowsUIDuringRetirement: Bool { true }
+
+    func start() -> Bool {
+        if model == nil { model = RunningAppsModel(operations: operations) }
+        if presentation == nil { presentation = SystemPresentationState() }
+        if cleaning == nil { cleaning = KeyboardCleaning() }
+        return true
+    }
+
+    func synchronize() {
+        let defaults = SharedDefaults.store
+        if let raw = defaults.string(forKey: RunningAppsKeys.sort),
+            AppSortKey(rawValue: raw) != nil
+        {
+            model?.restoreSort(
+                SystemAppsSort(
+                    sortKey: raw, ascending: defaults.bool(forKey: RunningAppsKeys.ascending)))
+        }
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard model != nil else { throw ExtensionPeerError.unavailable }
+        if command == "surface.snapshot" || command == "surface.perform" {
+            return try await SurfaceCommandService.execute(
+                providerID: "system", command: command, payload: payload,
+                snapshot: { tile in
+                    SystemSurface.snapshot(
+                        apps: self.operations.list(), tile: tile,
+                        cleaning: self.cleaning?.status)
+                },
+                perform: { action in
+                    if action == "cleanKeys" || action == "stopCleaning" {
+                        guard let cleaning = self.cleaning else {
+                            throw ExtensionPeerError.unavailable
                         }
-                        throw ExtensionPeerError.invalidRequest
-                    })
-            }
-            if command == "system.cli.catalog" { return try SystemCLICatalog.data() }
-            switch command {
-            case "system.cli":
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await SystemCLIExecution.run(request, operations: self.operations))
-            case "system.apps.snapshot":
-                guard payload == Data("{}".utf8), let model = self.model,
-                    let presentation = self.presentation
-                else { throw ExtensionPeerError.invalidRequest }
-                await model.refresh()
-                return try JSONEncoder().encode(model.snapshot(presentation: presentation))
-            case "system.presentation":
-                let wait = try JSONDecoder().decode(SystemPresentationWait.self, from: payload)
-                guard let presentation = self.presentation else {
+                        _ = try cleaning.execute("system." + action, payload: Data())
+                        return
+                    }
                     throw ExtensionPeerError.invalidRequest
-                }
-                let hideApps = await presentation.waitForChange(
-                    from: wait.hideApps, timeout: .seconds(10))
-                return try JSONEncoder().encode(SystemPresentationReply(hideApps: hideApps))
-            case "system.apps.sort":
-                let sort = try JSONDecoder().decode(SystemAppsSort.self, from: payload)
-                guard let key = AppSortKey(rawValue: sort.sortKey) else {
-                    throw ExtensionPeerError.invalidRequest
-                }
-                SharedDefaults.store.set(key.rawValue, forKey: RunningAppsKeys.sort)
-                SharedDefaults.store.set(sort.ascending, forKey: RunningAppsKeys.ascending)
-                self.model?.restoreSort(sort)
-                return Data("{}".utf8)
-            case "system.cleanKeys", "system.stopCleaning", "system.cleaning.status":
-                guard let cleaning = self.cleaning else { throw ExtensionPeerError.unavailable }
-                return try cleaning.execute(command, payload: payload)
-            case "apps.list":
-                return try JSONSerialization.data(
-                    withJSONObject: self.operations.list().map(Self.encode))
-            case "apps.quit":
-                let request = try SystemAppsQuitRequest.decode(payload)
-                let plan = try self.operations.plan(try request.selection(), force: request.force)
-                let outcome = self.operations.apply(plan, confirmed: request.confirmed)
-                return try JSONSerialization.data(withJSONObject: [
-                    "applied": outcome.applied, "changed": outcome.changed,
-                    "targets": plan.targets.map(Self.encode),
-                ])
-            default: throw ExtensionPeerError.rejected("System does not support this command.")
+                })
+        }
+        if command == "system.cli.catalog" { return try SystemCLICatalog.data() }
+        switch command {
+        case "system.cli":
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await SystemCLIExecution.run(request, operations: operations))
+        case "system.apps.snapshot":
+            guard payload == Data("{}".utf8), let model = model,
+                let presentation = presentation
+            else { throw ExtensionPeerError.invalidRequest }
+            await model.refresh()
+            return try JSONEncoder().encode(model.snapshot(presentation: presentation))
+        case "system.presentation":
+            let wait = try JSONDecoder().decode(SystemPresentationWait.self, from: payload)
+            guard let presentation = presentation else {
+                throw ExtensionPeerError.invalidRequest
             }
+            let hideApps = await presentation.waitForChange(
+                from: wait.hideApps, timeout: .seconds(10))
+            return try JSONEncoder().encode(SystemPresentationReply(hideApps: hideApps))
+        case "system.apps.sort":
+            let sort = try JSONDecoder().decode(SystemAppsSort.self, from: payload)
+            guard let key = AppSortKey(rawValue: sort.sortKey) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            SharedDefaults.store.set(key.rawValue, forKey: RunningAppsKeys.sort)
+            SharedDefaults.store.set(sort.ascending, forKey: RunningAppsKeys.ascending)
+            model?.restoreSort(sort)
+            return Data("{}".utf8)
+        case "system.cleanKeys", "system.stopCleaning", "system.cleaning.status":
+            guard let cleaning = self.cleaning else { throw ExtensionPeerError.unavailable }
+            return try cleaning.execute(command, payload: payload)
+        case "apps.list":
+            return try JSONSerialization.data(
+                withJSONObject: operations.list().map(Self.encode))
+        case "apps.quit":
+            let request = try SystemAppsQuitRequest.decode(payload)
+            let plan = try operations.plan(try request.selection(), force: request.force)
+            let outcome = operations.apply(plan, confirmed: request.confirmed)
+            return try JSONSerialization.data(withJSONObject: [
+                "applied": outcome.applied, "changed": outcome.changed,
+                "targets": plan.targets.map(Self.encode),
+            ])
+        default: throw ExtensionPeerError.rejected("System does not support this command.")
         }
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
-        let cleaning = cleaning, model = model, uiModel = uiModel
-        cleaning?.shutdown()
-        model?.beginSuspension()
-        uiModel?.beginSuspension()
-        Task { [self, cleaning, model, uiModel] in
-            _ = await commands.suspendAndWait()
-            await cleaning?.shutdownAndWait()
-            await model?.suspendAndWait()
-            await uiModel?.suspendAndWait()
-            completion()
-        }
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard let client = configuration.engineClient,
+            let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
+        else { return false }
+        releaseUI()
+        let presentation = SystemPresentationState(channel: nil)
+        uiClient = client
+        uiSettings = configuration.isSettings
+        uiPresentation = presentation
+        uiModel = RunningAppsModel(
+            engineClient: client, presentation: presentation, defaults: defaults)
+        return true
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let cleaning = cleaning, model = model, uiModel = uiModel
-        commands.shutdown()
-        cleaning?.shutdown()
-        model?.beginSuspension()
-        uiModel?.beginSuspension()
-        Task { [self, cleaning, model, uiModel] in
-            await commands.shutdownAndWait()
-            await cleaning?.shutdownAndWait()
-            await model?.suspendAndWait()
-            await uiModel?.suspendAndWait()
-            cleaning?.shutdown()
-            model?.shutdown()
-            presentation?.shutdown()
-            completion()
-        }
-    }
-
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "system", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if model == nil { model = RunningAppsModel(operations: operations) }
-            if presentation == nil { presentation = SystemPresentationState() }
-            if cleaning == nil { cleaning = KeyboardCleaning() }
-        case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                let client = configuration.engineClient,
-                let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
-            else { return ["ok": false] as NSDictionary }
-            stopUI()
-            let presentation = SystemPresentationState(channel: nil)
-            uiClient = client
-            uiSettings = input["location"] as? String == "settings"
-            uiPresentation = presentation
-            uiModel = RunningAppsModel(
-                engineClient: client, presentation: presentation, defaults: defaults)
-        case "stopUI": stopUI()
-        case "view":
-            guard let model = uiModel, let presentation = uiPresentation else {
-                return ["ok": false] as NSDictionary
-            }
-            if uiSettings, let client = uiClient {
-                return NSHostingController(
-                    rootView: ExtensionPageHost {
-                        SystemSettings { _ = try? await client.invoke("system.cleanKeys") }
-                    })
-            }
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let model = uiModel, let presentation = uiPresentation else { return nil }
+        if uiSettings, let client = uiClient {
             return NSHostingController(
-                rootView: ExtensionPageHost { SystemPage(model: model, presentation: presentation) }
-            )
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            let defaults = SharedDefaults.store
-            if let raw = defaults.string(forKey: RunningAppsKeys.sort),
-                AppSortKey(rawValue: raw) != nil
-            {
-                model?.restoreSort(
-                    SystemAppsSort(
-                        sortKey: raw, ascending: defaults.bool(forKey: RunningAppsKeys.ascending)))
-            }
-        case "stop":
-            commands.shutdown()
-            cleaning?.shutdown()
-            cleaning = nil
-            model?.shutdown()
-            model = nil
-            presentation?.shutdown()
-            presentation = nil
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
+                rootView: ExtensionPageHost {
+                    SystemSettings { _ = try? await client.invoke("system.cleanKeys") }
+                })
         }
-        return ["ok": true] as NSDictionary
+        return NSHostingController(
+            rootView: ExtensionPageHost { SystemPage(model: model, presentation: presentation) })
     }
 
-    private func stopUI() {
-        uiModel?.shutdown(); uiModel = nil
-        uiPresentation?.shutdown(); uiPresentation = nil
-        uiClient?.invalidate(); uiClient = nil
+    func stopUI() -> [Task<Void, Never>] {
+        releaseUI()
+        return []
+    }
+
+    func cancelPendingWork() {
+        cleaning?.shutdown()
+        model?.beginSuspension()
+        uiModel?.beginSuspension()
+    }
+
+    func drain() async {
+        await cleaning?.shutdownAndWait()
+        await model?.suspendAndWait()
+        await uiModel?.suspendAndWait()
+    }
+
+    func teardown() async {
+        releaseUI()
+        cleaning?.shutdown()
+        cleaning = nil
+        model?.shutdown()
+        model = nil
+        presentation?.shutdown()
+        presentation = nil
+    }
+
+    private func releaseUI() {
+        uiSettings = false
+        uiModel?.shutdown()
+        uiModel = nil
+        uiPresentation?.shutdown()
+        uiPresentation = nil
+        uiClient?.invalidate()
+        uiClient = nil
     }
 
     private static func encode(_ snapshot: RunningAppSnapshot) -> [String: Any] {
@@ -218,10 +190,18 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeSystemRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "system", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { _ in SystemService() }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeSystemRuntime()).toOpaque())
         })
 }
