@@ -411,7 +411,7 @@ import HostWorkerFixtureSupport
         #expect(updater.available == false)
     }
 
-    @Test func recordedShortcutPreservesEstablishedModifierOrderAndRejectsUnmodifiedKeys() {
+    @Test func recordedShortcutPreservesEstablishedModifierOrderAndRejectsUnmodifiedKeys() throws {
         #expect(
             HostRecordedShortcut(
                 code: 49, flags: [.control, .option, .shift, .command], characters: " ")?.label
@@ -422,7 +422,9 @@ import HostWorkerFixtureSupport
         #expect(HostRecordedShortcut(code: 14, flags: [], characters: "e") == nil)
         #expect(HostRecordedShortcut(code: 14, flags: [.shift], characters: "e") == nil)
         #expect(HostRecordedShortcut(code: 14, flags: [.control, .shift], characters: "e") != nil)
-        #expect(HostExtensionShortcut.micMute.prefix == "micHotKey")
+        #expect(
+            try HostIndex.bundled().first { $0.id == "micMute" }?.hotkeys.map(\.prefix)
+                == ["micHotKey"])
     }
 
     @Test func mainWindowFramesPreserveOriginalScreenBoundsAndAutosaveRepair() {

@@ -108,7 +108,10 @@ Develop and test extensions against this worktree's development build. Nothing
 in the loop needs GitHub or a merged pull request.
 
 An extension's host registration lives in `Extensions/<id>/package.json`
-(`title`, `symbolName`, `category`, `background`, `commands`). After editing
+(`title`, `symbolName`, `category`, `background`, `commands`, `hotkeys`).
+Each hotkey names its `id`, preference `prefix`, `title`, `subtitle` and a
+default `shortcut` such as `control+shift+e`; the host registers it while the
+extension is idle and starts the extension on the first press. After editing
 it, run `bun scripts/extension-index.mjs --write` and rebuild the development
 app, since the host index ships inside the app. Set `background` only when the
 extension must run before anything opens it.
