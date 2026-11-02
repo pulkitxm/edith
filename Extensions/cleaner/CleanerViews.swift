@@ -41,7 +41,9 @@ struct CleanerCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Items go to the Trash, so you can restore them until you empty it.")
+            Text(
+                "Items go to the Trash, so you can restore them until you empty it. Worktrees are pruned from their repository; their branches stay."
+            )
         }
     }
 
@@ -56,9 +58,10 @@ struct CleanerCard: View {
                     drivesView
                     if !model.categories.isEmpty {
                         searchBar
+                        CleanerFilterBar(model: model, dark: dark)
                         selectAllRow
                         if model.filteredCategories.isEmpty {
-                            Label("No items match this search", systemImage: "magnifyingglass")
+                            Label("No items match these filters", systemImage: "magnifyingglass")
                                 .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
@@ -82,7 +85,7 @@ struct CleanerCard: View {
 
     private var intro: some View {
         HStack {
-            Text("Scan build caches, package managers, Claude Code logs, and your drives.")
+            Text("Scan build caches, package managers, git worktrees and your drives.")
                 .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
             Button("Scan") { openPicker(scan: true) }
@@ -191,10 +194,16 @@ struct CleanerCard: View {
             .buttonStyle(.edith(.borderless))
             Text("Select all").font(.system(size: UIScale.pt(12), weight: .medium))
             Spacer()
-            Text("\(model.selectedItemCount) of \(model.totalItemCount) selected")
+            Text(selectionSummary)
                 .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(.vertical, UIScale.pt(4))
+    }
+
+    private var selectionSummary: String {
+        let selected = "\(model.selectedItemCount) of \(model.totalItemCount) selected"
+        let hidden = model.hiddenItemCount
+        return hidden > 0 ? selected + " · \(hidden) hidden by filters" : selected
     }
 
     private var selectAllSymbol: String {
@@ -244,7 +253,7 @@ private struct DrivePickerSheet: View {
                 .font(.system(size: UIScale.pt(15), weight: .semibold))
                 .padding(.horizontal, UIScale.pt(20)).padding(.top, UIScale.pt(20))
             Text(
-                "Selected drives and folders are searched for project junk like node_modules and virtualenvs. System caches always come from your home folder."
+                "Selected drives and folders are searched for build output, dependencies and git worktrees. System caches always come from your home folder."
             )
             .font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.horizontal, UIScale.pt(20)).padding(.top, UIScale.pt(4))
@@ -512,6 +521,52 @@ private struct CleanerCategoryRow: View {
     }
 }
 
+private struct CleanerFilterBar: View {
+    let model: CleanerModel
+    let dark: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(10)) {
+                caption("UNTOUCHED FOR")
+                EdithSegmentedPicker(
+                    "Untouched for",
+                    selection: Binding(get: { model.age }, set: { model.setAge($0) }),
+                    options: CleanerAge.allCases, label: \.label)
+                InfoDot(
+                    "Project folders and worktrees whose sources and git index have not changed for this long. Build output does not count as an edit. Global caches always show."
+                )
+            }
+            HStack(spacing: UIScale.pt(10)) {
+                caption("SORT")
+                EdithSegmentedPicker(
+                    "Sort",
+                    selection: Binding(get: { model.filters.sort }, set: { model.setSort($0) }),
+                    options: CleanerSort.allCases, label: \.label
+                )
+                .frame(maxWidth: UIScale.pt(160))
+                Spacer(minLength: UIScale.pt(8))
+                Toggle(
+                    "Protect worktrees with uncommitted changes",
+                    isOn: Binding(
+                        get: { model.filters.protectDirty },
+                        set: { model.setProtectDirty($0) })
+                )
+                .toggleStyle(.checkbox)
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            }
+        }
+        .padding(.vertical, UIScale.pt(2))
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text).font(.system(size: UIScale.pt(10), weight: .bold)).tracking(UIScale.pt(0.6))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .frame(minWidth: UIScale.pt(96), alignment: .leading)
+    }
+}
+
 private struct CleanerItemRow: View {
     let model: CleanerModel
     let categoryID: String
@@ -526,11 +581,20 @@ private struct CleanerItemRow: View {
             HStack(spacing: UIScale.pt(10)) {
                 Image(systemName: item.selected ? "checkmark.square.fill" : "square")
                     .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
-                Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .help(item.path.path)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .help(item.path.path)
+                    if let worktree = item.worktree { worktreeLine(worktree) }
+                }
                 Spacer()
+                if let age = CleanerAgeText.since(item.lastModified, now: Date()) {
+                    Text(age)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .help("Last edited")
+                }
                 Text(JunkScanner.format(item.sizeBytes))
                     .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -547,6 +611,45 @@ private struct CleanerItemRow: View {
         }
         .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([item.path])
+            }
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(item.path.path, forType: .string)
+            }
+        }
+    }
+
+    private func worktreeLine(_ worktree: WorktreeInfo) -> some View {
+        HStack(spacing: UIScale.pt(5)) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: UIScale.pt(9)))
+            Text(worktree.branch ?? "detached")
+                .font(.system(size: UIScale.pt(10), design: .monospaced))
+                .lineLimit(1).truncationMode(.middle)
+            ForEach(badges(worktree), id: \.self) { badge in
+                Text(badge)
+                    .font(.system(size: UIScale.pt(8.5), weight: .bold)).tracking(UIScale.pt(0.3))
+                    .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
+                    .background(DashSkin.inkFaint(dark).opacity(0.15), in: Capsule())
+            }
+        }
+        .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+
+    private func badges(_ worktree: WorktreeInfo) -> [String] {
+        var badges: [String] = []
+        if worktree.dirty == true { badges.append("UNCOMMITTED") }
+        if let unpushed = worktree.unpushed, unpushed > 0 { badges.append("\(unpushed) UNPUSHED") }
+        if worktree.merged {
+            badges.append("MERGED")
+        } else if worktree.upstreamGone {
+            badges.append("UPSTREAM GONE")
+        }
+        if worktree.locked { badges.append("LOCKED") }
+        return badges
     }
 }
 
