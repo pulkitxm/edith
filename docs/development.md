@@ -85,8 +85,17 @@ Inspect the extension's `dependencies` in `Extensions/manifest.json`. Sideload
 local dependency packages first, in dependency order. Sideload does not download
 missing dependencies. If shared host or marketplace contracts changed, rebuild
 the host first and rebuild affected extensions against that same checkout.
-Packages must match the running host ABI, architecture and minimum macOS version.
-Do not edit package metadata to bypass a mismatch.
+Packages must match the running architecture and minimum macOS version, and
+their host version must lie between `minimumWorkerHostABI` and `workerHostABI`
+in `MarketplaceConfiguration.swift`. Do not edit package metadata to bypass a
+mismatch.
+
+When the shared extension kit or host contract gains something new that fresh
+packages need, raise `workerHostABI` in `scripts/extension-host-abi.mjs` and run
+`bun scripts/extension-host-abi.mjs --write`. Older packages stay installable and
+are not republished. Raise `minimumWorkerHostABI` as well only when a change
+breaks packages built for the older version; the next release then republishes
+every extension.
 
 Swift libraries can remain mapped until the app quits, and owned tasks can delay
 replacement. If the new version is waiting for old work to drain, finish or stop
