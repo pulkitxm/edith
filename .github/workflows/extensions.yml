@@ -81,7 +81,7 @@ jobs:
       - run: bun scripts/test-extension-catalog-retention.mjs
       - run: bun scripts/test-extension-marketplace.mjs
   plan:
-    runs-on: ubuntu-latest
+    runs-on: jog
     outputs:
       matrix: "${{ steps.plan.outputs.matrix }}"
       batches: "${{ steps.plan.outputs.batches }}"
@@ -306,7 +306,7 @@ jobs:
       - plan
       - build
     if: "!cancelled() && needs.build.result == 'success' && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
-    runs-on: ubuntu-latest
+    runs-on: jog
     timeout-minutes: 330
     permissions:
       contents: read

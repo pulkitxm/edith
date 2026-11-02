@@ -19,7 +19,7 @@ concurrency:
 jobs:
   advisories:
     name: Rust advisories
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -32,7 +32,7 @@ jobs:
 
   osv:
     name: OSV scanner
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -44,7 +44,7 @@ jobs:
 
   gitleaks:
     name: Gitleaks
-    runs-on: ubuntu-latest
+    runs-on: jog
     permissions:
       contents: read
       pull-requests: read
@@ -60,7 +60,7 @@ jobs:
 
   semgrep:
     name: Semgrep
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -70,7 +70,7 @@ jobs:
 
   trivy:
     name: Trivy
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -85,7 +85,7 @@ jobs:
 
   sbom:
     name: SBOM
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -104,7 +104,7 @@ jobs:
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: jog
     permissions:
       contents: read
       pull-requests: write
@@ -120,7 +120,7 @@ jobs:
   scorecard:
     name: OpenSSF Scorecard
     if: github.event_name == 'schedule' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: jog
     permissions:
       contents: read
       id-token: write
@@ -150,7 +150,7 @@ jobs:
       - sbom
       - dependency-review
       - scorecard
-    runs-on: ubuntu-latest
+    runs-on: jog
     steps:
       - name: Fail when a check failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
