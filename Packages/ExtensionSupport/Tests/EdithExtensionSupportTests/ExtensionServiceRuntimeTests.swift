@@ -23,8 +23,16 @@ private final class SyntheticService: ExtensionService {
     var startInputs: [String] = []
     var synchronizations: [String] = []
 
-    func synchronize(_ context: ExtensionHostContext) {
+    var stoppedPresentations: [UUID?] = []
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
         synchronizations.append(context.input["policy"] as? String ?? "")
+        return context.input["policy"] as? String != "refused"
+    }
+
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
+        stoppedPresentations.append(presentation)
+        return []
     }
 
     func start(_ context: ExtensionHostContext) -> Bool {
@@ -132,8 +140,13 @@ private let syntheticScope = [
                 ])) == false)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
         #expect(service.starts == 2)
-        _ = runtime.execute(["operation": "synchronize", "policy": "ambient"])
-        #expect(service.synchronizations == ["ambient"])
+        #expect(ok(runtime.execute(["operation": "synchronize", "policy": "ambient"])) == true)
+        #expect(ok(runtime.execute(["operation": "synchronize", "policy": "refused"])) == false)
+        #expect(service.synchronizations == ["ambient", "refused"])
+        let presentation = UUID()
+        _ = runtime.execute(["operation": "stopUI", "presentationID": presentation.uuidString])
+        _ = runtime.execute(["operation": "stopUI"])
+        #expect(service.stoppedPresentations == [presentation, nil])
     }
 
     @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {

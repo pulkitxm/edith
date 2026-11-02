@@ -16,11 +16,12 @@ public protocol ExtensionService: AnyObject {
     func start() -> Bool
     func start(_ context: ExtensionHostContext) -> Bool
     func synchronize()
-    func synchronize(_ context: ExtensionHostContext)
+    func synchronize(_ context: ExtensionHostContext) -> Bool
     func invoke(_ command: String, payload: Data) async throws -> Data
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool
     func view(for presentation: UUID) -> NSViewController?
     func stopUI() -> [Task<Void, Never>]
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>]
     var isRunning: Bool { get }
     func cancelPendingWork()
     func drain() async
@@ -35,13 +36,17 @@ extension ExtensionService {
     public func start() -> Bool { true }
     public func start(_ context: ExtensionHostContext) -> Bool { start() }
     public func synchronize() {}
-    public func synchronize(_ context: ExtensionHostContext) { synchronize() }
+    public func synchronize(_ context: ExtensionHostContext) -> Bool {
+        synchronize()
+        return true
+    }
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         throw ExtensionPeerError.unavailable
     }
     public func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool { false }
     public func view(for presentation: UUID) -> NSViewController? { nil }
     public func stopUI() -> [Task<Void, Never>] { [] }
+    public func stopUI(for presentation: UUID?) -> [Task<Void, Never>] { stopUI() }
     public var isRunning: Bool { true }
     public func cancelPendingWork() {}
     public func drain() async {}
@@ -153,7 +158,10 @@ public final class ExtensionServiceRuntime: NSObject {
                 return Self.result(false)
             }
             started = true
-        case "synchronize": service?.synchronize(ExtensionHostContext(input: input))
+        case "synchronize":
+            guard service?.synchronize(ExtensionHostContext(input: input)) == true else {
+                return Self.result(false)
+            }
         case "configureUI":
             guard suspension == nil, teardownTask == nil, uiRetirements.isEmpty,
                 let configuration = ExtensionUIConfiguration(context: input),
@@ -167,7 +175,8 @@ public final class ExtensionServiceRuntime: NSObject {
             else { return Self.result(false) }
             return controller
         case "stopUI":
-            for task in service?.stopUI() ?? [] {
+            let presentation = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
+            for task in service?.stopUI(for: presentation) ?? [] {
                 let identifier = UUID()
                 uiRetirements[identifier] = Task { [self] in
                     await task.value
