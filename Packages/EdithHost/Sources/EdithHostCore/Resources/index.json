@@ -7,7 +7,8 @@
     "background": true,
     "commands": [
       "usage"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "herdr",
@@ -17,7 +18,8 @@
     "background": true,
     "commands": [
       "herdr"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "quinjet",
@@ -27,7 +29,8 @@
     "background": true,
     "commands": [
       "quinjet"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "companion",
@@ -37,7 +40,8 @@
     "background": true,
     "commands": [
       "companion"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "plugins",
@@ -47,7 +51,8 @@
     "background": false,
     "commands": [
       "skills"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "machines",
@@ -57,7 +62,8 @@
     "background": true,
     "commands": [
       "machines"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "terminal",
@@ -65,7 +71,8 @@
     "symbolName": "terminal",
     "category": "agents",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "docs",
@@ -75,7 +82,8 @@
     "background": false,
     "commands": [
       "docs"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "appMaintenance",
@@ -85,7 +93,8 @@
     "background": true,
     "commands": [
       "maintenance"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "homebrew",
@@ -95,7 +104,8 @@
     "background": false,
     "commands": [
       "brew"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "cleaner",
@@ -105,7 +115,8 @@
     "background": false,
     "commands": [
       "cleaner"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "blitztree",
@@ -113,7 +124,8 @@
     "symbolName": "square.grid.3x3.fill",
     "category": "utilities",
     "background": false,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "system",
@@ -125,7 +137,8 @@
       "system",
       "apps",
       "tools"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "keepAwake",
@@ -133,7 +146,8 @@
     "symbolName": "moon.zzz",
     "category": "utilities",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "lidAwake",
@@ -143,7 +157,8 @@
     "background": true,
     "commands": [
       "lid-awake"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "systemStats",
@@ -153,7 +168,8 @@
     "background": true,
     "commands": [
       "system"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "micMute",
@@ -161,7 +177,18 @@
     "symbolName": "mic.slash.fill",
     "category": "utilities",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": [
+      {
+        "id": "micMute",
+        "prefix": "micHotKey",
+        "title": "Mic mute",
+        "subtitle": "Mutes or unmutes every microphone system-wide",
+        "code": 46,
+        "modifiers": 768,
+        "label": "⇧⌘M"
+      }
+    ]
   },
   {
     "id": "presenter",
@@ -171,6 +198,17 @@
     "background": true,
     "commands": [
       "presenter"
+    ],
+    "hotkeys": [
+      {
+        "id": "presenter",
+        "prefix": "presenterHotKey",
+        "title": "Presenter mode",
+        "subtitle": "Forces presenter blur on or off",
+        "code": 35,
+        "modifiers": 2816,
+        "label": "⌥⇧⌘P"
+      }
     ]
   },
   {
@@ -181,7 +219,8 @@
     "background": true,
     "commands": [
       "calendar"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "bifrost",
@@ -191,6 +230,17 @@
     "background": true,
     "commands": [
       "bifrost"
+    ],
+    "hotkeys": [
+      {
+        "id": "bifrost",
+        "prefix": "bifrostHotKey",
+        "title": "Bifrost",
+        "subtitle": "Opens the launcher bar over whatever you are doing",
+        "code": 49,
+        "modifiers": 2048,
+        "label": "⌥␣"
+      }
     ]
   },
   {
@@ -201,6 +251,17 @@
     "background": true,
     "commands": [
       "clipboard"
+    ],
+    "hotkeys": [
+      {
+        "id": "clipboard",
+        "prefix": "clipboardHotKey",
+        "title": "Clipboard history",
+        "subtitle": "Opens the clipboard history popup",
+        "code": 8,
+        "modifiers": 4608,
+        "label": "⌃⇧C"
+      }
     ]
   },
   {
@@ -211,6 +272,17 @@
     "background": true,
     "commands": [
       "emoji"
+    ],
+    "hotkeys": [
+      {
+        "id": "emoji",
+        "prefix": "emojiHotKey",
+        "title": "Emoji picker",
+        "subtitle": "Opens the emoji picker over whatever you are typing in",
+        "code": 14,
+        "modifiers": 4608,
+        "label": "⌃⇧E"
+      }
     ]
   },
   {
@@ -222,6 +294,17 @@
     "commands": [
       "color",
       "colour"
+    ],
+    "hotkeys": [
+      {
+        "id": "colorPicker",
+        "prefix": "colorPickerHotKey",
+        "title": "Pick a color",
+        "subtitle": "Summons the color picker loupe",
+        "code": 8,
+        "modifiers": 6400,
+        "label": "⌃⌥⌘C"
+      }
     ]
   },
   {
@@ -230,7 +313,18 @@
     "symbolName": "keyboard.badge.ellipsis",
     "category": "desk",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": [
+      {
+        "id": "keystrokeHighlight",
+        "prefix": "keystrokeHighlightHotKey",
+        "title": "Keystroke highlight",
+        "subtitle": "Starts or pauses the on-screen keycaps",
+        "code": 40,
+        "modifiers": 6400,
+        "label": "⌃⌥⌘K"
+      }
+    ]
   },
   {
     "id": "focusDim",
@@ -238,7 +332,18 @@
     "symbolName": "circle.lefthalf.filled",
     "category": "desk",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": [
+      {
+        "id": "focusDim",
+        "prefix": "focusDimHotKey",
+        "title": "Focus dim",
+        "subtitle": "Toggles background-window dimming",
+        "code": 3,
+        "modifiers": 2304,
+        "label": "⌥⌘F"
+      }
+    ]
   },
   {
     "id": "notchShelf",
@@ -249,7 +354,8 @@
     "commands": [
       "shelf",
       "browser"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "audioMixer",
@@ -259,7 +365,8 @@
     "background": true,
     "commands": [
       "audio"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "studio",
@@ -269,7 +376,8 @@
     "background": true,
     "commands": [
       "studio"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "timeLapse",
@@ -277,7 +385,8 @@
     "symbolName": "record.circle",
     "category": "media",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "virtualCamera",
@@ -287,6 +396,17 @@
     "background": true,
     "commands": [
       "camera"
+    ],
+    "hotkeys": [
+      {
+        "id": "virtualCamera",
+        "prefix": "virtualCameraHotKey",
+        "title": "Virtual Camera",
+        "subtitle": "Pauses Edith Camera behind a card, or goes live again",
+        "code": 9,
+        "modifiers": 6400,
+        "label": "⌃⌥⌘V"
+      }
     ]
   },
   {
@@ -297,7 +417,8 @@
     "background": true,
     "commands": [
       "music"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "downloads",
@@ -309,7 +430,8 @@
       "download",
       "downloads",
       "dl"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "socialManager",
@@ -317,7 +439,8 @@
     "symbolName": "person.crop.rectangle.stack",
     "category": "media",
     "background": false,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "database",
@@ -327,7 +450,8 @@
     "background": true,
     "commands": [
       "database"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "codeStats",
@@ -337,7 +461,8 @@
     "background": true,
     "commands": [
       "code-stats"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "seoAudit",
@@ -347,7 +472,8 @@
     "background": false,
     "commands": [
       "seo"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "latex",
@@ -357,7 +483,8 @@
     "background": false,
     "commands": [
       "latex"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "attention",
@@ -367,7 +494,8 @@
     "background": true,
     "commands": [
       "attention"
-    ]
+    ],
+    "hotkeys": []
   },
   {
     "id": "hinge",
@@ -375,7 +503,18 @@
     "symbolName": "laptopcomputer.and.arrow.down",
     "category": "labs",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": [
+      {
+        "id": "hinge",
+        "prefix": "hingeHotKey",
+        "title": "Hinge",
+        "subtitle": "Turns the desktop fold on or off",
+        "code": 4,
+        "modifiers": 6144,
+        "label": "⌃⌥H"
+      }
+    ]
   },
   {
     "id": "windowSweaters",
@@ -383,7 +522,8 @@
     "symbolName": "square.dashed",
     "category": "labs",
     "background": true,
-    "commands": []
+    "commands": [],
+    "hotkeys": []
   },
   {
     "id": "jev",
@@ -393,6 +533,7 @@
     "background": false,
     "commands": [
       "jev"
-    ]
+    ],
+    "hotkeys": []
   }
 ]

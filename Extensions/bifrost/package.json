@@ -6,5 +6,14 @@
   "background": true,
   "commands": [
     "bifrost"
+  ],
+  "hotkeys": [
+    {
+      "id": "bifrost",
+      "prefix": "bifrostHotKey",
+      "title": "Bifrost",
+      "subtitle": "Opens the launcher bar over whatever you are doing",
+      "shortcut": "option+space"
+    }
   ]
 }

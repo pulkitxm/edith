@@ -4,5 +4,14 @@
   "symbolName": "circle.lefthalf.filled",
   "category": "desk",
   "background": true,
-  "commands": []
+  "commands": [],
+  "hotkeys": [
+    {
+      "id": "focusDim",
+      "prefix": "focusDimHotKey",
+      "title": "Focus dim",
+      "subtitle": "Toggles background-window dimming",
+      "shortcut": "option+command+f"
+    }
+  ]
 }

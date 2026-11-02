@@ -13,6 +13,72 @@ const categories = [
   "labs",
 ];
 const commandWord = /^[a-z][a-z0-9-]{0,40}$/;
+const keyCodes = {
+  a: 0,
+  s: 1,
+  d: 2,
+  f: 3,
+  h: 4,
+  g: 5,
+  z: 6,
+  x: 7,
+  c: 8,
+  v: 9,
+  b: 11,
+  q: 12,
+  w: 13,
+  e: 14,
+  r: 15,
+  y: 16,
+  t: 17,
+  o: 31,
+  u: 32,
+  i: 34,
+  p: 35,
+  l: 37,
+  j: 38,
+  k: 40,
+  n: 45,
+  m: 46,
+  space: 49,
+};
+const modifierKeys = [
+  ["control", 4096, "\u2303"],
+  ["option", 2048, "\u2325"],
+  ["shift", 512, "\u21e7"],
+  ["command", 256, "\u2318"],
+];
+
+export function parseShortcut(shortcut, context) {
+  const parts = String(shortcut).split("+");
+  const key = parts.pop();
+  const modifiers = modifierKeys.filter(([name]) => parts.includes(name));
+  if (
+    !Object.hasOwn(keyCodes, key) ||
+    !modifiers.length ||
+    modifiers.length !== parts.length ||
+    new Set(parts).size !== parts.length
+  )
+    throw new Error(`${context}: invalid shortcut ${shortcut}`);
+  return {
+    code: keyCodes[key],
+    modifiers: modifiers.reduce((sum, [, value]) => sum + value, 0),
+    label:
+      modifiers.map(([, , symbol]) => symbol).join("") +
+      (key === "space" ? "\u2423" : key.toUpperCase()),
+  };
+}
+
+function hotkey(declaration, directory) {
+  const keys = ["id", "prefix", "title", "subtitle", "shortcut"];
+  if (
+    Object.keys(declaration).some((key) => !keys.includes(key)) ||
+    keys.some((key) => typeof declaration[key] !== "string" || !declaration[key])
+  )
+    throw new Error(`${directory}: hotkeys need ${keys.join(", ")}`);
+  const { shortcut, ...rest } = declaration;
+  return { ...rest, ...parseShortcut(shortcut, directory) };
+}
 
 export function validateDeclaration(declaration, directory) {
   const keys = [
@@ -22,6 +88,7 @@ export function validateDeclaration(declaration, directory) {
     "category",
     "background",
     "commands",
+    "hotkeys",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
@@ -41,7 +108,12 @@ export function validateDeclaration(declaration, directory) {
     new Set(declaration.commands).size !== declaration.commands.length
   )
     throw new Error(`${directory}: commands must be unique command words`);
-  return declaration;
+  if (!Array.isArray(declaration.hotkeys ?? []))
+    throw new Error(`${directory}: hotkeys must be a list`);
+  return {
+    ...declaration,
+    hotkeys: (declaration.hotkeys ?? []).map((entry) => hotkey(entry, directory)),
+  };
 }
 
 export async function extensionDeclarations(root = process.cwd()) {
@@ -77,6 +149,11 @@ export function orderedIndex(declarations, previous = []) {
 export async function renderIndex(root = process.cwd()) {
   const previous = JSON.parse(await readFile(resolve(root, indexPath), "utf8"));
   const index = orderedIndex(await extensionDeclarations(root), previous);
+  for (const field of ["id", "prefix"]) {
+    const values = index.flatMap(({ hotkeys }) => hotkeys.map((entry) => entry[field]));
+    if (new Set(values).size !== values.length)
+      throw new Error(`Two hotkeys declare the same ${field}`);
+  }
   return `${JSON.stringify(index, null, 2)}\n`;
 }
 

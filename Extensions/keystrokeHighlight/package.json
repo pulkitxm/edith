@@ -4,5 +4,14 @@
   "symbolName": "keyboard.badge.ellipsis",
   "category": "desk",
   "background": true,
-  "commands": []
+  "commands": [],
+  "hotkeys": [
+    {
+      "id": "keystrokeHighlight",
+      "prefix": "keystrokeHighlightHotKey",
+      "title": "Keystroke highlight",
+      "subtitle": "Starts or pauses the on-screen keycaps",
+      "shortcut": "control+option+command+k"
+    }
+  ]
 }

@@ -23,6 +23,29 @@ public enum HostContract {
     }
 }
 
+public struct HostHotKey: Codable, Hashable, Sendable, Identifiable {
+    public let id: String
+    public let prefix: String
+    public let title: String
+    public let subtitle: String
+    public let code: Int
+    public let modifiers: Int
+    public let label: String
+
+    public init(
+        id: String, prefix: String, title: String, subtitle: String, code: Int, modifiers: Int,
+        label: String
+    ) {
+        self.id = id
+        self.prefix = prefix
+        self.title = title
+        self.subtitle = subtitle
+        self.code = code
+        self.modifiers = modifiers
+        self.label = label
+    }
+}
+
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -30,10 +53,11 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let category: String
     public let background: Bool
     public let commands: [String]
+    public let hotkeys: [HostHotKey]
 
     public init(
         id: String, title: String, symbolName: String, category: String,
-        background: Bool = true, commands: [String] = []
+        background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = []
     ) {
         self.id = id
         self.title = title
@@ -41,6 +65,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.category = category
         self.background = background
         self.commands = commands
+        self.hotkeys = hotkeys
     }
 }
 
