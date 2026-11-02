@@ -1,7 +1,7 @@
 import Foundation
 
 public enum MarketplaceConfiguration {
-    public static let workerHostABI = "edith-host-7"
+    public static let workerHostABI = "edith-host-8"
     public static let repository = "pulkitxm/edith"
     public static let hostABI = "host-0bb31de5d335ce2915fc4411"
     public static let publicKey = Data(
