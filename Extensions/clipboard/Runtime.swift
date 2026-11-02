@@ -214,7 +214,7 @@ final class ExtensionRuntime: NSObject {
                     if !fixture {
                         HotKeyRegistrar.configure(
                             .init(
-                                id: "clipboard", carbonID: 7, prefix: "clipboardHotKey",
+                                id: "clipboard", prefix: "clipboardHotKey",
                                 defaultCode: kVK_ANSI_C, defaultModifiers: controlKey | shiftKey))
                         registerHotKey()
                         settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in

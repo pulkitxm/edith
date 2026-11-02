@@ -10,11 +10,11 @@ import Testing
         let modifiers = cmdKey | controlKey | optionKey
         HotKeyRegistrar.configure(
             ExtensionHotKeyBinding(
-                id: "ownership-first", carbonID: 71, prefix: "ownershipFirst" + UUID().uuidString,
+                id: "ownership-first", prefix: "ownershipFirst" + UUID().uuidString,
                 defaultCode: kVK_F16, defaultModifiers: modifiers), image: first)
         HotKeyRegistrar.configure(
             ExtensionHotKeyBinding(
-                id: "ownership-second", carbonID: 72,
+                id: "ownership-second",
                 prefix: "ownershipSecond" + UUID().uuidString, defaultCode: kVK_F17,
                 defaultModifiers: modifiers), image: second)
         defer { HotKeyRegistrar.shutdown(image: second) }
@@ -27,12 +27,13 @@ import Testing
         HotKeyRegistrar.shutdown(image: first)
         #expect(!HotKeyRegistrar.isRegistered("ownership-first"))
         #expect(HotKeyRegistrar.isRegistered("ownership-second"))
-        #expect(try press(71) == eventNotHandledErr)
-        #expect(try press(72) == noErr)
+        #expect(try press("ownership-first") == eventNotHandledErr)
+        #expect(try press("ownership-second") == noErr)
         #expect(pressed == ["second"])
     }
 
-    private func press(_ id: UInt32) throws -> OSStatus {
+    private func press(_ name: String) throws -> OSStatus {
+        let id = try #require(HotKeyRegistrar.carbonID(name))
         var reference: EventRef?
         #expect(
             CreateEvent(

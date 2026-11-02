@@ -3,16 +3,12 @@ import Foundation
 
 public struct ExtensionHotKeyBinding {
     public let id: String
-    public let carbonID: UInt32
     public let prefix: String
     public let defaultCode: Int
     public let defaultModifiers: Int
 
-    public init(
-        id: String, carbonID: UInt32, prefix: String, defaultCode: Int, defaultModifiers: Int
-    ) {
+    public init(id: String, prefix: String, defaultCode: Int, defaultModifiers: Int) {
         self.id = id
-        self.carbonID = carbonID
         self.prefix = prefix
         self.defaultCode = defaultCode
         self.defaultModifiers = defaultModifiers
@@ -31,6 +27,7 @@ public enum HotKeyRegistrar {
     private static var references: [String: EventHotKeyRef] = [:]
     private static var combinations: [String: Combination] = [:]
     private static var owners: [String: UInt] = [:]
+    private static var carbonIDs: [String: UInt32] = [:]
     private static var handler: EventHandlerRef?
 
     public static func configure(
@@ -42,7 +39,8 @@ public enum HotKeyRegistrar {
 
     @discardableResult
     public static func install(
-        _ id: String, image: UnsafeRawPointer = #dsohandle, action: @escaping () -> Void
+        _ id: String, defaults explicitDefaults: UserDefaults? = nil,
+        image: UnsafeRawPointer = #dsohandle, action: @escaping () -> Void
     ) -> Bool {
         guard let binding = bindings[id] else {
             NSLog("Edith has no shortcut configured for %@", id)
@@ -52,7 +50,7 @@ public enum HotKeyRegistrar {
             NSLog("Edith could not listen for shortcuts for %@", id)
             return false
         }
-        let defaults = ExtensionScope.resolve(image).defaults()
+        let defaults = explicitDefaults ?? ExtensionScope.resolve(image).defaults()
         let code = defaults.object(forKey: binding.prefix + "Code") as? Int ?? binding.defaultCode
         let modifiers =
             defaults.object(forKey: binding.prefix + "Mods") as? Int ?? binding.defaultModifiers
@@ -61,10 +59,12 @@ public enum HotKeyRegistrar {
             actions[id] = action
             return true
         }
+        let carbonID = carbonIDs[id] ?? UInt32(carbonIDs.count + 1)
+        carbonIDs[id] = carbonID
         var reference: EventHotKeyRef?
         let result = RegisterEventHotKey(
             UInt32(clamping: code), UInt32(clamping: modifiers),
-            EventHotKeyID(signature: OSType(0x4544_4954), id: binding.carbonID),
+            EventHotKeyID(signature: OSType(0x4544_4954), id: carbonID),
             GetApplicationEventTarget(), 0, &reference)
         guard result == noErr, let reference else {
             NSLog("Edith could not register the %@ shortcut (status %d)", id, Int(result))
@@ -78,6 +78,15 @@ public enum HotKeyRegistrar {
     }
 
     public static func isRegistered(_ id: String) -> Bool { references[id] != nil }
+
+    public static func carbonID(_ id: String) -> UInt32? { carbonIDs[id] }
+
+    @discardableResult
+    public static func trigger(_ id: String) -> Bool {
+        guard references[id] != nil, let action = actions[id] else { return false }
+        action()
+        return true
+    }
 
     public static func clear(_ id: String) {
         if let reference = references.removeValue(forKey: id) { UnregisterEventHotKey(reference) }
@@ -126,11 +135,8 @@ public enum HotKeyRegistrar {
     }
 
     private static func dispatch(_ carbonID: UInt32) -> Bool {
-        guard let binding = bindings.values.first(where: { $0.carbonID == carbonID }),
-            let action = actions[binding.id]
-        else { return false }
-        action()
-        return true
+        guard let id = carbonIDs.first(where: { $0.value == carbonID })?.key else { return false }
+        return trigger(id)
     }
 }
 

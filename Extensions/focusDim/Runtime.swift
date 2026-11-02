@@ -118,7 +118,7 @@ final class ExtensionRuntime: NSObject {
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
-                    id: "focusDim", carbonID: 4, prefix: "focusDimHotKey",
+                    id: "focusDim", prefix: "focusDimHotKey",
                     defaultCode: kVK_ANSI_F,
                     defaultModifiers: cmdKey | optionKey))
         }
