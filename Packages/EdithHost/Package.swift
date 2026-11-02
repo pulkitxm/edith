@@ -4,10 +4,7 @@ import PackageDescription
 let package = Package(
     name: "EdithHost",
     platforms: [.macOS(.v14)],
-    products: [
-        .executable(name: "EdithHost", targets: ["EdithHost"]),
-        .executable(name: "HostNativeTaskHarness", targets: ["HostNativeTaskHarness"]),
-    ],
+    products: [.executable(name: "EdithHost", targets: ["EdithHost"])],
     dependencies: [
         .package(path: "../ExtensionMarketplace"),
         .package(path: "../ExtensionSupport"),
@@ -34,9 +31,6 @@ let package = Package(
                     ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
                     .when(configuration: .release))
             ]),
-        .executableTarget(
-            name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],
-            path: "Tests/NativeTaskHarness"),
         .target(
             name: "HostAccessibilityFixtureSupport", path: "Tests/HostAccessibilityFixtureSupport"),
         .target(
