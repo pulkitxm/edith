@@ -119,6 +119,9 @@ await mkdir(join(contents, "MacOS"), { recursive: true });
 await mkdir(join(contents, "Frameworks"), { recursive: true });
 await mkdir(join(contents, "Resources"), { recursive: true });
 await copyFile(join(products, "EdithHost"), executable);
+const kit = join(contents, "Frameworks/libEdithExtensionKit.dylib");
+await copyFile(join(products, "libEdithExtensionKit.dylib"), kit);
+removeCopiedCodeSignature(kit);
 const sparkle = join(contents, "Frameworks/Sparkle.framework");
 execFileSync("/bin/cp", ["-RL", join(products, "Sparkle.framework"), sparkle]);
 await rm(join(sparkle, "Versions"), { recursive: true, force: true });
@@ -175,6 +178,11 @@ await copyFile(
 await copyFile(
   join(packageDirectory, "Sources/EdithHostCore/Resources/index.json"),
   join(contents, "Resources/index.json"),
+);
+await cp(
+  join(products, "ExtensionSupport_EdithExtensionDocuments.bundle"),
+  join(contents, "Resources/ExtensionSupport_EdithExtensionDocuments.bundle"),
+  { recursive: true, dereference: false },
 );
 await cp(
   join(products, "EdithHost_EdithHost.bundle"),
@@ -237,7 +245,7 @@ execFileSync("install_name_tool", [
   "@executable_path/../../../../Frameworks",
   executable,
 ]);
-for (const file of [executable]) {
+for (const file of [kit, executable]) {
   const commands = execFileSync("otool", ["-l", file], { encoding: "utf8" });
   for (const match of commands.matchAll(
     /cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (\S+) \(offset/g,
@@ -249,7 +257,7 @@ for (const file of [executable]) {
     )
       execFileSync("install_name_tool", ["-delete_rpath", match[1], file]);
   }
-  execFileSync("strip", ["-rSTx", file]);
+  execFileSync("strip", file === kit ? ["-x", file] : ["-rSTx", file]);
   execFileSync("codesign", ["--force", "--sign", "-", file], {
     stdio: "inherit",
   });
@@ -301,7 +309,8 @@ async function installedBytes(directory) {
   }
   return total;
 }
-const bytes = await installedBytes(destination);
+const kitBytes = (await stat(kit)).size;
+const bytes = (await installedBytes(destination)) - kitBytes;
 assert.equal(
   execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   sourceCommit,
@@ -339,10 +348,14 @@ assert(
   bytes < 10_000_000,
   `The minimal host exceeds its 10 MB size limit: ${bytes}`,
 );
+assert(
+  kitBytes < 14_000_000,
+  `The shared extension kit exceeds its 14 MB size limit: ${kitBytes}`,
+);
 const index = JSON.parse(
   await readFile(join(contents, "Resources/index.json"), "utf8"),
 );
 assert(index.length >= 35);
 process.stdout.write(
-  `${JSON.stringify({ app: "Edith.app", installedBytes: bytes, extensionPayloadBytes: 0, indexedExtensions: index.length, signature: "verified", dependencyBoundary: "passed" }, null, 2)}\n`,
+  `${JSON.stringify({ app: "Edith.app", installedBytes: bytes, extensionKitBytes: kitBytes, extensionPayloadBytes: 0, indexedExtensions: index.length, signature: "verified", dependencyBoundary: "passed" }, null, 2)}\n`,
 );
