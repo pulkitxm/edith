@@ -12,6 +12,13 @@ private final class SyntheticService: ExtensionService {
     var teardowns = 0
     var invocations: [String] = []
     var requiresOwnedDataDirectory = false
+    var preparesForDisable = false
+    var disablePreparations = 0
+
+    func prepareDisable() async throws {
+        disablePreparations += 1
+        if disablePreparations > 1 { throw ExtensionPeerError.unavailable }
+    }
 
     var startInputs: [String] = []
 
@@ -120,6 +127,28 @@ private let syntheticScope = [
                 ])) == false)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
         #expect(service.starts == 2)
+    }
+
+    @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
+        let (plain, _) = runtime()
+        #expect(!plain.responds(to: selector))
+        let (runtime, service) = runtime()
+        service.preparesForDisable = true
+        #expect(runtime.responds(to: selector))
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let first = await withCheckedContinuation { continuation in
+            runtime.prepareDisable { continuation.resume(returning: $0) }
+        }
+        #expect(first == nil)
+        #expect(runtime.isSuspended && service.cancellations == 1 && service.drains == 1)
+        #expect(await invoke(runtime, "synthetic.late")?.hasPrefix("error:") == true)
+        let second = await withCheckedContinuation { continuation in
+            runtime.prepareDisable { continuation.resume(returning: $0) }
+        }
+        #expect(second != nil)
+        await runtime.stop()
+        #expect(service.teardowns == 1)
     }
 
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {

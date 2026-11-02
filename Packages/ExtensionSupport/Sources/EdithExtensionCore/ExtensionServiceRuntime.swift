@@ -11,6 +11,8 @@ public struct ExtensionStartContext {
 @MainActor
 public protocol ExtensionService: AnyObject {
     var requiresOwnedDataDirectory: Bool { get }
+    var preparesForDisable: Bool { get }
+    func prepareDisable() async throws
     func start() -> Bool
     func start(_ context: ExtensionStartContext) -> Bool
     func synchronize()
@@ -27,6 +29,8 @@ public protocol ExtensionService: AnyObject {
 
 extension ExtensionService {
     public var requiresOwnedDataDirectory: Bool { false }
+    public var preparesForDisable: Bool { false }
+    public func prepareDisable() async throws {}
     public func start() -> Bool { true }
     public func start(_ context: ExtensionStartContext) -> Bool { start() }
     public func synchronize() {}
@@ -98,6 +102,33 @@ public final class ExtensionServiceRuntime: NSObject {
             await pending.value
             withExtendedLifetime(self) { completion() }
         }
+    }
+
+    @objc(prepareDisableWithCompletion:)
+    public func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        let suspended = beginSuspension()
+        Task { [self] in
+            await suspended.value
+            let failure: NSError?
+            do {
+                try await service?.prepareDisable()
+                failure = nil
+            } catch {
+                failure = error as NSError
+            }
+            withExtendedLifetime(self) { completion(failure) }
+        }
+    }
+
+    public func stop() async {
+        await beginTeardown().value
+    }
+
+    public override func responds(to selector: Selector!) -> Bool {
+        if selector == NSSelectorFromString("prepareDisableWithCompletion:") {
+            return service?.preparesForDisable == true
+        }
+        return super.responds(to: selector)
     }
 
     @objc public func execute(_ input: NSDictionary) -> NSObject {
