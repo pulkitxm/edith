@@ -99,6 +99,10 @@ public final class ExtensionServiceRuntime: NSObject {
     @objc public func invoke(
         _ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void
     ) {
+        guard request["hostedFunctionalFixture"] == nil else {
+            completion(nil, "The functional fixture is unavailable.")
+            return
+        }
         let token = (request["token"] as? String).flatMap(UUID.init(uuidString:))
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.teardownTask == nil, let service = self.service, let token else {

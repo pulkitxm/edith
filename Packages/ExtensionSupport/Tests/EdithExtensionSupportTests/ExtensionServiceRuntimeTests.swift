@@ -237,6 +237,15 @@ private let syntheticScope = [
         let token = UUID()
         #expect(await invoke(runtime, "synthetic.ping", token: token) == "synthetic.ping")
         #expect(service.tokens == [token])
+        let fixture = await withCheckedContinuation { continuation in
+            runtime.invoke(
+                [
+                    "token": UUID().uuidString, "command": "synthetic.fixture",
+                    "payload": Data(), "hostedFunctionalFixture": ["owner": "synthetic"],
+                ] as NSDictionary
+            ) { data, message in continuation.resume(returning: data == nil && message != nil) }
+        }
+        #expect(fixture && service.tokens == [token])
         let toggled = runtime.execute(["operation": "toggle"]) as? NSDictionary
         #expect(toggled?["toggled"] as? Bool == true)
         #expect(ok(runtime.execute(["operation": "unknown"])) == false)
