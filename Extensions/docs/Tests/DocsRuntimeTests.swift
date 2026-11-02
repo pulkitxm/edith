@@ -6,7 +6,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct DocsRuntimeTests {
     @Test func stoppedRuntimeCannotAllocateOrAcceptEngineWork() async {
-        let runtime = ExtensionRuntime()
+        let runtime = makeDocsRuntime()
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
@@ -22,7 +22,7 @@ import Testing
         DocsCopyResetWork.beginSuspension()
         await DocsCopyResetWork.drain()
         DocsCopyResetWork.enable()
-        let runtime = ExtensionRuntime()
+        let runtime = makeDocsRuntime()
         let lease = DocsSharedResourceLease()
         ExtensionUIResources.bind(lease, to: runtime)
         _ = runtime.execute(["operation": "stopUI"])

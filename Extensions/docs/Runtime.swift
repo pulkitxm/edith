@@ -5,173 +5,124 @@ import EdithExtensionUI
 import SwiftUI
 
 @MainActor
-final class ExtensionRuntime: NSObject {
+final class DocsService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var browser: DocsBrowser?
     private var uiPresentations: [UUID: (browser: DocsBrowser, client: ExtensionEngineClient)] = [:]
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
-    private var stopped = false
-    private var activeCalls = 0
-    private var suspended = false
-    private var suspension: Task<Void, Never>?
-    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, !self.stopped, let browser = self.browser else {
-                throw ExtensionPeerError.unavailable
-            }
-            self.activeCalls += 1
-            defer { self.activeCalls -= 1 }
-            if command == "docs.cli.catalog" {
-                return try ExtensionCLICatalog.data(
-                    DocsCommandGroup.self, owner: "docs", payload: payload, streaming: true)
-            }
-            if command.hasPrefix("docs.cli.") {
-                if self.cliStreams == nil {
-                    self.cliStreams = try ExtensionCLIStreams(owner: "docs")
-                }
-                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try await DocsCLIExecution.stream(
-                    streams, operation: command, payload: payload, browser: browser)
-            }
-            if command == "docs.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await DocsCLIExecution.run(request, browser: browser))
-            }
-            if command.hasPrefix("docs.ui.") {
-                return try await DocsUIBridge.execute(command, payload: payload, browser: browser)
-            }
-            return try await DocsSurface.execute(command, payload: payload, browser: browser)
-        }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { browser != nil }
+
+    func start() -> Bool {
+        if browser == nil { browser = DocsBrowser() }
+        return true
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        suspended = true
-        ExtensionUIResources.cleanup(of: self, key: "copyReset") {
+    func synchronize() { _ = DocsPeerDecider.configured() }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let browser else { throw ExtensionPeerError.unavailable }
+        if command == "docs.cli.catalog" {
+            return try ExtensionCLICatalog.data(
+                DocsCommandGroup.self, owner: "docs", payload: payload, streaming: true)
+        }
+        if command.hasPrefix("docs.cli.") {
+            if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "docs") }
+            guard let streams = cliStreams else { throw ExtensionPeerError.unavailable }
+            return try await DocsCLIExecution.stream(
+                streams, operation: command, payload: payload, browser: browser)
+        }
+        if command == "docs.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await DocsCLIExecution.run(request, browser: browser))
+        }
+        if command.hasPrefix("docs.ui.") {
+            return try await DocsUIBridge.execute(command, payload: payload, browser: browser)
+        }
+        return try await DocsSurface.execute(command, payload: payload, browser: browser)
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard uiPresentations.count < 8, let client = configuration.engineClient else {
+            return false
+        }
+        if let previous = uiPresentations[client.presentationID] {
+            previous.browser.cancelPendingWork()
+            previous.client.invalidate()
+        }
+        DocsCopyResetWork.enable()
+        uiPresentations[client.presentationID] = (
+            DocsBrowser(remote: DocsUIBridge(client: client)), client
+        )
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let browser = uiPresentations[presentation]?.browser else { return nil }
+        return NSHostingController(rootView: ExtensionPageHost { DocsScreen(browser: browser) })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        ExtensionUIResources.cleanup(of: runtime, key: "copyReset") {
             DocsCopyResetWork.beginSuspension()
         }
-        let browser = browser
-        let uiBrowsers = uiPresentations.values.map(\.browser)
-        let streams = cliStreams
-        browser?.cancelPendingWork()
-        uiBrowsers.forEach { $0.cancelPendingWork() }
-        streams?.stop()
-        if suspension == nil {
-            let retired = Array(uiRetirements.values)
-            suspension = Task { [self, browser, uiBrowsers, streams] in
-                await commands.suspendAndWait()
-                if ExtensionUIResources.canDrainSharedResources(of: self) {
+        let retired = uiPresentations.values
+        uiPresentations = [:]
+        return retired.map { presentation in
+            let browser = presentation.browser
+            browser.cancelPendingWork()
+            presentation.client.invalidate()
+            return Task { [runtime, browser] in
+                await browser.drain()
+                if ExtensionUIResources.canDrainSharedResources(of: runtime) {
                     await DocsCopyResetWork.drain()
                 }
-                await browser?.drain()
-                for uiBrowser in uiBrowsers { await uiBrowser.drain() }
-                await streams?.stopAndWait()
-                for task in retired { await task.value }
+                browser.shutdown()
             }
-        }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
         }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands(completion: {})
-        stopped = true
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        commands.shutdown()
-        let browser = browser
+    func cancelPendingWork() {
+        ExtensionUIResources.cleanup(of: runtime, key: "copyReset") {
+            DocsCopyResetWork.beginSuspension()
+        }
         browser?.cancelPendingWork()
-        Task { [self, browser, streams] in
-            await suspension?.value
-            await browser?.drain()
-            while activeCalls > 0 { await Task.yield() }
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            browser?.shutdown()
-            for task in Array(uiRetirements.values) { await task.value }
-            completion()
-        }
+        uiPresentations.values.forEach { $0.browser.cancelPendingWork() }
+        cliStreams?.stop()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "docs", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended, uiRetirements.isEmpty, uiPresentations.count < 8 else {
-                return ["ok": false] as NSDictionary
-            }
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "docs", let client = configuration.engineClient
-            else { return ["ok": false] as NSDictionary }
-            if let previous = uiPresentations[client.presentationID] {
-                previous.browser.cancelPendingWork()
-                previous.client.invalidate()
-            }
-            DocsCopyResetWork.enable()
-            uiPresentations[client.presentationID] = (
-                DocsBrowser(remote: DocsUIBridge(client: client)), client
-            )
-        case "stopUI":
-            ExtensionUIResources.cleanup(of: self, key: "copyReset") {
-                DocsCopyResetWork.beginSuspension()
-            }
-            let retired = uiPresentations.values
-            uiPresentations = [:]
-            for presentation in retired {
-                let browser = presentation.browser
-                browser.cancelPendingWork()
-                let id = UUID()
-                uiRetirements[id] = Task { [self, browser] in
-                    await browser.drain()
-                    if ExtensionUIResources.canDrainSharedResources(of: self) {
-                        await DocsCopyResetWork.drain()
-                    }
-                    browser.shutdown()
-                    uiRetirements[id] = nil
-                }
-                presentation.client.invalidate()
-            }
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            guard !stopped, let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if browser == nil { browser = DocsBrowser() }
-        case "view":
-            guard let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
-                let browser = uiPresentations[id]?.browser
-            else { return ["ok": false] as NSDictionary }
-            return NSHostingController(rootView: ExtensionPageHost { DocsScreen(browser: browser) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": _ = DocsPeerDecider.configured()
-        case "stop":
-            prepareToStop(completion: {})
-            browser = nil
-        case "status": return ["ok": true, "running": !stopped && browser != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
+    func drain() async {
+        if ExtensionUIResources.canDrainSharedResources(of: runtime) {
+            await DocsCopyResetWork.drain()
         }
-        return ["ok": true] as NSDictionary
+        await browser?.drain()
+        for presentation in uiPresentations.values { await presentation.browser.drain() }
+        await cliStreams?.stopAndWait()
     }
+
+    func teardown() async {
+        let streams = cliStreams
+        cliStreams = nil
+        await streams?.stopAndWait()
+        browser?.shutdown()
+        browser = nil
+    }
+}
+
+@MainActor
+func makeDocsRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(id: "docs", role: "app", bundle: Bundle(for: BundleAnchor.self))
+    { DocsService(runtime: $0) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeDocsRuntime()).toOpaque())
         })
 }
