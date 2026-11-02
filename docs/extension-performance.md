@@ -86,3 +86,31 @@ thread (`startMs`), against 6 to 110 ms when the same package starts at launch.
 - Each package embeds its own copy of the shared support libraries, which
   these timings do not show directly; package size and duplicated classes are
   tracked separately.
+
+## After on-demand start
+
+Measured on 2026-11-02 from this branch (host ABI `edith-host-8`, shared
+extension kit), development build, same Mac and the same 17 extensions
+installed and enabled. Median of five cold launches with the default Home
+layout:
+
+| Extension | Role | verifyMs | startMs | readyAfterLaunchMs |
+| --- | --- | ---: | ---: | ---: |
+| herdr | app | 26.8 | 13.9 | 609.9 |
+| keepAwake | helper | 7.4 | 4.2 | 585.5 |
+| notchShelf | helper | 16.5 | 5.8 | 608.5 |
+| system | app | 39.5 | 20.5 | 633.1 |
+| systemStats | helper | 63.7 | 13.6 | 650.0 |
+
+Idle until first use: blitztree, colorPicker, database, docs, emoji, jev,
+latex, plugins, quinjet, seoAudit, studio and terminal. Keep Awake and System
+start because their actions card is on the default Home layout.
+
+Totals: 57 ms of main-thread start work (baseline 288 ms), and every launch
+extension ready 650 ms after launch (baseline 1012 ms).
+
+First opens in the background, median of five cold launches, now including
+starting the idle extension: docs 51 ms, database 68 ms, studio 84 ms
+(`firstFrameMs`; baseline 48, 75 and 111 ms with the extension already
+running). Once an extension is running, the same opens take docs 16 ms and
+studio 79 ms. Every install above became active without a restart.
