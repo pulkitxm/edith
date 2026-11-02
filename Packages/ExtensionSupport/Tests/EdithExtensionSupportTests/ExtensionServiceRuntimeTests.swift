@@ -30,9 +30,24 @@ private final class SyntheticService: ExtensionService {
         return context.input["policy"] as? String != "refused"
     }
 
+    var allowsUIDuringRetirement = false
+    var statusDetails: [String: Any] = [:]
+    var refusedStop: UUID?
+    var retirement: Task<Void, Never>?
+    var configurations = 0
+
+    func acceptsStopUI(for presentation: UUID?) -> Bool {
+        presentation == nil || presentation != refusedStop
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        configurations += 1
+        return true
+    }
+
     func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
         stoppedPresentations.append(presentation)
-        return []
+        return retirement.map { [$0] } ?? []
     }
 
     func start(_ context: ExtensionHostContext) -> Bool {
@@ -41,12 +56,38 @@ private final class SyntheticService: ExtensionService {
         return !context.isHostedFunctionalFixture
     }
 
+    var tokens: [UUID] = []
+
+    func invoke(_ command: String, token: UUID, payload: Data) async throws -> Data {
+        tokens.append(token)
+        return try await invoke(command, payload: payload)
+    }
+
     func invoke(_ command: String, payload: Data) async throws -> Data {
         invocations.append(command)
         return Data(command.utf8)
     }
 
-    func cancelPendingWork() { cancellations += 1 }
+    var events: [String] = []
+    var preparesUIToClose = false
+    var viewed: [String] = []
+
+    func cancelPendingWork() {
+        cancellations += 1
+        events.append("cancel")
+    }
+
+    func finishBeforeStop() async { events.append("finish") }
+
+    func prepareUIToClose(_ presentation: UUID) async -> String? {
+        events.append("close")
+        return presentation.uuidString.hasPrefix("0") ? "busy" : nil
+    }
+
+    func view(for presentation: UUID, context: ExtensionHostContext) -> NSViewController? {
+        viewed.append(context.input["route"] as? String ?? "")
+        return nil
+    }
     func drain() async { drains += 1 }
     func teardown() async { teardowns += 1 }
 
@@ -82,11 +123,13 @@ private let syntheticScope = [
         return (runtime, service)
     }
 
-    private func invoke(_ runtime: ExtensionServiceRuntime, _ command: String) async -> String? {
+    private func invoke(
+        _ runtime: ExtensionServiceRuntime, _ command: String, token: UUID = UUID()
+    ) async -> String? {
         await withCheckedContinuation { continuation in
             runtime.invoke(
                 [
-                    "token": UUID().uuidString, "command": command, "payload": Data(),
+                    "token": token.uuidString, "command": command, "payload": Data(),
                 ] as NSDictionary
             ) { data, message in
                 continuation.resume(
@@ -106,7 +149,7 @@ private let syntheticScope = [
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": "other"])) == false)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
-        #expect(service.starts == 1)
+        #expect(service.starts == 2)
         let status = runtime.execute(["operation": "status"]) as? NSDictionary
         #expect(status?["running"] as? Bool == true)
     }
@@ -149,6 +192,52 @@ private let syntheticScope = [
         #expect(service.stoppedPresentations == [presentation, nil])
     }
 
+    @Test func stopUIRefusesMalformedAndUnacceptedPresentations() {
+        let (runtime, service) = runtime()
+        let refused = UUID()
+        service.refusedStop = refused
+        #expect(ok(runtime.execute(["operation": "stopUI", "presentationID": "bad"])) == false)
+        #expect(
+            ok(runtime.execute(["operation": "stopUI", "presentationID": refused.uuidString]))
+                == false)
+        #expect(service.stoppedPresentations.isEmpty)
+        #expect(ok(runtime.execute(["operation": "stopUI"])) == true)
+        #expect(service.stoppedPresentations == [nil])
+    }
+
+    @Test func statusCarriesServiceDetailsUnderTheRuntimeFields() {
+        let (runtime, service) = runtime()
+        service.statusDetails = ["preventsQuit": true, "ok": false]
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let status = runtime.execute(["operation": "status"]) as? NSDictionary
+        #expect(status?["preventsQuit"] as? Bool == true)
+        #expect(status?["ok"] as? Bool == true)
+        #expect(status?["running"] as? Bool == true)
+    }
+
+    @Test func configureUIWaitsForRetirementsUnlessTheServiceAllowsOverlap() {
+        let (runtime, service) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let (stream, finish) = AsyncStream<Void>.makeStream()
+        service.retirement = Task { for await _ in stream {} }
+        _ = runtime.execute(["operation": "stopUI"])
+        let configure: () -> Bool? = {
+            self.ok(
+                runtime.execute([
+                    "operation": "configureUI", "inProcess": true, "remoteUI": true,
+                    "hostIdentifier": "com.pulkit.edith", "extensionID": "synthetic",
+                    "defaultsSuite": "com.pulkit.edith.shared", "uiOnly": true,
+                    "location": "settings",
+                    "presentationID": UUID().uuidString,
+                ]))
+        }
+        #expect(configure() == false)
+        service.allowsUIDuringRetirement = true
+        #expect(configure() == true)
+        #expect(service.configurations == 1)
+        finish.finish()
+    }
+
     @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {
         let selector = NSSelectorFromString("prepareDisableWithCompletion:")
         let (plain, _) = runtime()
@@ -171,10 +260,53 @@ private let syntheticScope = [
         #expect(service.teardowns == 1)
     }
 
+    @Test func stopFinishesServiceWorkBeforeSuspendingIt() async {
+        let (runtime, service) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        await runtime.stop()
+        #expect(Array(service.events.prefix(2)) == ["finish", "cancel"])
+        #expect(service.teardowns == 1)
+    }
+
+    @Test func closePreparationIsOfferedOnlyWhenDeclaredAndViewsSeeTheHostInput() async {
+        let selector = NSSelectorFromString("prepareUIToClose:completion:")
+        let (runtime, service) = runtime()
+        #expect(!runtime.responds(to: selector))
+        service.preparesUIToClose = true
+        #expect(runtime.responds(to: selector))
+        let busy = await withCheckedContinuation { continuation in
+            runtime.prepareUIToClose("00000000-0000-0000-0000-000000000001") {
+                continuation.resume(returning: $0 as String?)
+            }
+        }
+        #expect(busy == "busy")
+        let invalid = await withCheckedContinuation { continuation in
+            runtime.prepareUIToClose("not-a-presentation") {
+                continuation.resume(returning: $0 as String?)
+            }
+        }
+        #expect(invalid != nil && service.events == ["close"])
+        _ = runtime.execute([
+            "operation": "view", "presentationID": UUID().uuidString, "route": "notch",
+        ])
+        #expect(service.viewed == ["notch"])
+    }
+
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {
         let (runtime, service) = runtime()
         _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
-        #expect(await invoke(runtime, "synthetic.ping") == "synthetic.ping")
+        let token = UUID()
+        #expect(await invoke(runtime, "synthetic.ping", token: token) == "synthetic.ping")
+        #expect(service.tokens == [token])
+        let fixture = await withCheckedContinuation { continuation in
+            runtime.invoke(
+                [
+                    "token": UUID().uuidString, "command": "synthetic.fixture",
+                    "payload": Data(), "hostedFunctionalFixture": ["owner": "synthetic"],
+                ] as NSDictionary
+            ) { data, message in continuation.resume(returning: data == nil && message != nil) }
+        }
+        #expect(fixture && service.tokens == [token])
         let toggled = runtime.execute(["operation": "toggle"]) as? NSDictionary
         #expect(toggled?["toggled"] as? Bool == true)
         #expect(ok(runtime.execute(["operation": "unknown"])) == false)
