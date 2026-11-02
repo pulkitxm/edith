@@ -39,7 +39,7 @@ public final class ExtensionNativeLibrary: @unchecked Sendable {
         try verify(url)
         guard let bundle = Bundle(url: url),
             bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(id).\(role.rawValue)",
-            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI,
+            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == package.hostABI,
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 == package.version,
             let executable = bundle.executableURL,

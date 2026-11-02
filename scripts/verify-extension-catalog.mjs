@@ -2,6 +2,7 @@ import { createPublicKey, verify } from "node:crypto";
 import { mkdtemp, open, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { acceptsHostABI } from "./extension-host-abi.mjs";
 import { validateMinimumSystemVersion } from "./extension-system-version.mjs";
 
 export const maximumEnvelopeBytes = 3 * 1024 ** 2;
@@ -104,7 +105,7 @@ export function validateCatalog(catalog) {
         catalog.packages.some(
           (dependency) =>
             dependency.id === id &&
-            dependency.hostABI === entry.hostABI &&
+            acceptsHostABI(dependency.hostABI, entry.hostABI) &&
             dependency.architecture === entry.architecture,
         ),
       )

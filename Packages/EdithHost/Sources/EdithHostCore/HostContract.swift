@@ -6,6 +6,10 @@ public enum HostContract {
     public static let version = 1
     public static let compatibility = MarketplaceConfiguration.workerHostABI
 
+    public static func accepts(_ hostABI: String) -> Bool {
+        ExtensionHostABI.accepts(hostABI, host: compatibility)
+    }
+
     public static func permitsLaunching(
         identifier: String?, bundleURL: URL,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser

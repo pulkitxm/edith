@@ -39,8 +39,8 @@ public enum HostContainedRole {
             let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String,
             !version.isEmpty, version.utf8.count <= 80,
-            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
-                == HostContract.compatibility,
+            (bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String).map(
+                HostContract.accepts) == true,
             let provenance = bundle.object(forInfoDictionaryKey: "EdithExecutableProvenance")
                 as? String,
             provenance.count == 64, provenance.allSatisfy({ $0.isHexDigit })
@@ -51,8 +51,8 @@ public enum HostContainedRole {
         try verify(url, fixture: fixture)
         guard let payload = Bundle(url: url),
             payload.bundleIdentifier == "com.pulkit.edith.extensions.\(owner).\(role)",
-            payload.object(forInfoDictionaryKey: "EdithHostABI") as? String
-                == HostContract.compatibility,
+            (payload.object(forInfoDictionaryKey: "EdithHostABI") as? String).map(
+                HostContract.accepts) == true,
             payload.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
                 == version,
             let executable = payload.executableURL,
@@ -67,7 +67,7 @@ public enum HostContainedRole {
         let description = try execute(object, ["operation": "describe"])
         guard description["id"] as? String == owner, description["role"] as? String == role,
             description["version"] as? String == version,
-            description["hostABI"] as? String == HostContract.compatibility
+            (description["hostABI"] as? String).map(HostContract.accepts) == true
         else { throw HostContainedRoleError.invalidDescription }
         let operation = arguments == ["--contained-extension-probe"] ? "probe" : "start"
         let result = try execute(

@@ -1551,3 +1551,42 @@ describe("pull request candidate planning", () => {
     });
   });
 });
+
+test("a host version inside the supported range keeps published packages", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-abi-range-"));
+  const entry = (hostABI) => ({
+    id: "music",
+    version: "1.0.7",
+    hostABI,
+    inputs: ["Extensions/music"],
+    sharedInputs: [],
+    dependencies: [],
+    usesHostRuntime: false,
+  });
+  try {
+    await mkdir(join(root, "Extensions/music"), { recursive: true });
+    await writeFile(join(root, "Extensions/music/Runtime.swift"), "music");
+    const current = entry("edith-host-8");
+    const published = [
+      {
+        id: "music",
+        version: "1.0.7",
+        hostABI: "edith-host-8",
+        architecture: "arm64",
+        sourceFingerprint: await extensionFingerprint(root, current, [current]),
+      },
+    ];
+    const next = entry("edith-host-9");
+    expect(await planUnpublishedExtensions(root, [next], published)).toEqual(
+      [],
+    );
+    await writeFile(join(root, "Extensions/music/Runtime.swift"), "changed");
+    expect(
+      (await planUnpublishedExtensions(root, [next], published)).map(
+        ({ id, version }) => `${id}@${version}`,
+      ),
+    ).toEqual(["music@1.0.8"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

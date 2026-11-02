@@ -54,8 +54,10 @@ struct HostPrivilegedCaller {
         guard Self.valid(hostIdentifier), Self.valid(team) else {
             throw MarketplaceError.invalidSignature
         }
+        let abis = ExtensionHostABI.accepted(host: HostContract.compatibility)
+            .map { "info[EdithHostABI] = \"\($0)\"" }.joined(separator: " or ")
         return
-            "(identifier \"\(hostIdentifier)\" or (info[EdithHostIdentifier] = \"\(hostIdentifier)\" and info[EdithHostABI] = \"\(HostContract.compatibility)\")) and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\""
+            "(identifier \"\(hostIdentifier)\" or (info[EdithHostIdentifier] = \"\(hostIdentifier)\" and (\(abis)))) and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\""
     }
 
     static func read(processIdentifier: pid_t, hostIdentifier: String, team: String) throws

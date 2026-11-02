@@ -35,6 +35,34 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+public enum ExtensionHostABI {
+    static let prefix = "edith-host-"
+
+    static func number(_ abi: String) -> Int? {
+        guard abi.hasPrefix(prefix) else { return nil }
+        return Int(abi.dropFirst(prefix.count))
+    }
+
+    public static func accepts(
+        _ package: String, host: String,
+        minimum: String = MarketplaceConfiguration.minimumWorkerHostABI
+    ) -> Bool {
+        guard let packageNumber = number(package), let hostNumber = number(host),
+            let minimumNumber = number(minimum), minimumNumber <= hostNumber
+        else { return package == host }
+        return (minimumNumber...hostNumber).contains(packageNumber)
+    }
+
+    public static func accepted(
+        host: String, minimum: String = MarketplaceConfiguration.minimumWorkerHostABI
+    ) -> [String] {
+        guard let hostNumber = number(host), let minimumNumber = number(minimum),
+            minimumNumber <= hostNumber
+        else { return [host] }
+        return (minimumNumber...hostNumber).map { prefix + String($0) }
+    }
+}
+
 public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let version: String
@@ -78,7 +106,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
     public func isCompatible(
         hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion
     ) -> Bool {
-        self.hostABI == hostABI && self.architecture == architecture
+        ExtensionHostABI.accepts(self.hostABI, host: hostABI) && self.architecture == architecture
             && systemVersion >= minimumSystemVersion
     }
 
@@ -144,7 +172,8 @@ public struct ExtensionCatalog: Codable, Equatable, Sendable {
             guard
                 package.dependencies.allSatisfy({ dependency in
                     packages.contains {
-                        $0.id == dependency && $0.hostABI == package.hostABI
+                        $0.id == dependency
+                            && ExtensionHostABI.accepts($0.hostABI, host: package.hostABI)
                             && $0.architecture == package.architecture
                     }
                 })

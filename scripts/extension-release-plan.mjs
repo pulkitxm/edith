@@ -4,7 +4,7 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { supportSourceInputs } from "./build-extension-support.mjs";
 import { ghosttyNativeInputs } from "./extension-ghostty-native.mjs";
-import { writeHostABI } from "./extension-host-abi.mjs";
+import { acceptsHostABI, writeHostABI } from "./extension-host-abi.mjs";
 import { shippingDefinitions } from "./shipping-extension-policy.mjs";
 
 export const hostRuntimeInputs = [
@@ -346,14 +346,28 @@ export async function planUnpublishedExtensions(
       .filter(
         (entry) =>
           entry.id === definition.id &&
-          entry.hostABI === definition.hostABI &&
+          acceptsHostABI(entry.hostABI, definition.hostABI) &&
           entry.architecture === "arm64",
       )
       .sort((a, b) =>
         a.version.localeCompare(b.version, undefined, { numeric: true }),
       )
       .at(-1);
-    if (prior?.sourceFingerprint === fingerprint) continue;
+    if (
+      prior &&
+      prior.sourceFingerprint ===
+        (prior.hostABI === definition.hostABI
+          ? fingerprint
+          : await extensionFingerprint(
+              root,
+              { ...definition, hostABI: prior.hostABI },
+              definitions.map((candidate) => ({
+                ...candidate,
+                hostABI: prior.hostABI,
+              })),
+            ))
+    )
+      continue;
     let version = definition.version;
     if (
       prior &&
