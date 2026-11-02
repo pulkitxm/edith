@@ -112,7 +112,7 @@ import WorkerFixtureSupport
         await stop(runtime)
         let stopped = await invoke(runtime, "notchShelf.cli.catalog")
         #expect(stopped.data == nil)
-        #expect(stopped.error != nil)
+        #expect(stopped.error == ExtensionPeerError.unavailable.localizedDescription)
         #expect(probe.dependencies == 0)
     }
 
