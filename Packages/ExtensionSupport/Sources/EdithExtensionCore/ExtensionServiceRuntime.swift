@@ -1,14 +1,27 @@
 import AppKit
 import Foundation
 
+public struct ExtensionHostContext {
+    public let input: NSDictionary
+
+    public var dataDirectory: String? { input["dataDirectory"] as? String }
+    public var isHostedFunctionalFixture: Bool { input["hostedFunctionalFixture"] != nil }
+}
+
 @MainActor
 public protocol ExtensionService: AnyObject {
+    var requiresOwnedDataDirectory: Bool { get }
+    var preparesForDisable: Bool { get }
+    func prepareDisable() async throws
     func start() -> Bool
+    func start(_ context: ExtensionHostContext) -> Bool
     func synchronize()
+    func synchronize(_ context: ExtensionHostContext) -> Bool
     func invoke(_ command: String, payload: Data) async throws -> Data
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool
     func view(for presentation: UUID) -> NSViewController?
     func stopUI() -> [Task<Void, Never>]
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>]
     var isRunning: Bool { get }
     func cancelPendingWork()
     func drain() async
@@ -17,14 +30,23 @@ public protocol ExtensionService: AnyObject {
 }
 
 extension ExtensionService {
+    public var requiresOwnedDataDirectory: Bool { false }
+    public var preparesForDisable: Bool { false }
+    public func prepareDisable() async throws {}
     public func start() -> Bool { true }
+    public func start(_ context: ExtensionHostContext) -> Bool { start() }
     public func synchronize() {}
+    public func synchronize(_ context: ExtensionHostContext) -> Bool {
+        synchronize()
+        return true
+    }
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         throw ExtensionPeerError.unavailable
     }
     public func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool { false }
     public func view(for presentation: UUID) -> NSViewController? { nil }
     public func stopUI() -> [Task<Void, Never>] { [] }
+    public func stopUI(for presentation: UUID?) -> [Task<Void, Never>] { stopUI() }
     public var isRunning: Bool { true }
     public func cancelPendingWork() {}
     public func drain() async {}
@@ -89,6 +111,33 @@ public final class ExtensionServiceRuntime: NSObject {
         }
     }
 
+    @objc(prepareDisableWithCompletion:)
+    public func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        let suspended = beginSuspension()
+        Task { [self] in
+            await suspended.value
+            let failure: NSError?
+            do {
+                try await service?.prepareDisable()
+                failure = nil
+            } catch {
+                failure = error as NSError
+            }
+            withExtendedLifetime(self) { completion(failure) }
+        }
+    }
+
+    public func stop() async {
+        await beginTeardown().value
+    }
+
+    public override func responds(to selector: Selector!) -> Bool {
+        if selector == NSSelectorFromString("prepareDisableWithCompletion:") {
+            return service?.preparesForDisable == true
+        }
+        return super.responds(to: selector)
+    }
+
     @objc public func execute(_ input: NSDictionary) -> NSObject {
         let operation = input["operation"] as? String ?? ""
         switch operation {
@@ -102,11 +151,17 @@ public final class ExtensionServiceRuntime: NSObject {
         case "start":
             guard suspension == nil, teardownTask == nil, let service,
                 let suite = input["defaultsSuite"] as? String,
-                suite == scope["EDITH_SHARED_DEFAULTS_SUITE"]
+                suite == scope["EDITH_SHARED_DEFAULTS_SUITE"],
+                !service.requiresOwnedDataDirectory || ownsDataDirectory(input)
             else { return Self.result(false) }
-            guard started || service.start() else { return Self.result(false) }
+            guard started || service.start(ExtensionHostContext(input: input)) else {
+                return Self.result(false)
+            }
             started = true
-        case "synchronize": service?.synchronize()
+        case "synchronize":
+            guard service?.synchronize(ExtensionHostContext(input: input)) == true else {
+                return Self.result(false)
+            }
         case "configureUI":
             guard suspension == nil, teardownTask == nil, uiRetirements.isEmpty,
                 let configuration = ExtensionUIConfiguration(context: input),
@@ -120,7 +175,8 @@ public final class ExtensionServiceRuntime: NSObject {
             else { return Self.result(false) }
             return controller
         case "stopUI":
-            for task in service?.stopUI() ?? [] {
+            let presentation = (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
+            for task in service?.stopUI(for: presentation) ?? [] {
                 let identifier = UUID()
                 uiRetirements[identifier] = Task { [self] in
                     await task.value
@@ -138,6 +194,14 @@ public final class ExtensionServiceRuntime: NSObject {
             return service?.perform(operation, context: input) ?? Self.result(false)
         }
         return Self.result(true)
+    }
+
+    private func ownsDataDirectory(_ input: NSDictionary) -> Bool {
+        guard let path = input["dataDirectory"] as? String,
+            let root = scope["EDITH_EXTENSION_DATA_ROOT"]
+        else { return false }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
+            == URL(fileURLWithPath: root).standardizedFileURL.path
     }
 
     private func beginSuspension() -> Task<Void, Never> {

@@ -11,10 +11,34 @@ private final class SyntheticService: ExtensionService {
     var drains = 0
     var teardowns = 0
     var invocations: [String] = []
+    var requiresOwnedDataDirectory = false
+    var preparesForDisable = false
+    var disablePreparations = 0
 
-    func start() -> Bool {
+    func prepareDisable() async throws {
+        disablePreparations += 1
+        if disablePreparations > 1 { throw ExtensionPeerError.unavailable }
+    }
+
+    var startInputs: [String] = []
+    var synchronizations: [String] = []
+
+    var stoppedPresentations: [UUID?] = []
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        synchronizations.append(context.input["policy"] as? String ?? "")
+        return context.input["policy"] as? String != "refused"
+    }
+
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
+        stoppedPresentations.append(presentation)
+        return []
+    }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
         starts += 1
-        return true
+        startInputs.append(context.dataDirectory ?? "")
+        return !context.isHostedFunctionalFixture
     }
 
     func invoke(_ command: String, payload: Data) async throws -> Data {
@@ -31,19 +55,27 @@ private final class SyntheticService: ExtensionService {
     }
 }
 
+private let syntheticSuite = "edith.synthetic.service.runtime"
+private let syntheticDataRoot = "/tmp/edith-synthetic-service-data"
+private let syntheticScope = [
+    "EDITH_SHARED_DEFAULTS_SUITE": syntheticSuite, "EDITH_EXTENSION_DATA_ROOT": syntheticDataRoot,
+]
+
 @MainActor
 @Suite(.serialized) struct ExtensionServiceRuntimeTests {
-    private static let suite = "edith.synthetic.service.runtime"
+    private static let suite = syntheticSuite
+    private static let dataRoot = syntheticDataRoot
 
-    private func runtime() -> (ExtensionServiceRuntime, SyntheticService) {
+    private func runtime(owningData: Bool = false) -> (ExtensionServiceRuntime, SyntheticService) {
         ExtensionScope.register(
             ExtensionScope(
-                environment: { ["EDITH_SHARED_DEFAULTS_SUITE": Self.suite] },
-                value: { $0 == "EDITH_SHARED_DEFAULTS_SUITE" ? Self.suite : nil },
+                environment: { syntheticScope },
+                value: { syntheticScope[$0] },
                 defaults: { .standard },
                 dataRoot: { ExtensionScope.temporaryDataRoot() }),
             image: #dsohandle)
         let service = SyntheticService()
+        service.requiresOwnedDataDirectory = owningData
         let runtime = ExtensionServiceRuntime(id: "synthetic", role: "app", bundle: .main) { _ in
             service
         }
@@ -77,6 +109,66 @@ private final class SyntheticService: ExtensionService {
         #expect(service.starts == 1)
         let status = runtime.execute(["operation": "status"]) as? NSDictionary
         #expect(status?["running"] as? Bool == true)
+    }
+
+    @Test func startNeedsTheScopedDataDirectoryWhenTheServiceOwnsData() {
+        let (runtime, service) = runtime(owningData: true)
+        #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == false)
+        #expect(
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "dataDirectory": "/tmp/other",
+                ])) == false)
+        #expect(
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "dataDirectory": Self.dataRoot + "/",
+                ])) == true)
+        #expect(service.starts == 1)
+        #expect(service.startInputs == [Self.dataRoot + "/"])
+    }
+
+    @Test func serviceStartSeesTheHostInputAndCanRefuseIt() {
+        let (runtime, service) = runtime()
+        #expect(
+            ok(
+                runtime.execute([
+                    "operation": "start", "defaultsSuite": Self.suite,
+                    "hostedFunctionalFixture": true,
+                ])) == false)
+        #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
+        #expect(service.starts == 2)
+        #expect(ok(runtime.execute(["operation": "synchronize", "policy": "ambient"])) == true)
+        #expect(ok(runtime.execute(["operation": "synchronize", "policy": "refused"])) == false)
+        #expect(service.synchronizations == ["ambient", "refused"])
+        let presentation = UUID()
+        _ = runtime.execute(["operation": "stopUI", "presentationID": presentation.uuidString])
+        _ = runtime.execute(["operation": "stopUI"])
+        #expect(service.stoppedPresentations == [presentation, nil])
+    }
+
+    @Test func disablePreparationIsOfferedOnlyWhenTheServiceDeclaresIt() async {
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
+        let (plain, _) = runtime()
+        #expect(!plain.responds(to: selector))
+        let (runtime, service) = runtime()
+        service.preparesForDisable = true
+        #expect(runtime.responds(to: selector))
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        let first = await withCheckedContinuation { continuation in
+            runtime.prepareDisable { continuation.resume(returning: $0) }
+        }
+        #expect(first == nil)
+        #expect(runtime.isSuspended && service.cancellations == 1 && service.drains == 1)
+        #expect(await invoke(runtime, "synthetic.late")?.hasPrefix("error:") == true)
+        let second = await withCheckedContinuation { continuation in
+            runtime.prepareDisable { continuation.resume(returning: $0) }
+        }
+        #expect(second != nil)
+        await runtime.stop()
+        #expect(service.teardowns == 1)
     }
 
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {

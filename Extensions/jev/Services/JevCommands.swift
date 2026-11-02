@@ -5,7 +5,6 @@ import Foundation
 @MainActor
 final class JevCommands {
     let engine: JevEngine
-    private let registry = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "jev")
     private var stopped = false
 
@@ -20,78 +19,62 @@ final class JevCommands {
                 })
     }
 
-    func invoke(_ request: NSDictionary, completion: @escaping ExtensionCommandRegistry.Completion)
-    {
-        guard !stopped else { completion(nil, "The extension is disabled."); return }
-        registry.invoke(request, completion: completion) { [engine] command, payload in
-            if command == "jev.cli.catalog" { return try JevCLICatalog.data() }
-            if command.hasPrefix("jev.cli.stream.") {
-                guard let cliStreams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try await JevCLIEnvironment.$streamOwner.withValue(
-                    JevCLIEngine(engine: engine)
-                ) {
-                    try cliStreams.invoke(
-                        JevCommand.self, operation: command, prefix: "jev.cli.stream",
-                        payload: payload)
-                }
+    func execute(_ command: String, payload: Data) async throws -> Data {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if command == "jev.cli.catalog" { return try JevCLICatalog.data() }
+        if command.hasPrefix("jev.cli.stream.") {
+            guard let cliStreams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+            return try await JevCLIEnvironment.$streamOwner.withValue(
+                JevCLIEngine(engine: engine)
+            ) {
+                try cliStreams.invoke(
+                    JevCommand.self, operation: command, prefix: "jev.cli.stream",
+                    payload: payload)
             }
-            switch command {
-            case "jev.cli":
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await JevCLIExecution.run(request, engine: engine))
-            case "surface.snapshot", "surface.perform":
-                return try await SurfaceCommandService.execute(
-                    providerID: "jev", command: command, payload: payload,
-                    snapshot: { _ in JevSurface.snapshot(await engine.status(probe: false)) },
-                    perform: { _ in throw ExtensionPeerError.invalidRequest })
-            case "jev.status":
-                let query = try JSONDecoder().decode(JevStatusQuery.self, from: payload)
-                return try JSONEncoder().encode(await engine.status(probe: query.probe))
-            case "jev.key.set":
-                let update = try JSONDecoder().decode(JevKeyUpdate.self, from: payload)
-                await engine.setKey(update.key)
-                return try JSONEncoder().encode(await engine.status(probe: update.key != nil))
-            case "jev.find":
-                return try await JevFind.run(payload, using: engine)
-            case "jev.decide":
-                let call = try JSONDecoder().decode(JevCall.self, from: payload)
-                do {
-                    let decision = try await engine.decide(
-                        call.request.validated(), purpose: call.purpose)
-                    return try JSONEncoder().encode(JevReply(decision: decision))
-                } catch let error as JevError {
-                    return try JSONEncoder().encode(JevReply(error: error))
-                }
-            default: throw ExtensionPeerError.rejected("Jev does not support this command.")
+        }
+        switch command {
+        case "jev.cli":
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await JevCLIExecution.run(request, engine: engine))
+        case "surface.snapshot", "surface.perform":
+            return try await SurfaceCommandService.execute(
+                providerID: "jev", command: command, payload: payload,
+                snapshot: { _ in JevSurface.snapshot(await engine.status(probe: false)) },
+                perform: { _ in throw ExtensionPeerError.invalidRequest })
+        case "jev.status":
+            let query = try JSONDecoder().decode(JevStatusQuery.self, from: payload)
+            return try JSONEncoder().encode(await engine.status(probe: query.probe))
+        case "jev.key.set":
+            let update = try JSONDecoder().decode(JevKeyUpdate.self, from: payload)
+            await engine.setKey(update.key)
+            return try JSONEncoder().encode(await engine.status(probe: update.key != nil))
+        case "jev.find":
+            return try await JevFind.run(payload, using: engine)
+        case "jev.decide":
+            let call = try JSONDecoder().decode(JevCall.self, from: payload)
+            do {
+                let decision = try await engine.decide(
+                    call.request.validated(), purpose: call.purpose)
+                return try JSONEncoder().encode(JevReply(decision: decision))
+            } catch let error as JevError {
+                return try JSONEncoder().encode(JevReply(error: error))
             }
+        default: throw ExtensionPeerError.rejected("Jev does not support this command.")
         }
     }
 
-    func cancel(_ token: String) { registry.cancel(token) }
+    func suspend() { cliStreams?.stop() }
 
-    @discardableResult
-    func suspend() -> UUID {
-        let token = registry.suspend()
-        cliStreams?.stop()
-        return token
-    }
-
-    @discardableResult
-    func suspendAndWait() async -> UUID {
-        suspend()
-        await cliStreams?.stopAndWait()
-        return await registry.suspendAndWait()
-    }
-
-    func shutdownAndWait() async {
-        stopped = true
-        await registry.shutdownAndWait()
-        await cliStreams?.stopAndWait()
-    }
+    func drain() async { await cliStreams?.stopAndWait() }
 
     func shutdown() {
         stopped = true
-        registry.shutdown(); cliStreams?.stop()
+        cliStreams?.stop()
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await cliStreams?.stopAndWait()
     }
 }

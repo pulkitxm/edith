@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Security
 import Testing
@@ -103,19 +104,13 @@ private final class JevResponseGate: @unchecked Sendable {
                 == "Bearer second-key")
     }
 
-    @MainActor @Test func disabledCommandsCannotReadOrChangeSavedKey() {
+    @MainActor @Test func disabledCommandsCannotReadOrChangeSavedKey() async {
         let store = MemoryJevKeyStore()
         let commands = JevCommands(engine: JevEngine(store: store))
         commands.shutdown()
-        var completions = 0
-        commands.invoke(
-            ["token": UUID().uuidString, "command": "jev.status", "payload": Data()] as NSDictionary
-        ) { data, message in
-            completions += 1
-            #expect(data == nil)
-            #expect(message != nil)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await commands.execute("jev.status", payload: Data())
         }
-        #expect(completions == 1)
         #expect(store.reads == 0)
         #expect(store.stored == nil)
     }

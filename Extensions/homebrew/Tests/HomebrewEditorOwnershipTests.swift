@@ -6,35 +6,27 @@ import Testing
         let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Runtime.swift")
         let source = try String(contentsOf: path, encoding: .utf8)
-        let startup = try branch("start", in: source)
-        #expect(!startup.contains("TextEditingCommands"))
-        let configuration = try branch("configureUI", in: source)
-        let admission = try #require(
-            configuration.range(of: "ExtensionUIConfiguration(context: input)"))
+        #expect(!(try body("func start()", in: source)).contains("TextEditingCommands"))
+        let configuration = try body("func configureUI(", in: source)
+        let admission = try #require(configuration.range(of: "configuration.engineClient"))
+        let rejection = try #require(configuration.range(of: "return false"))
         let installation = try #require(configuration.range(of: "TextEditingCommands.install()"))
-        let rejection = try #require(
-            configuration.range(of: "return [\"ok\": false] as NSDictionary"))
         #expect(admission.lowerBound < rejection.lowerBound)
         #expect(rejection.lowerBound < installation.lowerBound)
         #expect(source.components(separatedBy: "TextEditingCommands.install()").count == 2)
-        #expect(try branch("stopUI", in: source).contains("releasePresentation()"))
-        #expect(try branch("stop", in: source).contains("stopUI()"))
-        let stop = try #require(source.range(of: "private func stopUI()"))
-        let teardown = source[stop.lowerBound...]
-        #expect(teardown.contains("TextEditingCommands.shutdown()"))
+        #expect(try body("func stopUI()", in: source).contains("releaseTextEditing()"))
+        let teardown = try body("func teardown()", in: source)
+        #expect(teardown.contains("releaseTextEditing()"))
         #expect(teardown.contains("invalidate()"))
-        let preparation = try #require(source.range(of: "func prepareToStop(completion:"))
-        let end = try #require(
-            source.range(of: "\n    }", range: preparation.upperBound..<source.endIndex))
-        #expect(source[preparation.upperBound..<end.lowerBound].contains("stopUI()"))
+        #expect(
+            try body("func releaseTextEditing()", in: source).contains(
+                "TextEditingCommands.shutdown()"))
     }
 
-    private func branch(_ operation: String, in source: String) throws -> Substring {
-        let start = try #require(source.range(of: "case \"" + operation + "\":", options: []))
-        let end =
-            source.range(of: "\n        case ", range: start.upperBound..<source.endIndex)?
-            .lowerBound
-            ?? source.endIndex
-        return source[start.upperBound..<end]
+    private func body(_ signature: String, in source: String) throws -> Substring {
+        let start = try #require(source.range(of: signature))
+        let end = try #require(
+            source.range(of: "\n    }\n", range: start.upperBound..<source.endIndex))
+        return source[start.upperBound..<end.lowerBound]
     }
 }
