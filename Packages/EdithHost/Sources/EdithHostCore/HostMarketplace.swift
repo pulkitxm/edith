@@ -140,8 +140,8 @@ public final class HostMarketplace {
                     publicLauncher: publicLauncher))
         }
         let entries = try HostIndex.bundled()
-        let demand = Set(entries.filter { $0.activation == .demand }.map(\.id))
-        sessions.startsAtLaunch = { !demand.contains($0) }
+        let background = Set(entries.filter(\.background).map(\.id))
+        sessions.startsAtLaunch = { background.contains($0) }
         return try HostMarketplace(
             identity: identity, entries: entries, store: store,
             catalogClient: localCatalog?.client(

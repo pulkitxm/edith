@@ -107,6 +107,12 @@ run at once next to the installed Edith without touching it or each other.
 Develop and test extensions against this worktree's development build. Nothing
 in the loop needs GitHub or a merged pull request.
 
+An extension's host registration lives in `Extensions/<id>/package.json`
+(`title`, `symbolName`, `category`, `background`, `commands`). After editing
+it, run `bun scripts/extension-index.mjs --write` and rebuild the development
+app, since the host index ships inside the app. Set `background` only when the
+extension must run before anything opens it.
+
 1. Build the development app once: `./build.sh --no-open`.
 2. Run `make dev-extension EXTENSION=<id>`. It builds an ad-hoc signed
    development package, sideloads it into this worktree's running development
