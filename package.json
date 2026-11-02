@@ -12,8 +12,8 @@
     "test": "bun test ./scripts"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.8",
-    "@biomejs/biome": "2.6.2",
+    "@babel/parser": "8.0.10",
+    "@biomejs/biome": "2.6.4",
     "emojibase": "18.0.0",
     "emojibase-data": "18.0.0"
   }
