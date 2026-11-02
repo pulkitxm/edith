@@ -88,42 +88,286 @@ public enum JunkCatalog {
         Entry(
             id: "derivedData", name: "Xcode DerivedData",
             detail: "Build intermediates, rebuilt on next build.",
-            relativePaths: ["Library/Developer/Xcode/DerivedData"], defaultOn: true),
+            relativePaths: ["Library/Developer/Xcode/DerivedData"],
+            defaultOn: true),
+        Entry(
+            id: "xcodeDeviceSupport", name: "Xcode device support",
+            detail: "Debug symbols copied from devices, recreated when a device connects.",
+            relativePaths: [
+                "Library/Developer/Xcode/iOS DeviceSupport",
+                "Library/Developer/Xcode/watchOS DeviceSupport",
+                "Library/Developer/Xcode/tvOS DeviceSupport",
+                "Library/Developer/Xcode/visionOS DeviceSupport",
+            ],
+            defaultOn: true),
+        Entry(
+            id: "xcodePreviews", name: "Xcode previews",
+            detail: "SwiftUI preview builds, rebuilt on demand.",
+            relativePaths: ["Library/Developer/Xcode/UserData/Previews"],
+            defaultOn: true),
+        Entry(
+            id: "simulatorCaches", name: "Simulator caches",
+            detail: "CoreSimulator caches. Simulator devices and their data stay.",
+            relativePaths: ["Library/Developer/CoreSimulator/Caches"],
+            defaultOn: true),
+        Entry(
+            id: "xcodeArchives", name: "Xcode archives",
+            detail: "Archived release builds and dSYMs. Keep the ones you still ship.",
+            relativePaths: ["Library/Developer/Xcode/Archives"],
+            defaultOn: false),
         Entry(
             id: "swiftpm", name: "Swift Package cache",
             detail: "Cached package checkouts, re-fetched on demand.",
-            relativePaths: ["Library/Caches/org.swift.swiftpm"], defaultOn: true),
+            relativePaths: ["Library/Caches/org.swift.swiftpm"],
+            defaultOn: true),
+        Entry(
+            id: "cocoapods", name: "CocoaPods cache",
+            detail: "Downloaded pods, re-fetched by pod install.",
+            relativePaths: ["Library/Caches/CocoaPods"],
+            defaultOn: true),
+        Entry(
+            id: "carthage", name: "Carthage cache",
+            detail: "Downloaded frameworks, re-fetched on bootstrap.",
+            relativePaths: ["Library/Caches/org.carthage.CarthageKit"],
+            defaultOn: true),
         Entry(
             id: "npm", name: "npm cache",
             detail: "Tarball cache, re-downloaded on install.",
-            relativePaths: [".npm/_cacache"], defaultOn: true),
+            relativePaths: [".npm/_cacache"],
+            defaultOn: true),
         Entry(
-            id: "yarn", name: "Yarn cache", detail: "Re-downloaded on install.",
-            relativePaths: ["Library/Caches/Yarn"], defaultOn: true),
+            id: "yarn", name: "Yarn cache",
+            detail: "Re-downloaded on install.",
+            relativePaths: ["Library/Caches/Yarn", ".yarn/berry/cache"],
+            defaultOn: true),
         Entry(
-            id: "bun", name: "Bun cache", detail: "Re-downloaded on install.",
-            relativePaths: [".bun/install/cache"], defaultOn: true),
+            id: "pnpm", name: "pnpm store",
+            detail: "Content-addressed store, re-downloaded on install.",
+            relativePaths: ["Library/pnpm/store", ".pnpm-store", ".local/share/pnpm/store"],
+            defaultOn: true),
         Entry(
-            id: "pip", name: "pip cache", detail: "Wheel cache, re-downloaded on install.",
-            relativePaths: ["Library/Caches/pip"], defaultOn: true),
+            id: "bun", name: "Bun cache",
+            detail: "Re-downloaded on install.",
+            relativePaths: [".bun/install/cache"],
+            defaultOn: true),
         Entry(
-            id: "homebrew", name: "Homebrew cache", detail: "Downloaded bottles.",
-            relativePaths: ["Library/Caches/Homebrew"], defaultOn: true),
+            id: "deno", name: "Deno cache",
+            detail: "Remote modules and compiled code, re-downloaded on run.",
+            relativePaths: ["Library/Caches/deno"],
+            defaultOn: true),
+        Entry(
+            id: "nodeGyp", name: "node-gyp and Electron headers",
+            detail: "Native addon headers, re-downloaded on rebuild.",
+            relativePaths: ["Library/Caches/node-gyp", ".electron-gyp"],
+            defaultOn: true),
+        Entry(
+            id: "electron", name: "Electron downloads",
+            detail: "Electron and electron-builder binaries, re-downloaded on build.",
+            relativePaths: ["Library/Caches/electron", "Library/Caches/electron-builder"],
+            defaultOn: true),
+        Entry(
+            id: "turbo", name: "Turborepo cache",
+            detail: "Local task cache, rebuilt on next run.",
+            relativePaths: ["Library/Caches/turborepo"],
+            defaultOn: true),
+        Entry(
+            id: "typescript", name: "TypeScript cache",
+            detail: "Editor type acquisition cache.",
+            relativePaths: ["Library/Caches/typescript"],
+            defaultOn: true),
+        Entry(
+            id: "prisma", name: "Prisma engines",
+            detail: "Query engine binaries, re-downloaded on generate.",
+            relativePaths: [".cache/prisma"],
+            defaultOn: true),
+        Entry(
+            id: "pip", name: "pip cache",
+            detail: "Wheel cache, re-downloaded on install.",
+            relativePaths: ["Library/Caches/pip"],
+            defaultOn: true),
+        Entry(
+            id: "uv", name: "uv cache",
+            detail: "Wheel and source cache, re-downloaded on sync.",
+            relativePaths: [".cache/uv", "Library/Caches/uv"],
+            defaultOn: true),
+        Entry(
+            id: "poetry", name: "Poetry cache",
+            detail: "Package cache, re-downloaded on install.",
+            relativePaths: ["Library/Caches/pypoetry"],
+            defaultOn: true),
+        Entry(
+            id: "conda", name: "Conda package cache",
+            detail: "Downloaded packages. Environments stay.",
+            relativePaths: ["miniconda3/pkgs", "anaconda3/pkgs", "miniforge3/pkgs", ".conda/pkgs"],
+            defaultOn: false),
+        Entry(
+            id: "huggingFace", name: "Hugging Face models",
+            detail: "Downloaded models and datasets. Large to fetch again.",
+            relativePaths: [".cache/huggingface/hub"],
+            defaultOn: false),
+        Entry(
+            id: "cargo", name: "Cargo registry",
+            detail: "Downloaded crates and git checkouts, re-fetched on build.",
+            relativePaths: [
+                ".cargo/registry/cache", ".cargo/registry/src", ".cargo/git/checkouts",
+                ".cargo/git/db",
+            ],
+            defaultOn: false),
+        Entry(
+            id: "goBuild", name: "Go build cache",
+            detail: "Compiled packages, rebuilt on next build.",
+            relativePaths: ["Library/Caches/go-build"],
+            defaultOn: true),
+        Entry(
+            id: "goModules", name: "Go module cache",
+            detail: "Downloaded modules, re-fetched on build.",
+            relativePaths: ["go/pkg/mod"],
+            defaultOn: false),
+        Entry(
+            id: "golangciLint", name: "golangci-lint cache",
+            detail: "Lint results, rebuilt on next run.",
+            relativePaths: ["Library/Caches/golangci-lint"],
+            defaultOn: true),
+        Entry(
+            id: "gradle", name: "Gradle caches",
+            detail: "Dependencies, wrappers and daemon logs, re-downloaded on build.",
+            relativePaths: [".gradle/caches", ".gradle/wrapper/dists", ".gradle/daemon"],
+            defaultOn: false),
+        Entry(
+            id: "maven", name: "Maven repository",
+            detail: "Downloaded artifacts, re-fetched on build.",
+            relativePaths: [".m2/repository"],
+            defaultOn: false),
+        Entry(
+            id: "sbt", name: "sbt and Coursier caches",
+            detail: "Scala dependencies, re-fetched on build.",
+            relativePaths: ["Library/Caches/Coursier", ".ivy2/cache", ".sbt/boot"],
+            defaultOn: false),
+        Entry(
+            id: "android", name: "Android build cache",
+            detail: "Gradle and SDK caches. Emulators stay.",
+            relativePaths: [".android/cache", ".android/build-cache"],
+            defaultOn: true),
+        Entry(
+            id: "androidImages", name: "Android system images",
+            detail: "Emulator images, re-downloaded from the SDK manager.",
+            relativePaths: ["Library/Android/sdk/system-images"],
+            defaultOn: false),
+        Entry(
+            id: "pub", name: "Dart pub cache",
+            detail: "Downloaded packages, re-fetched by pub get.",
+            relativePaths: [".pub-cache/hosted", ".pub-cache/git"],
+            defaultOn: false),
+        Entry(
+            id: "dartServer", name: "Dart analysis cache",
+            detail: "Analyzer state, rebuilt by the editor.",
+            relativePaths: [".dartServer"],
+            defaultOn: true),
+        Entry(
+            id: "composer", name: "Composer cache",
+            detail: "PHP packages, re-downloaded on install.",
+            relativePaths: ["Library/Caches/composer", ".composer/cache"],
+            defaultOn: true),
+        Entry(
+            id: "bundler", name: "Bundler cache",
+            detail: "Ruby gem downloads, re-fetched by bundle install.",
+            relativePaths: [".bundle/cache"],
+            defaultOn: true),
+        Entry(
+            id: "hex", name: "Hex packages",
+            detail: "Elixir package downloads, re-fetched by mix deps.get.",
+            relativePaths: [".hex/packages"],
+            defaultOn: true),
+        Entry(
+            id: "cabal", name: "Cabal packages",
+            detail: "Haskell package downloads, re-fetched on build.",
+            relativePaths: [".cabal/packages"],
+            defaultOn: true),
+        Entry(
+            id: "nuget", name: "NuGet packages",
+            detail: "Downloaded .NET packages, restored by dotnet restore.",
+            relativePaths: [".nuget/packages"],
+            defaultOn: false),
+        Entry(
+            id: "zigCache", name: "Zig cache",
+            detail: "Global build cache, rebuilt on next build.",
+            relativePaths: [".cache/zig", "Library/Caches/zig"],
+            defaultOn: true),
+        Entry(
+            id: "compilerCache", name: "ccache and sccache",
+            detail: "Compiler output caches, rebuilt on next build.",
+            relativePaths: ["Library/Caches/ccache", ".ccache", "Library/Caches/Mozilla.sccache"],
+            defaultOn: true),
+        Entry(
+            id: "bazelisk", name: "Bazelisk downloads",
+            detail: "Bazel binaries, re-downloaded on run.",
+            relativePaths: ["Library/Caches/bazelisk"],
+            defaultOn: true),
+        Entry(
+            id: "homebrew", name: "Homebrew cache",
+            detail: "Downloaded bottles.",
+            relativePaths: ["Library/Caches/Homebrew"],
+            defaultOn: true),
         Entry(
             id: "playwright", name: "Playwright browsers",
             detail: "Re-downloaded on next test run.",
-            relativePaths: ["Library/Caches/ms-playwright"], defaultOn: false),
+            relativePaths: ["Library/Caches/ms-playwright"],
+            defaultOn: false),
         Entry(
-            id: "puppeteer", name: "Puppeteer cache", detail: "Re-downloaded on next run.",
-            relativePaths: [".cache/puppeteer"], defaultOn: false),
+            id: "puppeteer", name: "Puppeteer cache",
+            detail: "Re-downloaded on next run.",
+            relativePaths: [".cache/puppeteer"],
+            defaultOn: false),
+        Entry(
+            id: "cypress", name: "Cypress binaries",
+            detail: "Re-downloaded on next install.",
+            relativePaths: ["Library/Caches/Cypress"],
+            defaultOn: false),
+        Entry(
+            id: "jetbrains", name: "JetBrains caches",
+            detail: "IDE indexes and logs. Settings stay.",
+            relativePaths: ["Library/Caches/JetBrains", "Library/Logs/JetBrains"],
+            defaultOn: true),
+        Entry(
+            id: "vscode", name: "VS Code caches",
+            detail: "Cached data, extension downloads and logs. Settings stay.",
+            relativePaths: [
+                "Library/Application Support/Code/Cache",
+                "Library/Application Support/Code/CachedData",
+                "Library/Application Support/Code/CachedExtensionVSIXs",
+                "Library/Application Support/Code/logs",
+            ],
+            defaultOn: true),
+        Entry(
+            id: "cursor", name: "Cursor caches",
+            detail: "Cached data, extension downloads and logs. Settings stay.",
+            relativePaths: [
+                "Library/Application Support/Cursor/Cache",
+                "Library/Application Support/Cursor/CachedData",
+                "Library/Application Support/Cursor/CachedExtensionVSIXs",
+                "Library/Application Support/Cursor/logs",
+            ],
+            defaultOn: true),
+        Entry(
+            id: "zed", name: "Zed caches",
+            detail: "Editor caches. Settings stay.",
+            relativePaths: ["Library/Caches/Zed"],
+            defaultOn: true),
         Entry(
             id: "claudeCode", name: "Claude Code logs",
             detail: "Debug logs and shell snapshots. Transcripts are left untouched.",
-            relativePaths: [".claude/debug", ".claude/shell-snapshots"], defaultOn: true),
+            relativePaths: [".claude/debug", ".claude/shell-snapshots"],
+            defaultOn: true),
         Entry(
             id: "claudeMcp", name: "Claude Code MCP logs",
             detail: "MCP server logs that can grow very large.",
-            relativePaths: ["Library/Caches/claude-cli-nodejs"], defaultOn: true),
+            relativePaths: ["Library/Caches/claude-cli-nodejs"],
+            defaultOn: true),
+        Entry(
+            id: "codexLogs", name: "Codex logs",
+            detail: "Codex CLI logs. Sessions are left untouched.",
+            relativePaths: [".codex/log"],
+            defaultOn: true),
     ]
 
     public static func resolve(_ entry: Entry, home: URL) -> [URL] {
@@ -249,85 +493,47 @@ public enum JunkScanner {
         return formatter.string(fromByteCount: bytes)
     }
 
-    public struct ProjectTarget: Sendable {
-        public let dir: String
-        public let categoryID: String
-        public let categoryName: String
-        public let detail: String
-
-        public init(dir: String, categoryID: String, categoryName: String, detail: String) {
-            self.dir = dir
-            self.categoryID = categoryID
-            self.categoryName = categoryName
-            self.detail = detail
-        }
-    }
-
-    public static let projectTargets: [ProjectTarget] = [
-        ProjectTarget(
-            dir: "node_modules", categoryID: "nodeModules", categoryName: "node_modules",
-            detail: "JavaScript dependencies, restored by install."),
-        ProjectTarget(
-            dir: "__pycache__", categoryID: "pycache", categoryName: "Python __pycache__",
-            detail: "Compiled bytecode caches."),
-        ProjectTarget(
-            dir: ".venv", categoryID: "pyvenv", categoryName: "Python virtualenvs",
-            detail: "Recreated from requirements."),
-        ProjectTarget(
-            dir: "venv", categoryID: "pyvenv", categoryName: "Python virtualenvs",
-            detail: "Recreated from requirements."),
-        ProjectTarget(
-            dir: "target", categoryID: "rustTarget", categoryName: "Cargo / Maven target",
-            detail: "Build output, rebuilt on next build."),
-        ProjectTarget(
-            dir: ".gradle", categoryID: "gradle", categoryName: "Gradle caches",
-            detail: "Rebuilt on next build."),
-        ProjectTarget(
-            dir: "Pods", categoryID: "pods", categoryName: "CocoaPods",
-            detail: "Restored by pod install."),
-        ProjectTarget(
-            dir: ".next", categoryID: "nextBuild", categoryName: "Next.js .next",
-            detail: "Rebuilt on next build."),
-        ProjectTarget(
-            dir: ".turbo", categoryID: "turbo", categoryName: "Turborepo cache",
-            detail: "Rebuilt on next build."),
-    ]
-
     private static let walkSkip: Set<String> = [
         "System", "Library", "Applications", "usr", "bin", "sbin", "opt", "private", "cores",
-        "dev", "Volumes", "Network", "Photos Library.photoslibrary",
+        "dev", "Volumes", "Network",
     ]
+
+    private static let walkSkipSuffixes = [
+        ".app", ".photoslibrary", ".xcodeproj", ".xcworkspace", ".xcassets", ".framework",
+        ".xcframework", ".bundle", ".lproj",
+    ]
+
+    public static let maxProjectItems = 5000
+    static let maxWalkDepth = 12
 
     public static func scanProjectJunk(
         roots: [URL], isCancelled: @escaping () -> Bool = { false },
         progress: @escaping (String) -> Void
     ) -> [JunkCategory] {
-        let targets = Dictionary(
-            projectTargets.map { ($0.dir, $0) }, uniquingKeysWith: { first, _ in first })
         var itemsByCategory: [String: [JunkItem]] = [:]
         var count = 0
-        let budget = 600
-        let maxDepth = 9
         let fm = FileManager.default
+        let ignore = GitIgnoreLookup()
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
 
         func walk(_ dir: URL, depth: Int) {
-            guard depth <= maxDepth, count < budget, !isCancelled() else { return }
+            guard depth <= maxWalkDepth, count < maxProjectItems, !isCancelled() else { return }
             guard
                 let children = try? fm.contentsOfDirectory(
-                    at: dir, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
-                    options: [])
+                    at: dir, includingPropertiesForKeys: keys, options: [])
             else { return }
+            let names = children.map(\.lastPathComponent)
             for child in children {
-                guard count < budget, !isCancelled() else { return }
-                let values = try? child.resourceValues(forKeys: [
-                    .isDirectoryKey, .isSymbolicLinkKey,
-                ])
+                guard count < maxProjectItems, !isCancelled() else { return }
+                let values = try? child.resourceValues(forKeys: Set(keys))
                 guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
                 let name = child.lastPathComponent
-                if let target = targets[name] {
+                if let rule = ProjectRules.match(
+                    name: name, directory: dir, siblings: names, ignore: ignore)
+                {
                     let size = directorySize(child, isCancelled: isCancelled)
                     if size > 0 {
-                        itemsByCategory[target.categoryID, default: []].append(
+                        itemsByCategory[rule.categoryID, default: []].append(
                             JunkItem(
                                 id: child.path, name: projectLabel(child), path: child,
                                 sizeBytes: size, selected: false))
@@ -335,7 +541,7 @@ public enum JunkScanner {
                     }
                     continue
                 }
-                if walkSkip.contains(name) || name.hasPrefix(".") { continue }
+                if skipsWalk(name) { continue }
                 walk(child, depth: depth + 1)
             }
         }
@@ -348,16 +554,18 @@ public enum JunkScanner {
             walk(root, depth: 0)
         }
 
-        return projectTargets.reduce(into: [String: JunkCategory]()) { result, target in
-            guard result[target.categoryID] == nil, let items = itemsByCategory[target.categoryID]
-            else { return }
-            let sorted = items.sorted { $0.sizeBytes > $1.sizeBytes }
-            result[target.categoryID] = JunkCategory(
-                id: target.categoryID, name: target.categoryName, detail: target.detail,
-                items: sorted)
+        return ProjectRules.categories.compactMap { category in
+            guard let items = itemsByCategory[category.id] else { return nil }
+            return JunkCategory(
+                id: category.id, name: category.name, detail: category.detail,
+                items: items.sorted { $0.sizeBytes > $1.sizeBytes })
         }
-        .values
         .sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    static func skipsWalk(_ name: String) -> Bool {
+        name.hasPrefix(".") || walkSkip.contains(name)
+            || walkSkipSuffixes.contains { name.hasSuffix($0) }
     }
 
     private static func projectLabel(_ url: URL) -> String {

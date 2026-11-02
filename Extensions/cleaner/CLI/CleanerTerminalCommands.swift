@@ -28,13 +28,7 @@ struct CleanerCommand: AsyncParsableCommand {
 @MainActor enum CleanerBridge {
     static var home: URL { CleanerCLIEnvironment.home }
 
-    static var projectCategoryIDs: [String] {
-        var seen: [String] = []
-        for target in JunkScanner.projectTargets where !seen.contains(target.categoryID) {
-            seen.append(target.categoryID)
-        }
-        return seen
-    }
+    static var projectCategoryIDs: [String] { ProjectRules.categoryIDs }
 
     static func knownCategoryIDs() -> [String] {
         JunkCatalog.entries.map(\.id) + projectCategoryIDs
