@@ -114,3 +114,7 @@ starting the idle extension: docs 51 ms, database 68 ms, studio 84 ms
 (`firstFrameMs`; baseline 48, 75 and 111 ms with the extension already
 running). Once an extension is running, the same opens take docs 16 ms and
 studio 79 ms. Every install above became active without a restart.
+
+With docs on the shared extension service runtime (host `edith-host-9`), docs
+opens in 41 ms (`firstFrameMs`, median of five background cold launches,
+including starting the idle extension), against 48 ms in the baseline.

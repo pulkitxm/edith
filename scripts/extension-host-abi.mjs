@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const workerHostABI = "edith-host-8";
+export const workerHostABI = "edith-host-9";
 export const minimumWorkerHostABI = "edith-host-8";
 const workerPrefix = "edith-host-";
 
