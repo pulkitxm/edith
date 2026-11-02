@@ -29,7 +29,7 @@ final class SocialManagerService: ExtensionService {
 
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
         guard model == nil, !settingsUI else { return false }
-        if configuration.uiOnly {
+        if configuration.isSettings {
             settingsUI = true
         } else {
             model = SocialManagerModel()
