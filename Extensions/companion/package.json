@@ -1,0 +1,10 @@
+{
+  "id": "companion",
+  "title": "Memory",
+  "symbolName": "brain.head.profile",
+  "category": "agents",
+  "background": true,
+  "commands": [
+    "companion"
+  ]
+}

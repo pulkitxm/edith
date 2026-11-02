@@ -1,0 +1,11 @@
+{
+  "id": "notchShelf",
+  "title": "Notch Shelf",
+  "symbolName": "tray.and.arrow.down",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "shelf",
+    "browser"
+  ]
+}

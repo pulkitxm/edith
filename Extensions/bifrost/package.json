@@ -1,0 +1,10 @@
+{
+  "id": "bifrost",
+  "title": "Launcher",
+  "symbolName": "rainbow",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "bifrost"
+  ]
+}

@@ -270,26 +270,14 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         prefixes[owner]?.isEmpty == false
     }
 
-    public static let prefixes: [String: Set<String>] = [
+    public static let prefixes: [String: Set<String>] = Dictionary(
+        uniqueKeysWithValues: ((try? HostIndex.bundled()) ?? []).map { ($0.id, Set($0.commands)) }
+    ).merging([
         "host": [
             "config", "app", "permissions", "guide", "schema", "version", "status", "install",
             "uninstall", "completions", "extensions", "agent",
-        ],
-        "keepAwake": [], "focusDim": [], "hinge": [], "windowSweaters": [],
-        "keystrokeHighlight": [], "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [],
-        "socialManager": [],
-        "calendar": ["calendar"], "music": ["music"], "usage": ["usage"],
-        "machines": ["machines"], "herdr": ["herdr"], "quinjet": ["quinjet"],
-        "studio": ["studio"], "database": ["database"], "docs": ["docs"],
-        "latex": ["latex"], "companion": ["companion"], "bifrost": ["bifrost"],
-        "plugins": ["skills"], "downloads": ["download", "downloads", "dl"], "seoAudit": ["seo"],
-        "codeStats": ["code-stats"], "clipboard": ["clipboard"], "attention": ["attention"],
-        "notchShelf": ["shelf", "browser"], "colorPicker": ["color", "colour"],
-        "emoji": ["emoji"], "presenter": ["presenter"], "lidAwake": ["lid-awake"],
-        "system": ["system", "apps", "tools"], "systemStats": ["system"],
-        "homebrew": ["brew"], "cleaner": ["cleaner"], "appMaintenance": ["maintenance"],
-        "jev": ["jev"], "virtualCamera": ["camera"], "audioMixer": ["audio"],
-    ]
+        ]
+    ]) { $1 }
 }
 
 public struct HostCLIProviderState: Codable, Equatable, Sendable {

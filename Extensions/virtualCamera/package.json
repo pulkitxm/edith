@@ -1,0 +1,10 @@
+{
+  "id": "virtualCamera",
+  "title": "Virtual Camera",
+  "symbolName": "web.camera",
+  "category": "media",
+  "background": true,
+  "commands": [
+    "camera"
+  ]
+}

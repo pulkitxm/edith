@@ -146,7 +146,11 @@ ci-lint:
 ci-host-abi:
 	bun scripts/extension-host-abi.mjs --check
 
-ci-scripts: ci-host-invocation ci-host-abi
+.PHONY: ci-extension-index
+ci-extension-index:
+	bun scripts/extension-index.mjs --check
+
+ci-scripts: ci-host-invocation ci-host-abi ci-extension-index
 	bun test ./scripts --path-ignore-patterns '**/._*'
 
 bench-cli:

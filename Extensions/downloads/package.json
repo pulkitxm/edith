@@ -1,0 +1,12 @@
+{
+  "id": "downloads",
+  "title": "Downloads",
+  "symbolName": "arrow.down.circle",
+  "category": "media",
+  "background": true,
+  "commands": [
+    "download",
+    "downloads",
+    "dl"
+  ]
+}

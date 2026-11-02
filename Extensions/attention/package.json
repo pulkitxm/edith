@@ -1,0 +1,10 @@
+{
+  "id": "attention",
+  "title": "Attention",
+  "symbolName": "hourglass",
+  "category": "developer",
+  "background": true,
+  "commands": [
+    "attention"
+  ]
+}

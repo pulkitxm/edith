@@ -42,12 +42,13 @@ import Testing
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../../Sources/EdithHostCore/Resources/index.json")
         let entries = try HostIndex.load(data: Data(contentsOf: url))
-        let demand = Set(entries.filter { $0.activation == .demand }.map(\.id))
+        let demand = Set(entries.filter { !$0.background }.map(\.id))
         #expect(
             demand == [
                 "homebrew", "jev", "cleaner", "blitztree", "plugins", "docs", "latex", "seoAudit",
                 "socialManager",
             ])
-        #expect(entries.first { $0.id == "notchShelf" }?.activation == .launch)
+        #expect(entries.first { $0.id == "notchShelf" }?.background == true)
+        #expect(entries.first { $0.id == "colorPicker" }?.commands == ["color", "colour"])
     }
 }

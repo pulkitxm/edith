@@ -1,0 +1,11 @@
+{
+  "id": "colorPicker",
+  "title": "Color Picker",
+  "symbolName": "eyedropper",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "color",
+    "colour"
+  ]
+}

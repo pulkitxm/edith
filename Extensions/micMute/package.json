@@ -1,0 +1,8 @@
+{
+  "id": "micMute",
+  "title": "Mic Mute",
+  "symbolName": "mic.slash.fill",
+  "category": "utilities",
+  "background": true,
+  "commands": []
+}

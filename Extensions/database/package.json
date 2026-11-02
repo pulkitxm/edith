@@ -1,0 +1,10 @@
+{
+  "id": "database",
+  "title": "Database",
+  "symbolName": "cylinder.fill",
+  "category": "developer",
+  "background": true,
+  "commands": [
+    "database"
+  ]
+}

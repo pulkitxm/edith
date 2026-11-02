@@ -1,0 +1,10 @@
+{
+  "id": "calendar",
+  "title": "Calendar",
+  "symbolName": "calendar",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "calendar"
+  ]
+}

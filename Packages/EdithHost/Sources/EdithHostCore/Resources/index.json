@@ -3,255 +3,396 @@
     "id": "usage",
     "title": "Usage",
     "symbolName": "chart.bar.fill",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": [
+      "usage"
+    ]
   },
   {
     "id": "herdr",
     "title": "Agents",
     "symbolName": "rectangle.split.3x1.fill",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": [
+      "herdr"
+    ]
   },
   {
     "id": "quinjet",
     "title": "Code Review",
     "symbolName": "arrow.triangle.branch",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": [
+      "quinjet"
+    ]
   },
   {
     "id": "companion",
     "title": "Memory",
     "symbolName": "brain.head.profile",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": [
+      "companion"
+    ]
   },
   {
     "id": "plugins",
     "title": "Plugins",
     "symbolName": "square.stack.3d.up",
     "category": "agents",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "skills"
+    ]
   },
   {
     "id": "machines",
     "title": "Machines",
     "symbolName": "desktopcomputer",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": [
+      "machines"
+    ]
   },
   {
     "id": "terminal",
     "title": "Terminal",
     "symbolName": "terminal",
-    "category": "agents"
+    "category": "agents",
+    "background": true,
+    "commands": []
   },
   {
     "id": "docs",
     "title": "Docs",
     "symbolName": "book.closed",
     "category": "agents",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "docs"
+    ]
   },
   {
     "id": "appMaintenance",
     "title": "App Updates",
     "symbolName": "shippingbox.and.arrow.backward",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "maintenance"
+    ]
   },
   {
     "id": "homebrew",
     "title": "Homebrew",
     "symbolName": "cube.box",
     "category": "utilities",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "brew"
+    ]
   },
   {
     "id": "cleaner",
     "title": "Cleaner",
     "symbolName": "sparkles.rectangle.stack",
     "category": "utilities",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "cleaner"
+    ]
   },
   {
     "id": "blitztree",
     "title": "Disk Map",
     "symbolName": "square.grid.3x3.fill",
     "category": "utilities",
-    "activation": "demand"
+    "background": false,
+    "commands": []
   },
   {
     "id": "system",
     "title": "Running Apps",
     "symbolName": "switch.2",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "system",
+      "apps",
+      "tools"
+    ]
   },
   {
     "id": "keepAwake",
     "title": "Keep Awake",
     "symbolName": "moon.zzz",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": []
   },
   {
     "id": "lidAwake",
     "title": "Lid Awake",
     "symbolName": "laptopcomputer",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "lid-awake"
+    ]
   },
   {
     "id": "systemStats",
     "title": "Menu Bar Stats",
     "symbolName": "gauge.with.needle",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "system"
+    ]
   },
   {
     "id": "micMute",
     "title": "Mic Mute",
     "symbolName": "mic.slash.fill",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": []
   },
   {
     "id": "presenter",
     "title": "Presenter",
     "symbolName": "theatermasks.fill",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "presenter"
+    ]
   },
   {
     "id": "calendar",
     "title": "Calendar",
     "symbolName": "calendar",
-    "category": "utilities"
+    "category": "utilities",
+    "background": true,
+    "commands": [
+      "calendar"
+    ]
   },
   {
     "id": "bifrost",
     "title": "Launcher",
     "symbolName": "rainbow",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "bifrost"
+    ]
   },
   {
     "id": "clipboard",
     "title": "Clipboard",
     "symbolName": "doc.on.clipboard",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "clipboard"
+    ]
   },
   {
     "id": "emoji",
     "title": "Emoji Picker",
     "symbolName": "face.smiling",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "emoji"
+    ]
   },
   {
     "id": "colorPicker",
     "title": "Color Picker",
     "symbolName": "eyedropper",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "color",
+      "colour"
+    ]
   },
   {
     "id": "keystrokeHighlight",
     "title": "Keystroke Highlight",
     "symbolName": "keyboard.badge.ellipsis",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": []
   },
   {
     "id": "focusDim",
     "title": "Focus Dim",
     "symbolName": "circle.lefthalf.filled",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": []
   },
   {
     "id": "notchShelf",
     "title": "Notch Shelf",
     "symbolName": "tray.and.arrow.down",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "shelf",
+      "browser"
+    ]
   },
   {
     "id": "audioMixer",
     "title": "Audio Mixer",
     "symbolName": "slider.horizontal.3",
-    "category": "desk"
+    "category": "desk",
+    "background": true,
+    "commands": [
+      "audio"
+    ]
   },
   {
     "id": "studio",
     "title": "Studio",
     "symbolName": "wand.and.stars",
-    "category": "media"
+    "category": "media",
+    "background": true,
+    "commands": [
+      "studio"
+    ]
   },
   {
     "id": "timeLapse",
     "title": "Screen Recorder",
     "symbolName": "record.circle",
-    "category": "media"
+    "category": "media",
+    "background": true,
+    "commands": []
   },
   {
     "id": "virtualCamera",
     "title": "Virtual Camera",
     "symbolName": "web.camera",
-    "category": "media"
+    "category": "media",
+    "background": true,
+    "commands": [
+      "camera"
+    ]
   },
   {
     "id": "music",
     "title": "Music",
     "symbolName": "music.note",
-    "category": "media"
+    "category": "media",
+    "background": true,
+    "commands": [
+      "music"
+    ]
   },
   {
     "id": "downloads",
     "title": "Downloads",
     "symbolName": "arrow.down.circle",
-    "category": "media"
+    "category": "media",
+    "background": true,
+    "commands": [
+      "download",
+      "downloads",
+      "dl"
+    ]
   },
   {
     "id": "socialManager",
     "title": "Social Manager",
     "symbolName": "person.crop.rectangle.stack",
     "category": "media",
-    "activation": "demand"
+    "background": false,
+    "commands": []
   },
   {
     "id": "database",
     "title": "Database",
     "symbolName": "cylinder.fill",
-    "category": "developer"
+    "category": "developer",
+    "background": true,
+    "commands": [
+      "database"
+    ]
   },
   {
     "id": "codeStats",
     "title": "Code Stats",
     "symbolName": "chart.line.uptrend.xyaxis",
-    "category": "developer"
+    "category": "developer",
+    "background": true,
+    "commands": [
+      "code-stats"
+    ]
   },
   {
     "id": "seoAudit",
     "title": "Site Audit",
     "symbolName": "doc.text.magnifyingglass",
     "category": "developer",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "seo"
+    ]
   },
   {
     "id": "latex",
     "title": "LaTeX",
     "symbolName": "doc.richtext",
     "category": "developer",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "latex"
+    ]
   },
   {
     "id": "attention",
     "title": "Attention",
     "symbolName": "hourglass",
-    "category": "developer"
+    "category": "developer",
+    "background": true,
+    "commands": [
+      "attention"
+    ]
   },
   {
     "id": "hinge",
     "title": "Hinge",
     "symbolName": "laptopcomputer.and.arrow.down",
-    "category": "labs"
+    "category": "labs",
+    "background": true,
+    "commands": []
   },
   {
     "id": "windowSweaters",
     "title": "Window Sweaters",
     "symbolName": "square.dashed",
-    "category": "labs"
+    "category": "labs",
+    "background": true,
+    "commands": []
   },
   {
     "id": "jev",
     "title": "Jev",
     "symbolName": "sparkles",
     "category": "labs",
-    "activation": "demand"
+    "background": false,
+    "commands": [
+      "jev"
+    ]
   }
 ]

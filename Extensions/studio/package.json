@@ -1,0 +1,10 @@
+{
+  "id": "studio",
+  "title": "Studio",
+  "symbolName": "wand.and.stars",
+  "category": "media",
+  "background": true,
+  "commands": [
+    "studio"
+  ]
+}

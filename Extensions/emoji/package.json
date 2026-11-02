@@ -1,0 +1,10 @@
+{
+  "id": "emoji",
+  "title": "Emoji Picker",
+  "symbolName": "face.smiling",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "emoji"
+  ]
+}

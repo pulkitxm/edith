@@ -1,0 +1,10 @@
+{
+  "id": "presenter",
+  "title": "Presenter",
+  "symbolName": "theatermasks.fill",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "presenter"
+  ]
+}

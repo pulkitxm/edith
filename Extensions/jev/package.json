@@ -1,0 +1,10 @@
+{
+  "id": "jev",
+  "title": "Jev",
+  "symbolName": "sparkles",
+  "category": "labs",
+  "background": false,
+  "commands": [
+    "jev"
+  ]
+}

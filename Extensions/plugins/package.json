@@ -1,0 +1,10 @@
+{
+  "id": "plugins",
+  "title": "Plugins",
+  "symbolName": "square.stack.3d.up",
+  "category": "agents",
+  "background": false,
+  "commands": [
+    "skills"
+  ]
+}

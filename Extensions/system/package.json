@@ -1,0 +1,12 @@
+{
+  "id": "system",
+  "title": "Running Apps",
+  "symbolName": "switch.2",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "system",
+    "apps",
+    "tools"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "homebrew",
+  "title": "Homebrew",
+  "symbolName": "cube.box",
+  "category": "utilities",
+  "background": false,
+  "commands": [
+    "brew"
+  ]
+}

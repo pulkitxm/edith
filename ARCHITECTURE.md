@@ -34,9 +34,15 @@ is an extension. A downloaded extension is `<id>/package.json` plus one
 processes are short-lived native task and CLI children, the virtual camera
 system extension carrier, the lid-awake helper, and the `ed` launcher.
 
-The host index (`Packages/EdithHost/Sources/EdithHostCore/Resources/index.json`)
-marks each extension `launch` or `demand`. Launch extensions start with the
-app; demand extensions stay idle until a page, setting or command needs them.
+Each extension declares what the host registers for it in
+`Extensions/<id>/package.json`: its title, symbol, category, `ed` command words
+and whether it has `background` work. `scripts/extension-index.mjs --write`
+renders those declarations into the host index
+(`Packages/EdithHost/Sources/EdithHostCore/Resources/index.json`), and
+`make ci-extension-index` fails when the index is stale. The host registers
+commands from the index without loading extension code. Background extensions
+start with the app; the others stay idle until a page, setting or command
+needs them.
 
 Extensions are built against the host contract in `Packages/ExtensionSupport`
 and `Packages/ExtensionMarketplace`. `scripts/extension-host-abi.mjs` computes
