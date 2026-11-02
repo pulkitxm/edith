@@ -6,5 +6,13 @@
   "background": false,
   "commands": [
     "quinjet"
+  ],
+  "pages": [
+    {
+      "id": "quinjet",
+      "title": "Code Review",
+      "symbolName": "arrow.triangle.branch",
+      "order": 3
+    }
   ]
 }

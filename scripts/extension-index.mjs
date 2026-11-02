@@ -69,6 +69,56 @@ export function parseShortcut(shortcut, context) {
   };
 }
 
+const pageParents = ["agents", "utilities", "media", "developer"];
+const sectionPages = ["appMaintenance"];
+
+function checked(declaration, directory, field, required, optional = {}) {
+  const allowed = [...Object.keys(required), ...Object.keys(optional)];
+  const unknown = Object.keys(declaration).filter(
+    (key) => !allowed.includes(key),
+  );
+  const invalid = Object.entries(required).filter(
+    ([key, type]) =>
+      typeof declaration[key] !== type ||
+      (type === "string" && !declaration[key]) ||
+      (type === "number" && !Number.isInteger(declaration[key])),
+  );
+  const invalidOptional = Object.entries(optional).filter(
+    ([key, type]) =>
+      Object.hasOwn(declaration, key) && typeof declaration[key] !== type,
+  );
+  if (unknown.length || invalid.length || invalidOptional.length)
+    throw new Error(
+      `${directory}: ${field} need ${Object.keys(required).join(", ")}`,
+    );
+  return declaration;
+}
+
+function page(declaration, directory) {
+  const { detachable = true, ...rest } = checked(
+    declaration,
+    directory,
+    "pages",
+    { id: "string", title: "string", symbolName: "string", order: "number" },
+    { detachable: "boolean", logoName: "string" },
+  );
+  return { ...rest, detachable };
+}
+
+function section(declaration, directory) {
+  checked(declaration, directory, "sections", {
+    page: "string",
+    id: "string",
+    title: "string",
+    symbolName: "string",
+    summary: "string",
+    order: "number",
+  });
+  if (!sectionPages.includes(declaration.page))
+    throw new Error(`${directory}: unknown section page ${declaration.page}`);
+  return declaration;
+}
+
 function hotkey(declaration, directory) {
   const keys = ["id", "prefix", "title", "subtitle", "shortcut"];
   if (
@@ -92,6 +142,8 @@ export function validateDeclaration(declaration, directory) {
     "commands",
     "hotkeys",
     "launchWhen",
+    "pages",
+    "sections",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
@@ -111,8 +163,6 @@ export function validateDeclaration(declaration, directory) {
     new Set(declaration.commands).size !== declaration.commands.length
   )
     throw new Error(`${directory}: commands must be unique command words`);
-  if (!Array.isArray(declaration.hotkeys ?? []))
-    throw new Error(`${directory}: hotkeys must be a list`);
   const launchWhen = declaration.launchWhen ?? [];
   if (
     !Array.isArray(launchWhen) ||
@@ -129,9 +179,23 @@ export function validateDeclaration(declaration, directory) {
     throw new Error(`${directory}: launchWhen needs key and boolean default`);
   if (declaration.background && launchWhen.length)
     throw new Error(`${directory}: background already starts at launch`);
+  for (const field of ["hotkeys", "pages", "sections"])
+    if (!Array.isArray(declaration[field] ?? []))
+      throw new Error(`${directory}: ${field} must be a list`);
+  const pages = (declaration.pages ?? []).map((entry) =>
+    page(entry, directory),
+  );
+  if (pages.length && !pageParents.includes(declaration.category))
+    throw new Error(
+      `${directory}: ${declaration.category} extensions have no pages`,
+    );
   return {
     ...declaration,
     launchWhen,
+    pages,
+    sections: (declaration.sections ?? []).map((entry) =>
+      section(entry, directory),
+    ),
     hotkeys: (declaration.hotkeys ?? []).map((entry) =>
       hotkey(entry, directory),
     ),
@@ -171,6 +235,15 @@ export function orderedIndex(declarations, previous = []) {
 export async function renderIndex(root = process.cwd()) {
   const previous = JSON.parse(await readFile(resolve(root, indexPath), "utf8"));
   const index = orderedIndex(await extensionDeclarations(root), previous);
+  for (const [field, values] of [
+    ["page id", index.flatMap(({ pages }) => pages.map(({ id }) => id))],
+    [
+      "section id",
+      index.flatMap(({ sections }) => sections.map(({ id }) => id)),
+    ],
+  ])
+    if (new Set(values).size !== values.length)
+      throw new Error(`Two extensions declare the same ${field}`);
   for (const field of ["id", "prefix"]) {
     const values = index.flatMap(({ hotkeys }) =>
       hotkeys.map((entry) => entry[field]),

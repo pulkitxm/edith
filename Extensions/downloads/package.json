@@ -8,5 +8,13 @@
     "download",
     "downloads",
     "dl"
+  ],
+  "pages": [
+    {
+      "id": "downloads",
+      "title": "Downloads",
+      "symbolName": "arrow.down.circle",
+      "order": 4
+    }
   ]
 }

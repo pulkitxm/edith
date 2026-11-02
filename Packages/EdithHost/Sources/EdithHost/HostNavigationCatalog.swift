@@ -1,4 +1,5 @@
 import EdithExtensionCore
+import EdithHostCore
 import Foundation
 
 struct HostNavigationSection: Identifiable, Equatable {
@@ -71,111 +72,65 @@ enum HostNavigationCatalog {
             id: "updates", title: "Updates", symbol: "arrow.triangle.2.circlepath",
             extensionID: nil, summary: "Version and automatic update behavior"),
     ]
-    static let maintenance: [HostNavigationSection] = [
-        .init(
-            id: "Updates", title: "Updates", symbol: "arrow.up.circle",
-            extensionID: "appMaintenance", summary: "Review and run available application updates."),
-        .init(
-            id: "Packages", title: "Packages", symbol: "shippingbox", extensionID: "homebrew",
-            summary: "Manage installed and discoverable Homebrew packages."),
-        .init(
-            id: "Remove", title: "Remove", symbol: "trash", extensionID: "appMaintenance",
-            summary: "Review applications and their related files before removal."),
-        .init(
-            id: "Cleaner", title: "Cleaner", symbol: "sparkles.rectangle.stack",
-            extensionID: "cleaner", summary: "Find reclaimable space and remove it after review."),
-        .init(
-            id: "History", title: "History", symbol: "clock.arrow.circlepath",
-            extensionID: "appMaintenance", summary: "Review completed maintenance operations."),
-    ]
-    static let pages: [HostNavigationPage] = [
-        .init(id: "home", title: "Home", symbol: "house.fill"),
-        .init(
-            id: "agents", title: "Agents & Terminal", symbol: "sparkles", suite: "agents",
-            landing: true),
-        .init(
-            id: "dashboard", title: "Usage", symbol: "chart.bar.fill", suite: "agents",
-            parentID: "agents", extensionID: "usage"),
-        .init(
-            id: "herdr", title: "Agents", symbol: "rectangle.split.3x1.fill", suite: "agents",
-            parentID: "agents", extensionID: "herdr", logoName: "herdr"),
-        .init(
-            id: "quinjet", title: "Code Review", symbol: "arrow.triangle.branch", suite: "agents",
-            parentID: "agents", extensionID: "quinjet"),
-        .init(
-            id: "companion", title: "Memory", symbol: "brain.head.profile", suite: "agents",
-            parentID: "agents", extensionID: "companion"),
-        .init(
-            id: "plugins", title: "Plugins", symbol: "square.stack.3d.up", suite: "agents",
-            parentID: "agents", extensionID: "plugins"),
-        .init(
-            id: "machines", title: "Machines", symbol: "server.rack", suite: "agents",
-            parentID: "agents", extensionID: "machines"),
-        .init(
-            id: "docs", title: "Docs", symbol: "book.closed", suite: "agents", parentID: "agents",
-            extensionID: "docs"),
-        .init(
-            id: "system", title: "Mac Utilities", symbol: "switch.2", suite: "utilities",
-            landing: true),
-        .init(
-            id: "runningApps", title: "Running Apps", symbol: "cpu", suite: "utilities",
-            parentID: "system", extensionID: "system"),
-        .init(
-            id: "blitztree", title: "Disk Map", symbol: "square.grid.3x3.fill",
-            suite: "utilities", parentID: "system", extensionID: "blitztree"),
-        .init(
-            id: "calendar", title: "Calendar", symbol: "calendar", suite: "utilities",
-            parentID: "system", extensionID: "calendar"),
-        .init(
-            id: "appMaintenance", title: "Maintenance", symbol: "shippingbox.and.arrow.backward",
-            suite: "utilities", sections: maintenance, landing: true),
-        .init(id: "desk", title: "Desk", symbol: "hand.tap", suite: "desk", landing: true),
-        .init(
-            id: "media", title: "Media", symbol: "play.rectangle.on.rectangle", suite: "media",
-            landing: true),
-        .init(
-            id: "studio", title: "Studio", symbol: "wand.and.stars", suite: "media",
-            parentID: "media", extensionID: "studio"),
-        .init(
-            id: "socialManager", title: "Social Manager", symbol: "person.crop.rectangle.stack",
-            suite: "media", parentID: "media", extensionID: "socialManager", detachable: false),
-        .init(
-            id: "timeLapse", title: "Screen Recorder", symbol: "record.circle", suite: "media",
-            parentID: "media", extensionID: "timeLapse"),
-        .init(
-            id: "downloads", title: "Downloads", symbol: "arrow.down.circle", suite: "media",
-            parentID: "media", extensionID: "downloads"),
-        .init(
-            id: "music", title: "Music", symbol: "music.note", suite: "media", parentID: "media",
-            extensionID: "music"),
-        .init(
-            id: "virtualCamera", title: "Virtual Camera", symbol: "web.camera", suite: "media",
-            parentID: "media", extensionID: "virtualCamera"),
-        .init(
-            id: "data", title: "Developer & Data", symbol: "cylinder.split.1x2", suite: "developer",
-            landing: true),
-        .init(
-            id: "database", title: "Database", symbol: "cylinder.fill", suite: "developer",
-            parentID: "data", extensionID: "database"),
-        .init(
-            id: "codeStats", title: "Code Stats", symbol: "chart.line.uptrend.xyaxis",
-            suite: "developer", parentID: "data", extensionID: "codeStats"),
-        .init(
-            id: "seoAudit", title: "Site Audit", symbol: "doc.text.magnifyingglass",
-            suite: "developer", parentID: "data", extensionID: "seoAudit"),
-        .init(
-            id: "latex", title: "LaTeX", symbol: "doc.richtext", suite: "developer",
-            parentID: "data", extensionID: "latex"),
-        .init(
-            id: "attention", title: "Attention", symbol: "hourglass", suite: "developer",
-            parentID: "data", extensionID: "attention"),
-        .init(id: "extensions", title: "Extensions", symbol: "puzzlepiece.extension"),
-        .init(
-            id: "settings", title: "Settings", symbol: "gearshape", sections: settings,
-            detachable: false),
-        .init(id: "about", title: "About", symbol: "info.circle", detachable: false),
-    ]
-    static let suiteProviders = HostMarketplaceCatalog.providers()
+    static let entries = (try? HostIndex.bundled()) ?? []
+    static let maintenance = sections(entries, page: "appMaintenance")
+    static let pages = pages(entries)
+
+    static func sections(_ entries: [HostExtension], page: String) -> [HostNavigationSection] {
+        entries.flatMap { entry in
+            entry.sections.filter { $0.page == page }.map { (entry.id, $0) }
+        }
+        .sorted { $0.1.order < $1.1.order }
+        .map { owner, section in
+            HostNavigationSection(
+                id: section.id, title: section.title, symbol: section.symbolName,
+                extensionID: owner, summary: section.summary)
+        }
+    }
+
+    static func pages(_ entries: [HostExtension]) -> [HostNavigationPage] {
+        func children(_ suite: String, parent: String) -> [HostNavigationPage] {
+            entries.filter { $0.category == suite }
+                .flatMap { entry in entry.pages.map { (entry.id, $0) } }
+                .sorted { $0.1.order < $1.1.order }
+                .map { owner, page in
+                    HostNavigationPage(
+                        id: page.id, title: page.title, symbol: page.symbolName, suite: suite,
+                        parentID: parent, extensionID: owner, detachable: page.detachable,
+                        logoName: page.logoName)
+                }
+        }
+        return [
+            .init(id: "home", title: "Home", symbol: "house.fill"),
+            .init(
+                id: "agents", title: "Agents & Terminal", symbol: "sparkles", suite: "agents",
+                landing: true),
+        ] + children("agents", parent: "agents") + [
+            .init(
+                id: "system", title: "Mac Utilities", symbol: "switch.2", suite: "utilities",
+                landing: true)
+        ] + children("utilities", parent: "system") + [
+            .init(
+                id: "appMaintenance", title: "Maintenance",
+                symbol: "shippingbox.and.arrow.backward", suite: "utilities",
+                sections: sections(entries, page: "appMaintenance"), landing: true),
+            .init(id: "desk", title: "Desk", symbol: "hand.tap", suite: "desk", landing: true),
+            .init(
+                id: "media", title: "Media", symbol: "play.rectangle.on.rectangle",
+                suite: "media", landing: true),
+        ] + children("media", parent: "media") + [
+            .init(
+                id: "data", title: "Developer & Data", symbol: "cylinder.split.1x2",
+                suite: "developer", landing: true)
+        ] + children("developer", parent: "data") + [
+            .init(id: "extensions", title: "Extensions", symbol: "puzzlepiece.extension"),
+            .init(
+                id: "settings", title: "Settings", symbol: "gearshape", sections: settings,
+                detachable: false),
+            .init(id: "about", title: "About", symbol: "info.circle", detachable: false),
+        ]
+    }
+    static let suiteProviders = HostMarketplaceCatalog.providers(entries)
     static func page(_ id: String) -> HostNavigationPage { pages.first { $0.id == id } ?? pages[0] }
     static func visible(_ page: HostNavigationPage, active: Set<String>, defaults: UserDefaults)
         -> Bool

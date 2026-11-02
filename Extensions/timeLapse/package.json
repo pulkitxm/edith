@@ -4,5 +4,13 @@
   "symbolName": "record.circle",
   "category": "media",
   "background": false,
-  "commands": []
+  "commands": [],
+  "pages": [
+    {
+      "id": "timeLapse",
+      "title": "Screen Recorder",
+      "symbolName": "record.circle",
+      "order": 3
+    }
+  ]
 }

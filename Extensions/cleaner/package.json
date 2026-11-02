@@ -6,5 +6,15 @@
   "background": false,
   "commands": [
     "cleaner"
+  ],
+  "sections": [
+    {
+      "page": "appMaintenance",
+      "id": "Cleaner",
+      "title": "Cleaner",
+      "symbolName": "sparkles.rectangle.stack",
+      "summary": "Find reclaimable space and remove it after review.",
+      "order": 4
+    }
   ]
 }

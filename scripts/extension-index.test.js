@@ -26,6 +26,8 @@ test("declarations reject unknown keys, mismatched ids and invalid commands", ()
     ...declaration,
     launchWhen: [],
     hotkeys: [],
+    pages: [],
+    sections: [],
   });
   for (const [value, directory] of [
     [{ ...declaration, hotkey: "x" }, "sample"],
@@ -83,5 +85,68 @@ test("launch conditions need a key and a boolean default and exclude background"
     ).toThrow();
   expect(() =>
     validateDeclaration({ ...conditional, background: true }, "sample"),
+  ).toThrow();
+});
+
+test("pages default to detachable and sections name a known page", () => {
+  const paged = {
+    ...declaration,
+    category: "agents",
+    pages: [
+      { id: "samplePage", title: "Sample", symbolName: "star", order: 1 },
+    ],
+    sections: [
+      {
+        page: "appMaintenance",
+        id: "Sample",
+        title: "Sample",
+        symbolName: "star",
+        summary: "A synthetic section.",
+        order: 1,
+      },
+    ],
+  };
+  const validated = validateDeclaration(paged, "sample");
+  expect(validated.pages).toEqual([
+    {
+      id: "samplePage",
+      title: "Sample",
+      symbolName: "star",
+      order: 1,
+      detachable: true,
+    },
+  ]);
+  expect(validated.sections).toEqual(paged.sections);
+  for (const pages of [
+    [{ id: "samplePage", title: "Sample", symbolName: "star" }],
+    [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1.5 }],
+    [
+      {
+        id: "samplePage",
+        title: "Sample",
+        symbolName: "star",
+        order: 1,
+        extra: 1,
+      },
+    ],
+    [
+      {
+        id: "samplePage",
+        title: "Sample",
+        symbolName: "star",
+        order: 1,
+        detachable: "no",
+      },
+    ],
+  ])
+    expect(() => validateDeclaration({ ...paged, pages }, "sample")).toThrow();
+  expect(() =>
+    validateDeclaration(
+      { ...paged, sections: [{ ...paged.sections[0], page: "settings" }] },
+      "sample",
+    ),
+  ).toThrow();
+  expect(() =>
+    validateDeclaration({ ...paged, category: "desk" }, "sample"),
   ).toThrow();
 });

@@ -8,5 +8,13 @@
     "system",
     "apps",
     "tools"
+  ],
+  "pages": [
+    {
+      "id": "runningApps",
+      "title": "Running Apps",
+      "symbolName": "cpu",
+      "order": 1
+    }
   ]
 }

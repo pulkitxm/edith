@@ -6,5 +6,13 @@
   "background": false,
   "commands": [
     "database"
+  ],
+  "pages": [
+    {
+      "id": "database",
+      "title": "Database",
+      "symbolName": "cylinder.fill",
+      "order": 1
+    }
   ]
 }

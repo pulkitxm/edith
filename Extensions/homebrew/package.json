@@ -6,5 +6,15 @@
   "background": false,
   "commands": [
     "brew"
+  ],
+  "sections": [
+    {
+      "page": "appMaintenance",
+      "id": "Packages",
+      "title": "Packages",
+      "symbolName": "shippingbox",
+      "summary": "Manage installed and discoverable Homebrew packages.",
+      "order": 2
+    }
   ]
 }
