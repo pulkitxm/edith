@@ -19,14 +19,14 @@ import Testing
     #if MACHINE_RUNTIME_TESTS
     @Test func invalidFixtureAdmissionRejectsRuntimeBeforeServices() {
         var admissions = 0
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in
+        let runtime = makeMachinesRuntime(fixtureAdmission: { _ in
             admissions += 1
             throw WorkerFixtureSupport.WorkerFixtureError.invalid
         })
+        let suite = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? ""
         for operation in ["start", "synchronize"] {
-            #expect(
-                (runtime.execute(["operation": operation]) as? NSDictionary)?["ok"] as? Bool
-                    == false)
+            let input: NSDictionary = ["operation": operation, "defaultsSuite": suite]
+            #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == false)
         }
         #expect(admissions == 2)
         #expect(
