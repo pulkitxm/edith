@@ -61,6 +61,8 @@ async function waitFor(id, version, seconds = 60) {
     if (reply.status === 0) {
       const info = JSON.parse(reply.stdout);
       if (info.version === version && info.state === "active") return info;
+      if (info.version === version && info.state === "idle")
+        edithCLI(["extensions", "enable", id, "--json"]);
       if (info.state === "failed") return info;
     }
     await Bun.sleep(250);
