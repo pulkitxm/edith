@@ -1,0 +1,10 @@
+{
+  "id": "clipboard",
+  "title": "Clipboard",
+  "symbolName": "doc.on.clipboard",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "clipboard"
+  ]
+}

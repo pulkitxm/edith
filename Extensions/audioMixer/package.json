@@ -1,0 +1,10 @@
+{
+  "id": "audioMixer",
+  "title": "Audio Mixer",
+  "symbolName": "slider.horizontal.3",
+  "category": "desk",
+  "background": true,
+  "commands": [
+    "audio"
+  ]
+}

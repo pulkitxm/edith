@@ -1,0 +1,10 @@
+{
+  "id": "latex",
+  "title": "LaTeX",
+  "symbolName": "doc.richtext",
+  "category": "developer",
+  "background": false,
+  "commands": [
+    "latex"
+  ]
+}

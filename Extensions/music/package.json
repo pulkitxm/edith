@@ -1,0 +1,10 @@
+{
+  "id": "music",
+  "title": "Music",
+  "symbolName": "music.note",
+  "category": "media",
+  "background": true,
+  "commands": [
+    "music"
+  ]
+}

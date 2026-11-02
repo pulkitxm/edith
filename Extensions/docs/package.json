@@ -1,0 +1,10 @@
+{
+  "id": "docs",
+  "title": "Docs",
+  "symbolName": "book.closed",
+  "category": "agents",
+  "background": false,
+  "commands": [
+    "docs"
+  ]
+}

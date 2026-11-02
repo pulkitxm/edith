@@ -1,0 +1,8 @@
+{
+  "id": "keystrokeHighlight",
+  "title": "Keystroke Highlight",
+  "symbolName": "keyboard.badge.ellipsis",
+  "category": "desk",
+  "background": true,
+  "commands": []
+}

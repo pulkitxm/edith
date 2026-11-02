@@ -1,0 +1,10 @@
+{
+  "id": "appMaintenance",
+  "title": "App Updates",
+  "symbolName": "shippingbox.and.arrow.backward",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "maintenance"
+  ]
+}

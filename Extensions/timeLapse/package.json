@@ -1,0 +1,8 @@
+{
+  "id": "timeLapse",
+  "title": "Screen Recorder",
+  "symbolName": "record.circle",
+  "category": "media",
+  "background": true,
+  "commands": []
+}

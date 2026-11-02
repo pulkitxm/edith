@@ -1,0 +1,10 @@
+{
+  "id": "quinjet",
+  "title": "Code Review",
+  "symbolName": "arrow.triangle.branch",
+  "category": "agents",
+  "background": true,
+  "commands": [
+    "quinjet"
+  ]
+}

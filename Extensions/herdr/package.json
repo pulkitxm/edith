@@ -1,0 +1,10 @@
+{
+  "id": "herdr",
+  "title": "Agents",
+  "symbolName": "rectangle.split.3x1.fill",
+  "category": "agents",
+  "background": true,
+  "commands": [
+    "herdr"
+  ]
+}

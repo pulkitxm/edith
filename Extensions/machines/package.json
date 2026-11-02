@@ -1,0 +1,10 @@
+{
+  "id": "machines",
+  "title": "Machines",
+  "symbolName": "desktopcomputer",
+  "category": "agents",
+  "background": true,
+  "commands": [
+    "machines"
+  ]
+}

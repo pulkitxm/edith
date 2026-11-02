@@ -1,0 +1,10 @@
+{
+  "id": "usage",
+  "title": "Usage",
+  "symbolName": "chart.bar.fill",
+  "category": "agents",
+  "background": true,
+  "commands": [
+    "usage"
+  ]
+}

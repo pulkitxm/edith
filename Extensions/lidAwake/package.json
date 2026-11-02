@@ -1,0 +1,10 @@
+{
+  "id": "lidAwake",
+  "title": "Lid Awake",
+  "symbolName": "laptopcomputer",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "lid-awake"
+  ]
+}

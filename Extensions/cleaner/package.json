@@ -1,0 +1,10 @@
+{
+  "id": "cleaner",
+  "title": "Cleaner",
+  "symbolName": "sparkles.rectangle.stack",
+  "category": "utilities",
+  "background": false,
+  "commands": [
+    "cleaner"
+  ]
+}

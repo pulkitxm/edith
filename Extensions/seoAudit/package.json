@@ -1,0 +1,10 @@
+{
+  "id": "seoAudit",
+  "title": "Site Audit",
+  "symbolName": "doc.text.magnifyingglass",
+  "category": "developer",
+  "background": false,
+  "commands": [
+    "seo"
+  ]
+}

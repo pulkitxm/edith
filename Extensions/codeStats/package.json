@@ -1,0 +1,10 @@
+{
+  "id": "codeStats",
+  "title": "Code Stats",
+  "symbolName": "chart.line.uptrend.xyaxis",
+  "category": "developer",
+  "background": true,
+  "commands": [
+    "code-stats"
+  ]
+}

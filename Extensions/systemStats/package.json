@@ -1,0 +1,10 @@
+{
+  "id": "systemStats",
+  "title": "Menu Bar Stats",
+  "symbolName": "gauge.with.needle",
+  "category": "utilities",
+  "background": true,
+  "commands": [
+    "system"
+  ]
+}
