@@ -43,6 +43,17 @@ and `Packages/ExtensionMarketplace`. `scripts/extension-host-abi.mjs` computes
 the contract identifier from those sources, and the host refuses to load a
 package built for a different one. An extension never links the host.
 
+The support modules ship once, as `Contents/Frameworks/libEdithExtensionKit.dylib`
+built from the `EdithExtensionKit` product with library evolution. The host and
+every extension role link that one copy, so shortcut monitors, window routing
+and other shared state exist once per process. Each role compiles only a small
+renamed `EdithExtensionSupport` context module that holds its environment,
+defaults suite and data folder and registers them under its image. Shared code
+that needs per-extension state takes the caller's image through an
+`image: UnsafeRawPointer = #dsohandle` default argument and resolves it with
+`ExtensionScope.resolve`; it never caches a scope in a static. Packaging fails
+if a role embeds kit code.
+
 ## Marketplace
 
 Each extension is released as its own ZIP with JSON metadata and a detached
