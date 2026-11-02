@@ -7,13 +7,20 @@ public struct JunkItem: Codable, Identifiable, Sendable {
     public let path: URL
     public var sizeBytes: Int64
     public var selected: Bool
+    public var lastModified: Date?
+    public var worktree: WorktreeInfo?
 
-    public init(id: String, name: String, path: URL, sizeBytes: Int64, selected: Bool) {
+    public init(
+        id: String, name: String, path: URL, sizeBytes: Int64, selected: Bool,
+        lastModified: Date? = nil, worktree: WorktreeInfo? = nil
+    ) {
         self.id = id
         self.name = name
         self.path = path
         self.sizeBytes = sizeBytes
         self.selected = selected
+        self.lastModified = lastModified
+        self.worktree = worktree
     }
 }
 
@@ -379,17 +386,28 @@ public enum JunkCatalog {
 
 public enum JunkScanner {
     public static func directorySize(_ url: URL, isCancelled: () -> Bool = { false }) -> Int64 {
+        measure(url, isCancelled: isCancelled).bytes
+    }
+
+    static func measure(
+        _ url: URL, isCancelled: () -> Bool = { false }
+    ) -> (bytes: Int64, latest: Date?) {
         let keys: [URLResourceKey] = [
             .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .isRegularFileKey,
+            .contentModificationDateKey,
         ]
         guard
             let enumerator = FileManager.default.enumerator(
                 at: url, includingPropertiesForKeys: keys, options: [])
         else {
             let single = try? url.resourceValues(forKeys: Set(keys))
-            return Int64(single?.totalFileAllocatedSize ?? single?.fileAllocatedSize ?? 0)
+            return (
+                Int64(single?.totalFileAllocatedSize ?? single?.fileAllocatedSize ?? 0),
+                single?.contentModificationDate
+            )
         }
         var total: Int64 = 0
+        var latest: Date?
         var seen = 0
         for case let item as URL in enumerator {
             seen += 1
@@ -398,8 +416,31 @@ public enum JunkScanner {
                 values.isRegularFile == true
             else { continue }
             total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
+            latest = later(latest, values.contentModificationDate)
         }
-        return total
+        return (total, latest)
+    }
+
+    static func later(_ first: Date?, _ second: Date?) -> Date? {
+        guard let first else { return second }
+        guard let second else { return first }
+        return max(first, second)
+    }
+
+    public static func outermost(_ items: [JunkItem]) -> [JunkItem] {
+        let paths = Set(items.map { $0.path.standardizedFileURL.path })
+        return items.filter { item in
+            var current = item.path.standardizedFileURL.deletingLastPathComponent()
+            while current.path != "/" && !current.path.isEmpty {
+                if paths.contains(current.path) { return false }
+                current = current.deletingLastPathComponent()
+            }
+            return true
+        }
+    }
+
+    public static func uniqueBytes(_ items: [JunkItem]) -> Int64 {
+        outermost(items).reduce(0) { $0 + $1.sizeBytes }
     }
 
     public static func scanCategory(
@@ -478,12 +519,15 @@ public enum JunkScanner {
 
     public static func clean(_ items: [JunkItem], isCancelled: () -> Bool = { false }) -> Int64 {
         var reclaimed: Int64 = 0
-        for item in items {
+        var repositories: Set<String> = []
+        for item in outermost(items) {
             guard !isCancelled() else { break }
             if (try? FileManager.default.trashItem(at: item.path, resultingItemURL: nil)) != nil {
                 reclaimed += item.sizeBytes
+                if let repository = item.worktree?.repository { repositories.insert(repository) }
             }
         }
+        Worktrees.prune(repositories: repositories)
         return reclaimed
     }
 
@@ -506,43 +550,100 @@ public enum JunkScanner {
     public static let maxProjectItems = 5000
     static let maxWalkDepth = 12
 
+    private final class WorktreeTally {
+        let path: URL
+        let link: Worktrees.Link
+        var bytes: Int64 = 0
+        var latest: Date?
+
+        init(path: URL, link: Worktrees.Link) {
+            self.path = path
+            self.link = link
+            latest = Worktrees.gitActivity(link)
+        }
+
+        func add(_ bytes: Int64, latest date: Date?) {
+            self.bytes += bytes
+            latest = JunkScanner.later(latest, date)
+        }
+    }
+
     public static func scanProjectJunk(
         roots: [URL], isCancelled: @escaping () -> Bool = { false },
         progress: @escaping (String) -> Void
     ) -> [JunkCategory] {
         var itemsByCategory: [String: [JunkItem]] = [:]
+        var tallies: [WorktreeTally] = []
         var count = 0
         let fm = FileManager.default
         let ignore = GitIgnoreLookup()
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey]
+        let keys: [URLResourceKey] = [
+            .isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey,
+            .fileAllocatedSizeKey, .contentModificationDateKey,
+        ]
 
-        func walk(_ dir: URL, depth: Int) {
-            guard depth <= maxWalkDepth, count < maxProjectItems, !isCancelled() else { return }
+        func walk(_ dir: URL, depth: Int, enclosing: [WorktreeTally]) {
+            guard !isCancelled() else { return }
             guard
                 let children = try? fm.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: keys, options: [])
             else { return }
             let names = children.map(\.lastPathComponent)
+            var enclosing = enclosing
+            if names.contains(".git"), let link = Worktrees.link(at: dir) {
+                let tally = WorktreeTally(path: dir, link: link)
+                tallies.append(tally)
+                enclosing.append(tally)
+            }
+            var activity: Date?
+            var found: [(URL, ProjectRule, Int64)] = []
             for child in children {
-                guard count < maxProjectItems, !isCancelled() else { return }
+                guard !isCancelled() else { return }
                 let values = try? child.resourceValues(forKeys: Set(keys))
-                guard values?.isDirectory == true, values?.isSymbolicLink != true else { continue }
+                if values?.isSymbolicLink == true { continue }
+                let modified = values?.contentModificationDate
+                guard values?.isDirectory == true else {
+                    activity = later(activity, modified)
+                    let size = Int64(
+                        values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? 0)
+                    for tally in enclosing { tally.add(size, latest: modified) }
+                    continue
+                }
                 let name = child.lastPathComponent
                 if let rule = ProjectRules.match(
                     name: name, directory: dir, siblings: names, ignore: ignore)
                 {
                     let size = directorySize(child, isCancelled: isCancelled)
-                    if size > 0 {
-                        itemsByCategory[rule.categoryID, default: []].append(
-                            JunkItem(
-                                id: child.path, name: projectLabel(child), path: child,
-                                sizeBytes: size, selected: false))
+                    for tally in enclosing { tally.add(size, latest: nil) }
+                    if size > 0, count < maxProjectItems {
+                        found.append((child, rule, size))
                         count += 1
                     }
                     continue
                 }
-                if skipsWalk(name) { continue }
-                walk(child, depth: depth + 1)
+                activity = later(activity, modified)
+                let container = worktreeContainer(child, name: name)
+                if let container { walk(container, depth: depth + 2, enclosing: []) }
+                if container == nil, name == ".worktrees" {
+                    walk(child, depth: depth + 1, enclosing: enclosing)
+                    continue
+                }
+                if skipsWalk(name) || depth >= maxWalkDepth || count >= maxProjectItems {
+                    if !enclosing.isEmpty {
+                        let measured = measure(child, isCancelled: isCancelled)
+                        for tally in enclosing {
+                            tally.add(measured.bytes, latest: measured.latest)
+                        }
+                    }
+                    continue
+                }
+                walk(child, depth: depth + 1, enclosing: enclosing)
+            }
+            for (child, rule, size) in found {
+                itemsByCategory[rule.categoryID, default: []].append(
+                    JunkItem(
+                        id: child.path, name: projectLabel(child), path: child, sizeBytes: size,
+                        selected: false, lastModified: activity))
             }
         }
 
@@ -551,16 +652,58 @@ public enum JunkScanner {
             progress(
                 "Scanning \(root.lastPathComponent.isEmpty ? root.path : root.lastPathComponent) for project junk…"
             )
-            walk(root, depth: 0)
+            walk(root, depth: 0, enclosing: [])
         }
 
-        return ProjectRules.categories.compactMap { category in
+        var categories = ProjectRules.categories.compactMap { category -> JunkCategory? in
             guard let items = itemsByCategory[category.id] else { return nil }
             return JunkCategory(
                 id: category.id, name: category.name, detail: category.detail,
-                items: items.sorted { $0.sizeBytes > $1.sizeBytes })
+                items: items.map { item in
+                    var copy = item
+                    copy.lastModified = later(
+                        item.lastModified, enclosingActivity(item.path, tallies: tallies))
+                    return copy
+                })
+        }
+        if !tallies.isEmpty, !isCancelled() {
+            progress("Checking \(tallies.count) git worktrees…")
+            var seen: Set<String> = []
+            let items = tallies.compactMap { tally -> JunkItem? in
+                guard seen.insert(tally.path.standardizedFileURL.path).inserted else { return nil }
+                return JunkItem(
+                    id: tally.path.path, name: projectLabel(tally.path), path: tally.path,
+                    sizeBytes: tally.bytes, selected: false, lastModified: tally.latest,
+                    worktree: Worktrees.info(tally.link))
+            }
+            categories.append(
+                JunkCategory(
+                    id: Worktrees.categoryID, name: "Git worktrees",
+                    detail: "Removes the worktree folder only. Its branch and commits stay.",
+                    items: Worktrees.inspect(items, isCancelled: isCancelled)))
+        }
+        return categories.map { category in
+            var sorted = category
+            sorted.items.sort { $0.sizeBytes > $1.sizeBytes }
+            return sorted
         }
         .sorted { $0.sizeBytes > $1.sizeBytes }
+    }
+
+    private static func enclosingActivity(_ path: URL, tallies: [WorktreeTally]) -> Date? {
+        let itemPath = path.standardizedFileURL.path
+        return tallies.filter { itemPath.hasPrefix($0.path.standardizedFileURL.path + "/") }
+            .compactMap(\.latest).max()
+    }
+
+    private static func worktreeContainer(_ directory: URL, name: String) -> URL? {
+        guard Worktrees.containers.contains(name) else { return nil }
+        let container = directory.appendingPathComponent("worktrees")
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: container.path, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        else { return nil }
+        return container
     }
 
     static func skipsWalk(_ name: String) -> Bool {

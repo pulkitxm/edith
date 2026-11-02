@@ -31,7 +31,7 @@ public struct CleanerScanResult: Sendable {
     }
 
     public var items: [JunkItem] { categories.flatMap(\.items) }
-    public var totalBytes: Int64 { categories.reduce(0) { $0 + $1.sizeBytes } }
+    public var totalBytes: Int64 { JunkScanner.uniqueBytes(items) }
 }
 
 public struct CleanerCleanResult: Equatable, Sendable {
@@ -49,6 +49,7 @@ public struct CleanerCleanResult: Equatable, Sendable {
 public enum CleanerOperationExecution {
     public static func scan(
         entries: [JunkCatalog.Entry], roots: [URL] = [], only: String? = nil,
+        filters: CleanerFilters = CleanerFilters(minimumAge: nil, protectDirty: false),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         isCancelled: @escaping () -> Bool = { false },
         progress: @escaping (String) -> Void = { _ in }
@@ -69,15 +70,16 @@ public enum CleanerOperationExecution {
             if let only { projects = projects.filter { $0.id == only } }
             categories.append(contentsOf: projects)
         }
-        return CleanerScanResult(categories: categories)
+        return CleanerScanResult(categories: filters.apply(categories, now: Date()))
     }
 
     public static func selectedItems(
         in categories: [JunkCategory], categoryID: String? = nil
     ) -> [JunkItem] {
-        categories
-            .filter { categoryID == nil || $0.id == categoryID }
-            .flatMap { $0.items.filter(\.selected) }
+        JunkScanner.outermost(
+            categories
+                .filter { categoryID == nil || $0.id == categoryID }
+                .flatMap { $0.items.filter(\.selected) })
     }
 
     public static func clean(

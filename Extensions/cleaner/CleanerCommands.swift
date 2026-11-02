@@ -59,7 +59,7 @@ enum CleanerCommands {
     private static func preview(_ model: CleanerModel) throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "previewToken": model.previewToken.uuidString, "working": model.scanning,
-            "categories": model.categories.map { category in
+            "categories": model.visibleCategories.map { category in
                 [
                     "id": category.id, "name": category.name, "bytes": category.sizeBytes,
                     "items": category.items.map {
