@@ -4,6 +4,32 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const workerHostABI = "edith-host-8";
+export const minimumWorkerHostABI = "edith-host-8";
+const workerPrefix = "edith-host-";
+
+function workerNumber(abi) {
+  if (typeof abi !== "string" || !abi.startsWith(workerPrefix)) return null;
+  const number = Number(abi.slice(workerPrefix.length));
+  return Number.isSafeInteger(number) ? number : null;
+}
+
+export function acceptsHostABI(
+  packageABI,
+  hostABI,
+  minimum = minimumWorkerHostABI,
+) {
+  const packageNumber = workerNumber(packageABI);
+  const hostNumber = workerNumber(hostABI);
+  const minimumNumber = workerNumber(minimum);
+  if (
+    packageNumber === null ||
+    hostNumber === null ||
+    minimumNumber === null ||
+    minimumNumber > hostNumber
+  )
+    return packageABI === hostABI;
+  return packageNumber >= minimumNumber && packageNumber <= hostNumber;
+}
 
 export async function hostABI(root = process.cwd()) {
   const files = [];
@@ -47,6 +73,10 @@ export async function writeHostABI(root = process.cwd()) {
     .replace(
       /public static let workerHostABI = "[^"]+"/,
       `public static let workerHostABI = "${workerHostABI}"`,
+    )
+    .replace(
+      /public static let minimumWorkerHostABI = "[^"]+"/,
+      `public static let minimumWorkerHostABI = "${minimumWorkerHostABI}"`,
     );
   if (
     source === nextSource &&
@@ -89,6 +119,10 @@ if (
     (source.includes("public static let workerHostABI =") &&
       !source.includes(
         `public static let workerHostABI = "${workerHostABI}"`,
+      )) ||
+    (source.includes("public static let minimumWorkerHostABI =") &&
+      !source.includes(
+        `public static let minimumWorkerHostABI = "${minimumWorkerHostABI}"`,
       )) ||
     manifest.some(
       (entry) =>

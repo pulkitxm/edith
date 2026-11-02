@@ -11,7 +11,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostABI, workerHostABI, writeHostABI } from "./extension-host-abi.mjs";
+import {
+  acceptsHostABI,
+  hostABI,
+  workerHostABI,
+  writeHostABI,
+} from "./extension-host-abi.mjs";
 
 async function fixture(run) {
   const root = await mkdtemp(join(tmpdir(), "extension-host-contract-"));
@@ -263,4 +268,24 @@ test("every package follows the current worker contract", async () => {
       "utf8",
     ),
   ).toContain(`public static let workerHostABI = "${workerHostABI}"`);
+});
+
+test("worker packages stay accepted from the minimum up to the host version", () => {
+  expect(acceptsHostABI("edith-host-8", "edith-host-9", "edith-host-8")).toBe(
+    true,
+  );
+  expect(acceptsHostABI("edith-host-9", "edith-host-9", "edith-host-8")).toBe(
+    true,
+  );
+  expect(acceptsHostABI("edith-host-7", "edith-host-9", "edith-host-8")).toBe(
+    false,
+  );
+  expect(acceptsHostABI("edith-host-10", "edith-host-9", "edith-host-8")).toBe(
+    false,
+  );
+  expect(acceptsHostABI("host-1", "host-1")).toBe(true);
+  expect(acceptsHostABI("host-1", "host-2")).toBe(false);
+  expect(acceptsHostABI("edith-host-3", "edith-host-2", "edith-host-8")).toBe(
+    false,
+  );
 });
