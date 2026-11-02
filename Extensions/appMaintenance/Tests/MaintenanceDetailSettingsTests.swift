@@ -127,52 +127,77 @@ import Testing
 
     @Test func factoryScopesOriginalSettingsAndPreservesMainRoutes() async throws {
         let bridge = MaintenanceDetailBridge()
-        let id = UUID()
-        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: id))
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let runtime = ExtensionRuntime()
-        var context: [String: Any] = [
-            "operation": "view", "extensionID": "appMaintenance", "uiOnly": false,
-            "presentationID": id.uuidString, "location": "settings", "section": "extension",
-        ]
-        #expect(runtime.configurePresentation(context as NSDictionary, client: client))
-        let view = try #require(runtime.execute(context as NSDictionary) as? NSViewController)
+        var created: AppMaintenanceService?
+        let runtime = ExtensionServiceRuntime(
+            id: "appMaintenance", role: "app", bundle: Bundle.main
+        ) {
+            let service = AppMaintenanceService(runtime: $0)
+            created = service
+            return service
+        }
+        let service = try #require(created)
+        func configuration(
+            _ id: UUID, location: String, section: String, uiOnly: Bool = false,
+            extra: [String: Any] = [:]
+        ) throws -> ExtensionUIConfiguration {
+            var context: [String: Any] = [
+                "remoteUI": true, "inProcess": true, "hostIdentifier": "test.host",
+                "extensionID": "appMaintenance",
+                "defaultsSuite": "test.host.extensions.appMaintenance", "uiOnly": uiOnly,
+                "presentationID": id.uuidString, "location": location, "section": section,
+            ]
+            if !uiOnly { context["engineClient"] = bridge }
+            context.merge(extra) { _, new in new }
+            return try #require(ExtensionUIConfiguration(context: context as NSDictionary))
+        }
+        let id = UUID()
+        let first = try configuration(id, location: "settings", section: "extension")
+        let client = try #require(first.engineClient)
+        #expect(service.configureUI(first))
+        #expect(service.allowsUIDuringRetirement)
+        let view = try #require(service.view(for: id))
         #expect(view.view.window == nil)
-        context["presentationID"] = UUID().uuidString
+        #expect(service.acceptsStopUI(for: id))
+        #expect(!service.acceptsStopUI(for: UUID()))
+        #expect(!service.acceptsStopUI(for: nil))
         #expect(
-            (runtime.execute(context as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
-        #expect(!runtime.configurePresentation(context as NSDictionary, client: client))
+            !service.configureUI(
+                try configuration(
+                    id, location: "settings", section: "extension", extra: ["tile": "x"])))
         #expect(
-            (runtime.execute(
-                ["operation": "stopUI", "presentationID": context["presentationID"]!]
-                    as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
-        context["presentationID"] = id.uuidString
-        context["section"] = "unrelated"
-        #expect(!runtime.configurePresentation(context as NSDictionary, client: client))
-        context["section"] = "extension"
-        context["uiOnly"] = true
-        #expect(!runtime.configurePresentation(context as NSDictionary, client: client))
-        context["uiOnly"] = false
-        let replacement = try #require(
-            ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-        context["presentationID"] = replacement.presentationID.uuidString
-        #expect(runtime.configurePresentation(context as NSDictionary, client: replacement))
+            !service.configureUI(
+                try configuration(
+                    id, location: "settings", section: "extension", extra: ["target": "x"])))
+        #expect(service.view(for: UUID()) == nil)
+        #expect(
+            !service.configureUI(try configuration(id, location: "settings", section: "unrelated")))
+        #expect(
+            !service.configureUI(
+                try configuration(id, location: "settings", section: "extension", uiOnly: true)))
+        let replacementID = UUID()
+        let replacement = try configuration(
+            replacementID, location: "settings", section: "extension")
+        #expect(service.configureUI(replacement))
         await #expect(throws: ExtensionEngineError.self) {
             try await client.invoke("maintenance.ui.settings.read")
         }
-        #expect(
-            (runtime.execute(
-                ["operation": "stopUI", "presentationID": replacement.presentationID.uuidString]
-                    as NSDictionary) as? NSDictionary)?["ok"] as? Bool == true)
-        #expect(runtime.settingsModel == nil)
+        #expect(service.view(for: id) == nil)
+        #expect(service.view(for: replacementID) != nil)
+        #expect(service.stopUI(for: id).isEmpty)
+        #expect(service.settingsModel != nil)
+        _ = service.stopUI(for: replacementID)
+        #expect(service.settingsModel == nil)
+        #expect(service.view(for: replacementID) == nil)
         for section in ["appMaintenance", "Updates", "Remove", "History"] {
-            let engine = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
-            context["presentationID"] = engine.presentationID.uuidString
-            context["location"] = "main"; context["section"] = section
-            #expect(runtime.configurePresentation(context as NSDictionary, client: engine))
-            #expect(runtime.settingsModel == nil)
+            let engineID = UUID()
+            #expect(
+                service.configureUI(try configuration(engineID, location: "main", section: section))
+            )
+            #expect(service.settingsModel == nil)
+            #expect(service.view(for: engineID) != nil)
         }
-        _ = runtime.execute(["operation": "stop"] as NSDictionary)
+        await runtime.stop()
     }
 
     @Test func originalNativePickersRenderWithoutWindowsInEveryLayout() async throws {
