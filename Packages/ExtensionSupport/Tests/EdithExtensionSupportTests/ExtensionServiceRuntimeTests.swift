@@ -46,7 +46,26 @@ private final class SyntheticService: ExtensionService {
         return Data(command.utf8)
     }
 
-    func cancelPendingWork() { cancellations += 1 }
+    var events: [String] = []
+    var preparesUIToClose = false
+    var viewed: [String] = []
+
+    func cancelPendingWork() {
+        cancellations += 1
+        events.append("cancel")
+    }
+
+    func finishBeforeStop() async { events.append("finish") }
+
+    func prepareUIToClose(_ presentation: UUID) async -> String? {
+        events.append("close")
+        return presentation.uuidString.hasPrefix("0") ? "busy" : nil
+    }
+
+    func view(for presentation: UUID, context: ExtensionHostContext) -> NSViewController? {
+        viewed.append(context.input["route"] as? String ?? "")
+        return nil
+    }
     func drain() async { drains += 1 }
     func teardown() async { teardowns += 1 }
 
@@ -106,7 +125,7 @@ private let syntheticScope = [
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": "other"])) == false)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
         #expect(ok(runtime.execute(["operation": "start", "defaultsSuite": Self.suite])) == true)
-        #expect(service.starts == 1)
+        #expect(service.starts == 2)
         let status = runtime.execute(["operation": "status"]) as? NSDictionary
         #expect(status?["running"] as? Bool == true)
     }
@@ -169,6 +188,38 @@ private let syntheticScope = [
         #expect(second != nil)
         await runtime.stop()
         #expect(service.teardowns == 1)
+    }
+
+    @Test func stopFinishesServiceWorkBeforeSuspendingIt() async {
+        let (runtime, service) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        await runtime.stop()
+        #expect(Array(service.events.prefix(2)) == ["finish", "cancel"])
+        #expect(service.teardowns == 1)
+    }
+
+    @Test func closePreparationIsOfferedOnlyWhenDeclaredAndViewsSeeTheHostInput() async {
+        let selector = NSSelectorFromString("prepareUIToClose:completion:")
+        let (runtime, service) = runtime()
+        #expect(!runtime.responds(to: selector))
+        service.preparesUIToClose = true
+        #expect(runtime.responds(to: selector))
+        let busy = await withCheckedContinuation { continuation in
+            runtime.prepareUIToClose("00000000-0000-0000-0000-000000000001") {
+                continuation.resume(returning: $0 as String?)
+            }
+        }
+        #expect(busy == "busy")
+        let invalid = await withCheckedContinuation { continuation in
+            runtime.prepareUIToClose("not-a-presentation") {
+                continuation.resume(returning: $0 as String?)
+            }
+        }
+        #expect(invalid != nil && service.events == ["close"])
+        _ = runtime.execute([
+            "operation": "view", "presentationID": UUID().uuidString, "route": "notch",
+        ])
+        #expect(service.viewed == ["notch"])
     }
 
     @Test func commandsRunUntilTeardownAndCustomOperationsReachTheService() async {

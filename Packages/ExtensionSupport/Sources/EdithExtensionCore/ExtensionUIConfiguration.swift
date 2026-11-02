@@ -6,6 +6,7 @@ public struct ExtensionUIConfiguration {
     public let extensionID: String
     public let defaultsSuite: String
     public let uiOnly: Bool
+    public let input: NSDictionary
     public let location: String?
     public let section: String?
     public var isSettings: Bool { location == "settings" }
@@ -51,6 +52,7 @@ public struct ExtensionUIConfiguration {
         self.extensionID = extensionID
         self.defaultsSuite = defaultsSuite
         self.uiOnly = uiOnly
+        input = context
         location = context["location"] as? String
         section = context["section"] as? String
         if uiOnly {
