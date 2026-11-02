@@ -36,16 +36,16 @@ import WorkerFixtureTestSupport
                         contentsOf: admission.home.appendingPathComponent("worker-fixture.json")))
                     as? [String: Any])
         }
-        @MainActor func admit(_ context: NSDictionary) throws -> KeepAwakeRuntime.FixtureAuthority?
-        {
+        @MainActor func admit(_ context: NSDictionary) throws -> WorkerFixtureAdmission? {
             return try WorkerFixtureAdmission.current(
                 extensionID: "keepAwake", context: context,
-                roleBundle: Bundle(for: KeepAwakeRuntime.self))
+                roleBundle: Bundle(for: KeepAwakeService.self))
         }
 
     }
 
-    private func invoke(_ runtime: KeepAwakeRuntime, command: String, payload: Data) async throws
+    private func invoke(_ runtime: ExtensionServiceRuntime, command: String, payload: Data)
+        async throws
         -> Data
     {
         try await withCheckedThrowingContinuation { continuation in
@@ -67,13 +67,12 @@ import WorkerFixtureTestSupport
         async throws
     {
         let defaults = try #require(MemoryDefaults(suiteName: UUID().uuidString))
-        let context: NSDictionary = [
-            "operation": "start",
-            "defaultsSuite": "com.pulkit.edith.tests.injected." + UUID().uuidString,
-        ]
+        let suite = "com.pulkit.edith.tests.injected." + UUID().uuidString
+        let context: NSDictionary = ["operation": "start", "defaultsSuite": suite]
         var defaultCreations = 0
         var storeCreations = 0
-        let runtime = KeepAwakeRuntime(
+        let harness = KeepAwakeTestRuntime(
+            suite: suite,
             admitFixture: { _ in nil },
             makeDefaults: { _ in
                 defaultCreations += 1; return defaults
@@ -82,6 +81,7 @@ import WorkerFixtureTestSupport
                 storeCreations += 1
                 return KeepAwakeStore.fixture(defaults: values)
             })
+        let runtime = harness.runtime
         #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(defaultCreations == 1 && storeCreations == 1)
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.actions))
@@ -95,6 +95,7 @@ import WorkerFixtureTestSupport
             runtime, command: "surface.perform", payload: enable.encoded(providerID: "keepAwake"))
         #expect(
             try SurfaceSnapshot.decode(after, providerID: "keepAwake").metrics.first?.value == "On")
+        #expect(harness.service.preventingSleep)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["preventingSleep"] as? Bool
                 == true)
@@ -111,9 +112,7 @@ import WorkerFixtureTestSupport
             ControlPreferenceUpdate(
                 values: ControlPresentationContract.encode(["preventSleep": false]), removed: []))
         _ = try await invoke(runtime, command: "keepAwake.ui.update", payload: update)
-        #expect(
-            (runtime.execute(["operation": "status"]) as? NSDictionary)?["preventingSleep"] as? Bool
-                == false)
+        #expect(!harness.service.preventingSleep)
         await withCheckedContinuation { continuation in
             runtime.suspendCommands { continuation.resume() }
         }
@@ -166,7 +165,8 @@ import WorkerFixtureTestSupport
         if mode == "foreign-suite" { context["defaultsSuite"] = "com.pulkit.edith.tests.foreign" }
         if mode == "foreign-data" { context["dataDirectory"] = input.admission.home.path }
         var defaultCreations = 0
-        let runtime = KeepAwakeRuntime(
+        let runtime = KeepAwakeTestRuntime(
+            suite: input.context["defaultsSuite"] as! String,
             admitFixture: input.admit,
             makeDefaults: { _ in
                 defaultCreations += 1; return nil
@@ -176,15 +176,18 @@ import WorkerFixtureTestSupport
                 return KeepAwakeStore.fixture(defaults: values)
             })
         #expect(
-            (runtime.execute(context as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
+            (runtime.runtime.execute(context as NSDictionary) as? NSDictionary)?["ok"] as? Bool
+                == false)
         #expect(defaultCreations == 0)
         #expect(
-            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
-                == false)
+            (runtime.runtime.execute(["operation": "status"]) as? NSDictionary)?["running"]
+                as? Bool == false)
     }
 
     @Test func thrownAdmissionNeverFallsThroughToProduction() {
-        let runtime = KeepAwakeRuntime(
+        let suite = "com.pulkit.edith.tests.synthetic"
+        let runtime = KeepAwakeTestRuntime(
+            suite: suite,
             admitFixture: { _ in throw WorkerFixtureError.invalid },
             makeDefaults: { _ in
                 Issue.record("Rejected admission reached defaults"); return nil
@@ -194,8 +197,7 @@ import WorkerFixtureTestSupport
                 return KeepAwakeStore.fixture(defaults: values)
             })
         #expect(
-            (runtime.execute([
-                "operation": "start", "defaultsSuite": "com.pulkit.edith.tests.synthetic",
-            ]) as? NSDictionary)?["ok"] as? Bool == false)
+            (runtime.runtime.execute(["operation": "start", "defaultsSuite": suite])
+                as? NSDictionary)?["ok"] as? Bool == false)
     }
 }

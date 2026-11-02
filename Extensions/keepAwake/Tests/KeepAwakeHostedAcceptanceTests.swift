@@ -52,7 +52,9 @@ import Testing
             ui.removePersistentDomain(forName: uiSuite)
         }
         engine.set(false, forKey: "preventSleep")
-        let runtime = KeepAwakeRuntime(admitFixture: { _ in nil }, makeDefaults: { _ in engine })
+        let harness = KeepAwakeTestRuntime(
+            suite: suite, admitFixture: { _ in nil }, makeDefaults: { _ in engine })
+        let runtime = harness.runtime
         try #require(
             (runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary)?[
                 "ok"] as? Bool == true)
@@ -121,7 +123,7 @@ import Testing
                     ui.bool(forKey: "preventSleep") ? 1 : 0,
                     engine.bool(forKey: "preventSleep") ? 1 : 0,
                     status == nil ? 0 : 1,
-                    status?["preventingSleep"] as? Bool == true ? 1 : 0,
+                    harness.service.preventingSleep ? 1 : 0,
                     operations.count, model.ready ? 1 : 0, model.running ? 1 : 0,
                     model.error == nil ? 0 : 1, model.load.isRunning ? 1 : 0,
                     try assertionCount(),
@@ -318,15 +320,14 @@ import Testing
                     return diagnosticJSON([
                         "enginePreventSleep": engine.bool(forKey: "preventSleep"),
                         "runtimeStatusAvailable": status != nil,
-                        "runtimePreventingSleep": status?["preventingSleep"] as? Bool ?? false,
+                        "runtimePreventingSleep": harness.service.preventingSleep,
                         "modelErrorPresent": model.error != nil,
                         "operationCount": operations.count,
                     ])
                 }
             ) {
                 guard engine.bool(forKey: "preventSleep") == requested,
-                    ((runtime.execute(["operation": "status"]) as? NSDictionary)?[
-                        "preventingSleep"] as? Bool) == requested
+                    harness.service.preventingSleep == requested
                 else { return false }
                 return try assertionCount() == (requested ? 1 : 0)
             }
