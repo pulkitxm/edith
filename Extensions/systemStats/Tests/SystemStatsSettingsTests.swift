@@ -200,7 +200,7 @@ struct SystemStatsSettingsTests {
     {
         _ = NSApplication.shared
         let host = "edith.settings.factory." + UUID().uuidString
-        let suite = host + ".extension.systemStats.worker"
+        let suite = host + ".extensions.systemStats"
         let previous = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
         setenv("EDITH_SHARED_DEFAULTS_SUITE", suite, 1)
         defer {
@@ -212,20 +212,18 @@ struct SystemStatsSettingsTests {
         }
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let runtime = ExtensionRuntime(
-            uiConfiguration: {
-                ExtensionUIConfiguration(
-                    context: $0, hostIdentifier: host,
-                    extensionID: "systemStats", defaultsSuite: suite)
-            }, uiDefaults: defaults)
-        #expect((runtime.execute(["operation": "view"]) as? NSDictionary)?["ok"] as? Bool == false)
+        let runtime = makeSystemStatsRuntime(uiDefaults: defaults)
+        let presentationID = UUID().uuidString
+        let viewRequest: NSDictionary = ["operation": "view", "presentationID": presentationID]
+        #expect((runtime.execute(viewRequest) as? NSDictionary)?["ok"] as? Bool == false)
         let context: NSDictionary = [
-            "operation": "configureUI", "remoteUI": true, "hostIdentifier": host,
+            "operation": "configureUI", "inProcess": true, "remoteUI": true,
+            "hostIdentifier": host,
             "extensionID": "systemStats", "defaultsSuite": suite, "uiOnly": true,
-            "presentationID": UUID().uuidString, "location": "settings", "section": "extension",
+            "presentationID": presentationID, "location": "settings", "section": "extension",
         ]
         #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
-        let controller = try #require(runtime.execute(["operation": "view"]) as? NSViewController)
+        let controller = try #require(runtime.execute(viewRequest) as? NSViewController)
         controller.view.frame = CGRect(x: 0, y: 0, width: 420, height: 600)
         controller.view.layoutSubtreeIfNeeded()
         #expect(controller.view.window == nil && !controller.view.subviews.isEmpty)
@@ -240,13 +238,15 @@ struct SystemStatsSettingsTests {
             rejected[key] = value
             #expect((runtime.execute(rejected) as? NSDictionary)?["ok"] as? Bool == false)
         }
-        _ = runtime.execute(["operation": "stopUI"])
-        #expect((runtime.execute(["operation": "view"]) as? NSDictionary)?["ok"] as? Bool == false)
+        _ = runtime.execute(["operation": "stopUI", "presentationID": presentationID])
+        #expect((runtime.execute(viewRequest) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
                 == false)
-        let untrusted = ExtensionRuntime(uiDefaults: defaults)
-        #expect((untrusted.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+        let untrusted = makeSystemStatsRuntime(uiDefaults: defaults)
+        let outOfProcess = context.mutableCopy() as! NSMutableDictionary
+        outOfProcess["inProcess"] = nil
+        #expect((untrusted.execute(outOfProcess) as? NSDictionary)?["ok"] as? Bool == false)
     }
     #endif
 
