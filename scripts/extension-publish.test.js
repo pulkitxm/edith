@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import {
   extensionChecksum,
   mergeExtensionCatalog,
@@ -25,7 +26,6 @@ import {
   runBounded,
   validateExtensionChecksum,
 } from "./extension-publish.mjs";
-import { catalogPointer } from "./extension-catalog-pointer.mjs";
 import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import {
   snapshotReleaseFile,
