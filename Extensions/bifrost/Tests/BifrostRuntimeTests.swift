@@ -4,7 +4,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct BifrostRuntimeTests {
     @Test func stoppedRuntimeCannotAllocateOrAcceptEngineWork() async {
-        let runtime = ExtensionRuntime()
+        let runtime = makeBifrostRuntime()
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }

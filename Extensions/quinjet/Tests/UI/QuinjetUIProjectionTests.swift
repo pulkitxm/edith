@@ -8,7 +8,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct QuinjetUIProjectionTests {
     @Test func runtimeRejectsUnvalidatedUIAndNeverReturnsAnEnginePage() {
-        let runtime = ExtensionRuntime()
+        let runtime = makeQuinjetRuntime()
         #expect(
             (runtime.execute(["operation": "view", "location": "main"]) as? NSDictionary)?["ok"]
                 as? Bool == false)

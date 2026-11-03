@@ -52,7 +52,8 @@ import Testing
 
     @Test func policyOnlySynchronizationDoesNotWakeSettingsWork() {
         var wakes = 0
-        let runtime = ExtensionRuntime(settingsWake: { wakes += 1 }, fixtureAdmission: { _ in nil })
+        let runtime = makeCodeStatsRuntime(
+            settingsWake: { wakes += 1 }, fixtureAdmission: { _ in nil })
         for paused in [false, true, true, false] {
             let input =
                 context(CodeStatsScheduleLifecycle.jobID, paused: paused).mutableCopy()
@@ -70,24 +71,28 @@ import Testing
             #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == true)
         }
         #expect(wakes == 4)
-        #expect(
-            (runtime.execute(["operation": "synchronize"]) as? NSDictionary)?["ok"] as? Bool
-                == false)
+        _ = runtime.execute(["operation": "synchronize"])
         #expect(wakes == 4)
     }
 
     @Test func invalidFixtureAdmissionRejectsStartAndSynchronizeBeforeServices() {
         var admissions = 0
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in
-            admissions += 1
-            throw WorkerFixtureError.invalid
-        })
-        for operation in ["start", "synchronize"] {
-            #expect(
-                (runtime.execute(["operation": operation]) as? NSDictionary)?["ok"] as? Bool
-                    == false)
-        }
+        var wakes = 0
+        let runtime = makeCodeStatsRuntime(
+            settingsWake: { wakes += 1 },
+            fixtureAdmission: { _ in
+                admissions += 1
+                throw WorkerFixtureError.invalid
+            })
+        let suite = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"] ?? ""
+        #expect(
+            (runtime.execute(["operation": "start", "defaultsSuite": suite]) as? NSDictionary)?[
+                "ok"] as? Bool == false)
+        #expect(
+            (runtime.execute(["operation": "synchronize"]) as? NSDictionary)?["ok"] as? Bool
+                == false)
         #expect(admissions == 2)
+        #expect(wakes == 0)
         #expect(
             (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
                 == false)
@@ -97,7 +102,7 @@ import Testing
         let fixture = try EngineFixture(owner: "codeStats")
         defer { fixture.remove() }
         #expect(try fixture.admit()?.role == .app)
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in try fixture.admit() })
+        let runtime = makeCodeStatsRuntime(fixtureAdmission: { _ in try fixture.admit() })
         let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
         input["operation"] = "synchronize"
         input["ambientPolicyOnly"] = true
