@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { minimumWorkerHostABI } from "./extension-host-abi.mjs";
 import {
   extensionFingerprint,
   extensionReleaseTag,
@@ -21,8 +22,6 @@ import {
   readPullRequestBaseline,
   supportCacheFingerprint,
 } from "./extension-release-plan.mjs";
-
-import { minimumWorkerHostABI } from "./extension-host-abi.mjs";
 
 const definitions = [
   {
