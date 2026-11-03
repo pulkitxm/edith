@@ -92,6 +92,7 @@ export function planLocalJobs(plan, options, definitions) {
   for (const entry of plan.include)
     jobs.push({
       lane: entry.lane,
+      needsHost: entry.targets.split(" ").includes("ci-marketplace-runtime"),
       make: entry.targets
         .split(" ")
         .map((target) => localTargets[target] ?? target),
@@ -206,7 +207,7 @@ async function main() {
   environment.EXTENSION_CONTAINING_HOST_APP ??= "local/minimal-host/Edith.app";
   environment.EDITH_LOCAL_CI_ROOT ??= localCIRoot(root);
   if (jobs.some((job) => job.needsHost)) {
-    console.log("building the host for camera packages");
+    console.log("building the host for extension runtime checks and packages");
     const host = await run(
       { lane: "host", make: ["host"] },
       logDirectory,

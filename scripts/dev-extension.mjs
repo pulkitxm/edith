@@ -1,12 +1,31 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, watch } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  watch,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { developmentVersion, launch } from "./dev-catalog.mjs";
 
 const root = resolve(import.meta.dir, "..");
 const app = resolve(root, "dist/Edith.app");
 const ed = resolve(app, "Contents/MacOS/ed");
+const skippedDirectories = new Set([
+  ".git",
+  ".build",
+  "build",
+  "dist",
+  "node_modules",
+  "Tests",
+  "tests",
+  "test",
+  "vendor",
+  "Vendor",
+]);
 
 export function watchedPaths(root, definition) {
   const paths = new Set([
@@ -25,15 +44,56 @@ export function watchedPaths(root, definition) {
 export function relevantChange(name) {
   if (!name) return false;
   const parts = name.split("/");
-  if (
-    parts.some((part) =>
-      [".build", "build", "dist", "node_modules", "Tests"].includes(part),
-    )
-  )
-    return false;
+  if (parts.some((part) => skippedDirectories.has(part))) return false;
   return /\.(swift|json|plist|strings|png|svg|js|css|html|metal|c|h|m|rs)$/.test(
     name,
   );
+}
+
+export function contentChangeAdmission(paths) {
+  const roots = [...new Set(paths.map((path) => resolve(path)))];
+  const fingerprints = new Map();
+  const eligible = (path) =>
+    roots.some((root) => {
+      const name = relative(root, path);
+      return (
+        name &&
+        name !== ".." &&
+        !name.startsWith("../") &&
+        !isAbsolute(name) &&
+        relevantChange(name)
+      );
+    });
+  const fingerprint = (path) => {
+    try {
+      if (!lstatSync(path).isFile()) return undefined;
+      return createHash("sha256").update(readFileSync(path)).digest("hex");
+    } catch (error) {
+      if (["ENOENT", "ENOTDIR"].includes(error.code)) return undefined;
+      throw error;
+    }
+  };
+  const seed = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (skippedDirectories.has(entry.name)) continue;
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) seed(path);
+      else if (entry.isFile() && eligible(path)) {
+        const hash = fingerprint(path);
+        if (hash !== undefined) fingerprints.set(path, hash);
+      }
+    }
+  };
+  for (const root of roots) seed(root);
+  return (path) => {
+    const absolute = resolve(path);
+    if (!eligible(absolute)) return false;
+    const hash = fingerprint(absolute);
+    if (fingerprints.get(absolute) === hash) return false;
+    if (hash === undefined) fingerprints.delete(absolute);
+    else fingerprints.set(absolute, hash);
+    return true;
+  };
 }
 
 function edithCLI(args, options = {}) {
@@ -54,20 +114,65 @@ function passthroughEnvironment() {
   );
 }
 
-async function waitFor(id, version, seconds = 60) {
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
-    const reply = edithCLI(["extensions", "info", id, "--json"]);
+function commandFailure(reply) {
+  return (
+    reply.error?.message ||
+    reply.stderr?.trim() ||
+    reply.stdout?.trim() ||
+    `command exited with status ${reply.status}`
+  );
+}
+
+export async function waitFor(
+  id,
+  version,
+  {
+    timeoutMs = 60_000,
+    cli = edithCLI,
+    now = () => performance.now(),
+    sleep = (milliseconds) => Bun.sleep(milliseconds),
+  } = {},
+) {
+  const deadline = now() + timeoutMs;
+  let observed = "no status received";
+  let enabling = false;
+  while (now() < deadline) {
+    const reply = cli(["extensions", "info", id, "--json"]);
     if (reply.status === 0) {
-      const info = JSON.parse(reply.stdout);
-      if (info.version === version && info.state === "active") return info;
-      if (info.version === version && info.state === "idle")
-        edithCLI(["extensions", "enable", id, "--json"]);
-      if (info.state === "failed") return info;
+      let info;
+      try {
+        info = JSON.parse(reply.stdout);
+      } catch {
+        throw new Error(`${id} ${version}: invalid extension status JSON`);
+      }
+      if (!info || info.id !== id || typeof info.state !== "string")
+        throw new Error(`${id} ${version}: invalid extension status response`);
+      observed = `${info.version ?? "uninstalled"} (${info.state})`;
+      if (info.version === version) {
+        if (info.state === "active") return info;
+        if (info.state === "failed")
+          throw new Error(
+            `${id} ${version} failed to start${info.failureReason ? `: ${info.failureReason}` : ""}`,
+          );
+        if (info.state === "idle" && !enabling) {
+          const enabled = cli(["extensions", "enable", id, "--json"]);
+          if (enabled.status !== 0)
+            throw new Error(
+              `${id} ${version} could not be enabled: ${commandFailure(enabled)}`,
+            );
+          enabling = true;
+        }
+      }
+    } else {
+      observed = `status check failed: ${commandFailure(reply)}`;
     }
-    await Bun.sleep(250);
+    const remaining = deadline - now();
+    if (remaining <= 0) break;
+    await sleep(Math.min(250, remaining));
   }
-  throw new Error(`${id} ${version} did not become active`);
+  throw new Error(
+    `${id} ${version} did not become active within ${timeoutMs / 1000}s; last observed: ${observed}`,
+  );
 }
 
 export async function cycle(id, definition) {
@@ -148,6 +253,8 @@ if (import.meta.main) {
   };
   await report();
   if (flags.includes("--watch")) {
+    const paths = watchedPaths(root, definition);
+    const admitsChange = contentChangeAdmission(paths);
     let timer;
     let busy = false;
     let pending = false;
@@ -166,9 +273,9 @@ if (import.meta.main) {
         busy = false;
       }, 400);
     };
-    for (const path of watchedPaths(root, definition)) {
+    for (const path of paths) {
       watch(path, { recursive: true }, (_, name) => {
-        if (relevantChange(name)) {
+        if (name && admitsChange(resolve(path, name))) {
           process.stdout.write(
             `changed ${relative(root, resolve(path, name))}\n`,
           );
