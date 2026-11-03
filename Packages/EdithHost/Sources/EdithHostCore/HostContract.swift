@@ -116,12 +116,16 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let launchWhen: [HostLaunchCondition]
     public let pages: [HostPage]
     public let sections: [HostPageSection]
+    public let homeCards: [String]
+    public let notchCards: [String]
+    public let notchTabs: [String]
 
     public init(
         id: String, title: String, symbolName: String, category: String,
         background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
         launchWhen: [HostLaunchCondition] = [], pages: [HostPage] = [],
-        sections: [HostPageSection] = []
+        sections: [HostPageSection] = [], homeCards: [String] = [],
+        notchCards: [String] = [], notchTabs: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -133,6 +137,9 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.launchWhen = launchWhen
         self.pages = pages
         self.sections = sections
+        self.homeCards = homeCards
+        self.notchCards = notchCards
+        self.notchTabs = notchTabs
     }
 }
 
@@ -146,9 +153,29 @@ public enum HostIndex {
                 !$0.id.isEmpty && $0.id.utf8.count <= 80
                     && $0.id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
                     && !$0.title.isEmpty && !$0.symbolName.isEmpty && !$0.category.isEmpty
+                    && validSurfaces($0)
             })
         else { throw CocoaError(.fileReadCorruptFile) }
         return entries
+    }
+
+    private static func validSurfaces(_ entry: HostExtension) -> Bool {
+        for cards in [entry.homeCards, entry.notchCards] {
+            guard Set(cards).count == cards.count,
+                cards.allSatisfy({
+                    guard let widget = SurfaceWidget(rawValue: $0), widget != .clocks else {
+                        return false
+                    }
+                    if case .ability(let id) = widget { return id == entry.id }
+                    return true
+                })
+            else { return false }
+        }
+        return Set(entry.notchTabs).count == entry.notchTabs.count
+            && entry.notchTabs.allSatisfy {
+                guard let tab = SurfaceNotchTab(rawValue: $0) else { return false }
+                return tab != .home
+            }
     }
 
     public static func bundled() throws -> [HostExtension] {
