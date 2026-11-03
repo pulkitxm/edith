@@ -853,3 +853,36 @@ test("pointer publication reads reject wrong immutable bytes and signed revision
     ).rejects.toThrow();
   }
 });
+
+test("the bot's own release commits on top of the target do not supersede publication", async () => {
+  const release = "c".repeat(40);
+  const commits = {
+    [release]: {
+      sha: release,
+      parents: [{ sha: target }],
+      commit: { message: "Release v0.0.375 [skip ci]" },
+    },
+  };
+  const readCommit = async (sha) => commits[sha];
+  await verifiedPublicationState(
+    options({ readMain: async () => release, readCommit }),
+  );
+  for (const message of ["feat: unrelated change", "Release v0.0.375"]) {
+    commits[release].commit.message = message;
+    await expect(
+      verifiedPublicationState(
+        options({ readMain: async () => release, readCommit }),
+      ),
+    ).rejects.toThrow("superseded: main changed");
+  }
+  commits[release].commit.message = "Release v0.0.375 [skip ci]";
+  commits[release].parents = [{ sha: "d".repeat(40) }];
+  await expect(
+    verifiedPublicationState(
+      options({ readMain: async () => release, readCommit }),
+    ),
+  ).rejects.toThrow("superseded: main changed");
+  await expect(
+    verifiedPublicationState(options({ readMain: async () => release })),
+  ).rejects.toThrow("superseded: main changed");
+});

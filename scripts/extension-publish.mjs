@@ -310,12 +310,33 @@ export async function restorePublishedExtension({
   }
 }
 
+const releaseCommitSubject = /^Release v[0-9A-Za-z.+-]+ \[skip ci\]$/;
+const maximumReleaseCommits = 5;
+
+export async function mainAtTarget({ main, target, readCommit }) {
+  let current = main;
+  for (let step = 0; step <= maximumReleaseCommits; step++) {
+    if (current === target) return true;
+    if (!readCommit || step === maximumReleaseCommits) return false;
+    const commit = await readCommit(current);
+    if (
+      commit?.sha !== current ||
+      commit.parents?.length !== 1 ||
+      !releaseCommitSubject.test(commit.commit?.message?.split("\n")[0] ?? "")
+    )
+      return false;
+    current = commit.parents[0].sha;
+  }
+  return false;
+}
+
 export async function verifiedPublicationState({
   ref,
   target,
   previous,
   publicKey,
   readMain,
+  readCommit,
   readCatalog,
 }) {
   if (ref !== "refs/heads/main" || !/^[a-f0-9]{40}$/.test(target ?? ""))
@@ -323,7 +344,9 @@ export async function verifiedPublicationState({
       "Extension publication requires the approved main ref and commit",
     );
   validateCatalog(previous);
-  if ((await readMain()) !== target)
+  const mainUnchanged = async () =>
+    mainAtTarget({ main: await readMain(), target, readCommit });
+  if (!(await mainUnchanged()))
     throw new Error("Extension publication superseded: main changed");
   const current = await readCatalog();
   if (current?.asset) {
@@ -341,7 +364,7 @@ export async function verifiedPublicationState({
       "Extension publication blocked: trusted catalog pointer missing",
     );
   }
-  if ((await readMain()) !== target)
+  if (!(await mainUnchanged()))
     throw new Error("Extension publication superseded: main changed");
   return current;
 }
@@ -654,6 +677,8 @@ async function publicationContext({
       readMain: async () =>
         JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`)).object
           .sha,
+      readCommit: async (sha) =>
+        JSON.parse(gh("api", `repos/${repository}/commits/${sha}`)),
       readCatalog: () => readPublicationCatalog(repository, catalogTag),
     });
     return current ? { ...current, catalogRevision: old.revision } : undefined;
@@ -826,6 +851,8 @@ export async function publishExtensions({
           readMain: async () =>
             JSON.parse(gh("api", `repos/${repository}/git/ref/heads/main`))
               .object.sha,
+          readCommit: async (sha) =>
+            JSON.parse(gh("api", `repos/${repository}/commits/${sha}`)),
           readCatalog: () => readPublicationCatalog(repository, catalogTag),
         }),
       publish: (id) => publishDraft(id, catalogTag),
