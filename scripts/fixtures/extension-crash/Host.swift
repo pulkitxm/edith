@@ -26,7 +26,6 @@ struct CrashRecoveryProof {
             print(HostContract.compatibility)
             return
         }
-        NSApplication.shared.setActivationPolicy(.prohibited)
         let identity = try HostIdentity(
             identifier: identifier, supportDirectory: root.appendingPathComponent("support"))
         let defaults = UserDefaults(suiteName: identity.defaultsSuite)!
@@ -51,6 +50,7 @@ struct CrashRecoveryProof {
             return
         }
         guard mode == "launch" else { throw CocoaError(.coderReadCorrupt) }
+        NSApplication.shared.setActivationPolicy(.prohibited)
         let sessions = HostExtensionSessions(defaults: defaults) { package in
             HostWorker(
                 configuration: HostWorkerConfiguration(

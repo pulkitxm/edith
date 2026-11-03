@@ -108,6 +108,20 @@ session is unavailable, report that exact gap. Keep the checks that did run and
 hand off the missing acceptance step. Do not claim end-to-end verification from
 a build or mock response.
 
+Run `make ci-host-crash-recovery` after building the host tests to exercise crash
+recovery with real process aborts. `CRASH_RECOVERY_PRODUCTS` can select another
+checkout's already-built host products. The check links the production session
+and worker code into a signed test app, compiles two synthetic extensions, and
+launches the app three times without showing windows. It verifies startup markers
+across SIGABRT, the probation retry, automatic disable after the repeat crash,
+and an unrelated extension's live command. It uses a unique test identity and
+cleans its synthetic preferences. It never launches the installed app or any
+real extension. Keep its JSON result and isolated artifacts for inspection with:
+
+```sh
+python3 -B scripts/test-extension-crash-recovery.py --output local/crash-proof
+```
+
 ## Repeatable proof
 
 Keep a local verification record beside the lane logs in ignored `local/`

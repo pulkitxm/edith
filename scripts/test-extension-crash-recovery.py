@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,11 +13,8 @@ import uuid
 
 
 def execute(arguments, environment=None, timeout=60):
-    environment = {
-        **os.environ,
-        "DEVELOPER_DIR": os.environ.get("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer"),
-        **(environment or {}),
-    }
+    environment = dict(os.environ) if environment is None else dict(environment)
+    environment.setdefault("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
     result = subprocess.run(arguments, env=environment, capture_output=True, text=True, timeout=timeout)
     if result.returncode:
         raise RuntimeError(f"Command failed ({result.returncode}): {arguments[0]}\n{result.stderr}")
@@ -34,6 +32,41 @@ def signed(path):
 
 def no_core():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+
+def fixture_environment(destination):
+    return {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+        "DEVELOPER_DIR": os.environ.get("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer"),
+        "EDITH_BACKGROUND_TESTING": "1", "EDITH_USAGE_OFFLINE": "1",
+        "EDITH_CRASH_PROOF_ROOT": str(destination), "SWIFT_BACKTRACE": "enable=no",
+        "HOME": str(destination / "home"), "CFFIXED_USER_HOME": str(destination / "home"),
+        "TMPDIR": str(destination / "temporary"), "LANG": "en_US.UTF-8",
+    }
+
+
+def run_proof(products, destination):
+    report = None
+    try:
+        report = proof(products, destination)
+    finally:
+        info_path = destination / "CrashRecoveryProof.app/Contents/Info.plist"
+        if info_path.exists():
+            identifier = plistlib.loads(info_path.read_bytes())["CFBundleIdentifier"]
+            if not identifier.startswith("com.pulkit.edith.tests.crash-"):
+                raise RuntimeError("Refusing to clean a non-fixture identity")
+            for suffix in ["", ".host", ".extensions.crashProbe", ".extensions.healthyProbe"]:
+                domain = identifier + suffix
+                removed = subprocess.run(
+                    ["/usr/bin/defaults", "delete", domain], capture_output=True, timeout=15,
+                )
+                if removed.returncode:
+                    remaining = subprocess.run(
+                        ["/usr/bin/defaults", "read", domain], capture_output=True, timeout=15,
+                    )
+                    if remaining.returncode == 0:
+                        raise RuntimeError("Synthetic preference cleanup left stored values")
+    print(json.dumps(report, indent=2))
 
 
 def proof(products, destination):
@@ -80,12 +113,9 @@ def proof(products, destination):
     (contents / "Resources/index.json").write_text(json.dumps(entries))
     signed(kit)
     signed(app)
-    environment = {
-        **os.environ, "EDITH_BACKGROUND_TESTING": "1", "EDITH_USAGE_OFFLINE": "1",
-        "EDITH_CRASH_PROOF_ROOT": str(destination), "SWIFT_BACKTRACE": "enable=no",
-        "HOME": str(destination / "home"), "CFFIXED_USER_HOME": str(destination / "home"),
-    }
+    environment = fixture_environment(destination)
     (destination / "home").mkdir()
+    (destination / "temporary").mkdir()
     abi = execute([str(executable), "abi", str(destination)], environment)
     state = destination / "support/Edith Tests" / identifier.split(".", 4)[4]
     packages = []
@@ -143,19 +173,30 @@ def proof(products, destination):
         raise RuntimeError("The automatic disable did not explain the crash")
     if json.loads(final["healthyEcho"]) != {"message": "synthetic echo"}:
         raise RuntimeError("The unrelated synthetic extension did not remain usable")
-    report = {"hostABI": abi, "crashes": observations, "recovered": final}
+    hashes = {
+        name: hashlib.sha256((products / "EdithHostCore.build" / (name + ".swift.o")).read_bytes()).hexdigest()
+        for name in ["HostExtensionSessions", "HostWorkerEngine"]
+    }
+    report = {
+        "hostABI": abi, "productionObjectSHA256": hashes,
+        "runtimeLibrarySHA256": hashlib.sha256(kit.read_bytes()).hexdigest(),
+        "crashes": observations, "recovered": final,
+    }
     (destination / "result.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps(report, indent=2))
+    return report
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--products", type=Path, required=True)
+    parser.add_argument(
+        "--products", type=Path,
+        default=Path(__file__).resolve().parent.parent / "Packages/EdithHost/.build/arm64-apple-macosx/debug",
+    )
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
     if arguments.output:
         arguments.output.mkdir(parents=True, exist_ok=False)
-        proof(arguments.products.resolve(), arguments.output.resolve())
+        run_proof(arguments.products.resolve(), arguments.output.resolve())
     else:
         with tempfile.TemporaryDirectory(prefix="edith-crash-recovery-") as temporary:
-            proof(arguments.products.resolve(), Path(temporary))
+            run_proof(arguments.products.resolve(), Path(temporary))
