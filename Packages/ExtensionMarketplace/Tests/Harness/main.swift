@@ -113,6 +113,7 @@ struct MarketplaceHarness {
         }
         let runtime = ExtensionBundleRuntime(
             store: store, role: .helper, hostABI: MarketplaceConfiguration.workerHostABI,
+            environment: ["EDITH_SHARED_DEFAULTS_SUITE": suite, "EDITH_EXTENSION_ID": "keepAwake"],
             verify: ExtensionCodeSignature.verifyDevelopment)
         try runtime.start(id: "keepAwake", context: ["defaultsSuite": suite])
         let initial = try runtime.snapshot(id: "keepAwake")!
