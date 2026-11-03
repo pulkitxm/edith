@@ -62,9 +62,9 @@ def run_proof(products, destination):
                 )
                 if removed.returncode:
                     remaining = subprocess.run(
-                        ["/usr/bin/defaults", "read", domain], capture_output=True, timeout=15,
+                        ["/usr/bin/defaults", "export", domain, "-"], capture_output=True, timeout=15,
                     )
-                    if remaining.returncode == 0:
+                    if remaining.returncode == 0 and plistlib.loads(remaining.stdout):
                         raise RuntimeError("Synthetic preference cleanup left stored values")
     print(json.dumps(report, indent=2))
 
