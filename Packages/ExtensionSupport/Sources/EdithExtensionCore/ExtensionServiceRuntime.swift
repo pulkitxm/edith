@@ -4,6 +4,8 @@ import Foundation
 public struct ExtensionHostContext {
     public let input: NSDictionary
 
+    public init(input: NSDictionary) { self.input = input }
+
     public var dataDirectory: String? { input["dataDirectory"] as? String }
     public var isHostedFunctionalFixture: Bool { input["hostedFunctionalFixture"] != nil }
 }
@@ -11,6 +13,7 @@ public struct ExtensionHostContext {
 @MainActor
 public protocol ExtensionService: AnyObject {
     var requiresOwnedDataDirectory: Bool { get }
+    var requiresDefaultsSuite: Bool { get }
     var preparesForDisable: Bool { get }
     var preparesUIToClose: Bool { get }
     var allowsUIDuringRetirement: Bool { get }
@@ -39,6 +42,7 @@ public protocol ExtensionService: AnyObject {
 
 extension ExtensionService {
     public var requiresOwnedDataDirectory: Bool { false }
+    public var requiresDefaultsSuite: Bool { true }
     public var preparesForDisable: Bool { false }
     public var preparesUIToClose: Bool { false }
     public var allowsUIDuringRetirement: Bool { false }
@@ -75,7 +79,7 @@ extension ExtensionService {
 }
 
 @MainActor
-public final class ExtensionServiceRuntime: NSObject {
+public final class ExtensionServiceRuntime: NSObject, ExtensionRuntimeProtocol {
     public let id: String
     public let role: String
     private let bundle: Bundle
@@ -178,50 +182,96 @@ public final class ExtensionServiceRuntime: NSObject {
         return super.responds(to: selector)
     }
 
+    public var runtimeAPIVersion: Int { ExtensionRuntimeAPI.version }
+    public var supportsDisablePreparation: Bool { service?.preparesForDisable == true }
+    public var supportsPresentationPreparation: Bool { service?.preparesUIToClose == true }
+
+    public func invokeCommand(_ command: String, token: UUID, payload: Data) async throws -> Data {
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            do {
+                let data: Data = try await withCheckedThrowingContinuation { continuation in
+                    invoke(["command": command, "token": token.uuidString, "payload": payload]) {
+                        data, error in
+                        if let data {
+                            continuation.resume(returning: data as Data)
+                        } else {
+                            continuation.resume(
+                                throwing: ExtensionPeerError.rejected(
+                                    error as String? ?? "The extension command failed."))
+                        }
+                    }
+                    if Task.isCancelled { commands.cancel(token.uuidString) }
+                }
+                try Task.checkCancellation()
+                return data
+            } catch {
+                try Task.checkCancellation()
+                throw error
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.commands.cancel(token.uuidString) }
+        }
+    }
+
+    public func suspend() async { await beginSuspension().value }
+
+    public func prepareForDisable() async throws {
+        await beginSuspension().value
+        try await service?.prepareDisable()
+    }
+
+    public func prepareForStop() async { await beginTeardown().value }
+
+    public func preparePresentationToClose(_ presentation: UUID) async -> String? {
+        await service?.prepareUIToClose(presentation)
+    }
+
     @objc public func execute(_ input: NSDictionary) -> NSObject {
-        let operation = input["operation"] as? String ?? ""
-        switch operation {
-        case "describe":
-            return [
-                "id": id, "role": role,
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
+        guard let operation = input["operation"] as? String,
+            let request = ExtensionRuntimeRequest(operation: operation, context: input)
+        else { return Self.result(false) }
+        return dispatch(request).object
+    }
+
+    public func dispatch(_ request: ExtensionRuntimeRequest) -> ExtensionRuntimeResponse {
+        switch request {
+        case .describe:
+            return .description(
+                ExtensionRuntimeDescription(
+                    id: id, role: role,
+                    version: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                        as? String ?? "",
+                    hostABI: bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
+                    apiVersion: runtimeAPIVersion))
+        case let .start(context):
+            let input = context.input
             guard suspension == nil, teardownTask == nil, let service,
-                let suite = input["defaultsSuite"] as? String,
-                suite == scope["EDITH_SHARED_DEFAULTS_SUITE"],
-                !service.requiresOwnedDataDirectory || ownsDataDirectory(input)
-            else { return Self.result(false) }
-            guard service.start(ExtensionHostContext(input: input)) else {
-                return Self.result(false)
-            }
+                !service.requiresDefaultsSuite
+                    || (input["defaultsSuite"] as? String).map({
+                        $0 == scope["EDITH_SHARED_DEFAULTS_SUITE"]
+                    }) == true,
+                !service.requiresOwnedDataDirectory || ownsDataDirectory(input),
+                service.start(context)
+            else { return .result(false) }
             started = true
-        case "synchronize":
-            guard service?.synchronize(ExtensionHostContext(input: input)) == true else {
-                return Self.result(false)
-            }
-        case "configureUI":
+        case let .synchronize(context):
+            guard suspension == nil, teardownTask == nil,
+                service?.synchronize(context) == true
+            else { return .result(false) }
+        case let .configureUI(configuration):
             guard suspension == nil, teardownTask == nil,
                 uiRetirements.isEmpty || service?.allowsUIDuringRetirement == true,
-                let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == id,
                 service?.configureUI(configuration) == true
-            else { return Self.result(false) }
-        case "view":
-            guard let value = input["presentationID"] as? String,
-                let presentation = UUID(uuidString: value),
-                let controller = service?.view(
-                    for: presentation, context: ExtensionHostContext(input: input))
-            else { return Self.result(false) }
-            return controller
-        case "stopUI":
-            let requested = input["presentationID"]
-            let presentation = (requested as? String).flatMap(UUID.init(uuidString:))
-            guard requested == nil || presentation != nil,
-                service?.acceptsStopUI(for: presentation) != false
-            else { return Self.result(false) }
+            else { return .result(false) }
+        case let .view(presentation, context):
+            guard suspension == nil, teardownTask == nil,
+                let controller = service?.view(for: presentation, context: context)
+            else { return .result(false) }
+            return .view(controller)
+        case let .stopUI(presentation):
+            guard service?.acceptsStopUI(for: presentation) != false else { return .result(false) }
             for task in service?.stopUI(for: presentation) ?? [] {
                 let identifier = UUID()
                 uiRetirements[identifier] = Task { [self] in
@@ -229,17 +279,19 @@ public final class ExtensionServiceRuntime: NSObject {
                     uiRetirements[identifier] = nil
                 }
             }
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "stop": _ = beginTeardown()
-        case "status":
-            var status = service?.statusDetails ?? [:]
-            status["ok"] = true
-            status["running"] = started && teardownTask == nil && service?.isRunning == true
-            return status as NSDictionary
-        default:
-            return service?.perform(operation, context: input) ?? Self.result(false)
+        case let .cancelCommand(token): commands.cancel(token.uuidString)
+        case .stop: _ = beginTeardown()
+        case .status:
+            return .status(
+                running: started && teardownTask == nil && service?.isRunning == true,
+                details: service?.statusDetails ?? [:])
+        case let .custom(operation, context):
+            guard suspension == nil, teardownTask == nil else { return .result(false) }
+            return service?.perform(operation, context: context).map(
+                ExtensionRuntimeResponse.custom)
+                ?? .result(false)
         }
-        return Self.result(true)
+        return .result(true)
     }
 
     private func ownsDataDirectory(_ input: NSDictionary) -> Bool {
