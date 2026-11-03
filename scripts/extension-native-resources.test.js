@@ -15,9 +15,11 @@ import {
   copyNativeFrameworks,
   copyNativeResources,
   copySupportLicenses,
+  extensionRoleSupport,
   nativeClangModuleFlags,
   nativePackageLinkFlags,
   nativeRolePolicy,
+  runtimeRoleLinkFlags,
 } from "./build-extension-package.mjs";
 
 test("native Swift resources and explicit licenses retain their bundle structure", async () => {
@@ -393,4 +395,81 @@ test("UI-only and absent SDK selections need no parser notice", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("native-only Attention wrappers link the shared kit without a second environment context", async () => {
+  const definitions = JSON.parse(
+    await readFile(
+      new URL("../Extensions/manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const attention = definitions.find(({ id }) => id === "attention");
+  expect(extensionRoleSupport(attention, "app")).toEqual({
+    product: null,
+    sharedKit: true,
+  });
+  const kit = {
+    modules: "/kit/Modules",
+    products: "/kit/products",
+    library: "EdithExtensionKit",
+  };
+  const native = nativePackageLinkFlags(
+    "/source",
+    attention,
+    "/payload/app.bundle/Contents",
+  );
+  const flags = runtimeRoleLinkFlags(kit, undefined, native);
+  expect(flags).toContain("/kit/Modules");
+  expect(flags).toContain("/kit/products");
+  expect(flags.filter((flag) => flag === "-lEdithExtensionKit")).toHaveLength(
+    1,
+  );
+  expect(flags.indexOf("-lAttentionNative")).toBeLessThan(
+    flags.indexOf("-lEdithExtensionKit"),
+  );
+  expect(flags).toContain("@executable_path/../Frameworks");
+  expect(flags).toContain("@executable_path/../../../../Frameworks");
+  expect(
+    flags.some((flag) => flag.includes("EdithExtensionSupport_attention_app")),
+  ).toBe(false);
+});
+
+test("role support overrides retain their scopes and native non-presentation roles stay independent", () => {
+  const definition = {
+    roles: { app: [], helper: [] },
+    supportProduct: "EdithExtensionSupport",
+    supportProducts: { helper: null },
+    nativePackage: "Extensions/mock/Native",
+    nativeRoles: ["app"],
+  };
+  expect(extensionRoleSupport(definition, "app")).toEqual({
+    product: "EdithExtensionSupport",
+    sharedKit: true,
+  });
+  expect(extensionRoleSupport(definition, "helper")).toEqual({
+    product: null,
+    sharedKit: false,
+  });
+  const kit = {
+    modules: "/kit/Modules",
+    products: "/kit/products",
+    library: "EdithExtensionKit",
+  };
+  const support = {
+    directory: "/context",
+    module: "EdithExtensionSupport_mock_app",
+  };
+  const flags = runtimeRoleLinkFlags(kit, support);
+  expect(flags).toContain("/context");
+  expect(flags.filter((flag) => flag === "-lEdithExtensionKit")).toHaveLength(
+    1,
+  );
+  expect(
+    flags.filter((flag) => flag === "-lEdithExtensionSupport_mock_app"),
+  ).toHaveLength(1);
+  expect(runtimeRoleLinkFlags(undefined, undefined, ["-lNativeOnly"])).toEqual([
+    "-lNativeOnly",
+  ]);
+  expect(() => runtimeRoleLinkFlags(undefined, support)).toThrow();
 });
