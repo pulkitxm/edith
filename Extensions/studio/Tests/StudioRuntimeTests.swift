@@ -5,7 +5,7 @@ import Testing
 @testable import StudioExtension
 
 @MainActor @Suite(.serialized) struct StudioRuntimeTests {
-    private func invoke(_ runtime: ExtensionRuntime, command: String, payload: Data) async
+    private func invoke(_ runtime: ExtensionServiceRuntime, command: String, payload: Data) async
         -> (Data?, String?)
     {
         await withCheckedContinuation { continuation in
@@ -19,7 +19,7 @@ import Testing
     }
 
     @Test func ownedRuntimeInvokesOriginalCLIAndRejectsAfterDisable() async throws {
-        let runtime = ExtensionRuntime()
+        let runtime = makeStudioRuntime()
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         let started = runtime.execute(
             ["operation": "start", "defaultsSuite": suite] as NSDictionary)
@@ -43,7 +43,7 @@ import Testing
     }
 
     @Test func streamedNativeExportDrainsOrderedOutputBeforeCompletion() async throws {
-        let runtime = ExtensionRuntime()
+        let runtime = makeStudioRuntime()
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         _ = runtime.execute(["operation": "start", "defaultsSuite": suite] as NSDictionary)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -109,7 +109,7 @@ import Testing
     }
 
     @Test func disablingRuntimeAwaitsActiveStreamExportAndPreservesExistingFiles() async throws {
-        let runtime = ExtensionRuntime()
+        let runtime = makeStudioRuntime()
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         let started = runtime.execute(
             ["operation": "start", "defaultsSuite": suite] as NSDictionary)
@@ -189,7 +189,7 @@ import Testing
     }
 
     @Test func remoteUIContextCannotStartOwnedNativeServices() throws {
-        let runtime = ExtensionRuntime()
+        let runtime = makeStudioRuntime()
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         let result = runtime.execute(
             ["operation": "start", "remoteUI": true, "defaultsSuite": suite]

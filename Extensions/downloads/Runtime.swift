@@ -1,193 +1,167 @@
 import AppKit
-import EdithExtensionSupport
 import EdithExtensionCommands
+import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
 
-@MainActor @objc(EdithDownloadsExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+@MainActor
+final class DownloadsExtensionService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var worker: DownloadsWorker?
     private var uiModel: YoutubeDownloader?
+    private var uiSettings = false
     private var engineClient: ExtensionEngineClient?
     private var surface: DownloadsSurface?
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
-    private var stopped = false
-    private var activeCalls = 0
-    private var uiRetirements: [UUID: Task<Void, Never>] = [:]
-    private var suspended = false
-    private var suspension: Task<Void, Never>?
-    private var stoppingTask: Task<Void, Never>?
+    private var suspended:
+        (
+            worker: DownloadsWorker?, model: YoutubeDownloader?, streams: ExtensionCLIStreams?,
+            cancellation: Task<Void, Never>
+        )?
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, !self.stopped, let worker = self.worker else {
-                throw ExtensionPeerError.unavailable
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { worker != nil }
+    var preparesForDisable: Bool { true }
+
+    func prepareDisable() async throws { await runtime.stop() }
+
+    func start() -> Bool {
+        if worker == nil {
+            let value = DownloadsWorker()
+            worker = value
+            surface = DownloadsSurface(worker: value)
+        }
+        return true
+    }
+
+    func synchronize() { worker?.downloader.checkAvailability() }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let worker else { throw ExtensionPeerError.unavailable }
+        if command == "downloads.cli.catalog" {
+            return try DownloadsCLIAliases.expanded(
+                ExtensionCLICatalog.data(
+                    DownloadCommand.self, owner: "downloads", payload: payload,
+                    streaming: true))
+        }
+        if command.hasPrefix("downloads.cli.") {
+            if cliStreams == nil {
+                cliStreams = try ExtensionCLIStreams(owner: "downloads")
             }
-            self.activeCalls += 1
-            defer { self.activeCalls -= 1 }
-            if command == "downloads.cli.catalog" {
-                return try DownloadsCLIAliases.expanded(
-                    ExtensionCLICatalog.data(
-                        DownloadCommand.self, owner: "downloads", payload: payload,
-                        streaming: true))
-            }
-            if command.hasPrefix("downloads.cli.") {
-                if self.cliStreams == nil {
-                    self.cliStreams = try ExtensionCLIStreams(owner: "downloads")
+            guard let streams = cliStreams else { throw ExtensionPeerError.unavailable }
+            return try await DownloadsCLIExecution.stream(
+                streams, operation: command, payload: payload, worker: worker.queue)
+        }
+        if command == "downloads.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await DownloadsCLIExecution.run(request, worker: worker.queue))
+        }
+        if command.hasPrefix("downloads.ui.") {
+            return try await DownloadsUIBridge.execute(
+                command, payload: payload, worker: worker)
+        }
+        if command.hasPrefix("surface.") {
+            guard let surface else { throw ExtensionPeerError.unavailable }
+            return try await surface.execute(command, payload: payload)
+        }
+        return try await worker.execute(command, payload: payload)
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard engineClient == nil, let client = configuration.engineClient else { return false }
+        engineClient = client
+        uiSettings = configuration.isSettings
+        uiModel = YoutubeDownloader(
+            client: DownloadsClient(client: client), remote: DownloadsUIBridge(client: client))
+        TextEditingCommands.install()
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let model = uiModel else { return nil }
+        let settings = uiSettings
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                if settings {
+                    DownloadsSettings(downloader: model)
+                } else {
+                    DownloadSheet(isPage: true, downloader: model)
                 }
-                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try await DownloadsCLIExecution.stream(
-                    streams, operation: command, payload: payload, worker: worker.queue)
-            }
-            if command == "downloads.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await DownloadsCLIExecution.run(request, worker: worker.queue))
-            }
-            if command.hasPrefix("downloads.ui.") {
-                return try await DownloadsUIBridge.execute(
-                    command, payload: payload, worker: worker)
-            }
-            if command.hasPrefix("surface.") {
-                guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
-                return try await surface.execute(command, payload: payload)
-            }
-            return try await worker.execute(command, payload: payload)
-        }
+            })
     }
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        suspended = true
-        let worker = worker
+
+    func stopUI() -> [Task<Void, Never>] {
+        engineClient?.invalidate()
+        engineClient = nil
+        uiSettings = false
         let model = uiModel
-        model?.cancelPendingWork()
-        let streams = cliStreams
-        streams?.stop()
-        if suspension == nil {
-            let retired = Array(uiRetirements.values)
-            suspension = Task { [self, worker, model, streams] in
-                await worker?.cancelPendingWork()
-                await model?.tools.shutdown()
-                await commands.suspendAndWait()
-                await worker?.drain()
-                await model?.drain()
-                await streams?.stopAndWait()
-                for task in retired { await task.value }
-            }
-        }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands(completion: {})
-        stopUI()
-        if let stoppingTask {
-            Task {
-                await stoppingTask.value; completion()
-            }; return
-        }
-        let streams = cliStreams; cliStreams = nil; streams?.stop()
-        stopped = true
-        commands.shutdown()
-        let worker = worker
-        let task = Task { [self, worker, streams] in
-            await suspension?.value
-            await worker?.shutdown()
-            await streams?.stopAndWait()
-            await commands.shutdownAndWait()
-            while activeCalls > 0 { await Task.yield() }
-        }
-        stoppingTask = task
-        Task {
-            await task.value; completion()
-        }
-    }
-    @objc(prepareDisableWithCompletion:)
-    func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        prepareToStop { completion(nil) }
-    }
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "downloads", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended, uiRetirements.isEmpty else { return ["ok": false] as NSDictionary }
-            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "downloads", let client = configuration.engineClient
-            else { return ["ok": false] as NSDictionary }
-            engineClient = client
-            uiModel = YoutubeDownloader(
-                client: DownloadsClient(client: client), remote: DownloadsUIBridge(client: client))
-            TextEditingCommands.install()
-        case "stopUI": stopUI()
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            guard !stopped, let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if worker == nil {
-                let value = DownloadsWorker()
-                worker = value
-                surface = DownloadsSurface(worker: value)
-            }
-        case "view":
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    if input["location"] as? String == "settings" {
-                        DownloadsSettings(downloader: model)
-                    } else {
-                        DownloadSheet(isPage: true, downloader: model)
-                    }
-                })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": worker?.downloader.checkAvailability()
-        case "stop":
-            suspendCommands(completion: {})
-            let streams = cliStreams; cliStreams = nil; streams?.stop()
-            Task { await streams?.stopAndWait() }
-            commands.shutdown()
-            worker = nil
-            surface = nil
-            stopUI()
-            InputFocus.uninstall()
-        case "status": return ["ok": true, "running": !stopped && worker != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
-    private func stopUI() {
-        engineClient?.invalidate(); engineClient = nil
-        let model = uiModel; uiModel = nil
+        uiModel = nil
+        var retirements: [Task<Void, Never>] = []
         if let model {
             model.cancelPendingWork()
-            let id = UUID()
-            uiRetirements[id] = Task { [self, model] in
-                await model.shutdown(); await model.tools.shutdown()
-                uiRetirements[id] = nil
-            }
+            retirements.append(
+                Task {
+                    await model.shutdown()
+                    await model.tools.shutdown()
+                })
         }
-        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
             TextEditingCommands.shutdown()
         }
+        return retirements
     }
+
+    func cancelPendingWork() {
+        let worker = worker
+        let model = uiModel
+        let streams = cliStreams
+        model?.cancelPendingWork()
+        streams?.stop()
+        let cancellation = Task {
+            await worker?.cancelPendingWork()
+            await model?.tools.shutdown()
+        }
+        suspended = (worker, model, streams, cancellation)
+    }
+
+    func drain() async {
+        guard let suspended else { return }
+        await suspended.cancellation.value
+        await suspended.worker?.drain()
+        await suspended.model?.drain()
+        await suspended.streams?.stopAndWait()
+    }
+
+    func teardown() async {
+        let retirements = stopUI()
+        let streams = cliStreams
+        cliStreams = nil
+        streams?.stop()
+        let stopping = worker
+        worker = nil
+        surface = nil
+        await stopping?.shutdown()
+        await streams?.stopAndWait()
+        for task in retirements { await task.value }
+        InputFocus.uninstall()
+    }
+}
+
+@MainActor
+func makeDownloadsRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "downloads", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { DownloadsExtensionService(runtime: $0) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
-    let runtime = MainActor.assumeIsolated { ExtensionRuntime() }
-    return Unmanaged.passRetained(runtime).toOpaque()
+    UnsafeMutableRawPointer(
+        bitPattern: MainActor.assumeIsolated {
+            UInt(bitPattern: Unmanaged.passRetained(makeDownloadsRuntime()).toOpaque())
+        })
 }

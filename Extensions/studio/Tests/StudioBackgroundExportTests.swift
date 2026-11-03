@@ -56,7 +56,7 @@ import Testing
     }
 
     private func diagnostics(
-        _ runtime: ExtensionRuntime, requests: Requests, facade: StudioUIFacade,
+        _ runtime: ExtensionServiceRuntime, requests: Requests, facade: StudioUIFacade,
         editor: VideoEditorModel? = nil
     ) -> String {
         let status = runtime.execute(["operation": "status"] as NSDictionary) as? NSDictionary
@@ -75,7 +75,7 @@ import Testing
     }
 
     private func facade(
-        _ runtime: ExtensionRuntime, requests: Requests,
+        _ runtime: ExtensionServiceRuntime, requests: Requests,
         invalidate: @escaping @MainActor () -> Void = {}
     ) -> StudioUIFacade {
         StudioUIFacade(
@@ -115,7 +115,7 @@ import Testing
     @Test func closingReadonlyEditorDetachesExportAndReopenedControlsReceiveNativeResult()
         async throws
     {
-        let runtime = ExtensionRuntime()
+        let runtime = makeStudioRuntime()
         let requests = Requests()
         var ownedFacades: [StudioUIFacade] = []
         var ownedEditor: VideoEditorModel?

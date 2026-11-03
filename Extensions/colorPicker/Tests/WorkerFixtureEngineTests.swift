@@ -35,7 +35,7 @@ import WorkerFixtureTestSupport
     }
 
     @Test func unsignedFunctionalIntentRejectsOriginalRuntimeStart() {
-        let runtime = ExtensionRuntime()
+        let runtime = makeColorPickerRuntime()
         let context: NSDictionary = [
             "operation": "start",
             "hostedFunctionalFixture": ["descriptorPath": "/synthetic/unsigned.json"],
