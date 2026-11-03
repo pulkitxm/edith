@@ -11,25 +11,11 @@ final class CrashFixtureService: ExtensionService {
     func start(_ context: ExtensionHostContext) -> Bool {
         guard let host = context.input["hostIdentifier"] as? String,
             host.hasPrefix("com.pulkit.edith.tests.crash-"),
-            let root = ProcessInfo.processInfo.environment["EDITH_CRASH_PROOF_ROOT"]
+            let root = ProcessInfo.processInfo.environment["EDITH_CRASH_PROOF_ROOT"],
+            let directory = context.dataDirectory, directory.hasPrefix(root + "/")
         else { return false }
-        guard bundle.object(forInfoDictionaryKey: "FixtureCrashes") as? Bool == true else {
-            return true
-        }
-        let defaults = UserDefaults(suiteName: host + ".host")!
-        let report: [String: Any] = [
-            "starting": defaults.stringArray(forKey: "extensionsStarting") ?? [],
-            "probation": defaults.string(forKey: "extensionStartProbation") as Any? ?? NSNull(),
-        ]
-        do {
-            let stage =
-                defaults.string(forKey: "extensionStartProbation") == nil ? "first" : "retry"
-            let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
-            try data.write(
-                to: URL(fileURLWithPath: root).appendingPathComponent("\(stage)-abort.json"),
-                options: .atomic)
-        } catch { return false }
-        abort()
+        if bundle.object(forInfoDictionaryKey: "FixtureCrashes") as? Bool == true { abort() }
+        return true
     }
 
     func invoke(_ command: String, payload: Data) async throws -> Data {

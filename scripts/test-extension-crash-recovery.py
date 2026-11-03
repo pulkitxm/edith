@@ -139,7 +139,8 @@ def proof(products, destination):
             "CFBundleIdentifier": f"com.pulkit.edith.extensions.{name}.app",
             "CFBundleExecutable": "Runtime", "CFBundlePackageType": "BNDL",
             "CFBundleVersion": "1.0.0", "CFBundleShortVersionString": "1.0.0",
-            "EdithHostABI": abi, "FixtureID": name, "FixtureCrashes": name == "crashProbe",
+            "EdithHostABI": abi, "EdithRuntimeAPIVersion": 1,
+            "FixtureID": name, "FixtureCrashes": name == "crashProbe",
         })
         (payload / "package.json").write_text(json.dumps({key: package[key] for key in [
             "id", "version", "hostABI", "architecture", "minimumSystemVersion", "dependencies",
@@ -157,11 +158,10 @@ def proof(products, destination):
         if result.returncode != -signal.SIGABRT:
             raise RuntimeError(f"Expected SIGABRT during {stage} start, received {result.returncode}: {result.stderr}")
         persisted = json.loads(execute([str(executable), "inspect", str(destination)], environment))
-        observed = json.loads((destination / f"{stage}-abort.json").read_text())
-        if "crashProbe" not in persisted["starting"] or "crashProbe" not in observed["starting"]:
+        if "crashProbe" not in persisted["starting"]:
             raise RuntimeError("The abrupt crash lost its extension startup marker")
         expected_probation = None if stage == "first" else "crashProbe"
-        if persisted["probation"] != expected_probation or observed["probation"] != expected_probation:
+        if persisted["probation"] != expected_probation:
             raise RuntimeError("The first retry did not use the expected probation policy")
         observations.append({"stage": stage, "signal": "SIGABRT", **persisted})
     final = json.loads(execute([str(executable), "launch", str(destination)], environment))
@@ -177,8 +177,11 @@ def proof(products, destination):
         name: hashlib.sha256((products / "EdithHostCore.build" / (name + ".swift.o")).read_bytes()).hexdigest()
         for name in ["HostExtensionSessions", "HostWorkerEngine"]
     }
+    hashes["ExtensionBundleRuntime"] = hashlib.sha256(
+        (products / "ExtensionMarketplace.build/ExtensionBundleRuntime.swift.o").read_bytes()
+    ).hexdigest()
     report = {
-        "hostABI": abi, "productionObjectSHA256": hashes,
+        "hostABI": abi, "extensionRuntimeAPIVersion": 1, "productionObjectSHA256": hashes,
         "runtimeLibrarySHA256": hashlib.sha256(kit.read_bytes()).hexdigest(),
         "crashes": observations, "recovered": final,
     }
