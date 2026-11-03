@@ -319,3 +319,18 @@ test("non-404 lookup failures still throw with the gh message", () => {
   ).toThrow();
   expect(calls).toBe(6);
 });
+
+test("an empty duplicate draft never hides the real release for its tag", () => {
+  const tag = "extensions/synthetic/1.0.4-abcdef";
+  const published = { id: 1, tag_name: tag, draft: false, assets: [{}] };
+  const orphan = { id: 2, tag_name: tag, draft: true, assets: [] };
+  const filled = { id: 3, tag_name: tag, draft: true, assets: [{}] };
+  expect(releaseFromListing([orphan, published], tag)).toBe(published);
+  expect(releaseFromListing([filled, orphan], tag)).toBe(filled);
+  expect(() => releaseFromListing([published, filled], tag)).toThrow(
+    "Ambiguous",
+  );
+  expect(() => releaseFromListing([orphan, { ...orphan, id: 4 }], tag)).toThrow(
+    "Ambiguous",
+  );
+});

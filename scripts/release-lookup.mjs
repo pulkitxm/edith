@@ -102,8 +102,12 @@ export function listReleases({
   throw new Error("Release lookup pagination limit exceeded");
 }
 
+const emptyDraft = (value) => value.draft && value.assets?.length === 0;
+
 export function releaseFromListing(releases, tag) {
-  const matches = releases.filter((value) => value.tag_name === tag);
+  let matches = releases.filter((value) => value.tag_name === tag);
+  if (matches.length > 1 && matches.some((value) => !emptyDraft(value)))
+    matches = matches.filter((value) => !emptyDraft(value));
   if (matches.length > 1) throw new Error("Ambiguous release lookup tag");
   return matches[0];
 }
