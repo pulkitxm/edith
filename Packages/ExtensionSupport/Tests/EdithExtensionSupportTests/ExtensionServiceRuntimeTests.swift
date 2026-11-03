@@ -11,6 +11,8 @@ private final class SyntheticService: ExtensionService {
     var drains = 0
     var teardowns = 0
     var invocations: [String] = []
+    var holdInvocation = false
+    var invocationCancelled = false
     var requiresOwnedDataDirectory = false
     var preparesForDisable = false
     var disablePreparations = 0
@@ -65,6 +67,11 @@ private final class SyntheticService: ExtensionService {
 
     func invoke(_ command: String, payload: Data) async throws -> Data {
         invocations.append(command)
+        if holdInvocation {
+            do { try await Task.sleep(for: .seconds(30)) } catch {
+                invocationCancelled = true; throw error
+            }
+        }
         return Data(command.utf8)
     }
 
@@ -92,7 +99,8 @@ private final class SyntheticService: ExtensionService {
     func teardown() async { teardowns += 1 }
 
     func perform(_ operation: String, context: NSDictionary) -> NSObject? {
-        operation == "toggle" ? (["ok": true, "toggled": true] as NSDictionary) : nil
+        ["toggle", "prepareApplicationQuit"].contains(operation)
+            ? (["ok": true, "toggled": true] as NSDictionary) : nil
     }
 }
 
@@ -104,6 +112,89 @@ private let syntheticScope = [
 
 @MainActor
 @Suite(.serialized) struct ExtensionServiceRuntimeTests {
+    @Test func typedDispatchKeepsTheVersionedIdentityAndCommandToken() async throws {
+        let (runtime, service) = runtime()
+        let peer: any ExtensionRuntimeProtocol = runtime
+        #expect(ExtensionRuntimeAPI.supportedVersions.contains(peer.runtimeAPIVersion))
+        guard case let .description(description) = peer.dispatch(.describe) else {
+            Issue.record("Missing typed description")
+            return
+        }
+        #expect(description.id == "synthetic" && description.role == "app")
+        #expect(description.apiVersion == peer.runtimeAPIVersion)
+        let token = UUID()
+        let reply = try await peer.invokeCommand("typed", token: token, payload: Data())
+        #expect(reply == Data("typed".utf8))
+        #expect(service.tokens == [token])
+        await peer.prepareForStop()
+        #expect(service.teardowns == 1)
+    }
+
+    @Test func suspendedAndStoppedRuntimesRejectFurtherSynchronousWork() async {
+        for stopping in [false, true] {
+            let (runtime, service) = runtime()
+            if stopping { await runtime.prepareForStop() } else { await runtime.suspend() }
+            let sync =
+                runtime.dispatch(.synchronize(ExtensionHostContext(input: [:]))).object
+                as? NSDictionary
+            let custom = runtime.dispatch(.custom("toggle", [:])).object as? NSDictionary
+            let view =
+                runtime.dispatch(.view(UUID(), ExtensionHostContext(input: [:]))).object
+                as? NSDictionary
+            #expect(sync?["ok"] as? Bool == false)
+            #expect(custom?["ok"] as? Bool == false)
+            #expect(view?["ok"] as? Bool == false)
+            #expect(service.synchronizations.isEmpty && service.viewed.isEmpty)
+            await runtime.prepareForStop()
+        }
+    }
+
+    @Test func malformedTypedRequestsDoNotReachTheService() {
+        #expect(ExtensionRuntimeRequest(operation: "view", context: [:]) == nil)
+        #expect(
+            ExtensionRuntimeRequest(operation: "stopUI", context: ["presentationID": "invalid"])
+                == nil)
+        #expect(
+            ExtensionRuntimeRequest(operation: "cancelCommand", context: ["token": "invalid"])
+                == nil)
+    }
+
+    @Test func typedCommandsCancelledBeforeAdmissionNeverInvokeTheService() async {
+        let (runtime, service) = runtime()
+        let task = Task {
+            try await runtime.invokeCommand("cancelled", token: UUID(), payload: Data())
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(service.invocations.isEmpty)
+        await runtime.prepareForStop()
+    }
+
+    @Test func typedCommandCancellationCancelsTheRegisteredOwner() async {
+        let (runtime, service) = runtime()
+        service.holdInvocation = true
+        let task = Task { try await runtime.invokeCommand("held", token: UUID(), payload: Data()) }
+        while service.invocations.isEmpty { await Task.yield() }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        await runtime.suspend()
+        #expect(service.invocationCancelled)
+        await runtime.prepareForStop()
+    }
+
+    @Test func confirmedQuitCallbackRemainsAvailableAfterCommandSuspensionUntilStop() async {
+        let (runtime, _) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        await runtime.suspend()
+        let quit = runtime.execute(["operation": "prepareApplicationQuit"]) as? NSDictionary
+        #expect(quit?["ok"] as? Bool == true)
+        let toggle = runtime.execute(["operation": "toggle"]) as? NSDictionary
+        #expect(toggle?["ok"] as? Bool == false)
+        await runtime.prepareForStop()
+        let stopped = runtime.execute(["operation": "prepareApplicationQuit"]) as? NSDictionary
+        #expect(stopped?["ok"] as? Bool == false)
+    }
+
     private static let suite = syntheticSuite
     private static let dataRoot = syntheticDataRoot
 
