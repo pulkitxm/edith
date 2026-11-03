@@ -537,11 +537,14 @@ public final class HostMarketplace {
     }
 
     private func verifyInstalledBundles(_ packages: [ExtensionPackage]) async {
-        let bundles = packages.flatMap { package in
+        let contents: [URL] = packages.flatMap { package -> [URL] in
             (try? FileManager.default.contentsOfDirectory(
                 at: store.directory(for: package).appendingPathComponent(package.id),
                 includingPropertiesForKeys: nil)) ?? []
-        }.filter { $0.pathExtension == "bundle" || $0.lastPathComponent == "CameraCarrier.app" }
+        }
+        let bundles = contents.filter {
+            $0.pathExtension == "bundle" || $0.lastPathComponent == "CameraCarrier.app"
+        }
         await HostBundleVerification.verifyConcurrently(
             bundles, receipts: verificationReceipts, using: verifyInstalledBundle)
     }
