@@ -8,8 +8,8 @@ import SwiftUI
 import WorkerFixtureSupport
 #endif
 
-@MainActor @objc(EdithHerdrExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+@MainActor
+final class HerdrService: ExtensionService {
     private struct UIPresentation {
         let location: String
         let client: ExtensionEngineClient?
@@ -23,30 +23,24 @@ final class ExtensionRuntime: NSObject {
     private var worker: HerdrWorker?
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
-    private let commands = ExtensionCommandRegistry()
-    private var suspended = false
-    private var suspension: Task<Void, Never>?
+    private var draining = false
+    private var drainTask: Task<Void, Never>?
     private var uiRetirements: [UUID: Task<Void, Never>] = [:]
     private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
     private let workerFactory: @MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker
     private var fixture: WorkerFixtureAdmission?
 
-    override convenience init() {
-        self.init(
-            fixtureAdmission: { context in
+    init(
+        fixtureAdmission: (@MainActor (NSDictionary) throws -> WorkerFixtureAdmission?)? = nil,
+        workerFactory: (@MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker)? = nil
+    ) {
+        self.fixtureAdmission =
+            fixtureAdmission ?? { context in
                 try WorkerFixtureAdmission.current(
                     extensionID: "herdr", context: context,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-            }, workerFactory: Self.makeWorker)
-    }
-
-    init(
-        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?,
-        workerFactory: @escaping @MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker
-    ) {
-        self.fixtureAdmission = fixtureAdmission
-        self.workerFactory = workerFactory
-        super.init()
+                    roleBundle: Bundle(for: HerdrService.self))
+            }
+        self.workerFactory = workerFactory ?? Self.makeWorker
     }
 
     private static func makeWorker(
@@ -67,29 +61,28 @@ final class ExtensionRuntime: NSObject {
             && next?.home == fixture?.home && next?.dataDirectory == fixture?.dataDirectory
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
-            await self.startup?.value
-            if command == "herdr.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    await HerdrCLIExecution.run(request, worker: worker))
-            }
-            if command.hasPrefix("surface.") {
-                guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
-                return try await surface.execute(command, payload: payload)
-            }
-            return try await worker.execute(command, payload: payload)
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let worker = self.worker else { throw ExtensionPeerError.unavailable }
+        await self.startup?.value
+        if command == "herdr.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                await HerdrCLIExecution.run(request, worker: worker))
         }
+        if command.hasPrefix("surface.") {
+            guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
+            return try await surface.execute(command, payload: payload)
+        }
+        return try await worker.execute(command, payload: payload)
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        suspended = true
-        let worker = worker
-        let startup = startup
+    var preparesForDisable: Bool { true }
+    var allowsUIDuringRetirement: Bool { true }
+    var isRunning: Bool { worker?.isStopped == false }
+
+    func cancelPendingWork() {
+        guard drainTask == nil else { return }
+        draining = true
         let current = Array(presentations.values)
         for presentation in current {
             presentation.store?.cancelPendingWork()
@@ -99,245 +92,210 @@ final class ExtensionRuntime: NSObject {
         }
         startup?.cancel()
         worker?.requestWorkCancellation()
-        if suspension == nil {
-            let retired = Array(uiRetirements.values)
-            suspension = Task { [self, worker, startup, current] in
-                await startup?.value
-                await worker?.cancelPendingWork()
-                await commands.suspendAndWait()
-                for presentation in current {
-                    await presentation.store?.drain()
-                    await presentation.sessionSettings?.stopAndWait()
-                    await presentation.settings?.stopAndWait()
-                    await presentation.activity?.cancelPendingWorkAndWait()
-                }
-                for task in retired { await task.value }
-            }
-        }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-
-    @objc(prepareDisableWithCompletion:)
-    func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        suspendCommands(completion: {})
-        startup?.cancel()
-        commands.shutdown()
-        let worker = worker
-        let startup = startup
-        worker?.requestWorkCancellation()
-        Task { [self, worker, startup] in
-            await suspension?.value
+        let startup = startup, worker = worker
+        let retired = Array(uiRetirements.values)
+        drainTask = Task {
             await startup?.value
             await worker?.cancelPendingWork()
-            await commands.shutdownAndWait()
-            do { try await worker?.prepareDisable(); completion(nil) } catch {
-                completion(error as NSError)
+            for presentation in current {
+                await presentation.store?.drain()
+                await presentation.sessionSettings?.stopAndWait()
+                await presentation.settings?.stopAndWait()
+                await presentation.activity?.cancelPendingWorkAndWait()
             }
+            for task in retired { await task.value }
         }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands(completion: {})
-        startup?.cancel()
-        commands.shutdown()
-        let worker = worker
-        let startup = startup
-        worker?.requestWorkCancellation()
-        Task { [self, worker, startup] in
-            await suspension?.value
-            await startup?.value
-            await worker?.cancelPendingWork()
-            await commands.shutdownAndWait()
-            await worker?.shutdown()
-            stopAllUI()
-            for task in Array(uiRetirements.values) { await task.value }
-            self.worker = nil
-            fixture = nil
-            surface = nil
-            self.startup = nil
-            completion()
-        }
+    func drain() async { await drainTask?.value }
+
+    func prepareDisable() async throws {
+        try await worker?.prepareDisable()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "herdr", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            guard worker == nil, let location = input["location"] as? String,
-                [
-                    "main", "settings", "notch", "herdr.agent", "herdr.agent.controls",
-                    "herdr.space", "herdr.files",
-                ]
-                .contains(location),
-                let configuration = ExtensionUIConfiguration(context: input),
-                let origin = input["presentationID"] as? String,
-                let presentationID = UUID(uuidString: origin),
-                configuration.extensionID == "herdr",
-                location == "settings" || configuration.engineClient != nil
-            else { return ["ok": false] as NSDictionary }
-            let settingsSection = (input["section"] as? String).flatMap(HerdrSettingsSection.init)
-            guard location != "settings" || settingsSection != nil else {
-                return ["ok": false] as NSDictionary
-            }
-            if location.hasPrefix("herdr.") {
-                guard let target = input["target"] as? String, !target.isEmpty,
-                    target.utf8.count <= (location == "herdr.files" ? 8192 : 4096),
-                    !target.utf8.contains(0),
-                    let raw = input["herdrPresentationToken"] as? String,
-                    UUID(uuidString: raw) != nil
-                else { return ["ok": false] as NSDictionary }
-            }
-            stopUI(presentationID)
-            var presentation = UIPresentation(
-                location: location, client: configuration.engineClient)
-            if location != "settings", let client = configuration.engineClient {
-                let facade = HerdrUIClient(client: client)
-                let store = HerdrStore(uiClient: facade)
-                store.uiPresentationID = presentationID
-                store.terminalUI = store.makeTerminalUIPresentation(
-                    id: presentationID,
-                    location: location, target: input["target"] as? String ?? "",
-                    token: (input["herdrPresentationToken"] as? String).flatMap(
-                        UUID.init(uuidString:)))
-                let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
-                store.uiActivity = activity
-                presentation.store = store
-                presentation.activity = activity
-                presentation.controller = NSHostingController(
-                    rootView: ExtensionPageHost {
-                        if location == "main" {
-                            HerdrPage(store: store, activity: activity)
-                                .environment(\.terminalLaunchEnabled, true)
-                        } else if location == "notch" {
-                            HerdrNotchAgentsCard(store: store, monitor: activity)
-                        } else {
-                            HerdrRemoteScene(
-                                store: store, location: location,
-                                target: input["target"] as? String ?? "",
-                                token: UUID(
-                                    uuidString: input["herdrPresentationToken"] as? String ?? "")!
-                            )
+    func teardown() async {
+        await worker?.shutdown()
+        stopAllUI()
+        for task in Array(uiRetirements.values) { await task.value }
+        worker = nil
+        fixture = nil
+        surface = nil
+        startup = nil
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        let input = configuration.input
+        guard worker == nil, let location = input["location"] as? String,
+            [
+                "main", "settings", "notch", "herdr.agent", "herdr.agent.controls",
+                "herdr.space", "herdr.files",
+            ]
+            .contains(location),
+            let origin = input["presentationID"] as? String,
+            let presentationID = UUID(uuidString: origin),
+            configuration.extensionID == "herdr",
+            location == "settings" || configuration.engineClient != nil
+        else { return false }
+        let settingsSection = (input["section"] as? String).flatMap(HerdrSettingsSection.init)
+        guard location != "settings" || settingsSection != nil else {
+            return false
+        }
+        if location.hasPrefix("herdr.") {
+            guard let target = input["target"] as? String, !target.isEmpty,
+                target.utf8.count <= (location == "herdr.files" ? 8192 : 4096),
+                !target.utf8.contains(0),
+                let raw = input["herdrPresentationToken"] as? String,
+                UUID(uuidString: raw) != nil
+            else { return false }
+        }
+        stopUI(presentationID)
+        var presentation = UIPresentation(
+            location: location, client: configuration.engineClient)
+        if location != "settings", let client = configuration.engineClient {
+            let facade = HerdrUIClient(client: client)
+            let store = HerdrStore(uiClient: facade)
+            store.uiPresentationID = presentationID
+            store.terminalUI = store.makeTerminalUIPresentation(
+                id: presentationID,
+                location: location, target: input["target"] as? String ?? "",
+                token: (input["herdrPresentationToken"] as? String).flatMap(
+                    UUID.init(uuidString:)))
+            let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+            store.uiActivity = activity
+            presentation.store = store
+            presentation.activity = activity
+            presentation.controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    if location == "main" {
+                        HerdrPage(store: store, activity: activity)
                             .environment(\.terminalLaunchEnabled, true)
-                        }
-                    })
-                PresenterState.shared.start()
-            } else if settingsSection == .agentActivity {
-                let facade: HerdrUIClient
-                if let client = configuration.engineClient {
-                    facade = HerdrUIClient(client: client)
-                } else {
-                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
-                }
-                let store = HerdrStore(uiClient: facade)
-                store.uiPresentationID = presentationID
-                let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
-                activity.folderPresentationID = presentationID
-                store.uiActivity = activity
-                presentation.store = store
-                presentation.activity = activity
-                presentation.controller = NSHostingController(
-                    rootView: ExtensionPageHost {
-                        HerdrActivitySettingsPage(store: store, monitor: activity)
-                    })
-            } else if settingsSection == .extensionSettings {
-                let facade: HerdrUIClient
-                if let client = configuration.engineClient {
-                    facade = HerdrUIClient(client: client)
-                } else {
-                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
-                }
-                let model = HerdrSessionSettingsModel(client: facade)
-                presentation.sessionSettings = model
-                presentation.controller = NSHostingController(
-                    rootView: ExtensionPageHost { HerdrExtensionSettingsPage(model: model) })
+                    } else if location == "notch" {
+                        HerdrNotchAgentsCard(store: store, monitor: activity)
+                    } else {
+                        HerdrRemoteScene(
+                            store: store, location: location,
+                            target: input["target"] as? String ?? "",
+                            token: UUID(
+                                uuidString: input["herdrPresentationToken"] as? String ?? "")!
+                        )
+                        .environment(\.terminalLaunchEnabled, true)
+                    }
+                })
+            PresenterState.shared.start()
+        } else if settingsSection == .agentActivity {
+            let facade: HerdrUIClient
+            if let client = configuration.engineClient {
+                facade = HerdrUIClient(client: client)
             } else {
-                let model: HerdrSettingsModel
-                if let client = configuration.engineClient {
-                    model = HerdrSettingsModel(client: client)
-                } else {
-                    model = HerdrSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
-                }
-                presentation.settings = model
-                presentation.controller = NSHostingController(
-                    rootView: ExtensionPageHost { HerdrSettingsPage(model: model) })
+                facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
             }
-            presentations[presentationID] = presentation
-        case "terminalUI", "terminalUIStatus":
-            guard let binding = presentation(input)?.store?.terminalUI else {
-                return ["ok": false] as NSDictionary
+            let store = HerdrStore(uiClient: facade)
+            store.uiPresentationID = presentationID
+            let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+            activity.folderPresentationID = presentationID
+            store.uiActivity = activity
+            presentation.store = store
+            presentation.activity = activity
+            presentation.controller = NSHostingController(
+                rootView: ExtensionPageHost {
+                    HerdrActivitySettingsPage(store: store, monitor: activity)
+                })
+        } else if settingsSection == .extensionSettings {
+            let facade: HerdrUIClient
+            if let client = configuration.engineClient {
+                facade = HerdrUIClient(client: client)
+            } else {
+                facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
             }
-            return binding.execute(input)
-        case "stopUI":
-            if let id = presentationID(input) { stopUI(id) } else { stopAllUI() }
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            guard presentations.isEmpty, !ExtensionHostRole.isInterfaceProcess else {
-                return ["ok": false] as NSDictionary
+            let model = HerdrSessionSettingsModel(client: facade)
+            presentation.sessionSettings = model
+            presentation.controller = NSHostingController(
+                rootView: ExtensionPageHost { HerdrExtensionSettingsPage(model: model) })
+        } else {
+            let model: HerdrSettingsModel
+            if let client = configuration.engineClient {
+                model = HerdrSettingsModel(client: client)
+            } else {
+                model = HerdrSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
             }
-            let admitted: WorkerFixtureAdmission?
-            do { admitted = try fixtureAdmission(input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            if admitted == nil {
-                guard let suite = input["defaultsSuite"] as? String,
-                    suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-                else { return ["ok": false] as NSDictionary }
-            }
-            if let worker {
-                guard matchesFixture(admitted) else { return ["ok": false] as NSDictionary }
-                do { try worker.applyAmbientPolicy(context: input) } catch {
-                    return ["ok": false] as NSDictionary
-                }
-                return ["ok": true] as NSDictionary
-            }
-            let created = workerFactory(input, admitted)
-            do { try created.applyAmbientPolicy(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            fixture = admitted
-            worker = created
-            surface = HerdrSurface(worker: created)
-            let recovery =
-                input["recoveryOnly"] as? Bool == true
-                || ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
-            if !recovery { startup = Task { await created.start() } }
-        case "view":
-            guard let presentation = presentation(input),
-                input["location"] as? String == presentation.location,
-                let controller = presentation.controller
-            else { return ["ok": false] as NSDictionary }
-            return controller
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            guard let worker else { return ["ok": false] as NSDictionary }
-            do {
-                guard matchesFixture(try fixtureAdmission(input)) else {
-                    return ["ok": false] as NSDictionary
-                }
-                try worker.applyAmbientPolicy(context: input)
-            } catch { return ["ok": false] as NSDictionary }
-        case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
-        case "stop":
-            suspendCommands(completion: {})
-            commands.shutdown()
-            startup?.cancel()
-        default: return ["ok": false] as NSDictionary
+            presentation.settings = model
+            presentation.controller = NSHostingController(
+                rootView: ExtensionPageHost { HerdrSettingsPage(model: model) })
         }
-        return ["ok": true] as NSDictionary
+        presentations[presentationID] = presentation
+        return true
     }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        guard presentations.isEmpty, !ExtensionHostRole.isInterfaceProcess else {
+            return false
+        }
+        let admitted: WorkerFixtureAdmission?
+        do { admitted = try fixtureAdmission(input) } catch {
+            return false
+        }
+        if admitted == nil {
+            guard let suite = input["defaultsSuite"] as? String,
+                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return false }
+        }
+        if let worker {
+            guard matchesFixture(admitted) else { return false }
+            do { try worker.applyAmbientPolicy(context: input) } catch {
+                return false
+            }
+            return true
+        }
+        let created = workerFactory(input, admitted)
+        do { try created.applyAmbientPolicy(context: input) } catch {
+            return false
+        }
+        fixture = admitted
+        worker = created
+        surface = HerdrSurface(worker: created)
+        let recovery =
+            input["recoveryOnly"] as? Bool == true
+            || ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
+        if !recovery { startup = Task { await created.start() } }
+        return true
+    }
+
+    func view(for identifier: UUID, context: ExtensionHostContext) -> NSViewController? {
+        let input = context.input
+        guard let presentation = presentation(input),
+            input["location"] as? String == presentation.location,
+            let controller = presentation.controller
+        else { return nil }
+        return controller
+    }
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        guard !draining, let worker else { return false }
+        do {
+            guard matchesFixture(try fixtureAdmission(input)) else {
+                return false
+            }
+            try worker.applyAmbientPolicy(context: input)
+        } catch { return false }
+        return true
+    }
+
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
+        if let presentation { stopUI(presentation) } else { stopAllUI() }
+        return Array(uiRetirements.values)
+    }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        guard ["terminalUI", "terminalUIStatus"].contains(operation),
+            let binding = presentation(context)?.store?.terminalUI
+        else { return nil }
+        let input = context.mutableCopy() as! NSMutableDictionary
+        input["operation"] = operation
+        return binding.execute(input)
+    }
+
     private func presentationID(_ input: NSDictionary) -> UUID? {
         (input["presentationID"] as? String).flatMap(UUID.init(uuidString:))
     }
@@ -369,10 +327,23 @@ final class ExtensionRuntime: NSObject {
 
 }
 
+@MainActor
+func makeHerdrRuntime(
+    fixtureAdmission: (@MainActor (NSDictionary) throws -> WorkerFixtureAdmission?)? = nil,
+    workerFactory: (@MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker)? = nil
+) -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(id: "herdr", role: "app", bundle: Bundle(for: BundleAnchor.self))
+    {
+        _ in
+        return HerdrService(fixtureAdmission: fixtureAdmission, workerFactory: workerFactory)
+    }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     let address = MainActor.assumeIsolated {
-        UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+        UInt(bitPattern: Unmanaged.passRetained(makeHerdrRuntime()).toOpaque())
     }
     return UnsafeMutableRawPointer(bitPattern: address)
 }
