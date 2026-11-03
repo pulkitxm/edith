@@ -11,6 +11,8 @@ private final class SyntheticService: ExtensionService {
     var drains = 0
     var teardowns = 0
     var invocations: [String] = []
+    var holdInvocation = false
+    var invocationCancelled = false
     var requiresOwnedDataDirectory = false
     var preparesForDisable = false
     var disablePreparations = 0
@@ -65,6 +67,11 @@ private final class SyntheticService: ExtensionService {
 
     func invoke(_ command: String, payload: Data) async throws -> Data {
         invocations.append(command)
+        if holdInvocation {
+            do { try await Task.sleep(for: .seconds(30)) } catch {
+                invocationCancelled = true; throw error
+            }
+        }
         return Data(command.utf8)
     }
 
@@ -149,6 +156,29 @@ private let syntheticScope = [
         #expect(
             ExtensionRuntimeRequest(operation: "cancelCommand", context: ["token": "invalid"])
                 == nil)
+    }
+
+    @Test func typedCommandsCancelledBeforeAdmissionNeverInvokeTheService() async {
+        let (runtime, service) = runtime()
+        let task = Task {
+            try await runtime.invokeCommand("cancelled", token: UUID(), payload: Data())
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(service.invocations.isEmpty)
+        await runtime.prepareForStop()
+    }
+
+    @Test func typedCommandCancellationCancelsTheRegisteredOwner() async {
+        let (runtime, service) = runtime()
+        service.holdInvocation = true
+        let task = Task { try await runtime.invokeCommand("held", token: UUID(), payload: Data()) }
+        while service.invocations.isEmpty { await Task.yield() }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        await runtime.suspend()
+        #expect(service.invocationCancelled)
+        await runtime.prepareForStop()
     }
 
     private static let suite = syntheticSuite

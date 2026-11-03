@@ -187,17 +187,30 @@ public final class ExtensionServiceRuntime: NSObject, ExtensionRuntimeProtocol {
     public var supportsPresentationPreparation: Bool { service?.preparesUIToClose == true }
 
     public func invokeCommand(_ command: String, token: UUID, payload: Data) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
-            invoke(["command": command, "token": token.uuidString, "payload": payload]) {
-                data, error in
-                if let data {
-                    continuation.resume(returning: data as Data)
-                } else {
-                    continuation.resume(
-                        throwing: ExtensionPeerError.rejected(
-                            error as String? ?? "The extension command failed."))
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            do {
+                let data: Data = try await withCheckedThrowingContinuation { continuation in
+                    invoke(["command": command, "token": token.uuidString, "payload": payload]) {
+                        data, error in
+                        if let data {
+                            continuation.resume(returning: data as Data)
+                        } else {
+                            continuation.resume(
+                                throwing: ExtensionPeerError.rejected(
+                                    error as String? ?? "The extension command failed."))
+                        }
+                    }
+                    if Task.isCancelled { commands.cancel(token.uuidString) }
                 }
+                try Task.checkCancellation()
+                return data
+            } catch {
+                try Task.checkCancellation()
+                throw error
             }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.commands.cancel(token.uuidString) }
         }
     }
 
