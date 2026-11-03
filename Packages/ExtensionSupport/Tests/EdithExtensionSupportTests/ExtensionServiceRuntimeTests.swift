@@ -99,7 +99,8 @@ private final class SyntheticService: ExtensionService {
     func teardown() async { teardowns += 1 }
 
     func perform(_ operation: String, context: NSDictionary) -> NSObject? {
-        operation == "toggle" ? (["ok": true, "toggled": true] as NSDictionary) : nil
+        ["toggle", "prepareApplicationQuit"].contains(operation)
+            ? (["ok": true, "toggled": true] as NSDictionary) : nil
     }
 }
 
@@ -179,6 +180,19 @@ private let syntheticScope = [
         await runtime.suspend()
         #expect(service.invocationCancelled)
         await runtime.prepareForStop()
+    }
+
+    @Test func confirmedQuitCallbackRemainsAvailableAfterCommandSuspensionUntilStop() async {
+        let (runtime, _) = runtime()
+        _ = runtime.execute(["operation": "start", "defaultsSuite": Self.suite])
+        await runtime.suspend()
+        let quit = runtime.execute(["operation": "prepareApplicationQuit"]) as? NSDictionary
+        #expect(quit?["ok"] as? Bool == true)
+        let toggle = runtime.execute(["operation": "toggle"]) as? NSDictionary
+        #expect(toggle?["ok"] as? Bool == false)
+        await runtime.prepareForStop()
+        let stopped = runtime.execute(["operation": "prepareApplicationQuit"]) as? NSDictionary
+        #expect(stopped?["ok"] as? Bool == false)
     }
 
     private static let suite = syntheticSuite
