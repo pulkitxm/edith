@@ -41,6 +41,52 @@ export function nativeTaskLinkerFlags(definition, role) {
     : [];
 }
 
+export function extensionRoleSupport(definition, role) {
+  assert(Object.hasOwn(definition.roles, role));
+  const product =
+    definition.supportProducts &&
+    Object.hasOwn(definition.supportProducts, role)
+      ? definition.supportProducts[role]
+      : definition.supportProduct;
+  return {
+    product,
+    sharedKit:
+      Boolean(product) ||
+      nativeRolePolicy(definition).presentations.includes(role),
+  };
+}
+
+export function runtimeRoleLinkFlags(kit, support, nativeFlags = []) {
+  if (!kit) {
+    assert(!support);
+    return [...nativeFlags];
+  }
+  return [
+    "-swift-version",
+    "5",
+    "-I",
+    kit.modules,
+    "-I",
+    kit.products,
+    ...(support ? ["-I", support.directory] : []),
+    ...nativeFlags,
+    "-L",
+    kit.products,
+    `-l${kit.library}`,
+    ...(support ? ["-L", support.directory, `-l${support.module}`] : []),
+    "-Xlinker",
+    "-rpath",
+    "-Xlinker",
+    "@executable_path/../Frameworks",
+    "-Xlinker",
+    "-rpath",
+    "-Xlinker",
+    "@executable_path/../../../../Frameworks",
+    "-Xlinker",
+    "-dead_strip",
+  ];
+}
+
 export async function copySupportLicenses(
   root,
   selections,
@@ -415,17 +461,15 @@ export async function buildExtensionPackage({
       ].includes(role)
     )
       throw new Error(`Unknown host role ${role}`);
-    const supportProduct =
-      definition.supportProducts &&
-      Object.hasOwn(definition.supportProducts, role)
-        ? definition.supportProducts[role]
-        : definition.supportProduct;
+    const policy = extensionRoleSupport(definition, role);
+    const supportProduct = policy.product;
     const scope = `${id}_${role}`;
-    if (supportProduct) kit ??= buildExtensionKit(root, environment);
+    if (policy.sharedKit) kit ??= buildExtensionKit(root, environment);
+    const roleKit = policy.sharedKit ? kit : undefined;
     const support = supportProduct
       ? buildExtensionContext(
           root,
-          kit,
+          roleKit,
           scope,
           resolve(staging, "context", role),
           environment,
@@ -634,35 +678,7 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}`,
         ...compileSources,
-        ...(support
-          ? [
-              "-swift-version",
-              "5",
-              "-I",
-              kit.modules,
-              "-I",
-              kit.products,
-              "-I",
-              support.directory,
-              "-L",
-              kit.products,
-              `-l${kit.library}`,
-              "-L",
-              support.directory,
-              `-l${support.module}`,
-              "-Xlinker",
-              "-rpath",
-              "-Xlinker",
-              "@executable_path/../Frameworks",
-              "-Xlinker",
-              "-rpath",
-              "-Xlinker",
-              "@executable_path/../../../../Frameworks",
-              "-Xlinker",
-              "-dead_strip",
-            ]
-          : []),
-        ...nativeFlags,
+        ...runtimeRoleLinkFlags(roleKit, support, nativeFlags),
         ...nativeTaskLinkerFlags(definition, role),
         "-Xlinker",
         "-install_name",

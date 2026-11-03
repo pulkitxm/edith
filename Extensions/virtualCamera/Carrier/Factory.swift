@@ -4,6 +4,6 @@ import Foundation
 public func createCameraCarrier() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(CameraCarrierRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCameraCarrierRuntime()).toOpaque())
         })
 }

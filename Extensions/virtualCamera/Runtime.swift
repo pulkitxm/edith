@@ -9,190 +9,154 @@ import CoreMedia
 import CoreMediaIO
 import SwiftUI
 
-@MainActor @objc(EdithCameraExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+@MainActor
+final class CameraService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var worker: CameraAppWorker?
     private var uiClient: ExtensionEngineClient?
     private var uiModel: VirtualCameraPageModel?
-    private let commands = ExtensionCommandRegistry()
     private let cliStreams = try? ExtensionCLIStreams(owner: "virtualCamera")
     private var disable: Task<Void, Error>?
-    private var stopError: NSError?
     private var draining = false
     private var uiStops: [UUID: Task<Void, Never>] = [:]
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let worker = self?.worker, !worker.draining else {
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var preparesForDisable: Bool { true }
+    var isRunning: Bool { worker != nil }
+    var statusDetails: [String: Any] { ["pendingDisable": worker?.draining ?? false] }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let worker = worker, !worker.draining else {
+            throw ExtensionPeerError.unavailable
+        }
+        if command == "camera.snapshot",
+            SurfacePrivacyState.hides(
+                .ability("virtualCamera"),
+                values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
+        {
+            throw ExtensionPeerError.rejected("Camera is hidden while presenting.")
+        }
+        if command == "virtualCamera.cli.catalog" { return try CameraCLICatalog.data() }
+        if command.hasPrefix("camera.cli.stream.") {
+            guard let cliStreams = cliStreams else {
                 throw ExtensionPeerError.unavailable
             }
-            if command == "camera.snapshot",
-                SurfacePrivacyState.hides(
-                    .ability("virtualCamera"),
-                    values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
-            {
-                throw ExtensionPeerError.rejected("Camera is hidden while presenting.")
+            return try await CameraCLIEnvironment.$streamEngine.withValue(worker.engine) {
+                try cliStreams.invoke(
+                    CameraCommand.self, operation: command, prefix: "camera.cli.stream",
+                    payload: payload)
             }
-            if command == "virtualCamera.cli.catalog" { return try CameraCLICatalog.data() }
-            if command.hasPrefix("camera.cli.stream.") {
-                guard let cliStreams = self?.cliStreams else {
-                    throw ExtensionPeerError.unavailable
-                }
-                return try await CameraCLIEnvironment.$streamEngine.withValue(worker.engine) {
-                    try cliStreams.invoke(
-                        CameraCommand.self, operation: command, prefix: "camera.cli.stream",
-                        payload: payload)
-                }
-            }
-            if command == "camera.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await CameraCLIExecution.run(request, engine: worker.engine))
-            }
-            if command.hasPrefix("camera.ui.") {
-                return try await worker.ui.execute(command, payload: payload)
-            }
-            if command == "camera.fixture" { return try worker.fixtureRequest(payload) }
-            if command == "camera.snapshot" {
-                guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
-                return try JSONEncoder().encode(worker.engine.snapshot())
-            }
-            if command == "camera.request" {
-                guard
-                    let values = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
-                    let request = VirtualCameraRuntimeRequest(payload: values), request.isLive()
-                else { throw ExtensionPeerError.invalidRequest }
-                return try JSONEncoder().encode(
-                    try await worker.engine.performRecording(request.request))
-            }
-            return try await worker.surface.execute(command, payload: payload)
         }
+        if command == "camera.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await CameraCLIExecution.run(request, engine: worker.engine))
+        }
+        if command.hasPrefix("camera.ui.") {
+            return try await worker.ui.execute(command, payload: payload)
+        }
+        if command == "camera.fixture" { return try worker.fixtureRequest(payload) }
+        if command == "camera.snapshot" {
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(worker.engine.snapshot())
+        }
+        if command == "camera.request" {
+            guard
+                let values = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                let request = VirtualCameraRuntimeRequest(payload: values), request.isLive()
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                try await worker.engine.performRecording(request.request))
+        }
+        return try await worker.surface.execute(command, payload: payload)
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
+    func cancelPendingWork() {
         draining = true
-        stopUI()
-        let worker = worker, streams = cliStreams
+        _ = stopUI()
         worker?.beginDrain()
-        streams?.stop()
-        Task { [self, worker, streams] in
-            _ = await commands.suspendAndWait()
-            await worker?.drain()
-            await streams?.stopAndWait()
-            let stops = Array(uiStops.values)
-            for task in stops { await task.value }
-            completion()
-        }
-    }
-
-    @objc(prepareDisableWithCompletion:)
-    func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        commands.shutdown()
-        draining = true
-        stopUI()
         cliStreams?.stop()
-        let worker = worker
-        worker?.beginDrain()
+    }
+
+    func drain() async {
+        await worker?.drain()
+        await cliStreams?.stopAndWait()
+        for task in Array(uiStops.values) { await task.value }
+    }
+
+    func prepareDisable() async throws {
+        cancelPendingWork()
+        await drain()
         if disable == nil {
-            disable = Task { [self, worker] in
-                await commands.shutdownAndWait()
-                await cliStreams?.stopAndWait()
-                try await worker?.prepareDisable()
+            let worker = worker
+            disable = Task {
+                if let worker { try await worker.prepareDisable() }
             }
         }
-        let disable = disable
-        Task { [self, disable] in
-            do { try await disable?.value; completion(nil) } catch {
-                self.disable = nil; completion(error as NSError)
-            }
+        do {
+            try await disable?.value
+        } catch {
+            disable = nil
+            throw error
         }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        stopUI()
-        commands.shutdown()
-        draining = true
-        stopUI()
-        cliStreams?.stop()
-        let worker = worker, streams = cliStreams, disable = disable
-        worker?.beginDrain()
-        Task { [self, worker, streams, disable] in
-            await commands.shutdownAndWait()
-            await worker?.drain()
-            await streams?.stopAndWait()
-            let stops = Array(uiStops.values)
-            for task in stops { await task.value }
+    func finishBeforeStop() async {
+        cancelPendingWork()
+        while true {
             do {
-                if let disable {
-                    try await disable.value
-                } else {
-                    try await worker?.prepareDisable()
-                }
-                stopError = nil
-                completion()
+                try await prepareDisable()
+                return
             } catch {
-                stopError = error as NSError
+                try? await Task.sleep(for: .seconds(5))
             }
         }
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: Self.self)
-            return [
-                "id": "virtualCamera", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
-            guard !draining, worker == nil, let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
-                let host = input["hostIdentifier"] as? String,
-                host == ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"],
-                SurfaceHostContext.current != nil, let defaults = UserDefaults(suiteName: suite)
-            else { return ["ok": false] as NSDictionary }
-            do { worker = try CameraAppWorker(defaults: defaults, host: host) } catch {
-                return ["ok": false] as NSDictionary
-            }
-        case "configureUI":
-            guard !draining, uiStops.isEmpty,
-                let configuration = ExtensionUIConfiguration(context: input),
-                let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
-                let client = configuration.engineClient
-            else { return ["ok": false] as NSDictionary }
-            stopUI(); uiClient = client;
-            uiModel = VirtualCameraPageModel(engineClient: client, defaults: defaults)
-            TextEditingCommands.install()
-        case "stopUI": stopUI()
-        case "view":
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost { VirtualCameraPage(model: model) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": worker?.installHotKey()
-        case "stop":
-            stopUI()
-            commands.shutdown(); cliStreams?.stop()
-            HotKeyRegistrar.shutdown()
-            worker?.engine.shutdown()
-            worker = nil
-            InputFocus.uninstall()
-        case "status":
-            return [
-                "ok": true, "running": worker != nil,
-                "pendingDisable": worker?.draining ?? false,
-            ] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
+    func teardown() async {
+        await drain()
+        HotKeyRegistrar.shutdown()
+        worker?.engine.shutdown()
+        worker = nil
+        InputFocus.uninstall()
     }
-    private func stopUI() {
-        ExtensionUIResources.cleanup(of: self, key: "textEditing") {
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        guard !draining, worker == nil, let suite = input["defaultsSuite"] as? String,
+            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
+            let host = input["hostIdentifier"] as? String,
+            host == ExtensionEnvironment.values["EDITH_APPLICATION_IDENTIFIER"],
+            SurfaceHostContext.current != nil, let defaults = UserDefaults(suiteName: suite)
+        else { return false }
+        do { worker = try CameraAppWorker(defaults: defaults, host: host) } catch {
+            return false
+        }
+        return true
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard !draining, uiStops.isEmpty,
+            let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
+            let client = configuration.engineClient
+        else { return false }
+        _ = stopUI(); uiClient = client;
+        uiModel = VirtualCameraPageModel(engineClient: client, defaults: defaults)
+        TextEditingCommands.install()
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let model = uiModel else { return nil }
+        return NSHostingController(
+            rootView: ExtensionPageHost { VirtualCameraPage(model: model) })
+    }
+
+    func synchronize() { worker?.installHotKey() }
+
+    func stopUI() -> [Task<Void, Never>] {
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
             TextEditingCommands.shutdown()
         }
         let client = uiClient; uiClient = nil
@@ -208,6 +172,7 @@ final class ExtensionRuntime: NSObject {
         } else {
             client?.invalidate()
         }
+        return Array(uiStops.values)
     }
 }
 
@@ -317,7 +282,7 @@ enum CameraCarrierLaunchEnvironment {
 
     init(
         defaults: UserDefaults, host: String,
-        roleURL: URL = Bundle(for: ExtensionRuntime.self).bundleURL
+        roleURL: URL = Bundle(for: CameraService.self).bundleURL
     ) throws {
         self.defaults = defaults
         let layout = try CameraSelectedPackageLayout(roleURL: roleURL, hostIdentifier: host)
@@ -485,11 +450,20 @@ enum CameraCarrierLaunchEnvironment {
 
 }
 
+@MainActor
+func makeCameraRuntime() -> ExtensionServiceRuntime {
+    ExtensionServiceRuntime(
+        id: "virtualCamera", role: "app", bundle: Bundle(for: CameraService.self)
+    ) {
+        CameraService(runtime: $0)
+    }
+}
+
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCameraRuntime()).toOpaque())
         })
 }
 

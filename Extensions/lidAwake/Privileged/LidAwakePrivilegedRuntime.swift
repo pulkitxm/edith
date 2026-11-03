@@ -2,57 +2,54 @@ import Darwin
 import Foundation
 import EdithExtensionSupport
 
-@MainActor @objc(EdithLidAwakePrivilegedRuntime)
-final class LidAwakePrivilegedRuntime: NSObject {
+@MainActor
+final class LidAwakePrivilegedService: ExtensionService {
     private var controller: LidAwakePrivilegedController?
     private var fixtureState = false
-    private let commands = ExtensionCommandRegistry()
     private var journal: URL {
-        Bundle(for: LidAwakePrivilegedRuntime.self).bundleURL.deletingLastPathComponent()
+        Bundle(for: LidAwakePrivilegedService.self).bundleURL.deletingLastPathComponent()
             .appendingPathComponent("lidAwake-state.json")
     }
 
-    override init() { super.init() }
+    init() {}
 
     init(controller: LidAwakePrivilegedController) {
         self.controller = controller
-        super.init()
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [self] command, payload in
-            try Task.checkCancellation()
-            guard payload.count <= 16 else { throw CocoaError(.coderReadCorrupt) }
-            if command == "status" {
-                guard payload.isEmpty || payload == Data("{}".utf8) else {
-                    throw CocoaError(.coderReadCorrupt)
-                }
-                let state =
-                    getuid() == 0 ? try await LidAwakeSystemStateReader.read() : fixtureState
-                return try JSONEncoder().encode(["sleepDisabled": state])
+    var preparesForDisable: Bool { true }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        try Task.checkCancellation()
+        guard payload.count <= 16 else { throw CocoaError(.coderReadCorrupt) }
+        if command == "status" {
+            guard payload.isEmpty || payload == Data("{}".utf8) else {
+                throw CocoaError(.coderReadCorrupt)
             }
-            guard command == "setSleepDisabled" else { throw CocoaError(.coderReadCorrupt) }
-            let disabled = try JSONDecoder().decode(Bool.self, from: payload)
-            let controller = try makeController()
-            try await controller.setSleepDisabled(disabled)
-            return Data("{}".utf8)
+            let state =
+                getuid() == 0 ? try await LidAwakeSystemStateReader.read() : fixtureState
+            return try JSONEncoder().encode(["sleepDisabled": state])
         }
+        guard command == "setSleepDisabled" else { throw CocoaError(.coderReadCorrupt) }
+        let disabled = try JSONDecoder().decode(Bool.self, from: payload)
+        let controller = try makeController()
+        try await controller.setSleepDisabled(disabled)
+        return Data("{}".utf8)
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        Task { [self] in
-            await commands.suspendAndWait()
-            completion()
-        }
+    func prepareDisable() async throws {
+        try await makeController().restore()
     }
 
-    @objc(prepareDisableWithCompletion:)
-    func prepareDisable(completion: @escaping (NSError?) -> Void) {
-        Task { [self] in
-            do { try await makeController().restore(); completion(nil) } catch {
-                completion(error as NSError)
+    func teardown() async {
+        guard controller != nil else { return }
+        while true {
+            do {
+                try await prepareDisable()
+                controller = nil
+                return
+            } catch {
+                try? await Task.sleep(for: .seconds(5))
             }
         }
     }
@@ -126,10 +123,17 @@ final class LidAwakePrivilegedRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeLidAwakePrivilegedRuntime() -> ExtensionServiceRuntime {
+    ExtensionServiceRuntime(
+        id: "lidAwake", role: "privileged", bundle: Bundle(for: LidAwakePrivilegedService.self)
+    ) { _ in LidAwakePrivilegedService() }
+}
+
 @_cdecl("edith_extension_create")
 public func createLidAwakePrivilegedExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(LidAwakePrivilegedRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeLidAwakePrivilegedRuntime()).toOpaque())
         })
 }

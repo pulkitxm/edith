@@ -1,8 +1,9 @@
 import Darwin
 import Foundation
+import EdithExtensionSupport
 import Security
 
-@MainActor final class CameraCarrierRuntime: NSObject {
+@MainActor final class CameraCarrierService: NSObject, ExtensionService {
     struct Environment {
         var admit: @MainActor () throws -> Void
         var lease: @MainActor (String, URL, String) throws -> any CameraCarrierLease
@@ -29,119 +30,143 @@ import Security
     private(set) var startupFailed = false
     init(environment: Environment = .live) { self.environment = environment }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: Self.self)
-            return [
-                "id": "virtualCamera", "role": "cameraCarrier",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "probe":
-            return [
-                "ok": input["fixture"] as? Bool == true, "payloadLoaded": true,
-                "role": "cameraCarrier", "systemServiceStarted": false,
-            ] as NSDictionary
-        case "start":
-            guard !started, let host = input["hostIdentifier"] as? String,
-                let version = input["version"] as? String,
-                let fixture = input["fixture"] as? Bool
-            else { return ["ok": false] as NSDictionary }
-            if fixture {
-                guard host.hasPrefix("com.pulkit.edith.tests."),
-                    Bundle.main.bundleIdentifier == host + ".cameraCarrier",
-                    let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
-                    Bundle.main.bundleURL.resolvingSymlinksInPath().path.hasPrefix(
-                        URL(fileURLWithPath: root).resolvingSymlinksInPath().path + "/")
-                else { return ["ok": false] as NSDictionary }
-                let lease = CameraFixtureLease()
-                environment = .init(
-                    admit: {}, lease: { _, _, _ in lease },
-                    broker: { CameraFixtureBroker(lease: lease) }, input: .standardInput,
-                    output: .standardOutput, exited: { CFRunLoopStop(CFRunLoopGetMain()) })
-            }
-            do { try environment.admit() } catch { return ["ok": false] as NSDictionary }
-            started = true
-            let source = Bundle.main.bundleURL.appendingPathComponent(
-                "Contents/PlugIns/privileged.bundle")
-            startup = Task { [weak self] in
-                guard let self else { return }
-                do {
-                    let lease = try environment.lease(host, source, version)
-                    self.lease = lease
-                    let exited = try await lease.begin()
-                    let obsTransport =
-                        Bundle.main.object(forInfoDictionaryKey: "EdithCameraTransport") as? String
-                        == "obs"
-                    let controller = CameraSystemExtensionController(
-                        identifier: host + ".camera",
-                        broker: obsTransport
-                            ? CameraOBSTransportBroker() : environment.broker(),
-                        initiallyActive: obsTransport ? false : !exited,
-                        providerExited: {
-                            let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-                            repeat {
-                                if try await lease.providerExited() { return true }
-                                try await Task.sleep(for: .milliseconds(50))
-                            } while ContinuousClock.now < deadline
-                            return false
-                        })
-                    session = CameraCarrierSession(
-                        controller: controller,
-                        send: { [environment] in try environment.output.write(contentsOf: $0) },
-                        obsTransport: obsTransport,
-                        prepareDisableResources: { try await lease.retireMicrophone() },
-                        releaseResources: { try await lease.release() },
-                        exited: { [weak self, environment] in
-                            self?.environment.input.readabilityHandler = nil
-                            self?.retry?.cancel(); self?.retry = nil
-                            environment.exited()
-                        })
-                    environment.input.readabilityHandler = { [weak self] handle in
-                        let data = handle.availableData
-                        Task { @MainActor in self?.session?.receive(data) }
-                    }
-                    retry = Task { [weak self, environment] in
-                        while !Task.isCancelled {
-                            do { try await Task.sleep(for: environment.retryInterval) } catch {
-                                return
-                            }
-                            self?.session?.retryDisconnectedCleanup()
-                        }
-                    }
-                    if Task.isCancelled { session?.disconnect() }
-                } catch {
-                    startupFailed = true
-                    if let lease {
-                        retry = Task { [weak self] in
-                            guard let self else { return }
-                            while !Task.isCancelled {
-                                do {
-                                    try await lease.release()
-                                    self.lease = nil
-                                    environment.exited()
-                                    return
-                                } catch {
-                                    do {
-                                        try await Task.sleep(for: environment.retryInterval)
-                                    } catch { return }
-                                }
-                            }
-                        }
-                    } else {
+    var requiresDefaultsSuite: Bool { false }
+    var isRunning: Bool { started && !startupFailed }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        guard !started, let host = input["hostIdentifier"] as? String,
+            let version = input["version"] as? String,
+            let fixture = input["fixture"] as? Bool
+        else { return false }
+        if fixture {
+            guard host.hasPrefix("com.pulkit.edith.tests."),
+                Bundle.main.bundleIdentifier == host + ".cameraCarrier",
+                let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
+                Bundle.main.bundleURL.resolvingSymlinksInPath().path.hasPrefix(
+                    URL(fileURLWithPath: root).resolvingSymlinksInPath().path + "/")
+            else { return false }
+            let lease = CameraFixtureLease()
+            environment = .init(
+                admit: {}, lease: { _, _, _ in lease },
+                broker: { CameraFixtureBroker(lease: lease) }, input: .standardInput,
+                output: .standardOutput, exited: { CFRunLoopStop(CFRunLoopGetMain()) })
+        }
+        do { try environment.admit() } catch { return false }
+        started = true
+        let source = Bundle.main.bundleURL.appendingPathComponent(
+            "Contents/PlugIns/privileged.bundle")
+        startup = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let lease = try environment.lease(host, source, version)
+                self.lease = lease
+                let exited = try await lease.begin()
+                let obsTransport =
+                    Bundle.main.object(forInfoDictionaryKey: "EdithCameraTransport") as? String
+                    == "obs"
+                let controller = CameraSystemExtensionController(
+                    identifier: host + ".camera",
+                    broker: obsTransport
+                        ? CameraOBSTransportBroker() : environment.broker(),
+                    initiallyActive: obsTransport ? false : !exited,
+                    providerExited: {
+                        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+                        repeat {
+                            if try await lease.providerExited() { return true }
+                            try await Task.sleep(for: .milliseconds(50))
+                        } while ContinuousClock.now < deadline
+                        return false
+                    })
+                session = CameraCarrierSession(
+                    controller: controller,
+                    send: { [environment] in try environment.output.write(contentsOf: $0) },
+                    obsTransport: obsTransport,
+                    prepareDisableResources: { try await lease.retireMicrophone() },
+                    releaseResources: { try await lease.release() },
+                    exited: { [weak self, environment] in
+                        self?.lease = nil
+                        self?.environment.input.readabilityHandler = nil
+                        self?.retry?.cancel(); self?.retry = nil
                         environment.exited()
+                    })
+                environment.input.readabilityHandler = { [weak self] handle in
+                    let data = handle.availableData
+                    Task { @MainActor in self?.session?.receive(data) }
+                }
+                retry = Task { [weak self, environment] in
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: environment.retryInterval) } catch {
+                            return
+                        }
+                        self?.session?.retryDisconnectedCleanup()
                     }
                 }
+                if Task.isCancelled { session?.disconnect() }
+            } catch {
+                startupFailed = true
+                if let lease {
+                    retry = Task { [weak self] in
+                        guard let self else { return }
+                        while !Task.isCancelled {
+                            do {
+                                try await lease.release()
+                                self.lease = nil
+                                environment.exited()
+                                return
+                            } catch {
+                                do {
+                                    try await Task.sleep(for: environment.retryInterval)
+                                } catch { return }
+                            }
+                        }
+                    }
+                } else {
+                    environment.exited()
+                }
             }
-        case "stop":
-            startup?.cancel()
-            session?.disconnect()
-        default: return ["ok": false] as NSDictionary
         }
-        return ["ok": true] as NSDictionary
+        return true
     }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        guard operation == "probe" else { return nil }
+        return [
+            "ok": context["fixture"] as? Bool == true, "payloadLoaded": true,
+            "role": "cameraCarrier", "systemServiceStarted": false,
+        ] as NSDictionary
+    }
+
+    func cancelPendingWork() {
+        startup?.cancel()
+        session?.disconnect()
+    }
+
+    func drain() async {
+        await startup?.value
+        while lease != nil { try? await Task.sleep(for: .milliseconds(50)) }
+    }
+
+    func teardown() async {
+        retry?.cancel()
+        await retry?.value
+        retry = nil
+        startup = nil
+        environment.input.readabilityHandler = nil
+        session = nil
+        started = false
+    }
+
+}
+
+@MainActor
+func makeCameraCarrierRuntime(
+    service: CameraCarrierService? = nil
+) -> ExtensionServiceRuntime {
+    let service = service ?? CameraCarrierService()
+    return ExtensionServiceRuntime(
+        id: "virtualCamera", role: "cameraCarrier", bundle: Bundle(for: CameraCarrierService.self)
+    ) { _ in service }
 }
 
 @MainActor private final class CameraFixtureLease: CameraCarrierLease {
