@@ -6,168 +6,126 @@ import Foundation
 import SwiftUI
 
 @MainActor
-@objc(EdithCleanerExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+final class CleanerService: ExtensionService {
     private var model: CleanerModel?
     private var uiModel: CleanerModel?
     private var uiClient: ExtensionEngineClient?
-    private var commandDrain: Task<Void, Never>?
-    private var resourceStop: Task<Void, Never>?
-    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
-    private let commands = ExtensionCommandRegistry()
+    private var suspended = false
     private let cliStreams = try? ExtensionCLIStreams(owner: "cleaner")
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let model = self?.model else { throw ExtensionPeerError.unavailable }
-            if command == "cleaner.cli.catalog" { return try CleanerCLICatalog.data() }
-            if command.hasPrefix("cleaner.cli.stream.") {
-                guard let cliStreams = self?.cliStreams else {
-                    throw ExtensionPeerError.unavailable
-                }
-                return try cliStreams.invoke(
-                    CleanerCommand.self, operation: command, prefix: "cleaner.cli.stream",
-                    payload: payload)
+    var isRunning: Bool { model != nil }
+    var allowsUIDuringRetirement: Bool { true }
+
+    func start() -> Bool {
+        if model == nil {
+            model = CleanerModel()
+            if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                model?.startBackgroundEstimates()
             }
-            if command == "cleaner.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(try await CleanerCLIExecution.run(request))
-            }
-            if command.hasPrefix("cleaner.ui.") {
-                return try await CleanerUICommands.execute(command, payload: payload, model: model)
-            }
-            if command == "surface.snapshot" || command == "surface.perform" {
-                return try await SurfaceCommandService.execute(
-                    providerID: "cleaner", command: command, payload: payload,
-                    snapshot: { tile in CleanerSurface.snapshot(model) },
-                    perform: { action in
-                        if action == "scan" { model.scan() } else { model.cancelScan() }
-                    })
-            }
-            return try await CleanerCommands.execute(command, payload: payload, model: model)
         }
+        return true
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        Task { [self] in
-            await drain.value
-            await resourceStop?.value
-            withExtendedLifetime(self) { completion() }
+    func synchronize() { uiModel?.reloadPreferences() }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let model else { throw ExtensionPeerError.unavailable }
+        if command == "cleaner.cli.catalog" { return try CleanerCLICatalog.data() }
+        if command.hasPrefix("cleaner.cli.stream.") {
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try cliStreams.invoke(
+                CleanerCommand.self, operation: command, prefix: "cleaner.cli.stream",
+                payload: payload)
         }
+        if command == "cleaner.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(try await CleanerCLIExecution.run(request))
+        }
+        if command.hasPrefix("cleaner.ui.") {
+            return try await CleanerUICommands.execute(command, payload: payload, model: model)
+        }
+        if command == "surface.snapshot" || command == "surface.perform" {
+            return try await SurfaceCommandService.execute(
+                providerID: "cleaner", command: command, payload: payload,
+                snapshot: { tile in CleanerSurface.snapshot(model) },
+                perform: { action in
+                    if action == "scan" { model.scan() } else { model.cancelScan() }
+                })
+        }
+        return try await CleanerCommands.execute(command, payload: payload, model: model)
     }
 
-    private func beginCommandDrain() -> Task<Void, Never> {
-        let owner = model
-        let uiOwner = uiModel
-        let streams = cliStreams
-        commandsSuspended = true
-        _ = commands.suspend()
-        if let commandDrain { return commandDrain }
-        owner?.cancelPendingCommands()
-        uiOwner?.cancelPendingCommands()
-        streams?.stop()
-        if let commandDrain { return commandDrain }
-        let task = Task { [self] in
-            _ = await commands.suspendAndWait()
-            await owner?.cancelAndWait()
-            await uiOwner?.cancelAndWait()
-            await streams?.stopAndWait()
-            while let task = uiDrains.values.first { await task.value }
-        }
-        commandDrain = task
-        return task
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard uiDrains.count < 8, let client = configuration.engineClient,
+            let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
+        else { return false }
+        releaseUI()
+        uiClient = client
+        uiModel = CleanerModel(engineClient: client, defaults: defaults)
+        return true
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let stop = beginResourceStop()
-        Task { [self] in
-            await stop.value
-            withExtendedLifetime(self) { completion() }
-        }
+    func view(for presentation: UUID) -> NSViewController? {
+        guard !suspended, let model = uiModel else { return nil }
+        return NSHostingController(rootView: ExtensionPageHost { CleanerPage(model: model) })
     }
 
-    private func beginResourceStop() -> Task<Void, Never> {
-        if let resourceStop { return resourceStop }
-        let owner = model
-        let drain = beginCommandDrain()
-        if let resourceStop { return resourceStop }
-        stopUI()
-        model = nil
-        let task = Task { [self] in
-            await drain.value
-            await commands.shutdownAndWait()
-            await owner?.shutdown()
-        }
-        resourceStop = task
-        return task
+    func stopUI() -> [Task<Void, Never>] {
+        [releaseUI()]
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "cleaner", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            if model == nil {
-                model = CleanerModel()
-                if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
-                    model?.startBackgroundEstimates()
-                }
-            }
-        case "configureUI":
-            guard !commandsSuspended, uiDrains.count < 8 else {
-                return ["ok": false] as NSDictionary
-            }
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                let client = configuration.engineClient,
-                let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
-            else { return ["ok": false] as NSDictionary }
-            stopUI(); uiClient = client;
-            uiModel = CleanerModel(engineClient: client, defaults: defaults)
-        case "stopUI": stopUI()
-        case "view":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let model = uiModel else { return ["ok": false] as NSDictionary }
-            return NSHostingController(rootView: ExtensionPageHost { CleanerPage(model: model) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": uiModel?.reloadPreferences()
-        case "stop":
-            _ = beginResourceStop()
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
-
-    private func stopUI() {
-        let model = uiModel; uiModel = nil
-        uiClient?.invalidate(); uiClient = nil
+    func cancelPendingWork() {
+        suspended = true
         model?.cancelPendingCommands()
-        let id = UUID()
-        uiDrains[id] = Task { [self] in
-            defer { uiDrains[id] = nil }
-            await model?.shutdown()
-        }
+        uiModel?.cancelPendingCommands()
+        cliStreams?.stop()
     }
+
+    func drain() async {
+        await model?.cancelAndWait()
+        await uiModel?.cancelAndWait()
+        await cliStreams?.stopAndWait()
+        while let task = uiDrains.values.first { await task.value }
+    }
+
+    func teardown() async {
+        let release = releaseUI()
+        let owner = model
+        model = nil
+        await release.value
+        await owner?.shutdown()
+    }
+
+    @discardableResult
+    private func releaseUI() -> Task<Void, Never> {
+        let stopping = uiModel
+        uiModel = nil
+        uiClient?.invalidate()
+        uiClient = nil
+        stopping?.cancelPendingCommands()
+        let id = UUID()
+        let task = Task { [self] in
+            defer { uiDrains[id] = nil }
+            await stopping?.shutdown()
+        }
+        uiDrains[id] = task
+        return task
+    }
+}
+
+@MainActor
+func makeCleanerRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "cleaner", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { _ in CleanerService() }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCleanerRuntime()).toOpaque())
         })
 }

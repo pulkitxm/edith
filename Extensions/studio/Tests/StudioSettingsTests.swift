@@ -241,16 +241,13 @@ import ViewInspector
         let suffix = ".extension.studio.worker"
         try #require(configuredSuite.hasSuffix(suffix))
         let host = String(configuredSuite.dropLast(suffix.count))
-        let runtime = ExtensionRuntime(uiConfiguration: {
-            ExtensionUIConfiguration(
-                context: $0, hostIdentifier: host, extensionID: "studio",
-                defaultsSuite: configuredSuite)
-        })
+        let inProcessSuite = host + ".extensions.studio"
+        let runtime = makeStudioRuntime(expectedSuite: { inProcessSuite })
         defer { _ = runtime.execute(["operation": "stopUI"]) }
         let id = UUID()
         let input: NSDictionary = [
-            "operation": "configureUI", "remoteUI": true, "hostIdentifier": host,
-            "extensionID": "studio", "defaultsSuite": configuredSuite, "uiOnly": false,
+            "operation": "configureUI", "remoteUI": true, "inProcess": true, "hostIdentifier": host,
+            "extensionID": "studio", "defaultsSuite": inProcessSuite, "uiOnly": false,
             "presentationID": id.uuidString, "engineClient": probe,
             "location": "settings", "section": "extension",
         ]

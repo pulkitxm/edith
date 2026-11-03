@@ -9,233 +9,186 @@ import SwiftUI
 import Foundation
 
 @MainActor
-final class ExtensionRuntime: NSObject {
-    private var service: SystemStatsStatusItem?
-    private let uiConfiguration: @MainActor (NSDictionary) -> ExtensionUIConfiguration?
+final class SystemStatsService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
+    private var item: SystemStatsStatusItem?
     private let uiDefaults: UserDefaults
-
-    init(
-        uiConfiguration: @escaping @MainActor (NSDictionary) -> ExtensionUIConfiguration? = {
-            ExtensionUIConfiguration(context: $0)
-        },
-        uiDefaults: UserDefaults = SharedDefaults.store
-    ) {
-        self.uiConfiguration = uiConfiguration
-        self.uiDefaults = uiDefaults
-        super.init()
-    }
-
     private var presentation: ControlPresentation?
     private var presentationStops: [UUID: Task<Void, Never>] = [:]
     private var draining = false
     private var settingsDetail = false
-
-    private var follow = SystemStatsFollow()
-
+    private let follow = SystemStatsFollow()
     private var fixture: WorkerFixtureAdmission?
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
-            return try await self.withFixtureRequest(
-                command, payload: payload, token: request["token"] as? String
-            ) { [weak self] in
-                if command.hasPrefix("systemStats.follow.") {
-                    guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
-                    guard let self, self.service != nil else {
-                        throw ExtensionPeerError.unavailable
-                    }
-                    return try await self.follow.execute(command, payload: payload)
-                }
-                if command == "systemStats.cli.catalog" {
-                    return try SystemStatsCLIExecution.catalog(payload)
-                }
-                if command.hasPrefix("systemStats.cli.stream.") {
-                    guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
-                    guard let self, self.service != nil, let streams = self.cliStreams else {
-                        throw ExtensionPeerError.unavailable
-                    }
-                    return try streams.invoke(
-                        SystemCommand.self, operation: command,
-                        prefix: "systemStats.cli.stream", payload: payload)
-                }
-                if command == "systemStats.cli" {
-                    let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                    if let help = try await SystemStatsCLIExecution.help(request) {
-                        return try JSONEncoder().encode(help)
-                    }
-                    guard let self, self.service != nil else {
-                        throw ExtensionPeerError.unavailable
-                    }
-                    guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
-                    let reply = try await SystemStatsCLIExecution.run(request)
-                    return try JSONEncoder().encode(reply)
-                }
-                if command.hasPrefix("systemStats.ui.") {
-                    guard let self, self.service != nil else {
-                        throw ExtensionPeerError.unavailable
-                    }
-                    return try ControlPresentationContract.execute(
-                        command, payload: payload, defaults: SharedDefaults.store,
-                        state: ControlPresentationState(
-                            cpu: self.service?.snapshot.cpu ?? 0,
-                            memory: self.service?.snapshot.memory ?? 0))
-                }
-                guard let self, let service = self.service else {
-                    throw ExtensionPeerError.unavailable
-                }
-                return try await SurfaceCommandService.execute(
-                    providerID: "systemStats", command: command, payload: payload,
-                    snapshot: { _ in
-                        let volume = Self.dataVolume()
-                        return SystemStatsSurface.snapshot(
-                            cpu: service.snapshot.cpu, memory: service.snapshot.memory,
-                            freeDiskBytes: self.fixture != nil ? 1_000_000 : volume?.free,
-                            totalDiskBytes: self.fixture != nil ? 4_000_000 : volume?.total)
-                    },
-                    perform: { action in
-                        throw ExtensionPeerError.invalidRequest
-                    })
-            }
-        }
+    init(runtime: ExtensionServiceRuntime, uiDefaults: UserDefaults = SharedDefaults.store) {
+        self.runtime = runtime
+        self.uiDefaults = uiDefaults
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
+    var isRunning: Bool { item != nil }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        do {
+            guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                !context.isHostedFunctionalFixture
+            else { return false }
+            fixture = try WorkerFixtureAdmission.current(
+                extensionID: "systemStats", context: context.input,
+                roleBundle: Bundle(for: SystemStatsService.self))
+        } catch { return false }
+        guard !draining, !ExtensionHostRole.isInterfaceProcess, presentation == nil
+        else { return false }
+        if item == nil { item = SystemStatsStatusItem(fixture: fixture) }
+        if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
+        return true
+    }
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool { !draining }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        operation == "prepareToStop" ? runtime.execute(["operation": "stop"]) : nil
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        if command.hasPrefix("systemStats.follow.") {
+            guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
+            guard self.item != nil else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try await self.follow.execute(command, payload: payload)
+        }
+        if command == "systemStats.cli.catalog" {
+            return try SystemStatsCLIExecution.catalog(payload)
+        }
+        if command.hasPrefix("systemStats.cli.stream.") {
+            guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
+            guard self.item != nil, let streams = self.cliStreams else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try streams.invoke(
+                SystemCommand.self, operation: command,
+                prefix: "systemStats.cli.stream", payload: payload)
+        }
+        if command == "systemStats.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            if let help = try await SystemStatsCLIExecution.help(request) {
+                return try JSONEncoder().encode(help)
+            }
+            guard self.item != nil else {
+                throw ExtensionPeerError.unavailable
+            }
+            guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
+            let reply = try await SystemStatsCLIExecution.run(request)
+            return try JSONEncoder().encode(reply)
+        }
+        if command.hasPrefix("systemStats.ui.") {
+            guard self.item != nil else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try ControlPresentationContract.execute(
+                command, payload: payload, defaults: SharedDefaults.store,
+                state: ControlPresentationState(
+                    cpu: self.item?.snapshot.cpu ?? 0,
+                    memory: self.item?.snapshot.memory ?? 0))
+        }
+        guard let item = self.item else {
+            throw ExtensionPeerError.unavailable
+        }
+        return try await SurfaceCommandService.execute(
+            providerID: "systemStats", command: command, payload: payload,
+            snapshot: { _ in
+                let volume = Self.dataVolume()
+                return SystemStatsSurface.snapshot(
+                    cpu: item.snapshot.cpu, memory: item.snapshot.memory,
+                    freeDiskBytes: self.fixture != nil ? 1_000_000 : volume?.free,
+                    totalDiskBytes: self.fixture != nil ? 4_000_000 : volume?.total)
+            },
+            perform: { action in
+                throw ExtensionPeerError.invalidRequest
+            })
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard !draining, presentationStops.isEmpty,
+            configuration.defaultsSuite
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        let settings = SystemStatsSettingsScene.accepts(configuration.input)
+        guard
+            settings
+                || (!configuration.uiOnly && configuration.location == "main"
+                    && configuration.section == "systemStats")
+        else { return false }
+        _ = retirePresentation()
+        settingsDetail = settings
+        presentation = ControlPresentation(client: configuration.engineClient, defaults: uiDefaults)
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let presentation = self.presentation else { return nil }
+        if settingsDetail {
+            return SystemStatsSettingsScene.controller(
+                presentation: presentation, defaults: uiDefaults)
+        }
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                ControlSettingsHost(presentation: presentation) {
+                    PageWorkspace {
+                        PageHeader("System Stats")
+                    } content: {
+                        Form {
+                            Section("Usage") {
+                                if presentation.active {
+                                    SystemMenuReadings(
+                                        cpu: presentation.state.cpu,
+                                        memory: presentation.state.memory)
+                                } else {
+                                    Text("Enable System Stats to see live readings.")
+                                        .settingsCaption()
+                                }
+                            }
+                            Section("Menu Bar") {
+                                Text(
+                                    "CPU and memory readings refresh every two seconds while this extension is enabled."
+                                )
+                                .settingsCaption()
+                            }
+                        }.formStyle(.grouped)
+                    }
+                }
+            })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        retirePresentation().map { [$0] } ?? []
+    }
+
+    func cancelPendingWork() {
         draining = true
-        let presentation = presentation
         presentation?.stop()
-        let service = service, streams = cliStreams, follow = follow
-        streams?.stop()
+        cliStreams?.stop()
         follow.shutdown()
-        service?.suspendWork()
-        Task { [self, service, streams, follow, presentation] in
-            _ = await commands.suspendAndWait()
-            await streams?.stopAndWait()
-            await follow.shutdownAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(presentation)
-            completion()
-        }
+        item?.suspendWork()
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        draining = true
-        retirePresentation()
-        let service = service, streams = cliStreams, follow = follow
-        commands.shutdown()
-        streams?.stop()
-        follow.shutdown()
-        service?.suspendWork()
-        Task { [self, service, streams, follow] in
-            await commands.shutdownAndWait()
-            await streams?.stopAndWait()
-            await follow.shutdownAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(nil)
-            _ = execute(["operation": "stop"])
-            completion()
-        }
+    func drain() async {
+        await cliStreams?.stopAndWait()
+        await follow.shutdownAndWait()
+        await item?.suspendAndWait()
+        await presentation?.stopAndWait()
+        await finishPresentations()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "systemStats", "role": "helper",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !draining, presentationStops.isEmpty else { return ["ok": false] as NSDictionary }
-            guard let configuration = uiConfiguration(input),
-                configuration.extensionID == "systemStats",
-                configuration.defaultsSuite
-                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            guard
-                SystemStatsSettingsScene.accepts(input)
-                    || (!configuration.uiOnly && input["location"] as? String == "main"
-                        && input["section"] as? String == "systemStats")
-            else { return ["ok": false] as NSDictionary }
-            retirePresentation()
-            settingsDetail = SystemStatsSettingsScene.accepts(input)
-            presentation = ControlPresentation(
-                client: configuration.engineClient, defaults: uiDefaults)
-            return ["ok": true] as NSDictionary
-        case "stopUI":
-            retirePresentation()
-            return ["ok": true] as NSDictionary
-        case "prepareToStop":
-            commands.shutdown()
-            cliStreams?.stop()
-            return ["ok": true] as NSDictionary
-        case "start":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            do {
-                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-                    input["hostedFunctionalFixture"] == nil
-                else { throw WorkerFixtureError.invalid }
-                fixture = try WorkerFixtureAdmission.current(
-                    extensionID: "systemStats", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                return startOwned(input)
-            } catch { return ["ok": false] as NSDictionary }
-        case "view":
-            guard let presentation else { return ["ok": false] as NSDictionary }
-            if settingsDetail {
-                return SystemStatsSettingsScene.controller(
-                    presentation: presentation, defaults: uiDefaults)
-            }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        PageWorkspace {
-                            PageHeader("System Stats")
-                        } content: {
-                            Form {
-                                Section("Usage") {
-                                    if presentation.active {
-                                        SystemMenuReadings(
-                                            cpu: presentation.state.cpu,
-                                            memory: presentation.state.memory)
-                                    } else {
-                                        Text("Enable System Stats to see live readings.")
-                                            .settingsCaption()
-                                    }
-                                }
-                                Section("Menu Bar") {
-                                    Text(
-                                        "CPU and memory readings refresh every two seconds while this extension is enabled."
-                                    )
-                                    .settingsCaption()
-                                }
-                            }.formStyle(.grouped)
-                        }
-                    }
-                })
-        case "synchronize":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            break
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "stop":
-            cliStreams?.stop()
-            cliStreams = nil
-            follow.shutdown()
-            retirePresentation()
-            commands.shutdown()
-            service?.shutdown()
-            service = nil
-        case "status": return ["ok": true, "running": service != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
+    func teardown() async {
+        cliStreams?.stop()
+        cliStreams = nil
+        follow.shutdown()
+        _ = retirePresentation()
+        item?.shutdown()
+        item = nil
+        await finishPresentations()
     }
 
     private static func dataVolume() -> (free: Int64, total: Int64)? {
@@ -252,49 +205,38 @@ final class ExtensionRuntime: NSObject {
         return (free, Int64(total))
     }
 
-    private func startOwned(_ input: NSDictionary) -> NSObject {
-        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
-        else { return ["ok": false] as NSDictionary }
-        guard let suite = input["defaultsSuite"] as? String,
-            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return ["ok": false] as NSDictionary }
-        if service == nil { service = SystemStatsStatusItem(fixture: fixture) }
-        if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
-        return ["ok": true] as NSDictionary
-    }
-
-    private func withFixtureRequest(
-        _ operation: String, payload: Data, token: String?,
-        execute: () async throws -> Data
-    ) async throws -> Data {
-        return try await execute()
-    }
-
-    private func retirePresentation() {
-        guard let presentation else { return }
+    private func retirePresentation() -> Task<Void, Never>? {
+        guard let presentation else { return nil }
         presentation.stop()
         let id = UUID()
-        presentationStops[id] = Task { [self, presentation] in
+        let task = Task { [self, presentation] in
             defer { presentationStops[id] = nil }
             await presentation.stopAndWait()
         }
+        presentationStops[id] = task
         self.presentation = nil
+        return task
     }
 
-    private func finishPresentations(_ presentation: ControlPresentation?) async {
-        await presentation?.stopAndWait()
-        while !presentationStops.isEmpty {
-            let pending = Array(presentationStops.values)
-            for task in pending { await task.value }
-        }
+    private func finishPresentations() async {
+        while let task = presentationStops.values.first { await task.value }
     }
+}
 
+@MainActor
+func makeSystemStatsRuntime(uiDefaults: UserDefaults = SharedDefaults.store)
+    -> ExtensionServiceRuntime
+{
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "systemStats", role: "helper", bundle: Bundle(for: BundleAnchor.self)
+    ) { SystemStatsService(runtime: $0, uiDefaults: uiDefaults) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeSystemStatsRuntime()).toOpaque())
         })
 }
