@@ -185,3 +185,38 @@ needed synthetic fixtures and results. It deletes slot data and permissions.
 `./build.sh --gc` cleans orphaned slots and also affects LaunchServices entries;
 it is machine-wide cleanup, so coordinate it with other workers. Avoid `make
 reset`, `make reinstall` and `make install` during ordinary parallel development.
+
+## Publishing from a local Mac
+
+After the integrated checks pass and the changes are merged, a release owner can
+publish from a clean detached worktree at the exact current `origin/main`:
+
+```sh
+git fetch origin main --tags
+git worktree add --detach ../release-publication origin/main
+cd ../release-publication
+bun install --frozen-lockfile
+EDITH_RELEASE_ENV_FILE=../edith/.env ./scripts/release-local.sh --force-all
+```
+
+`EDITH_RELEASE_ENV_FILE` selects the existing private signing environment file;
+its default is `.env` in the release checkout. The example assumes the primary
+checkout is the sibling `edith` directory. The wrapper creates an isolated
+signing keychain, restores the original keychain search list on exit, and leaves
+`/Applications/Edith.app` untouched.
+
+The extension step builds the frozen plan sequentially, submits all packages to
+Apple together, and waits for notarization before invoking the same immutable
+asset and signed catalog publisher as CI. `--force-all` rebuilds and versions
+every shipping extension. Without it, the planner reuses unchanged compatible
+packages. An owned catalog draft can resume without rebuilding packages.
+
+The host step signs and notarizes the app DMG, signs its Sparkle appcast, verifies
+the release proof and asset capacity, then cuts and publishes the release through
+the shared release tools. Main-source and catalog guards reject superseded work.
+The checkout stays detached after publication and does not switch the occupied
+primary worktree's branch.
+
+For a host artifact preview, run `./scripts/release-local.sh --dry-run` from a
+clean checkout. It signs, notarizes and verifies the host artifacts but publishes
+no extensions, commit, tag or release.
