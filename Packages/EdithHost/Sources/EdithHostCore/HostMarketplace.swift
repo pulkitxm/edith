@@ -58,6 +58,8 @@ public final class HostMarketplace {
     @ObservationIgnored private let store: ExtensionPackageStore
     @ObservationIgnored private let catalogClient: ExtensionCatalogClient
     @ObservationIgnored private let installer: ExtensionPackageInstaller
+    @ObservationIgnored private let verificationReceipts: HostBundleVerificationReceipts
+    @ObservationIgnored private let verifyInstalledBundle: ExtensionPackageInstaller.Verify
     @ObservationIgnored private var catalog: ExtensionCatalog?
     @ObservationIgnored private var catalogRefresh: Task<Void, Never>?
     @ObservationIgnored private var catalogFetch: Task<ExtensionCatalogClient.Result, Error>?
@@ -70,7 +72,9 @@ public final class HostMarketplace {
         store: ExtensionPackageStore,
         catalogClient: ExtensionCatalogClient,
         installer: ExtensionPackageInstaller,
-        sessions: HostExtensionSessions
+        sessions: HostExtensionSessions,
+        verificationReceipts: HostBundleVerificationReceipts? = nil,
+        verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil
     ) throws {
         self.identity = identity
         self.entries = entries
@@ -78,6 +82,18 @@ public final class HostMarketplace {
         self.catalogClient = catalogClient
         self.installer = installer
         self.sessions = sessions
+        self.verificationReceipts = verificationReceipts ?? HostBundleVerification.receipts
+        let development = identity.development
+        let team = ExtensionCodeSignature.teamIdentifier()
+        self.verifyInstalledBundle =
+            verifyInstalledBundle ?? { url in
+                if development {
+                    try ExtensionCodeSignature.verifyDevelopment(url)
+                } else {
+                    guard let team else { throw MarketplaceError.invalidSignature }
+                    try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                }
+            }
         guard let preferences = UserDefaults(suiteName: identity.defaultsSuite) else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
@@ -488,6 +504,7 @@ public final class HostMarketplace {
                     plan, repository: MarketplaceConfiguration.repository,
                     progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
             }
+            await verifyInstalledBundles(plan)
             var activationFailure: String?
             for package in plan {
                 if let failure = await activate(
@@ -517,6 +534,16 @@ public final class HostMarketplace {
         } catch {
             return fail(id, "The extension could not be downloaded. Try again.")
         }
+    }
+
+    private func verifyInstalledBundles(_ packages: [ExtensionPackage]) async {
+        let bundles = packages.flatMap { package in
+            (try? FileManager.default.contentsOfDirectory(
+                at: store.directory(for: package).appendingPathComponent(package.id),
+                includingPropertiesForKeys: nil)) ?? []
+        }.filter { $0.pathExtension == "bundle" || $0.lastPathComponent == "CameraCarrier.app" }
+        await HostBundleVerification.verifyConcurrently(
+            bundles, receipts: verificationReceipts, using: verifyInstalledBundle)
     }
 
     static func retryingTransfer<T>(_ operation: () async throws -> T) async throws -> T {
@@ -609,6 +636,7 @@ public final class HostMarketplace {
                 try FileManager.default.copyItem(at: archive, to: copy)
                 return copy
             }, admit: admit)
+        await verifyInstalledBundles([package])
         await activate(
             package,
             starting: !sessions.enabledIDs.contains(package.id)

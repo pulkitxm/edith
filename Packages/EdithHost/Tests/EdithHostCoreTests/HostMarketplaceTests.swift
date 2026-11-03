@@ -1092,6 +1092,97 @@ import HostWorkerFixtureSupport
         #expect(await relaunched.sessions.shutdown())
     }
 
+    @Test func successfulDownloadsSeedFinalBundleReceiptsBeforeFirstActivation() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let download = try fixture.build("1.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [download.package]))
+        let file = fixture.directory.appendingPathComponent("verification.json")
+        let paths = VerificationPaths()
+        let receipts = HostBundleVerificationReceipts(file: file)
+        let marketplace = try fixture.marketplace(
+            serving: [download.package.downloadURL: download.archive],
+            verificationReceipts: receipts,
+            verifyInstalledBundle: { url in paths.record(url.path) })
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(marketplace.sessions.activeIDs.isEmpty)
+        let bundle = fixture.store.roleBundle(for: download.package, role: .app)
+        #expect(paths.values == [bundle.resolvingSymlinksInPath().path])
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        try HostBundleVerification.verify(
+            bundle, receipts: HostBundleVerificationReceipts(file: file)
+        ) { _ in
+            Issue.record("A verified installed bundle should reuse its receipt after restart.")
+        }
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(paths.values == [bundle.resolvingSymlinksInPath().path])
+    }
+
+    @Test func failedInstallsNeverSeedFinalBundleReceipts() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let download = try fixture.build("1.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [download.package]))
+        let file = fixture.directory.appendingPathComponent("verification.json")
+        let paths = VerificationPaths()
+        let marketplace = try fixture.marketplace(
+            verificationReceipts: HostBundleVerificationReceipts(file: file),
+            verifyInstalledBundle: { url in paths.record(url.path) })
+        #expect(await marketplace.download(id: "sample") != nil)
+        #expect(paths.values.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(try fixture.store.installedPackages().isEmpty)
+    }
+
+    @Test func failedFinalSignatureVerificationDoesNotCreateATrustedReceipt() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let download = try fixture.build("1.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [download.package]))
+        let file = fixture.directory.appendingPathComponent("verification.json")
+        let receipts = HostBundleVerificationReceipts(file: file)
+        let marketplace = try fixture.marketplace(
+            serving: [download.package.downloadURL: download.archive],
+            verificationReceipts: receipts,
+            verifyInstalledBundle: { _ in throw MarketplaceError.invalidSignature })
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        let bundle = fixture.store.roleBundle(for: download.package, role: .app)
+        #expect(throws: MarketplaceError.invalidSignature) {
+            try HostBundleVerification.verify(bundle, receipts: receipts) { _ in
+                throw MarketplaceError.invalidSignature
+            }
+        }
+    }
+
+    @Test func successfulSideloadsSeedReceiptsBeforeActivating() async throws {
+        let fixture = try Fixture(identifier: "com.pulkit.edith.dev.receipts-\(UUID().uuidString)")
+        defer { fixture.clean() }
+        let sideload = try fixture.build("1.0.9")
+        let paths = VerificationPaths()
+        let receipts = HostBundleVerificationReceipts()
+        let marketplace = try fixture.marketplace(
+            workerMode: { _ in "normal" }, verificationReceipts: receipts,
+            verifyInstalledBundle: { url in paths.record(url.path) })
+        _ = try await marketplace.sideload(sideload, admit: { _ in })
+        let bundle = fixture.store.roleBundle(for: sideload.package, role: .app)
+        #expect(paths.values == [bundle.resolvingSymlinksInPath().path])
+        try HostBundleVerification.verify(bundle, receipts: receipts) { _ in
+            Issue.record("The first load should reuse the successful sideload verification.")
+        }
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    private final class VerificationPaths: @unchecked Sendable {
+        private let lock = NSLock()
+        private var paths: [String] = []
+        var values: [String] { lock.withLock { paths } }
+        func record(_ path: String) {
+            let normalized = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            lock.withLock { paths.append(normalized) }
+        }
+    }
+
     private func expectEveryExtensionAvailable(
         _ ids: [String], marketplace: HostMarketplace, gateway: HostCLIGateway
     ) async throws {
@@ -1128,7 +1219,9 @@ import HostWorkerFixtureSupport
 
         func marketplace(
             ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil,
-            serving: [URL: URL] = [:]
+            serving: [URL: URL] = [:],
+            verificationReceipts: HostBundleVerificationReceipts? = nil,
+            verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil
         ) throws
             -> HostMarketplace
         {
@@ -1160,7 +1253,9 @@ import HostWorkerFixtureSupport
                 identity: identity,
                 entries: ids.map {
                     HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
-                }, store: store, catalogClient: client, installer: installer, sessions: sessions)
+                }, store: store, catalogClient: client, installer: installer, sessions: sessions,
+                verificationReceipts: verificationReceipts,
+                verifyInstalledBundle: verifyInstalledBundle)
         }
 
         func package(
