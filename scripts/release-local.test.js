@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -21,9 +20,12 @@ function fixture() {
   const root = mkdtempSync(join(tmpdir(), "release-shell-"));
   for (const dir of ["scripts", "Resources", "Casks", "bin"])
     mkdirSync(join(root, dir));
-  copyFileSync(
-    resolve("scripts/release-local.sh"),
+  writeFileSync(
     join(root, "scripts/release-local.sh"),
+    readFileSync(resolve("scripts/release-local.sh"), "utf8").replaceAll(
+      "/usr/libexec/PlistBuddy",
+      "plistbuddy",
+    ),
   );
   for (const name of ["Info.plist", "HelperInfo.plist"])
     writeFileSync(join(root, "Resources", name), plist("0.0.375", "375"));
@@ -62,6 +64,10 @@ if (command === "git") {
 } else if (command === "security") {
   if (args[0] === "list-keychains" && !args.includes("-s")) process.stdout.write('    "/synthetic/login.keychain-db"\\n    "/synthetic/Work Keys.keychain-db"\\n');
   if (args[0] === "find-identity") process.stdout.write(${JSON.stringify(syntheticIdentity)} + "\\n");
+} else if (command === "plistbuddy") {
+  if (args[1]?.startsWith("Print :CFBundleShortVersionString")) process.stdout.write(process.env.RELEASE_VERSION + "\\n");
+} else if (command === "shasum") {
+  process.stdout.write("a".repeat(64) + "  Edith.dmg\\n");
 } else if (command === "find") {
   process.stdout.write(join(root, args[0].startsWith("/Applications") ? "intermediate.cer" : "generate_appcast") + "\\n");
 } else if (command === "bun") {
@@ -92,6 +98,8 @@ if (command === "git") {
     "codesign",
     "spctl",
     "pukbot",
+    "plistbuddy",
+    "shasum",
   ]) {
     writeFileSync(join(root, "bin", name), mock);
     chmodSync(join(root, "bin", name), 0o755);
