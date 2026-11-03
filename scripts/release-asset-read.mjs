@@ -56,8 +56,12 @@ export async function downloadReleaseAsset({
       "Accept: application/octet-stream",
       `repos/${repository}/releases/assets/${asset.id}`,
     ],
-    { stdio: ["ignore", "pipe", "ignore"] },
+    { stdio: ["ignore", "pipe", "pipe"] },
   );
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => {
+    if (stderr.length < 2048) stderr += chunk.toString("utf8");
+  });
   const completed = new Promise((resolve) => {
     child.once("error", (error) => resolve({ error }));
     child.once("close", (code) => resolve({ code }));
@@ -94,7 +98,10 @@ export async function downloadReleaseAsset({
     if (timeoutReason)
       throw new Error(`Release asset download timed out: ${timeoutReason}`);
     if (result.error || result.code !== 0)
-      throw new Error("Release asset download failed");
+      throw Object.assign(new Error("Release asset download failed"), {
+        stderr: stderr.slice(0, 2048),
+        cause: result.error,
+      });
     if (size !== expectedBytes)
       throw new Error("Release asset has an unexpected size");
     const sha256 = hash.digest("hex");
