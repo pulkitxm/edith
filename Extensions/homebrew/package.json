@@ -16,5 +16,12 @@
       "summary": "Manage installed and discoverable Homebrew packages.",
       "order": 2
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:homebrew"
+  ],
+  "notchCards": [
+    "extension:homebrew"
+  ],
+  "notchTabs": []
 }

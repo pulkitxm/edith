@@ -14,5 +14,14 @@
       "symbolName": "hourglass",
       "order": 5
     }
-  ]
+  ],
+  "homeCards": [
+    "focus",
+    "extension:attention"
+  ],
+  "notchCards": [
+    "focus",
+    "extension:attention"
+  ],
+  "notchTabs": []
 }

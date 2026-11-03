@@ -14,5 +14,14 @@
       "symbolName": "arrow.triangle.branch",
       "order": 3
     }
-  ]
+  ],
+  "homeCards": [
+    "github",
+    "extension:quinjet"
+  ],
+  "notchCards": [
+    "github",
+    "extension:quinjet"
+  ],
+  "notchTabs": []
 }

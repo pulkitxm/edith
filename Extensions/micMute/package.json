@@ -13,5 +13,14 @@
       "subtitle": "Mutes or unmutes every microphone system-wide",
       "shortcut": "shift+command+m"
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:micMute"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:micMute"
+  ],
+  "notchTabs": []
 }

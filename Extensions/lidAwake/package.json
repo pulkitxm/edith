@@ -12,5 +12,14 @@
       "key": "lidAwakeActive",
       "default": false
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:lidAwake"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:lidAwake"
+  ],
+  "notchTabs": []
 }

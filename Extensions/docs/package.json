@@ -14,5 +14,12 @@
       "symbolName": "book.closed",
       "order": 7
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:docs"
+  ],
+  "notchCards": [
+    "extension:docs"
+  ],
+  "notchTabs": []
 }

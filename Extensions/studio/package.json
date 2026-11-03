@@ -14,5 +14,14 @@
       "symbolName": "wand.and.stars",
       "order": 1
     }
-  ]
+  ],
+  "homeCards": [
+    "media",
+    "extension:studio"
+  ],
+  "notchCards": [
+    "media",
+    "extension:studio"
+  ],
+  "notchTabs": []
 }

@@ -13,5 +13,12 @@
       "order": 2,
       "detachable": false
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:socialManager"
+  ],
+  "notchCards": [
+    "extension:socialManager"
+  ],
+  "notchTabs": []
 }

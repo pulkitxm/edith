@@ -17,6 +17,19 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "activity",
+      "usage",
+      "limits",
+      "extension:usage"
+    ],
+    "notchCards": [
+      "activity",
+      "usage",
+      "limits",
+      "extension:usage"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -40,6 +53,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "agents",
+      "extension:herdr"
+    ],
+    "notchCards": [
+      "agents",
+      "extension:herdr"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -62,6 +84,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "github",
+      "extension:quinjet"
+    ],
+    "notchCards": [
+      "github",
+      "extension:quinjet"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -84,6 +115,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:companion"
+    ],
+    "notchCards": [
+      "extension:companion"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -106,6 +144,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:plugins"
+    ],
+    "notchCards": [
+      "extension:plugins"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -128,6 +173,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "machines",
+      "extension:machines"
+    ],
+    "notchCards": [
+      "machines",
+      "extension:machines"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -139,6 +193,13 @@
     "category": "agents",
     "background": false,
     "commands": [],
+    "homeCards": [
+      "extension:terminal"
+    ],
+    "notchCards": [
+      "extension:terminal"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -162,6 +223,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:docs"
+    ],
+    "notchCards": [
+      "extension:docs"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -201,6 +269,13 @@
         "order": 5
       }
     ],
+    "homeCards": [
+      "extension:appMaintenance"
+    ],
+    "notchCards": [
+      "extension:appMaintenance"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -224,6 +299,13 @@
         "order": 2
       }
     ],
+    "homeCards": [
+      "extension:homebrew"
+    ],
+    "notchCards": [
+      "extension:homebrew"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -247,6 +329,13 @@
         "order": 4
       }
     ],
+    "homeCards": [
+      "extension:cleaner"
+    ],
+    "notchCards": [
+      "extension:cleaner"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -267,6 +356,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:blitztree"
+    ],
+    "notchCards": [
+      "extension:blitztree"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -291,6 +387,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:system"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:system"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -308,6 +413,15 @@
         "default": false
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:keepAwake"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:keepAwake"
+    ],
+    "notchTabs": [],
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -327,6 +441,15 @@
         "default": false
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:lidAwake"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:lidAwake"
+    ],
+    "notchTabs": [],
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -340,6 +463,13 @@
     "commands": [
       "system"
     ],
+    "homeCards": [
+      "extension:systemStats"
+    ],
+    "notchCards": [
+      "extension:systemStats"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -363,6 +493,15 @@
         "label": "⇧⌘M"
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:micMute"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:micMute"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -387,6 +526,15 @@
         "label": "⌥⇧⌘P"
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:presenter"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:presenter"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -409,6 +557,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "calendar",
+      "extension:calendar"
+    ],
+    "notchCards": [
+      "calendar",
+      "extension:calendar"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -433,6 +590,13 @@
         "label": "⌥␣"
       }
     ],
+    "homeCards": [
+      "extension:bifrost"
+    ],
+    "notchCards": [
+      "extension:bifrost"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -456,6 +620,17 @@
         "modifiers": 4608,
         "label": "⌃⇧C"
       }
+    ],
+    "homeCards": [
+      "desk",
+      "extension:clipboard"
+    ],
+    "notchCards": [
+      "desk",
+      "extension:clipboard"
+    ],
+    "notchTabs": [
+      "clipboard"
     ],
     "launchWhen": [],
     "pages": [],
@@ -481,6 +656,15 @@
         "label": "⌃⇧E"
       }
     ],
+    "homeCards": [
+      "desk",
+      "extension:emoji"
+    ],
+    "notchCards": [
+      "desk",
+      "extension:emoji"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -506,6 +690,15 @@
         "label": "⌃⌥⌘C"
       }
     ],
+    "homeCards": [
+      "desk",
+      "extension:colorPicker"
+    ],
+    "notchCards": [
+      "desk",
+      "extension:colorPicker"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -528,6 +721,15 @@
         "label": "⌃⌥⌘K"
       }
     ],
+    "homeCards": [
+      "actions",
+      "extension:keystrokeHighlight"
+    ],
+    "notchCards": [
+      "actions",
+      "extension:keystrokeHighlight"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -556,6 +758,13 @@
         "default": false
       }
     ],
+    "homeCards": [
+      "extension:focusDim"
+    ],
+    "notchCards": [
+      "extension:focusDim"
+    ],
+    "notchTabs": [],
     "pages": [],
     "sections": []
   },
@@ -569,6 +778,18 @@
       "shelf",
       "browser"
     ],
+    "homeCards": [
+      "extension:notchShelf"
+    ],
+    "notchCards": [
+      "extension:notchShelf"
+    ],
+    "notchTabs": [
+      "agents",
+      "browser",
+      "files",
+      "camera"
+    ],
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -581,6 +802,15 @@
     "category": "desk",
     "background": false,
     "commands": [
+      "audio"
+    ],
+    "homeCards": [
+      "extension:audioMixer"
+    ],
+    "notchCards": [
+      "extension:audioMixer"
+    ],
+    "notchTabs": [
       "audio"
     ],
     "launchWhen": [],
@@ -606,6 +836,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "media",
+      "extension:studio"
+    ],
+    "notchCards": [
+      "media",
+      "extension:studio"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -626,6 +865,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "media",
+      "extension:timeLapse"
+    ],
+    "notchCards": [
+      "media",
+      "extension:timeLapse"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -659,6 +907,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "media",
+      "extension:virtualCamera"
+    ],
+    "notchCards": [
+      "media",
+      "extension:virtualCamera"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": []
   },
@@ -680,6 +937,17 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "music",
+      "media",
+      "extension:music"
+    ],
+    "notchCards": [
+      "music",
+      "media",
+      "extension:music"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -704,6 +972,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "media",
+      "extension:downloads"
+    ],
+    "notchCards": [
+      "media",
+      "extension:downloads"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -724,6 +1001,13 @@
         "detachable": false
       }
     ],
+    "homeCards": [
+      "extension:socialManager"
+    ],
+    "notchCards": [
+      "extension:socialManager"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -746,6 +1030,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "databases",
+      "extension:database"
+    ],
+    "notchCards": [
+      "databases",
+      "extension:database"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -768,6 +1061,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "codeStats",
+      "extension:codeStats"
+    ],
+    "notchCards": [
+      "codeStats",
+      "extension:codeStats"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -790,6 +1092,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:seoAudit"
+    ],
+    "notchCards": [
+      "extension:seoAudit"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -812,6 +1121,13 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "extension:latex"
+    ],
+    "notchCards": [
+      "extension:latex"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -834,6 +1150,15 @@
         "detachable": true
       }
     ],
+    "homeCards": [
+      "focus",
+      "extension:attention"
+    ],
+    "notchCards": [
+      "focus",
+      "extension:attention"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -862,6 +1187,13 @@
         "default": false
       }
     ],
+    "homeCards": [
+      "extension:hinge"
+    ],
+    "notchCards": [
+      "extension:hinge"
+    ],
+    "notchTabs": [],
     "pages": [],
     "sections": []
   },
@@ -878,6 +1210,13 @@
         "default": true
       }
     ],
+    "homeCards": [
+      "extension:windowSweaters"
+    ],
+    "notchCards": [
+      "extension:windowSweaters"
+    ],
+    "notchTabs": [],
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -891,6 +1230,13 @@
     "commands": [
       "jev"
     ],
+    "homeCards": [
+      "extension:jev"
+    ],
+    "notchCards": [
+      "extension:jev"
+    ],
+    "notchTabs": [],
     "launchWhen": [],
     "pages": [],
     "sections": [],

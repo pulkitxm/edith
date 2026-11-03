@@ -16,5 +16,14 @@
       "symbolName": "cpu",
       "order": 1
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:system"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:system"
+  ],
+  "notchTabs": []
 }

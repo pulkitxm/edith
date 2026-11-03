@@ -10,5 +10,14 @@
       "key": "preventSleep",
       "default": false
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:keepAwake"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:keepAwake"
+  ],
+  "notchTabs": []
 }

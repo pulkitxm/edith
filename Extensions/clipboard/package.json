@@ -15,5 +15,16 @@
       "subtitle": "Opens the clipboard history popup",
       "shortcut": "control+shift+c"
     }
+  ],
+  "homeCards": [
+    "desk",
+    "extension:clipboard"
+  ],
+  "notchCards": [
+    "desk",
+    "extension:clipboard"
+  ],
+  "notchTabs": [
+    "clipboard"
   ]
 }

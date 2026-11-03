@@ -14,5 +14,14 @@
       "symbolName": "cylinder.fill",
       "order": 1
     }
-  ]
+  ],
+  "homeCards": [
+    "databases",
+    "extension:database"
+  ],
+  "notchCards": [
+    "databases",
+    "extension:database"
+  ],
+  "notchTabs": []
 }

@@ -15,5 +15,14 @@
       "order": 2,
       "logoName": "herdr"
     }
-  ]
+  ],
+  "homeCards": [
+    "agents",
+    "extension:herdr"
+  ],
+  "notchCards": [
+    "agents",
+    "extension:herdr"
+  ],
+  "notchTabs": []
 }

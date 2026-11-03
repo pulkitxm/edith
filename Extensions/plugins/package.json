@@ -14,5 +14,12 @@
       "symbolName": "square.stack.3d.up",
       "order": 5
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:plugins"
+  ],
+  "notchCards": [
+    "extension:plugins"
+  ],
+  "notchTabs": []
 }

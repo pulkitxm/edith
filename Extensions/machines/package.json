@@ -14,5 +14,14 @@
       "symbolName": "server.rack",
       "order": 6
     }
-  ]
+  ],
+  "homeCards": [
+    "machines",
+    "extension:machines"
+  ],
+  "notchCards": [
+    "machines",
+    "extension:machines"
+  ],
+  "notchTabs": []
 }

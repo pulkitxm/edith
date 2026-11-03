@@ -13,5 +13,14 @@
       "subtitle": "Starts or pauses the on-screen keycaps",
       "shortcut": "control+option+command+k"
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:keystrokeHighlight"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:keystrokeHighlight"
+  ],
+  "notchTabs": []
 }

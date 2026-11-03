@@ -19,5 +19,12 @@
       "key": "hingeActive",
       "default": false
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:hinge"
+  ],
+  "notchCards": [
+    "extension:hinge"
+  ],
+  "notchTabs": []
 }

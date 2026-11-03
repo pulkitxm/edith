@@ -15,5 +15,14 @@
       "subtitle": "Forces presenter blur on or off",
       "shortcut": "option+shift+command+p"
     }
-  ]
+  ],
+  "homeCards": [
+    "actions",
+    "extension:presenter"
+  ],
+  "notchCards": [
+    "actions",
+    "extension:presenter"
+  ],
+  "notchTabs": []
 }

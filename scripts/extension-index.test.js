@@ -28,6 +28,9 @@ test("declarations reject unknown keys, mismatched ids and invalid commands", ()
     hotkeys: [],
     pages: [],
     sections: [],
+    homeCards: [],
+    notchCards: [],
+    notchTabs: [],
   });
   for (const [value, directory] of [
     [{ ...declaration, hotkey: "x" }, "sample"],
@@ -142,11 +145,38 @@ test("pages default to detachable and sections name a known page", () => {
     expect(() => validateDeclaration({ ...paged, pages }, "sample")).toThrow();
   expect(() =>
     validateDeclaration(
-      { ...paged, sections: [{ ...paged.sections[0], page: "settings" }] },
+      {
+        ...paged,
+        sections: [{ ...paged.sections[0], page: "settings" }],
+      },
       "sample",
     ),
   ).toThrow();
   expect(() =>
     validateDeclaration({ ...paged, category: "desk" }, "sample"),
+  ).toThrow();
+});
+
+test("surface declarations register independent Home cards, Notch cards and tabs", () => {
+  const surfaces = {
+    ...declaration,
+    homeCards: ["music", "extension:sample"],
+    notchCards: ["actions"],
+    notchTabs: ["audio"],
+  };
+  const validated = validateDeclaration(surfaces, "sample");
+  expect(validated.homeCards).toEqual(surfaces.homeCards);
+  expect(validated.notchCards).toEqual(surfaces.notchCards);
+  expect(validated.notchTabs).toEqual(surfaces.notchTabs);
+  for (const field of ["homeCards", "notchCards", "notchTabs"])
+    for (const value of ["music", ["unknown"], ["music", "music"], [null]])
+      expect(() =>
+        validateDeclaration({ ...surfaces, [field]: value }, "sample"),
+      ).toThrow();
+  expect(() =>
+    validateDeclaration(
+      { ...surfaces, homeCards: ["extension:other"] },
+      "sample",
+    ),
   ).toThrow();
 });

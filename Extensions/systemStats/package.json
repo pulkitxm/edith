@@ -6,5 +6,12 @@
   "background": true,
   "commands": [
     "system"
-  ]
+  ],
+  "homeCards": [
+    "extension:systemStats"
+  ],
+  "notchCards": [
+    "extension:systemStats"
+  ],
+  "notchTabs": []
 }

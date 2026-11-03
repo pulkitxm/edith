@@ -16,5 +16,12 @@
       "summary": "Find reclaimable space and remove it after review.",
       "order": 4
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:cleaner"
+  ],
+  "notchCards": [
+    "extension:cleaner"
+  ],
+  "notchTabs": []
 }

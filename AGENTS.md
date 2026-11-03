@@ -109,6 +109,11 @@ in the loop needs GitHub or a merged pull request.
 
 An extension's host registration lives in `Extensions/<id>/package.json`
 (`title`, `symbolName`, `category`, `background`, `commands`, `hotkeys`).
+`homeCards` and `notchCards` list the surface widget ids the extension provides
+on each surface; `notchTabs` lists its Notch tabs. The generated host index
+registers these providers without loading code and starts them when their card
+or tab is present. Use `extension:<id>` for the extension's generic ability card;
+shared cards such as `actions` can name several providers.
 Each hotkey names its `id`, preference `prefix`, `title`, `subtitle` and a
 default `shortcut` such as `control+shift+e`; the host registers it while the
 extension is idle and starts the extension on the first press. `launchWhen`

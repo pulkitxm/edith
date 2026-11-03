@@ -36,6 +36,31 @@ import Testing
         #expect(entries.contains { $0.id == "keepAwake" })
     }
 
+    @Test func indexesRejectInvalidAndDuplicatedSurfaceDeclarations() throws {
+        for cards in [["unknown"], ["music", "music"], ["extension:other"], ["clocks"]] {
+            for entry in [
+                HostExtension(
+                    id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                    homeCards: cards),
+                HostExtension(
+                    id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                    notchCards: cards),
+            ] {
+                #expect(throws: (any Error).self) {
+                    try HostIndex.load(data: JSONEncoder().encode([entry]))
+                }
+            }
+        }
+        for tabs in [["unknown"], ["audio", "audio"], ["home"]] {
+            let entry = HostExtension(
+                id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                notchTabs: tabs)
+            #expect(throws: (any Error).self) {
+                try HostIndex.load(data: JSONEncoder().encode([entry]))
+            }
+        }
+    }
+
     @Test func packagedAppAndExtensionIndexesNeverUseAdjacentBuildResources() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

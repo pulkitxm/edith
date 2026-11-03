@@ -12,5 +12,14 @@
       "symbolName": "record.circle",
       "order": 3
     }
-  ]
+  ],
+  "homeCards": [
+    "media",
+    "extension:timeLapse"
+  ],
+  "notchCards": [
+    "media",
+    "extension:timeLapse"
+  ],
+  "notchTabs": []
 }

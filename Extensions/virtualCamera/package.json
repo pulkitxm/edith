@@ -23,5 +23,14 @@
       "symbolName": "web.camera",
       "order": 6
     }
-  ]
+  ],
+  "homeCards": [
+    "media",
+    "extension:virtualCamera"
+  ],
+  "notchCards": [
+    "media",
+    "extension:virtualCamera"
+  ],
+  "notchTabs": []
 }

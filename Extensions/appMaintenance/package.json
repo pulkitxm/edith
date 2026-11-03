@@ -32,5 +32,12 @@
       "summary": "Review completed maintenance operations.",
       "order": 5
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:appMaintenance"
+  ],
+  "notchCards": [
+    "extension:appMaintenance"
+  ],
+  "notchTabs": []
 }

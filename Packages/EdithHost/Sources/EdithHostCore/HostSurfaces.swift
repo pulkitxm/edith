@@ -19,12 +19,13 @@ public final class HostSurfaces {
         var action: @MainActor () -> Void = {}
     }
 
+    private let entries: [HostExtension]
     private weak var sessions: HostExtensionSessions?
 
     public var demandedProviderIDs: Set<String> {
         HostSurfaceDemand.providerIDs(
             home: layouts.home, notch: layouts.notch,
-            notchEnabled: sessions?.enabledIDs.contains("notchShelf") == true)
+            notchEnabled: sessions?.enabledIDs.contains("notchShelf") == true, entries: entries)
     }
 
     public init(identity: HostIdentity, entries: [HostExtension], sessions: HostExtensionSessions)
@@ -34,6 +35,7 @@ public final class HostSurfaces {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
         preferences = defaults
+        self.entries = entries
         self.sessions = sessions
         let channel = ExtensionSharedState(
             root: identity.root.appendingPathComponent("ExtensionState"),

@@ -14,5 +14,14 @@
       "symbolName": "calendar",
       "order": 3
     }
-  ]
+  ],
+  "homeCards": [
+    "calendar",
+    "extension:calendar"
+  ],
+  "notchCards": [
+    "calendar",
+    "extension:calendar"
+  ],
+  "notchTabs": []
 }

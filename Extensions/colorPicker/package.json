@@ -16,5 +16,14 @@
       "subtitle": "Summons the color picker loupe",
       "shortcut": "control+option+command+c"
     }
-  ]
+  ],
+  "homeCards": [
+    "desk",
+    "extension:colorPicker"
+  ],
+  "notchCards": [
+    "desk",
+    "extension:colorPicker"
+  ],
+  "notchTabs": []
 }

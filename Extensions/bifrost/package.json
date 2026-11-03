@@ -15,5 +15,12 @@
       "subtitle": "Opens the launcher bar over whatever you are doing",
       "shortcut": "option+space"
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:bifrost"
+  ],
+  "notchCards": [
+    "extension:bifrost"
+  ],
+  "notchTabs": []
 }
