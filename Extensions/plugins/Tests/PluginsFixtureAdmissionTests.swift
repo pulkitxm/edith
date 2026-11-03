@@ -35,15 +35,15 @@ import WorkerFixtureTestSupport
         func admit(_ context: NSDictionary) throws -> WorkerFixtureEngineAdmission? {
             try WorkerFixtureEngineAdmission.current(
                 extensionID: "plugins", context: context,
-                roleBundle: Bundle(for: ExtensionRuntime.self))
+                roleBundle: Bundle(for: PluginsService.self))
         }
 
     }
 
     @MainActor private func makeRuntime(
         _ input: Input, defaults: @escaping (String) -> UserDefaults?
-    ) -> ExtensionRuntime {
-        return ExtensionRuntime(admitOrdinaryContext: { context in
+    ) -> ExtensionServiceRuntime {
+        return makePluginsRuntime(admitOrdinaryContext: { context in
             guard try input.admit(context) == nil else { throw WorkerFixtureError.invalid }
             return nil
         })
@@ -51,7 +51,7 @@ import WorkerFixtureTestSupport
 
     @MainActor @Test func originalRuntimeRejectsFunctionalContextBeforeModelConstruction() async {
         for operation in ["start", "configureUI"] {
-            let runtime = ExtensionRuntime()
+            let runtime = makePluginsRuntime()
             let reply =
                 runtime.execute([
                     "operation": operation, "defaultsSuite": "synthetic-unavailable-suite",
