@@ -10,6 +10,10 @@ name: Extensions
         type: string
         required: false
         default: ""
+      force_all:
+        type: boolean
+        required: false
+        default: false
     secrets:
       EXTENSION_CATALOG_PRIVATE_KEY:
         required: false
@@ -37,6 +41,11 @@ name: Extensions
         type: string
         required: false
         default: ""
+      force_all:
+        description: Rebuild every extension and give each one a new version
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 env:
@@ -119,6 +128,7 @@ jobs:
           PR_BASE_SHA: "${{ github.event.pull_request.base.sha }}"
           EXTENSION_VALIDATION_SHA: "${{ inputs.validation_sha }}"
           EXTENSION_PUBLISH: "${{ inputs.publish }}"
+          EXTENSION_FORCE_ALL: "${{ inputs.force_all }}"
         run: |
           mkdir -p dist/extensions
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then

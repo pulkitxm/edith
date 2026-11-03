@@ -354,6 +354,45 @@ test("verified fingerprints reuse unchanged packages and rebuild changed source"
   }
 });
 
+test("a forced plan gives unchanged packages a new version", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "extension-forced-plan-"));
+  const definition = {
+    id: "synthetic",
+    version: "1.0.0",
+    hostABI: "edith-host-1",
+    inputs: ["source.txt"],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  try {
+    await writeFile(join(directory, "source.txt"), "synthetic source");
+    const fingerprint = await extensionFingerprint(directory, definition, [
+      definition,
+    ]);
+    const previous = JSON.parse(
+      verifiedCatalogPayload(
+        signed(catalog([{ ...packageRecord, sourceFingerprint: fingerprint }])),
+        publicKey,
+      ),
+    );
+    const planned = await planUnpublishedExtensions(
+      directory,
+      [definition],
+      previous.packages,
+      { forceAll: true },
+    );
+    assert.equal(planned.length, 1);
+    assert.equal(planned[0].version, "1.0.1");
+    assert.equal(planned[0].fingerprint, fingerprint);
+    assert.notEqual(
+      planned[0].tag,
+      `extensions/synthetic/1.0.0-${fingerprint.slice(0, 20)}`,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("Swift CryptoKit signatures interoperate with Node verification in both directions", {
   skip: process.platform !== "darwin",
   timeout: 60000,

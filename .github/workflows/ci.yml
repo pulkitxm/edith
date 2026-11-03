@@ -16,6 +16,11 @@ on:
         type: string
         required: false
         default: ""
+      force_all:
+        description: "With release, rebuild every extension and give each one a new version."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: >-
@@ -367,6 +372,7 @@ jobs:
     uses: ./.github/workflows/extensions.yml
     with:
       publish: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
+      force_all: ${{ github.event_name == 'workflow_dispatch' && inputs.release && inputs.force_all }}
     secrets:
       EXTENSION_CATALOG_PRIVATE_KEY: ${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}

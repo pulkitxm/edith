@@ -334,6 +334,7 @@ export async function planUnpublishedExtensions(
   root,
   definitions,
   publishedPackages,
+  { forceAll = false } = {},
 ) {
   const result = [];
   for (const definition of definitions) {
@@ -354,6 +355,7 @@ export async function planUnpublishedExtensions(
       )
       .at(-1);
     if (
+      !forceAll &&
       prior &&
       prior.sourceFingerprint ===
         (prior.hostABI === definition.hostABI
@@ -566,6 +568,7 @@ if (import.meta.main) {
         root,
         definitions,
         published.packages,
+        { forceAll: process.env.EXTENSION_FORCE_ALL === "true" },
       );
     }
     process.stdout.write(`${JSON.stringify({ include })}\n`);
