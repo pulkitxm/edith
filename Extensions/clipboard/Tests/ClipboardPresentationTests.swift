@@ -158,7 +158,7 @@ import Testing
     }
 
     @Test func runtimeRejectsUncheckedConfigurationAndUnconfiguredView() {
-        let runtime = ExtensionRuntime()
+        let runtime = makeClipboardRuntime()
         let result =
             runtime.execute(["operation": "configureUI", "remoteUI": true] as NSDictionary)
             as? NSDictionary

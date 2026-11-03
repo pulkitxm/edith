@@ -10,233 +10,210 @@ import Foundation
 import SwiftUI
 
 @MainActor
-@objc(EdithPresenterExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+final class PresenterExtensionService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var service: PresenterDetector?
     private var state: PresenterState?
     private var observer: NSObjectProtocol?
     private var pauseObserver: NSObjectProtocol?
     private var presentation: ControlPresentation?
     private var presentationStops: [UUID: Task<Void, Never>] = [:]
-    private var draining = false
-
     private var fixture: WorkerFixtureAdmission?
-    private let commands = ExtensionCommandRegistry()
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
-            return try await self.withFixtureRequest(
-                command, payload: payload, token: request["token"] as? String
-            ) { [weak self] in
-                if command == "presenter.cli.catalog" {
-                    return try PresenterCLIExecution.catalog(payload)
-                }
-                if command == "presenter.cli" {
-                    let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                    if let help = try await PresenterCLIExecution.help(request) {
-                        return try JSONEncoder().encode(help)
-                    }
-                    guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
-                    let reply = try await PresenterCLIExecution.run(
-                        request, defaults: SharedDefaults.store
-                    ) { operation in
-                        if operation == .stop { self.service?.pauseUntilShareEnds() }
-                        let snapshot = PresenterRuntimeOperationExecution.perform(
-                            operation, post: { _ in })
-                        self.synchronize()
-                        return snapshot
-                    }
-                    return try JSONEncoder().encode(reply)
-                }
-                if command.hasPrefix("presenter.ui.") {
-                    guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
-                    let defaults = SharedDefaults.store
-                    switch command {
-                    case "presenter.ui.read":
-                        guard payload == Data("{}".utf8) else {
-                            throw ExtensionPeerError.invalidRequest
-                        }
-                    case "presenter.ui.update":
-                        let wasManual = defaults.bool(forKey: AppStorageKeys.Presenter.mode)
-                        try ControlPresentationContract.update(payload, defaults: defaults)
-                        if wasManual && !defaults.bool(forKey: AppStorageKeys.Presenter.mode) {
-                            self.service?.pauseUntilShareEnds()
-                        }
-                        self.synchronize()
-                    case "presenter.ui.action":
-                        let action = try JSONDecoder().decode(
-                            ControlPresentationAction.self, from: payload)
-                        guard action.value.isEmpty else { throw ExtensionPeerError.invalidRequest }
-                        switch action.action {
-                        case "screenRecording":
-                            guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
-                            guard
-                                let url = URL(
-                                    string:
-                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-                                )
-                            else { throw ExtensionPeerError.invalidRequest }
-                            NSWorkspace.shared.open(url)
-                        case "start": _ = PresenterRuntimeOperationExecution.perform(.start)
-                        case "stop":
-                            self.service?.pauseUntilShareEnds()
-                            _ = PresenterRuntimeOperationExecution.perform(.stop)
-                        default: throw ExtensionPeerError.invalidRequest
-                        }
-                        self.synchronize()
-                    default: throw ExtensionPeerError.invalidRequest
-                    }
-                    return try ControlPresentationContract.snapshot(
-                        defaults: defaults,
-                        state: ControlPresentationState(
-                            jevConfigured: PresenterJevClient.configured() != nil))
-                }
-                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
-                if command == "surface.snapshot" || command == "surface.perform" {
-                    return try await SurfaceCommandService.execute(
-                        providerID: "presenter", command: command, payload: payload,
-                        snapshot: { _ in
-                            PresenterSurface.snapshot(PresenterRuntimeOperationExecution.status())
-                        },
-                        perform: { action in
-                            if action == "stop" { self.service?.pauseUntilShareEnds() }
-                            _ = PresenterRuntimeOperationExecution.perform(
-                                action == "stop" ? .stop : .start)
-                            self.synchronize()
-                        })
-                }
-                switch command {
-                case "presenter.start": _ = PresenterRuntimeOperationExecution.perform(.start)
-                case "presenter.stop": _ = PresenterRuntimeOperationExecution.perform(.stop)
-                case "presenter.status": break
-                default:
-                    throw ExtensionPeerError.rejected("Presenter does not support this command.")
-                }
-                self.synchronize()
-                let snapshot = PresenterRuntimeOperationExecution.status()
-                return try JSONSerialization.data(withJSONObject: [
-                    "enabled": snapshot.enabled, "manual": snapshot.manual,
-                    "autoActive": snapshot.autoActive, "active": snapshot.active,
-                    "autoReason": snapshot.autoReason ?? "",
-                ])
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+
+    var isRunning: Bool { state != nil }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        if command == "presenter.cli.catalog" {
+            return try PresenterCLIExecution.catalog(payload)
+        }
+        if command == "presenter.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            if let help = try await PresenterCLIExecution.help(request) {
+                return try JSONEncoder().encode(help)
             }
-        }
-    }
-
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
-        draining = true
-        let presentation = presentation
-        presentation?.stop()
-        let service = service
-        service?.suspendWork()
-        Task { [self, service, presentation] in
-            _ = await commands.suspendAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(presentation)
-            completion()
-        }
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        draining = true
-        retirePresentation()
-        let service = service
-        service?.suspendWork()
-        commands.shutdown()
-        Task { [self, service] in
-            await commands.shutdownAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(nil)
-            _ = execute(["operation": "stop"])
-            completion()
-        }
-    }
-
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "presenter", "role": "helper",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !draining, presentationStops.isEmpty else { return ["ok": false] as NSDictionary }
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "presenter",
-                configuration.defaultsSuite
-                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            retirePresentation()
-            presentation = ControlPresentation(client: configuration.engineClient)
-            return ["ok": true] as NSDictionary
-        case "stopUI":
-            retirePresentation()
-            return ["ok": true] as NSDictionary
-        case "prepareToStop":
-            commands.shutdown()
-            return ["ok": true] as NSDictionary
-        case "start":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            do {
-                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-                    input["hostedFunctionalFixture"] == nil
-                else { throw WorkerFixtureError.invalid }
-                fixture = try WorkerFixtureAdmission.current(
-                    extensionID: "presenter", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                return startOwned(input)
-            } catch { return ["ok": false] as NSDictionary }
-        case "view":
-            guard let presentation else { return ["ok": false] as NSDictionary }
-            if let controller = PresenterSidebarScene.controller(input, presentation: presentation)
-            {
-                return controller
+            guard state != nil else { throw ExtensionPeerError.unavailable }
+            let reply = try await PresenterCLIExecution.run(
+                request, defaults: SharedDefaults.store
+            ) { [self] operation in
+                if operation == .stop { self.service?.pauseUntilShareEnds() }
+                let snapshot = PresenterRuntimeOperationExecution.perform(
+                    operation, post: { _ in })
+                applyState()
+                return snapshot
             }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        Form { PresenterRows(presentation: presentation) }.edithForm()
-                    }
+            return try JSONEncoder().encode(reply)
+        }
+        if command.hasPrefix("presenter.ui.") {
+            guard state != nil else { throw ExtensionPeerError.unavailable }
+            let defaults = SharedDefaults.store
+            switch command {
+            case "presenter.ui.read":
+                guard payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case "presenter.ui.update":
+                let wasManual = defaults.bool(forKey: AppStorageKeys.Presenter.mode)
+                try ControlPresentationContract.update(payload, defaults: defaults)
+                if wasManual && !defaults.bool(forKey: AppStorageKeys.Presenter.mode) {
+                    self.service?.pauseUntilShareEnds()
+                }
+                applyState()
+            case "presenter.ui.action":
+                let action = try JSONDecoder().decode(
+                    ControlPresentationAction.self, from: payload)
+                guard action.value.isEmpty else { throw ExtensionPeerError.invalidRequest }
+                switch action.action {
+                case "screenRecording":
+                    guard fixture == nil else { throw ExtensionPeerError.unavailable }
+                    guard
+                        let url = URL(
+                            string:
+                                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+                        )
+                    else { throw ExtensionPeerError.invalidRequest }
+                    NSWorkspace.shared.open(url)
+                case "start": _ = PresenterRuntimeOperationExecution.perform(.start)
+                case "stop":
+                    self.service?.pauseUntilShareEnds()
+                    _ = PresenterRuntimeOperationExecution.perform(.stop)
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                applyState()
+            default: throw ExtensionPeerError.invalidRequest
+            }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults,
+                state: ControlPresentationState(
+                    jevConfigured: PresenterJevClient.configured() != nil))
+        }
+        guard state != nil else { throw ExtensionPeerError.unavailable }
+        if command == "surface.snapshot" || command == "surface.perform" {
+            return try await SurfaceCommandService.execute(
+                providerID: "presenter", command: command, payload: payload,
+                snapshot: { _ in
+                    PresenterSurface.snapshot(PresenterRuntimeOperationExecution.status())
+                },
+                perform: { [self] action in
+                    if action == "stop" { self.service?.pauseUntilShareEnds() }
+                    _ = PresenterRuntimeOperationExecution.perform(
+                        action == "stop" ? .stop : .start)
+                    applyState()
                 })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            synchronize()
-        case "stop":
-            retirePresentation()
-            commands.shutdown()
-            service?.shutdown()
-            service = nil
-            state?.shutdown()
-            state = nil
-            IPC.stopObserving(observer)
-            IPC.stopObserving(pauseObserver)
-            observer = nil
-            pauseObserver = nil
-            HotKeyRegistrar.shutdown()
-        case "pauseUntilShareEnds": service?.pauseUntilShareEnds()
-        case "status": return ["ok": true, "running": state != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
+        }
+        switch command {
+        case "presenter.start": _ = PresenterRuntimeOperationExecution.perform(.start)
+        case "presenter.stop": _ = PresenterRuntimeOperationExecution.perform(.stop)
+        case "presenter.status": break
+        default:
+            throw ExtensionPeerError.rejected("Presenter does not support this command.")
+        }
+        applyState()
+        let snapshot = PresenterRuntimeOperationExecution.status()
+        return try JSONSerialization.data(withJSONObject: [
+            "enabled": snapshot.enabled, "manual": snapshot.manual,
+            "autoActive": snapshot.autoActive, "active": snapshot.active,
+            "autoReason": snapshot.autoReason ?? "",
+        ])
+
+    }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        do {
+            guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+                !context.isHostedFunctionalFixture
+            else { throw WorkerFixtureError.invalid }
+            fixture = try WorkerFixtureAdmission.current(
+                extensionID: "presenter", context: input,
+                roleBundle: Bundle(for: PresenterExtensionService.self))
+            return startOwned()
+        } catch { return false }
+    }
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        guard !(runtime.isSuspended || runtime.isStopping) else { return false }
+        applyState()
+        return true
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard presentationStops.isEmpty,
+            configuration.defaultsSuite
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        _ = retirePresentation()
+        presentation = ControlPresentation(client: configuration.engineClient)
+        return true
+    }
+
+    func view(for presentationID: UUID, context: ExtensionHostContext) -> NSViewController? {
+        guard let presentation else { return nil }
+        if let controller = PresenterSidebarScene.controller(
+            context.input, presentation: presentation)
+        {
+            return controller
+        }
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                ControlSettingsHost(presentation: presentation) {
+                    Form { PresenterRows(presentation: presentation) }.edithForm()
+                }
+            })
+    }
+
+    func stopUI(for presentationID: UUID?) -> [Task<Void, Never>] {
+        retirePresentation().map { [$0] } ?? []
+    }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        switch operation {
+        case "prepareToStop":
+            runtime.prepareToStop {}
+        case "pauseUntilShareEnds":
+            service?.pauseUntilShareEnds()
+        default:
+            return nil
         }
         return ["ok": true] as NSDictionary
     }
 
-    private func synchronize() {
-        guard !draining, state != nil else { return }
+    func cancelPendingWork() {
+        presentation?.stop()
+        service?.suspendWork()
+    }
+
+    func drain() async {
+        await service?.suspendAndWait()
+        await finishPresentations(presentation)
+    }
+
+    func teardown() async {
+        let retiring = retirePresentation()
+        let detector = service
+        service = nil
+        detector?.shutdown()
+        state?.shutdown()
+        state = nil
+        IPC.stopObserving(observer)
+        IPC.stopObserving(pauseObserver)
+        observer = nil
+        pauseObserver = nil
+        HotKeyRegistrar.shutdown()
+        await retiring?.value
+        await finishPresentations(nil)
+    }
+
+    private func applyState() {
+        guard !(runtime.isSuspended || runtime.isStopping), state != nil else { return }
         if fixture == nil {
             HotKeyRegistrar.install(HotKeyCatalog.presenter) { [weak self] in
                 let operation: PresenterRuntimeOperation =
                     SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.mode)
                     ? .stop : .start
                 _ = PresenterRuntimeOperationExecution.perform(operation)
-                self?.synchronize()
+                self?.applyState()
             }
         }
         if SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoEnabled) {
@@ -250,12 +227,8 @@ final class ExtensionRuntime: NSObject {
         state?.refresh()
     }
 
-    private func startOwned(_ input: NSDictionary) -> NSObject {
-        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
-        else { return ["ok": false] as NSDictionary }
-        guard let suite = input["defaultsSuite"] as? String,
-            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return ["ok": false] as NSDictionary }
+    private func startOwned() -> Bool {
+        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil else { return false }
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Presenter.enabled)
         SharedDefaults.store.set(false, forKey: AppStorageKeys.Presenter.autoActive)
         if state == nil { state = PresenterState() }
@@ -267,32 +240,27 @@ final class ExtensionRuntime: NSObject {
         }
         if observer == nil {
             observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                MainActor.assumeIsolated { self?.synchronize() }
+                MainActor.assumeIsolated { self?.applyState() }
             }
             pauseObserver = IPC.observe(IPC.Name.presenterPauseAuto) { [weak self] in
                 MainActor.assumeIsolated { self?.service?.pauseUntilShareEnds() }
             }
         }
-        synchronize()
-        return ["ok": true] as NSDictionary
+        applyState()
+        return true
     }
 
-    private func withFixtureRequest(
-        _ operation: String, payload: Data, token: String?,
-        execute: () async throws -> Data
-    ) async throws -> Data {
-        return try await execute()
-    }
-
-    private func retirePresentation() {
-        guard let presentation else { return }
+    private func retirePresentation() -> Task<Void, Never>? {
+        guard let presentation else { return nil }
         presentation.stop()
         let id = UUID()
-        presentationStops[id] = Task { [self, presentation] in
+        let task = Task { [self, presentation] in
             defer { presentationStops[id] = nil }
             await presentation.stopAndWait()
         }
+        presentationStops[id] = task
         self.presentation = nil
+        return task
     }
 
     private func finishPresentations(_ presentation: ControlPresentation?) async {
@@ -302,13 +270,20 @@ final class ExtensionRuntime: NSObject {
             for task in pending { await task.value }
         }
     }
+}
 
+@MainActor
+func makePresenterRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "presenter", role: "helper", bundle: Bundle(for: BundleAnchor.self)
+    ) { PresenterExtensionService(runtime: $0) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makePresenterRuntime()).toOpaque())
         })
 }

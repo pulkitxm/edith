@@ -33,8 +33,8 @@ import Testing
         try seed.exportSnapshot(to: cloud)
         let selected = try capture("selected", in: local)
         _ = NSApplication.shared
-        let first = ExtensionRuntime()
-        var replacement: ExtensionRuntime?
+        let first = makeClipboardRuntime()
+        var replacement: ExtensionServiceRuntime?
         do {
             #expect(
                 (first.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
@@ -56,7 +56,7 @@ import Testing
             await #expect(throws: ExtensionPeerError.self) {
                 try await invoke(first, command: "backup.status")
             }
-            let next = ExtensionRuntime()
+            let next = makeClipboardRuntime()
             replacement = next
             try start(next, suite: suite)
             await wait { (try? ClipboardArchive(root: cloud).snapshot(.init()).total) == 3 }
@@ -78,12 +78,12 @@ import Testing
         }
     }
 
-    private func start(_ runtime: ExtensionRuntime, suite: String) throws {
+    private func start(_ runtime: ExtensionServiceRuntime, suite: String) throws {
         let result = runtime.execute(["operation": "start", "defaultsSuite": suite])
         try #require((result as? NSDictionary)?["ok"] as? Bool == true)
     }
 
-    private func stop(_ runtime: ExtensionRuntime) async {
+    private func stop(_ runtime: ExtensionServiceRuntime) async {
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
@@ -93,7 +93,8 @@ import Testing
                 == false)
     }
 
-    private func invoke(_ runtime: ExtensionRuntime, command: String) async throws -> [String: Any]
+    private func invoke(_ runtime: ExtensionServiceRuntime, command: String) async throws
+        -> [String: Any]
     {
         let result: Data = try await withCheckedThrowingContinuation { continuation in
             runtime.invoke(["token": UUID().uuidString, "command": command, "payload": Data()]) {
@@ -120,7 +121,7 @@ import Testing
         return value
     }
 
-    private func waitForIdle(_ runtime: ExtensionRuntime) async throws -> [String: Any] {
+    private func waitForIdle(_ runtime: ExtensionServiceRuntime) async throws -> [String: Any] {
         var status = try await invoke(runtime, command: "backup.status")
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while (status["scheduled"] as? Bool != false || status["running"] as? Bool != false),
