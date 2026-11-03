@@ -32,21 +32,24 @@ try {
       `import Foundation
 import AppKit
 import Sparkle
-@MainActor @objc final class FixtureRuntime: NSObject {
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        if input["operation"] as? String == "describe" {
-            return ["id": "virtualCamera", "role": "${role}", "version": "1.0.0", "hostABI": "${workerHostABI}"] as NSDictionary
-        }
+import EdithExtensionCore
+@MainActor final class FixtureService: ExtensionService {
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
         let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
         let framework = Bundle(for: SPUStandardUpdaterController.self)
         let resourcesLoaded = NSNib(nibNamed: "SUUpdateAlert", bundle: framework) != nil
-        return ["ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
+        return ["hostABI": Bundle(for: FixtureService.self).object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "", "runtimeAPIVersion": ExtensionRuntimeAPI.version, "ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
+    }
+    func teardown() async {
+        try? await Task.sleep(for: .milliseconds(50))
+        guard let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] else { return }
+        try? Data("stopped".utf8).write(to: URL(fileURLWithPath: root).appendingPathComponent("${role}.stopped"))
     }
 }
 @_cdecl("edith_extension_create") public func create() -> UnsafeMutableRawPointer? {
-    UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(FixtureRuntime()).toOpaque()) })
+    UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(ExtensionServiceRuntime(id: "virtualCamera", role: "${role}", bundle: Bundle(for: FixtureService.self)) { _ in FixtureService() }).toOpaque()) })
 }
 `,
     );
@@ -60,6 +63,11 @@ import Sparkle
         "-emit-library",
         "-module-name",
         "CameraFixture",
+        "-I",
+        resolve("Packages/EdithHost/.build/arm64-apple-macosx/release/Modules"),
+        "-L",
+        resolve("Packages/EdithHost/.build/arm64-apple-macosx/release"),
+        "-lEdithExtensionKit",
         "-F",
         resolve("Packages/EdithHost/.build/arm64-apple-macosx/release"),
         "-framework",
@@ -81,6 +89,7 @@ import Sparkle
       CFBundlePackageType: "BNDL",
       CFBundleShortVersionString: "1.0.0",
       EdithHostABI: workerHostABI,
+      EdithRuntimeAPIVersion: 1,
     };
     const json = join(root, `${role}.json`);
     await writeFile(json, JSON.stringify(info));
@@ -139,6 +148,12 @@ import Sparkle
       assert.equal(result.sparkleGUIControllerInitialized, true);
       assert.equal(result.sparkleGUIResourcesLoaded, true);
       assert.equal(result.exposedWindows, 0);
+      assert.equal(result.hostABI, workerHostABI);
+      assert.equal(result.runtimeAPIVersion, 1);
+      assert.equal(
+        await readFile(join(root, `${role}.stopped`), "utf8"),
+        "stopped",
+      );
     }
     assert.equal(
       output.provenance.roles.find((item) => item.role === role)
@@ -198,6 +213,7 @@ import Sparkle
       ),
       archiveSymlinks: 0,
       signatureTamperRejected: true,
+      asynchronousTeardownCompleted: true,
       fixtureScopeRejected: true,
     }),
   );

@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import EdithExtensionCore
 import ObjectiveC
 
 @MainActor
@@ -21,16 +22,26 @@ public final class ExtensionBundleRuntime {
     }
 
     private final class Loaded {
+        enum Lifecycle {
+            case loaded
+            case starting
+            case started
+            case stopped
+
+            var needsCleanup: Bool { self == .starting || self == .started }
+        }
+
         let package: ExtensionPackage
         let bundle: Bundle
         let handle: UnsafeMutableRawPointer
-        let object: NSObject
+        let object: NSObject & ExtensionRuntimeProtocol
         let lease: PackageFileLock?
         var active = false
+        var lifecycle = Lifecycle.loaded
 
         init(
             package: ExtensionPackage, bundle: Bundle, handle: UnsafeMutableRawPointer,
-            object: NSObject, lease: PackageFileLock?
+            object: NSObject & ExtensionRuntimeProtocol, lease: PackageFileLock?
         ) {
             self.package = package
             self.bundle = bundle
@@ -99,21 +110,26 @@ public final class ExtensionBundleRuntime {
         return renderer
     }
 
+    public func prepare(id: String) throws { _ = try load(id: id) }
+
     public func start(id: String, context: NSDictionary) throws {
         guard readOnlyPackage == nil else { throw MarketplaceError.invalidBundle }
         let instance = try load(id: id)
-        guard !instance.active else { return }
+        if instance.lifecycle == .started { return }
+        guard instance.lifecycle == .loaded else { throw MarketplaceError.invalidBundle }
         if context["recoveryOnly"] as? Bool == true,
-            !instance.object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+            !instance.object.supportsDisablePreparation
         {
             return
         }
+        instance.lifecycle = .starting
         let response = try execute(instance, operation: "start", context: context)
         guard response["ok"] as? Bool == true else {
             _ = try? execute(instance, operation: "stop", context: [:])
             throw BundleCommandError.failed(
                 response["error"] as? String ?? "\(id) \(role.rawValue) refused to start")
         }
+        instance.lifecycle = .started
         instance.active = context["recoveryOnly"] as? Bool != true
     }
 
@@ -124,10 +140,11 @@ public final class ExtensionBundleRuntime {
     }
 
     public func stop(id: String) throws {
-        guard let instance = loaded[id], instance.active else { return }
+        guard let instance = loaded[id], instance.lifecycle.needsCleanup else { return }
         let response = try execute(instance, operation: "stop", context: [:])
         guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
         instance.active = false
+        instance.lifecycle = .stopped
     }
 
     public func suspendCommandsAll() async throws {
@@ -135,49 +152,16 @@ public final class ExtensionBundleRuntime {
     }
 
     private func suspendCommands(includeInactive: Bool) async throws {
-        let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
-        for instance in loaded.values where instance.active || includeInactive {
-            guard instance.object.responds(to: NSSelectorFromString("invoke:completion:")) else {
-                continue
-            }
-            guard instance.object.responds(to: selector) else {
-                throw MarketplaceError.invalidBundle
-            }
-            let completion = BundleCommandCompletion()
-            _ = try await withCheckedThrowingContinuation { continuation in
-                guard completion.begin(continuation) else { return }
-                typealias Suspend =
-                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-                let suspend = unsafeBitCast(instance.object.method(for: selector), to: Suspend.self)
-                let callback: @convention(block) () -> Void = {
-                    completion.finish(.success(Data()))
-                }
-                suspend(instance.object, selector, callback)
-            }
+        for instance in loaded.values where instance.lifecycle != .loaded || includeInactive {
+            await instance.object.suspend()
         }
     }
 
     public func prepareDisableAll() async throws {
         try await suspendCommandsAll()
-        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
         for instance in loaded.values
-        where instance.active && instance.object.responds(to: selector) {
-            let completion = BundleCommandCompletion()
-            _ = try await withCheckedThrowingContinuation { continuation in
-                guard completion.begin(continuation) else { return }
-                typealias Prepare =
-                    @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
-                    -> Void
-                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
-                let callback: @convention(block) (NSError?) -> Void = { error in
-                    if let error {
-                        completion.finish(.failure(error))
-                    } else {
-                        completion.finish(.success(Data()))
-                    }
-                }
-                prepare(instance.object, selector, callback)
-            }
+        where instance.lifecycle.needsCleanup && instance.object.supportsDisablePreparation {
+            try await instance.object.prepareForDisable()
         }
     }
 
@@ -186,20 +170,8 @@ public final class ExtensionBundleRuntime {
     }
 
     private func prepareToStop(includeInactive: Bool) async throws {
-        let selector = NSSelectorFromString("prepareToStopWithCompletion:")
-        for instance in loaded.values
-        where (instance.active || includeInactive) && instance.object.responds(to: selector) {
-            let completion = BundleCommandCompletion()
-            _ = try await withCheckedThrowingContinuation { continuation in
-                guard completion.begin(continuation) else { return }
-                typealias Prepare =
-                    @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-                let prepare = unsafeBitCast(instance.object.method(for: selector), to: Prepare.self)
-                let callback: @convention(block) () -> Void = {
-                    completion.finish(.success(Data()))
-                }
-                prepare(instance.object, selector, callback)
-            }
+        for instance in loaded.values where instance.lifecycle != .loaded || includeInactive {
+            await instance.object.prepareForStop()
         }
     }
 
@@ -232,23 +204,19 @@ public final class ExtensionBundleRuntime {
             object: instance.object, presentationID: presentationID)
     }
 
-    static func preparePresentationToClose(object: NSObject, presentationID: UUID) async throws {
-        let selector = NSSelectorFromString("prepareUIToClose:completion:")
-        guard object.responds(to: selector) else { return }
+    static func preparePresentationToClose(
+        object: any ExtensionRuntimeProtocol, presentationID: UUID
+    ) async throws {
+        guard object.supportsPresentationPreparation else { return }
         let completion = BundleCommandCompletion()
         try await withTaskCancellationHandler {
             _ = try await withCheckedThrowingContinuation { continuation in
                 guard completion.begin(continuation) else { return }
-                typealias Prepare =
-                    @convention(c) (
-                        AnyObject, Selector, NSString, @convention(block) (NSString?) -> Void
-                    ) -> Void
-                let prepare = unsafeBitCast(object.method(for: selector), to: Prepare.self)
-                let callback: @convention(block) (NSString?) -> Void = { error in
+                Task { @MainActor in
+                    let error = await object.preparePresentationToClose(presentationID)
                     completion.finish(
                         error == nil ? .success(Data()) : .failure(MarketplaceError.invalidBundle))
                 }
-                prepare(object, selector, presentationID.uuidString as NSString, callback)
             }
         } onCancel: {
             completion.finish(.failure(CancellationError()))
@@ -257,7 +225,7 @@ public final class ExtensionBundleRuntime {
 
     public func supportsCommands(id: String) -> Bool {
         guard let instance = loaded[id], instance.active else { return false }
-        return instance.object.responds(to: NSSelectorFromString("invoke:completion:"))
+        return ExtensionRuntimeAPI.supportedVersions.contains(instance.object.runtimeAPIVersion)
     }
 
     public func command(id: String, token: UUID, command: String, payload: Data) async throws
@@ -266,39 +234,36 @@ public final class ExtensionBundleRuntime {
         guard let instance = loaded[id], instance.active, supportsCommands(id: id) else {
             throw MarketplaceError.invalidBundle
         }
+        return try await Self.command(
+            object: instance.object, token: token, command: command, payload: payload
+        ) { [weak self] in
+            _ = try? self?.response(
+                id: id, operation: "cancelCommand", context: ["token": token.uuidString])
+        }
+    }
+
+    static func command(
+        object: any ExtensionRuntimeProtocol, token: UUID, command: String, payload: Data,
+        cancel: @escaping @MainActor () -> Void
+    ) async throws -> Data {
         let completion = BundleCommandCompletion()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard completion.begin(continuation) else { return }
-                let selector = NSSelectorFromString("invoke:completion:")
-                typealias Invoke =
-                    @convention(c) (
-                        AnyObject, Selector, NSDictionary,
-                        @convention(block) (NSData?, NSString?) -> Void
-                    ) -> Void
-                let invoke = unsafeBitCast(instance.object.method(for: selector), to: Invoke.self)
-                let callback: @convention(block) (NSData?, NSString?) -> Void = {
-                    payload, message in
-                    if let payload {
-                        completion.finish(.success(payload as Data))
-                    } else {
+                let invocation = Task { @MainActor in
+                    do {
+                        try Task.checkCancellation()
                         completion.finish(
-                            .failure(
-                                BundleCommandError.failed(
-                                    message as String? ?? "The extension command failed.")))
-                    }
+                            .success(
+                                try await object.invokeCommand(
+                                    command, token: token, payload: payload)))
+                    } catch { completion.finish(.failure(error)) }
                 }
-                invoke(
-                    instance.object, selector,
-                    ["token": token.uuidString, "command": command, "payload": payload]
-                        as NSDictionary, callback)
+                completion.attach(invocation)
             }
         } onCancel: {
-            completion.finish(.failure(CancellationError()))
-            Task { @MainActor [weak self] in
-                _ = try? self?.response(
-                    id: id, operation: "cancelCommand", context: ["token": token.uuidString])
-            }
+            completion.cancel()
+            Task { @MainActor in cancel() }
         }
     }
 
@@ -335,10 +300,14 @@ public final class ExtensionBundleRuntime {
             objc_setAssociatedObject(
                 instance.object, key, uiOwnership, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
-        let input = NSMutableDictionary(dictionary: context)
-        input["operation"] = "view"
-        return instance.object.perform(NSSelectorFromString("execute:"), with: input)?
-            .takeUnretainedValue() as? NSViewController
+        guard let value = context["presentationID"] as? String,
+            let presentation = UUID(uuidString: value)
+        else { return nil }
+        guard
+            case let .view(controller) = instance.object.dispatch(
+                .view(presentation, ExtensionHostContext(input: context)))
+        else { return nil }
+        return controller
     }
 
     public func presentation(
@@ -555,8 +524,12 @@ public final class ExtensionBundleRuntime {
         guard let pointer = factory() else {
             throw MarketplaceError.invalidBundle
         }
-        let object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
-        guard object.responds(to: NSSelectorFromString("execute:")) else {
+        let created = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        guard let object = created as? (NSObject & ExtensionRuntimeProtocol),
+            ExtensionRuntimeAPI.supportedVersions.contains(object.runtimeAPIVersion),
+            bundle.object(forInfoDictionaryKey: "EdithRuntimeAPIVersion") as? Int
+                == object.runtimeAPIVersion
+        else {
             throw MarketplaceError.invalidBundle
         }
         let privileged =
@@ -565,7 +538,7 @@ public final class ExtensionBundleRuntime {
             : directory.appendingPathComponent(id).appendingPathComponent("privileged.bundle")
         guard
             readOnlyPackage != nil || !FileManager.default.fileExists(atPath: privileged.path)
-                || object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+                || object.supportsDisablePreparation
         else { throw MarketplaceError.invalidBundle }
         let instance = Loaded(
             package: package, bundle: bundle, handle: handle, object: object, lease: lease)
@@ -626,12 +599,9 @@ public final class ExtensionBundleRuntime {
             input["hostUIOwnership"] = uiOwnership
         }
         input["operation"] = operation
-        guard
-            let result = instance.object.perform(NSSelectorFromString("execute:"), with: input)?
-                .takeUnretainedValue() as? NSDictionary
-        else {
-            throw MarketplaceError.invalidBundle
-        }
+        guard let request = ExtensionRuntimeRequest(operation: operation, context: input),
+            let result = instance.object.dispatch(request).object as? NSDictionary
+        else { throw MarketplaceError.invalidBundle }
         return result
     }
 }
@@ -649,6 +619,18 @@ private final class BundleCommandCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?
+    private var invocation: Task<Void, Never>?
+
+    func attach(_ task: Task<Void, Never>) {
+        let completed = lock.withLock {
+            guard result == nil else { return true }
+            invocation = task
+            return false
+        }
+        if completed { task.cancel() }
+    }
+
+    func cancel() { finish(.failure(CancellationError()), cancelInvocation: true) }
 
     func begin(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
         let completedResult = lock.withLock { () -> Result<Data, any Error>? in
@@ -660,13 +642,15 @@ private final class BundleCommandCompletion: @unchecked Sendable {
         return true
     }
 
-    func finish(_ result: Result<Data, any Error>) {
-        let continuation = lock.withLock { () -> CheckedContinuation<Data, any Error>? in
-            guard self.result == nil else { return nil }
+    func finish(_ result: Result<Data, any Error>, cancelInvocation: Bool = false) {
+        let pending = lock.withLock {
+            () -> (CheckedContinuation<Data, any Error>?, Task<Void, Never>?) in
+            guard self.result == nil else { return (nil, nil) }
             self.result = result
-            defer { self.continuation = nil }
-            return self.continuation
+            defer { self.continuation = nil; invocation = nil }
+            return (continuation, invocation)
         }
-        continuation?.resume(with: result)
+        if cancelInvocation { pending.1?.cancel() }
+        pending.0?.resume(with: result)
     }
 }

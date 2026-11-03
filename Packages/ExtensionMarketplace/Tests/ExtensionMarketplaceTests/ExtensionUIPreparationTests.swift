@@ -1,4 +1,5 @@
 import Foundation
+import EdithExtensionCore
 import Testing
 
 @testable import ExtensionMarketplace
@@ -43,16 +44,32 @@ struct ExtensionUIPreparationTests {
 
     @Test func runtimesWithoutPendingUIStateRequireNoAdditionalOperation() async throws {
         try await ExtensionBundleRuntime.preparePresentationToClose(
-            object: NSObject(), presentationID: UUID())
+            object: IdlePreparation(), presentationID: UUID())
     }
 
-    @MainActor private final class Preparation: NSObject {
+    @MainActor private final class Preparation: IdlePreparation {
+        override var supportsPresentationPreparation: Bool { true }
         var presentation: String?
         var callback: ((NSString?) -> Void)?
-        @objc(prepareUIToClose:completion:)
-        func prepareUIToClose(_ id: NSString, completion: @escaping (NSString?) -> Void) {
-            presentation = id as String
-            callback = completion
+        override func preparePresentationToClose(_ id: UUID) async -> String? {
+            presentation = id.uuidString
+            return await withCheckedContinuation { continuation in
+                callback = { continuation.resume(returning: $0 as String?) }
+            }
         }
     }
+}
+
+@MainActor private class IdlePreparation: ExtensionRuntimeProtocol {
+    var runtimeAPIVersion: Int { ExtensionRuntimeAPI.version }
+    var supportsDisablePreparation: Bool { false }
+    var supportsPresentationPreparation: Bool { false }
+    func dispatch(_ request: ExtensionRuntimeRequest) -> ExtensionRuntimeResponse { .result(true) }
+    func invokeCommand(_ command: String, token: UUID, payload: Data) async throws -> Data {
+        Data()
+    }
+    func suspend() async {}
+    func prepareForDisable() async throws {}
+    func prepareForStop() async {}
+    func preparePresentationToClose(_ presentation: UUID) async -> String? { nil }
 }

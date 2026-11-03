@@ -8,7 +8,8 @@ loading and starting the code, the first presentation and its first frame.
 | Field | Meaning |
 | --- | --- |
 | `verifyMs` | Code signature checks for the extension's bundles, including time queued behind other extensions (four run at once) and waiting for the main thread during launch. A bundle whose files are unchanged since its last full check skips the check itself. |
-| `startMs` | Loading the bundle, describing it and running its `start` on the main thread. |
+| `loadMs` | Mapping the bundle, creating its runtime and validating its typed description on the main thread. |
+| `startMs` | Running the loaded service’s `start` on the main thread. Before host ABI 10 this field also included loading. |
 | `readyAfterLaunchMs` | When the role finished starting, measured from process launch. |
 | `presentationMs` | Creating the view controller for the first presentation. |
 | `firstFrameMs` | From the presentation request until the view is in a window and the main thread is free. |
@@ -118,3 +119,30 @@ studio 79 ms. Every install above became active without a restart.
 With docs on the shared extension service runtime (host `edith-host-9`), docs
 opens in 41 ms (`firstFrameMs`, median of five background cold launches,
 including starting the idle extension), against 48 ms in the baseline.
+
+## Typed runtime verification
+
+Measured on 2026-11-03 with host ABI `edith-host-10`, the same Mac and a fresh
+Docs-only development slot. Each of five process restarts left Docs idle
+until its page opened in the background.
+
+| Metric | Median |
+| --- | ---: |
+| Combined `loadMs` and `startMs` | 6.9 ms |
+| `firstFrameMs` | 45.9 ms |
+
+The first-frame samples were 53.5, 45.9, 39.8, 21.0 and 50.8 ms. This marker
+measures view attachment and main-thread availability. The 17-extension
+launch comparison above remains the earlier on-demand measurement.
+
+Fresh install activated Docs in the same app process. Its list and typed
+library command each returned 502 bundled reference pages. Disable rejected
+new commands, and re-enable restored them. A failed loopback catalog download
+left Docs uninstalled; retrying after the server returned activated it in the
+same process.
+
+A warm single-extension build took 9.9 seconds, or 11.7 seconds through
+sideload, relaunch and activation. The watcher rebuilt an actual source edit
+and its restoration in 10.4 and 10.8 seconds, with total cycles of 12.3 and
+12.5 seconds. It then remained quiet for 25 seconds while both commands still
+returned 502 pages.

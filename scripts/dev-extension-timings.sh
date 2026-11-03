@@ -40,7 +40,7 @@ import json, statistics, sys
 from pathlib import Path
 
 runs = [json.loads(path.read_text()) for path in sorted(Path(sys.argv[1]).glob("*.json"))]
-keys = ["verifyMs", "startMs", "readyAfterLaunchMs"]
+keys = ["verifyMs", "loadMs", "startMs", "readyAfterLaunchMs"]
 table = {}
 totals = []
 idle = set()
@@ -56,7 +56,7 @@ for run in runs:
                 if key in values:
                     row[key].append(values[key])
             if "startMs" in values:
-                starts.append(values["startMs"])
+                starts.append(values["startMs"] + values.get("loadMs", 0))
                 ready.append(values["readyAfterLaunchMs"])
     totals.append((sum(starts), max(ready, default=0)))
 
@@ -69,5 +69,5 @@ for (identifier, role), row in sorted(table.items()):
 start, ready = statistics.median(t[0] for t in totals), statistics.median(t[1] for t in totals)
 if idle:
     print(f"\nidle until first use: {', '.join(sorted(idle))}")
-print(f"\nmedian of {len(runs)} cold launches: total start {start:.0f} ms, all ready {ready:.0f} ms after launch")
+print(f"\nmedian of {len(runs)} cold launches: total load and start {start:.0f} ms, all ready {ready:.0f} ms after launch")
 PY

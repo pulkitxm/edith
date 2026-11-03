@@ -8,11 +8,17 @@ let package = Package(
         .library(name: "ExtensionMarketplace", type: .static, targets: ["ExtensionMarketplace"]),
         .executable(name: "MarketplaceHarness", targets: ["MarketplaceHarness"]),
     ],
-    dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")],
+    dependencies: [
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
+        .package(path: "../ExtensionSupport"),
+    ],
     targets: [
         .target(
             name: "ExtensionMarketplace",
-            dependencies: [.product(name: "ZIPFoundation", package: "ZIPFoundation")]),
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                .product(name: "EdithExtensionKit", package: "ExtensionSupport"),
+            ]),
         .executableTarget(
             name: "MarketplaceHarness", dependencies: ["ExtensionMarketplace"],
             path: "Tests/Harness",

@@ -718,6 +718,7 @@ export async function buildExtensionPackage({
       CFBundleShortVersionString: releaseVersion,
       CFBundleVersion: releaseVersion,
       EdithHostABI: definition.hostABI,
+      EdithRuntimeAPIVersion: 1,
     };
     if (definition.contractVersion === 1) {
       const linkage = run("otool", ["-L", executable], {

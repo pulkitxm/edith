@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { minimumWorkerHostABI } from "./extension-host-abi.mjs";
 import {
   extensionFingerprint,
   extensionReleaseTag,
@@ -1566,17 +1567,19 @@ test("a host version inside the supported range keeps published packages", async
   try {
     await mkdir(join(root, "Extensions/music"), { recursive: true });
     await writeFile(join(root, "Extensions/music/Runtime.swift"), "music");
-    const current = entry("edith-host-8");
+    const current = entry(minimumWorkerHostABI);
     const published = [
       {
         id: "music",
         version: "1.0.7",
-        hostABI: "edith-host-8",
+        hostABI: minimumWorkerHostABI,
         architecture: "arm64",
         sourceFingerprint: await extensionFingerprint(root, current, [current]),
       },
     ];
-    const next = entry("edith-host-9");
+    const next = entry(
+      `edith-host-${Number(minimumWorkerHostABI.split("-").at(-1)) + 1}`,
+    );
     expect(await planUnpublishedExtensions(root, [next], published)).toEqual(
       [],
     );

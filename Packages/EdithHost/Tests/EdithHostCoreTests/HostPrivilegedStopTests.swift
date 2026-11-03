@@ -111,25 +111,31 @@ import Testing
                 ? .init(reason: .applicationQuit, restoreOnQuit: false, host: current) : nil)
     }
 
-    @MainActor private final class RestoreFixture: NSObject {
+    @MainActor private final class RestoreFixture: NSObject, ExtensionRuntimeProtocol {
+        var runtimeAPIVersion: Int { ExtensionRuntimeAPI.version }
+        var supportsDisablePreparation: Bool { true }
+        var supportsPresentationPreparation: Bool { false }
+        func dispatch(_ request: ExtensionRuntimeRequest) -> ExtensionRuntimeResponse {
+            .result(true)
+        }
+        func invokeCommand(_ command: String, token: UUID, payload: Data) async throws -> Data {
+            Data()
+        }
+        func prepareForStop() async {}
+        func preparePresentationToClose(_ presentation: UUID) async -> String? { nil }
         let commands = ExtensionCommandRegistry()
         var suspensions = 0
         var restorations = 0
         var reject = false
 
-        @objc(suspendCommandsWithCompletion:)
-        func suspendCommands(completion: @escaping @convention(block) () -> Void) {
+        func suspend() async {
             suspensions += 1
-            Task {
-                await commands.suspendAndWait()
-                completion()
-            }
+            await commands.suspendAndWait()
         }
 
-        @objc(prepareDisableWithCompletion:)
-        func prepareDisable(completion: @escaping @convention(block) (NSError?) -> Void) {
+        func prepareForDisable() async throws {
             restorations += 1
-            completion(reject ? NSError(domain: "synthetic.restore", code: 1) : nil)
+            if reject { throw NSError(domain: "synthetic.restore", code: 1) }
         }
     }
 }

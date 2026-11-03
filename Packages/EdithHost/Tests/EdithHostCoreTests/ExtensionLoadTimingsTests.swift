@@ -9,6 +9,7 @@ import Testing
     @Test func recordsPhasesPerRoleWithLaunchOffsets() throws {
         let timings = ExtensionLoadTimings(launch: Date().addingTimeInterval(-2))
         timings.record(id: "clipboard", role: "bundles", .verify, elapsed: .milliseconds(12))
+        timings.record(id: "clipboard", role: "app", .load, elapsed: .milliseconds(25))
         timings.record(id: "clipboard", role: "app", .start, elapsed: .milliseconds(40))
         timings.record(id: "clipboard", role: "app", .presentation, elapsed: .milliseconds(8))
         timings.record(id: "clipboard", role: "app", .firstFrame, elapsed: .milliseconds(30))
@@ -16,6 +17,7 @@ import Testing
         let bundles = try #require(json["bundles"] as? [String: NSNumber]).mapValues(\.doubleValue)
         let app = try #require(json["app"] as? [String: NSNumber]).mapValues(\.doubleValue)
         #expect(bundles["verifyMs"] == 12)
+        #expect(app["loadMs"] == 25)
         #expect(app["startMs"] == 40)
         #expect(app["presentationMs"] == 8)
         #expect(app["firstFrameMs"] == 30)

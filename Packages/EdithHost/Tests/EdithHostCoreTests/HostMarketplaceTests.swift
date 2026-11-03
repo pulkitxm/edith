@@ -186,7 +186,7 @@ import HostWorkerFixtureSupport
     }
 
     @Test func theWorkerContractIsTheOneSignedByTheCurrentTeam() {
-        #expect(HostContract.compatibility == "edith-host-9")
+        #expect(HostContract.compatibility == "edith-host-10")
     }
 
     @Test func extensionsInstalledForThePreviousContractMoveToTheCurrentOneOnLaunch() async throws {
@@ -962,6 +962,25 @@ import HostWorkerFixtureSupport
         let reply = try await HostCLIGateway(marketplace: marketplace)
             .execute(HostCLIRequest(action: .info, id: id))
         return try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+    }
+
+    @Test func cliReportsTheActualActivationFailureAndClearsItAfterRecovery() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        var mode = "reject-start-with-reason"
+        let marketplace = try fixture.marketplace(workerMode: { _ in mode })
+        let failure = await marketplace.enable(id: "sample")
+        #expect(failure != nil)
+        var info = try await report(marketplace)
+        #expect(info["failureReason"] as? String == failure)
+        #expect(info["state"] as? String == "failed")
+        mode = "normal"
+        #expect(await marketplace.enable(id: "sample") == nil)
+        info = try await report(marketplace)
+        #expect(info["failureReason"] is NSNull)
+        #expect(info["state"] as? String == "active")
+        #expect(await marketplace.sessions.shutdown())
     }
 
     @Test func cliReportsAnUninstalledCatalogPackageAsCompatibleAndNotInstalled() async throws {

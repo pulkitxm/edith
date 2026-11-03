@@ -124,6 +124,11 @@ import Foundation
     public func shutdown() {
         socketMonitor?.cancel()
         socketMonitor = nil
+        if let bound = boundSocket,
+            Self.isSocket(bound.path, device: bound.device, inode: bound.inode)
+        {
+            unlink(bound.path)
+        }
         boundSocket = nil
         rebinding = false
         if listenerPaused { listener?.resume(); listenerPaused = false }

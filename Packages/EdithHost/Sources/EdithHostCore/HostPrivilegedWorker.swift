@@ -4,7 +4,7 @@ import ExtensionMarketplace
 import Foundation
 
 @MainActor public final class HostPrivilegedWorker {
-    private let object: NSObject
+    private let object: NSObject & ExtensionRuntimeProtocol
     private let image: UnsafeMutableRawPointer?
     private var frames = HostWorkerFrames()
     private var watcher: DispatchSourceProcess?
@@ -44,14 +44,17 @@ import Foundation
         let factory = unsafeBitCast(
             symbol, to: (@convention(c) () -> UnsafeMutableRawPointer?).self)
         guard let pointer = factory() else { throw MarketplaceError.invalidBundle }
-        object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
-        guard object.responds(to: NSSelectorFromString("invoke:completion:")),
-            object.responds(to: NSSelectorFromString("suspendCommandsWithCompletion:")),
-            object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+        let created = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        guard let runtime = created as? (NSObject & ExtensionRuntimeProtocol),
+            ExtensionRuntimeAPI.supportedVersions.contains(runtime.runtimeAPIVersion),
+            loaded.object(forInfoDictionaryKey: "EdithRuntimeAPIVersion") as? Int
+                == runtime.runtimeAPIVersion,
+            runtime.supportsDisablePreparation
         else { throw MarketplaceError.invalidBundle }
+        object = runtime
     }
 
-    init(object: NSObject) {
+    init(object: NSObject & ExtensionRuntimeProtocol) {
         self.object = object
         image = nil
     }
@@ -85,15 +88,7 @@ import Foundation
 
     private func suspend() async throws {
         try await suspension.prepare {
-            let selector = NSSelectorFromString("suspendCommandsWithCompletion:")
-            guard self.object.responds(to: selector) else { throw MarketplaceError.invalidBundle }
-            typealias Suspend =
-                @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
-            let suspend = unsafeBitCast(self.object.method(for: selector), to: Suspend.self)
-            await withCheckedContinuation { continuation in
-                let completion: @convention(block) () -> Void = { continuation.resume() }
-                suspend(self.object, selector, completion)
-            }
+            await self.object.suspend()
             if let invocation = self.invocation { await invocation.value }
         }
     }
@@ -172,42 +167,12 @@ import Foundation
     }
 
     private func invoke(_ command: String, payload: Data, token: UUID) async throws -> Data {
-        let selector = NSSelectorFromString("invoke:completion:")
-        typealias Invoke =
-            @convention(c) (
-                AnyObject, Selector, NSDictionary, @convention(block) (NSData?, NSString?) -> Void
-            ) -> Void
-        let invoke = unsafeBitCast(object.method(for: selector), to: Invoke.self)
-        return try await withCheckedThrowingContinuation { continuation in
-            let completion: @convention(block) (NSData?, NSString?) -> Void = { data, error in
-                if let error {
-                    continuation.resume(throwing: HostWorkerError.disableRejected(String(error)))
-                } else if let data, data.length <= 32_768 {
-                    continuation.resume(returning: data as Data)
-                } else {
-                    continuation.resume(throwing: HostWorkerError.invalidResponse)
-                }
-            }
-            invoke(
-                object, selector,
-                ["command": command, "payload": payload as NSData, "token": token.uuidString],
-                completion)
-        }
+        let data = try await object.invokeCommand(command, token: token, payload: payload)
+        guard data.count <= 32_768 else { throw HostWorkerError.invalidResponse }
+        return data
     }
 
-    private func prepare() async throws {
-        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
-        typealias Prepare =
-            @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void) -> Void
-        let prepare = unsafeBitCast(object.method(for: selector), to: Prepare.self)
-        try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<Void, Error>) in
-            let completion: @convention(block) (NSError?) -> Void = { error in
-                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
-            }
-            prepare(object, selector, completion)
-        }
-    }
+    private func prepare() async throws { try await object.prepareForDisable() }
 
     private func restoreAndExit() {
         guard restoration == nil else { return }
