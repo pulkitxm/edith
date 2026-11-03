@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 const expectedActions = new Map([
   [
     "DavidAnson/markdownlint-cli2-action",
-    "21c1be1b93ad9ed58fa840aacc3f279cde2a72ff",
+    "696eb3f2509270d7b882d2aa68347bc676e7af34",
   ],
   ["actions/cache", "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
   ["actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"],
@@ -35,7 +35,7 @@ const expectedActions = new Map([
   ["ossf/scorecard-action", "fa7117db83c52d787ae5a89f350999701505d78e"],
   ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
   ["pascalgn/size-label-action", "56b489b027932ec0cf60438a1a5f1a19c8fc71ff"],
-  ["taiki-e/install-action", "1e29709c0ec63babbe8f266397a465f29a825f91"],
+  ["taiki-e/install-action", "68a389c788b2cd04016ce8c80ee23b80d2ab3d68"],
 ]);
 
 const workflows = readdirSync(".github/workflows")
