@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { chmod, lstat, mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { TransientGitHubError, withGitHubRetry } from "./github-retry.mjs";
 import { downloadReleaseAsset } from "./release-asset-read.mjs";
 import { uploadReleaseAsset } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
@@ -85,6 +86,7 @@ export async function publishExtensionAssets({
   uploadAsset = upload,
   readRelease = lookupRelease,
   downloadAsset = downloadReleaseAsset,
+  retry = {},
 }) {
   assert.equal(new Set(files.map(([, name]) => name)).size, files.length);
   const directory = await mkdtemp(
@@ -128,13 +130,24 @@ export async function publishExtensionAssets({
         }
         if (asset.size !== snapshot.bytes)
           throw new Error("Immutable asset differs from build output");
-        const downloaded = await downloadAsset({
-          repository,
-          asset,
-          expectedBytes: snapshot.bytes,
-          expectedSHA256: snapshot.sha256,
-          collect: false,
-        });
+        const downloaded = await withGitHubRetry(async () => {
+          try {
+            return await downloadAsset({
+              repository,
+              asset,
+              expectedBytes: snapshot.bytes,
+              expectedSHA256: snapshot.sha256,
+              collect: false,
+            });
+          } catch (error) {
+            if (
+              error?.message !== "Release asset download failed" ||
+              /\bHTTP 4(?!29)[0-9]{2}\b/.test(error.stderr ?? "")
+            )
+              throw error;
+            throw new TransientGitHubError(error.message, { cause: error });
+          }
+        }, retry);
         if (downloaded.sha256 !== snapshot.sha256)
           throw new Error("Immutable asset differs from build output");
       }

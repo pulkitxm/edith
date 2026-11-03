@@ -745,3 +745,51 @@ test("a failed catalog pointer download is retried before publication gives up",
   expect(attempts).toBe(2);
   expect(result.data).toEqual(data);
 });
+
+test("immutable asset verification retries a failed download but not a missing asset", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-asset-retry-"));
+  try {
+    const path = join(directory, "calendar.zip");
+    writeFileSync(path, "synthetic calendar.zip");
+    const bytes = readFileSync(path);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    let downloads = 0;
+    const delays = [];
+    let failure = () => new Error("Release asset download failed");
+    const options = {
+      repository: "synthetic/fixture",
+      item: {
+        id: 1,
+        tag_name: "extension-calendar-v1.0.0",
+        draft: false,
+        assets: [{ name: "calendar.zip", id: 1, size: bytes.length }],
+      },
+      entry: { tag: "extension-calendar-v1.0.0" },
+      files: [[path, "calendar.zip"]],
+      readRelease: () => options.item,
+      uploadAsset: async () => {
+        throw new Error("unexpected upload");
+      },
+      downloadAsset: async () => {
+        downloads++;
+        if (downloads === 1) throw failure();
+        return { sha256 };
+      },
+      retry: { sleep: async (delay) => delays.push(delay), random: () => 0 },
+    };
+    await publishExtensionAssets(options);
+    expect(downloads).toBe(3);
+    expect(delays).toEqual([1000]);
+    downloads = 0;
+    failure = () =>
+      Object.assign(new Error("Release asset download failed"), {
+        stderr: "gh: Not Found (HTTP 404)",
+      });
+    await expect(publishExtensionAssets(options)).rejects.toThrow(
+      "Release asset download failed",
+    );
+    expect(downloads).toBe(1);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
