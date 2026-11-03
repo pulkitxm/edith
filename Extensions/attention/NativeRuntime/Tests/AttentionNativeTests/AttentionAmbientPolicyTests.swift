@@ -10,24 +10,25 @@ struct AttentionAmbientPolicyTests {
 
     @Test func policyOnlySynchronizationDoesNotEnqueueExplicitIngestion() throws {
         var explicitCalls = 0
-        let controller = AttentionExtensionController(
+        let controller = AttentionService(
             bundle: .main, notifySettingsChanged: { explicitCalls += 1 }, admitFixture: { _ in nil }
         )
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         let context: NSMutableDictionary = [
             "operation": "synchronize", "ambientPolicyOnly": true,
             "ambientPolicy": [
                 "pauseAmbientOnBattery": true, "subscribers": ["attention.ingest": 0],
             ],
         ]
-        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(explicitCalls == 0)
         context["ambientPolicyOnly"] = false
-        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
         context.removeObject(forKey: "ambientPolicyOnly")
-        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(explicitCalls == 2)
         context["ambientPolicyOnly"] = "true"
-        #expect((controller.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(explicitCalls == 2)
     }
 

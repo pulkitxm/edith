@@ -121,14 +121,15 @@ import Testing
     }
 
     @Test func exportedControllerRejectsUncheckedConfigurationAndEngineStartupInWorker() {
-        let controller = AttentionExtensionController(bundle: .main)
+        let controller = AttentionService(bundle: .main)
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         let unchecked =
-            controller.execute(["operation": "configureUI", "remoteUI": true] as NSDictionary)
+            runtime.execute(["operation": "configureUI", "remoteUI": true] as NSDictionary)
             as? NSDictionary
         #expect(unchecked?["ok"] as? Bool == false)
-        let view = controller.execute(["operation": "view"] as NSDictionary) as? NSDictionary
+        let view = runtime.execute(["operation": "view"] as NSDictionary) as? NSDictionary
         #expect(view?["ok"] as? Bool == false)
-        #expect(controller.responds(to: NSSelectorFromString("prepareToStopWithCompletion:")))
-        #expect(controller.responds(to: NSSelectorFromString("invoke:completion:")))
+        #expect(runtime.responds(to: NSSelectorFromString("prepareToStopWithCompletion:")))
+        #expect(runtime.responds(to: NSSelectorFromString("invoke:completion:")))
     }
 }

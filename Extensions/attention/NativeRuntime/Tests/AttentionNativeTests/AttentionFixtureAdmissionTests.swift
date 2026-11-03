@@ -73,12 +73,13 @@ struct AttentionFixtureAdmissionTests {
     @Test func invalidFixtureHintsRejectBeforeDatabaseOrObserverStartup() throws {
         let fixture = try AttentionIssuedFixture()
         defer { fixture.remove() }
-        let controller = AttentionExtensionController(bundle: .main)
+        let controller = AttentionService(bundle: .main)
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         #expect(
-            (controller.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
+            (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == false)
         #expect(
-            (controller.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
                 == false)
         #expect(
             !FileManager.default.fileExists(
@@ -100,25 +101,26 @@ struct AttentionFixtureAdmissionTests {
             observeBatteryChanges: { _ in
                 observations += 1; return {}
             })
-        let controller = AttentionExtensionController(
+        let controller = AttentionService(
             bundle: .main, notifySettingsChanged: { explicitCalls += 1 },
             admitFixture: fixture.admit, ambientPolicy: policy)
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         #expect(
-            (controller.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
+            (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == true)
         await Task.yield()
         #expect(observations == 0)
         let sync = fixture.input(operation: "synchronize")
         sync["ambientPolicyOnly"] = true
-        #expect((controller.execute(sync) as? NSDictionary)?["ok"] as? Bool == true)
+        #expect((runtime.execute(sync) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(explicitCalls == 0 && observations == 0)
         sync["defaultsSuite"] = "invalid"
-        #expect((controller.execute(sync) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect((runtime.execute(sync) as? NSDictionary)?["ok"] as? Bool == false)
         await withCheckedContinuation { continuation in
-            controller.prepareToStop { continuation.resume() }
+            runtime.prepareToStop { continuation.resume() }
         }
         #expect(
-            (controller.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
                 == false)
         #expect(observations == 0)
     }
@@ -128,13 +130,14 @@ struct AttentionFixtureAdmissionTests {
         defer { fixture.remove() }
         try Data("{}".utf8).write(
             to: fixture.admission.home.appendingPathComponent("worker-fixture.json"))
-        let controller = AttentionExtensionController(
+        let controller = AttentionService(
             bundle: .main, notifySettingsChanged: {}, admitFixture: fixture.admit)
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         #expect(
-            (controller.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
+            (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == false)
         #expect(
-            (controller.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
                 == false)
         #expect(
             !FileManager.default.fileExists(

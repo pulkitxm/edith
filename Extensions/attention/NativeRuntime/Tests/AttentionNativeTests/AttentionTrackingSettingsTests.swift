@@ -103,7 +103,8 @@ import Testing
 
     @Test func factoryExportsOriginalDetailAndScopesCurrentClient() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let controller = AttentionExtensionController(bundle: .main)
+        let controller = AttentionService(bundle: .main)
+        let runtime = makeAttentionRuntime(bundle: .main, service: controller)
         let bridge = TrackingDetailBridge()
         let engine = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
         var context: [String: Any] = [
@@ -113,12 +114,12 @@ import Testing
         ]
         #expect(controller.configurePresentation(context as NSDictionary, engine: engine))
         #expect(controller.trackingSettings != nil)
-        let view = try #require(controller.execute(context as NSDictionary) as? NSViewController)
+        let view = try #require(runtime.execute(context as NSDictionary) as? NSViewController)
         #expect(view.view.window == nil)
         context["section"] = "attention"
         #expect(!controller.configurePresentation(context as NSDictionary, engine: engine))
         #expect(
-            (controller.execute(context as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
+            (runtime.execute(context as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
         context["section"] = "extension"
         context["uiOnly"] = true
         #expect(!controller.configurePresentation(context as NSDictionary, engine: engine))
@@ -128,14 +129,14 @@ import Testing
         context["presentationID"] = replacement.presentationID.uuidString
         #expect(controller.configurePresentation(context as NSDictionary, engine: replacement))
         #expect(
-            (controller.execute(
+            (runtime.execute(
                 ["operation": "stopUI", "presentationID": engine.presentationID.uuidString]
                     as NSDictionary) as? NSDictionary)?["ok"] as? Bool == false)
         await #expect(throws: ExtensionEngineError.self) {
             try await engine.invoke("attention.settings.get")
         }
         #expect(
-            (controller.execute(
+            (runtime.execute(
                 ["operation": "stopUI", "presentationID": replacement.presentationID.uuidString]
                     as NSDictionary) as? NSDictionary)?["ok"] as? Bool == true)
         #expect(controller.trackingSettings == nil)
