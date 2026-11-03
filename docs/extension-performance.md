@@ -8,7 +8,8 @@ loading and starting the code, the first presentation and its first frame.
 | Field | Meaning |
 | --- | --- |
 | `verifyMs` | Code signature checks for the extension's bundles, including time queued behind other extensions (four run at once) and waiting for the main thread during launch. A bundle whose files are unchanged since its last full check skips the check itself. |
-| `startMs` | Loading the bundle, describing it and running its `start` on the main thread. |
+| `loadMs` | Mapping the bundle, creating its runtime and validating its typed description on the main thread. |
+| `startMs` | Running the loaded service’s `start` on the main thread. Before host ABI 10 this field also included loading. |
 | `readyAfterLaunchMs` | When the role finished starting, measured from process launch. |
 | `presentationMs` | Creating the view controller for the first presentation. |
 | `firstFrameMs` | From the presentation request until the view is in a window and the main thread is free. |

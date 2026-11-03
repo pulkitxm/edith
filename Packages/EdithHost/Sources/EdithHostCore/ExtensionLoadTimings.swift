@@ -6,7 +6,7 @@ import os
 @MainActor
 public final class ExtensionLoadTimings {
     public enum Phase: String, CaseIterable, Sendable {
-        case verify, start, presentation, firstFrame
+        case verify, load, start, presentation, firstFrame
     }
 
     public struct Entry: Equatable, Sendable {

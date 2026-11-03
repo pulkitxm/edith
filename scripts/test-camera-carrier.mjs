@@ -32,11 +32,9 @@ try {
       `import Foundation
 import AppKit
 import Sparkle
-@MainActor @objc final class FixtureRuntime: NSObject {
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        if input["operation"] as? String == "describe" {
-            return ["id": "virtualCamera", "role": "${role}", "version": "1.0.0", "hostABI": "${workerHostABI}"] as NSDictionary
-        }
+import EdithExtensionCore
+@MainActor final class FixtureService: ExtensionService {
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
         let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
@@ -46,7 +44,7 @@ import Sparkle
     }
 }
 @_cdecl("edith_extension_create") public func create() -> UnsafeMutableRawPointer? {
-    UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(FixtureRuntime()).toOpaque()) })
+    UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(ExtensionServiceRuntime(id: "virtualCamera", role: "${role}", bundle: Bundle(for: FixtureService.self)) { _ in FixtureService() }).toOpaque()) })
 }
 `,
     );
@@ -60,6 +58,11 @@ import Sparkle
         "-emit-library",
         "-module-name",
         "CameraFixture",
+        "-I",
+        resolve("Packages/EdithHost/.build/arm64-apple-macosx/release/Modules"),
+        "-L",
+        resolve("Packages/EdithHost/.build/arm64-apple-macosx/release"),
+        "-lEdithExtensionKit",
         "-F",
         resolve("Packages/EdithHost/.build/arm64-apple-macosx/release"),
         "-framework",
@@ -81,6 +84,7 @@ import Sparkle
       CFBundlePackageType: "BNDL",
       CFBundleShortVersionString: "1.0.0",
       EdithHostABI: workerHostABI,
+      EdithRuntimeAPIVersion: 1,
     };
     const json = join(root, `${role}.json`);
     await writeFile(json, JSON.stringify(info));

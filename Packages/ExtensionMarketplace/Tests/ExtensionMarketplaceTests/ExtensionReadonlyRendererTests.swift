@@ -1,4 +1,5 @@
 import Foundation
+import EdithExtensionCore
 import Testing
 
 @testable import ExtensionMarketplace
@@ -17,49 +18,57 @@ import Testing
         import AppKit
         import Foundation
         import ObjectiveC
-        @MainActor final class Renderer: NSObject {
+        import EdithExtensionCore
+        @MainActor final class RendererService: ExtensionService {
+            private unowned let runtime: ExtensionServiceRuntime
             private var title: String?
-            @objc func execute(_ input: NSDictionary) -> NSObject {
-                switch input["operation"] as? String {
-                case "describe":
-                    return ["id": "herdr", "version": "1.0.0", "hostABI": "synthetic-abi",
-                            "role": "app"] as NSDictionary
-                case "configureUI":
-                    title = input["presentationID"] as? String
-                    let key = unsafeBitCast(NSSelectorFromString("edithExtensionUIOwnership"), to: UnsafeRawPointer.self)
-                    let bound = objc_getAssociatedObject(self, key) as? NSObject
-                    return ["ok": title != nil, "ownershipBound": bound === input["hostUIOwnership"] as? NSObject] as NSDictionary
-                case "view":
-                    let controller = NSViewController()
-                    controller.title = title
-                    return controller
-                case "stopUI":
-                    title = nil
-                    return ["ok": true] as NSDictionary
-                case "terminalUI", "terminalUIStatus":
-                    let keys = input.allKeys.compactMap { $0 as? String }.sorted()
-                    return ["ok": true, "keys": keys] as NSDictionary
-                default: return ["ok": false] as NSDictionary
-                }
+            init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
+            func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+                title = configuration.input["presentationID"] as? String
+                let key = unsafeBitCast(NSSelectorFromString("edithExtensionUIOwnership"), to: UnsafeRawPointer.self)
+                let bound = objc_getAssociatedObject(runtime, key) as? NSObject
+                return title != nil && bound === configuration.input["hostUIOwnership"] as? NSObject
+            }
+            func view(for presentation: UUID) -> NSViewController? {
+                let controller = NSViewController()
+                controller.title = title
+                return controller
+            }
+            func stopUI() -> [Task<Void, Never>] { title = nil; return [] }
+            func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+                let keys = context.allKeys.compactMap { $0 as? String }.sorted()
+                return ["ok": true, "keys": keys] as NSDictionary
             }
         }
+        private final class BundleAnchor {}
         @_cdecl("edith_extension_create")
         public func createRenderer() -> UnsafeMutableRawPointer? {
-            MainActor.assumeIsolated { Unmanaged.passRetained(Renderer()).toOpaque() }
+            MainActor.assumeIsolated {
+                Unmanaged.passRetained(ExtensionServiceRuntime(id: "herdr", role: "app", bundle: Bundle(for: BundleAnchor.self)) {
+                    RendererService(runtime: $0)
+                }).toOpaque()
+            }
         }
         """.write(to: source, atomically: true, encoding: .utf8)
         let information: [String: Any] = [
             "CFBundleIdentifier": "com.pulkit.edith.extensions.herdr.app",
             "CFBundleExecutable": "Renderer", "CFBundlePackageType": "BNDL",
             "CFBundleShortVersionString": "1.0.0", "EdithHostABI": "synthetic-abi",
+            "EdithRuntimeAPIVersion": ExtensionRuntimeAPI.version,
         ]
         try PropertyListSerialization.data(
             fromPropertyList: information, format: .xml, options: 0
         ).write(to: bundle.appendingPathComponent("Info.plist"))
+        let products = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent(".build/arm64-apple-macosx/debug")
         let compiler = Process()
         compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         compiler.arguments = [
             "swiftc", "-emit-library", "-module-name", "ScopedRendererFixture",
+            "-I", products.appendingPathComponent("Modules").path,
+            "-L", products.path, "-lEdithExtensionKit",
+            "-Xlinker", "-rpath", "-Xlinker", products.path,
             source.path, "-o", executable.path,
         ]
         try compiler.run()
@@ -87,7 +96,6 @@ import Testing
                 id: package.id, operation: "configureUI",
                 context: configuration(package.id, "main", id))
             #expect(response["ok"] as? Bool == true)
-            #expect(response["ownershipBound"] as? Bool == true)
         }
         let terminal = try first.response(
             id: package.id, operation: "terminalUI", context: event(firstID, 1))
@@ -96,13 +104,22 @@ import Testing
             id: package.id, operation: "terminalUIStatus",
             context: ["presentationID": firstID.uuidString])
         #expect(status["keys"] as? [String] == ["operation", "presentationID"])
-        #expect(try first.viewController(id: package.id, context: [:])?.title == firstID.uuidString)
         #expect(
-            try second.viewController(id: package.id, context: [:])?.title == secondID.uuidString)
+            try first.viewController(
+                id: package.id, context: ["presentationID": firstID.uuidString])?.title
+                == firstID.uuidString)
+        #expect(
+            try second.viewController(
+                id: package.id, context: ["presentationID": secondID.uuidString])?.title
+                == secondID.uuidString)
         _ = try first.response(id: package.id, operation: "stopUI")
-        #expect(try first.viewController(id: package.id, context: [:])?.title == nil)
         #expect(
-            try second.viewController(id: package.id, context: [:])?.title == secondID.uuidString)
+            try first.viewController(
+                id: package.id, context: ["presentationID": firstID.uuidString])?.title == nil)
+        #expect(
+            try second.viewController(
+                id: package.id, context: ["presentationID": secondID.uuidString])?.title
+                == secondID.uuidString)
         _ = try second.response(id: package.id, operation: "stopUI")
     }
 
@@ -319,8 +336,10 @@ import Testing
 
     private func configuration(_ owner: String, _ location: String, _ id: UUID) -> NSDictionary {
         let input = NSMutableDictionary(dictionary: [
+            "inProcess": true, "hostIdentifier": "com.pulkit.edith.dev.synthetic",
+            "defaultsSuite": "com.pulkit.edith.dev.synthetic.extensions." + owner,
             "remoteUI": true, "uiOnly": false, "extensionID": owner,
-            "location": location, "presentationID": id.uuidString, "engineClient": NSObject(),
+            "location": location, "presentationID": id.uuidString, "engineClient": RendererBridge(),
         ])
         if location.hasPrefix("herdr.") {
             input["target"] = "synthetic-host.synthetic-agent"
@@ -341,4 +360,9 @@ import Testing
             "payload": try JSONSerialization.data(withJSONObject: fields),
         ]
     }
+}
+
+@MainActor private final class RendererBridge: NSObject {
+    @objc func invoke(_ input: NSData, completion: @escaping (NSData) -> Void) { completion(input) }
+    @objc func cancel(_ token: NSString) {}
 }

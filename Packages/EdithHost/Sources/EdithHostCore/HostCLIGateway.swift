@@ -164,6 +164,7 @@ import Foundation
             "idle": marketplace.sessions.idleIDs.contains(id),
             "processIdentifier": marketplace.sessions.processIdentifiers[id] as Any? ?? NSNull(),
             "state": state(id).rawValue,
+            "failureReason": marketplace.failures[id] as Any? ?? NSNull(),
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),
             "updateAvailable": marketplace.updateAvailable(id: id), "offline": marketplace.offline,

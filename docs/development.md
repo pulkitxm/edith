@@ -102,6 +102,20 @@ replacement. If the new version is waiting for old work to drain, finish or stop
 that work and restart this slot. Recheck its version and behavior after restart.
 Do not infer that new code is active merely because a ZIP was installed.
 
+### Typed runtime contract
+
+Every role returns an `ExtensionRuntimeProtocol` object from
+`edith_extension_create`. The host validates `EdithRuntimeAPIVersion` in the
+signed role bundle against the object's API version and the host's supported
+range before dispatch. Lifecycle requests and responses use Swift enums;
+commands carry a UUID token and `Data` payload. Suspension, disable preparation,
+UI preparation and stop run through async protocol methods. The host does not
+fall back to Objective-C runtime selectors for older packages.
+
+Host ABI 10 requires the typed contract and republishes every extension.
+Later compatible host releases can retain ABI 10 as their minimum, so additive
+host changes do not require republishing every package.
+
 ### GitHub Releases and offline work
 
 The marketplace downloads published extensions from a signed GitHub catalog.

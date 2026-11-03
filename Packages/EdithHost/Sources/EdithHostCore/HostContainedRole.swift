@@ -2,6 +2,7 @@ import CryptoKit
 import Darwin
 import ExtensionMarketplace
 import Foundation
+import EdithExtensionCore
 
 public enum HostContainedRoleError: Error {
     case rejected, invalidMetadata, invalidPayload, invalidFactory, invalidDescription,
@@ -63,7 +64,12 @@ public enum HostContainedRole {
         guard let pointer = unsafeBitCast(symbol, to: Factory.self)() else {
             throw HostContainedRoleError.invalidFactory
         }
-        let object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        let created = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        guard let object = created as? (NSObject & ExtensionRuntimeProtocol),
+            ExtensionRuntimeAPI.supportedVersions.contains(object.runtimeAPIVersion),
+            payload.object(forInfoDictionaryKey: "EdithRuntimeAPIVersion") as? Int
+                == object.runtimeAPIVersion
+        else { throw HostContainedRoleError.invalidFactory }
         let description = try execute(object, ["operation": "describe"])
         guard description["id"] as? String == owner, description["role"] as? String == role,
             description["version"] as? String == version,
@@ -146,11 +152,12 @@ public enum HostContainedRole {
         else { throw HostContainedRoleError.rejected }
     }
 
-    private static func execute(_ object: NSObject, _ input: NSDictionary) throws -> NSDictionary {
-        let selector = NSSelectorFromString("execute:")
-        guard object.responds(to: selector),
-            let result = object.perform(selector, with: input)?.takeUnretainedValue()
-                as? NSDictionary
+    private static func execute(_ object: any ExtensionRuntimeProtocol, _ input: NSDictionary)
+        throws -> NSDictionary
+    {
+        guard let operation = input["operation"] as? String,
+            let request = ExtensionRuntimeRequest(operation: operation, context: input),
+            let result = object.dispatch(request).object as? NSDictionary
         else { throw HostContainedRoleError.rejected }
         return result
     }

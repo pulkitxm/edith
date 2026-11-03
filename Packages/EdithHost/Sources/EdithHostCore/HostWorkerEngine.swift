@@ -276,6 +276,9 @@ public final class HostInProcessWorkerEngine: HostWorkerEngine {
                 store: store, role: role, hostABI: HostContract.compatibility,
                 packageVersion: next.version, environment: environment, verify: verify)
             runtimes.append(runtime)
+            try ExtensionLoadTimings.shared.measure(id: package.id, role: role.rawValue, .load) {
+                try runtime.prepare(id: package.id)
+            }
             try ExtensionLoadTimings.shared.measure(id: package.id, role: role.rawValue, .start) {
                 try runtime.start(id: package.id, context: context)
             }
