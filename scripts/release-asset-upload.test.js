@@ -116,6 +116,8 @@ test("small accepted assets stay with the release client and wait for upload com
       "--repo",
       "synthetic/transport",
       "--exit-status",
+      "--interval",
+      "20",
     ]);
     expect(
       value.calls.some((call) => call[0] === "gh" && call[1] === "release"),

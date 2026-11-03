@@ -531,6 +531,8 @@ function delayedMutations(value, effect = () => {}) {
         "--repo",
         "synthetic/control",
         "--exit-status",
+        "--interval",
+        "20",
       ]);
       expect(options.timeout).toBeGreaterThan(0);
       expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);

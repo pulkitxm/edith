@@ -60,6 +60,8 @@ function watchWorkflow(workflowUrl, execute, timeout) {
         "--repo",
         `${match[1]}/${match[2]}`,
         "--exit-status",
+        "--interval",
+        "20",
       ],
       {
         encoding: "utf8",

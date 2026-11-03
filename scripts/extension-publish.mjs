@@ -627,7 +627,7 @@ async function publishEntries({
     EXTENSION_CATALOG_TAG: catalogTag,
     EXTENSION_CATALOG_PUBLIC_KEY: publicKey,
   };
-  const worker = (entry) =>
+  const attempt = (entry) =>
     new Promise((done, fail) => {
       const child = spawn(process.execPath, [script, "--entry", entry.id], {
         env: environment,
@@ -640,7 +640,9 @@ async function publishEntries({
           : fail(new Error(`Extension publication failed: ${entry.id}`)),
       );
     });
-  await runBounded(include, publicationConcurrency, worker);
+  await runBounded(include, publicationConcurrency, (entry) =>
+    withRateLimitRecovery(() => attempt(entry)),
+  );
   return Promise.all(
     include.map(async (entry) =>
       JSON.parse(

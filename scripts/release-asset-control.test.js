@@ -33,6 +33,8 @@ test("release mutation and workflow watch share one bounded deadline and output 
     "--repo",
     "synthetic/fixture",
     "--exit-status",
+    "--interval",
+    "20",
   ]);
 });
 
