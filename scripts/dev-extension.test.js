@@ -1,5 +1,134 @@
 import { expect, test } from "bun:test";
-import { waitFor } from "./dev-extension.mjs";
+import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import {
+  contentChangeAdmission,
+  relevantChange,
+  waitFor,
+  watchedPaths,
+} from "./dev-extension.mjs";
+
+async function sourceFixture(run) {
+  const root = await mkdtemp(join(tmpdir(), "extension-watch-"));
+  try {
+    await run(root);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("watch admission ignores metadata and identical writes but admits edits and restores", async () => {
+  await sourceFixture(async (root) => {
+    const file = join(root, "highlight.min.js");
+    await writeFile(file, "synthetic bytes");
+    const admits = contentChangeAdmission([root]);
+    expect(admits(file)).toBe(false);
+    await utimes(file, new Date(0), new Date(0));
+    await chmod(file, 0o600);
+    expect(admits(file)).toBe(false);
+    await writeFile(file, "synthetic bytes");
+    expect(admits(file)).toBe(false);
+    await writeFile(file, "synthetic bytes ");
+    expect(admits(file)).toBe(true);
+    expect(admits(file)).toBe(false);
+    await writeFile(file, "synthetic bytes");
+    expect(admits(file)).toBe(true);
+    expect(admits(file)).toBe(false);
+  });
+});
+
+test("watch admission tracks additions and deletions once across overlapping roots", async () => {
+  await sourceFixture(async (root) => {
+    const nested = join(root, "Sources");
+    await mkdir(nested);
+    const file = join(nested, "Synthetic.swift");
+    const admits = contentChangeAdmission([root, nested]);
+    expect(admits(file)).toBe(false);
+    await writeFile(file, "synthetic");
+    expect(admits(file)).toBe(true);
+    expect(
+      admits(resolve(root, "Sources", "..", "Sources", "Synthetic.swift")),
+    ).toBe(false);
+    await rm(file);
+    expect(admits(file)).toBe(true);
+    expect(admits(file)).toBe(false);
+    await writeFile(file, "synthetic");
+    expect(admits(file)).toBe(true);
+    expect(admits(file)).toBe(false);
+  });
+});
+
+test("watch admission excludes generated, vendor, test and outside paths", async () => {
+  await sourceFixture(async (root) => {
+    for (const directory of [
+      ".build",
+      "build",
+      "dist",
+      "node_modules",
+      "Tests",
+      "tests",
+      "test",
+      "vendor",
+      "Vendor",
+      ".git",
+    ]) {
+      await mkdir(join(root, directory), { recursive: true });
+      await writeFile(join(root, directory, "Synthetic.swift"), "before");
+    }
+    const admits = contentChangeAdmission([root]);
+    for (const directory of [
+      ".build",
+      "build",
+      "dist",
+      "node_modules",
+      "Tests",
+      "tests",
+      "test",
+      "vendor",
+      "Vendor",
+      ".git",
+    ]) {
+      const file = join(root, directory, "Synthetic.swift");
+      await writeFile(file, "after");
+      expect(relevantChange(`${directory}/Synthetic.swift`)).toBe(false);
+      expect(admits(file)).toBe(false);
+    }
+    const ignored = join(root, "README.md");
+    await writeFile(ignored, "synthetic");
+    expect(admits(ignored)).toBe(false);
+    expect(admits(join(root, "..", "outside.swift"))).toBe(false);
+  });
+});
+
+test("watch roots include extension, role support and shared source trees", async () => {
+  await sourceFixture(async (root) => {
+    for (const directory of [
+      "Extensions/synthetic",
+      "Extensions/fixtureSupport",
+      "Packages/ExtensionSupport/Sources",
+    ]) {
+      await mkdir(join(root, directory), { recursive: true });
+    }
+    expect(
+      watchedPaths(root, {
+        id: "synthetic",
+        roles: {
+          app: [
+            "Extensions/synthetic/Runtime.swift",
+            "Extensions/fixtureSupport/Admission.swift",
+            "Packages/ExtensionSupport/Sources/Runtime.swift",
+          ],
+        },
+      }),
+    ).toEqual([
+      join(root, "Extensions/synthetic"),
+      join(root, "Packages/ExtensionSupport/Sources"),
+      join(root, "Extensions/fixtureSupport"),
+      join(root, "Packages/ExtensionSupport"),
+    ]);
+  });
+});
 
 const id = "synthetic";
 const version = "1.0.7";
