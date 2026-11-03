@@ -5,8 +5,11 @@ import { join } from "node:path";
 import {
   backoffDelay,
   isTransientFailure,
+  rateLimitWait,
   retryAfterMs,
   withGitHubRetrySync,
+  withRateLimitRecovery,
+  withRateLimitRecoverySync,
 } from "./github-retry.mjs";
 import {
   executeReleaseMutation,
@@ -316,4 +319,65 @@ test("GitHub connection timeouts retry reads without changing the request", () =
   );
   expect(result).toBe("verified response");
   expect(calls).toBe(2);
+});
+
+test("an exhausted rate limit waits for its reset and a healthy one does not", () => {
+  const now = () => 1_000_000;
+  const probe = (output) => rateLimitWait({ execute: () => output, now });
+  expect(probe("3 1600\n")).toBe(605_000);
+  expect(probe("0 900\n")).toBe(5_000);
+  expect(probe("0 99999\n")).toBe(65 * 60_000);
+  expect(probe("4000 1600\n")).toBeUndefined();
+  expect(probe("garbage")).toBeUndefined();
+  expect(
+    rateLimitWait({
+      execute: () => {
+        throw new Error("offline");
+      },
+      now,
+    }),
+  ).toBeUndefined();
+});
+
+test("a rate-limited operation reruns after the reset, at most twice", () => {
+  const { delays, sleep } = recordingSleep();
+  let calls = 0;
+  const result = withRateLimitRecoverySync(
+    () => {
+      calls++;
+      if (calls < 3)
+        throw new Error("GitHub rejected the Pukbot workflow dispatch");
+      return "published";
+    },
+    { probe: () => 61_000, sleep },
+  );
+  expect(result).toBe("published");
+  expect(delays).toEqual([61_000, 61_000]);
+  calls = 0;
+  expect(() =>
+    withRateLimitRecoverySync(
+      () => {
+        calls++;
+        throw new Error("still limited");
+      },
+      { probe: () => 1_000, sleep: () => {} },
+    ),
+  ).toThrow("still limited");
+  expect(calls).toBe(3);
+});
+
+test("failures with a healthy rate limit are rethrown without waiting", async () => {
+  const { delays, sleep } = recordingSleep();
+  let calls = 0;
+  await expect(
+    withRateLimitRecovery(
+      async () => {
+        calls++;
+        throw new Error("HTTP 422: Validation Failed");
+      },
+      { probe: () => undefined, sleep },
+    ),
+  ).rejects.toThrow("HTTP 422");
+  expect(calls).toBe(1);
+  expect(delays).toEqual([]);
 });

@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 export const githubRetryAttempts = 6;
 const maximumDelayMs = 30_000;
 
@@ -50,6 +52,86 @@ export function isTransientFailure(error) {
 
 export function sleepSync(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+export const rateLimitRecoveries = 2;
+const exhaustedBelow = 25;
+const maximumRateLimitWaitMs = 65 * 60_000;
+
+export function rateLimitWait({ execute = execFileSync, now = Date.now } = {}) {
+  try {
+    const [remaining, reset] = String(
+      execute(
+        "gh",
+        [
+          "api",
+          "rate_limit",
+          "--jq",
+          '.resources.core | "\\(.remaining) \\(.reset)"',
+        ],
+        { encoding: "utf8", timeout: 30_000 },
+      ),
+    )
+      .trim()
+      .split(" ")
+      .map(Number);
+    if (
+      !Number.isSafeInteger(remaining) ||
+      !Number.isSafeInteger(reset) ||
+      remaining >= exhaustedBelow
+    )
+      return undefined;
+    return Math.min(
+      Math.max(0, reset * 1000 - now()) + 5_000,
+      maximumRateLimitWaitMs,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function recoveryWait(error, recovery, { probe, recoveries }) {
+  const wait = recovery < recoveries ? probe() : undefined;
+  if (wait === undefined) throw error;
+  console.error(
+    `GitHub API rate limit exhausted; waiting ${Math.ceil(wait / 1000)}s for the reset`,
+  );
+  return wait;
+}
+
+export function withRateLimitRecoverySync(
+  operation,
+  {
+    probe = rateLimitWait,
+    sleep = sleepSync,
+    recoveries = rateLimitRecoveries,
+  } = {},
+) {
+  for (let recovery = 0; ; recovery++) {
+    try {
+      return operation();
+    } catch (error) {
+      sleep(recoveryWait(error, recovery, { probe, recoveries }));
+    }
+  }
+}
+
+export async function withRateLimitRecovery(
+  operation,
+  {
+    probe = rateLimitWait,
+    sleep = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    recoveries = rateLimitRecoveries,
+  } = {},
+) {
+  for (let recovery = 0; ; recovery++) {
+    try {
+      return await operation();
+    } catch (error) {
+      await sleep(recoveryWait(error, recovery, { probe, recoveries }));
+    }
+  }
 }
 
 function nextDelay(error, attempt, { attempts, random, remaining }) {

@@ -38,6 +38,8 @@ import {
   TransientGitHubError,
   withGitHubRetry,
   withGitHubRetrySync,
+  withRateLimitRecovery,
+  withRateLimitRecoverySync,
 } from "./github-retry.mjs";
 import {
   listReleases,
@@ -107,24 +109,28 @@ function gh(...args) {
       timeout: args[0] === "api" ? 60_000 : undefined,
       maxBuffer: 4 * 1024 ** 2,
     });
-  if (args[0] !== "api") return run();
-  return withGitHubRetrySync(() => {
-    const output = run();
-    JSON.parse(output);
-    return output;
-  });
+  if (args[0] !== "api") return withRateLimitRecoverySync(run);
+  return withRateLimitRecoverySync(() =>
+    withGitHubRetrySync(() => {
+      const output = run();
+      JSON.parse(output);
+      return output;
+    }),
+  );
 }
 
 function mutate(...args) {
-  return executeReleaseMutation(args);
+  return withRateLimitRecoverySync(() => executeReleaseMutation(args));
 }
 
 function release(repository, tag) {
-  return lookupRelease({ repository, tag });
+  return withRateLimitRecoverySync(() => lookupRelease({ repository, tag }));
 }
 
 async function upload(repository, releaseID, tag, file, name) {
-  await uploadReleaseAsset({ repository, releaseID, tag, file, name });
+  await withRateLimitRecovery(() =>
+    uploadReleaseAsset({ repository, releaseID, tag, file, name }),
+  );
 }
 
 export const stableCatalogAsset = "catalog.json";
