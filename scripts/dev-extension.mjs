@@ -54,20 +54,65 @@ function passthroughEnvironment() {
   );
 }
 
-async function waitFor(id, version, seconds = 60) {
-  const deadline = Date.now() + seconds * 1000;
-  while (Date.now() < deadline) {
-    const reply = edithCLI(["extensions", "info", id, "--json"]);
+function commandFailure(reply) {
+  return (
+    reply.error?.message ||
+    reply.stderr?.trim() ||
+    reply.stdout?.trim() ||
+    `command exited with status ${reply.status}`
+  );
+}
+
+export async function waitFor(
+  id,
+  version,
+  {
+    timeoutMs = 60_000,
+    cli = edithCLI,
+    now = () => performance.now(),
+    sleep = (milliseconds) => Bun.sleep(milliseconds),
+  } = {},
+) {
+  const deadline = now() + timeoutMs;
+  let observed = "no status received";
+  let enabling = false;
+  while (now() < deadline) {
+    const reply = cli(["extensions", "info", id, "--json"]);
     if (reply.status === 0) {
-      const info = JSON.parse(reply.stdout);
-      if (info.version === version && info.state === "active") return info;
-      if (info.version === version && info.state === "idle")
-        edithCLI(["extensions", "enable", id, "--json"]);
-      if (info.state === "failed") return info;
+      let info;
+      try {
+        info = JSON.parse(reply.stdout);
+      } catch {
+        throw new Error(`${id} ${version}: invalid extension status JSON`);
+      }
+      if (!info || info.id !== id || typeof info.state !== "string")
+        throw new Error(`${id} ${version}: invalid extension status response`);
+      observed = `${info.version ?? "uninstalled"} (${info.state})`;
+      if (info.version === version) {
+        if (info.state === "active") return info;
+        if (info.state === "failed")
+          throw new Error(
+            `${id} ${version} failed to start${info.failureReason ? `: ${info.failureReason}` : ""}`,
+          );
+        if (info.state === "idle" && !enabling) {
+          const enabled = cli(["extensions", "enable", id, "--json"]);
+          if (enabled.status !== 0)
+            throw new Error(
+              `${id} ${version} could not be enabled: ${commandFailure(enabled)}`,
+            );
+          enabling = true;
+        }
+      }
+    } else {
+      observed = `status check failed: ${commandFailure(reply)}`;
     }
-    await Bun.sleep(250);
+    const remaining = deadline - now();
+    if (remaining <= 0) break;
+    await sleep(Math.min(250, remaining));
   }
-  throw new Error(`${id} ${version} did not become active`);
+  throw new Error(
+    `${id} ${version} did not become active within ${timeoutMs / 1000}s; last observed: ${observed}`,
+  );
 }
 
 export async function cycle(id, definition) {
