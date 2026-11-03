@@ -220,25 +220,36 @@ public final class ExtensionBundleRuntime {
         guard let instance = loaded[id], instance.active, supportsCommands(id: id) else {
             throw MarketplaceError.invalidBundle
         }
+        return try await Self.command(
+            object: instance.object, token: token, command: command, payload: payload
+        ) { [weak self] in
+            _ = try? self?.response(
+                id: id, operation: "cancelCommand", context: ["token": token.uuidString])
+        }
+    }
+
+    static func command(
+        object: any ExtensionRuntimeProtocol, token: UUID, command: String, payload: Data,
+        cancel: @escaping @MainActor () -> Void
+    ) async throws -> Data {
         let completion = BundleCommandCompletion()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard completion.begin(continuation) else { return }
-                Task { @MainActor in
+                let invocation = Task { @MainActor in
                     do {
+                        try Task.checkCancellation()
                         completion.finish(
                             .success(
-                                try await instance.object.invokeCommand(
+                                try await object.invokeCommand(
                                     command, token: token, payload: payload)))
                     } catch { completion.finish(.failure(error)) }
                 }
+                completion.attach(invocation)
             }
         } onCancel: {
-            completion.finish(.failure(CancellationError()))
-            Task { @MainActor [weak self] in
-                _ = try? self?.response(
-                    id: id, operation: "cancelCommand", context: ["token": token.uuidString])
-            }
+            completion.cancel()
+            Task { @MainActor in cancel() }
         }
     }
 
@@ -594,6 +605,18 @@ private final class BundleCommandCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?
+    private var invocation: Task<Void, Never>?
+
+    func attach(_ task: Task<Void, Never>) {
+        let completed = lock.withLock {
+            guard result == nil else { return true }
+            invocation = task
+            return false
+        }
+        if completed { task.cancel() }
+    }
+
+    func cancel() { finish(.failure(CancellationError()), cancelInvocation: true) }
 
     func begin(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
         let completedResult = lock.withLock { () -> Result<Data, any Error>? in
@@ -605,13 +628,15 @@ private final class BundleCommandCompletion: @unchecked Sendable {
         return true
     }
 
-    func finish(_ result: Result<Data, any Error>) {
-        let continuation = lock.withLock { () -> CheckedContinuation<Data, any Error>? in
-            guard self.result == nil else { return nil }
+    func finish(_ result: Result<Data, any Error>, cancelInvocation: Bool = false) {
+        let pending = lock.withLock {
+            () -> (CheckedContinuation<Data, any Error>?, Task<Void, Never>?) in
+            guard self.result == nil else { return (nil, nil) }
             self.result = result
-            defer { self.continuation = nil }
-            return self.continuation
+            defer { self.continuation = nil; invocation = nil }
+            return (continuation, invocation)
         }
-        continuation?.resume(with: result)
+        if cancelInvocation { pending.1?.cancel() }
+        pending.0?.resume(with: result)
     }
 }
