@@ -39,6 +39,23 @@ test("local CI runs the same make targets as each CI lane after the checks", () 
   expect(jobs[2].make).toEqual(["ci-host", "ci-marketplace-runtime"]);
 });
 
+test("runtime checks require a containing host even without package builds", () => {
+  const runtime = planLocalJobs(
+    plan,
+    parseArguments(["--lanes=host-runtime"]),
+    definitions,
+  );
+  expect(runtime).toHaveLength(1);
+  expect(runtime[0].needsHost).toBe(true);
+  const usage = planLocalJobs(
+    plan,
+    parseArguments(["--lanes=extension-usage"]),
+    definitions,
+  );
+  expect(usage).toHaveLength(1);
+  expect(usage[0].needsHost).toBe(false);
+});
+
 test("builds add one development package per planned extension and mark camera hosts", () => {
   const jobs = planLocalJobs(
     plan,
