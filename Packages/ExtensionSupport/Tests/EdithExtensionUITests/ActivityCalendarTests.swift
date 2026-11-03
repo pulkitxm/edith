@@ -15,7 +15,7 @@ import EdithExtensionUI
             ], calendar: calendar)
         #expect(weeks.flatMap(\.cells).count <= 36_531)
         #expect(
-            weeks.flatMap(\.cells).allSatisfy { $0.value.isFinite && (-1...4).contains($0.level) })
+            weeks.flatMap(\.cells).allSatisfy { $0.value.isFinite && (-1...6).contains($0.level) })
         #expect(ActivityCalendar.cuts([.infinity, .nan, 1, 2, 3]).allSatisfy { $0.isFinite })
     }
 
@@ -46,5 +46,12 @@ import EdithExtensionUI
         #expect(ActivityCalendar.level(-1, cuts: [1, 2, 3]) == 0)
         #expect(ActivityCalendar.level(1, cuts: [1, 2, 3]) == 1)
         #expect(ActivityCalendar.level(4, cuts: [1, 2, 3]) == 4)
+    }
+
+    @Test func heavyTailedActivityKeepsDistinctLevels() {
+        let values: [Double] = [1, 5, 15, 40, 120, 458]
+        let cuts = ActivityCalendar.cuts(values)
+        #expect(values.map { ActivityCalendar.level($0, cuts: cuts) } == [1, 2, 3, 4, 5, 6])
+        #expect(ActivityCalendar.cuts([5, 5]) == [5])
     }
 }

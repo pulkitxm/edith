@@ -22,9 +22,9 @@ import Testing
         #expect(projection.heatWeeks.dropFirst().contains { $0.monthLabel == "Aug" })
     }
 
-    @Test func levelsSplitPositiveValuesIntoQuartiles() {
+    @Test func levelsSpreadPositiveValuesOnALogScale() {
         let level = CodeStatsProjection.levels(Array(0...8))
-        #expect([0, 1, 3, 5, 8].map(level) == [0, 1, 2, 3, 4])
+        #expect([0, 1, 2, 3, 5, 8].map(level) == [0, 1, 2, 4, 5, 6])
         #expect(CodeStatsProjection.levels([0, 0])(5) == 0)
     }
 

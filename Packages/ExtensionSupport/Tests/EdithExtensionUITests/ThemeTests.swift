@@ -77,6 +77,14 @@ import Testing
         }
     }
 
+    @Test func calendarLevelsGetLighterAsActivityRises() {
+        for dark in [false, true] {
+            let levels = (1...6).map { luminance(ActivityCalendarStyle.color($0, dark: dark)) }
+            #expect(levels == levels.sorted(), "dark=\(dark) \(levels)")
+            #expect(Set(levels).count == levels.count, "dark=\(dark) \(levels)")
+        }
+    }
+
     private func rgb(_ color: Color, dark: Bool) -> [Int] {
         var channels: [Int] = []
         NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {

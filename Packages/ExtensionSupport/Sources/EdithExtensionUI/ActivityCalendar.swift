@@ -10,7 +10,7 @@ public struct ActivityCalendarDay: Identifiable, Equatable, Sendable {
         self.id = id
         self.date = date
         self.value = value.isFinite ? min(9e15, max(0, value)) : 0
-        self.level = min(4, max(-1, level))
+        self.level = min(ActivityCalendar.levels, max(-1, level))
     }
 }
 
@@ -27,10 +27,14 @@ public struct ActivityCalendarWeek: Identifiable, Equatable, Sendable {
 }
 
 public enum ActivityCalendar {
+    static let levels = 6
+
     public static func cuts(_ values: [Double]) -> [Double] {
-        let positive = values.filter { $0 > 0 && $0.isFinite }.sorted()
-        guard !positive.isEmpty else { return [] }
-        return [0.25, 0.5, 0.75].map { positive[Int(Double(positive.count - 1) * $0)] }
+        let positive = values.filter { $0 > 0 && $0.isFinite }
+        guard let low = positive.min(), let high = positive.max() else { return [] }
+        guard high > low else { return [low] }
+        let span = log(high / low)
+        return (1..<levels).map { low * exp(span * Double($0) / Double(levels)) }
     }
 
     public static func level(_ value: Double, cuts: [Double]) -> Int {
