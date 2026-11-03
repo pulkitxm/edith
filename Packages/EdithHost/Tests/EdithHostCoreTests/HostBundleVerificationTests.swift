@@ -180,6 +180,7 @@ import ExtensionMarketplace
         let pipe = bundle.appendingPathComponent("Contents/MacOS/pipe")
         #expect(mkfifo(pipe.path, 0o600) == 0)
         #expect(HostBundleVerification.codeDigest(of: pipe) == nil)
+        #expect(HostBundleVerification.fingerprint(of: bundle) == nil)
         #expect(HostBundleVerification.codeDigest(of: bundle) == nil)
     }
 

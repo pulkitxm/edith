@@ -114,7 +114,8 @@ enum HostBundleVerification {
                 info.st_ctimespec.tv_sec, info.st_ctimespec.tv_nsec,
             ].map(String.init).joined(separator: ",")
             hash.update(data: Data("\(relative)\u{0}\(stamp)\u{0}".utf8))
-            guard info.st_mode & S_IFMT != S_IFLNK else { return nil }
+            let kind = info.st_mode & S_IFMT
+            guard kind == S_IFREG || kind == S_IFDIR else { return nil }
             if info.st_mode & S_IFMT == S_IFREG,
                 relative.hasPrefix("Contents/MacOS/") || info.st_mode & 0o111 != 0
                     || ["dylib", "so", "metallib"].contains(
