@@ -72,7 +72,7 @@ struct UsageFixtureAdmissionTests {
     @Test func suspensionClosesRegistryAndStartupBeforeFixtureAdmission() async throws {
         let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
         var admissions = 0
-        let runtime = ExtensionRuntime(admitFixture: { _ in
+        let runtime = makeUsageRuntime(admitFixture: { _ in
             admissions += 1
             throw WorkerFixtureError.invalid
         })
@@ -102,7 +102,7 @@ struct UsageFixtureAdmissionTests {
     @Test func broadFixtureHintIsRejectedBeforeAnyOwnedEngineStarts() throws {
         let fixture = try UsageIssuedFixture()
         defer { fixture.remove() }
-        let runtime = ExtensionRuntime()
+        let runtime = makeUsageRuntime()
         #expect(
             (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == false)
@@ -116,7 +116,7 @@ struct UsageFixtureAdmissionTests {
     {
         let fixture = try UsageIssuedFixture()
         defer { fixture.remove() }
-        let runtime = ExtensionRuntime(admitFixture: fixture.admit)
+        let runtime = makeUsageRuntime(admitFixture: fixture.admit)
         #expect(
             (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == true)
@@ -139,7 +139,7 @@ struct UsageFixtureAdmissionTests {
         defer { fixture.remove() }
         try Data("{}".utf8).write(
             to: fixture.admission.home.appendingPathComponent("worker-fixture.json"))
-        let runtime = ExtensionRuntime(admitFixture: fixture.admit)
+        let runtime = makeUsageRuntime(admitFixture: fixture.admit)
         #expect(
             (runtime.execute(fixture.input(operation: "start")) as? NSDictionary)?["ok"] as? Bool
                 == false)

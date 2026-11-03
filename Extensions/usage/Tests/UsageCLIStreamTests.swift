@@ -48,7 +48,7 @@ import Testing
     }
 
     private func invoke(
-        _ runtime: ExtensionRuntime, command: String, payload: Data
+        _ runtime: ExtensionServiceRuntime, command: String, payload: Data
     ) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             runtime.invoke(
@@ -71,7 +71,7 @@ import Testing
         try FileManager.default.createDirectory(at: Repo.dataDir, withIntermediateDirectories: true)
         try Data(CLIUsageTests.document.utf8).write(to: Repo.usageJSON)
         defer { try? FileManager.default.removeItem(at: Repo.usageJSON) }
-        let runtime = ExtensionRuntime(admitFixture: fixture.admit)
+        let runtime = makeUsageRuntime(admitFixture: fixture.admit)
         let started = runtime.execute(fixture.input(operation: "start"))
         try #require((started as? NSDictionary)?["ok"] as? Bool == true)
         let catalog = try await invoke(runtime, command: "usage.cli.catalog", payload: Data())
