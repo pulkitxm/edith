@@ -5,7 +5,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct CameraAppRuntimeTests {
     @Test func malformedStartupCannotAllocateAWorker() {
-        let runtime = ExtensionRuntime()
+        let runtime = makeCameraRuntime()
         #expect((runtime.execute(["operation": "start"]) as? NSDictionary)?["ok"] as? Bool == false)
         let status = runtime.execute(["operation": "status"]) as? NSDictionary
         #expect(status?["running"] as? Bool == false)

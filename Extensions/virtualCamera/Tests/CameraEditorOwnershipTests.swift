@@ -1,40 +1,47 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Testing
+@testable import VirtualCameraExtension
 
-@Suite struct CameraEditorOwnershipTests {
-    @Test func onlyValidatedUIConfigurationCanOwnTheEditorMonitor() throws {
-        let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Runtime.swift")
-        let source = try String(contentsOf: path, encoding: .utf8)
-        let startup = try branch("start", in: source)
-        #expect(!startup.contains("TextEditingCommands"))
-        let configuration = try branch("configureUI", in: source)
-        let admission = try #require(
-            configuration.range(of: "ExtensionUIConfiguration(context: input)"))
-        let installation = try #require(configuration.range(of: "TextEditingCommands.install()"))
-        let rejection = try #require(
-            configuration.range(of: "return [\"ok\": false] as NSDictionary"))
-        #expect(admission.lowerBound < rejection.lowerBound)
-        #expect(rejection.lowerBound < installation.lowerBound)
-        #expect(source.components(separatedBy: "TextEditingCommands.install()").count == 2)
-        #expect(try branch("stopUI", in: source).contains("stopUI()"))
-        #expect(try branch("stop", in: source).contains("stopUI()"))
-        let stop = try #require(source.range(of: "private func stopUI()"))
-        let teardown = source[stop.lowerBound...]
-        #expect(teardown.contains("TextEditingCommands.shutdown()"))
-        #expect(teardown.contains("invalidate()"))
-        let preparation = try #require(source.range(of: "func prepareToStop(completion:"))
-        let end = try #require(
-            source.range(of: "\n    }", range: preparation.upperBound..<source.endIndex))
-        #expect(source[preparation.upperBound..<end.lowerBound].contains("stopUI()"))
+@Suite(.serialized) @MainActor struct CameraEditorOwnershipTests {
+    @Test func onlyValidatedUIConfigurationCanOwnTheEditorMonitor() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        for stopUI in [true, false] {
+            let runtime = makeCameraRuntime()
+            #expect(!TextEditingCommands.isInstalled)
+            let rejected =
+                runtime.execute(["operation": "configureUI", "remoteUI": true])
+                as? NSDictionary
+            #expect(rejected?["ok"] as? Bool == false)
+            #expect(!TextEditingCommands.isInstalled)
+            let host = "com.pulkit.edith.tests.editor." + UUID().uuidString
+            let suite = host + ".extensions.virtualCamera"
+            defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+            let context: NSDictionary = [
+                "operation": "configureUI", "inProcess": true, "remoteUI": true,
+                "hostIdentifier": host, "extensionID": "virtualCamera", "defaultsSuite": suite,
+                "uiOnly": false, "presentationID": UUID().uuidString,
+                "location": "main", "section": "virtualCamera", "engineClient": Bridge(),
+            ]
+            #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+            #expect(TextEditingCommands.isInstalled)
+            if stopUI {
+                let stopped = runtime.execute(["operation": "stopUI"]) as? NSDictionary
+                #expect(stopped?["ok"] as? Bool == true)
+                #expect(!TextEditingCommands.isInstalled)
+            }
+            await runtime.stop()
+            #expect(!TextEditingCommands.isInstalled)
+            #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+        }
     }
 
-    private func branch(_ operation: String, in source: String) throws -> Substring {
-        let start = try #require(source.range(of: "case \"" + operation + "\":", options: []))
-        let end =
-            source.range(of: "\n        case ", range: start.upperBound..<source.endIndex)?
-            .lowerBound
-            ?? source.endIndex
-        return source[start.upperBound..<end]
+    private final class Bridge: NSObject {
+        @objc func invoke(_ data: Data, completion: @escaping (Data) -> Void) {
+            completion(Data())
+        }
+        @objc func cancel(_ token: String) {}
     }
 }

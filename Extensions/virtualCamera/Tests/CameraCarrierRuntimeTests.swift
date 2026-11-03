@@ -47,13 +47,14 @@ import Testing
         let lease = RuntimeLeaseProbe()
         let input = Pipe(), output = Pipe()
         var exited = false
-        let runtime = CameraCarrierRuntime(
+        let service = CameraCarrierService(
             environment: .init(
                 admit: { throw CocoaError(.fileReadNoPermission) }, lease: { _, _, _ in lease },
                 broker: { RuntimeBrokerProbe(lease) }, input: input.fileHandleForReading,
                 output: output.fileHandleForWriting, exited: { exited = true }))
+        let runtime = makeCameraCarrierRuntime(service: service)
         #expect((runtime.execute(start()) as? NSDictionary)?["ok"] as? Bool == false)
-        #expect(!runtime.started)
+        #expect(!service.started)
         #expect(lease.begins == 0)
         #expect(!exited)
     }
@@ -63,14 +64,15 @@ import Testing
         lease.failBegin = true; lease.failRelease = true
         let input = Pipe(), output = Pipe()
         var exited = false
-        let runtime = CameraCarrierRuntime(
+        let service = CameraCarrierService(
             environment: .init(
                 admit: {}, lease: { _, _, _ in lease }, broker: { RuntimeBrokerProbe(lease) },
                 input: input.fileHandleForReading, output: output.fileHandleForWriting,
                 exited: { exited = true }, retryInterval: .milliseconds(10)))
+        let runtime = makeCameraCarrierRuntime(service: service)
         #expect((runtime.execute(start()) as? NSDictionary)?["ok"] as? Bool == true)
         try await wait { lease.releases > 1 }
-        #expect(runtime.startupFailed)
+        #expect(service.startupFailed)
         #expect(!exited)
         lease.failRelease = false
         try await wait { exited }
@@ -81,11 +83,12 @@ import Testing
         let broker = RuntimeBrokerProbe(lease)
         let input = Pipe(), output = Pipe()
         var exited = false
-        let runtime = CameraCarrierRuntime(
+        let service = CameraCarrierService(
             environment: .init(
                 admit: {}, lease: { _, _, _ in lease }, broker: { broker },
                 input: input.fileHandleForReading, output: output.fileHandleForWriting,
                 exited: { exited = true }, retryInterval: .milliseconds(10)))
+        let runtime = makeCameraCarrierRuntime(service: service)
         #expect((runtime.execute(start()) as? NSDictionary)?["ok"] as? Bool == true)
         try await wait { input.fileHandleForReading.readabilityHandler != nil }
         try input.fileHandleForWriting.write(
@@ -106,12 +109,13 @@ import Testing
 
     @Test func fixtureProbeDoesNotRegisterSystemServices() {
         let lease = RuntimeLeaseProbe()
-        let runtime = CameraCarrierRuntime()
+        let service = CameraCarrierService()
+        let runtime = makeCameraCarrierRuntime(service: service)
         let result = runtime.execute(["operation": "probe", "fixture": true]) as? NSDictionary
         #expect(result?["ok"] as? Bool == true)
         #expect(result?["systemServiceStarted"] as? Bool == false)
         #expect(lease.begins == 0)
-        #expect(!runtime.started)
+        #expect(!service.started)
         #expect(
             (runtime.execute(["operation": "probe", "fixture": false]) as? NSDictionary)?["ok"]
                 as? Bool == false)

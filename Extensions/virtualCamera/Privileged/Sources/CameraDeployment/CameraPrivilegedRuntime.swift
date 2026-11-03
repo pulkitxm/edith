@@ -2,15 +2,14 @@ import Darwin
 import Foundation
 import EdithExtensionSupport
 
-@MainActor @objc(EdithCameraPrivilegedRuntime)
-final class CameraPrivilegedRuntime: NSObject {
+@MainActor
+final class CameraPrivilegedService: ExtensionService {
     private var ownsSession = false
-    private let commands = ExtensionCommandRegistry()
     private var retirement: CameraMicrophoneRetirement?
     private var installer: CameraSealedInstallation?
     private var fixtureProviderActive = false
     private let files = FileManager.default
-    private var bundle: Bundle { Bundle(for: CameraPrivilegedRuntime.self) }
+    private var bundle: Bundle { Bundle(for: CameraPrivilegedService.self) }
     private var host: String { Bundle.main.bundleIdentifier ?? "" }
     private var fixture: Bool {
         getuid() != 0 && host.hasPrefix("com.pulkit.edith.tests.")
@@ -21,81 +20,82 @@ final class CameraPrivilegedRuntime: NSObject {
             "camera-microphone-retirement.json")
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [self] command, payload in
-            do {
-                try Task.checkCancellation()
-                guard payload.count <= 8192,
-                    let values = try JSONSerialization.jsonObject(with: payload)
-                        as? [String: String]
-                else { throw CocoaError(.coderReadCorrupt) }
-                let result: [String: Any]
-                switch command {
-                case "installCarrier":
-                    guard values.count == 1, let source = values["source"],
-                        source.utf8.count <= 4096,
-                        source.hasPrefix("/")
-                    else { throw CocoaError(.coderReadCorrupt) }
-                    if fixture {
-                        guard
-                            let root = ExtensionEnvironment.values[
-                                "EDITH_EXTENSION_FIXTURE_HOME"], source.hasPrefix(root + "/")
-                        else { throw CocoaError(.fileReadNoPermission) }
-                        result = ["path": source]
-                    } else {
-                        let installed = try makeInstaller().installCarrier(
-                            source: URL(fileURLWithPath: source),
-                            providerExited: try providerExited())
-                        result = ["path": installed.path]
-                    }
-                case "beginSession":
-                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
-                    ownsSession = true
-                    result = ["providerExited": try providerExited()]
-                case "providerStatus":
-                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
-                    result = ["providerExited": try providerExited()]
-                case "microphoneRemove":
-                    guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
-                    result = ["restartRequired": try retireMicrophone()]
-                case "microphoneDisable":
-                    guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
-                    result = ["restartRequired": try retireMicrophone()]
-                default: throw CocoaError(.coderReadCorrupt)
-                }
-                return try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
-            } catch {
-                throw ExtensionPeerError.rejected(String(error.localizedDescription.prefix(1024)))
-            }
-        }
-    }
+    var preparesForDisable: Bool { true }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        Task { [self] in
-            await commands.suspendAndWait()
-            completion()
-        }
-    }
-
-    @objc(prepareDisableWithCompletion:)
-    func prepareDisable(completion: @escaping (NSError?) -> Void) {
+    func invoke(_ command: String, payload: Data) async throws -> Data {
         do {
-            if ownsSession {
-                guard try providerExited() else {
-                    throw failure(
-                        "The camera provider is still running. Finish disabling it before releasing the carrier."
-                    )
+            try Task.checkCancellation()
+            guard payload.count <= 8192,
+                let values = try JSONSerialization.jsonObject(with: payload)
+                    as? [String: String]
+            else { throw CocoaError(.coderReadCorrupt) }
+            let result: [String: Any]
+            switch command {
+            case "installCarrier":
+                guard values.count == 1, let source = values["source"],
+                    source.utf8.count <= 4096,
+                    source.hasPrefix("/")
+                else { throw CocoaError(.coderReadCorrupt) }
+                if fixture {
+                    guard
+                        let root = ExtensionEnvironment.values[
+                            "EDITH_EXTENSION_FIXTURE_HOME"], source.hasPrefix(root + "/")
+                    else { throw CocoaError(.fileReadNoPermission) }
+                    result = ["path": source]
+                } else {
+                    let installed = try makeInstaller().installCarrier(
+                        source: URL(fileURLWithPath: source),
+                        providerExited: try providerExited())
+                    result = ["path": installed.path]
                 }
-                guard try !retireMicrophone() else {
-                    throw failure(
-                        "Restart macOS to finish removing the meeting microphone. Its loaded driver remains owned until restart."
-                    )
-                }
+            case "beginSession":
+                guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                ownsSession = true
+                result = ["providerExited": try providerExited()]
+            case "providerStatus":
+                guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                result = ["providerExited": try providerExited()]
+            case "microphoneRemove":
+                guard values.isEmpty else { throw CocoaError(.coderReadCorrupt) }
+                result = ["restartRequired": try retireMicrophone()]
+            case "microphoneDisable":
+                guard values.isEmpty, ownsSession else { throw CocoaError(.coderReadCorrupt) }
+                result = ["restartRequired": try retireMicrophone()]
+            default: throw CocoaError(.coderReadCorrupt)
             }
-            completion(nil)
-        } catch { completion(error as NSError) }
+            return try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+        } catch {
+            throw ExtensionPeerError.rejected(String(error.localizedDescription.prefix(1024)))
+        }
+    }
+
+    func prepareDisable() async throws {
+        if ownsSession {
+            guard try providerExited() else {
+                throw failure(
+                    "The camera provider is still running. Finish disabling it before releasing the carrier."
+                )
+            }
+            guard try !retireMicrophone() else {
+                throw failure(
+                    "Restart macOS to finish removing the meeting microphone. Its loaded driver remains owned until restart."
+                )
+            }
+        }
+    }
+
+    func teardown() async {
+        while true {
+            do {
+                try await prepareDisable()
+                ownsSession = false
+                retirement = nil
+                installer = nil
+                return
+            } catch {
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
     }
 
     private func makeInstaller() throws -> CameraSealedInstallation {
@@ -184,10 +184,17 @@ final class CameraPrivilegedRuntime: NSObject {
     }
 }
 
+@MainActor
+func makeCameraPrivilegedRuntime() -> ExtensionServiceRuntime {
+    ExtensionServiceRuntime(
+        id: "virtualCamera", role: "privileged", bundle: Bundle(for: CameraPrivilegedService.self)
+    ) { _ in CameraPrivilegedService() }
+}
+
 @_cdecl("edith_extension_create")
 public func createCameraPrivilegedExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(CameraPrivilegedRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCameraPrivilegedRuntime()).toOpaque())
         })
 }

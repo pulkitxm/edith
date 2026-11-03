@@ -4,7 +4,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct CameraPrivilegedRuntimeTests {
     @Test func malformedAndUnsupportedCommandsReturnBoundedFailure() {
-        let runtime = CameraPrivilegedRuntime()
+        let runtime = makeCameraPrivilegedRuntime()
         for request: NSDictionary in [
             [:], ["command": "unknown", "payload": Data("{}".utf8)],
             ["command": "installCarrier", "payload": Data(repeating: 0, count: 8193)],
@@ -21,11 +21,15 @@ import Testing
             #expect(completed)
         }
     }
-    @Test func unusedInstallerReleasesWithoutChangingSystemResources() {
-        let runtime = CameraPrivilegedRuntime()
+    @Test func unusedInstallerReleasesWithoutChangingSystemResources() async {
+        let runtime = makeCameraPrivilegedRuntime()
         var completed = false
-        runtime.prepareDisable { error in
-            completed = true; #expect(error == nil)
+        await withCheckedContinuation { continuation in
+            runtime.prepareDisable { error in
+                completed = true
+                #expect(error == nil)
+                continuation.resume()
+            }
         }
         #expect(completed)
     }
