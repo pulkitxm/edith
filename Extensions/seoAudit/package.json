@@ -14,5 +14,12 @@
       "symbolName": "doc.text.magnifyingglass",
       "order": 3
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:seoAudit"
+  ],
+  "notchCards": [
+    "extension:seoAudit"
+  ],
+  "notchTabs": []
 }

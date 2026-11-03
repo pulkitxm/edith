@@ -14,5 +14,18 @@
       "symbolName": "chart.bar.fill",
       "order": 1
     }
-  ]
+  ],
+  "homeCards": [
+    "activity",
+    "usage",
+    "limits",
+    "extension:usage"
+  ],
+  "notchCards": [
+    "activity",
+    "usage",
+    "limits",
+    "extension:usage"
+  ],
+  "notchTabs": []
 }

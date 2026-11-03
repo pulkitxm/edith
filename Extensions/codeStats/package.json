@@ -14,5 +14,14 @@
       "symbolName": "chart.line.uptrend.xyaxis",
       "order": 2
     }
-  ]
+  ],
+  "homeCards": [
+    "codeStats",
+    "extension:codeStats"
+  ],
+  "notchCards": [
+    "codeStats",
+    "extension:codeStats"
+  ],
+  "notchTabs": []
 }

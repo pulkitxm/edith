@@ -19,5 +19,12 @@
       "key": "focusDimActive",
       "default": false
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:focusDim"
+  ],
+  "notchCards": [
+    "extension:focusDim"
+  ],
+  "notchTabs": []
 }

@@ -71,6 +71,43 @@ export function parseShortcut(shortcut, context) {
 
 const pageParents = ["agents", "utilities", "media", "developer"];
 const sectionPages = ["appMaintenance"];
+const surfaceCards = [
+  "actions",
+  "activity",
+  "usage",
+  "limits",
+  "music",
+  "calendar",
+  "codeStats",
+  "agents",
+  "focus",
+  "databases",
+  "machines",
+  "desk",
+  "media",
+  "github",
+];
+const notchTabs = [
+  "agents",
+  "browser",
+  "files",
+  "clipboard",
+  "audio",
+  "camera",
+];
+
+function surfaceItems(declaration, directory, field, allowed) {
+  const values = declaration[field] ?? [];
+  if (
+    !Array.isArray(values) ||
+    values.some((value) => !allowed.includes(value)) ||
+    new Set(values).size !== values.length
+  )
+    throw new Error(
+      `${directory}: ${field} must contain unique registered surface ids`,
+    );
+  return values;
+}
 
 function checked(declaration, directory, field, required, optional = {}) {
   const allowed = [...Object.keys(required), ...Object.keys(optional)];
@@ -99,7 +136,12 @@ function page(declaration, directory) {
     declaration,
     directory,
     "pages",
-    { id: "string", title: "string", symbolName: "string", order: "number" },
+    {
+      id: "string",
+      title: "string",
+      symbolName: "string",
+      order: "number",
+    },
     { detachable: "boolean", logoName: "string" },
   );
   return { ...rest, detachable };
@@ -144,6 +186,9 @@ export function validateDeclaration(declaration, directory) {
     "launchWhen",
     "pages",
     "sections",
+    "homeCards",
+    "notchCards",
+    "notchTabs",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
@@ -192,6 +237,15 @@ export function validateDeclaration(declaration, directory) {
   return {
     ...declaration,
     launchWhen,
+    homeCards: surfaceItems(declaration, directory, "homeCards", [
+      ...surfaceCards,
+      `extension:${directory}`,
+    ]),
+    notchCards: surfaceItems(declaration, directory, "notchCards", [
+      ...surfaceCards,
+      `extension:${directory}`,
+    ]),
+    notchTabs: surfaceItems(declaration, directory, "notchTabs", notchTabs),
     pages,
     sections: (declaration.sections ?? []).map((entry) =>
       section(entry, directory),

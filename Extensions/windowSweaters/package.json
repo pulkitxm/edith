@@ -10,5 +10,12 @@
       "key": "windowSweatersActive",
       "default": true
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:windowSweaters"
+  ],
+  "notchCards": [
+    "extension:windowSweaters"
+  ],
+  "notchTabs": []
 }

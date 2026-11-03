@@ -14,5 +14,16 @@
       "symbolName": "music.note",
       "order": 5
     }
-  ]
+  ],
+  "homeCards": [
+    "music",
+    "media",
+    "extension:music"
+  ],
+  "notchCards": [
+    "music",
+    "media",
+    "extension:music"
+  ],
+  "notchTabs": []
 }

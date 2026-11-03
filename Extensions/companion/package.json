@@ -14,5 +14,12 @@
       "symbolName": "brain.head.profile",
       "order": 4
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:companion"
+  ],
+  "notchCards": [
+    "extension:companion"
+  ],
+  "notchTabs": []
 }

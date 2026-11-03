@@ -14,5 +14,12 @@
       "symbolName": "doc.richtext",
       "order": 4
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:latex"
+  ],
+  "notchCards": [
+    "extension:latex"
+  ],
+  "notchTabs": []
 }

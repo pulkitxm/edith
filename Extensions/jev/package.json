@@ -6,5 +6,12 @@
   "background": false,
   "commands": [
     "jev"
-  ]
+  ],
+  "homeCards": [
+    "extension:jev"
+  ],
+  "notchCards": [
+    "extension:jev"
+  ],
+  "notchTabs": []
 }

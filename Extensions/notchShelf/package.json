@@ -7,5 +7,17 @@
   "commands": [
     "shelf",
     "browser"
+  ],
+  "homeCards": [
+    "extension:notchShelf"
+  ],
+  "notchCards": [
+    "extension:notchShelf"
+  ],
+  "notchTabs": [
+    "agents",
+    "browser",
+    "files",
+    "camera"
   ]
 }

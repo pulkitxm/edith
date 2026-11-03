@@ -4,5 +4,12 @@
   "symbolName": "terminal",
   "category": "agents",
   "background": false,
-  "commands": []
+  "commands": [],
+  "homeCards": [
+    "extension:terminal"
+  ],
+  "notchCards": [
+    "extension:terminal"
+  ],
+  "notchTabs": []
 }

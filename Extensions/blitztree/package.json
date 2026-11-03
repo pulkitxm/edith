@@ -12,5 +12,12 @@
       "symbolName": "square.grid.3x3.fill",
       "order": 2
     }
-  ]
+  ],
+  "homeCards": [
+    "extension:blitztree"
+  ],
+  "notchCards": [
+    "extension:blitztree"
+  ],
+  "notchTabs": []
 }

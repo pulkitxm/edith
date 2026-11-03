@@ -16,5 +16,14 @@
       "symbolName": "arrow.down.circle",
       "order": 4
     }
-  ]
+  ],
+  "homeCards": [
+    "media",
+    "extension:downloads"
+  ],
+  "notchCards": [
+    "media",
+    "extension:downloads"
+  ],
+  "notchTabs": []
 }
