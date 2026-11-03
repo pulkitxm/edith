@@ -114,7 +114,49 @@ enum HostBundleVerification {
                 info.st_ctimespec.tv_sec, info.st_ctimespec.tv_nsec,
             ].map(String.init).joined(separator: ",")
             hash.update(data: Data("\(relative)\u{0}\(stamp)\u{0}".utf8))
+            guard info.st_mode & S_IFMT != S_IFLNK else { return nil }
+            if info.st_mode & S_IFMT == S_IFREG,
+                relative.hasPrefix("Contents/MacOS/") || info.st_mode & 0o111 != 0
+                    || ["dylib", "so", "metallib"].contains(
+                        URL(fileURLWithPath: relative).pathExtension)
+            {
+                guard let digest = codeDigest(of: root.appendingPathComponent(relative)) else {
+                    return nil
+                }
+                hash.update(data: Data(digest.utf8))
+            }
         }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
+
+    static func codeDigest(of url: URL) -> String? {
+        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { return nil }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var initial = stat()
+        guard fstat(descriptor, &initial) == 0, initial.st_mode & S_IFMT == S_IFREG,
+            initial.st_size >= 0
+        else { return nil }
+        var remaining = Int(initial.st_size)
+        var hash = SHA256()
+        do {
+            while remaining > 0 {
+                guard let bytes = try handle.read(upToCount: min(remaining, 1_048_576)),
+                    !bytes.isEmpty
+                else { return nil }
+                hash.update(data: bytes)
+                remaining -= bytes.count
+            }
+        } catch { return nil }
+        var after = stat()
+        guard fstat(descriptor, &after) == 0, after.st_size == initial.st_size,
+            after.st_mtimespec.tv_sec == initial.st_mtimespec.tv_sec,
+            after.st_mtimespec.tv_nsec == initial.st_mtimespec.tv_nsec,
+            after.st_ctimespec.tv_sec == initial.st_ctimespec.tv_sec,
+            after.st_ctimespec.tv_nsec == initial.st_ctimespec.tv_nsec
+        else { return nil }
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
 }
