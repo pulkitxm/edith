@@ -104,6 +104,53 @@ private let syntheticScope = [
 
 @MainActor
 @Suite(.serialized) struct ExtensionServiceRuntimeTests {
+    @Test func typedDispatchKeepsTheVersionedIdentityAndCommandToken() async throws {
+        let (runtime, service) = runtime()
+        let peer: any ExtensionRuntimeProtocol = runtime
+        #expect(ExtensionRuntimeAPI.supportedVersions.contains(peer.runtimeAPIVersion))
+        guard case let .description(description) = peer.dispatch(.describe) else {
+            Issue.record("Missing typed description")
+            return
+        }
+        #expect(description.id == "synthetic" && description.role == "app")
+        #expect(description.apiVersion == peer.runtimeAPIVersion)
+        let token = UUID()
+        let reply = try await peer.invokeCommand("typed", token: token, payload: Data())
+        #expect(reply == Data("typed".utf8))
+        #expect(service.tokens == [token])
+        await peer.prepareForStop()
+        #expect(service.teardowns == 1)
+    }
+
+    @Test func suspendedAndStoppedRuntimesRejectFurtherSynchronousWork() async {
+        for stopping in [false, true] {
+            let (runtime, service) = runtime()
+            if stopping { await runtime.prepareForStop() } else { await runtime.suspend() }
+            let sync =
+                runtime.dispatch(.synchronize(ExtensionHostContext(input: [:]))).object
+                as? NSDictionary
+            let custom = runtime.dispatch(.custom("toggle", [:])).object as? NSDictionary
+            let view =
+                runtime.dispatch(.view(UUID(), ExtensionHostContext(input: [:]))).object
+                as? NSDictionary
+            #expect(sync?["ok"] as? Bool == false)
+            #expect(custom?["ok"] as? Bool == false)
+            #expect(view?["ok"] as? Bool == false)
+            #expect(service.synchronizations.isEmpty && service.viewed.isEmpty)
+            await runtime.prepareForStop()
+        }
+    }
+
+    @Test func malformedTypedRequestsDoNotReachTheService() {
+        #expect(ExtensionRuntimeRequest(operation: "view", context: [:]) == nil)
+        #expect(
+            ExtensionRuntimeRequest(operation: "stopUI", context: ["presentationID": "invalid"])
+                == nil)
+        #expect(
+            ExtensionRuntimeRequest(operation: "cancelCommand", context: ["token": "invalid"])
+                == nil)
+    }
+
     private static let suite = syntheticSuite
     private static let dataRoot = syntheticDataRoot
 
