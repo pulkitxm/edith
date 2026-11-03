@@ -206,6 +206,10 @@ ci-host: ci-host-invocation
 	python3 -B scripts/run-host-swift-testing.py
 
 
+.PHONY: ci-host-crash-recovery
+ci-host-crash-recovery:
+	python3 -B scripts/test-extension-crash-recovery.py $(if $(CRASH_RECOVERY_PRODUCTS),--products "$(CRASH_RECOVERY_PRODUCTS)")
+
 .PHONY: ci-host-navigation-local
 ci-host-navigation-local:
 	python3 -B scripts/test-host-navigation-local.test.py
