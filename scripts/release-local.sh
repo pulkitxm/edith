@@ -1,40 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set +xv
 
 cd "$(dirname "$0")/.."
 REPO="pulkitxm/edith"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: ./scripts/release-local.sh [--dry-run]
+usage: ./scripts/release-local.sh [--dry-run] [--force-all]
 
 Builds and publishes an empty-host release on this Mac:
 resolve the next version, build and sign the release app, package and verify the
 DMG, generate the signed Sparkle appcast, stamp the version files and cask,
 commit and tag through Pukbot, then publish the verified host assets.
 
-  --dry-run        build, sign, package, and verify, but do not commit, tag,
-                   or publish. Leaves the artifacts under dist/ for review.
+  --dry-run        build, sign, package, and verify the host without committing,
+                   tagging or publishing. Leaves artifacts under dist/ for review.
+  --force-all      rebuild and version every extension before publishing the app.
 
-Signing material is read from .env at the repository root. See AGENTS.md.
+Requires a clean checkout. Publication accepts main or a detached checkout at
+origin/main. Signing material comes from EDITH_RELEASE_ENV_FILE, default .env.
 USAGE
   exit 1
 }
 
 DRY_RUN=0
+FORCE_ALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
+    --force-all) FORCE_ALL=1 ;;
     -h|--help) usage ;;
     *) usage ;;
   esac
   shift
 done
 
+ENV_FILE="${EDITH_RELEASE_ENV_FILE:-.env}"
+case "$ENV_FILE" in /*) ;; *) ENV_FILE="$PWD/$ENV_FILE" ;; esac
 set -a
-[ -f .env ] || { echo "release blocked: .env is missing (see AGENTS.md)" >&2; exit 1; }
-. ./.env
+[ -f "$ENV_FILE" ] || { echo "release blocked: the signing environment file is missing" >&2; exit 1; }
+. "$ENV_FILE"
 set +a
+[ "$FORCE_ALL" -eq 0 ] || export EXTENSION_FORCE_ALL=true
 
 : "${MACOS_CERT_P12_BASE64:?release blocked: MACOS_CERT_P12_BASE64 missing from .env}"
 : "${MACOS_CERT_PASSWORD:?release blocked: MACOS_CERT_PASSWORD missing from .env}"
@@ -48,17 +56,17 @@ case "$EDITH_SIGN_IDENTITY" in
   "Developer ID Application: "*) ;;
   *) echo "release blocked: a Developer ID Application identity is required" >&2; exit 1 ;;
 esac
-unset EDITH_RELEASE_ALLOW_DEV_SIGNING
+unset EDITH_RELEASE_ALLOW_DEV_SIGNING REBUILD
 
+if [ -n "$(git status --porcelain)" ]; then
+  echo "release blocked: the working tree is not clean" >&2
+  exit 1
+fi
 if [ "$DRY_RUN" -eq 0 ]; then
-  if [ "$(git branch --show-current)" != main ]; then
-    echo "release blocked: run from main" >&2
-    exit 1
-  fi
-  if [ -n "$(git status --porcelain)" ]; then
-    echo "release blocked: the working tree is not clean" >&2
-    exit 1
-  fi
+  case "$(git branch --show-current)" in
+    main|"") ;;
+    *) echo "release blocked: use main or a detached checkout at origin/main" >&2; exit 1 ;;
+  esac
 fi
 
 INTERMEDIATE="$(find /Applications/Xcode*.app -iname DeveloperIDCA-G2.cer -print -quit)"
@@ -70,31 +78,22 @@ export BUILT_SHA
 
 if [ "$DRY_RUN" -eq 0 ]; then
   [ "$BUILT_SHA" = "$(git rev-parse origin/main)" ] \
-    || { echo "release blocked: HEAD is not origin/main; pull first" >&2; exit 1; }
-  echo "==> publishing changed extensions"
-  bun scripts/release-extensions-local.mjs
+    || { echo "release blocked: HEAD is not origin/main; update the checkout first" >&2; exit 1; }
 fi
-
-TMP_OUT="$(mktemp)"
-GITHUB_OUTPUT="$TMP_OUT" ./scripts/resolve-release-version.sh
-RELEASE_TAG="$(sed -n 's/^tag=//p' "$TMP_OUT")"
-RELEASE_VERSION="$(sed -n 's/^version=//p' "$TMP_OUT")"
-RELEASE_BUILD="$(sed -n 's/^build=//p' "$TMP_OUT")"
-rm -f "$TMP_OUT"
-[ -n "$RELEASE_TAG" ] && [ -n "$RELEASE_VERSION" ] && [ -n "$RELEASE_BUILD" ] \
-  || { echo "release blocked: could not resolve the next version" >&2; exit 1; }
-export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD
-echo "==> releasing $RELEASE_TAG (version $RELEASE_VERSION, build $RELEASE_BUILD)"
+export GITHUB_REPOSITORY="$REPO" GITHUB_REF=refs/heads/main GITHUB_SHA="$BUILT_SHA"
 
 KEYCHAIN="$HOME/Library/Keychains/edith-release-$$.keychain-db"
-ORIG_KEYCHAINS="$(security list-keychains -d user | sed 's/[",]//g' | xargs)"
+ORIG_KEYCHAINS=()
+while IFS= read -r keychain; do
+  [ -z "$keychain" ] || ORIG_KEYCHAINS+=("$keychain")
+done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
 STAGED_FILES=(Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb)
 COMMITTED=0
 RELEASE_PLISTS_DIR="$(mktemp -d)"
 SUPERSEDED_FILE="$RELEASE_PLISTS_DIR/superseded"
 
 cleanup() {
-  security list-keychains -d user -s $ORIG_KEYCHAINS >/dev/null 2>&1 || true
+  security list-keychains -d user -s "${ORIG_KEYCHAINS[@]}" >/dev/null 2>&1 || true
   security delete-keychain "$KEYCHAIN" >/dev/null 2>&1 || true
   rm -rf "$RELEASE_PLISTS_DIR"
   if [ "$COMMITTED" -eq 0 ]; then
@@ -107,16 +106,37 @@ security create-keychain -p release "$KEYCHAIN"
 security set-keychain-settings "$KEYCHAIN"
 security unlock-keychain -p release "$KEYCHAIN"
 security import "$INTERMEDIATE" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1
-P12="$(mktemp).p12"
+P12="$RELEASE_PLISTS_DIR/signing.p12"
 printf '%s' "$MACOS_CERT_P12_BASE64" | base64 -d > "$P12"
 security import "$P12" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign >/dev/null 2>&1
 rm -f "$P12"
 security set-key-partition-list -S apple-tool:,apple: -s -k release "$KEYCHAIN" >/dev/null 2>&1
-security list-keychains -d user -s "$KEYCHAIN" $ORIG_KEYCHAINS >/dev/null
+security list-keychains -d user -s "$KEYCHAIN" "${ORIG_KEYCHAINS[@]}" >/dev/null
 security find-identity -v -p codesigning | grep -qF "$EDITH_SIGN_IDENTITY" \
-  || { echo "release blocked: $EDITH_SIGN_IDENTITY is not a valid signing identity" >&2; exit 1; }
+  || { echo "release blocked: the configured signing identity is unavailable" >&2; exit 1; }
 
-export RELEASE_VERSION RELEASE_BUILD
+pukbot capabilities --json
+pukbot commit create --help
+pukbot tag create --help
+pukbot release create --help
+pukbot release edit --help
+pukbot release upload-asset --help
+
+if [ "$DRY_RUN" -eq 0 ]; then
+  echo "==> publishing verified extensions"
+  RELEASE_SUPERSEDED_FILE="$SUPERSEDED_FILE" ./scripts/run-current-release-build.sh \
+    bun scripts/release-extensions-local.mjs
+fi
+
+TMP_OUT="$RELEASE_PLISTS_DIR/version-output"
+GITHUB_OUTPUT="$TMP_OUT" ./scripts/resolve-release-version.sh
+RELEASE_TAG="$(sed -n 's/^tag=//p' "$TMP_OUT")"
+RELEASE_VERSION="$(sed -n 's/^version=//p' "$TMP_OUT")"
+RELEASE_BUILD="$(sed -n 's/^build=//p' "$TMP_OUT")"
+[ -n "$RELEASE_TAG" ] && [ -n "$RELEASE_VERSION" ] && [ -n "$RELEASE_BUILD" ] \
+  || { echo "release blocked: could not resolve the next version" >&2; exit 1; }
+export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD
+echo "==> releasing $RELEASE_TAG (version $RELEASE_VERSION, build $RELEASE_BUILD)"
 
 echo "==> building the release app"
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -183,11 +203,6 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 node scripts/extension-release-ready.mjs .
-pukbot capabilities --json
-pukbot commit create --help
-pukbot tag create --help
-pukbot release create --help
-pukbot release upload-asset --help
 
 export RELEASE_TAG RELEASE_VERSION RELEASE_BUILD RELEASE_SHA256 RELEASE_PLISTS_DIR
 rm -rf dist/host-release-assets
@@ -207,5 +222,4 @@ RELEASE_TARGET_SHA="$(git rev-parse HEAD)"
 echo "==> publishing the host release"
 GITHUB_REPOSITORY="$REPO" RELEASE_TARGET_SHA="$RELEASE_TARGET_SHA" \
   node scripts/publish-host-release.mjs dist/host-release-assets
-git switch main
 echo "==> released $RELEASE_TAG"
