@@ -23,7 +23,11 @@ public final class ExtensionCommandRegistry {
     public func invoke(
         _ request: NSDictionary, completion: @escaping Completion, execute: @escaping Execute
     ) {
-        guard !stopping, suspension == nil, let identifier = request["token"] as? String,
+        guard !stopping, suspension == nil else {
+            completion(nil, ExtensionPeerError.unavailable.localizedDescription as NSString)
+            return
+        }
+        guard let identifier = request["token"] as? String,
             let token = UUID(uuidString: identifier),
             let command = request["command"] as? String,
             let payload = request["payload"] as? Data,

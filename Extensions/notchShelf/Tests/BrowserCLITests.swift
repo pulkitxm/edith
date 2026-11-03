@@ -121,7 +121,7 @@ import Testing
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         var ownersCreated = 0
-        let runtime = ExtensionRuntime(
+        let runtime = NotchTestRuntime.make(
             admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context }, connectedDisplays: { [:] },
             createController: { _, _ in

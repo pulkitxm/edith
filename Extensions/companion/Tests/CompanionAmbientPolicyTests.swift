@@ -67,8 +67,9 @@ import Testing
 
     @Test func policyOnlySynchronizationDoesNotWakeSettingsWork() {
         var wakes = 0
-        let runtime = ExtensionRuntime(
-            settingsChanged: { wakes += 1 }, fixtureAdmission: { _ in nil })
+        let runtime = CompanionTestRuntime(
+            settingsChanged: { wakes += 1 }, fixtureAdmission: { _ in nil }
+        ).runtime
         for paused in [false, true, true, false] {
             let input =
                 context(CompanionMonitor.jobID, paused: paused).mutableCopy()
@@ -109,14 +110,17 @@ import Testing
 
     @Test func invalidFixtureAdmissionRejectsStartAndSynchronizeBeforeServices() {
         var admissions = 0
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in
+        let runtime = CompanionTestRuntime(fixtureAdmission: { _ in
             admissions += 1
             throw WorkerFixtureError.invalid
-        })
+        }).runtime
         for operation in ["start", "synchronize"] {
             #expect(
-                (runtime.execute(["operation": operation]) as? NSDictionary)?["ok"] as? Bool
-                    == false)
+                (runtime.execute([
+                    "operation": operation,
+                    "defaultsSuite": ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+                        ?? "",
+                ]) as? NSDictionary)?["ok"] as? Bool == false)
         }
         #expect(admissions == 2)
         #expect(
@@ -125,7 +129,7 @@ import Testing
     }
 
     @Test func injectedOrdinaryPolicySynchronizationRemainsObserverFree() {
-        let runtime = ExtensionRuntime(fixtureAdmission: { _ in nil })
+        let runtime = CompanionTestRuntime(fixtureAdmission: { _ in nil }).runtime
         let input = context(job, paused: true).mutableCopy() as! NSMutableDictionary
         input["operation"] = "synchronize"
         input["ambientPolicyOnly"] = true

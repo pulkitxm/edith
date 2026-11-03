@@ -8,244 +8,213 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ExtensionRuntime: NSObject {
-    private var stopping = false
+final class CalendarService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private var store: CalendarStore?
     private var presentation: CalendarPresentationState?
     private var surface: CalendarSurface?
     private var uiEngine: CalendarUIEngine?
     private var navigation: CalendarHostNavigation?
     private var fixture: CalendarFixtureBackend?
-    private var commandDrain: Task<Void, Never>?
-    private var resourceStop: Task<Void, Never>?
-    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
-    private let commands = ExtensionCommandRegistry()
     private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
+    private var drainEngine: CalendarUIEngine?
+    private var drainStore: CalendarStore?
+    private var drainNavigation: CalendarHostNavigation?
+    private var drainScenes: [CalendarUIPresentation] = []
 
-    override init() { super.init() }
+    init(runtime: ExtensionServiceRuntime) { self.runtime = runtime }
 
     init(
+        runtime: ExtensionServiceRuntime,
         store: CalendarStore, presentation: CalendarPresentationState, uiEngine: CalendarUIEngine,
         fixture: CalendarFixtureBackend? = nil
     ) {
+        self.runtime = runtime
         self.store = store
         self.presentation = presentation
         self.uiEngine = uiEngine
         self.fixture = fixture
         surface = fixture?.surface
-        super.init()
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        guard !stopping else {
-            completion(nil, "The Calendar extension is stopping.")
-            return
-        }
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            if command == "calendar.cli.catalog" {
-                guard self?.store != nil, payload == Data("{}".utf8) else {
-                    throw ExtensionPeerError.unavailable
+    var allowsUIDuringRetirement: Bool { true }
+    var isRunning: Bool { store != nil }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        guard !ExtensionHostRole.isInterfaceProcess, uiPresentations.isEmpty else { return false }
+        do {
+            let admission = try CalendarFixtureAdmission.current(input)
+            if store == nil {
+                if let admission {
+                    let fixture = CalendarFixtureBackend(admission: admission)
+                    self.fixture = fixture
+                    store = fixture.store
+                    presentation = fixture.presentation
+                } else {
+                    store = CalendarStore(startImmediately: false)
                 }
-                return try CalendarCLICatalog.encoded(payload)
             }
-            if command.hasPrefix("calendar.ui.") {
-                guard let engine = self?.uiEngine else { throw ExtensionPeerError.unavailable }
-                return try await engine.execute(command, payload: payload)
+        } catch { return false }
+        if presentation == nil { presentation = CalendarPresentationState() }
+        if let store, let presentation, surface == nil {
+            let navigation = CalendarHostNavigation(
+                bridge: input["hostNavigation"] as? NSObject)
+            self.navigation = navigation
+            surface =
+                fixture?.surface
+                ?? CalendarSurface(store: store, presentation: presentation)
+            let navigate: (CalendarNavigationRequest) async throws -> Void = {
+                [weak navigation] request in
+                guard let navigation else { throw ExtensionPeerError.unavailable }
+                try await navigation.navigate(request)
             }
-            if command == "calendar.cli" {
-                guard let store = self?.store else { throw ExtensionPeerError.unavailable }
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                let reply = try await CalendarCLIExecution.run(
-                    request, actions: self?.fixture?.cliActions
-                ) { query in
-                    store.refreshAuthStatus()
-                    guard store.authStatus == .fullAccess else {
-                        throw CLIFailure.unavailable(
-                            "macOS has not granted Edith calendar access",
-                            hint: "run `ed permissions request calendar`")
-                    }
-                    return await store.events(query)
+            if let fixture {
+                uiEngine = fixture.makeUIEngine(navigate: navigate)
+            } else {
+                uiEngine = CalendarUIEngine(
+                    store: store, presentation: presentation, navigate: navigate)
+            }
+            store.start()
+        }
+        return true
+    }
+
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        guard !(runtime.isSuspended || runtime.isStopping) else { return false }
+        store?.refreshAuthStatus()
+        return true
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        if command == "calendar.cli.catalog" {
+            guard store != nil, payload == Data("{}".utf8) else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try CalendarCLICatalog.encoded(payload)
+        }
+        if command.hasPrefix("calendar.ui.") {
+            guard let engine = uiEngine else { throw ExtensionPeerError.unavailable }
+            return try await engine.execute(command, payload: payload)
+        }
+        if command == "calendar.cli" {
+            guard let store = store else { throw ExtensionPeerError.unavailable }
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            let reply = try await CalendarCLIExecution.run(
+                request, actions: fixture?.cliActions
+            ) { query in
+                store.refreshAuthStatus()
+                guard store.authStatus == .fullAccess else {
+                    throw CLIFailure.unavailable(
+                        "macOS has not granted Edith calendar access",
+                        hint: "run `ed permissions request calendar`")
                 }
-                return try CalendarCLIExecution.encoded(reply)
+                return await store.events(query)
             }
-            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
-            return try await surface.execute(command, payload: payload)
+            return try CalendarCLIExecution.encoded(reply)
         }
+        guard let surface = surface else { throw ExtensionPeerError.unavailable }
+        return try await surface.execute(command, payload: payload)
     }
 
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        Task { [self] in
-            await drain.value
-            await resourceStop?.value
-            withExtendedLifetime(self) { completion() }
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard uiDrains.count < 8 else { return false }
+        for (id, scene) in uiPresentations where !scene.isRetained {
+            retireScene(scene)
+            uiPresentations[id] = nil
         }
+        guard store == nil, let client = configuration.engineClient,
+            let scene = CalendarUIPresentation(client: client, context: configuration.input),
+            uiPresentations.count < 8 || uiPresentations[client.presentationID] != nil
+        else { return false }
+        if let previous = uiPresentations[client.presentationID] { retireScene(previous) }
+        uiPresentations[client.presentationID] = scene
+        return true
     }
 
-    private func beginCommandDrain() -> Task<Void, Never> {
-        let engine = uiEngine
-        let owner = store
-        let navigator = navigation
-        let scenes = Array(uiPresentations.values)
-        commandsSuspended = true
-        _ = commands.suspend()
-        if let commandDrain { return commandDrain }
-        engine?.shutdown()
-        owner?.shutdown()
-        navigator?.invalidate()
+    func view(for presentation: UUID, context: ExtensionHostContext) -> NSViewController? {
+        guard !(runtime.isSuspended || runtime.isStopping),
+            let scene = uiPresentations[presentation], scene.matches(context.input)
+        else { return nil }
+        return scene.controller()
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        let retired = uiPresentations.values.map { retireScene($0) }
+        uiPresentations.removeAll()
+        return retired
+    }
+
+    func cancelPendingWork() {
+        drainEngine = uiEngine
+        drainStore = store
+        drainNavigation = navigation
+        drainScenes = Array(uiPresentations.values)
+        drainEngine?.shutdown()
+        drainStore?.shutdown()
+        drainNavigation?.invalidate()
         CalendarPermission.shutdown()
-        for scene in scenes { scene.stop() }
-        if let commandDrain { return commandDrain }
-        let task = Task { [self] in
-            _ = await commands.suspendAndWait()
-            await engine?.stopAndWait()
-            await owner?.stopAndWait()
-            await navigator?.stopAndWait()
-            await CalendarPermission.stopAndWait()
-            for scene in scenes { await scene.stopAndWait() }
-            while let task = uiDrains.values.first { await task.value }
-        }
-        commandDrain = task
-        return task
+        for scene in drainScenes { scene.stop() }
     }
 
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let stop = beginResourceStop()
-        Task { [self] in
-            await stop.value
-            withExtendedLifetime(self) { completion() }
-        }
+    func drain() async {
+        let engine = drainEngine
+        let owner = drainStore
+        let navigator = drainNavigation
+        let scenes = drainScenes
+        await engine?.stopAndWait()
+        await owner?.stopAndWait()
+        await navigator?.stopAndWait()
+        await CalendarPermission.stopAndWait()
+        for scene in scenes { await scene.stopAndWait() }
+        while let task = uiDrains.values.first { await task.value }
     }
 
-    private func beginResourceStop() -> Task<Void, Never> {
-        if let resourceStop { return resourceStop }
+    func teardown() async {
         let owner = store
         let engine = uiEngine
         let navigationOwner = navigation
         let originalPresentation = presentation
-        let drain = beginCommandDrain()
-        if let resourceStop { return resourceStop }
-        stopping = true
-        stopUI()
-        store = nil; uiEngine = nil; navigation = nil; surface = nil; presentation = nil;
+        _ = stopUI()
+        store = nil
+        uiEngine = nil
+        navigation = nil
+        surface = nil
+        presentation = nil
         fixture = nil
-        let task = Task { [self] in
-            await drain.value
-            await commands.shutdownAndWait()
-            engine?.shutdown()
-            owner?.shutdown()
-            navigationOwner?.invalidate()
-            CalendarPermission.shutdown()
-            originalPresentation?.shutdown()
-        }
-        resourceStop = task
-        return task
+        drainEngine = nil
+        drainStore = nil
+        drainNavigation = nil
+        drainScenes = []
+        while let task = uiDrains.values.first { await task.value }
+        engine?.shutdown()
+        owner?.shutdown()
+        navigationOwner?.invalidate()
+        CalendarPermission.shutdown()
+        originalPresentation?.shutdown()
     }
 
-    private func retireScene(_ scene: CalendarUIPresentation) {
+    @discardableResult
+    private func retireScene(_ scene: CalendarUIPresentation) -> Task<Void, Never> {
         scene.stop()
         let id = UUID()
-        uiDrains[id] = Task { [self, scene] in
+        let task = Task { [self, scene] in
             defer { uiDrains[id] = nil }
             await scene.stopAndWait()
             scene.shutdown()
         }
+        uiDrains[id] = task
+        return task
     }
+}
 
-    private func stopUI() {
-        for scene in uiPresentations.values { retireScene(scene) }
-        uiPresentations.removeAll()
-    }
-
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "calendar", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "start":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard !stopping, !ExtensionHostRole.isInterfaceProcess,
-                uiPresentations.isEmpty,
-                let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            do {
-                let admission = try CalendarFixtureAdmission.current(input)
-                if store == nil {
-                    if let admission {
-                        let fixture = CalendarFixtureBackend(admission: admission)
-                        self.fixture = fixture
-                        store = fixture.store
-                        presentation = fixture.presentation
-                    } else {
-                        store = CalendarStore(startImmediately: false)
-                    }
-                }
-            } catch { return ["ok": false] as NSDictionary }
-            if presentation == nil { presentation = CalendarPresentationState() }
-            if let store, let presentation, surface == nil {
-                let navigation = CalendarHostNavigation(
-                    bridge: input["hostNavigation"] as? NSObject)
-                self.navigation = navigation
-                surface =
-                    fixture?.surface
-                    ?? CalendarSurface(store: store, presentation: presentation)
-                let navigate: (CalendarNavigationRequest) async throws -> Void = {
-                    [weak navigation] request in
-                    guard let navigation else { throw ExtensionPeerError.unavailable }
-                    try await navigation.navigate(request)
-                }
-                if let fixture {
-                    uiEngine = fixture.makeUIEngine(navigate: navigate)
-                } else {
-                    uiEngine = CalendarUIEngine(
-                        store: store, presentation: presentation, navigate: navigate)
-                }
-                store.start()
-            }
-        case "configureUI":
-            guard !commandsSuspended, uiDrains.count < 8 else {
-                return ["ok": false] as NSDictionary
-            }
-            for (id, scene) in uiPresentations where !scene.isRetained {
-                retireScene(scene)
-                uiPresentations[id] = nil
-            }
-            guard store == nil, let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "calendar", let client = configuration.engineClient,
-                let scene = CalendarUIPresentation(client: client, context: input),
-                uiPresentations.count < 8 || uiPresentations[client.presentationID] != nil
-            else { return ["ok": false] as NSDictionary }
-            if let previous = uiPresentations[client.presentationID] { retireScene(previous) }
-            uiPresentations[client.presentationID] = scene
-        case "view":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let value = input["presentationID"] as? String,
-                let id = UUID(uuidString: value), let scene = uiPresentations[id],
-                scene.matches(input)
-            else { return ["ok": false] as NSDictionary }
-            return scene.controller() ?? (["ok": false] as NSDictionary)
-        case "stopUI":
-            stopUI()
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            store?.refreshAuthStatus()
-        case "stop":
-            _ = beginResourceStop()
-        case "status": return ["ok": true, "running": store != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
+@MainActor
+func makeCalendarRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "calendar", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { CalendarService(runtime: $0) }
 }
 
 #if !SWIFT_PACKAGE
@@ -253,7 +222,7 @@ final class ExtensionRuntime: NSObject {
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCalendarRuntime()).toOpaque())
         })
 }
 #endif
@@ -270,7 +239,7 @@ struct CalendarFixtureAdmission {
     }
 
     static func current(_ context: NSDictionary) throws -> Self? {
-        let role = Bundle(for: ExtensionRuntime.self)
+        let role = Bundle(for: CalendarService.self)
         return try admit(
             context: context, environment: ExtensionEnvironment.values,
             hostIdentifier: Bundle.main.bundleIdentifier, hostBundle: Bundle.main.bundleURL,

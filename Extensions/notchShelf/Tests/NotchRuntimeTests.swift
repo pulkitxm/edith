@@ -11,7 +11,7 @@ import Testing
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         var created: [NotchShelfController] = []
-        let runtime = ExtensionRuntime(
+        let runtime = NotchTestRuntime.make(
             admitOrdinaryContext: { _ in nil },
             contextSource: { fixture.context },
             connectedDisplays: { [42: CGSize(width: 1280, height: 900)] },
@@ -57,7 +57,9 @@ import Testing
         #expect(owner.ownedPanelCount == 0)
     }
 
-    private func invoke<T: Encodable>(_ runtime: ExtensionRuntime, _ command: String, _ request: T)
+    private func invoke<T: Encodable>(
+        _ runtime: ExtensionServiceRuntime, _ command: String, _ request: T
+    )
         async throws -> Data
     {
         let payload = try JSONEncoder().encode(request)

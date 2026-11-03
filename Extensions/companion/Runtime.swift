@@ -7,8 +7,9 @@ import EdithExtensionCommands
 import EdithExtensionUI
 import SwiftUI
 
-@MainActor @objc(EdithCompanionExtensionRuntime)
-final class ExtensionRuntime: NSObject {
+@MainActor
+final class CompanionService: ExtensionService {
+    private unowned let runtime: ExtensionServiceRuntime
     private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
     private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
         CompanionMonitor.jobID: .init(ambient: 60, live: 20)
@@ -20,98 +21,199 @@ final class ExtensionRuntime: NSObject {
     private var uiEngine: CompanionUIEngine?
     private var engineClient: ExtensionEngineClient?
     private var surface: CompanionSurface?
-    private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
-    private var commandDrain: Task<Void, Never>?
-    private var resourceStop: Task<Void, Never>?
-    private var commandsSuspended = false
     private var uiDrains: [UUID: Task<Void, Never>] = [:]
+    private var drainWorker: CompanionWorker?
+    private var drainEngine: CompanionUIEngine?
+    private var drainWorkspace: CompanionWorkspaceSession?
+    private var drainBridge: CompanionUIBridge?
+    private var drainStreams: ExtensionCLIStreams?
 
     init(
+        runtime: ExtensionServiceRuntime,
         settingsChanged: @escaping @MainActor () -> Void = { IPC.post(IPC.Name.settingsChanged) },
         fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
             try WorkerFixtureAdmission.current(
                 extensionID: "companion", context: $0,
-                roleBundle: Bundle(for: ExtensionRuntime.self))
+                roleBundle: Bundle(for: CompanionService.self))
         }
     ) {
+        self.runtime = runtime
         self.fixtureAdmission = fixtureAdmission
         self.settingsChanged = settingsChanged
-        super.init()
     }
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
-            if command == "companion.cli.catalog" {
-                return try ExtensionCLICatalog.data(
-                    CompanionCommand.self, owner: "companion", payload: payload, streaming: true)
-            }
-            if command.hasPrefix("companion.cli.") {
-                if self.cliStreams == nil {
-                    self.cliStreams = try ExtensionCLIStreams(owner: "companion")
-                }
-                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
-                return try CompanionCLIExecution.stream(
-                    streams, operation: command, payload: payload)
-            }
-            if command == "companion.cli" {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    try await CompanionCLIExecution.run(request))
-            }
-            if command.hasPrefix("companion.ui."), let engine = self.uiEngine {
-                return try await engine.execute(command, payload: payload)
-            }
-            if command.hasPrefix("surface.") {
-                guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
-                return try await surface.execute(command, payload: payload)
-            }
-            return try await worker.execute(command, payload: payload)
+    var allowsUIDuringRetirement: Bool { true }
+    var isRunning: Bool { worker?.isStopped == false }
+    var preparesUIToClose: Bool { true }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        let input = context.input
+        let fixture: Bool
+        do { fixture = try fixtureAdmission(input) != nil } catch { return false }
+        do { try ambientPolicy.apply(context: input) } catch { return false }
+        guard worker == nil else { return true }
+        if !fixture {
+            do {
+                try ambientPolicy.start { [weak self] in self?.worker?.monitor.reschedule() }
+            } catch { return false }
         }
-    }
-
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        let drain = beginCommandDrain()
-        Task { [self] in
-            await drain.value
-            await resourceStop?.value
-            withExtendedLifetime(self) { completion() }
+        let policy = ambientPolicy
+        let monitor = CompanionMonitor(interval: {
+            policy.interval(for: CompanionMonitor.jobID)
+        })
+        let worker = CompanionWorker(monitor: monitor)
+        self.worker = worker
+        uiEngine = CompanionUIEngine(worker: worker)
+        CompanionCLIEnvironment.stopGenerations = { [weak self] in
+            (self?.uiEngine?.stopGenerations() ?? 0) + CompanionGeneration.stopAll()
         }
+        surface = CompanionSurface(
+            monitor: worker.monitor,
+            isStopped: { [weak worker] in worker?.isStopped != false },
+            open: { [weak worker] id in worker?.openEpisode(id) })
+        worker.start()
+        TextEditingCommands.install()
+        return true
     }
 
-    private func beginCommandDrain() -> Task<Void, Never> {
-        let originalWorker = worker
-        let engine = uiEngine
-        let workspace = uiWorkspace
-        let bridge = uiBridge
-        let streams = cliStreams
-        commandsSuspended = true
-        _ = commands.suspend()
-        if let commandDrain { return commandDrain }
-        originalWorker?.cancelPendingCommands()
-        engine?.cancelPendingCommands()
-        workspace?.cancelPendingCommands()
-        bridge?.stop()
-        streams?.stop()
+    func synchronize(_ context: ExtensionHostContext) -> Bool {
+        guard !(runtime.isSuspended || runtime.isStopping) else { return false }
+        let input = context.input
+        do { _ = try fixtureAdmission(input) } catch { return false }
+        do { try ambientPolicy.apply(context: input) } catch { return false }
+        if input["ambientPolicyOnly"] as? Bool != true { settingsChanged() }
+        return true
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let worker else { throw ExtensionPeerError.unavailable }
+        if command == "companion.cli.catalog" {
+            return try ExtensionCLICatalog.data(
+                CompanionCommand.self, owner: "companion", payload: payload, streaming: true)
+        }
+        if command.hasPrefix("companion.cli.") {
+            if cliStreams == nil {
+                cliStreams = try ExtensionCLIStreams(owner: "companion")
+            }
+            guard let streams = cliStreams else { throw ExtensionPeerError.unavailable }
+            return try CompanionCLIExecution.stream(
+                streams, operation: command, payload: payload)
+        }
+        if command == "companion.cli" {
+            let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+            return try JSONEncoder().encode(
+                try await CompanionCLIExecution.run(request))
+        }
+        if command.hasPrefix("companion.ui."), let engine = uiEngine {
+            return try await engine.execute(command, payload: payload)
+        }
+        if command.hasPrefix("surface.") {
+            guard let surface else { throw ExtensionPeerError.unavailable }
+            return try await surface.execute(command, payload: payload)
+        }
+        return try await worker.execute(command, payload: payload)
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard let client = configuration.engineClient else { return false }
+        return openWorkspace(client: client) != nil
+    }
+
+    func openWorkspace(client: ExtensionEngineClient) -> CompanionWorkspaceSession? {
+        guard !(runtime.isSuspended || runtime.isStopping), uiDrains.count < 8,
+            engineClient == nil
+        else { return nil }
+        let bridge = CompanionUIBridge(client: client)
+        let workspace = CompanionWorkspaceSession(
+            privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
+            remote: bridge)
+        engineClient = client
+        uiBridge = bridge
+        uiWorkspace = workspace
+        TextEditingCommands.install()
+        return workspace
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard !(runtime.isSuspended || runtime.isStopping), let workspace = uiWorkspace else {
+            return nil
+        }
+        return NSHostingController(
+            rootView: ExtensionPageHost { CompanionPage(session: workspace) })
+    }
+
+    func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {
+        let drain = retireUI()
+        cleanUpTextEditing()
+        return drain.map { [$0] } ?? []
+    }
+
+    func prepareUIToClose(_ presentation: UUID) async -> String? {
+        guard engineClient == nil || engineClient?.presentationID == presentation else {
+            return "Invalid Companion presentation."
+        }
+        await retireUI()?.value
+        while let task = uiDrains.values.first { await task.value }
+        return nil
+    }
+
+    func cancelPendingWork() {
+        drainWorker = worker
+        drainEngine = uiEngine
+        drainWorkspace = uiWorkspace
+        drainBridge = uiBridge
+        drainStreams = cliStreams
+        drainWorker?.cancelPendingCommands()
+        drainEngine?.cancelPendingCommands()
+        drainWorkspace?.cancelPendingCommands()
+        drainBridge?.stop()
+        drainStreams?.stop()
         _ = CompanionCLIExecution.stopChats()
         CompanionTransport.shared.close()
-        if let commandDrain { return commandDrain }
-        let task = Task { [self] in
-            await originalWorker?.monitor.cancelDelivery()
-            _ = await commands.suspendAndWait()
-            await streams?.stopAndWait()
-            await CompanionCLIExecution.stopChatsAndWait()
-            await engine?.cancelAndWait()
-            await originalWorker?.cancelAndWait()
-            await workspace?.cancelAndWait()
-            await bridge?.stopAndWait()
-            await CompanionTransport.shared.closeAndWait()
-            while let task = uiDrains.values.first { await task.value }
-        }
-        commandDrain = task
-        return task
+    }
+
+    func drain() async {
+        let originalWorker = drainWorker
+        let engine = drainEngine
+        let workspace = drainWorkspace
+        let bridge = drainBridge
+        let streams = drainStreams
+        await originalWorker?.monitor.cancelDelivery()
+        await streams?.stopAndWait()
+        await CompanionCLIExecution.stopChatsAndWait()
+        await engine?.cancelAndWait()
+        await originalWorker?.cancelAndWait()
+        await workspace?.cancelAndWait()
+        await bridge?.stopAndWait()
+        await CompanionTransport.shared.closeAndWait()
+        while let task = uiDrains.values.first { await task.value }
+    }
+
+    func finishBeforeStop() async {
+        ambientPolicy.stop()
+    }
+
+    func teardown() async {
+        let owner = worker
+        let engine = uiEngine
+        let workspace = uiWorkspace
+        let retirement = retireUI()
+        worker = nil
+        uiEngine = nil
+        surface = nil
+        cliStreams = nil
+        drainWorker = nil
+        drainEngine = nil
+        drainWorkspace = nil
+        drainBridge = nil
+        drainStreams = nil
+        await retirement?.value
+        while let task = uiDrains.values.first { await task.value }
+        await engine?.shutdown()
+        await owner?.shutdown()
+        workspace?.shutdown()
+        cleanUpTextEditing()
     }
 
     @discardableResult
@@ -137,145 +239,25 @@ final class ExtensionRuntime: NSObject {
         return drain
     }
 
-    @objc(prepareUIToClose:completion:)
-    func prepareUIToClose(_ value: NSString, completion: @escaping (NSString?) -> Void) {
-        guard let id = UUID(uuidString: value as String),
-            engineClient == nil || engineClient?.presentationID == id
-        else { completion("Invalid Companion presentation."); return }
-        let drain = retireUI()
-        Task { [self] in
-            await drain?.value
-            while let task = uiDrains.values.first { await task.value }
-            withExtendedLifetime(self) { completion(nil) }
+    private func cleanUpTextEditing() {
+        ExtensionUIResources.cleanup(of: runtime, key: "textEditing") {
+            TextEditingCommands.shutdown()
         }
     }
+}
 
-    func configureUI(client: ExtensionEngineClient) -> CompanionWorkspaceSession? {
-        guard !commandsSuspended, uiDrains.count < 8, engineClient == nil else { return nil }
-        let bridge = CompanionUIBridge(client: client)
-        let workspace = CompanionWorkspaceSession(
-            privacy: ExtensionSharedState.current.map { SurfacePrivacyState(channel: $0) },
-            remote: bridge)
-        engineClient = client
-        uiBridge = bridge
-        uiWorkspace = workspace
-        TextEditingCommands.install()
-        return workspace
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        let stop = beginResourceStop()
-        Task { [self] in
-            await stop.value
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-
-    private func beginResourceStop() -> Task<Void, Never> {
-        if let resourceStop { return resourceStop }
-        let owner = worker
-        let engine = uiEngine
-        let workspace = uiWorkspace
-        let drain = beginCommandDrain()
-        if let resourceStop { return resourceStop }
-        retireUI()
-        ambientPolicy.stop()
-        worker = nil; uiEngine = nil; surface = nil; cliStreams = nil
-        let task = Task { [self] in
-            await drain.value
-            await commands.shutdownAndWait()
-            await engine?.shutdown()
-            await owner?.shutdown()
-            workspace?.shutdown()
-            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
-                TextEditingCommands.shutdown()
-            }
-        }
-        resourceStop = task
-        return task
-    }
-
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "companion", "role": "app",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "companion", let client = configuration.engineClient,
-                configureUI(client: client) != nil
-            else { return ["ok": false] as NSDictionary }
-        case "stopUI":
-            retireUI()
-            ExtensionUIResources.cleanup(of: self, key: "textEditing") {
-                TextEditingCommands.shutdown()
-            }
-        case "start":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            let fixture: Bool
-            do { fixture = try fixtureAdmission(input) != nil } catch {
-                return ["ok": false] as NSDictionary
-            }
-            guard let suite = input["defaultsSuite"] as? String,
-                suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            do { try ambientPolicy.apply(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            guard worker == nil else { return ["ok": true] as NSDictionary }
-            if !fixture {
-                do {
-                    try ambientPolicy.start { [weak self] in self?.worker?.monitor.reschedule() }
-                } catch { return ["ok": false] as NSDictionary }
-            }
-            let policy = ambientPolicy
-            let monitor = CompanionMonitor(interval: {
-                policy.interval(for: CompanionMonitor.jobID)
-            })
-            let worker = CompanionWorker(monitor: monitor)
-            self.worker = worker
-            uiEngine = CompanionUIEngine(worker: worker)
-            CompanionCLIEnvironment.stopGenerations = { [weak self] in
-                (self?.uiEngine?.stopGenerations() ?? 0) + CompanionGeneration.stopAll()
-            }
-            surface = CompanionSurface(
-                monitor: worker.monitor,
-                isStopped: { [weak worker] in worker?.isStopped != false },
-                open: { [weak worker] id in worker?.openEpisode(id) })
-            worker.start()
-            TextEditingCommands.install()
-        case "view":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            guard let workspace = uiWorkspace else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost { CompanionPage(session: workspace) })
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize":
-            guard !commandsSuspended else { return ["ok": false] as NSDictionary }
-            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
-            do { try ambientPolicy.apply(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
-            if input["ambientPolicyOnly"] as? Bool != true { settingsChanged() }
-        case "stop":
-            _ = beginResourceStop()
-        case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
+@MainActor
+func makeCompanionRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "companion", role: "app", bundle: Bundle(for: BundleAnchor.self)
+    ) { CompanionService(runtime: $0) }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeCompanionRuntime()).toOpaque())
         })
 }

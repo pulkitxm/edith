@@ -101,7 +101,7 @@ import Testing
         #expect(facade.authorized)
         scene.shutdown()
         #expect(!facade.authorized && facade.events.isEmpty)
-        let runtime = ExtensionRuntime()
+        let runtime = CalendarTestRuntime.make()
         #expect((runtime.execute(["operation": "view"]) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(
             (runtime.execute(["operation": "configureUI", "remoteUI": true]) as? NSDictionary)?[
