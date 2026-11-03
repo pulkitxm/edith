@@ -286,7 +286,9 @@ public final class ExtensionServiceRuntime: NSObject, ExtensionRuntimeProtocol {
                 running: started && teardownTask == nil && service?.isRunning == true,
                 details: service?.statusDetails ?? [:])
         case let .custom(operation, context):
-            guard suspension == nil, teardownTask == nil else { return .result(false) }
+            guard teardownTask == nil,
+                suspension == nil || operation == "prepareApplicationQuit"
+            else { return .result(false) }
             return service?.perform(operation, context: context).map(
                 ExtensionRuntimeResponse.custom)
                 ?? .result(false)
