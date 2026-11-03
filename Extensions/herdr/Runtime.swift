@@ -181,7 +181,7 @@ final class HerdrService: ExtensionService {
                         .environment(\.terminalLaunchEnabled, true)
                     }
                 })
-            PresenterState.shared.start()
+            PresenterState.shared.acquire(presentationID)
         } else if settingsSection == .agentActivity {
             let facade: HerdrUIClient
             if let client = configuration.engineClient {
@@ -310,6 +310,7 @@ final class HerdrService: ExtensionService {
 
     private func stopUI(_ id: UUID) {
         guard let presentation = presentations.removeValue(forKey: id) else { return }
+        PresenterState.shared.release(id)
         presentation.sessionSettings?.shutdown()
         presentation.settings?.shutdown()
         presentation.store?.stopRendering()

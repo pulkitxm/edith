@@ -9,13 +9,26 @@ import SwiftUI
 final class PresenterState {
     static let shared = PresenterState()
     private var state: SurfacePrivacyState?
+    @ObservationIgnored private var owners = Set<UUID>()
+    private let channel: () -> ExtensionSharedState?
     var active: Bool { state?.values["active"] == "1" }
     var hidesAgents: Bool { SurfacePrivacyState.hides(.agents, values: state?.values ?? [:]) }
-    func start() {
-        guard state == nil, let channel = ExtensionSharedState.current else { return }
+
+    init(channel: @escaping () -> ExtensionSharedState? = { ExtensionSharedState.current }) {
+        self.channel = channel
+    }
+
+    func acquire(_ owner: UUID) {
+        owners.insert(owner)
+        guard state == nil, let channel = channel() else { return }
         state = SurfacePrivacyState(channel: channel)
     }
-    func shutdown() { state?.shutdown(); state = nil }
+
+    func release(_ owner: UUID) {
+        guard owners.remove(owner) != nil, owners.isEmpty else { return }
+        state?.shutdown()
+        state = nil
+    }
 }
 
 struct AgentTerminalAttentionObservation: Codable, Equatable, Sendable {

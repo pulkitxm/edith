@@ -44,6 +44,7 @@ import WorkerFixtureSupport
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
     private(set) var isStopped = false
     private var started = false
+    private let presenterOwner = UUID()
     private var workSuspended = false
     private var pendingDrain: Task<Void, Never>?
     private var cliStreams: ExtensionCLIStreams?
@@ -273,7 +274,7 @@ import WorkerFixtureSupport
         }
         guard !Task.isCancelled else { return }
         await activity.start()
-        PresenterState.shared.start()
+        PresenterState.shared.acquire(presenterOwner)
         guard automaticActions else { return }
         _ = try? await MachineRegistry.refresh()
         await refreshDiscoveryDemand()
@@ -700,7 +701,7 @@ import WorkerFixtureSupport
         await HerdrWorkOwnership.shutdown()
         maintenance = nil
         HerdrTopicFeed.shutdown()
-        PresenterState.shared.shutdown()
+        PresenterState.shared.release(presenterOwner)
         MachineRegistry.shutdown()
     }
 
