@@ -330,7 +330,7 @@ test("an empty duplicate draft never hides the real release for its tag", () => 
   expect(() => releaseFromListing([published, filled], tag)).toThrow(
     "Ambiguous",
   );
-  expect(() =>
-    releaseFromListing([orphan, { ...orphan, id: 4 }], tag),
-  ).toThrow("Ambiguous");
+  expect(() => releaseFromListing([orphan, { ...orphan, id: 4 }], tag)).toThrow(
+    "Ambiguous",
+  );
 });
