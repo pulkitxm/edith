@@ -40,7 +40,7 @@ import EdithExtensionCore
         let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
         let framework = Bundle(for: SPUStandardUpdaterController.self)
         let resourcesLoaded = NSNib(nibNamed: "SUUpdateAlert", bundle: framework) != nil
-        return ["ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
+        return ["hostABI": Bundle(for: FixtureService.self).object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "", "runtimeAPIVersion": ExtensionRuntimeAPI.version, "ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
     }
     func teardown() async {
         try? await Task.sleep(for: .milliseconds(50))
@@ -148,6 +148,8 @@ import EdithExtensionCore
       assert.equal(result.sparkleGUIControllerInitialized, true);
       assert.equal(result.sparkleGUIResourcesLoaded, true);
       assert.equal(result.exposedWindows, 0);
+      assert.equal(result.hostABI, workerHostABI);
+      assert.equal(result.runtimeAPIVersion, 1);
       assert.equal(
         await readFile(join(root, `${role}.stopped`), "utf8"),
         "stopped",
