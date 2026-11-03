@@ -86,12 +86,22 @@ public enum HostContainedRole {
         if operation == "probe" {
             let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
             FileHandle.standardOutput.write(data + Data([10]))
-            _ = try execute(object, ["operation": "stop"])
+            finishBeforeExit(object)
             return true
         }
         CFRunLoopRun()
-        _ = try execute(object, ["operation": "stop"])
+        finishBeforeExit(object)
         return true
+    }
+
+    private static func finishBeforeExit(_ runtime: any ExtensionRuntimeProtocol) {
+        var finished = false
+        Task { @MainActor in
+            await runtime.prepareForStop()
+            finished = true
+            CFRunLoopStop(CFRunLoopGetMain())
+        }
+        while !finished { CFRunLoopRunInMode(.defaultMode, 0.05, false) }
     }
 
     private static func fixtureAdmission(_ bundle: Bundle) -> Bool {

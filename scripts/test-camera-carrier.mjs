@@ -42,6 +42,11 @@ import EdithExtensionCore
         let resourcesLoaded = NSNib(nibNamed: "SUUpdateAlert", bundle: framework) != nil
         return ["ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
     }
+    func teardown() async {
+        try? await Task.sleep(for: .milliseconds(50))
+        guard let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] else { return }
+        try? Data("stopped".utf8).write(to: URL(fileURLWithPath: root).appendingPathComponent("${role}.stopped"))
+    }
 }
 @_cdecl("edith_extension_create") public func create() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(ExtensionServiceRuntime(id: "virtualCamera", role: "${role}", bundle: Bundle(for: FixtureService.self)) { _ in FixtureService() }).toOpaque()) })
@@ -143,6 +148,10 @@ import EdithExtensionCore
       assert.equal(result.sparkleGUIControllerInitialized, true);
       assert.equal(result.sparkleGUIResourcesLoaded, true);
       assert.equal(result.exposedWindows, 0);
+      assert.equal(
+        await readFile(join(root, `${role}.stopped`), "utf8"),
+        "stopped",
+      );
     }
     assert.equal(
       output.provenance.roles.find((item) => item.role === role)
@@ -202,6 +211,7 @@ import EdithExtensionCore
       ),
       archiveSymlinks: 0,
       signatureTamperRejected: true,
+      asynchronousTeardownCompleted: true,
       fixtureScopeRejected: true,
     }),
   );
