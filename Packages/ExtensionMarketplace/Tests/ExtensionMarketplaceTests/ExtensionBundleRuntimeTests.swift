@@ -69,8 +69,6 @@ import Testing
             try runtime.response(id: package.id, operation: "status")["running"] as? Bool == false)
         #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
         #expect(defaults.bool(forKey: "preventSleep"))
-        try await runtime.prepareDisableAll()
-        try runtime.stopAll()
         let selectedDirectory = fixture.store.payloadDirectory(for: package)
             .deletingLastPathComponent()
         let ui = try ExtensionBundleRuntime(
@@ -96,7 +94,6 @@ import Testing
         try runtime.synchronize(id: package.id, context: [:])
         #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
         #expect(defaults.bool(forKey: "preventSleep"))
-        try runtime.stop(id: package.id)
         #expect(try runtime.snapshot(id: package.id)?.active == false)
         #expect(
             try runtime.response(id: package.id, operation: "status")["running"] as? Bool == false)
@@ -112,7 +109,128 @@ import Testing
         #expect(try runtime.snapshot(id: package.id)?.active == false)
         #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
         #expect(defaults.bool(forKey: "preventSleep"))
+        #expect(!runtime.supportsCommands(id: package.id))
+        try await runtime.suspendCommandsAll()
+        #expect(
+            try runtime.response(id: package.id, operation: "synchronize")["ok"] as? Bool == false)
+        try await runtime.prepareDisableAll()
+        #expect(!defaults.bool(forKey: "preventSleep"))
+        try await runtime.prepareToStopAll()
         try runtime.stopAll()
+        try await runtime.prepareToStopAll()
+        try runtime.stopAll()
+        #expect(!runtime.supportsCommands(id: package.id))
+    }
+
+    @Test func aFailedStartRetainsOwnershipUntilAsyncTeardownFinishes() async throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let package = ExtensionPackage(
+            id: "failedStart", version: "1.0.0", hostABI: "synthetic-abi",
+            downloadURL: URL(string: "https://synthetic.invalid/failedStart.zip")!,
+            sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1)
+        let role = fixture.store.roleBundle(for: package, role: .app)
+        let contents = role.appendingPathComponent("Contents")
+        let binaries = contents.appendingPathComponent("MacOS")
+        try FileManager.default.createDirectory(at: binaries, withIntermediateDirectories: true)
+        let executable = binaries.appendingPathComponent("FailedStart")
+        let source = fixture.directory.appendingPathComponent("FailedStart.swift")
+        try """
+        import Foundation
+        import EdithExtensionCore
+        @MainActor final class FailedStartService: ExtensionService {
+            var requiresDefaultsSuite: Bool { false }
+            private var directory: URL?
+            private var starts = 0
+            private var teardowns = 0
+            func start(_ context: ExtensionHostContext) -> Bool {
+                guard let path = context.dataDirectory else { return false }
+                let directory = URL(fileURLWithPath: path)
+                self.directory = directory
+                starts += 1
+                try? Data(String(starts).utf8).write(to: directory.appendingPathComponent("starts"))
+                return false
+            }
+            func teardown() async {
+                teardowns += 1
+                try? await Task.sleep(for: .milliseconds(50))
+                guard let directory else { return }
+                try? Data(String(teardowns).utf8).write(to: directory.appendingPathComponent("teardowns"))
+            }
+        }
+        private final class FailedStartBundleAnchor {}
+        @_cdecl("edith_extension_create")
+        public func createFailedStart() -> UnsafeMutableRawPointer? {
+            MainActor.assumeIsolated {
+                Unmanaged.passRetained(ExtensionServiceRuntime(
+                    id: "failedStart", role: "app", bundle: Bundle(for: FailedStartBundleAnchor.self)
+                ) { _ in FailedStartService() }).toOpaque()
+            }
+        }
+        """.write(to: source, atomically: true, encoding: .utf8)
+        let information: [String: Any] = [
+            "CFBundleIdentifier": "com.pulkit.edith.extensions.failedStart.app",
+            "CFBundleExecutable": "FailedStart", "CFBundlePackageType": "BNDL",
+            "CFBundleShortVersionString": package.version, "EdithHostABI": package.hostABI,
+            "EdithRuntimeAPIVersion": 1,
+        ]
+        try PropertyListSerialization.data(
+            fromPropertyList: information, format: .xml, options: 0
+        ).write(to: contents.appendingPathComponent("Info.plist"))
+        try JSONEncoder().encode(ExtensionPayloadManifest(package: package)).write(
+            to: fixture.store.payloadDirectory(for: package).appendingPathComponent("package.json"))
+        let products = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent(".build/arm64-apple-macosx/debug")
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        compiler.arguments = [
+            "swiftc", "-emit-library", "-module-name", "FailedStartFixture",
+            "-I", products.appendingPathComponent("Modules").path,
+            "-L", products.path, "-lEdithExtensionKit",
+            "-Xlinker", "-rpath", "-Xlinker", products.path,
+            source.path, "-o", executable.path,
+        ]
+        try compiler.run()
+        compiler.waitUntilExit()
+        try #require(compiler.terminationStatus == 0)
+        let signer = Process()
+        signer.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        signer.arguments = ["--force", "--sign", "-", role.path]
+        try signer.run()
+        signer.waitUntilExit()
+        try #require(signer.terminationStatus == 0)
+        try fixture.store.commit([package])
+        for stopBeforeWait in [false, true] {
+            let runtime = ExtensionBundleRuntime(
+                store: fixture.store, role: .app, hostABI: package.hostABI,
+                verify: ExtensionCodeSignature.verifyDevelopment)
+            let dataDirectory = fixture.directory.appendingPathComponent(
+                "synthetic-data-\(stopBeforeWait)")
+            try FileManager.default.createDirectory(
+                at: dataDirectory, withIntermediateDirectories: true)
+            let starts = dataDirectory.appendingPathComponent("starts")
+            let teardowns = dataDirectory.appendingPathComponent("teardowns")
+            let context: NSDictionary = ["dataDirectory": dataDirectory.path]
+            #expect(throws: (any Error).self) {
+                try runtime.start(id: package.id, context: context)
+            }
+            #expect(try String(contentsOf: starts, encoding: .utf8) == "1")
+            #expect(!FileManager.default.fileExists(atPath: teardowns.path))
+            #expect(try runtime.snapshot(id: package.id)?.active == false)
+            #expect(!runtime.supportsCommands(id: package.id))
+            if stopBeforeWait { try runtime.stopAll() }
+            try await runtime.prepareToStopAll()
+            #expect(try String(contentsOf: teardowns, encoding: .utf8) == "1")
+            try runtime.stopAll()
+            try runtime.stopAll()
+            try await runtime.prepareToStopAll()
+            #expect(throws: (any Error).self) {
+                try runtime.start(id: package.id, context: context)
+            }
+            #expect(try String(contentsOf: starts, encoding: .utf8) == "1")
+            #expect(try String(contentsOf: teardowns, encoding: .utf8) == "1")
+        }
     }
 
     @Test func anUninstalledExtensionCannotStart() {

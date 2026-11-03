@@ -22,12 +22,22 @@ public final class ExtensionBundleRuntime {
     }
 
     private final class Loaded {
+        enum Lifecycle {
+            case loaded
+            case starting
+            case started
+            case stopped
+
+            var needsCleanup: Bool { self == .starting || self == .started }
+        }
+
         let package: ExtensionPackage
         let bundle: Bundle
         let handle: UnsafeMutableRawPointer
         let object: NSObject & ExtensionRuntimeProtocol
         let lease: PackageFileLock?
         var active = false
+        var lifecycle = Lifecycle.loaded
 
         init(
             package: ExtensionPackage, bundle: Bundle, handle: UnsafeMutableRawPointer,
@@ -105,18 +115,21 @@ public final class ExtensionBundleRuntime {
     public func start(id: String, context: NSDictionary) throws {
         guard readOnlyPackage == nil else { throw MarketplaceError.invalidBundle }
         let instance = try load(id: id)
-        guard !instance.active else { return }
+        if instance.lifecycle == .started { return }
+        guard instance.lifecycle == .loaded else { throw MarketplaceError.invalidBundle }
         if context["recoveryOnly"] as? Bool == true,
             !instance.object.supportsDisablePreparation
         {
             return
         }
+        instance.lifecycle = .starting
         let response = try execute(instance, operation: "start", context: context)
         guard response["ok"] as? Bool == true else {
             _ = try? execute(instance, operation: "stop", context: [:])
             throw BundleCommandError.failed(
                 response["error"] as? String ?? "\(id) \(role.rawValue) refused to start")
         }
+        instance.lifecycle = .started
         instance.active = context["recoveryOnly"] as? Bool != true
     }
 
@@ -127,10 +140,11 @@ public final class ExtensionBundleRuntime {
     }
 
     public func stop(id: String) throws {
-        guard let instance = loaded[id], instance.active else { return }
+        guard let instance = loaded[id], instance.lifecycle.needsCleanup else { return }
         let response = try execute(instance, operation: "stop", context: [:])
         guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
         instance.active = false
+        instance.lifecycle = .stopped
     }
 
     public func suspendCommandsAll() async throws {
@@ -138,7 +152,7 @@ public final class ExtensionBundleRuntime {
     }
 
     private func suspendCommands(includeInactive: Bool) async throws {
-        for instance in loaded.values where instance.active || includeInactive {
+        for instance in loaded.values where instance.lifecycle != .loaded || includeInactive {
             await instance.object.suspend()
         }
     }
@@ -146,7 +160,7 @@ public final class ExtensionBundleRuntime {
     public func prepareDisableAll() async throws {
         try await suspendCommandsAll()
         for instance in loaded.values
-        where instance.active && instance.object.supportsDisablePreparation {
+        where instance.lifecycle.needsCleanup && instance.object.supportsDisablePreparation {
             try await instance.object.prepareForDisable()
         }
     }
@@ -156,7 +170,7 @@ public final class ExtensionBundleRuntime {
     }
 
     private func prepareToStop(includeInactive: Bool) async throws {
-        for instance in loaded.values where instance.active || includeInactive {
+        for instance in loaded.values where instance.lifecycle != .loaded || includeInactive {
             await instance.object.prepareForStop()
         }
     }
