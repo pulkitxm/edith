@@ -2,118 +2,35 @@
 import WorkerFixtureSupport
 #endif
 import AppKit
+import Carbon.HIToolbox
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
-import Carbon.HIToolbox
 import SwiftUI
 
 @MainActor
-final class ExtensionRuntime: NSObject {
-    private var service: FocusDimEngine?
+final class FocusDimService: ExtensionService {
+    private var engine: FocusDimEngine?
     private var observer: NSObjectProtocol?
-
     private var presentation: ControlPresentation?
-
-    private var fixture: WorkerFixtureAdmission?
-    private let commands = ExtensionCommandRegistry()
-    private var suspended = false
-    private var suspension: Task<Void, Never>?
     private var retiredPresentations: [UUID: Task<Void, Never>] = [:]
+    private var suspended = false
+    private var fixture: WorkerFixtureAdmission?
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
-            let reply = try await self.executeCommand(command, payload: payload)
-            return reply
+    var isRunning: Bool { engine != nil }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        guard !suspended, !ExtensionHostRole.isInterfaceProcess, presentation == nil else {
+            return false
         }
-    }
-
-    private func executeCommand(_ command: String, payload: Data) async throws -> Data {
-        if command.hasPrefix("focusDim.ui.") {
-            guard self.service != nil else { throw ExtensionPeerError.unavailable }
-            let defaults = SharedDefaults.store
-            switch command {
-            case "focusDim.ui.read":
-                guard payload == Data("{}".utf8) else {
-                    throw ExtensionPeerError.invalidRequest
-                }
-            case "focusDim.ui.update":
-                try ControlPresentationContract.update(payload, defaults: defaults)
-                self.service?.applySettings()
-            case "focusDim.ui.action":
-                let action = try JSONDecoder().decode(
-                    ControlPresentationAction.self, from: payload)
-                guard action.action == "screenRecording", action.value.isEmpty else {
-                    throw ExtensionPeerError.invalidRequest
-                }
-                guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
-                _ = CGRequestScreenCaptureAccess()
-            default: throw ExtensionPeerError.invalidRequest
-            }
-            return try ControlPresentationContract.snapshot(
-                defaults: defaults, state: ControlPresentationState())
-        }
-        guard let service = self.service else { throw ExtensionPeerError.unavailable }
-        return try await SurfaceCommandService.execute(
-            providerID: "focusDim", command: command, payload: payload,
-            snapshot: { _ in
-                FocusDimSurface.snapshot(active: FocusDimState.isActive())
-            },
-            perform: { action in
-                FocusDimState.setActive(action == "enable")
-                service.applySettings()
-                IPC.post(IPC.Name.settingsChanged)
-            })
-    }
-
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        commands.suspend()
-        suspended = true
-        let service = service
-        let presentation = presentation
-        presentation?.stop()
-        service?.cancelPendingWork()
-        if suspension == nil {
-            let presentations = Array(retiredPresentations.values)
-            suspension = Task { [self, service, presentation] in
-                await commands.suspendAndWait()
-                await service?.drain()
-                await presentation?.stopAndWait()
-                for task in presentations { await task.value }
-            }
-        }
-        let pending = suspension
-        Task { [self] in
-            await pending?.value
-            withExtendedLifetime(self) { completion() }
-        }
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        suspendCommands { [self] in
-            Task { [self] in
-                await self.commands.shutdownAndWait()
-                let service = self.service
-                _ = self.execute(["operation": "stop"])
-                await service?.drain()
-                for task in Array(self.retiredPresentations.values) { await task.value }
-                completion()
-            }
-        }
-    }
-
-    private func requireEngineCurrent() throws {
-    }
-
-    private func startService(_ input: NSDictionary) -> Bool {
-        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            !context.isHostedFunctionalFixture
         else { return false }
-        guard let suite = input["defaultsSuite"] as? String,
-            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return false }
+        do {
+            fixture = try WorkerFixtureAdmission.current(
+                extensionID: "focusDim", context: context.input,
+                roleBundle: Bundle(for: FocusDimService.self))
+        } catch { return false }
         SharedDefaults.store.set(true, forKey: FocusDimState.enabledKey)
         if fixture == nil {
             HotKeyRegistrar.configure(
@@ -122,98 +39,138 @@ final class ExtensionRuntime: NSObject {
                     defaultCode: kVK_ANSI_F,
                     defaultModifiers: cmdKey | optionKey))
         }
-        if service == nil { service = FocusDimEngine(fixture: fixture) }
+        if engine == nil { engine = FocusDimEngine(fixture: fixture) }
         if observer == nil {
             observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                MainActor.assumeIsolated { self?.service?.applySettings() }
+                MainActor.assumeIsolated { self?.engine?.applySettings() }
             }
         }
         return true
     }
 
-    private func retirePresentation() {
-        guard let presentation else { return }
-        presentation.stop()
-        let id = UUID()
-        retiredPresentations[id] = Task { [self, presentation] in
-            await presentation.stopAndWait()
-            retiredPresentations[id] = nil
-        }
-        self.presentation = nil
+    func synchronize() {
+        engine?.applySettings()
     }
 
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "focusDim", "role": "helper",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !suspended, retiredPresentations.isEmpty,
-                let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "focusDim",
-                configuration.defaultsSuite
-                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            retirePresentation()
-            presentation = ControlPresentation(client: configuration.engineClient)
-            return ["ok": true] as NSDictionary
-        case "stopUI":
-            retirePresentation()
-            return ["ok": true] as NSDictionary
-        case "prepareToStop":
-            commands.shutdown()
-            return ["ok": true] as NSDictionary
-        case "start":
-            guard !suspended else { return ["ok": false] as NSDictionary }
-            do {
-                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-                    input["hostedFunctionalFixture"] == nil
-                else { return ["ok": false] as NSDictionary }
-                fixture = try WorkerFixtureAdmission.current(
-                    extensionID: "focusDim", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                return ["ok": startService(input)] as NSDictionary
-            } catch { return ["ok": false] as NSDictionary }
-        case "view":
-            guard let presentation else { return ["ok": false] as NSDictionary }
-            UIScale.install(from: SharedDefaults.store)
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        FocusDimSettings(presentation: presentation)
-                    }
-                })
-        case "synchronize":
-            do { try requireEngineCurrent() } catch {
-                return ["ok": false] as NSDictionary
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        if command.hasPrefix("focusDim.ui.") {
+            guard engine != nil else { throw ExtensionPeerError.unavailable }
+            let defaults = SharedDefaults.store
+            switch command {
+            case "focusDim.ui.read":
+                guard payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case "focusDim.ui.update":
+                try ControlPresentationContract.update(payload, defaults: defaults)
+                engine?.applySettings()
+            case "focusDim.ui.action":
+                let action = try JSONDecoder().decode(
+                    ControlPresentationAction.self, from: payload)
+                guard action.action == "screenRecording", action.value.isEmpty else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                guard fixture == nil else { throw ExtensionPeerError.unavailable }
+                _ = CGRequestScreenCaptureAccess()
+            default: throw ExtensionPeerError.invalidRequest
             }
-            service?.applySettings()
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "stop":
-            suspendCommands(completion: {})
-            retirePresentation()
-            commands.shutdown()
-            service?.shutdown()
-            service = nil
-            IPC.stopObserving(observer)
-            observer = nil
-            HotKeyRegistrar.shutdown()
-        case "status": return ["ok": true, "running": service != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
         }
-        return ["ok": true] as NSDictionary
+        guard let engine else { throw ExtensionPeerError.unavailable }
+        return try await SurfaceCommandService.execute(
+            providerID: "focusDim", command: command, payload: payload,
+            snapshot: { _ in
+                FocusDimSurface.snapshot(active: FocusDimState.isActive())
+            },
+            perform: { action in
+                FocusDimState.setActive(action == "enable")
+                engine.applySettings()
+                IPC.post(IPC.Name.settingsChanged)
+            })
     }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard !suspended, retiredPresentations.isEmpty,
+            configuration.defaultsSuite
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        if let stopping = retirePresentation() {
+            let id = UUID()
+            retiredPresentations[id] = Task { [self] in
+                await stopping.value
+                retiredPresentations[id] = nil
+            }
+        }
+        presentation = ControlPresentation(client: configuration.engineClient)
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let presentation = self.presentation else { return nil }
+        UIScale.install(from: SharedDefaults.store)
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                ControlSettingsHost(presentation: presentation) {
+                    FocusDimSettings(presentation: presentation)
+                }
+            })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        retirePresentation().map { [$0] } ?? []
+    }
+
+    func cancelPendingWork() {
+        suspended = true
+        presentation?.stop()
+        engine?.cancelPendingWork()
+    }
+
+    func drain() async {
+        await engine?.drain()
+        await presentation?.stopAndWait()
+        await finishRetiredPresentations()
+    }
+
+    func teardown() async {
+        await retirePresentation()?.value
+        await finishRetiredPresentations()
+        let stopping = engine
+        engine = nil
+        stopping?.shutdown()
+        IPC.stopObserving(observer)
+        observer = nil
+        HotKeyRegistrar.shutdown()
+        await stopping?.drain()
+    }
+
+    private func retirePresentation() -> Task<Void, Never>? {
+        guard let presentation else { return nil }
+        presentation.stop()
+        self.presentation = nil
+        return Task { await presentation.stopAndWait() }
+    }
+
+    private func finishRetiredPresentations() async {
+        while !retiredPresentations.isEmpty {
+            for task in Array(retiredPresentations.values) { await task.value }
+        }
+    }
+}
+
+@MainActor
+func makeFocusDimRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "focusDim", role: "helper", bundle: Bundle(for: BundleAnchor.self)
+    ) { _ in FocusDimService() }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeFocusDimRuntime()).toOpaque())
         })
 }

@@ -9,173 +9,28 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ExtensionRuntime: NSObject {
-    private var service: MicMuteEngine?
+final class MicMuteService: ExtensionService {
+    private var engine: MicMuteEngine?
     private var observer: NSObjectProtocol?
-
     private var presentation: ControlPresentation?
     private var presentationStops: [UUID: Task<Void, Never>] = [:]
     private var draining = false
-
     private var fixture: WorkerFixtureAdmission?
-    private let commands = ExtensionCommandRegistry()
 
-    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self else { throw ExtensionPeerError.unavailable }
-            return try await self.withFixtureRequest(
-                command, payload: payload, token: request["token"] as? String
-            ) { [weak self] in
-                if command.hasPrefix("micMute.ui.") {
-                    guard let self, self.service != nil else {
-                        throw ExtensionPeerError.unavailable
-                    }
-                    let defaults = SharedDefaults.store
-                    switch command {
-                    case "micMute.ui.read":
-                        guard payload == Data("{}".utf8) else {
-                            throw ExtensionPeerError.invalidRequest
-                        }
-                    case "micMute.ui.update":
-                        try ControlPresentationContract.update(payload, defaults: defaults)
-                        self.service?.syncSettings()
-                    case "micMute.ui.action":
-                        let action = try JSONDecoder().decode(
-                            ControlPresentationAction.self, from: payload)
-                        guard action.value.isEmpty, let service = self.service else {
-                            throw ExtensionPeerError.invalidRequest
-                        }
-                        switch action.action {
-                        case "mute": service.setMuted(true)
-                        case "unmute": service.setMuted(false)
-                        case "retry": service.retry()
-                        default: throw ExtensionPeerError.invalidRequest
-                        }
-                    default: throw ExtensionPeerError.invalidRequest
-                    }
-                    return try ControlPresentationContract.snapshot(
-                        defaults: defaults,
-                        state: ControlPresentationState(
-                            muted: self.service?.muted ?? false, error: self.service?.error))
-                }
-                guard let self, let service = self.service else {
-                    throw ExtensionPeerError.unavailable
-                }
-                return try await SurfaceCommandService.execute(
-                    providerID: "micMute", command: command, payload: payload,
-                    snapshot: { _ in
-                        MicMuteSurface.snapshot(muted: service.muted)
-                    },
-                    perform: { action in
-                        guard action == "toggle" else { throw ExtensionPeerError.invalidRequest }
-                        service.toggle()
-                    })
-            }
+    var isRunning: Bool { observer != nil }
+
+    func start(_ context: ExtensionHostContext) -> Bool {
+        guard !draining, !ExtensionHostRole.isInterfaceProcess, presentation == nil else {
+            return false
         }
-    }
-
-    @objc(suspendCommandsWithCompletion:)
-    func suspendCommands(completion: @escaping () -> Void) {
-        _ = commands.suspend()
-        draining = true
-        let presentation = presentation
-        presentation?.stop()
-        let service = service
-        service?.suspendWork()
-        Task { [self, service, presentation] in
-            _ = await commands.suspendAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(presentation)
-            completion()
-        }
-    }
-
-    @objc(prepareToStopWithCompletion:)
-    func prepareToStop(completion: @escaping () -> Void) {
-        draining = true
-        retirePresentation()
-        let service = service
-        service?.suspendWork()
-        commands.shutdown()
-        Task { [self, service] in
-            await commands.shutdownAndWait()
-            await service?.suspendAndWait()
-            await finishPresentations(nil)
-            _ = execute(["operation": "stop"])
-            completion()
-        }
-    }
-
-    @objc func execute(_ input: NSDictionary) -> NSObject {
-        switch input["operation"] as? String {
-        case "describe":
-            let bundle = Bundle(for: ExtensionRuntime.self)
-            return [
-                "id": "micMute", "role": "helper",
-                "version": bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                    as? String ?? "",
-                "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
-            ] as NSDictionary
-        case "configureUI":
-            guard !draining, presentationStops.isEmpty else { return ["ok": false] as NSDictionary }
-            guard let configuration = ExtensionUIConfiguration(context: input),
-                configuration.extensionID == "micMute",
-                configuration.defaultsSuite
-                    == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            retirePresentation()
-            presentation = ControlPresentation(client: configuration.engineClient)
-            return ["ok": true] as NSDictionary
-        case "stopUI":
-            retirePresentation()
-            return ["ok": true] as NSDictionary
-        case "prepareToStop":
-            commands.shutdown()
-            return ["ok": true] as NSDictionary
-        case "start":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            do {
-                guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
-                    input["hostedFunctionalFixture"] == nil
-                else { throw WorkerFixtureError.invalid }
-                fixture = try WorkerFixtureAdmission.current(
-                    extensionID: "micMute", context: input,
-                    roleBundle: Bundle(for: ExtensionRuntime.self))
-                return startOwned(input)
-            } catch { return ["ok": false] as NSDictionary }
-        case "view":
-            guard let presentation else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    ControlSettingsHost(presentation: presentation) {
-                        Form { MicMuteRows(presentation: presentation) }.edithForm()
-                    }
-                })
-        case "synchronize":
-            guard !draining else { return ["ok": false] as NSDictionary }
-            service?.syncSettings()
-        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "stop":
-            retirePresentation()
-            commands.shutdown()
-            service?.shutdown()
-            service = nil
-            IPC.stopObserving(observer)
-            observer = nil
-            HotKeyRegistrar.shutdown()
-        case "toggle": service?.toggle()
-        case "status": return ["ok": true, "running": observer != nil] as NSDictionary
-        default: return ["ok": false] as NSDictionary
-        }
-        return ["ok": true] as NSDictionary
-    }
-
-    private func startOwned(_ input: NSDictionary) -> NSObject {
-        guard !ExtensionHostRole.isInterfaceProcess, presentation == nil
-        else { return ["ok": false] as NSDictionary }
-        guard let suite = input["defaultsSuite"] as? String,
-            suite == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return ["ok": false] as NSDictionary }
+        guard ExtensionEnvironment.values["EDITH_FUNCTIONAL_FIXTURE"] == nil,
+            !context.isHostedFunctionalFixture
+        else { return false }
+        do {
+            fixture = try WorkerFixtureAdmission.current(
+                extensionID: "micMute", context: context.input,
+                roleBundle: Bundle(for: MicMuteService.self))
+        } catch { return false }
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
@@ -183,48 +38,148 @@ final class ExtensionRuntime: NSObject {
                     defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
         }
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Mic.muteEnabled)
-        if service == nil { service = MicMuteEngine(fixture: fixture) }
-        service?.syncSettings()
+        if engine == nil { engine = MicMuteEngine(fixture: fixture) }
+        engine?.syncSettings()
         if observer == nil {
             observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                MainActor.assumeIsolated { self?.service?.syncSettings() }
+                MainActor.assumeIsolated { self?.engine?.syncSettings() }
             }
         }
+        return true
+    }
+
+    func synchronize() {
+        guard !draining else { return }
+        engine?.syncSettings()
+    }
+
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        if command.hasPrefix("micMute.ui.") {
+            guard engine != nil else { throw ExtensionPeerError.unavailable }
+            let defaults = SharedDefaults.store
+            switch command {
+            case "micMute.ui.read":
+                guard payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+            case "micMute.ui.update":
+                try ControlPresentationContract.update(payload, defaults: defaults)
+                engine?.syncSettings()
+            case "micMute.ui.action":
+                let action = try JSONDecoder().decode(
+                    ControlPresentationAction.self, from: payload)
+                guard action.value.isEmpty, let engine else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                switch action.action {
+                case "mute": engine.setMuted(true)
+                case "unmute": engine.setMuted(false)
+                case "retry": engine.retry()
+                default: throw ExtensionPeerError.invalidRequest
+                }
+            default: throw ExtensionPeerError.invalidRequest
+            }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults,
+                state: ControlPresentationState(
+                    muted: engine?.muted ?? false, error: engine?.error))
+        }
+        guard let engine else { throw ExtensionPeerError.unavailable }
+        return try await SurfaceCommandService.execute(
+            providerID: "micMute", command: command, payload: payload,
+            snapshot: { _ in
+                MicMuteSurface.snapshot(muted: engine.muted)
+            },
+            perform: { action in
+                guard action == "toggle" else { throw ExtensionPeerError.invalidRequest }
+                engine.toggle()
+            })
+    }
+
+    func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
+        guard !draining, presentationStops.isEmpty,
+            configuration.defaultsSuite
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
+        else { return false }
+        if let stopping = retirePresentation() {
+            let id = UUID()
+            presentationStops[id] = Task { [self] in
+                await stopping.value
+                presentationStops[id] = nil
+            }
+        }
+        presentation = ControlPresentation(client: configuration.engineClient)
+        return true
+    }
+
+    func view(for presentation: UUID) -> NSViewController? {
+        guard let presentation = self.presentation else { return nil }
+        return NSHostingController(
+            rootView: ExtensionPageHost {
+                ControlSettingsHost(presentation: presentation) {
+                    Form { MicMuteRows(presentation: presentation) }.edithForm()
+                }
+            })
+    }
+
+    func stopUI() -> [Task<Void, Never>] {
+        retirePresentation().map { [$0] } ?? []
+    }
+
+    func perform(_ operation: String, context: NSDictionary) -> NSObject? {
+        guard operation == "toggle" else { return nil }
+        engine?.toggle()
         return ["ok": true] as NSDictionary
     }
 
-    private func withFixtureRequest(
-        _ operation: String, payload: Data, token: String?,
-        execute: () async throws -> Data
-    ) async throws -> Data {
-        return try await execute()
+    func cancelPendingWork() {
+        draining = true
+        presentation?.stop()
+        engine?.suspendWork()
     }
 
-    private func retirePresentation() {
-        guard let presentation else { return }
-        presentation.stop()
-        let id = UUID()
-        presentationStops[id] = Task { [self, presentation] in
-            defer { presentationStops[id] = nil }
-            await presentation.stopAndWait()
-        }
-        self.presentation = nil
-    }
-
-    private func finishPresentations(_ presentation: ControlPresentation?) async {
+    func drain() async {
+        await engine?.suspendAndWait()
         await presentation?.stopAndWait()
-        while !presentationStops.isEmpty {
-            let pending = Array(presentationStops.values)
-            for task in pending { await task.value }
-        }
+        await finishPresentationStops()
     }
 
+    func teardown() async {
+        await retirePresentation()?.value
+        await finishPresentationStops()
+        engine?.shutdown()
+        engine = nil
+        IPC.stopObserving(observer)
+        observer = nil
+        HotKeyRegistrar.shutdown()
+    }
+
+    private func retirePresentation() -> Task<Void, Never>? {
+        guard let presentation else { return nil }
+        presentation.stop()
+        self.presentation = nil
+        return Task { await presentation.stopAndWait() }
+    }
+
+    private func finishPresentationStops() async {
+        while !presentationStops.isEmpty {
+            for task in Array(presentationStops.values) { await task.value }
+        }
+    }
+}
+
+@MainActor
+func makeMicMuteRuntime() -> ExtensionServiceRuntime {
+    final class BundleAnchor {}
+    return ExtensionServiceRuntime(
+        id: "micMute", role: "helper", bundle: Bundle(for: BundleAnchor.self)
+    ) { _ in MicMuteService() }
 }
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
     UnsafeMutableRawPointer(
         bitPattern: MainActor.assumeIsolated {
-            UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
+            UInt(bitPattern: Unmanaged.passRetained(makeMicMuteRuntime()).toOpaque())
         })
 }
