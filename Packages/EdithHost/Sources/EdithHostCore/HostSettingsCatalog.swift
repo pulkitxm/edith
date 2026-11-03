@@ -138,6 +138,7 @@ public enum HostSettingsCatalog {
         AppStorageKeys.CodeStats.identitySubstrings,
         AppStorageKeys.CodeStats.includeArchived,
         AppStorageKeys.CodeStats.includeForks,
+        AppStorageKeys.CodeStats.scheduleEveryHours,
         AppStorageKeys.CodeStats.scheduleHour,
         AppStorageKeys.CodeStats.scheduleKind,
         AppStorageKeys.CodeStats.scheduleWeekday,

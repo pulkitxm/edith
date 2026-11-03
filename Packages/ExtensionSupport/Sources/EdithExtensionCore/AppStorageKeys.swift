@@ -121,6 +121,7 @@ public enum AppStorageKeys {
         public static let scheduleKind = "codeStatsScheduleKind"
         public static let scheduleHour = "codeStatsScheduleHour"
         public static let scheduleWeekday = "codeStatsScheduleWeekday"
+        public static let scheduleEveryHours = "codeStatsScheduleEveryHours"
         public static let includeForks = "codeStatsIncludeForks"
         public static let includeArchived = "codeStatsIncludeArchived"
         public static let identitySubstrings = "codeStatsIdentitySubstrings"

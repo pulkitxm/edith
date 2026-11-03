@@ -11,7 +11,7 @@
 | [`ed code-stats cancel`](./cancel.md) | Cancels the refresh in progress. |
 | [`ed code-stats report`](./report.md) | Prints the report for 30 days, 90 days, a year or all time. |
 | [`ed code-stats folder`](./folder.md) | Chooses the folder that holds the mirror. |
-| [`ed code-stats schedule`](./schedule.md) | Chooses a manual, daily or weekly refresh. |
+| [`ed code-stats schedule`](./schedule.md) | Chooses a manual, hourly, daily or weekly refresh. |
 | [`ed code-stats identity`](./identity.md) | Lists, adds and removes the identities counted as you. |
 | [`ed code-stats authors`](./authors.md) | Lists the commit authors found in the mirror. |
 | [`ed code-stats audit`](./audit.md) | Explains what was counted and what was excluded, and why. |
@@ -32,6 +32,6 @@
 | Code | When |
 | --- | --- |
 | 0 | the command completed |
-| 2 | a range, schedule, hour or weekday was not valid |
+| 2 | a range, schedule, interval, hour or weekday was not valid |
 | 3 | the folder does not exist, an identity to remove is not listed, or no report exists yet |
 | 4 | the background agent is not running |

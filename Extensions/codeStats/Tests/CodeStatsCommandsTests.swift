@@ -56,6 +56,7 @@ import Testing
             ("codeStats.folder", ["path": fixture.harness.mirror.path]),
             ("codeStats.schedule", ["kind": "daily", "hour": true]),
             ("codeStats.schedule", ["kind": "weekly", "weekday": 8]),
+            ("codeStats.schedule", ["kind": "hourly", "every": 5]),
             ("codeStats.schedule", ["kind": "daily", "hour": 1.5]),
             ("codeStats.export", ["card": "highlights", "output": "/tmp/card.png"]),
             ("codeStats.result.chunk", ["resultID": UUID().uuidString, "offset": 0]),

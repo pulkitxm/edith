@@ -277,10 +277,11 @@ struct CodeStatsSettingsSteps: View {
                 selection: Binding(
                     get: { CodeStatsScheduleKind(model.schedule) },
                     set: { kind in Task { await model.setSchedule(kind) } }),
-                options: [CodeStatsScheduleKind.manual, .daily, .weekly],
+                options: [CodeStatsScheduleKind.manual, .hourly, .daily, .weekly],
                 label: {
                     switch $0 {
                     case .manual: "Manually"
+                    case .hourly: "Hourly"
                     case .daily: "Daily"
                     case .weekly: "Weekly"
                     }
@@ -296,6 +297,16 @@ struct CodeStatsSettingsSteps: View {
         switch model.schedule {
         case .manual:
             EmptyView()
+        case .hourly(let every):
+            Picker(
+                "Every",
+                selection: Binding(get: { every }, set: { value in update(.hourly(every: value)) })
+            ) {
+                ForEach(CodeStatsPreferences.everyHours, id: \.self) { value in
+                    Text(CodeStatsPreferences.everyLabel(value)).tag(value)
+                }
+            }
+            .fixedSize()
         case .daily(let hour):
             HStack(spacing: UIScale.pt(10)) {
                 hourPicker(hour) { .daily(hour: $0) }

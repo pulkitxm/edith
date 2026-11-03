@@ -42,6 +42,10 @@ import Testing
         CodeStatsPreferences.setSchedule(.daily(hour: 7), in: defaults)
         #expect(CodeStatsPreferences.schedule(in: defaults) == .daily(hour: 7))
         #expect(defaults.integer(forKey: AppStorageKeys.CodeStats.scheduleWeekday) == 6)
+        CodeStatsPreferences.setSchedule(.hourly(every: 6), in: defaults)
+        #expect(CodeStatsPreferences.schedule(in: defaults) == .hourly(every: 6))
+        defaults.set(5, forKey: AppStorageKeys.CodeStats.scheduleEveryHours)
+        #expect(CodeStatsPreferences.schedule(in: defaults) == .hourly(every: 4))
         CodeStatsPreferences.setSchedule(.manual, in: defaults)
         #expect(CodeStatsPreferences.schedule(in: defaults) == .manual)
     }

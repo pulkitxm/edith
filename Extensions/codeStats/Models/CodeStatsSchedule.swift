@@ -3,12 +3,13 @@ import Foundation
 
 public enum CodeStatsSchedule: Codable, Equatable, Hashable, Sendable {
     case manual
+    case hourly(every: Int)
     case daily(hour: Int)
     case weekly(weekday: Int, hour: Int)
 
     private var slot: DateComponents? {
         switch self {
-        case .manual:
+        case .manual, .hourly:
             return nil
         case .daily(let hour):
             return DateComponents(hour: min(max(hour, 0), 23), minute: 0, second: 0)
@@ -20,7 +21,11 @@ public enum CodeStatsSchedule: Codable, Equatable, Hashable, Sendable {
     }
 
     public func nextRun(after lastRun: Date?, calendar: Calendar) -> Date? {
-        guard let slot, let lastRun else { return nil }
+        guard let lastRun else { return nil }
+        if case .hourly(let every) = self {
+            return lastRun.addingTimeInterval(TimeInterval(max(every, 1)) * 3600)
+        }
+        guard let slot else { return nil }
         return calendar.nextDate(
             after: lastRun, matching: slot, matchingPolicy: .nextTime,
             repeatedTimePolicy: .first, direction: .forward)
