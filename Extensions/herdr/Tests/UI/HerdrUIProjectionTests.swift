@@ -393,7 +393,7 @@ import Testing
     }
 
     @Test func runtimeRejectsUnvalidatedUIAndNeverReturnsAnEnginePage() {
-        let runtime = ExtensionRuntime()
+        let runtime = makeHerdrRuntime()
         #expect(
             (runtime.execute(["operation": "view", "location": "main"]) as? NSDictionary)?["ok"]
                 as? Bool == false)
@@ -408,7 +408,7 @@ import Testing
     }
 
     @Test func eachPresentationKeepsItsTerminalInputWhenAnotherOpensOrStops() throws {
-        let runtime = ExtensionRuntime()
+        let runtime = makeHerdrRuntime()
         let registry = OwnedTerminalSessionRegistry()
         defer { registry.stopAll() }
         let host = "com.pulkit.edith.tests.herdr-presentations"
@@ -438,6 +438,29 @@ import Testing
         #expect(!accepts(notch))
         _ = runtime.execute(["operation": "stopUI", "presentationID": main.presentation.uuidString])
         #expect(!accepts(main))
+    }
+
+    @Test func serviceRoutesTerminalStatusWithoutAnOperationInTheContext() async throws {
+        let service = HerdrService()
+        let registry = OwnedTerminalSessionRegistry()
+        defer { registry.stopAll() }
+        let bridge = SyntheticPTYEngineBridge(registry: registry)
+        let host = "com.pulkit.edith.tests.herdr-service"
+        let configuration = try #require(
+            ExtensionUIConfiguration(context: [
+                "location": "main", "remoteUI": true, "inProcess": true,
+                "hostIdentifier": host, "extensionID": "herdr",
+                "defaultsSuite": host + ".extensions.herdr", "uiOnly": false,
+                "presentationID": bridge.presentation.uuidString, "engineClient": bridge,
+            ]))
+        try #require(service.configureUI(configuration))
+        let reply = service.perform(
+            "terminalUIStatus",
+            context: [
+                "presentationID": bridge.presentation.uuidString
+            ])
+        #expect((reply as? NSDictionary)?["ok"] as? Bool == true)
+        for task in service.stopUI(for: nil) { await task.value }
     }
 
     @Test func ownerStopCancelsInflightOriginalCatalogDiscoveryBeforeCommandDrain() async throws {

@@ -76,7 +76,7 @@ import WorkerFixtureTestSupport
         let admitted = try #require(try fixture.admit())
         let effects = HerdrFixtureEffects()
         var owned: HerdrWorker?
-        let runtime = ExtensionRuntime(
+        let runtime = makeHerdrRuntime(
             fixtureAdmission: { _ in try fixture.admit() },
             workerFactory: { _, admission in
                 let worker = effects.worker(admission); owned = worker; return worker
@@ -126,7 +126,7 @@ import WorkerFixtureTestSupport
         default: Issue.record("Unknown marker mutation")
         }
         let effects = HerdrFixtureEffects()
-        let runtime = ExtensionRuntime(
+        let runtime = makeHerdrRuntime(
             fixtureAdmission: { _ in try fixture.admit() },
             workerFactory: { _, admission in effects.worker(admission) })
         #expect(!ok(runtime.execute(request("start", pause: false))))
@@ -141,7 +141,7 @@ import WorkerFixtureTestSupport
         defer { fixture.remove() }
         var admitted = try fixture.admit()
         let effects = HerdrFixtureEffects()
-        let runtime = ExtensionRuntime(
+        let runtime = makeHerdrRuntime(
             fixtureAdmission: { _ in admitted },
             workerFactory: { _, admission in effects.worker(admission) })
         #expect(ok(runtime.execute(request("start", pause: false))))
@@ -155,7 +155,7 @@ import WorkerFixtureTestSupport
     @Test func productionRuntimeStillAttachesOnlyItsInjectedOwnedObservation() async {
         defer { HerdrWorkOwnership.enable() }
         let effects = HerdrFixtureEffects()
-        let runtime = ExtensionRuntime(
+        let runtime = makeHerdrRuntime(
             fixtureAdmission: { _ in nil },
             workerFactory: { _, admission in effects.worker(admission) })
         let input = request("start", pause: true).mutableCopy() as! NSMutableDictionary
@@ -180,12 +180,13 @@ import WorkerFixtureTestSupport
         let input =
             policy(pause: pause, subscribers: subscribers).mutableCopy() as! NSMutableDictionary
         input["operation"] = operation
+        input["defaultsSuite"] = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
         return input
     }
 
     private func ok(_ reply: NSObject) -> Bool { (reply as? NSDictionary)?["ok"] as? Bool == true }
 
-    private func stop(_ runtime: ExtensionRuntime) async {
+    private func stop(_ runtime: ExtensionServiceRuntime) async {
         await withCheckedContinuation { continuation in
             runtime.prepareToStop { continuation.resume() }
         }
