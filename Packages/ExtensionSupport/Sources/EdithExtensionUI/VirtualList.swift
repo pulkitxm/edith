@@ -76,6 +76,7 @@ public final class VirtualListCoordinator<Item: Identifiable & Equatable>: NSObj
         NSUserInterfaceItemIdentifier("header")
     }
     static var itemCell: NSUserInterfaceItemIdentifier { NSUserInterfaceItemIdentifier("item") }
+    static var maximumHeaderHeight: CGFloat { 4_000 }
 
     weak var table: NSTableView?
     var environment = EnvironmentValues()
@@ -111,11 +112,12 @@ public final class VirtualListCoordinator<Item: Identifiable & Equatable>: NSObj
 
     func measureHeader() {
         guard let table else { return }
-        headerProbe.rootView = content(for: 0)
+        headerProbe.rootView = AnyView(content(for: 0).fixedSize(horizontal: false, vertical: true))
         let width = max(1, table.bounds.width)
-        let height = ceil(
-            headerProbe.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
-                .height)
+        let fitted = headerProbe.sizeThatFits(
+            in: CGSize(width: width, height: Self.maximumHeaderHeight)
+        ).height
+        let height = fitted.isFinite ? ceil(min(fitted, Self.maximumHeaderHeight)) : 0
         guard abs(height - headerHeight) > 0.5 else { return }
         headerHeight = height
         table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: 0))

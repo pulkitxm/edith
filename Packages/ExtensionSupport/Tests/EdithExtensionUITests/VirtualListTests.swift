@@ -62,6 +62,26 @@ import Testing
         #expect(table.rect(ofRow: 0).height > short + 40)
     }
 
+    @Test func aFlexibleHeaderIsMeasuredAtItsIdealHeight() async throws {
+        let view = VirtualList(Array(SyntheticRows.rows.prefix(50)), rowHeight: { _ in 46 }) {
+            VStack {
+                Text("Header")
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } row: { row in
+            SyntheticRowView(row: row)
+        }
+        let (window, host) = ScrollFrameHarness.host(view, size: CGSize(width: 900, height: 700))
+        defer { window.orderOut(nil) }
+        await ScrollFrameHarness.settle(host)
+        let table = try #require(
+            ScrollFrameHarness.scrollView(in: host)?.documentView as? NSTableView)
+        let header = table.rect(ofRow: 0).height
+        #expect(header.isFinite)
+        #expect(header < 200)
+    }
+
     private func list(_ rows: [SyntheticRow]) -> some View {
         VirtualList(rows, rowHeight: { _ in 46 }) {
             Text("Header")
