@@ -22,7 +22,7 @@ import Testing
         }
     }
 
-    @Test(arguments: [UsageScrollScenario.page, .pageWithProjectList]) func scrollStaysWithinBounds(
+    @Test(arguments: UsageScrollScenario.allCases) func scrollStaysWithinBounds(
         scenario: UsageScrollScenario
     ) async throws {
         let timing = try await Self.measure(
