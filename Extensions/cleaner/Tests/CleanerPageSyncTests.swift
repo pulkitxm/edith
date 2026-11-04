@@ -14,7 +14,7 @@ struct CleanerPageSyncTests {
 
         func settle() async throws {
             for _ in 0..<200 {
-                if ui.categories == engine.categories { return }
+                if ui.categories == engine.categories, ui.selection == engine.selection { return }
                 try await Task.sleep(for: .milliseconds(5))
             }
         }
@@ -52,29 +52,42 @@ struct CleanerPageSyncTests {
     }
 
     @Test func snapshotIsResentAfterEngineChanges() async throws {
-        let request = { (known: Int?) in
-            try JSONEncoder().encode(CleanerUISnapshotRequest(known: known))
+        let request = { (known: Int?, knownSelection: Int?) in
+            try JSONEncoder().encode(
+                CleanerUISnapshotRequest(known: known, knownSelection: knownSelection))
         }
         let defaults = try #require(
             UserDefaults(suiteName: "synthetic.cleaner.sync." + UUID().uuidString))
         let engine = await CleanerSyntheticFixture.engine(items: 40, defaults: defaults)
         defer { Task { await engine.shutdown() } }
         let stamp = engine.uiStamp
+        let selectionStamp = engine.selectionRevision
 
         let unchanged = try JSONDecoder().decode(
             CleanerUIReply.self,
             from: try await CleanerUICommands.execute(
-                "cleaner.ui.snapshot", payload: try request(stamp), model: engine))
-        #expect(unchanged.snapshot == nil)
-        #expect(unchanged.stamp == stamp)
+                "cleaner.ui.snapshot", payload: try request(stamp, selectionStamp), model: engine))
+        #expect(unchanged.snapshot == nil && unchanged.selection == nil)
+        #expect(unchanged.stamp == stamp && unchanged.selectionStamp == selectionStamp)
 
         engine.toggleAll()
+        let toggled = try JSONDecoder().decode(
+            CleanerUIReply.self,
+            from: try await CleanerUICommands.execute(
+                "cleaner.ui.snapshot", payload: try request(stamp, selectionStamp), model: engine))
+        #expect(toggled.snapshot == nil)
+        #expect(toggled.selectionStamp != selectionStamp)
+        #expect(toggled.selection == engine.selection)
+
+        engine.updateFilters(CleanerFilters(minimumAge: 86_400))
         let changed = try JSONDecoder().decode(
             CleanerUIReply.self,
             from: try await CleanerUICommands.execute(
-                "cleaner.ui.snapshot", payload: try request(stamp), model: engine))
+                "cleaner.ui.snapshot", payload: try request(stamp, toggled.selectionStamp),
+                model: engine))
         #expect(changed.stamp != stamp)
         #expect(changed.snapshot?.categories == engine.categories)
+        #expect(changed.selection == nil)
     }
 
     @Test func selectionClicksStayInSyncWithStampOnlyReplies() async throws {
@@ -92,6 +105,7 @@ struct CleanerPageSyncTests {
         try await harness.settle()
 
         #expect(ui.categories == harness.engine.categories)
+        #expect(ui.selection == harness.engine.selection)
         #expect(ui.selectedItemCount == harness.engine.selectedItemCount)
         let actions = harness.bridge.replies.filter { $0.operation == "cleaner.ui.action" }
         #expect(!actions.isEmpty)
@@ -118,6 +132,7 @@ struct CleanerPageSyncTests {
         let reopened = CleanerModel(engineClient: client, defaults: defaults)
         defer { Task { await reopened.shutdown() } }
         #expect(reopened.categories == harness.engine.categories)
+        #expect(reopened.selection == harness.engine.selection)
     }
 
     @Test func pageAdoptsEngineChangesMadeOutsideThePage() async throws {
@@ -132,9 +147,8 @@ struct CleanerPageSyncTests {
         ui.toggleItem(categoryID: category.id, itemID: inside.id)
         try await harness.settle()
 
-        #expect(ui.categories == harness.engine.categories)
-        let items = try #require(ui.categories.first?.items)
-        #expect(items[0].selected != outside.selected)
-        #expect(items[1].selected != inside.selected)
+        #expect(ui.selection == harness.engine.selection)
+        #expect(ui.isSelected(categoryID: category.id, itemID: outside.id) != outside.selected)
+        #expect(ui.isSelected(categoryID: category.id, itemID: inside.id) != inside.selected)
     }
 }

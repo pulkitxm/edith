@@ -74,7 +74,7 @@ import Testing
             try await CleanerUICommands.execute(
                 "cleaner.ui.action", payload: JSONEncoder().encode(action), model: model)
         }
-        #expect(model.categories.first?.items.first?.selected == true)
+        #expect(model.selectedItemCount == 1)
         await model.shutdown()
         await #expect(throws: ExtensionPeerError.self) {
             try await CleanerUICommands.execute(

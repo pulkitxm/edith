@@ -317,6 +317,8 @@ private struct CleanerCategoryHeader: View {
     let onClean: (String) -> Void
     @State private var hover = false
 
+    private var selection: JunkSelection { model.categorySelection(category.id) }
+
     var body: some View {
         ZStack {
             Button {
@@ -358,16 +360,15 @@ private struct CleanerCategoryHeader: View {
                 Button {
                     model.toggleCategory(category.id)
                 } label: {
-                    Image(systemName: CleanerRowView.checkbox(category.selection))
-                        .foregroundStyle(
-                            category.selection == .none ? .secondary : DashSkin.accent(dark))
+                    Image(systemName: CleanerRowView.checkbox(selection))
+                        .foregroundStyle(selection == .none ? .secondary : DashSkin.accent(dark))
                 }
                 .buttonStyle(.edith(.borderless))
                 Spacer()
                 Button("Clean") { onClean(category.id) }
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))
                     .buttonStyle(.edith(.borderless))
-                    .disabled(category.selectedCount == 0)
+                    .disabled(model.selectedItemCount(categoryID: category.id) == 0)
             }
             .padding(.horizontal, UIScale.pt(6))
             .padding(.vertical, UIScale.pt(7))
@@ -386,8 +387,9 @@ private struct CleanerItemLine: View {
             model.toggleItem(categoryID: item.categoryID, itemID: item.id)
         } label: {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: item.selected ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
+                let selected = model.isSelected(categoryID: item.categoryID, itemID: item.id)
+                Image(systemName: selected ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(selected ? DashSkin.accent(dark) : .secondary)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
                         .truncationMode(.middle)

@@ -6,9 +6,6 @@ struct CleanerCategoryRow: Equatable, Sendable {
     let detail: String
     let itemCount: Int
     let sizeText: String
-    let selection: JunkSelection
-    let selectedCount: Int
-    let selectedBytes: Int64
     let expanded: Bool
 }
 
@@ -17,7 +14,6 @@ struct CleanerItemRow: Equatable, Sendable {
     let categoryID: String
     let name: String
     let path: URL
-    let selected: Bool
     let sizeText: String
     let ageText: String?
     let branch: String?
@@ -48,27 +44,13 @@ final class CleanerSizeText {
     }
 }
 
-struct CleanerCategorySelection: Equatable, Sendable {
-    var count = 0
-    var bytes: Int64 = 0
-}
-
 struct CleanerListState: Equatable, Sendable {
     var visibleCategories: [JunkCategory] = []
     var rows: [CleanerRow] = []
     var matchesSearch = true
     var totalItemCount = 0
     var hiddenItemCount = 0
-    var selectedItemCount = 0
-    var markedItemCount = 0
-    var selectedTotal: Int64 = 0
     var reclaimableTotal: Int64 = 0
-    var selectionByCategory: [String: CleanerCategorySelection] = [:]
-
-    var overallSelection: JunkSelection {
-        guard totalItemCount > 0, markedItemCount > 0 else { return .none }
-        return markedItemCount == totalItemCount ? .all : .some
-    }
 
     static let itemFilterThreshold = 10
 
@@ -84,21 +66,10 @@ struct CleanerListState: Equatable, Sendable {
         let allCount = categories.reduce(0) { $0 + $1.items.count }
         totalItemCount = visibleCategories.reduce(0) { $0 + $1.items.count }
         hiddenItemCount = allCount - totalItemCount
-        markedItemCount = visibleCategories.reduce(0) { total, category in
-            category.items.reduce(total) { $1.selected ? $0 + 1 : $0 }
-        }
-        let selected = CleanerOperationExecution.selectedItems(in: visibleCategories)
-        selectedItemCount = selected.count
-        selectedTotal = selected.reduce(0) { $0 + $1.sizeBytes }
-        for category in visibleCategories {
-            let chosen = JunkScanner.outermost(category.items.filter(\.selected))
-            selectionByCategory[category.id] = CleanerCategorySelection(
-                count: chosen.count, bytes: chosen.reduce(0) { $0 + $1.sizeBytes })
-        }
         let displayed = Self.searched(visibleCategories, query: search)
         matchesSearch = !displayed.isEmpty
         rows = Self.rows(
-            displayed, selection: selectionByCategory, expanded: expanded,
+            displayed, expanded: expanded,
             itemFilters: itemFilters, now: now, sizeText: sizeText)
     }
 
@@ -119,15 +90,14 @@ struct CleanerListState: Equatable, Sendable {
     }
 
     private static func rows(
-        _ categories: [JunkCategory], selection: [String: CleanerCategorySelection],
-        expanded: Set<String>, itemFilters: [String: String], now: Date,
+        _ categories: [JunkCategory], expanded: Set<String>, itemFilters: [String: String],
+        now: Date,
         sizeText: CleanerSizeText
     ) -> [CleanerRow] {
         var rows: [CleanerRow] = []
         rows.reserveCapacity(categories.count * 2)
         for category in categories {
             let isExpanded = expanded.contains(category.id)
-            let chosen = selection[category.id] ?? CleanerCategorySelection()
             rows.append(
                 CleanerRow(
                     id: "category\u{0}" + category.id,
@@ -135,9 +105,7 @@ struct CleanerListState: Equatable, Sendable {
                         CleanerCategoryRow(
                             id: category.id, name: category.name, detail: category.detail,
                             itemCount: category.items.count,
-                            sizeText: sizeText(category.sizeBytes),
-                            selection: category.selection, selectedCount: chosen.count,
-                            selectedBytes: chosen.bytes, expanded: isExpanded))))
+                            sizeText: sizeText(category.sizeBytes), expanded: isExpanded))))
             if isExpanded {
                 if category.items.count > itemFilterThreshold {
                     rows.append(
@@ -168,7 +136,7 @@ struct CleanerListState: Equatable, Sendable {
     ) -> CleanerItemRow {
         CleanerItemRow(
             id: item.id, categoryID: categoryID, name: item.name, path: item.path,
-            selected: item.selected, sizeText: sizeText(item.sizeBytes),
+            sizeText: sizeText(item.sizeBytes),
             ageText: CleanerAgeText.since(item.lastModified, now: now),
             branch: item.worktree.map { $0.branch ?? "detached" },
             badges: item.worktree.map(badges) ?? [])
