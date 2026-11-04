@@ -664,6 +664,42 @@ import HostWorkerFixtureSupport
         #expect(!TestWindowHost.isExposedOnDesktop(window))
     }
 
+    @Test(arguments: [ColorScheme.light, .dark])
+    func homeHeaderShowsGreetingDateAndTwoLayoutControls(scheme: ColorScheme) async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = try enableAccessibility()
+        defer { restore() }
+        fixture.marketplace.surfaceLayouts.update(.home) { $0.tiles = [SurfaceTile(.clocks)] }
+        let host = NSHostingView(
+            rootView: HostHomePage(
+                marketplace: fixture.marketplace, customize: { _ in }, extensions: {}
+            )
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.surfaceSampleContent, true)
+            .environment(\.colorScheme, scheme)
+            .background(DashSkin.paper(scheme == .dark)))
+        host.frame = CGRect(x: 0, y: 0, width: 900, height: 420)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Edit layout") != nil)
+        #expect(find(host, label: "Widget editor") != nil)
+        #expect(find(host, label: "Auto fit") == nil)
+        let date = Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        #expect(find(host, label: date) != nil)
+        if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(
+                to: URL(fileURLWithPath: capture).appendingPathComponent("home-\(scheme).png"),
+                options: .atomic)
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
     @Test func originalHomeLayoutControlsChangeLayoutAndOpenItsEditorWithoutStartingWorkers()
         async throws
     {
@@ -687,14 +723,15 @@ import HostWorkerFixtureSupport
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         await settle(window, host: host)
-        let fit = try #require(find(host, label: "Auto fit"))
-        #expect((fit as AnyObject).accessibilityPerformPress?() == true)
-        await settle(window, host: host)
-        #expect(fixture.marketplace.surfaceLayouts.home.balancedRows == true)
+        #expect(find(host, label: "Auto fit") == nil)
         let edit = try #require(find(host, label: "Edit layout"))
         #expect((edit as AnyObject).accessibilityPerformPress?() == true)
         await settle(window, host: host)
         #expect(find(host, label: "Done") != nil)
+        let fit = try #require(find(host, label: "Auto fit"))
+        #expect((fit as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(fixture.marketplace.surfaceLayouts.home.balancedRows == true)
         let editor = try #require(find(host, label: "Widget editor"))
         #expect((editor as AnyObject).accessibilityPerformPress?() == true)
         #expect(editorOpened)
@@ -769,7 +806,7 @@ import HostWorkerFixtureSupport
         await settle(window, host: host)
         #expect(find(host, label: "World clocks") != nil)
         #expect(find(host, label: "Widget editor") != nil)
-        #expect(find(host, label: "Auto fit") != nil)
+        #expect(find(host, label: "Auto fit") == nil)
         #expect(find(host, label: "Edit layout") != nil)
         #expect(find(host, label: "Meetings") == nil)
         #expect(find(host, label: "Open Calendar") == nil)
@@ -1223,10 +1260,20 @@ import HostWorkerFixtureSupport
                             actions.append(utility.id)
                         }
                     }
+                    HostSidebarNotice(
+                        symbol: "arrow.down.circle.fill", title: "Update ready", detail: "v9.9.9",
+                        tint: DashSkin.sage
+                    ) { actions.append("update") }
+                    HostSidebarNotice(
+                        symbol: "exclamationmark.triangle.fill",
+                        title: "Permissions needed", tint: DashSkin.warn
+                    ) { actions.append("permissions") }
                     HostAgentStatusBar(online: true, summary: "2 active") {
                         actions.append("agent")
                     }
-                }.padding(10).environment(\.colorScheme, variant.scheme))
+                }.padding(10).frame(maxHeight: .infinity, alignment: .top)
+                    .background(DashSkin.paper(variant.scheme == .dark))
+                    .environment(\.colorScheme, variant.scheme))
             host.frame = CGRect(x: 0, y: 0, width: variant.width, height: 550)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host; window.orderBack(nil)
@@ -1236,11 +1283,27 @@ import HostWorkerFixtureSupport
                 let button = try #require(find(host, label: utility.title))
                 let frame = try #require((button as AnyObject).accessibilityFrame?())
                 #expect(bounds.insetBy(dx: -1, dy: -1).contains(frame))
+                #expect(frame.height <= UIScale.pt(34))
                 #expect((button as AnyObject).accessibilityPerformPress?() == true)
+            }
+            for label in ["Update ready, v9.9.9", "Permissions needed"] {
+                let notice = try #require(find(host, label: label))
+                #expect((notice as AnyObject).accessibilityPerformPress?() == true)
             }
             let agent = try #require(find(host, label: "Background agent"))
             #expect((agent as AnyObject).accessibilityPerformPress?() == true)
-            #expect(actions == HostSidebarUtility.allCases.map(\.id) + ["agent"])
+            #expect(
+                actions == HostSidebarUtility.allCases.map(\.id) + [
+                    "update", "permissions", "agent",
+                ])
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: URL(fileURLWithPath: capture).appendingPathComponent(
+                        "sidebar-footer-\(variant.name).png"), options: .atomic)
+            }
             #expect(!TestWindowHost.isExposedOnDesktop(window))
             window.orderOut(nil)
         }

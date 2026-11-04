@@ -134,16 +134,13 @@ struct HostWorkflowOnboardingView: View {
                         Text(entry.title).font(.edithText(.body))
                         Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.category).font(
                             .edithText(.caption)
-                        ).foregroundStyle(.secondary)
-                        Text(model.reviewMetadata(for: entry.id).summary).font(
-                            .edithText(.caption)
-                        ).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("workflow.package-review.\(entry.id)")
+                        ).foregroundStyle(.secondary).lineLimit(1)
                     }
                     Spacer()
-                    if model.installedIDs.contains(entry.id) {
-                        Text("Downloaded").font(.edithText(.caption)).foregroundStyle(.secondary)
-                    }
+                    Text(packageNote(entry.id)).font(.edithText(.caption))
+                        .foregroundStyle(.secondary).monospacedDigit()
+                        .help(model.reviewMetadata(for: entry.id).summary)
+                        .accessibilityIdentifier("workflow.package-review.\(entry.id)")
                     Toggle(
                         entry.title,
                         isOn: Binding(
@@ -205,26 +202,20 @@ struct HostWorkflowOnboardingView: View {
     }
 
     private var costSummary: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             if model.cost.complete {
                 Text(
-                    "\(bytes(model.cost.downloadBytes)) download · \(bytes(model.cost.installedBytes)) unpacked package contents"
-                ).font(.edithText(.headline))
+                    "\(bytes(model.cost.downloadBytes)) to download · about \(bytes(model.cost.installedBytes)) on disk"
+                ).font(.edithText(.headline)).monospacedDigit()
                 if model.cost.packageIDs.subtracting(model.selected).isEmpty == false {
-                    Text("Includes required extension dependencies.").font(.edithText(.caption))
+                    Text("Includes required dependencies.").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                 }
             } else {
                 Text(
                     "Download sizes are unavailable for \(model.cost.unknownIDs.sorted().joined(separator: ", ")). Refresh before installing."
-                ).font(.edithText(.callout)).foregroundStyle(.orange)
+                ).font(.edithText(.callout)).foregroundStyle(DashSkin.warn)
             }
-            Text("Already downloaded extensions do not add to this download.").font(
-                .edithText(.caption)
-            ).foregroundStyle(.secondary)
-            Text(
-                "Package sizes estimate additional contents. Actual disk use can differ on APFS. Storage measures the app, packages, cache and retained data."
-            ).font(.edithText(.caption)).foregroundStyle(.secondary)
         }.padding(UIScale.pt(12)).frame(maxWidth: .infinity, alignment: .leading).background(
             DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
@@ -279,6 +270,11 @@ struct HostWorkflowOnboardingView: View {
             }
         }
     }
+    private func packageNote(_ id: String) -> String {
+        if model.installedIDs.contains(id) { return "Downloaded" }
+        return model.reviewMetadata(for: id).downloadBytes.map(bytes) ?? ""
+    }
+
     private func bytes(_ count: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
     }
