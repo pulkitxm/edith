@@ -121,7 +121,9 @@ import Testing
             operation: "drives", value: nil, item: nil, previewToken: token)
         let reply = try await CleanerUICommands.execute(
             "cleaner.ui.action", payload: JSONEncoder().encode(drives), model: model)
-        #expect(try JSONDecoder().decode(CleanerUISnapshot.self, from: reply).loadingDriveOptions)
+        #expect(
+            try JSONDecoder().decode(CleanerUIReply.self, from: reply).snapshot?
+                .loadingDriveOptions == true)
         await model.shutdown()
     }
 }

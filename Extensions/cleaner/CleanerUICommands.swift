@@ -18,22 +18,38 @@ struct CleanerUISnapshot: Codable {
 }
 struct CleanerUIAction: Codable {
     let operation: String; let value: String?; let item: String?; let previewToken: UUID
+    var known: Int? = nil
+}
+struct CleanerUISnapshotRequest: Codable {
+    let known: Int?
+}
+struct CleanerUIReply: Codable {
+    let stamp: Int
+    let snapshot: CleanerUISnapshot?
 }
 @MainActor enum CleanerUICommands {
     static func execute(_ command: String, payload: Data, model: CleanerModel) async throws -> Data
     {
         guard !model.stopped else { throw ExtensionPeerError.unavailable }
         if command == "cleaner.ui.snapshot" {
-            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            guard payload.count <= 64,
+                let request = try? JSONDecoder().decode(
+                    CleanerUISnapshotRequest.self, from: payload)
+            else { throw ExtensionPeerError.invalidRequest }
+            if request.known == model.uiStamp {
+                return try JSONEncoder().encode(CleanerUIReply(stamp: model.uiStamp, snapshot: nil))
+            }
         } else if command == "cleaner.ui.action" {
             let action = try JSONDecoder().decode(CleanerUIAction.self, from: payload)
-            if ["all", "category", "item"].contains(action.operation) {
+            let selection = ["all", "category", "item"].contains(action.operation)
+            if selection {
                 guard action.previewToken == model.previewToken, !model.scanning, model.scanned
                 else {
                     throw ExtensionPeerError.rejected(
                         "Review a current scan before changing its selection.")
                 }
             }
+            let mirrored = selection && action.known == model.uiStamp
             switch action.operation {
             case "scan": model.scan()
             case "cancel": model.cancelScan()
@@ -77,9 +93,13 @@ struct CleanerUIAction: Codable {
                 model.clean(categoryID: action.value)
             default: throw ExtensionPeerError.invalidRequest
             }
+            if mirrored {
+                return try JSONEncoder().encode(CleanerUIReply(stamp: model.uiStamp, snapshot: nil))
+            }
         } else {
             throw ExtensionPeerError.invalidRequest
         }
-        return try JSONEncoder().encode(model.uiSnapshot())
+        return try JSONEncoder().encode(
+            CleanerUIReply(stamp: model.uiStamp, snapshot: model.uiSnapshot()))
     }
 }

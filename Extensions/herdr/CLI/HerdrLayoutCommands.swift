@@ -331,6 +331,31 @@ struct HerdrLayoutEvenCommand: AsyncParsableCommand {
     }
 }
 
+struct HerdrSelectCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "select",
+        abstract: "Show one Herdr tab.",
+        discussion: """
+            It selects that tab, the same way Command-number does. The board is tab 0.
+            Example: `ed herdr select --tab 2`.
+            """)
+
+    @Flag(name: .long, help: "Emit the layout as JSON.")
+    var json = false
+
+    @Option(name: .long, help: "Tab index, id, or title.")
+    var tab: String
+
+    func run() async throws {
+        try await execute {
+            let current = try await HerdrLayoutCLI.request(.status)
+            let target = try HerdrLayoutCLI.tab(tab, in: current, allowingBoard: true)
+            let snapshot = try await HerdrLayoutCLI.request(.select(target.id))
+            HerdrLayoutCLI.emit(snapshot, json: json)
+        }
+    }
+}
+
 struct HerdrCloseTabCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "close-tab",

@@ -1358,6 +1358,27 @@ private actor ProcessReadProbe {
         #expect(arguments.last == "root@10.0.0.5")
     }
 
+    @Test func isolatedHomesNeverReadTheAccountSSHConfig() throws {
+        let account = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ssh-config-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(SSHConnection.configArguments(home: account, accountHome: account).isEmpty)
+        #expect(SSHConnection.configArguments(home: home, accountHome: account) == ["-F", "none"])
+        let config = home.appendingPathComponent(".ssh/config")
+        try FileManager.default.createDirectory(
+            at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("Host fixture\n".utf8).write(to: config)
+        #expect(
+            SSHConnection.configArguments(home: home, accountHome: account) == ["-F", config.path])
+    }
+
+    @Test func fixtureRunsPinTheSSHConfigFile() async {
+        guard ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil else { return }
+        let arguments = SSHConnection(machine: aliasMachine).masterArguments()
+        #expect(arguments.firstIndex(of: "-F").map { arguments.indices.contains($0 + 1) } == true)
+    }
+
     @Test func passwordMachinesDisablePublicKeyAuth() async {
         let machine = Machine(name: "Box", host: "10.0.0.5", username: "root", auth: .password)
         let arguments = SSHConnection(machine: machine).masterArguments()

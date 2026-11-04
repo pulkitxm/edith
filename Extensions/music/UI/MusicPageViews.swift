@@ -376,6 +376,7 @@ struct EmbeddedMusicPage: View {
                     .embeddedLiquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
             }
             .buttonStyle(.edith(.borderless))
+            .disabled(!remote.canPlayView)
             .help(
                 remote.showingFavourites
                     ? "Play your favourites" : "Play everything in this folder")

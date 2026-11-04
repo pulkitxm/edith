@@ -112,7 +112,6 @@ struct HerdrPage: View {
         .overlay { HerdrDragOverlay(drag: drag, store: store, hideAgents: hideAgents) }
         .herdrDropFrame(HerdrDropGeometry.pageKey)
         .coordinateSpace(name: HerdrDragCoordinator.space)
-        .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
         .navigationRoute(
             "view", selection: viewBinding, isValid: herdrViewIsValid,
@@ -146,7 +145,7 @@ struct HerdrPage: View {
                         in: event.window)
                 })
         )
-        .navigationTitle("Herdr")
+        .navigationTitle("Agents")
         .onAppear {
             keyMonitor.active = automaticActions
             keyMonitor.install(store: store) { store, event, window in
@@ -316,7 +315,7 @@ struct HerdrPage: View {
     }
 
     private var header: some View {
-        PageHeader(title: { Text("Herdr") }, trailing: { headerActions })
+        PageHeader(title: { Text("Agents") }, trailing: { headerActions })
     }
 
     private var headerActions: some View {

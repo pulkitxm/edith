@@ -3,6 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct SystemPage: View {
+    static let title = "Running Apps"
     @State var model: RunningAppsModel
     @State var presentation: SystemPresentationState
     @Environment(\.colorScheme) private var scheme
@@ -56,7 +57,7 @@ struct SystemPage: View {
 
     private var header: some View {
         PageHeader(
-            "System",
+            Self.title,
             trailing: {
                 Button(role: .destructive) {
                     confirmQuitAll = true

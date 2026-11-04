@@ -4,6 +4,18 @@ import Testing
 @testable import EdithStudio
 
 @Suite struct CatalogTests {
+    @Test func runReferenceListsEveryToolAsTheCatalogDescribesIt() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<6 { root.deleteLastPathComponent() }
+        let reference = try String(
+            contentsOf: root.appendingPathComponent("docs/cli/studio/run.md"), encoding: .utf8)
+        let documented = reference.split(separator: "\n").map(String.init).filter {
+            $0.hasPrefix("| `") && $0.split(separator: "|").count == 3
+        }
+        let expected = StudioCatalog.tools.map { "| `\($0.id)` | \($0.title) | \($0.summary) |" }
+        #expect(documented == expected)
+    }
+
     @Test func toolIdentifiersAreUniqueAndNamespaced() {
         let ids = StudioCatalog.tools.map(\.id)
         #expect(Set(ids).count == ids.count)
