@@ -29,7 +29,6 @@ struct PageTabPicker<Option: Hashable>: View {
 struct PageTabStrip<ID: Hashable, Content: View>: View {
     let selection: ID
     @ViewBuilder let content: () -> Content
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -38,9 +37,7 @@ struct PageTabStrip<ID: Hashable, Content: View>: View {
                 .task(id: selection) {
                     await Task.yield()
                     guard !Task.isCancelled else { return }
-                    withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                        proxy.scrollTo(selection)
-                    }
+                    proxy.scrollTo(selection)
                 }
         }
     }

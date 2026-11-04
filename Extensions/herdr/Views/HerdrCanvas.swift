@@ -73,7 +73,6 @@ struct HerdrPaneSlot: View {
             .offset(x: placement.frame.minX, y: placement.frame.minY)
             .opacity(placement.visible ? 1 : 0)
             .allowsHitTesting(placement.visible)
-            .zIndex(placement.visible ? 1 : 0)
         }
     }
 }
