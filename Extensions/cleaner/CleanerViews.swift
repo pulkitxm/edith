@@ -13,12 +13,18 @@ private enum CleanerPendingClean: Equatable {
     }
 }
 
+private enum CleanerDrivePicker: Identifiable {
+    case scan
+    case choose
+
+    var id: Self { self }
+}
+
 struct CleanerCard: View {
     let dark: Bool
     let compact: Bool
     let model: CleanerModel
-    @State private var showDrivePicker = false
-    @State private var pickerScans = false
+    @State private var drivePicker: CleanerDrivePicker?
     @State private var pendingClean: CleanerPendingClean?
 
     var body: some View {
@@ -44,11 +50,11 @@ struct CleanerCard: View {
                     .padding(.vertical, UIScale.pt(10))
             }
         }
-        .edithSheet(isPresented: $showDrivePicker) {
+        .edithSheet(item: $drivePicker) { picker in
             DrivePickerSheet(
-                model: model, dark: dark, confirmTitle: pickerScans ? "Scan" : "Done"
+                model: model, dark: dark, confirmTitle: picker == .scan ? "Scan" : "Done"
             ) {
-                if pickerScans { model.scan() }
+                if picker == .scan { model.scan() }
             }
         }
         .confirmationDialog(
@@ -259,9 +265,8 @@ struct CleanerCard: View {
     }
 
     private func openPicker(scan: Bool) {
-        pickerScans = scan
         model.loadDriveOptions()
-        showDrivePicker = true
+        drivePicker = scan ? .scan : .choose
     }
 }
 
@@ -462,7 +467,7 @@ private struct DrivePickerSheet: View {
 
             ScrollView {
                 VStack(spacing: UIScale.pt(6)) {
-                    if model.loadingDriveOptions {
+                    if model.driveOptions.isEmpty, model.loadingDriveOptions {
                         ForEach(0..<3, id: \.self) { index in
                             DrivePickerRowSkeleton(index: index, dark: dark)
                         }
