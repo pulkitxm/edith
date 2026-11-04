@@ -8,25 +8,20 @@ struct HerdrPanePlacement {
     let frame: CGRect
     let visible: Bool
 
-    @MainActor static func all(for store: HerdrStore, in rect: CGRect, gap: CGFloat, active: Bool)
-        -> [String: HerdrPanePlacement]
-    {
-        var result: [String: HerdrPanePlacement] = [:]
-        for tab in store.tabs {
-            let shown = active && tab.id == store.selectedTab
-            let frames = tab.layout.paneFrames(in: rect, gap: gap)
-            let content = tab.layout.content(in: rect, gap: gap)
-            for (id, frame) in frames {
-                if let zoomed = tab.zoomed {
-                    result[id] = HerdrPanePlacement(
-                        tab: tab, frame: id == zoomed ? content : frame,
-                        visible: shown && id == zoomed)
-                } else {
-                    result[id] = HerdrPanePlacement(tab: tab, frame: frame, visible: shown)
-                }
-            }
+    static func placement(
+        of sessionID: String, in tabs: [HerdrTab], rect: CGRect, gap: CGFloat,
+        isSelected: (String) -> Bool
+    ) -> HerdrPanePlacement? {
+        guard let tab = tabs.first(where: { $0.layout.contains(sessionID) }),
+            let frame = tab.layout.paneFrames(in: rect, gap: gap)[sessionID]
+        else { return nil }
+        let shown = isSelected(tab.id)
+        guard let zoomed = tab.zoomed else {
+            return HerdrPanePlacement(tab: tab, frame: frame, visible: shown)
         }
-        return result
+        return HerdrPanePlacement(
+            tab: tab, frame: sessionID == zoomed ? tab.layout.content(in: rect, gap: gap) : frame,
+            visible: shown && sessionID == zoomed)
     }
 }
 
@@ -34,7 +29,6 @@ struct HerdrCanvas: View {
     var store: HerdrStore
     let launchEnabled: Bool
     let hideAgents: Bool
-    let active: Bool
 
     @Environment(\.colorScheme) private var scheme
 
@@ -44,42 +38,69 @@ struct HerdrCanvas: View {
     var body: some View {
         GeometryReader { proxy in
             let rect = CGRect(origin: .zero, size: proxy.size)
-            let placements = HerdrPanePlacement.all(
-                for: store, in: rect, gap: gap, active: active)
             ZStack(alignment: .topLeading) {
                 ForEach(store.sessions) { session in
-                    if let placement = placements[session.id] {
-                        HerdrPaneView(
-                            store: store, session: session, placement: placement,
-                            launchEnabled: launchEnabled, hideAgents: hideAgents
-                        )
-                        .frame(width: placement.frame.width, height: placement.frame.height)
-                        .offset(x: placement.frame.minX, y: placement.frame.minY)
-                        .opacity(placement.visible ? 1 : 0)
-                        .allowsHitTesting(placement.visible)
-                        .zIndex(placement.visible ? 1 : 0)
-                    }
+                    HerdrPaneSlot(
+                        store: store, session: session, rect: rect, gap: gap,
+                        launchEnabled: launchEnabled, hideAgents: hideAgents)
                 }
-                if active, let tab = store.currentTab, tab.isSplit, tab.zoomed == nil {
-                    ForEach(tab.layout.paneDividers(in: rect, gap: gap)) { divider in
-                        HerdrLayoutDividerHandle(
-                            axis: divider.axis, dark: dark,
-                            onDrag: { delta in
-                                store.resize(
-                                    tab.id, split: divider.splitID, index: divider.index,
-                                    by: Double(delta / divider.span))
-                            },
-                            onEqualize: { store.equalize(tab.id) }
-                        )
-                        .frame(width: divider.rect.width, height: divider.rect.height)
-                        .offset(x: divider.rect.minX, y: divider.rect.minY)
-                        .zIndex(2)
-                    }
-                }
+                HerdrCanvasDividers(store: store, rect: rect, gap: gap)
             }
             .frame(width: rect.width, height: rect.height, alignment: .topLeading)
         }
         .background(DashSkin.paper(dark))
+    }
+}
+
+struct HerdrPaneSlot: View {
+    var store: HerdrStore
+    let session: HerdrOpenTab
+    let rect: CGRect
+    let gap: CGFloat
+    let launchEnabled: Bool
+    let hideAgents: Bool
+
+    var body: some View {
+        if let placement = HerdrPanePlacement.placement(
+            of: session.id, in: store.tabs, rect: rect, gap: gap,
+            isSelected: store.isTabSelected)
+        {
+            HerdrPaneView(
+                store: store, session: session, placement: placement,
+                launchEnabled: launchEnabled, hideAgents: hideAgents
+            )
+            .frame(width: placement.frame.width, height: placement.frame.height)
+            .offset(x: placement.frame.minX, y: placement.frame.minY)
+            .opacity(placement.visible ? 1 : 0)
+            .allowsHitTesting(placement.visible)
+        }
+    }
+}
+
+struct HerdrCanvasDividers: View {
+    var store: HerdrStore
+    let rect: CGRect
+    let gap: CGFloat
+
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if let tab = store.currentTab, tab.isSplit, tab.zoomed == nil {
+            ForEach(tab.layout.paneDividers(in: rect, gap: gap)) { divider in
+                HerdrLayoutDividerHandle(
+                    axis: divider.axis, dark: scheme == .dark,
+                    onDrag: { delta in
+                        store.resize(
+                            tab.id, split: divider.splitID, index: divider.index,
+                            by: Double(delta / divider.span))
+                    },
+                    onEqualize: { store.equalize(tab.id) }
+                )
+                .frame(width: divider.rect.width, height: divider.rect.height)
+                .offset(x: divider.rect.minX, y: divider.rect.minY)
+                .zIndex(2)
+            }
+        }
     }
 }
 
