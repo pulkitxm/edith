@@ -9,7 +9,7 @@ struct AttentionOverview: View {
     private var summary: AttentionSummary { model.summary }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Text(
                 "App breakdowns and productivity show active use. Idle and locked time are kept separately."
             )
