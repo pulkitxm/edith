@@ -2,22 +2,24 @@ import ExtensionMarketplace
 import Foundation
 
 struct HostMarketplacePackageSummary: Equatable {
-    let estimate: String?
-    let downloaded: String?
+    let facts: [String]
 
     init(candidate: ExtensionPackage?, downloadedVersions: [ExtensionPackage]) {
-        estimate = candidate.map {
-            "Version \($0.version): \(Self.bytes($0.downloadBytes)) download · \(Self.bytes($0.installedBytes)) unpacked package contents"
+        var facts: [String] = []
+        if let candidate {
+            facts.append("Version \(candidate.version)")
+            facts.append("\(Self.bytes(candidate.downloadBytes)) download")
+            facts.append("\(Self.bytes(candidate.installedBytes)) unpacked")
         }
-        let count = Set(
+        let kept = Set(
             downloadedVersions.map { $0.hostABI + "/" + $0.architecture + "/" + $0.version }
         )
         .count
-        downloaded =
-            count == 0
-            ? nil
-            : "\(count) downloaded \(count == 1 ? "version" : "versions, including retained copies"). See Storage for measured disk use."
+        if kept > 1 { facts.append("\(kept) versions kept") }
+        self.facts = facts
     }
+
+    var line: String? { facts.isEmpty ? nil : facts.joined(separator: " · ") }
 
     private static func bytes(_ value: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: value, countStyle: .file)

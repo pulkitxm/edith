@@ -178,7 +178,7 @@ actor UsageMachinesProjection {
             guard UsageMachinesPeer.hash(data) == snapshot.sha256.lowercased() else {
                 throw ExtensionPeerError.invalidRequest
             }
-            try UsageNativeFileIO.privateDirectory(directory)
+            try UsageNativeFileIO.ownedDirectory(directory)
             let stages = directory.appendingPathComponent("remote-staging", isDirectory: true)
             try UsageNativeFileIO.privateDirectory(stages)
             let home = stages.appendingPathComponent(UUID().uuidString, isDirectory: true)

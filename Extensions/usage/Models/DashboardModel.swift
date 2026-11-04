@@ -83,6 +83,7 @@ struct DashUsage: Decodable {
     struct Machine: Decodable {
         let id: String?
         let collectedAt: String?
+        var refreshFailure: String?
     }
     struct Day: Decodable {
         let period: String
@@ -474,6 +475,7 @@ final class DashboardModel {
     private(set) var allSources: [SourceInfo] = []
     private(set) var machineGroups: [MachineGroup] = []
     private(set) var machineCollectionDates: [String: Date] = [:]
+    private(set) var machineRefreshFailures: [String: String] = [:]
     private(set) var defaultSources: [String] = []
     private(set) var defaultModels: [String] = []
     private(set) var monthOptions: [String] = []
@@ -683,6 +685,7 @@ final class DashboardModel {
         sourceIndex = digest.sourceIndex
         machineGroups = digest.machineGroups
         machineCollectionDates = digest.machineCollectionDates
+        machineRefreshFailures = digest.machineRefreshFailures
         defaultSources = digest.defaultSources
         allModels = digest.allModels
         modelIndex = digest.modelIndex
@@ -783,7 +786,8 @@ final class DashboardModel {
 
     func machineFreshness(_ group: MachineGroup, now: Date = Date()) -> MachineUsageFreshness? {
         guard !group.isLocal, let collectedAt = machineCollectionDates[group.id] else { return nil }
-        return MachineUsageFreshness(collectedAt: collectedAt, now: now)
+        return MachineUsageFreshness(
+            collectedAt: collectedAt, now: now, failure: machineRefreshFailures[group.id])
     }
 
     func showMachine(_ group: MachineGroup, _ shown: Bool) {

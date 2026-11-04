@@ -1,21 +1,27 @@
 import Foundation
 
 public struct MachineUsageFreshness: Equatable, Sendable {
-    public static let tolerance: TimeInterval = 5 * 60
+    public static let refreshInterval: TimeInterval = 30 * 60
+    public static let tolerance: TimeInterval = 10 * 60
 
     public let collectedAt: Date
     public let age: TimeInterval
     public let isStale: Bool
+    public let failure: String?
 
     public init(
         collectedAt: Date, now: Date = Date(),
-        refreshInterval: TimeInterval = 1800,
-        tolerance: TimeInterval = Self.tolerance
+        refreshInterval: TimeInterval = Self.refreshInterval,
+        tolerance: TimeInterval = Self.tolerance,
+        failure: String? = nil
     ) {
         self.collectedAt = collectedAt
         age = max(0, now.timeIntervalSince(collectedAt))
         isStale = age > refreshInterval + tolerance
+        self.failure = failure
     }
+
+    public var needsAttention: Bool { isStale || failure != nil }
 
     public var ageLabel: String {
         let minutes = Int(age) / 60
@@ -36,6 +42,8 @@ public struct MachineUsageFreshness: Equatable, Sendable {
     }
 
     public var statusLabel: String {
-        isStale ? "usage stale · collected \(ageLabel)" : "collected \(ageLabel)"
+        let collected = isStale ? "usage stale · collected \(ageLabel)" : "collected \(ageLabel)"
+        guard let failure else { return collected }
+        return collected + " · last refresh failed: " + failure
     }
 }

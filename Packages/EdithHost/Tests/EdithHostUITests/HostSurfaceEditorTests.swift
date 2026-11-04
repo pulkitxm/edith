@@ -263,6 +263,49 @@ import HostWorkerFixtureSupport
         #expect(await fixture.requests.count == 0)
     }
 
+    @Test(arguments: [false, true])
+    func settingsFormsLineUpWithTheirPageTitle(compact: Bool) async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let defaults = try #require(
+            UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let permissions = HostPermissions(
+            environment: .init(read: { [:] }, request: { _ in }, openSettings: { _ in false }))
+        let width: Double = compact ? 600 : 1200
+        let host = NSHostingView(
+            rootView: HostSettingsContainer(category: .constant("general")) {
+                HostSettingsPage(
+                    marketplace: fixture.marketplace, permissions: permissions,
+                    defaults: defaults, activation: { _ in })
+            }
+            .environment(\.compactLayout, compact)
+            .environment(\.colorScheme, .dark)
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: width, height: 800)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let summary = try #require(find(host, label: "Appearance, window, and welcome tour"))
+        let row = try #require(find(host, label: "Permissions"))
+        let summaryFrame = try #require((summary as AnyObject).accessibilityFrame?())
+        let rowFrame = try #require((row as AnyObject).accessibilityFrame?())
+        #expect(abs(rowFrame.minX - summaryFrame.minX) <= 16, "\(rowFrame) \(summaryFrame)")
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+            let directory = URL(fileURLWithPath: capture, isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(
+                to: directory.appendingPathComponent(
+                    "settings-general-\(compact ? "compact" : "regular").png"), options: .atomic)
+        }
+    }
+
     @Test func aboutRestoresOriginalIdentityStoryAndRepositoryWithoutAutomaticRequests()
         async throws
     {
@@ -915,21 +958,15 @@ import HostWorkerFixtureSupport
         defer { window.orderOut(nil) }
         await settle(window, host: host)
         #expect(find(host, label: "Disable pending · 1.0.0") != nil)
-        #expect(find(host, label: "Enabled · 1.0.0") == nil)
-        #expect(find(host, label: "Disabled · 1.0.0") == nil)
-        #expect(
-            find(
-                host,
-                label:
-                    "Cleanup is still pending. Home and Notch cards are inactive. System resources may remain until cleanup or macOS approval finishes."
-            ) != nil)
+        #expect(find(host, label: "On · 1.0.0") == nil)
+        #expect(find(host, label: "Off · 1.0.0") == nil)
         let retry = try #require(find(host, label: "Retry disable"))
         #expect((retry as AnyObject).accessibilityPerformPress?() == true)
         await settle(window, host: host)
         #expect(fixture.marketplace.sessions.pendingDisableIDs == ["calendar"])
         #expect(fixture.marketplace.error != nil)
         #expect(fixture.marketplace.surfaceAvailability.activeIDs.isEmpty)
-        let enable = try #require(find(host, label: "Enable instead"))
+        let enable = try #require(find(host, label: "Calendar enabled"))
         #expect((enable as AnyObject).accessibilityPerformPress?() == true)
         await settle(window, host: host)
         #expect(fixture.marketplace.sessions.pendingDisableIDs == ["calendar"])
@@ -971,11 +1008,29 @@ import HostWorkerFixtureSupport
                 != nil)
         #expect(find(host, label: "Not installed") == nil)
         #expect(find(host, label: "Enable") == nil)
+        #expect(find(host, label: state == "removal" ? "Remove" : "Update") != nil)
         let bytes = fixture.marketplace.installedBytes
         #expect(bytes >= 128)
         fixture.heldLease?.close()
-        let remove = try #require(find(host, label: "Remove"))
+        let review = NSHostingView(
+            rootView: HostExtensionReview(
+                marketplace: fixture.marketplace,
+                suites: HostSuiteSelection(
+                    marketplace: fixture.marketplace,
+                    defaults: try #require(
+                        UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))),
+                entry: try #require(fixture.marketplace.entries.first { $0.id == "calendar" }),
+                presenter: nil, open: nil, done: {}
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        review.frame = CGRect(x: 0, y: 0, width: 560, height: 620)
+        let reviewWindow = TestWindowHost.window(contentRect: review.frame)
+        reviewWindow.contentView = review; reviewWindow.orderBack(nil)
+        defer { reviewWindow.orderOut(nil) }
+        await settle(reviewWindow, host: review)
+        let remove = try #require(find(review, label: "Remove"))
         #expect((remove as AnyObject).accessibilityPerformPress?() == true)
+        await settle(reviewWindow, host: review)
         await settle(window, host: host)
         #expect(fixture.marketplace.installedVersions["calendar"] == nil)
         #expect(!fixture.marketplace.downloadedIDs.contains("calendar"))
@@ -983,9 +1038,139 @@ import HostWorkerFixtureSupport
         #expect(fixture.marketplace.installedBytes < bytes)
         #expect(find(host, label: "Not installed") != nil)
         #expect(find(host, label: "Download") != nil)
-        #expect(find(host, label: "Remove") == nil)
+        #expect(find(review, label: "Download") != nil)
+        #expect(find(review, label: "Remove") == nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(fixture.marketplace.error == nil)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test(arguments: [
+        ("abi", "Update required for this version of Edith", HostExtensionRowState.Action.update),
+        ("os", "Update required for this version of Edith", .update),
+        ("removal", "Removal pending", .remove),
+        ("installed", "Update available · 1.1.0", .update),
+        ("pendingDisable", "Disable pending · 1.0.0", .retryDisable),
+    ])
+    func extensionRowsShowOneStatusAndOnePrimaryAction(
+        state: String, status: String, action: HostExtensionRowState.Action
+    ) async throws {
+        let fixture =
+            switch state {
+            case "pendingDisable": try Fixture(pendingDisableID: "calendar")
+            case "installed": try Fixture(packageState: "installed")
+            default: try Fixture(packageState: state)
+            }
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        let entry = try #require(fixture.marketplace.entries.first { $0.id == "calendar" })
+        let row = HostExtensionRowState(entry, marketplace: fixture.marketplace)
+        #expect(row.status == status)
+        #expect(row.action == action)
+        #expect(!row.on)
+        #expect(row.progress == nil)
+        #expect(row.canToggle == (state != "removal"))
+        #expect(row.tone == .attention)
+    }
+
+    @Test func extensionsPageRendersCompactRegularZoomedLightAndDark() async throws {
+        let fixture = try Fixture(packageState: "abi")
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let previousScale = UIScale.current
+        defer { UIScale.apply(previousScale) }
+        for variant in [
+            Variant("regular-light", 1100, 1, .light), Variant("regular-dark", 1100, 1, .dark),
+            Variant("compact", 600, 1, .light), Variant("zoomed", 1100, 1.5, .dark),
+        ] {
+            UIScale.apply(variant.zoom)
+            let host = NSHostingView(
+                rootView: MarketplacePage(marketplace: fixture.marketplace)
+                    .environment(\.compactLayout, variant.width < UIScale.pt(720))
+                    .environment(\.colorScheme, variant.scheme)
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .transaction { $0.animation = nil })
+            host.frame = CGRect(x: 0, y: 0, width: variant.width, height: 760)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            await settle(window, host: host)
+            #expect(abs(host.bounds.width - variant.width) < 1)
+            #expect(
+                find(host, label: "1 extension needs an update for this version of Edith.") != nil)
+            let visible = window.convertToScreen(host.convert(host.bounds, to: nil))
+            for label in [
+                "Update now", "Update required for this version of Edith", "Calendar enabled",
+            ] {
+                let control = try #require(find(host, label: label))
+                let frame = try #require((control as AnyObject).accessibilityFrame?())
+                #expect(visible.insetBy(dx: -1, dy: -1).contains(frame))
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let directory = URL(fileURLWithPath: capture, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: directory.appendingPathComponent("extensions-\(variant.name).png"),
+                    options: .atomic)
+            }
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
+            window.orderOut(nil)
+        }
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func extensionDetailsCarryVersionsSizesAndRemoveInBothSchemes() async throws {
+        let fixture = try Fixture(packageState: "abi")
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let entry = try #require(fixture.marketplace.entries.first { $0.id == "calendar" })
+        for scheme in [ColorScheme.light, .dark] {
+            let host = NSHostingView(
+                rootView: HostExtensionReview(
+                    marketplace: fixture.marketplace,
+                    suites: HostSuiteSelection(
+                        marketplace: fixture.marketplace,
+                        defaults: try #require(
+                            UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))),
+                    entry: entry, presenter: nil, open: nil, done: {}
+                )
+                .environment(\.colorScheme, scheme)
+                .environment(\.automaticViewActionsEnabled, false))
+            host.frame = CGRect(x: 0, y: 0, width: 560, height: 620)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            await settle(window, host: host)
+            for label in [
+                "Calendar", "Update required for this version of Edith",
+                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update", "Remove",
+                "Done",
+            ] {
+                #expect(find(host, label: label) != nil, "\(label)")
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let directory = URL(fileURLWithPath: capture, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: directory.appendingPathComponent("extension-details-\(scheme).png"),
+                    options: .atomic)
+            }
+            window.orderOut(nil)
+        }
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
 

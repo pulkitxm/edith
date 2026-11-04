@@ -6,32 +6,29 @@ import Testing
 @testable import EdithHost
 
 @MainActor struct HostMarketplacePackageSummaryTests {
-    @Test func uninstalledCandidateShowsAnEstimateWithoutClaimingInstalledBytes() {
+    @Test func candidateShowsVersionAndSizesWithoutClaimingDiskUse() {
         let value = HostMarketplacePackageSummary(
             candidate: package("2.0.0"), downloadedVersions: [])
-        #expect(value.estimate?.contains("Version 2.0.0") == true)
-        #expect(value.estimate?.contains("unpacked package contents") == true)
-        #expect(value.estimate?.contains("installed") == false)
-        #expect(value.downloaded == nil)
+        #expect(value.facts == ["Version 2.0.0", "100 bytes download", "200 bytes unpacked"])
+        #expect(value.line == "Version 2.0.0 · 100 bytes download · 200 bytes unpacked")
+        #expect(value.line?.contains("installed") == false)
     }
 
-    @Test func candidateAndRetainedVersionCountsStayDistinct() {
+    @Test func retainedVersionsAreCountedOnlyWhenMoreThanOneIsKept() {
         let old = package("1.0.0"), selected = package("1.1.0")
         let value = HostMarketplacePackageSummary(
             candidate: package("2.0.0"), downloadedVersions: [old, selected, old])
-        #expect(value.estimate?.contains("Version 2.0.0") == true)
-        #expect(
-            value.downloaded?.contains("2 downloaded versions, including retained copies") == true)
-        #expect(value.downloaded?.contains("Storage for measured disk use") == true)
-        #expect(value.downloaded?.contains("2.0.0") == false)
+        #expect(value.facts.last == "2 versions kept")
+        let single = HostMarketplacePackageSummary(
+            candidate: package("2.0.0"), downloadedVersions: [old])
+        #expect(!single.facts.contains { $0.contains("kept") })
     }
 
-    @Test func offlineInstalledVersionDoesNotInventDiskMeasurement() {
-        let installed = package("1.0.0")
+    @Test func offlineInstalledVersionDoesNotInventSizes() {
         let value = HostMarketplacePackageSummary(
-            candidate: nil, downloadedVersions: [installed])
-        #expect(value.estimate == nil)
-        #expect(value.downloaded?.hasPrefix("1 downloaded version.") == true)
+            candidate: nil, downloadedVersions: [package("1.0.0")])
+        #expect(value.facts.isEmpty)
+        #expect(value.line == nil)
     }
 
     @Test func siteAuditFootprintUsesTheOwnedExtensionID() throws {

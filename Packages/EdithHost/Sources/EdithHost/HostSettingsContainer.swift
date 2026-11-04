@@ -37,7 +37,7 @@ struct HostSettingsContainer<Content: View>: View {
     private var maximumWidth: CGFloat {
         ["permissions", "agent", "data", "storage", "surfaces", "agentActivity"].contains(
             section.id)
-            ? .infinity : UIScale.pt(1180)
+            ? .infinity : UIScale.pt(740)
     }
 }
 enum HostSettingsSummary {
