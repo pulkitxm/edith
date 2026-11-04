@@ -784,6 +784,7 @@ struct DashboardView: View {
                 }
             }
         }
+        .background(ChartWarmup())
     }
 
     private var hourlyUnattributedText: String {

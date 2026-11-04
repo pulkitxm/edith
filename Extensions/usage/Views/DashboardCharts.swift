@@ -9,6 +9,77 @@ private func costScale(_ points: [ComboPoint]) -> Double {
     return maxTok / maxCost
 }
 
+struct ChartWarmup: View {
+    private static let points = [
+        ComboPoint(id: "a", label: "a", tokens: 2, cost: 1),
+        ComboPoint(id: "b", label: "b", tokens: 1, cost: 2),
+    ]
+
+    private static let bars = [
+        StackDatum(id: "a-x", x: "a", series: "x", value: 1),
+        StackDatum(id: "b-x", x: "b", series: "x", value: 2),
+    ]
+
+    var body: some View {
+        VStack {
+            ComboChart(points: Self.points, barColor: .clear, lineColor: .clear, height: 40)
+            StackedChart(
+                bars: Self.bars, costLine: Self.points, domain: ["x"], range: [.clear], height: 40)
+        }
+        .frame(width: 1, height: 1)
+        .clipped()
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+enum ChartCategoryAxis {
+    static let barInset = 0.11
+
+    static func barStart(_ index: Int) -> Double { Double(index) - 0.5 + barInset }
+
+    static func barEnd(_ index: Int) -> Double { Double(index) + 0.5 - barInset }
+
+    static func labelStep(count: Int) -> Int { count > 30 ? 2 : 1 }
+
+    static func index(of selection: Double?, count: Int) -> Int? {
+        guard let selection, count > 0 else { return nil }
+        let index = Int(selection.rounded())
+        return (0..<count).contains(index) ? index : nil
+    }
+
+    static func domain(count: Int) -> ClosedRange<Double> {
+        -0.5...(Double(max(count, 1)) - 0.5)
+    }
+
+    static func labelValues(count: Int) -> [Int] {
+        Array(stride(from: 0, to: count, by: labelStep(count: count)))
+    }
+}
+
+struct ChartStackSegment: Identifiable {
+    let id: String
+    let index: Int
+    let series: String
+    let start: Double
+    let end: Double
+
+    static func stack(_ bars: [StackDatum], labels: [String]) -> [ChartStackSegment] {
+        let positions = Dictionary(
+            labels.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var totals: [Int: Double] = [:]
+        return bars.compactMap { datum in
+            guard let index = positions[datum.x] else { return nil }
+            let start = totals[index] ?? 0
+            totals[index] = start + datum.value
+            return ChartStackSegment(
+                id: datum.id, index: index, series: datum.series, start: start,
+                end: start + datum.value)
+        }
+    }
+}
+
 struct ComboChart: View {
     let points: [ComboPoint]
     let barColor: Color
@@ -18,36 +89,42 @@ struct ComboChart: View {
     var height: CGFloat = 200
     var blur = false
     var blurTokens = false
-    @State private var selected: String?
+    @State private var selected: Double?
 
-    private var selectedPoint: ComboPoint? {
-        selected.flatMap { sel in points.first { $0.label == sel } }
+    private var selectedIndex: Int? {
+        ChartCategoryAxis.index(of: selected, count: points.count)
     }
 
     var body: some View {
         let scale = costScale(points)
         let chart = Chart {
-            ForEach(points) { p in
-                BarMark(
-                    x: .value("Day", p.label),
-                    y: .value("Tokens", p.tokens)
+            ForEach(Array(points.enumerated()), id: \.element.id) { index, p in
+                RectangleMark(
+                    xStart: .value("Day", ChartCategoryAxis.barStart(index)),
+                    xEnd: .value("Day", ChartCategoryAxis.barEnd(index)),
+                    yStart: .value("Tokens", 0),
+                    yEnd: .value("Tokens", p.tokens)
                 )
                 .foregroundStyle(barColor.opacity(0.7))
                 .cornerRadius(2)
             }
-            ForEach(points) { p in
+            ForEach(Array(points.enumerated()), id: \.element.id) { index, p in
                 LineMark(
-                    x: .value("Day", p.label),
+                    x: .value("Day", index),
                     y: .value("Cost", p.cost * scale)
                 )
                 .foregroundStyle(lineColor)
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.5)))
             }
-            if let p = selectedPoint {
-                RectangleMark(x: .value("Day", p.label))
-                    .foregroundStyle(.primary.opacity(0.06))
-                RuleMark(x: .value("Day", p.label))
+            if let index = selectedIndex {
+                let p = points[index]
+                RectangleMark(
+                    xStart: .value("Day", Double(index) - 0.5),
+                    xEnd: .value("Day", Double(index) + 0.5)
+                )
+                .foregroundStyle(.primary.opacity(0.06))
+                RuleMark(x: .value("Day", index))
                     .foregroundStyle(.primary.opacity(0.18))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
@@ -61,6 +138,7 @@ struct ComboChart: View {
                     }
             }
         }
+        .chartXScale(domain: ChartCategoryAxis.domain(count: points.count))
         .chartYAxis {
             AxisMarks(position: .leading) { value in
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
@@ -83,12 +161,7 @@ struct ComboChart: View {
                 }
             }
         }
-        .chartXAxis {
-            AxisMarks(preset: .aligned) { _ in
-                AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
-            }
-        }
+        .chartXAxis { categoryLabels(points.map(\.label), dark: dark) }
         .chartXSelection(value: $selected)
         .frame(height: height)
         .padding(.top, UIScale.pt(22))
@@ -99,6 +172,18 @@ struct ComboChart: View {
                 .chartXVisibleDomain(length: 30)
         } else {
             chart
+        }
+    }
+}
+
+@AxisContentBuilder
+func categoryLabels(_ labels: [String], dark: Bool) -> some AxisContent {
+    AxisMarks(values: ChartCategoryAxis.labelValues(count: labels.count)) { value in
+        AxisValueLabel(orientation: .verticalReversed) {
+            if let index = value.as(Int.self), labels.indices.contains(index) {
+                Text(labels[index])
+                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
+            }
         }
     }
 }
@@ -186,10 +271,10 @@ struct StackedChart: View {
     var height: CGFloat = 200
     var blur = false
     var blurTokens = false
-    @State private var selected: String?
+    @State private var selected: Double?
 
-    private var selectedPoint: ComboPoint? {
-        selected.flatMap { sel in costLine.first { $0.label == sel } }
+    private var selectedIndex: Int? {
+        ChartCategoryAxis.index(of: selected, count: costLine.count)
     }
 
     private var legendItems: [ChartLegendItem] {
@@ -200,27 +285,34 @@ struct StackedChart: View {
 
     var body: some View {
         let scale = costScale(costLine)
+        let segments = ChartStackSegment.stack(bars, labels: costLine.map(\.label))
         let chart = Chart {
-            ForEach(bars) { d in
-                BarMark(
-                    x: .value("Day", d.x),
-                    y: .value("Tokens", d.value)
+            ForEach(segments) { segment in
+                RectangleMark(
+                    xStart: .value("Day", ChartCategoryAxis.barStart(segment.index)),
+                    xEnd: .value("Day", ChartCategoryAxis.barEnd(segment.index)),
+                    yStart: .value("Tokens", segment.start),
+                    yEnd: .value("Tokens", segment.end)
                 )
-                .foregroundStyle(by: .value("Series", d.series))
+                .foregroundStyle(by: .value("Series", segment.series))
             }
-            ForEach(costLine) { p in
+            ForEach(Array(costLine.enumerated()), id: \.element.id) { index, p in
                 LineMark(
-                    x: .value("Day", p.label),
+                    x: .value("Day", index),
                     y: .value("Cost", p.cost * scale)
                 )
                 .foregroundStyle(.secondary)
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }
-            if let p = selectedPoint {
-                RectangleMark(x: .value("Day", p.label))
-                    .foregroundStyle(.primary.opacity(0.06))
-                RuleMark(x: .value("Day", p.label))
+            if let index = selectedIndex {
+                let p = costLine[index]
+                RectangleMark(
+                    xStart: .value("Day", Double(index) - 0.5),
+                    xEnd: .value("Day", Double(index) + 0.5)
+                )
+                .foregroundStyle(.primary.opacity(0.06))
+                RuleMark(x: .value("Day", index))
                     .foregroundStyle(.primary.opacity(0.18))
                     .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1), dash: [3, 3]))
                     .annotation(
@@ -234,6 +326,7 @@ struct StackedChart: View {
                     }
             }
         }
+        .chartXScale(domain: ChartCategoryAxis.domain(count: costLine.count))
         .chartXSelection(value: $selected)
         .chartForegroundStyleScale(domain: domain, range: range)
         .chartYAxis {
@@ -248,12 +341,7 @@ struct StackedChart: View {
                 }
             }
         }
-        .chartXAxis {
-            AxisMarks(preset: .aligned) { _ in
-                AxisValueLabel(orientation: .verticalReversed)
-                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
-            }
-        }
+        .chartXAxis { categoryLabels(costLine.map(\.label), dark: dark) }
         .chartLegend(.hidden)
         .frame(height: max(UIScale.pt(150), height - UIScale.pt(24)))
         .padding(.top, UIScale.pt(22))
