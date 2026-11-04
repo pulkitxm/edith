@@ -207,7 +207,8 @@ final class CleanerModel {
             scanned: scanned,
             logs: logs, lastReclaimed: lastReclaimed, drives: drives, driveOptions: driveOptions,
             customFolders: customFolders, driveSelection: driveSelection,
-            operationTitle: operationTitle, loadingDriveOptions: driveOptionsLoad.isRunning,
+            operationTitle: operationTitle,
+            loadingDriveOptions: remote ? remoteLoadingDriveOptions : driveOptionsLoad.isRunning,
             filters: filters)
     }
 
@@ -303,6 +304,7 @@ final class CleanerModel {
                     let reply = try JSONDecoder().decode(CleanerUIReply.self, from: data)
                     if reply.snapshot == nil {
                         remoteStamp = reply.stamp
+                        Self.uiMemory?.snapshot = uiSnapshot()
                     } else {
                         latest = reply
                     }

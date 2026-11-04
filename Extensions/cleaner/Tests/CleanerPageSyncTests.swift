@@ -102,6 +102,24 @@ struct CleanerPageSyncTests {
         #expect(harness.bridge.replies.allSatisfy { $0.bytes < 64 })
     }
 
+    @Test func reopenedPageStartsFromTheLatestSelection() async throws {
+        let harness = try await Self.harness(items: 200)
+        defer { Task { await harness.stop() } }
+        let category = try #require(harness.ui.categories.first)
+        let item = try #require(category.items.first)
+        harness.ui.toggleItem(categoryID: category.id, itemID: item.id)
+        try await harness.settle()
+        await harness.ui.shutdown()
+
+        let client = try #require(
+            ExtensionEngineClient(bridge: harness.bridge, presentationID: UUID()))
+        let defaults = try #require(
+            UserDefaults(suiteName: "synthetic.cleaner.sync." + UUID().uuidString))
+        let reopened = CleanerModel(engineClient: client, defaults: defaults)
+        defer { Task { await reopened.shutdown() } }
+        #expect(reopened.categories == harness.engine.categories)
+    }
+
     @Test func pageAdoptsEngineChangesMadeOutsideThePage() async throws {
         let harness = try await Self.harness(items: 200)
         defer { Task { await harness.stop() } }
