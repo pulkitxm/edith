@@ -35,8 +35,8 @@ import Testing
     }
 
     @Test(arguments: [
-        "colorPicker", "emoji", "focusDim", "hinge", "keepAwake", "keystrokeHighlight", "micMute",
-        "presenter", "systemStats", "windowSweaters",
+        "audioMixer", "colorPicker", "emoji", "focusDim", "hinge", "keepAwake",
+        "keystrokeHighlight", "micMute", "presenter", "systemStats", "windowSweaters",
     ])
     func installedPreferenceFormsRemainAvailableWithoutStartingAnEngine(id: String) throws {
         let request = try #require(self.request(id, installed: package(id), state: .disabled))

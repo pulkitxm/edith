@@ -7,12 +7,11 @@ enum HostExtensionSettingsPolicy: Equatable {
 
     static func route(for id: String) -> HostExtensionSettingsRoute? {
         switch id {
-        case "colorPicker", "emoji", "focusDim", "hinge", "keepAwake", "keystrokeHighlight",
-            "micMute",
-            "presenter", "systemStats", "windowSweaters":
+        case "audioMixer", "colorPicker", "emoji", "focusDim", "hinge", "keepAwake",
+            "keystrokeHighlight", "micMute", "presenter", "systemStats", "windowSweaters":
             .init(section: "extension", policy: .preferences)
         case "bifrost", "clipboard", "codeStats", "downloads", "lidAwake", "attention",
-            "appMaintenance", "studio", "quinjet", "notchShelf", "audioMixer", "latex",
+            "appMaintenance", "studio", "quinjet", "notchShelf", "latex",
             "timeLapse", "socialManager":
             .init(section: "extension", policy: .active)
         case "calendar": .init(section: "calendar", policy: .active)
