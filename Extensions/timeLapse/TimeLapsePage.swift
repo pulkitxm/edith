@@ -67,6 +67,21 @@ struct TimeLapseControls: View {
             } content: {
                 if recorder.recording {
                     recordingStatus
+                } else if extensionEnabled, loadsSources, recorder.screenRecordingDenied,
+                    !recorder.sourceLoad.hasContent
+                {
+                    PageNotice(
+                        TimeLapseError.screenRecordingDenied.errorDescription ?? "",
+                        title: "Allow Screen Recording", tone: .warning,
+                        actions: {
+                            HStack(spacing: UIScale.pt(8)) {
+                                Button("Open System Settings") {
+                                    TimeLapseScreenRecordingAccess.request()
+                                }
+                                .buttonStyle(.edith(.primary))
+                                Button("Try Again") { sourcesRefresh += 1 }
+                            }
+                        })
                 } else {
                     PageLoading(
                         state: !extensionEnabled || !loadsSources
