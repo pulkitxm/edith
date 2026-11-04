@@ -7,17 +7,22 @@ public struct HostPackageDownloader: Sendable {
 
     public let connections: Int
     public let segmentBytes: Int64
+    public let minimumSegmentBytes: Int64
+    public let probeBytes: Int64
     public let attempts: Int
     public let idleTimeout: TimeInterval
     private let configuration: @Sendable () -> URLSessionConfiguration
 
     public init(
-        connections: Int = 8, segmentBytes: Int64 = 512 * 1024, attempts: Int = 6,
-        idleTimeout: TimeInterval = 20,
+        connections: Int = 8, segmentBytes: Int64 = 512 * 1024,
+        minimumSegmentBytes: Int64 = 128 * 1024, probeBytes: Int64 = 64 * 1024,
+        attempts: Int = 6, idleTimeout: TimeInterval = 20,
         configuration: @escaping @Sendable () -> URLSessionConfiguration = { .ephemeral }
     ) {
         self.connections = max(1, connections)
         self.segmentBytes = max(1, segmentBytes)
+        self.minimumSegmentBytes = max(1, min(minimumSegmentBytes, segmentBytes))
+        self.probeBytes = max(1, probeBytes)
         self.attempts = max(1, attempts)
         self.idleTimeout = idleTimeout
         self.configuration = configuration
@@ -36,9 +41,7 @@ public struct HostPackageDownloader: Sendable {
             if !completed { try? FileManager.default.removeItem(at: destination) }
         }
         let counter = HostTransferCounter(report: progress)
-        var segments = stride(from: Int64(0), to: expectedBytes, by: Int(segmentBytes)).map {
-            $0..<min($0 + segmentBytes, expectedBytes)
-        }
+        var segments = plan(expectedBytes)
         let first = segments.removeFirst()
         let probe = session()
         defer { probe.invalidateAndCancel() }
@@ -69,6 +72,15 @@ public struct HostPackageDownloader: Sendable {
         counter.flush()
         completed = true
         return destination
+    }
+
+    func plan(_ total: Int64) -> [Range<Int64>] {
+        let probe = min(probeBytes, total)
+        let remaining = total - probe
+        let share = (remaining + Int64(connections * 4) - 1) / Int64(connections * 4)
+        let size = min(segmentBytes, max(minimumSegmentBytes, share))
+        return [0..<probe]
+            + stride(from: probe, to: total, by: Int(size)).map { $0..<min($0 + size, total) }
     }
 
     private func session() -> URLSession {

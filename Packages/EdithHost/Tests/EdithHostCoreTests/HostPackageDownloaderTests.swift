@@ -13,10 +13,27 @@ import Testing
             server.url, expectedBytes: Int64(payload.count)
         ) { progress.record($0) }
         defer { try? FileManager.default.removeItem(at: file) }
+        let planned = server.downloader().plan(Int64(payload.count))
         #expect(try Data(contentsOf: file) == payload)
-        #expect(server.ranges.count == 10)
-        #expect(Set(server.ranges.map(\.lowerBound)).count == 10)
+        #expect(server.ranges.first == 0..<250)
+        #expect(server.ranges.count == planned.count)
+        #expect(Set(server.ranges.map { Int64($0.lowerBound) }) == Set(planned.map(\.lowerBound)))
         #expect(progress.last == Int64(payload.count))
+    }
+
+    @Test func archivesAreSplitSoEveryConnectionStaysBusyUntilTheEnd() {
+        let downloader = HostPackageDownloader()
+        for total: Int64 in [40_000, 2_400_000, 12_000_000, 60_000_000] {
+            let plan = downloader.plan(total)
+            #expect(plan.first == 0..<min(64 * 1024, total))
+            #expect(plan.last?.upperBound == total)
+            #expect(zip(plan, plan.dropFirst()).allSatisfy { $0.upperBound == $1.lowerBound })
+            #expect(plan.dropFirst().allSatisfy { $0.count <= 512 * 1024 })
+            if total > 1_000_000 {
+                #expect(plan.count > downloader.connections * 2, "\(total)")
+            }
+        }
+        #expect(downloader.plan(2_400_000).dropFirst().allSatisfy { $0.count <= 128 * 1024 })
     }
 
     @Test func aDroppedConnectionResumesFromTheReceivedOffset() async throws {
@@ -25,8 +42,10 @@ import Testing
         let file = try await server.downloader().download(
             server.url, expectedBytes: Int64(payload.count))
         defer { try? FileManager.default.removeItem(at: file) }
+        let starts = Set(server.downloader().plan(Int64(payload.count)).map(\.lowerBound))
         #expect(try Data(contentsOf: file) == payload)
-        #expect(server.ranges.contains { $0.lowerBound % 1_000 != 0 }, "\(server.ranges)")
+        #expect(
+            server.ranges.contains { !starts.contains(Int64($0.lowerBound)) }, "\(server.ranges)")
     }
 
     @Test func aServerWithoutRangeSupportDeliversTheWholeArchiveOnce() async throws {
@@ -119,7 +138,8 @@ private final class RangeServer: @unchecked Sendable {
 
     func downloader(attempts: Int = 4) -> HostPackageDownloader {
         HostPackageDownloader(
-            connections: 4, segmentBytes: 1_000, attempts: attempts, idleTimeout: 5
+            connections: 4, segmentBytes: 1_000, minimumSegmentBytes: 200, probeBytes: 250,
+            attempts: attempts, idleTimeout: 5
         ) {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.protocolClasses = [RangeStub.self]
