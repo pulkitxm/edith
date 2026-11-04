@@ -150,6 +150,39 @@ import Testing
         #expect(selection.selected.isEmpty)
     }
 
+    @Test func declinedScreenCaptureBecomesAPermissionError() {
+        let declined = NSError(
+            domain: SCStreamErrorDomain, code: SCStreamError.Code.userDeclined.rawValue)
+        let mapped = TimeLapseSources.sourceError(declined)
+        #expect(
+            mapped.localizedDescription
+                == TimeLapseError.screenRecordingDenied.errorDescription)
+        let other = NSError(
+            domain: SCStreamErrorDomain, code: SCStreamError.Code.noDisplayList.rawValue)
+        #expect((TimeLapseSources.sourceError(other) as NSError) == other)
+    }
+
+    @Test @MainActor func deniedSourcesReportMissingScreenRecordingAccess() async {
+        guard #available(macOS 15.0, *) else { return }
+        let recorder = TimeLapseRecorder()
+        await recorder.loadSources {
+            throw TimeLapseSources.sourceError(
+                NSError(
+                    domain: SCStreamErrorDomain, code: SCStreamError.Code.userDeclined.rawValue))
+        }
+        #expect(recorder.screenRecordingDenied)
+        await recorder.loadSources { throw TimeLapseError.missingSource }
+        #expect(!recorder.screenRecordingDenied)
+    }
+
+    @Test @MainActor func allowingAccessOpensSettingsOnlyWhenThePromptCannotGrantIt() {
+        var opened: [URL] = []
+        TimeLapseScreenRecordingAccess.request(prompt: { true }, open: { opened.append($0) })
+        #expect(opened.isEmpty)
+        TimeLapseScreenRecordingAccess.request(prompt: { false }, open: { opened.append($0) })
+        #expect(opened == [TimeLapseScreenRecordingAccess.settingsURL])
+    }
+
     @Test @MainActor func choosingWindowsAutomaticallyEnablesAppAudioAndCanBeMuted() {
         guard #available(macOS 15.0, *) else { return }
         let recorder = TimeLapseRecorder()
