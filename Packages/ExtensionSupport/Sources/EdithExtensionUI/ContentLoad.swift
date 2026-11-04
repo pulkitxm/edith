@@ -22,10 +22,10 @@ public final class ContentLoad {
         cancelOperation?()
         cancelOperation = nil
         generation &+= 1
-        isRunning = true
-        errorMessage = nil
-        hasContent = preservingContent && hasContent
-        state = hasContent ? retainedState : .loading
+        assign(\.isRunning, true)
+        assign(\.errorMessage, nil)
+        assign(\.hasContent, preservingContent && hasContent)
+        assign(\.state, hasContent ? retainedState : .loading)
         return generation
     }
 
@@ -39,18 +39,18 @@ public final class ContentLoad {
 
     public func complete(_ request: UInt64, empty: Bool = false) {
         guard isCurrent(request) else { return }
-        isRunning = false
+        assign(\.isRunning, false)
         cancelOperation = nil
         retainContent(empty: empty)
-        errorMessage = nil
+        assign(\.errorMessage, nil)
     }
 
     public func fail(_ request: UInt64, message: String, offline: Bool = false) {
         guard isCurrent(request) else { return }
-        isRunning = false
+        assign(\.isRunning, false)
         cancelOperation = nil
-        errorMessage = message
-        state = hasContent ? retainedState : offline ? .offline : .error
+        assign(\.errorMessage, message)
+        assign(\.state, hasContent ? retainedState : offline ? .offline : .error)
     }
 
     public func fail(_ request: UInt64, error: Error) {
@@ -68,14 +68,14 @@ public final class ContentLoad {
         cancelOperation?()
         cancelOperation = nil
         generation &+= 1
-        isRunning = false
-        state = hasContent ? retainedState : .cancelled
+        assign(\.isRunning, false)
+        assign(\.state, hasContent ? retainedState : .cancelled)
     }
 
     public func retainContent(empty: Bool = false) {
-        hasContent = true
+        assign(\.hasContent, true)
         retainedState = empty ? .empty : .content
-        state = retainedState
+        assign(\.state, retainedState)
     }
 
     public func reset() {
@@ -116,5 +116,11 @@ public final class ContentLoad {
             guard request == generation else { return }
             fail(request, error: error)
         }
+    }
+
+    private func assign<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<ContentLoad, Value>, _ value: Value
+    ) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
     }
 }
