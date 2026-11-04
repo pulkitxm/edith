@@ -235,6 +235,9 @@ struct UsageMachinesPeer: Sendable {
     static func isDue(_ machine: Machine, directory: URL = Repo.dataDir, now: Date = Date())
         -> Bool
     {
+        if UsageMachineRefreshLedger.load(directory: directory)[machine.id]?.failure != nil {
+            return true
+        }
         let file = directory.appendingPathComponent("machines").appendingPathComponent(
             machine.id.uuidString.lowercased() + ".json")
         guard

@@ -305,6 +305,32 @@ import Testing
         #expect(try fixture.machineEntry(in: merged)["refreshFailure"] == nil)
     }
 
+    @Test func aFailedMachineIsRetriedOnTheNextRefreshEvenWithFreshUsage() async throws {
+        let document = try await nativeDocument()
+        let fixture = try MergeFixture(cacheAge: 120, document: document)
+        defer { fixture.remove() }
+        UsageMachineRefreshLedger.recordFailure(
+            fixture.machine.id, reason: "Connection refused", at: fixture.now - 60,
+            directory: fixture.directory)
+        #expect(
+            UsageMachinesPeer.isDue(fixture.machine, directory: fixture.directory, now: fixture.now)
+        )
+        let transport = Transport(data: document)
+        let peer = UsageMachinesPeer(
+            active: { true }, invoke: { try await transport.invoke($0, payload: $1) })
+        _ = try await UsageMachinesPeer.merge(
+            local: try fixture.local(), policy: .due, directory: fixture.directory,
+            defaults: fixture.defaults, now: { fixture.now },
+            registry: { [fixture.machine] }, currentPeer: { peer }, onEvent: { _ in })
+        #expect(await transport.releases == 1)
+        #expect(
+            UsageMachineRefreshLedger.load(directory: fixture.directory)[fixture.machine.id]?
+                .failure == nil)
+        #expect(
+            !UsageMachinesPeer.isDue(
+                fixture.machine, directory: fixture.directory, now: fixture.now))
+    }
+
     @MainActor @Test func recentlyCollectedMachinesAreNotRecollectedOrMarkedFailed() async throws {
         let fixture = try MergeFixture(cacheAge: 600, document: await nativeDocument())
         defer { fixture.remove() }
