@@ -8,24 +8,24 @@ import Testing
 @Suite(.serialized) @MainActor struct VirtualListTests {
     @Test func scrollingThousandsOfRowsReusesAHandfulOfCells() async throws {
         let (window, host) = ScrollFrameHarness.host(
-            list(SyntheticRows.rows), size: CGSize(width: 900, height: 700))
+            list(ScrollFixtureRows.rows), size: CGSize(width: 900, height: 700))
         defer { window.orderOut(nil) }
         await ScrollFrameHarness.settle(host)
         let scroll = try #require(ScrollFrameHarness.scrollView(in: host))
         let table = try #require(scroll.documentView as? NSTableView)
-        let coordinator = try #require(table.delegate as? VirtualListCoordinator<SyntheticRow>)
-        #expect(table.numberOfRows == SyntheticRows.rows.count + 1)
+        let coordinator = try #require(table.delegate as? VirtualListCoordinator<ScrollFixtureRow>)
+        #expect(table.numberOfRows == ScrollFixtureRows.rows.count + 1)
         let reloads = coordinator.reloads
         _ = await ScrollFrameHarness.scroll(host, step: 400, frames: 120)
         let visible = table.rows(in: table.visibleRect).length
         #expect(visible > 5)
         #expect(table.subviews.count <= visible + 8)
-        #expect(coordinator.rowBuilds < SyntheticRows.rows.count)
+        #expect(coordinator.rowBuilds < ScrollFixtureRows.rows.count)
         #expect(coordinator.reloads == reloads)
     }
 
     @Test func updatingOneItemRefreshesOnlyThatRow() async throws {
-        var rows = Array(SyntheticRows.rows.prefix(200))
+        var rows = Array(ScrollFixtureRows.rows.prefix(200))
         let model = VirtualListModel(rows: rows)
         let (window, host) = ScrollFrameHarness.host(
             VirtualListHarnessView(model: model), size: CGSize(width: 900, height: 700))
@@ -33,10 +33,10 @@ import Testing
         await ScrollFrameHarness.settle(host)
         let scroll = try #require(ScrollFrameHarness.scrollView(in: host))
         let table = try #require(scroll.documentView as? NSTableView)
-        let coordinator = try #require(table.delegate as? VirtualListCoordinator<SyntheticRow>)
+        let coordinator = try #require(table.delegate as? VirtualListCoordinator<ScrollFixtureRow>)
         let builds = coordinator.rowBuilds
         let reloads = coordinator.reloads
-        rows[3] = SyntheticRow(id: 3, title: "Renamed", detail: "Changed", value: "1m")
+        rows[3] = ScrollFixtureRow(id: 3, title: "Renamed", detail: "Changed", value: "1m")
         model.rows = rows
         await ScrollFrameHarness.settle(host)
         #expect(coordinator.reloads == reloads)
@@ -49,7 +49,7 @@ import Testing
     }
 
     @Test func theHeaderRowFollowsItsContentHeight() async throws {
-        let model = VirtualListModel(rows: Array(SyntheticRows.rows.prefix(20)))
+        let model = VirtualListModel(rows: Array(ScrollFixtureRows.rows.prefix(20)))
         let (window, host) = ScrollFrameHarness.host(
             VirtualListHarnessView(model: model), size: CGSize(width: 900, height: 700))
         defer { window.orderOut(nil) }
@@ -63,14 +63,14 @@ import Testing
     }
 
     @Test func aFlexibleHeaderIsMeasuredAtItsIdealHeight() async throws {
-        let view = VirtualList(Array(SyntheticRows.rows.prefix(50)), rowHeight: { _ in 46 }) {
+        let view = VirtualList(Array(ScrollFixtureRows.rows.prefix(50)), rowHeight: { _ in 46 }) {
             VStack {
                 Text("Header")
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } row: { row in
-            SyntheticRowView(row: row)
+            ScrollFixtureRowView(row: row)
         }
         let (window, host) = ScrollFrameHarness.host(view, size: CGSize(width: 900, height: 700))
         defer { window.orderOut(nil) }
@@ -82,11 +82,11 @@ import Testing
         #expect(header < 200)
     }
 
-    private func list(_ rows: [SyntheticRow]) -> some View {
+    private func list(_ rows: [ScrollFixtureRow]) -> some View {
         VirtualList(rows, rowHeight: { _ in 46 }) {
             Text("Header")
         } row: { row in
-            SyntheticRowView(row: row)
+            ScrollFixtureRowView(row: row)
         }
     }
 }
@@ -112,10 +112,10 @@ import Testing
 
 @MainActor @Observable
 final class VirtualListModel {
-    var rows: [SyntheticRow]
+    var rows: [ScrollFixtureRow]
     var headerLines = 1
 
-    init(rows: [SyntheticRow]) { self.rows = rows }
+    init(rows: [ScrollFixtureRow]) { self.rows = rows }
 }
 
 struct VirtualListHarnessView: View {
@@ -130,7 +130,7 @@ struct VirtualListHarnessView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } row: { row in
-            SyntheticRowView(row: row)
+            ScrollFixtureRowView(row: row)
         }
     }
 }

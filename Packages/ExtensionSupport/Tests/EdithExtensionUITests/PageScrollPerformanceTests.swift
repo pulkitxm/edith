@@ -9,9 +9,9 @@ import Testing
 
     @Test(.enabled(if: benchmark)) func longPagesScrollWithinTheFrameBudget() async {
         for (name, view) in [
-            ("scaffold", AnyView(SyntheticRows.scaffold(loading: false))),
-            ("scaffold+loading", AnyView(SyntheticRows.scaffold(loading: true))),
-            ("virtual-list", AnyView(SyntheticRows.virtual)),
+            ("scaffold", AnyView(ScrollFixtureRows.scaffold(loading: false))),
+            ("scaffold+loading", AnyView(ScrollFixtureRows.scaffold(loading: true))),
+            ("virtual-list", AnyView(ScrollFixtureRows.virtual)),
         ] {
             let (window, host) = ScrollFrameHarness.host(
                 view.environment(\.colorScheme, .dark), size: CGSize(width: 1200, height: 860))
@@ -24,9 +24,9 @@ import Testing
     }
 }
 
-enum SyntheticRows {
+enum ScrollFixtureRows {
     static let rows = (0..<3_000).map { index in
-        SyntheticRow(
+        ScrollFixtureRow(
             id: index, title: "Synthetic item \(index)",
             detail: "Detail line for item \(index) with some extra words",
             value: "\(index % 97)m")
@@ -49,26 +49,26 @@ enum SyntheticRows {
         VirtualList(rows, rowHeight: { _ in 46 }) {
             PageHeader("Synthetic")
         } row: { row in
-            SyntheticRowView(row: row).padding(.horizontal, 24)
+            ScrollFixtureRowView(row: row).padding(.horizontal, 24)
         }
     }
 
     @MainActor static var list: some View {
         ForEach(rows) { row in
-            SyntheticRowView(row: row)
+            ScrollFixtureRowView(row: row)
         }
     }
 }
 
-struct SyntheticRow: Identifiable, Equatable {
+struct ScrollFixtureRow: Identifiable, Equatable {
     let id: Int
     let title: String
     let detail: String
     let value: String
 }
 
-struct SyntheticRowView: View {
-    let row: SyntheticRow
+struct ScrollFixtureRowView: View {
+    let row: ScrollFixtureRow
 
     var body: some View {
         HStack(spacing: 10) {
