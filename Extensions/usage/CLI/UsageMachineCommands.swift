@@ -27,15 +27,21 @@ struct UsageMachinesCommand: AsyncParsableCommand {
 }
 
 @MainActor enum UsageMachineBridge {
-    static func json(machine: Machine, counted: Bool, summary: MachineUsageSummary?)
-        -> JSONValue
-    {
+    static func json(
+        machine: Machine, counted: Bool, summary: MachineUsageSummary?,
+        refresh: UsageMachineRefreshStatus? = nil
+    ) -> JSONValue {
         .object([
             "machine": .string(machine.name),
             "id": .string(machine.id.uuidString),
             "counted": .bool(counted),
             "collectedAt": .optional(
                 summary.map { JSONSerializer.iso.string(from: $0.collectedAt) }),
+            "refreshAttemptedAt": .optional(
+                refresh.map { JSONSerializer.iso.string(from: $0.attemptedAt) }),
+            "refreshSucceededAt": .optional(
+                refresh?.succeededAt.map { JSONSerializer.iso.string(from: $0) }),
+            "refreshFailure": .optional(refresh?.failure),
             "host": .optional(summary?.host),
             "sources": .array((summary?.sources ?? []).map { .string($0) }),
             "days": .int(summary?.days ?? 0),
@@ -44,18 +50,24 @@ struct UsageMachinesCommand: AsyncParsableCommand {
         ])
     }
 
-    static func row(machine: Machine, counted: Bool, summary: MachineUsageSummary?) -> [String] {
+    static func row(
+        machine: Machine, counted: Bool, summary: MachineUsageSummary?,
+        refresh: UsageMachineRefreshStatus? = nil
+    ) -> [String] {
         [
             machine.name,
             counted ? "yes" : "no",
             summary.map { JSONSerializer.iso.string(from: $0.collectedAt) } ?? "-",
+            refresh.map { $0.failure == nil ? "ok" : "failed" } ?? "-",
             summary.map { String($0.sources.count) } ?? "-",
             summary.map { String(format: "%.2f", $0.cost) } ?? "-",
             summary.map { String(Int($0.tokens)) } ?? "-",
         ]
     }
 
-    static let headers = ["MACHINE", "COUNTED", "COLLECTED", "SOURCES", "COST", "TOKENS"]
+    static let headers = [
+        "MACHINE", "COUNTED", "COLLECTED", "REFRESH", "SOURCES", "COST", "TOKENS",
+    ]
 
     static func merge(progress: CLIProgress) async -> Bool {
         progress.begin("folding it in")
@@ -98,22 +110,27 @@ struct UsageMachinesListCommand: AsyncParsableCommand {
                     try UsageCLIMachines.summary(machine).map { (machine.id, $0) }
                 })
             let counted = UsageCLIMachines.selected
+            let refresh = UsageMachineRefreshLedger.load()
             guard !json else {
                 CLIOut.json(
                     .array(
                         machines.map {
                             UsageMachineBridge.json(
                                 machine: $0, counted: counted.contains($0.id),
-                                summary: summaries[$0.id])
+                                summary: summaries[$0.id], refresh: refresh[$0.id])
                         }))
                 return
             }
             let rows = machines.map {
                 UsageMachineBridge.row(
                     machine: $0, counted: counted.contains($0.id),
-                    summary: summaries[$0.id])
+                    summary: summaries[$0.id], refresh: refresh[$0.id])
             }
             CLIOut.out(TextTable.render(headers: UsageMachineBridge.headers, rows: rows))
+            for machine in machines {
+                guard let failure = refresh[machine.id]?.failure else { continue }
+                CLIOut.note(machine.name + ": last refresh failed: " + failure)
+            }
         }
     }
 }

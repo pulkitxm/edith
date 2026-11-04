@@ -269,4 +269,23 @@ import Testing
         #expect(try #require(forward[id]).name == "Alpha")
         #expect(try #require(reverse[id]).name == "Alpha")
     }
+
+    @Test func freshnessExplainsFailedRefreshesAndOnlyAgesOutAfterTheCadence() {
+        let collected = Date(timeIntervalSince1970: 1_791_504_000)
+        let fresh = MachineUsageFreshness(collectedAt: collected, now: collected + 1_900)
+        #expect(!fresh.isStale)
+        #expect(!fresh.needsAttention)
+        #expect(fresh.statusLabel == "collected 31m ago")
+        let stale = MachineUsageFreshness(collectedAt: collected, now: collected + 2_460)
+        #expect(stale.isStale)
+        let failing = MachineUsageFreshness(
+            collectedAt: collected, now: collected + 600,
+            failure: UsageMachineRefreshLedger.machinesUnavailable)
+        #expect(!failing.isStale)
+        #expect(failing.needsAttention)
+        #expect(
+            failing.statusLabel
+                == "collected 10m ago · last refresh failed: "
+                + UsageMachineRefreshLedger.machinesUnavailable)
+    }
 }
