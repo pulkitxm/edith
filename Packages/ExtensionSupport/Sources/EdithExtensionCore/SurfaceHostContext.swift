@@ -28,6 +28,16 @@ public struct SurfaceHostContext {
         return Set(ids)
     }
 
+    public var enabledIDs: Set<String>? {
+        let values = sharedState.values(for: "host")
+        guard let raw = values["surface.enabledIDs"], raw.utf8.count <= 16_384,
+            let data = raw.data(using: .utf8),
+            let ids = try? JSONDecoder().decode([String].self, from: data), ids.count <= 128,
+            ids.allSatisfy({ SurfaceWidget(rawValue: "extension:" + $0) != nil })
+        else { return nil }
+        return Set(ids)
+    }
+
     public var activeVersions: [String: String] {
         let values = sharedState.values(for: "host")
         let active = activeIDs

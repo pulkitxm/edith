@@ -47,4 +47,21 @@ import Testing
         #expect(PresenterPrivacy.usage.hides(active: true, defaults: defaults))
         #expect(PresenterPrivacy.browser.hides(active: true, defaults: defaults))
     }
+
+    @Test func onlyCategoriesOfEnabledExtensionsAreListed() {
+        #expect(PresenterPrivacy.listed(enabledIDs: nil) == PresenterPrivacy.allCases)
+        #expect(PresenterPrivacy.listed(enabledIDs: []).isEmpty)
+        #expect(
+            PresenterPrivacy.listed(enabledIDs: ["music", "herdr", "presenter"])
+                == [.music, .agents])
+        #expect(
+            PresenterPrivacy.listed(enabledIDs: ["notchShelf"]) == [.camera, .shelf, .browser])
+        #expect(PresenterPrivacy.listed(enabledIDs: ["usage"]) == [.money, .usage])
+    }
+
+    @Test func everyCategoryHasAProvider() {
+        for category in PresenterPrivacy.allCases {
+            #expect(!category.providerIDs.isEmpty)
+        }
+    }
 }
