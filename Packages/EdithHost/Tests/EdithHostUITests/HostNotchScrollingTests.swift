@@ -103,6 +103,7 @@ struct HostNotchScrollingTests {
         let slot = CGRect(x: 20, y: 60, width: 300, height: 120)
         let strip = NSScrollView(frame: CGRect(origin: .zero, size: slot.size))
         strip.hasHorizontalScroller = true
+        strip.scrollerStyle = .overlay
         strip.documentView = NSView(frame: CGRect(x: 0, y: 0, width: 1200, height: 120))
         fixture.container.attach(card(strip), rectangle: slot, native: true)
         let point = windowPoint(CGPoint(x: slot.midX, y: slot.midY), in: fixture)
