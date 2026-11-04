@@ -4,6 +4,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct BlitzTreePage: View {
+    static let title = "Disk Map"
     @State var model: BlitzTreeModel
     @State private var pendingRemoval: BlitzTreeReport.Entry?
     @Environment(\.colorScheme) private var scheme
@@ -13,7 +14,7 @@ struct BlitzTreePage: View {
     var body: some View {
         PageScaffold {
             PageHeader {
-                Text("BlitzTree")
+                Text(Self.title)
             } accessory: {
                 HStack {
                     if model.scanning {
