@@ -1083,6 +1083,54 @@ import HostWorkerFixtureSupport
         #expect(await fixture.requests.count == 0)
     }
 
+    @Test func extensionDetailsCarryVersionsSizesAndRemoveInBothSchemes() async throws {
+        let fixture = try Fixture(packageState: "abi")
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let entry = try #require(fixture.marketplace.entries.first { $0.id == "calendar" })
+        for scheme in [ColorScheme.light, .dark] {
+            let host = NSHostingView(
+                rootView: HostExtensionReview(
+                    marketplace: fixture.marketplace,
+                    suites: HostSuiteSelection(
+                        marketplace: fixture.marketplace,
+                        defaults: try #require(
+                            UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))),
+                    entry: entry, presenter: nil, open: nil, done: {}
+                )
+                .environment(\.colorScheme, scheme)
+                .environment(\.automaticViewActionsEnabled, false))
+            host.frame = CGRect(x: 0, y: 0, width: 560, height: 620)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            await settle(window, host: host)
+            for label in [
+                "Calendar", "Update required for this version of Edith",
+                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update", "Remove",
+                "Done",
+            ] {
+                #expect(find(host, label: label) != nil, "\(label)")
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let directory = URL(fileURLWithPath: capture, isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: directory.appendingPathComponent("extension-details-\(scheme).png"),
+                    options: .atomic)
+            }
+            window.orderOut(nil)
+        }
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
     @Test func sidebarUtilitiesAdmitOnlyCurrentProviderActions() {
         #expect(
             HostSidebarUtility.allCases.map(\.id) == [

@@ -88,6 +88,7 @@ struct HostExtensionReview: View {
             width: PresentationMetrics.width(560),
             height: PresentationMetrics.height(Self.idealHeight(for: entry.id))
         )
+        .pageSurface()
         .tracksWindowVisibility()
         .interactiveDismissDisabled(owning)
         .onDisappear {

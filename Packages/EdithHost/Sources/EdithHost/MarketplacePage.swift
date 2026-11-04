@@ -279,7 +279,7 @@ struct HostMarketplaceBatchStatus: View {
     let bytesPerSecond: Double
 
     private var title: String {
-        "Updating \(min(batch.finished + 1, batch.total)) of \(batch.total)"
+        "Downloading \(min(batch.finished + 1, batch.total)) of \(batch.total)"
     }
 
     var body: some View {
