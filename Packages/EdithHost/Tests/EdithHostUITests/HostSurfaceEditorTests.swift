@@ -1495,6 +1495,27 @@ import HostWorkerFixtureSupport
         }
     }
 
+    @Test func marketplacePageScrollsWithoutHitches() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        let (window, host) = HostScrollHarness.host(
+            MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.compactLayout, false)
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.colorScheme, .dark),
+            size: CGSize(width: 1100, height: 700))
+        defer { window.orderOut(nil) }
+        await HostScrollHarness.settle(host, for: .seconds(1))
+        let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
+        let timing = await HostScrollHarness.scroll(host, frames: frames)
+        print(
+            "host-scroll extensions-page rows=\(fixture.marketplace.entries.count): \(timing)")
+        #expect(timing.frames.count == frames)
+        #expect(timing.frames.filter { $0 > 40 }.isEmpty, "\(timing)")
+        #expect(timing.median < 12, "\(timing)")
+    }
+
     @MainActor private struct Fixture {
         let directory: URL
         let marketplace: HostMarketplace
