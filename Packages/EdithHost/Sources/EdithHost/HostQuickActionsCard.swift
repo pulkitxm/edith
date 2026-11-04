@@ -52,6 +52,7 @@ extension HostSidebarUtility {
         case .lidAwake: "laptopcomputer"
         case .keystrokeHighlight: "keyboard.badge.ellipsis"
         case .presenter: "person.wave.2"
+        case .micMute: "mic.slash"
         }
     }
     var cardSubtitle: String {
@@ -61,6 +62,7 @@ extension HostSidebarUtility {
         case .lidAwake: "Keep running with the lid closed"
         case .keystrokeHighlight: "Show keyboard input on screen"
         case .presenter: "Blur sensitive values on screen"
+        case .micMute: "Mute or unmute the microphone"
         }
     }
 }

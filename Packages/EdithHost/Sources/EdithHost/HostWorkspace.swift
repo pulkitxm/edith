@@ -93,7 +93,7 @@ struct HostWorkspace: View {
             wrappedValue: "Updates", AppStorageKeys.AppMaintenance.section, store: defaults)
     }
     private var defaults: UserDefaults { navigationDefaults }
-    private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
+    private var active: Set<String> { marketplace.surfaceAvailability.navigableIDs }
     private var destination: HostNavigationPage {
         HostNavigationCatalog.page(
             HostNavigationCatalog.resolve(selection, active: active, defaults: defaults))
@@ -236,7 +236,8 @@ struct HostWorkspace: View {
     private var musicSidebarShown: Bool { musicAdmission.eligible && musicSlots?.sidebar == true }
     private var musicAdmission: MusicAdmission {
         MusicAdmission(
-            version: active.contains("music") ? marketplace.sessions.versions["music"] : nil,
+            version: marketplace.surfaceAvailability.activeIDs.contains("music")
+                ? marketplace.sessions.versions["music"] : nil,
             mediaEnabled: mediaEnabled,
             hidden: marketplace.surfaces.privacy.hides(.music),
             visible: windowVisible && automaticActions)
