@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -26,22 +27,92 @@ import Testing
             model.select(preset)
             model.reload()
             await model.waitForReload()
+            let realizeStart = CACurrentMediaTime()
             let (window, host) = AttentionScrollHarness.host(
                 AttentionPage(model: model)
                     .environment(\.compactLayout, false)
                     .environment(\.colorScheme, .dark),
                 size: CGSize(width: 1280, height: 860))
+            host.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            CATransaction.flush()
+            let realizeMs = (CACurrentMediaTime() - realizeStart) * 1000
             await AttentionScrollHarness.settle(host, for: .seconds(1))
             let before = requests.icons
             let timing = await AttentionScrollHarness.scroll(host, frames: frames)
             await AttentionScrollHarness.settle(host)
             print(
-                "attention-scroll \(section.rawValue) \(preset.rawValue): \(timing) iconRequestsDuringScroll=\(requests.icons - before) slowAt=\(timing.slowOffsets)"
+                "attention-scroll \(section.rawValue) \(preset.rawValue): realize=\(Int(realizeMs))ms \(timing) iconRequestsDuringScroll=\(requests.icons - before) slowAt=\(timing.slowOffsets)"
             )
             window.orderOut(nil)
             window.contentView = nil
             await model.shutdown()
         }
+    }
+}
+
+extension AttentionScrollBenchmarkTests {
+    @Test func overviewScrollDoesNotRealizePanelsMidScroll() async throws {
+        let fixture = try AttentionSyntheticHistory.make(days: 7, eventsPerDay: 420)
+        defer { fixture.cleanup() }
+        let model = AttentionPageModel(
+            repository: fixture.repository,
+            uiClient: fixture.client(counter: AttentionRequestCounter()))
+        model.section = .overview
+        model.select(.last7)
+        model.reload()
+        await model.waitForReload()
+        let (window, host) = AttentionScrollHarness.host(
+            AttentionPage(model: model)
+                .environment(\.compactLayout, false)
+                .environment(\.colorScheme, .dark),
+            size: CGSize(width: 1280, height: 860))
+        await AttentionScrollHarness.settle(host, for: .seconds(1))
+        let timing = await AttentionScrollHarness.scroll(host, frames: 240)
+        window.orderOut(nil)
+        window.contentView = nil
+        await model.shutdown()
+        #expect(timing.frames.count == 240)
+        #expect(timing.frames.filter { $0 > 40 }.isEmpty, "\(timing)")
+        #expect(timing.median < 12, "\(timing)")
+    }
+
+    @Test(.enabled(if: enabled)) func realizingEachOverviewPanel() async throws {
+        let fixture = try AttentionSyntheticHistory.make(days: 7, eventsPerDay: 420)
+        defer { fixture.cleanup() }
+        let client = fixture.client(counter: AttentionRequestCounter())
+        let model = AttentionPageModel(repository: fixture.repository, uiClient: client)
+        model.section = .overview
+        model.select(.last7)
+        model.reload()
+        await model.waitForReload()
+        let panels: [(String, AnyView)] = [
+            ("headline", AnyView(AttentionHeadline(model: model))),
+            ("allocation", AnyView(AttentionAllocationPanel(model: model))),
+            ("entities", AnyView(AttentionEntitiesPanel(model: model, limit: 12))),
+            ("day", AnyView(AttentionDayPanel(model: model))),
+            ("categories", AnyView(AttentionCategoryPanel(model: model))),
+            ("hours", AnyView(AttentionHoursPanel(model: model))),
+            ("triage", AnyView(AttentionTriagePanel(model: model))),
+            ("edith", AnyView(AttentionEdithPanel(model: model))),
+            ("switching", AnyView(AttentionSwitchingPanel(model: model))),
+            ("agents", AnyView(AttentionAgentsSummaryPanel(model: model))),
+            ("listening", AnyView(AttentionListeningPanel(model: model))),
+        ]
+        for (name, panel) in panels + panels {
+            let start = CACurrentMediaTime()
+            let (window, host) = AttentionScrollHarness.host(
+                panel.environment(\.compactLayout, false).environment(\.colorScheme, .dark),
+                size: CGSize(width: 1100, height: 600))
+            host.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            CATransaction.flush()
+            let first = (CACurrentMediaTime() - start) * 1000
+            print(String(format: "attention-panel %@ firstRealize=%.1fms", name, first))
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        await model.shutdown()
     }
 }
 
