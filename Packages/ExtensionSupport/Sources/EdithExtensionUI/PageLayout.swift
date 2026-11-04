@@ -289,6 +289,17 @@ public struct PageSectionHeader<Trailing: View>: View {
     }
 }
 
+public struct PageSubtitle: View {
+    private let text: Text
+
+    public init(_ text: String) { self.text = Text(text) }
+    public init(_ text: Text) { self.text = text }
+
+    public var body: some View {
+        text.font(.edithText(.callout)).foregroundStyle(.secondary).lineLimit(2)
+    }
+}
+
 public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
