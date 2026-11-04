@@ -1,6 +1,7 @@
 import Combine
 import EdithExtensionSupport
 import EdithExtensionUI
+import Observation
 import SwiftUI
 
 struct ClipboardPanelView: View {
@@ -14,7 +15,8 @@ struct ClipboardPanelView: View {
     @State private var clipboardQueryTask: Task<Void, Never>?
     @State private var clipboardQueryGeneration: UInt = 0
     @State private var keyboardScrollTick = 0
-    @State private var renderLimit = ClipboardPanelView.pageSize
+    @State private var sections: [ClipboardPanelSection] = []
+    @State private var selection = ClipboardPanelSelection()
     @State private var lastMouse = NSEvent.mouseLocation
     @State private var pendingClearPlan: ClipboardClearPlan?
     @State private var showingClearConfirmation = false
@@ -31,8 +33,6 @@ struct ClipboardPanelView: View {
     private var accessibilityGranted = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
-
-    static let pageSize = 80
 
     static var footerEnabled: Bool {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.showFooter) as? Bool ?? true
@@ -64,6 +64,12 @@ struct ClipboardPanelView: View {
         .onChange(of: store.revision) { _, _ in
             palette.replace(store.entries)
             reportHeight()
+        }
+        .onChange(of: palette.rows, initial: true) { _, _ in
+            sections = ClipboardPanelSection.build(palette)
+        }
+        .onChange(of: palette.selectedID, initial: true) { _, id in
+            selection.id = id
         }
         .onChange(of: pinTo) { _, _ in
             palette.setPinToTop(pinToTop)
@@ -177,7 +183,6 @@ struct ClipboardPanelView: View {
         let active = palette.category == category
         return Button {
             palette.choose(category)
-            renderLimit = Self.pageSize
             keyboardScrollTick += 1
         } label: {
             Text(category?.title ?? "All")
@@ -197,65 +202,31 @@ struct ClipboardPanelView: View {
 
     private var list: some View {
         ScrollViewReader { proxy in
-            List {
+            ScrollView {
                 if palette.rows.isEmpty {
                     emptyState
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
                 } else {
-                    ForEach(palette.sections(limit: renderLimit)) { section in
-                        sectionHeader(section.title)
-                        ForEach(section.entries) { entry in
-                            row(entry)
-                                .id(entry.id)
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(
-                                            palette.selectedID == entry.id
-                                                ? themeColor(themeName) : Color.clear
-                                        )
-                                        .padding(.horizontal, 6)
-                                )
+                    ClipboardPanelList(
+                        sections: sections, selection: selection, themeName: themeName,
+                        client: store.client,
+                        activate: { activate($0, plainText: false) },
+                        hover: { id in
+                            let location = NSEvent.mouseLocation
+                            guard location != lastMouse else { return }
+                            lastMouse = location
+                            palette.select(id)
                         }
-                    }
-                    if renderLimit < palette.rows.count {
-                        Color.clear
-                            .frame(height: 1)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .onAppear { extendPage() }
-                    }
+                    )
+                    .equatable()
                 }
             }
-            .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, 1)
             .padding(.vertical, ClipboardPanelLayout.listPadding / 2)
             .onChange(of: keyboardScrollTick) { _, _ in
                 guard let selectedID = palette.selectedID else { return }
                 proxy.scrollTo(selectedID)
             }
         }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .frame(
-                maxWidth: .infinity, minHeight: ClipboardPanelLayout.sectionHeaderHeight,
-                maxHeight: ClipboardPanelLayout.sectionHeaderHeight, alignment: .bottomLeading
-            )
-            .padding(.bottom, 2)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-            .accessibilityAddTraits(.isHeader)
     }
 
     private var emptyState: some View {
@@ -282,95 +253,6 @@ struct ClipboardPanelView: View {
             "Copy anything and it lands here. \((SharedDefaults.store.string(forKey: ClipboardPreferences.hotKeyLabelKey) ?? "⌃⇧C")) opens it from any app."
     }
 
-    private func row(_ entry: ClipboardEntry) -> some View {
-        let selected = palette.selectedID == entry.id
-        let category = palette.category(of: entry)
-        let secondary = selected ? Color.white.opacity(0.75) : Color.secondary
-        return Button {
-            activate(entry, plainText: false)
-        } label: {
-            HStack(spacing: 10) {
-                leading(entry, category: category, selected: selected)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title(entry))
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(ClipboardTimeline.subtitle(for: entry))
-                        .font(.system(size: 11))
-                        .lineLimit(1)
-                        .foregroundStyle(secondary)
-                }
-                Spacer(minLength: 8)
-                if entry.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(secondary)
-                        .accessibilityLabel("Pinned")
-                }
-                if let digit = palette.shortcut(for: entry.id) {
-                    Text("⌘\(digit)")
-                        .font(.system(size: 11, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(secondary)
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(selected ? Color.white : Color.primary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel("\(category.title): \(title(entry))")
-        .onContinuousHover { phase in
-            guard case .active = phase else { return }
-            let location = NSEvent.mouseLocation
-            guard location != lastMouse else { return }
-            lastMouse = location
-            palette.select(entry.id)
-        }
-    }
-
-    @ViewBuilder private func leading(
-        _ entry: ClipboardEntry, category: ClipboardCategory, selected: Bool
-    ) -> some View {
-        let side: CGFloat = entry.kind == .image ? 44 : 28
-        Group {
-            switch category {
-            case .color:
-                if let color = ClipboardColorValue(parsing: entry.preview ?? "") {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(
-                            Color(
-                                .sRGB, red: color.red, green: color.green, blue: color.blue,
-                                opacity: color.alpha)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.15))
-                        )
-                        .frame(width: 22, height: 22)
-                } else {
-                    symbol(category, selected: selected)
-                }
-            case .image, .file:
-                ClipboardThumbnailView(entry: entry, maxHeight: side, client: store.client) {
-                    symbol(category, selected: selected)
-                }
-            default:
-                symbol(category, selected: selected)
-            }
-        }
-        .frame(width: side, height: side)
-    }
-
-    private func symbol(_ category: ClipboardCategory, selected: Bool) -> some View {
-        Image(systemName: category.symbol)
-            .font(.system(size: 14))
-            .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
-    }
-
     private var footer: some View {
         HStack(spacing: 12) {
             KeyHint(keys: "↑↓", label: "Navigate")
@@ -383,12 +265,6 @@ struct ClipboardPanelView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: ClipboardPanelLayout.footerHeight)
-    }
-
-    private func title(_ entry: ClipboardEntry) -> String {
-        entry.displayPreview
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
     }
 
     private func scheduleClipboardQuery(_ text: String) {
@@ -409,7 +285,6 @@ struct ClipboardPanelView: View {
                     generation: result.generation, current: clipboardQueryGeneration)
             else { return }
             palette.apply(query: text, rows: result.rows)
-            renderLimit = Self.pageSize
             keyboardScrollTick += 1
         }
     }
@@ -420,23 +295,12 @@ struct ClipboardPanelView: View {
         palette.replace(store.entries)
         palette.reset()
         filterText = ""
-        renderLimit = Self.pageSize
         keyboardScrollTick += 1
         reportHeight()
         DispatchQueue.main.async { searchFocused = true }
     }
 
-    private func extendPage() {
-        guard renderLimit < palette.rows.count else { return }
-        renderLimit = min(palette.rows.count, renderLimit + Self.pageSize)
-    }
-
-    private func revealSelection() {
-        if let index = palette.selectedIndex, index >= renderLimit {
-            renderLimit = min(palette.rows.count, index + Self.pageSize)
-        }
-        keyboardScrollTick += 1
-    }
+    private func revealSelection() { keyboardScrollTick += 1 }
 
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         guard
@@ -457,7 +321,6 @@ struct ClipboardPanelView: View {
             revealSelection()
         case .cycleCategory(let delta):
             palette.cycleCategory(by: delta)
-            renderLimit = Self.pageSize
             keyboardScrollTick += 1
         case .paste(let plainText):
             activate(palette.selected, plainText: plainText)
@@ -528,5 +391,183 @@ private struct KeyHint: View {
         }
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct ClipboardPanelRowModel: Identifiable, Equatable {
+    let entry: ClipboardEntry
+    let category: ClipboardCategory
+    let shortcut: Int?
+    var id: String { entry.id }
+}
+
+struct ClipboardPanelSection: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let rows: [ClipboardPanelRowModel]
+
+    static func build(_ palette: ClipboardPalette) -> [ClipboardPanelSection] {
+        palette.sections().map { section in
+            ClipboardPanelSection(
+                id: section.id, title: section.title,
+                rows: section.entries.map {
+                    ClipboardPanelRowModel(
+                        entry: $0, category: palette.category(of: $0),
+                        shortcut: palette.shortcut(for: $0.id))
+                })
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class ClipboardPanelSelection {
+    var id: String?
+}
+
+struct ClipboardPanelList: View, Equatable {
+    let sections: [ClipboardPanelSection]
+    let selection: ClipboardPanelSelection
+    let themeName: String
+    let client: ClipboardClient
+    let activate: (ClipboardEntry) -> Void
+    let hover: (String) -> Void
+
+    nonisolated static func == (lhs: ClipboardPanelList, rhs: ClipboardPanelList) -> Bool {
+        lhs.sections == rhs.sections && lhs.selection === rhs.selection
+            && lhs.themeName == rhs.themeName
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(sections) { section in
+                header(section.title)
+                ForEach(section.rows) { model in
+                    ClipboardPanelRow(
+                        model: model, selection: selection, themeName: themeName, client: client,
+                        activate: activate, hover: hover
+                    )
+                    .id(model.id)
+                }
+            }
+        }
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .frame(
+                maxWidth: .infinity, minHeight: ClipboardPanelLayout.sectionHeaderHeight,
+                maxHeight: ClipboardPanelLayout.sectionHeaderHeight, alignment: .bottomLeading
+            )
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+private struct ClipboardPanelRow: View {
+    let model: ClipboardPanelRowModel
+    let selection: ClipboardPanelSelection
+    let themeName: String
+    let client: ClipboardClient
+    let activate: (ClipboardEntry) -> Void
+    let hover: (String) -> Void
+
+    var body: some View {
+        let entry = model.entry
+        let selected = selection.id == entry.id
+        let secondary = selected ? Color.white.opacity(0.75) : Color.secondary
+        Button {
+            activate(entry)
+        } label: {
+            HStack(spacing: 10) {
+                leading(selected: selected)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(ClipboardTimeline.subtitle(for: entry))
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(secondary)
+                }
+                Spacer(minLength: 8)
+                if entry.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(secondary)
+                        .accessibilityLabel("Pinned")
+                }
+                if let digit = model.shortcut {
+                    Text("⌘\(digit)")
+                        .font(.system(size: 11, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(selected ? Color.white : Color.primary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(selected ? themeColor(themeName) : Color.clear)
+                .padding(.horizontal, 6)
+        )
+        .accessibilityLabel("\(model.category.title): \(title)")
+        .onContinuousHover { phase in
+            guard case .active = phase else { return }
+            hover(entry.id)
+        }
+    }
+
+    private var title: String {
+        model.entry.displayPreview
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    @ViewBuilder private func leading(selected: Bool) -> some View {
+        let entry = model.entry
+        let side: CGFloat = entry.kind == .image ? 44 : 28
+        Group {
+            switch model.category {
+            case .color:
+                if let color = ClipboardColorValue(parsing: entry.preview ?? "") {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            Color(
+                                .sRGB, red: color.red, green: color.green, blue: color.blue,
+                                opacity: color.alpha)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.15))
+                        )
+                        .frame(width: 22, height: 22)
+                } else {
+                    symbol(selected: selected)
+                }
+            case .image, .file:
+                ClipboardThumbnailView(entry: entry, maxHeight: side, client: client) {
+                    symbol(selected: selected)
+                }
+            default:
+                symbol(selected: selected)
+            }
+        }
+        .frame(width: side, height: side)
+    }
+
+    private func symbol(selected: Bool) -> some View {
+        Image(systemName: model.category.symbol)
+            .font(.system(size: 14))
+            .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
     }
 }
