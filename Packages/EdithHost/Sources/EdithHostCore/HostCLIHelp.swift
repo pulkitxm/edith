@@ -257,7 +257,10 @@ public enum HostCLIHelp {
         .init("app clean-keys", "Request keyboard cleaning from its owning extension."),
         .init("app test-notification", "Send a test notification."),
         .init("app open", "Open the original app window."),
-        .init("app quit", "Preview quitting this app.", flags: ["json", "yes"]),
+        .init(
+            "app quit",
+            "Preview closing app windows, or quitting the whole app with --completely.",
+            flags: ["json", "yes", "completely"]),
         .init(
             "app relaunch", "Preview quitting and relaunching this app.", flags: ["json", "yes"]),
         .init("app clear-updates", "Preview clearing update history.", flags: ["json", "yes"]),

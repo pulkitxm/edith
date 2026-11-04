@@ -82,6 +82,21 @@ struct AppMaintenanceView: View {
         }
     }
 
+    private var applicationRows: [AppMaintenanceApplicationRowItem] {
+        filteredApplications.map { application in
+            AppMaintenanceApplicationRowItem(
+                application: application, selected: model.selectedApplicationID == application.id)
+        }
+    }
+
+    private var updateRows: [AppMaintenanceUpdateRowItem] {
+        filteredUpdates.map { item in
+            AppMaintenanceUpdateRowItem(
+                item: item, selected: model.selectedUpdateIDs.contains(item.id),
+                focused: model.focusedUpdateID == item.id)
+        }
+    }
+
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
@@ -241,21 +256,16 @@ struct AppMaintenanceView: View {
                     "No applications", message: "No installed app matches this search.",
                     symbol: "app.dashed")
             } else {
-                List(filteredApplications) { application in
-                    Button {
-                        model.select(application)
-                    } label: {
-                        AppMaintenanceApplicationRow(model: model, application: application)
-                    }
-                    .buttonStyle(
-                        EdithButtonStyle(
-                            .selection,
-                            selected: model.selectedApplicationID == application.id,
-                            tint: theme)
-                    )
-                    .listRowBackground(Color.clear)
+                VirtualList(
+                    applicationRows,
+                    rowHeight: { _ in AppMaintenanceRowMetrics.application },
+                    header: { EmptyView() }
+                ) { entry in
+                    AppMaintenanceApplicationRow(
+                        entry: entry, icon: model.icon(for: entry.application.url.path),
+                        tint: theme, select: { model.select(entry.application) })
                 }
-                .listStyle(.sidebar)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Divider()
             HStack {
@@ -280,49 +290,19 @@ struct AppMaintenanceView: View {
                     "No updates", message: "Everything visible is current, ignored, or snoozed.",
                     symbol: "checkmark.circle")
             } else {
-                List(filteredUpdates) { item in
-                    HStack(spacing: UIScale.pt(9)) {
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { model.selectedUpdateIDs.contains(item.id) },
-                                set: { model.setUpdateSelected($0, item: item) })
-                        )
-                        .labelsHidden()
-                        .toggleStyle(.checkbox)
-                        Button {
-                            model.focusedUpdateID = item.id
-                        } label: {
-                            HStack(spacing: UIScale.pt(9)) {
-                                if let path = item.applicationPath {
-                                    Image(nsImage: model.icon(for: path))
-                                        .resizable()
-                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                                } else {
-                                    Image(systemName: "shippingbox")
-                                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                                }
-                                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                    Text(item.name).lineLimit(1)
-                                    Text("\(item.currentVersion) → \(item.availableVersion)")
-                                        .settingsCaption()
-                                }
-                                Spacer(minLength: 0)
-                                Text(item.source.title).settingsCaption().lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(
-                            EdithButtonStyle(
-                                .borderless, selected: model.focusedUpdateID == item.id,
-                                tint: theme))
-                    }
-                    .padding(.vertical, UIScale.pt(3))
-                    .listRowBackground(
-                        model.focusedUpdateID == item.id ? theme.opacity(0.2) : Color.clear)
+                VirtualList(
+                    updateRows,
+                    rowHeight: { _ in AppMaintenanceRowMetrics.update },
+                    header: { EmptyView() }
+                ) { entry in
+                    AppMaintenanceUpdateRow(
+                        entry: entry,
+                        icon: entry.item.applicationPath.map { model.icon(for: $0) },
+                        tint: theme,
+                        setSelected: { model.setUpdateSelected($0, item: entry.item) },
+                        focus: { model.focusedUpdateID = entry.item.id })
                 }
-                .listStyle(.sidebar)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Divider()
             HStack {
@@ -654,29 +634,98 @@ struct AppMaintenanceView: View {
     }
 }
 
-private struct AppMaintenanceApplicationRow: View {
-    let model: AppMaintenanceModel
+enum AppMaintenanceRowMetrics {
+    static var application: CGFloat { CGFloat(UIScale.pt(44)) }
+    static var update: CGFloat { CGFloat(UIScale.pt(46)) }
+}
+
+struct AppMaintenanceApplicationRowItem: Identifiable, Equatable {
     let application: InstalledApplication
+    let selected: Bool
+    var id: String { application.id }
+}
+
+struct AppMaintenanceUpdateRowItem: Identifiable, Equatable {
+    let item: AppUpdateItem
+    let selected: Bool
+    let focused: Bool
+    var id: String { item.id }
+}
+
+private struct AppMaintenanceApplicationRow: View {
+    let entry: AppMaintenanceApplicationRowItem
+    let icon: NSImage
+    let tint: Color
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: UIScale.pt(9)) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(entry.application.name)
+                        .lineLimit(1)
+                    Text(entry.application.version)
+                        .settingsCaption()
+                }
+                Spacer(minLength: 0)
+                if entry.application.update != nil {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            .padding(.vertical, UIScale.pt(3))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(EdithButtonStyle(.selection, selected: entry.selected, tint: tint))
+        .padding(.horizontal, UIScale.pt(8))
+        .frame(maxHeight: .infinity)
+    }
+}
+
+private struct AppMaintenanceUpdateRow: View {
+    let entry: AppMaintenanceUpdateRowItem
+    let icon: NSImage?
+    let tint: Color
+    let setSelected: (Bool) -> Void
+    let focus: () -> Void
 
     var body: some View {
         HStack(spacing: UIScale.pt(9)) {
-            Image(nsImage: model.icon(for: application.url.path))
-                .resizable()
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text(application.name)
-                    .lineLimit(1)
-                Text(application.version)
-                    .settingsCaption()
+            Toggle(
+                "",
+                isOn: Binding(get: { entry.selected }, set: setSelected)
+            )
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+            Button(action: focus) {
+                HStack(spacing: UIScale.pt(9)) {
+                    if let icon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                    } else {
+                        Image(systemName: "shippingbox")
+                            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                    }
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(entry.item.name).lineLimit(1)
+                        Text("\(entry.item.currentVersion) → \(entry.item.availableVersion)")
+                            .settingsCaption()
+                    }
+                    Spacer(minLength: 0)
+                    Text(entry.item.source.title).settingsCaption().lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
-            if application.update != nil {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(.green)
-                    .help("Update available")
-            }
+            .buttonStyle(EdithButtonStyle(.borderless, selected: entry.focused, tint: tint))
         }
-        .padding(.vertical, UIScale.pt(3))
+        .padding(.horizontal, UIScale.pt(12))
+        .frame(maxHeight: .infinity)
+        .background(entry.focused ? tint.opacity(0.2) : Color.clear)
     }
 }
 
