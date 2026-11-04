@@ -61,14 +61,18 @@ struct CleanerListStateTests {
 
     @Test func selectionTotalsMatchSelectedItems() {
         let categories = CleanerSyntheticFixture.categories(items: 500, now: now)
-        let state = state(categories)
+        let selection = CleanerSelection.resolve(categories, stored: [:])
+        let stats = CleanerSelectionIndex(
+            visible: categories, all: categories, selection: selection
+        ).stats
         let selected = CleanerOperationExecution.selectedItems(in: categories)
-        #expect(state.selectedItemCount == selected.count)
-        #expect(state.selectedTotal == selected.reduce(0) { $0 + $1.sizeBytes })
-        #expect(state.overallSelection == .some)
+        #expect(selection.applied(to: categories) == categories)
+        #expect(stats.selectedCount == selected.count)
+        #expect(stats.selectedBytes == selected.reduce(0) { $0 + $1.sizeBytes })
+        #expect(stats.selection == .some)
         for category in categories {
             let chosen = category.items.filter(\.selected)
-            #expect(state.selectionByCategory[category.id]?.count == chosen.count)
+            #expect(stats.categories[category.id]?.selectedCount == chosen.count)
         }
     }
 
@@ -138,7 +142,8 @@ struct CleanerListStateTests {
 
         model.toggleAll()
         #expect(model.overallSelection == .none)
-        #expect(model.categories.allSatisfy { $0.items.allSatisfy { !$0.selected } })
+        #expect(model.selectedItemCount == 0)
+        #expect(model.visibleCategories.allSatisfy { $0.items.allSatisfy { !$0.selected } })
     }
 
     @Test func modelRebuildsRowsWhenInputsChange() async throws {
@@ -154,8 +159,9 @@ struct CleanerListStateTests {
 
         let item = try #require(category.items.first)
         model.toggleItem(categoryID: category.id, itemID: item.id)
-        let row = try #require(itemRows(model.list).first { $0.id == item.id })
-        #expect(row.selected != item.selected)
+        let rows = model.list.rows
+        #expect(model.isSelected(categoryID: category.id, itemID: item.id) != item.selected)
+        #expect(model.list.rows == rows)
 
         model.setItemFilter("no-such-folder", categoryID: category.id)
         #expect(model.list.rows.count == collapsed + 1)
