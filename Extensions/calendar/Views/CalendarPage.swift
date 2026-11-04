@@ -22,29 +22,34 @@ struct CalendarPage: View {
         PageWorkspace {
             pageHeader
         } content: {
-            PageLoading(
+            LoadingContainer(
                 state: store.loaded ? .content : store.error == nil ? .loading : .error,
                 title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
-                layout: .list, retry: store.refresh
+                retry: store.refresh
             ) {
-                if let error = store.error {
-                    HStack {
-                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    if let error = store.error {
+                        HStack {
+                            Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                        }
+                        .padding(.horizontal, UIScale.pt(24))
                     }
-                    .padding(.horizontal, UIScale.pt(24))
+                    if !store.authorized {
+                        CalendarPermissionPrompt(
+                            style: calendarStyle, accentColor: theme,
+                            onGrant: { store.perform(.permission) }
+                        )
+                        .frame(maxWidth: UIScale.pt(420))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        agenda
+                    }
                 }
-                if !store.authorized {
-                    CalendarPermissionPrompt(
-                        style: calendarStyle, accentColor: theme,
-                        onGrant: { store.perform(.permission) }
-                    )
-                    .frame(maxWidth: UIScale.pt(420))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    agenda
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } placeholder: {
+                PageSkeleton(layout: .list)
             }
         }
         .navigationTitle("Calendar")
