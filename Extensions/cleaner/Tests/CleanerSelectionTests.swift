@@ -206,6 +206,48 @@ struct CleanerSelectionTests {
         #expect(actions.allSatisfy { $0.bytes < 64 })
     }
 
+    @Test func pageAdoptsTheSelectionARescanDerivesForNewCategories() async throws {
+        final class Scans: @unchecked Sendable { var count = 0 }
+        let scans = Scans()
+        let first = CleanerSyntheticFixture.categories(items: 200)
+        let added = JunkCategory(
+            id: "derivedData", name: "DerivedData", detail: "",
+            items: (0..<5).map {
+                JunkItem(
+                    id: "/synthetic/derived/\($0)", name: "derived \($0)",
+                    path: URL(fileURLWithPath: "/synthetic/derived/\($0)"), sizeBytes: 1_000,
+                    selected: true)
+            })
+        let engine = CleanerModel(
+            defaults: try Self.defaults(),
+            services: CleanerServices(
+                drives: { [] },
+                scan: { _, _, _ in
+                    scans.count += 1
+                    return CleanerScanResult(categories: scans.count == 1 ? first : first + [added])
+                }))
+        engine.scan()
+        await engine.finishWork()
+        let bridge = CleanerEngineBridge(engine: engine)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        CleanerModel.uiMemory = nil
+        let ui = CleanerModel(engineClient: client, defaults: try Self.defaults())
+        defer {
+            Task {
+                await ui.shutdown(); await engine.shutdown()
+            }
+        }
+        await ui.refreshRemote()
+        #expect(ui.selection == engine.selection)
+
+        engine.scan()
+        await engine.finishWork()
+        await ui.refreshRemote()
+        #expect(ui.categorySelection(added.id) == .all)
+        #expect(ui.selection == engine.selection)
+        #expect(ui.selectedItemCount == engine.selectedItemCount)
+    }
+
     @Test func selectionPersistsCompactlyAndDropsVanishedItems() async throws {
         let defaults = try Self.defaults()
         let categories = CleanerSyntheticFixture.categories(items: 10_000)

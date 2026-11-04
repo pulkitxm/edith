@@ -144,6 +144,7 @@ final class CleanerModel {
         selection = value
         index.reload(value)
         stats = index.stats
+        selectionRevision &+= 1
     }
 
     private func publishReclaimable() {
