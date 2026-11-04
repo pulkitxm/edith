@@ -44,14 +44,16 @@ private struct ClipboardMutationFailure: LocalizedError {
         ]
     }
 
-    @Test func largeHistoriesRenderOnlyTheFirstPage() {
+    @Test func largeHistoriesBuildOneRowModelPerClipWithShortcutsOnTheFirstNine() {
         let many = (0..<5_000).map { entry("e\($0)", "clip \($0)", age: Double($0)) }
         var palette = ClipboardPalette(entries: many)
 
-        let page = palette.sections(limit: ClipboardPanelView.pageSize)
-        #expect(ClipboardPanelView.pageSize == 80)
-        #expect(page.flatMap(\.entries).count == ClipboardPanelView.pageSize)
-        #expect(palette.rows.count == 5_000)
+        let sections = ClipboardPanelSection.build(palette)
+        let rows = sections.flatMap(\.rows)
+        #expect(rows.count == 5_000)
+        #expect(rows.map(\.id) == palette.rows.map(\.id))
+        #expect(rows.compactMap(\.shortcut) == Array(1...ClipboardPalette.shortcutLimit))
+        #expect(rows.allSatisfy { $0.category == .text })
 
         palette.jump(toTop: false)
         #expect(palette.selectedIndex == 4_999)

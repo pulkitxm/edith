@@ -22,6 +22,25 @@ struct ProjNode: Identifiable {
     var note: String?
 }
 
+struct ProjectListRow: Identifiable, Equatable {
+    let node: ProjNode
+    let depth: Int
+    let expanded: Bool
+    let generation: Int
+    let dark: Bool
+    let blur: Bool
+    let blurTokens: Bool
+
+    var id: String { node.id }
+
+    static func == (left: Self, right: Self) -> Bool {
+        left.node.id == right.node.id && left.depth == right.depth
+            && left.expanded == right.expanded && left.generation == right.generation
+            && left.dark == right.dark && left.blur == right.blur
+            && left.blurTokens == right.blurTokens
+    }
+}
+
 enum ProjColumns {
     static let project: CGFloat = 300
     static let tokens: CGFloat = 96
@@ -41,6 +60,7 @@ struct ProjectDrilldownView: View {
     var blurTokens = false
     @State private var debouncedQuery = ""
     @State private var displayNodes: [ProjNode] = []
+    @State private var nodesGeneration = 0
 
     private static let rowHeight: CGFloat = 27
     private static let minTableHeight: CGFloat = 520
@@ -90,23 +110,26 @@ struct ProjectDrilldownView: View {
                 VStack(spacing: UIScale.pt(0)) {
                     headerRow
                     Divider().opacity(0.4)
-                    ScrollView {
-                        LazyVStack(spacing: UIScale.pt(0)) {
-                            ForEach(flatRows, id: \.node.id) { row in
-                                ProjectRow(
-                                    node: row.node, depth: row.depth, dark: dark, blur: blur,
-                                    blurTokens: blurTokens,
-                                    expanded: model.projExpanded.contains(row.node.id),
-                                    onToggle: { toggleExpand(row.node.id) }, actions: actions)
-                                Divider().opacity(0.12)
-                            }
-                            if displayNodes.isEmpty, !debouncedQuery.isEmpty {
-                                Text("No projects match “\(model.projQuery)”")
-                                    .presenterBlur(.agents)
-                                    .font(.system(size: UIScale.pt(11)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .padding(UIScale.pt(12))
-                            }
+                    VirtualList(
+                        flatRows,
+                        rowHeight: { _ in Self.listRowHeight },
+                        header: { EmptyView() }
+                    ) { row in
+                        VStack(spacing: UIScale.pt(0)) {
+                            ProjectRow(
+                                node: row.node, depth: row.depth, dark: dark, blur: blur,
+                                blurTokens: blurTokens, expanded: row.expanded,
+                                onToggle: { toggleExpand(row.node.id) }, actions: actions)
+                            Divider().opacity(0.12)
+                        }
+                    }
+                    .overlay {
+                        if displayNodes.isEmpty, !debouncedQuery.isEmpty {
+                            Text("No projects match “\(model.projQuery)”")
+                                .presenterBlur(.agents)
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .padding(UIScale.pt(12))
                         }
                     }
                 }
@@ -135,6 +158,7 @@ struct ProjectDrilldownView: View {
                     }
                     guard !Task.isCancelled else { return }
                     displayNodes = nodes
+                    nodesGeneration += 1
                 }
             }
         }
@@ -212,11 +236,17 @@ struct ProjectDrilldownView: View {
         }
     }
 
-    private var flatRows: [(node: ProjNode, depth: Int)] {
-        var out: [(ProjNode, Int)] = []
+    private static var listRowHeight: CGFloat { UIScale.pt(28) }
+
+    private var flatRows: [ProjectListRow] {
+        var out: [ProjectListRow] = []
         func add(_ node: ProjNode, _ depth: Int) {
-            out.append((node, depth))
-            if model.projExpanded.contains(node.id), let kids = node.children {
+            let expanded = model.projExpanded.contains(node.id)
+            out.append(
+                ProjectListRow(
+                    node: node, depth: depth, expanded: expanded, generation: nodesGeneration,
+                    dark: dark, blur: blur, blurTokens: blurTokens))
+            if expanded, let kids = node.children {
                 for kid in kids { add(kid, depth + 1) }
             }
         }
