@@ -3,6 +3,58 @@ import EdithExtensionUI
 import EdithExtensionSupport
 import SwiftUI
 
+struct DownloadListRow: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case item(YoutubeDownloader.DownloadItem)
+        case controls(retryable: Bool, count: Int)
+    }
+
+    let kind: Kind
+    let first: Bool
+    let last: Bool
+    let running: Bool
+    let appearance: String
+
+    var id: String {
+        switch kind {
+        case .item(let item): item.id.uuidString
+        case .controls: "controls"
+        }
+    }
+}
+
+enum DownloadRowMetrics {
+    static func height(of row: DownloadListRow) -> CGFloat {
+        switch row.kind {
+        case .item(let item):
+            let base: Double
+            switch item.status {
+            case .done, .interrupted: base = 44
+            case .queued, .resolving, .downloading, .error: base = 60
+            }
+            return CGFloat(UIScale.pt(base + (row.first ? 6 : 0) + (row.last ? 6 : 0)))
+        case .controls:
+            return CGFloat(UIScale.pt(44 + PageMetrics.bottom))
+        }
+    }
+}
+
+private struct DownloadRowBackground: View {
+    let first: Bool
+    let last: Bool
+    let dark: Bool
+
+    var body: some View {
+        let radius = UIScale.pt(12)
+        UnevenRoundedRectangle(
+            topLeadingRadius: first ? radius : 0, bottomLeadingRadius: last ? radius : 0,
+            bottomTrailingRadius: last ? radius : 0, topTrailingRadius: first ? radius : 0,
+            style: .continuous
+        )
+        .fill(DashSkin.paper2(dark))
+    }
+}
+
 struct DownloadSheet: View {
     var isPage = false
     @State private var downloader: YoutubeDownloader
@@ -185,67 +237,118 @@ struct DownloadSheet: View {
 
     @ViewBuilder
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(22)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                    urlInput
-                    formatRow
-                    Divider().overlay(DashSkin.line(dark))
-                    destinationRow
-                    if downloadKind == .audio || downloadKind == .video { optionsRow }
-                    startRow
-                }
-                .padding(UIScale.pt(20))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark))
-                )
-
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    HStack {
-                        Text("Your downloads")
-                            .font(DashSkin.heading(15))
-                        Text("\(downloader.items.count)")
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, UIScale.pt(7))
-                            .padding(.vertical, UIScale.pt(3))
-                            .background(DashSkin.paper2(dark), in: Capsule())
-                        Spacer()
-                        if !summaryText.isEmpty {
-                            Text(summaryText)
-                                .font(.system(size: UIScale.pt(11)))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.bottom, UIScale.pt(6))
-                    if downloader.items.isEmpty {
-                        emptyState.frame(height: UIScale.pt(100))
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        LazyVStack(spacing: UIScale.pt(4)) {
-                            ForEach(downloader.items) { item in
-                                switch item.status {
-                                case .queued, .resolving, .downloading, .error: queueCard(item)
-                                case .done, .interrupted: historyRow(item)
-                                }
-                            }
-                        }
-                        .padding(UIScale.pt(8))
-                        .background(
-                            DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-                        controlsRow
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .pageContent(compact)
+        VirtualList(
+            listRows,
+            rowHeight: { DownloadRowMetrics.height(of: $0) },
+            header: { listHeader }
+        ) { row in
+            downloadRow(row)
         }
         .edithSheet(item: $logItem) { item in
             logSheet(item)
+        }
+        .confirmationDialog(
+            "Clear download history?", isPresented: $confirmClearHistory,
+            titleVisibility: .visible
+        ) {
+            Button("Clear \(downloader.items.count) entries", role: .destructive) {
+                downloader.clearHistory()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Downloaded files stay on disk; only the list is cleared.")
+        }
+    }
+
+    private var listRows: [DownloadListRow] {
+        let items = downloader.items
+        let appearance = "\(dark)-\(themeName)"
+        let running = downloader.isRunning
+        var rows: [DownloadListRow] = []
+        rows.reserveCapacity(items.count + 1)
+        for (index, item) in items.enumerated() {
+            rows.append(
+                DownloadListRow(
+                    kind: .item(item), first: index == 0, last: index == items.count - 1,
+                    running: running, appearance: appearance))
+        }
+        if !items.isEmpty {
+            rows.append(
+                DownloadListRow(
+                    kind: .controls(
+                        retryable: items.contains { $0.record.canRetry }, count: items.count),
+                    first: false, last: false, running: running, appearance: appearance))
+        }
+        return rows
+    }
+
+    private var listHeader: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(22)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                urlInput
+                formatRow
+                Divider().overlay(DashSkin.line(dark))
+                destinationRow
+                if downloadKind == .audio || downloadKind == .video { optionsRow }
+                startRow
+            }
+            .padding(UIScale.pt(20))
+            .background(
+                DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark))
+            )
+
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                HStack {
+                    Text("Your downloads")
+                        .font(DashSkin.heading(15))
+                    Text("\(downloader.items.count)")
+                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, UIScale.pt(7))
+                        .padding(.vertical, UIScale.pt(3))
+                        .background(DashSkin.paper2(dark), in: Capsule())
+                    Spacer()
+                    if !summaryText.isEmpty {
+                        Text(summaryText)
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.bottom, UIScale.pt(6))
+                if downloader.items.isEmpty {
+                    emptyState.frame(height: UIScale.pt(100))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.bottom, UIScale.pt(downloader.items.isEmpty ? PageMetrics.bottom : 6))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .pageGutter(compact)
+    }
+
+    @ViewBuilder
+    private func downloadRow(_ row: DownloadListRow) -> some View {
+        switch row.kind {
+        case .item(let item):
+            Group {
+                switch item.status {
+                case .queued, .resolving, .downloading, .error: queueCard(item)
+                case .done, .interrupted: historyRow(item)
+                }
+            }
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.top, UIScale.pt(row.first ? 8 : 2))
+            .padding(.bottom, UIScale.pt(row.last ? 8 : 2))
+            .frame(maxHeight: .infinity)
+            .background(DownloadRowBackground(first: row.first, last: row.last, dark: dark))
+            .pageGutter(compact)
+        case .controls:
+            controlsRow
+                .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+                .pageGutter(compact)
         }
     }
 
@@ -900,17 +1003,6 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .disabled(downloader.isRunning)
-                .confirmationDialog(
-                    "Clear download history?", isPresented: $confirmClearHistory,
-                    titleVisibility: .visible
-                ) {
-                    Button("Clear \(downloader.items.count) entries", role: .destructive) {
-                        downloader.clearHistory()
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Downloaded files stay on disk; only the list is cleared.")
-                }
             }
             if downloader.isRunning {
                 Button {
