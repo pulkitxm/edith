@@ -17,8 +17,10 @@ final class CleanerModel {
     private static let confirmedExternalPathsKey = "cleanerConfirmedExternalPaths"
     private static let selectedDrivesKey = "cleanerSelectedDrives"
     private static let customFoldersKey = "cleanerCustomFolders"
-    private static let selectionOverridesKey = "cleanerSelectionOverrides"
-    private static let categoryDefaultsKey = "cleanerCategoryDefaults"
+    private static let selectionKey = "cleanerSelection"
+    private static let legacySelectionKeys = [
+        "cleanerSelectionOverrides", "cleanerCategoryDefaults",
+    ]
     private static let filtersKey = "cleanerFilters"
     static let backgroundEstimateKey = "cleaner.backgroundEstimate"
 
@@ -30,10 +32,18 @@ final class CleanerModel {
         didSet {
             revision &+= 1
             refreshList()
+            rebuildIndex()
             publishReclaimable()
         }
     }
     private(set) var list = CleanerListState()
+    private(set) var selection = CleanerSelection()
+    private(set) var stats = CleanerSelectionStats()
+    @ObservationIgnored private var index = CleanerSelectionIndex()
+    @ObservationIgnored private(set) var selectionRevision = 0
+    @ObservationIgnored private var remoteSelectionStamp: Int?
+    @ObservationIgnored private var selectionSave: Task<Void, Never>?
+    @ObservationIgnored private var selectionDirty = false
     @ObservationIgnored private var publishedReclaimable: Int64?
     private(set) var scanning = false {
         didSet { revision &+= 1 }
@@ -69,6 +79,7 @@ final class CleanerModel {
         didSet {
             revision &+= 1
             refreshList()
+            rebuildIndex()
         }
     }
     var search = "" {
@@ -123,6 +134,18 @@ final class CleanerModel {
         if updated != list { list = updated }
     }
 
+    private func rebuildIndex() {
+        index = CleanerSelectionIndex(
+            visible: list.visibleCategories, all: categories, selection: selection)
+        stats = index.stats
+    }
+
+    private func replaceSelection(_ value: CleanerSelection) {
+        selection = value
+        index.reload(value)
+        stats = index.stats
+    }
+
     private func publishReclaimable() {
         guard !remote, publishedReclaimable != list.reclaimableTotal else { return }
         publishedReclaimable = list.reclaimableTotal
@@ -165,6 +188,9 @@ final class CleanerModel {
             let kept = raw.filter { Self.pathIsAllowed($0, confirmed: confirmed) }
             customFolders = kept
         }
+        for key in Self.legacySelectionKeys where defaults.object(forKey: key) != nil {
+            defaults.removeObject(forKey: key)
+        }
         if let data = defaults.data(forKey: Self.filtersKey), data.count <= 1_024,
             let stored = try? JSONDecoder().decode(CleanerFilters.self, from: data)
         {
@@ -177,6 +203,7 @@ final class CleanerModel {
         self.engineClient = engineClient
         if let memory = Self.uiMemory {
             seed(memory.snapshot)
+            replaceSelection(memory.selection)
             logsExpanded = memory.logsExpanded
             search = memory.search
             expanded = memory.expanded
@@ -185,6 +212,7 @@ final class CleanerModel {
 
     struct UIMemory {
         var snapshot: CleanerUISnapshot
+        var selection: CleanerSelection
         var logsExpanded: Bool
         var search: String
         var expanded: Set<String>
@@ -226,7 +254,8 @@ final class CleanerModel {
         else { return }
         let generation = remoteGeneration
         do {
-            let request = try JSONEncoder().encode(CleanerUISnapshotRequest(known: remoteStamp))
+            let request = try JSONEncoder().encode(
+                CleanerUISnapshotRequest(known: remoteStamp, knownSelection: remoteSelectionStamp))
             let data = try await engineClient.invoke("cleaner.ui.snapshot", payload: request)
             guard !stopped, !suspending, !Task.isCancelled, generation == remoteGeneration else {
                 return
@@ -257,11 +286,17 @@ final class CleanerModel {
 
     private func applyRemote(_ reply: CleanerUIReply) {
         remoteStamp = reply.stamp
-        guard let value = reply.snapshot else { return }
+        remoteSelectionStamp = reply.selectionStamp
+        if let value = reply.selection, value != selection { replaceSelection(value) }
+        guard let value = reply.snapshot else {
+            Self.uiMemory?.selection = selection
+            return
+        }
         let wasScanning = scanning
         seed(value)
         Self.uiMemory = UIMemory(
-            snapshot: value, logsExpanded: logsExpanded, search: search, expanded: expanded)
+            snapshot: value, selection: selection, logsExpanded: logsExpanded, search: search,
+            expanded: expanded)
         if value.scanning, !wasScanning {
             logCollapse?.cancel()
             logCollapse = nil
@@ -280,31 +315,38 @@ final class CleanerModel {
         }
     }
 
-    private func sendRemote(_ operation: String, value: String? = nil, item: String? = nil) {
+    private func sendRemote(
+        _ operation: String, value: String? = nil, item: String? = nil, search: String? = nil
+    ) {
         guard engineClient != nil, !stopped, !suspending, remoteQueue.count < 64 else { return }
         remoteGeneration += 1
         remoteQueue.append(
             CleanerUIAction(
-                operation: operation, value: value, item: item, previewToken: previewToken))
+                operation: operation, value: value, item: item, previewToken: previewToken,
+                search: search))
         guard remoteDrain == nil else { return }
         remoteDrain = track { [self] in
             defer { remoteDrain = nil }
             guard let engineClient else { return }
             var latest: CleanerUIReply?
             var failed = false
-            defer { if failed { remoteStamp = nil } }
+            defer { if failed { remoteStamp = nil; remoteSelectionStamp = nil } }
             while !remoteQueue.isEmpty {
                 var request = remoteQueue.removeFirst()
-                request.known = latest == nil && !failed ? remoteStamp : nil
+                let current = latest == nil && !failed
+                request.known = current ? remoteStamp : nil
+                request.knownSelection = current ? remoteSelectionStamp : nil
                 do {
                     let payload = try JSONEncoder().encode(request)
                     let data = try await engineClient.invoke(
                         "cleaner.ui.action", payload: payload, timeout: 30)
                     guard !stopped, !suspending, !Task.isCancelled else { return }
                     let reply = try JSONDecoder().decode(CleanerUIReply.self, from: data)
-                    if reply.snapshot == nil {
+                    if reply.snapshot == nil, reply.selection == nil, current {
                         remoteStamp = reply.stamp
+                        remoteSelectionStamp = reply.selectionStamp
                         Self.uiMemory?.snapshot = uiSnapshot()
+                        Self.uiMemory?.selection = selection
                     } else {
                         latest = reply
                     }
@@ -349,18 +391,26 @@ final class CleanerModel {
     }
 
     var reclaimableTotal: Int64 { list.reclaimableTotal }
-    var visibleCategories: [JunkCategory] { list.visibleCategories }
-    var selectedTotal: Int64 { list.selectedTotal }
+    var visibleCategories: [JunkCategory] { selection.applied(to: list.visibleCategories) }
+    var selectedTotal: Int64 { stats.selectedBytes }
     var totalItemCount: Int { list.totalItemCount }
     var hiddenItemCount: Int { list.hiddenItemCount }
-    var selectedItemCount: Int { list.selectedItemCount }
+    var selectedItemCount: Int { stats.selectedCount }
 
     func selectedTotal(categoryID: String) -> Int64 {
-        list.selectionByCategory[categoryID]?.bytes ?? 0
+        stats.categories[categoryID]?.selectedBytes ?? 0
     }
 
     func selectedItemCount(categoryID: String) -> Int {
-        list.selectionByCategory[categoryID]?.count ?? 0
+        stats.categories[categoryID]?.selectedCount ?? 0
+    }
+
+    func categorySelection(_ categoryID: String) -> JunkSelection {
+        stats.categories[categoryID]?.selection ?? .none
+    }
+
+    func isSelected(categoryID: String, itemID: String) -> Bool {
+        selection.includes(itemID, categoryID: categoryID)
     }
 
     var age: CleanerAge {
@@ -400,7 +450,10 @@ final class CleanerModel {
         }
     }
 
-    var overallSelection: JunkSelection { list.overallSelection }
+    var overallSelection: JunkSelection {
+        let query = search.lowercased()
+        return query.isEmpty ? stats.selection : index.selection(of: index.scopes(matching: query))
+    }
 
     func setItemFilter(_ text: String, categoryID: String) {
         guard itemFilters[categoryID, default: ""] != text else { return }
@@ -541,8 +594,8 @@ final class CleanerModel {
         drives = []
         let token = CleanerCancellation()
         scanToken = token
-        let choices = overrides
-        let categoryChoices = categoryDefaults
+        saveSelection()
+        let stored = storedChoices
         workTask = track { [self, services] in
             defer { finish(token) }
             let all = await services.drives()
@@ -573,9 +626,8 @@ final class CleanerModel {
                 return
             }
             previewToken = UUID()
-            categories = result.categories.map {
-                Self.applyChoices($0, items: choices, categories: categoryChoices)
-            }
+            replaceSelection(CleanerSelection.resolve(result.categories, stored: stored))
+            categories = result.categories
             for category in categories {
                 log("  \(category.name) · \(JunkScanner.format(category.sizeBytes))")
             }
@@ -641,6 +693,9 @@ final class CleanerModel {
     }
 
     func cancelPendingCommands() {
+        selectionSave?.cancel()
+        selectionSave = nil
+        saveSelection()
         suspending = true
         remoteGeneration += 1
         stopBackgroundEstimates()
@@ -681,70 +736,81 @@ final class CleanerModel {
         logs = []
     }
 
-    private static func applyChoices(
-        _ category: JunkCategory, items itemChoices: [String: Bool],
-        categories categoryChoices: [String: Bool]
-    ) -> JunkCategory {
-        var updated = category
-        let categoryDefault = categoryChoices[category.id]
-        updated.items = category.items.map { item in
-            var copy = item
-            if let choice = itemChoices[item.id] {
-                copy.selected = choice
-            } else if let categoryDefault {
-                copy.selected = categoryDefault
-            }
-            return copy
-        }
-        return updated
-    }
-
-    func toggleAll() {
+    func toggleAll(matching query: String? = nil) {
         guard !stopped, !suspending else { return }
-        defer { if remote { sendRemote("all") } }
-        setSelection(overallSelection != .all, categoryIDs: visibleCategories.map(\.id))
+        let query = (query ?? search).lowercased()
+        defer { if remote { sendRemote("all", search: query) } }
+        let scopes = index.scopes(matching: query)
+        guard !scopes.isEmpty else { return }
+        choose(index.selection(of: scopes) != .all, scopes: scopes)
     }
 
-    func toggleCategory(_ id: String) {
+    func toggleCategory(_ id: String, matching query: String? = nil) {
         guard !stopped, !suspending else { return }
-        defer { if remote { sendRemote("category", value: id) } }
-        guard let visible = visibleCategories.first(where: { $0.id == id }) else { return }
-        setSelection(visible.selection != .all, categoryIDs: [id])
-    }
-
-    private func setSelection(_ selected: Bool, categoryIDs: [String]) {
-        let at = now()
-        var updated = categories
-        var itemChoices = overrides
-        var categoryChoices = categoryDefaults
-        for categoryID in categoryIDs {
-            guard let index = updated.firstIndex(where: { $0.id == categoryID }) else { continue }
-            let narrowed = updated[index].items.contains { !filters.admits($0, now: at) }
-            for position in updated[index].items.indices {
-                let item = updated[index].items[position]
-                guard !narrowed || filters.admits(item, now: at) else { continue }
-                itemChoices[item.id] = narrowed ? selected : nil
-                updated[index].items[position].selected = selected
-            }
-            if !narrowed { categoryChoices[categoryID] = selected }
-        }
-        overrides = itemChoices
-        categoryDefaults = categoryChoices
-        categories = updated
+        let query = (query ?? search).lowercased()
+        defer { if remote { sendRemote("category", value: id, search: query) } }
+        guard let scope = index.scope(categoryID: id, matching: query) else { return }
+        choose(index.selection(of: [scope]) != .all, scopes: [scope])
     }
 
     func toggleItem(categoryID: String, itemID: String) {
         guard !stopped, !suspending else { return }
         defer { if remote { sendRemote("item", value: categoryID, item: itemID) } }
-        guard let categoryIndex = categories.firstIndex(where: { $0.id == categoryID }),
-            let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
-        else { return }
-        var updated = categories
-        updated[categoryIndex].items[itemIndex].selected.toggle()
-        var choices = overrides
-        choices[itemID] = updated[categoryIndex].items[itemIndex].selected
-        overrides = choices
-        categories = updated
+        guard let position = index.position(categoryID: categoryID, itemID: itemID) else {
+            return
+        }
+        let value = !index.marked[position]
+        var updated = selection
+        updated.choices[categoryID, default: CleanerCategoryChoice(selected: false)].set(
+            itemID, to: value)
+        commit(updated) { $0.set([position], to: value) }
+    }
+
+    private func choose(_ value: Bool, scopes: [CleanerSelectionScope]) {
+        var updated = selection
+        for scope in scopes {
+            if scope.whole {
+                updated.choices[scope.categoryID] = CleanerCategoryChoice(selected: value)
+            } else {
+                var choice =
+                    updated.choices[scope.categoryID] ?? CleanerCategoryChoice(selected: false)
+                for position in scope.positions { choice.set(index.ids[position], to: value) }
+                updated.choices[scope.categoryID] = choice
+            }
+        }
+        commit(updated) { $0.set(scopes.flatMap(\.positions), to: value) }
+    }
+
+    private func commit(
+        _ updated: CleanerSelection, marking: (inout CleanerSelectionIndex) -> Void
+    ) {
+        marking(&index)
+        selection = updated
+        stats = index.stats
+        selectionRevision &+= 1
+        guard !remote else { return }
+        selectionDirty = true
+        guard selectionSave == nil else { return }
+        selectionSave = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.selectionSave = nil
+            self?.saveSelection()
+        }
+    }
+
+    private func saveSelection() {
+        guard selectionDirty, !remote else { return }
+        selectionDirty = false
+        var choices = storedChoices
+        choices.merge(selection.choices) { $1 }
+        if let data = try? JSONEncoder().encode(choices) {
+            defaults.set(data, forKey: Self.selectionKey)
+        }
+    }
+
+    private var storedChoices: [String: CleanerCategoryChoice] {
+        guard let data = defaults.data(forKey: Self.selectionKey) else { return [:] }
+        return (try? JSONDecoder().decode([String: CleanerCategoryChoice].self, from: data)) ?? [:]
     }
 
     func toggleExpand(_ id: String) {
@@ -757,6 +823,7 @@ final class CleanerModel {
         guard !scanning, !stopped, !suspending else { return }
         let items = CleanerOperationExecution.selectedItems(
             in: visibleCategories, categoryID: categoryID)
+        saveSelection()
         guard !items.isEmpty else { return }
         cancelScan()
         scanning = true
@@ -771,21 +838,5 @@ final class CleanerModel {
             finish(token)
             scan()
         }
-    }
-
-    private var overrides: [String: Bool] {
-        get {
-            (defaults.dictionary(forKey: Self.selectionOverridesKey) ?? [:])
-                .compactMapValues { $0 as? Bool }
-        }
-        set { if !remote { defaults.set(newValue, forKey: Self.selectionOverridesKey) } }
-    }
-
-    private var categoryDefaults: [String: Bool] {
-        get {
-            (defaults.dictionary(forKey: Self.categoryDefaultsKey) ?? [:])
-                .compactMapValues { $0 as? Bool }
-        }
-        set { if !remote { defaults.set(newValue, forKey: Self.categoryDefaultsKey) } }
     }
 }
