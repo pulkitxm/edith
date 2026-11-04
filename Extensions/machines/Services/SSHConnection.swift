@@ -144,12 +144,22 @@ public actor SSHConnection {
         let userKnownHosts = home.appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =
             "\"\(MachinePaths.knownHostsFile.path)\" \"\(userKnownHosts)\""
-        configArguments = fixtureHome.map { ["-F", Self.fixtureConfigFile($0)] } ?? []
+        configArguments = Self.configArguments(home: home, accountHome: Self.accountHome())
     }
 
-    nonisolated static func fixtureConfigFile(_ home: URL) -> String {
+    nonisolated static func configArguments(home: URL, accountHome: URL?) -> [String] {
+        guard home.standardizedFileURL.path != accountHome?.standardizedFileURL.path else {
+            return []
+        }
         let config = home.appendingPathComponent(".ssh/config").path
-        return FileManager.default.fileExists(atPath: config) ? config : "none"
+        return ["-F", FileManager.default.fileExists(atPath: config) ? config : "none"]
+    }
+
+    private nonisolated static func accountHome() -> URL? {
+        guard let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir else {
+            return nil
+        }
+        return URL(fileURLWithPath: String(cString: directory), isDirectory: true)
     }
 
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")

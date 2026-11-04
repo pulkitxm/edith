@@ -1358,16 +1358,19 @@ private actor ProcessReadProbe {
         #expect(arguments.last == "root@10.0.0.5")
     }
 
-    @Test func fixtureHomesNeverReadTheRealSSHConfig() throws {
+    @Test func isolatedHomesNeverReadTheAccountSSHConfig() throws {
+        let account = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
         let home = FileManager.default.temporaryDirectory
             .appendingPathComponent("ssh-config-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: home) }
-        #expect(SSHConnection.fixtureConfigFile(home) == "none")
+        #expect(SSHConnection.configArguments(home: account, accountHome: account).isEmpty)
+        #expect(SSHConnection.configArguments(home: home, accountHome: account) == ["-F", "none"])
         let config = home.appendingPathComponent(".ssh/config")
         try FileManager.default.createDirectory(
             at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("Host fixture\n".utf8).write(to: config)
-        #expect(SSHConnection.fixtureConfigFile(home) == config.path)
+        #expect(
+            SSHConnection.configArguments(home: home, accountHome: account) == ["-F", config.path])
     }
 
     @Test func fixtureRunsPinTheSSHConfigFile() async {
