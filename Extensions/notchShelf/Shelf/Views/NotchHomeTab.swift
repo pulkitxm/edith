@@ -1,9 +1,11 @@
+import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
 struct NotchHomeTab: View {
     let controller: any NotchChromeFacade
+    var scroll = NotchScrollOffset()
     @State private var selected: String?
 
     private var layout: SurfaceLayout { controller.visibleSurfaceLayout }
@@ -34,6 +36,7 @@ struct NotchHomeTab: View {
                             }
                         }
                     ) { tile in tileContent(tile) }
+                    .background { NotchScrollMemory(offset: scroll) }
                 }
             }
             if layout.visible.isEmpty, !controller.layoutEditing {
@@ -91,6 +94,60 @@ struct NotchHomeTab: View {
 
     private func add(_ widget: SurfaceWidget) {
         controller.chromeLayouts.update(.notch) { selected = $0.add(widget) }
+    }
+}
+
+final class NotchScrollOffset {
+    var origin = CGPoint.zero
+}
+
+private struct NotchScrollMemory: NSViewRepresentable {
+    let offset: NotchScrollOffset
+    func makeNSView(context: Context) -> NotchScrollMemoryView {
+        NotchScrollMemoryView(offset: offset)
+    }
+    func updateNSView(_ view: NotchScrollMemoryView, context: Context) {
+        view.offset = offset
+    }
+}
+
+final class NotchScrollMemoryView: NSView {
+    var offset: NotchScrollOffset
+    private var observation: NSObjectProtocol?
+    private var restoring = false
+
+    init(offset: NotchScrollOffset) {
+        self.offset = offset
+        super.init(frame: .zero)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let observation { NotificationCenter.default.removeObserver(observation) }
+        observation = nil
+        guard window != nil, let clip = enclosingScrollView?.contentView else { return }
+        clip.postsBoundsChangedNotifications = true
+        observation = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: clip, queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.restoring else { return }
+                self.offset.origin = clip.bounds.origin
+            }
+        }
+        restoring = true
+        DispatchQueue.main.async { [weak self] in self?.restore(clip) }
+    }
+
+    func restore(_ clip: NSClipView) {
+        restoring = false
+        guard offset.origin.y > 0, let document = clip.documentView else { return }
+        let limit = max(0, document.frame.height - clip.bounds.height)
+        clip.scroll(to: CGPoint(x: clip.bounds.origin.x, y: min(offset.origin.y, limit)))
+        enclosingScrollView?.reflectScrolledClipView(clip)
     }
 }
 

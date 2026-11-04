@@ -19,7 +19,7 @@ struct BifrostRows: View {
     var body: some View {
         Group {
             Section {
-                Button("Open Bifrost") {
+                Button("Open Launcher") {
                     BifrostUIContext.perform("open")
                 }
                 LabeledContent {
@@ -116,7 +116,7 @@ struct BifrostRows: View {
                     Text("Index")
                 } footer: {
                     Text(
-                        "Bifrost indexes the application folders on this Mac. Rebuild it after installing something it has not noticed."
+                        "The launcher indexes the application folders on this Mac. Rebuild it after installing something it has not noticed."
                     )
                     .font(.system(size: UIScale.pt(10)))
                 }
