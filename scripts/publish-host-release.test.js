@@ -11,6 +11,7 @@ const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 import { assetNames, fixture, publish } from "./host-release-test-fixture.mjs";
 import "./host-release-races.test.js";
+import "./host-release-rate-limit.test.js";
 
 test("preview publication creates a genuine prerelease and never selects latest", async () => {
   const value = fixture();

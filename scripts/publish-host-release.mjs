@@ -5,7 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
 import {
+  rateLimitWait,
   withGitHubRetrySync,
+  withRateLimitRecovery,
   withRateLimitRecoverySync,
 } from "./github-retry.mjs";
 import {
@@ -21,12 +23,6 @@ import {
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
-
-function rateLimitedExecute(command, args, options) {
-  return withRateLimitRecoverySync(() =>
-    execFileSync(command, args, options),
-  );
-}
 
 export function hostReleasePrerelease(value = "false") {
   if (!["true", "false"].includes(value))
@@ -64,7 +60,7 @@ export function preflightHostRelease({
   tag,
   source,
   rebuild = false,
-  execute = rateLimitedExecute,
+  execute = execFileSync,
   retry = {},
 }) {
   if (
@@ -135,7 +131,7 @@ export async function publishHostRelease({
   rebuild = false,
   sourceTarget = target,
   prerelease = false,
-  execute = rateLimitedExecute,
+  execute = execFileSync,
   retry = {},
   matchesAsset = releaseAssetMatchesFile,
   verifySource = async () => {
@@ -439,6 +435,28 @@ export async function publishHostRelease({
   }
 }
 
+export function preflightHostReleaseWithRecovery({
+  execute = execFileSync,
+  rateLimit = {},
+  ...options
+}) {
+  return withRateLimitRecoverySync(
+    () => preflightHostRelease({ ...options, execute }),
+    { probe: () => rateLimitWait({ execute }), ...rateLimit },
+  );
+}
+
+export function publishHostReleaseWithRecovery({
+  execute = execFileSync,
+  rateLimit = {},
+  ...options
+}) {
+  return withRateLimitRecovery(
+    () => publishHostRelease({ ...options, execute }),
+    { probe: () => rateLimitWait({ execute }), ...rateLimit },
+  );
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -453,7 +471,7 @@ if (
     prerelease: hostReleasePrerelease(process.env.RELEASE_PRERELEASE),
   };
   if (preflight) {
-    preflightHostRelease(configuration);
+    preflightHostReleaseWithRecovery(configuration);
     process.stdout.write("Release assets accepted by the release client.\n");
   } else {
     const target =
@@ -462,7 +480,7 @@ if (
         encoding: "utf8",
       }).trim();
     process.stdout.write(
-      `${JSON.stringify(await publishHostRelease({ ...configuration, target, sourceTarget: process.env.BUILT_SHA ?? target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
+      `${JSON.stringify(await publishHostReleaseWithRecovery({ ...configuration, target, sourceTarget: process.env.BUILT_SHA ?? target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
     );
   }
 }
