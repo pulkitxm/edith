@@ -18,27 +18,39 @@ struct CleanerUISnapshot: Codable {
 }
 struct CleanerUIAction: Codable {
     let operation: String; let value: String?; let item: String?; let previewToken: UUID
+    var search: String? = nil
     var known: Int? = nil
+    var knownSelection: Int? = nil
 }
 struct CleanerUISnapshotRequest: Codable {
     let known: Int?
+    var knownSelection: Int? = nil
 }
 struct CleanerUIReply: Codable {
     let stamp: Int
     let snapshot: CleanerUISnapshot?
+    let selectionStamp: Int
+    let selection: CleanerSelection?
+
+    @MainActor init(model: CleanerModel, known: Int?, knownSelection: Int?) {
+        stamp = model.uiStamp
+        snapshot = known == model.uiStamp ? nil : model.uiSnapshot()
+        selectionStamp = model.selectionRevision
+        selection = knownSelection == model.selectionRevision ? nil : model.selection
+    }
 }
 @MainActor enum CleanerUICommands {
     static func execute(_ command: String, payload: Data, model: CleanerModel) async throws -> Data
     {
         guard !model.stopped else { throw ExtensionPeerError.unavailable }
         if command == "cleaner.ui.snapshot" {
-            guard payload.count <= 64,
+            guard payload.count <= 128,
                 let request = try? JSONDecoder().decode(
                     CleanerUISnapshotRequest.self, from: payload)
             else { throw ExtensionPeerError.invalidRequest }
-            if request.known == model.uiStamp {
-                return try JSONEncoder().encode(CleanerUIReply(stamp: model.uiStamp, snapshot: nil))
-            }
+            return try JSONEncoder().encode(
+                CleanerUIReply(
+                    model: model, known: request.known, knownSelection: request.knownSelection))
         } else if command == "cleaner.ui.action" {
             let action = try JSONDecoder().decode(CleanerUIAction.self, from: payload)
             let selection = ["all", "category", "item"].contains(action.operation)
@@ -49,16 +61,18 @@ struct CleanerUIReply: Codable {
                         "Review a current scan before changing its selection.")
                 }
             }
-            let mirrored = selection && action.known == model.uiStamp
+            let mirrored = selection && action.knownSelection == model.selectionRevision
+            let search = action.search ?? ""
+            guard search.utf8.count <= 1_024 else { throw ExtensionPeerError.invalidRequest }
             switch action.operation {
             case "scan": model.scan()
             case "cancel": model.cancelScan()
             case "drives": model.loadDriveOptions()
-            case "all": model.toggleAll()
+            case "all": model.toggleAll(matching: search)
             case "category":
                 guard let id = action.value, model.categories.contains(where: { $0.id == id })
                 else { throw ExtensionPeerError.invalidRequest }
-                model.toggleCategory(id)
+                model.toggleCategory(id, matching: search)
             case "item":
                 guard let category = action.value, let item = action.item,
                     model.categories.first(where: { $0.id == category })?.items.contains(where: {
@@ -93,13 +107,11 @@ struct CleanerUIReply: Codable {
                 model.clean(categoryID: action.value)
             default: throw ExtensionPeerError.invalidRequest
             }
-            if mirrored {
-                return try JSONEncoder().encode(CleanerUIReply(stamp: model.uiStamp, snapshot: nil))
-            }
-        } else {
-            throw ExtensionPeerError.invalidRequest
+            return try JSONEncoder().encode(
+                CleanerUIReply(
+                    model: model, known: action.known,
+                    knownSelection: mirrored ? model.selectionRevision : action.knownSelection))
         }
-        return try JSONEncoder().encode(
-            CleanerUIReply(stamp: model.uiStamp, snapshot: model.uiSnapshot()))
+        throw ExtensionPeerError.invalidRequest
     }
 }
