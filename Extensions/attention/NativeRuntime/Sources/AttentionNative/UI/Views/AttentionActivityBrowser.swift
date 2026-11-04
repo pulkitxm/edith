@@ -27,8 +27,14 @@ struct AttentionEntitiesPanel: View {
     @State private var search = ""
     @State private var sort = AttentionActivitySort.time
     @State private var source = "all"
-    @State private var shown = 12
+    @State private var shown: Int
     @Environment(\.colorScheme) private var scheme
+
+    init(model: AttentionPageModel, limit: Int) {
+        self.model = model
+        self.limit = limit
+        _shown = State(initialValue: limit)
+    }
 
     private var entities: [AttentionEntity] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
