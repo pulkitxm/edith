@@ -16,8 +16,14 @@ usage history and collection choice on the next refresh. Collection uses the new
 SSH registration and checks that the remote hostname matches the saved history
 before updating it. The usage UUID stays unchanged, so chart selections and
 historical totals are preserved. Ambiguous names are not automatically linked.
-The dashboard's `usage stale` warning describes the age of the last collection,
-not whether SSH is connected.
+Every refresh records, per machine, when collection was last attempted, when it
+last succeeded and why the latest attempt failed. A machine is due again 20
+minutes after its last successful collection, so the 15 minute background
+refresh never skips it. The dashboard marks a machine stale once its last
+successful collection is more than 40 minutes old and shows the failure reason
+next to it, for example that the Machines extension is not running. When the Machines extension
+starts or updates, the Mac wakes or the network comes back, Usage collects any
+due machines again without waiting for the next scheduled refresh.
 
 Whatever the collector needs and cannot find there, jq, bun and ccusage, is
 installed under `~/.cache/edith` on that machine. That is why collecting waits
@@ -54,20 +60,25 @@ it has ever been collected:
     "host": "asus-tuf-7",
     "id": "1F0A9C22-4E64-4C63-9E0B-2F5A1E7D2C10",
     "machine": "Asus TUF 7",
+    "refreshAttemptedAt": "2026-08-08T16:14:51Z",
+    "refreshFailure": null,
+    "refreshSucceededAt": "2026-08-08T16:14:51Z",
     "sources": ["cli"],
     "tokens": 321812580
   }
 ]
 ```
 
-A machine that has never been collected still appears, with `collectedAt` and
-`host` as `null`, `sources` empty, and `days`, `cost` and `tokens` at zero. The
-human table writes `-` in those columns instead.
+A machine that has never been collected still appears, with `collectedAt`,
+`host` and the `refresh` fields as `null`, `sources` empty, and `days`, `cost`
+and `tokens` at zero. The human table writes `-` in those columns instead. The
+`REFRESH` column reads `ok` or `failed`, and a failed machine is followed by a
+note with `refreshFailure`.
 
 ```
 $ ed usage machines
-MACHINE     COUNTED  COLLECTED             SOURCES  COST    TOKENS
-Asus TUF 7  yes      2026-08-08T16:14:51Z  1        249.81  321812580
+MACHINE     COUNTED  COLLECTED             REFRESH  SOURCES  COST    TOKENS
+Asus TUF 7  yes      2026-08-08T16:14:51Z  ok       1        249.81  321812580
 ```
 
 Reads only, mutates nothing, needs no app. With no machines configured at all it

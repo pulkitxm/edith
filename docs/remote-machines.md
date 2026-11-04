@@ -43,6 +43,12 @@ chat attribution is preserved when data is reconciled. Replaced snapshots are
 deduplicated, so reconnecting or refreshing a host does not count the same activity
 twice.
 
+Each counted host is collected again 20 minutes after its last successful
+collection. Agent Usage shows when a host last refreshed and, when collection
+fails, why: the host is unreachable, the collector failed, or the Machines
+extension is not running yet. Usage retries on its own when Machines starts or
+updates, after the Mac wakes and when the network returns.
+
 ## Docker ownership
 
 Docker projects are grouped by their Compose project name. The exact

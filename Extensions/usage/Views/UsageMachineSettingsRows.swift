@@ -99,9 +99,16 @@ struct UsageMachineSettingsRows: View {
 
     private func detail(_ machine: Machine, _ summary: UsageMachineSummaryPayload?) -> String {
         guard let summary else { return machine.subtitle }
-        let when = Date(timeIntervalSince1970: summary.collectedAt)
-            .formatted(date: .abbreviated, time: .shortened)
-        return "\(DashFmt.usdFull(summary.cost)) · \(summary.days) days · \(when)"
+        var parts: [String] = []
+        if let collectedAt = summary.collectedAt {
+            let when = Date(timeIntervalSince1970: collectedAt)
+                .formatted(date: .abbreviated, time: .shortened)
+            parts = [DashFmt.usdFull(summary.cost), "\(summary.days) days", when]
+        } else {
+            parts = [machine.subtitle]
+        }
+        if let failure = summary.refreshFailure { parts.append("last refresh failed: " + failure) }
+        return parts.joined(separator: " · ")
     }
 
     private func reload() async {
@@ -112,21 +119,9 @@ struct UsageMachineSettingsRows: View {
                     "usage.ui.machines.summaries", as: [UsageMachineSummaryPayload].self)) ?? []
             summaries = Dictionary(found.map { ($0.machineID, $0) }) { first, _ in first }
         } else {
-            guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else {
-                return
-            }
             machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
             summaries = Dictionary(
-                machines.compactMap { machine in
-                    (try? UsageCLIMachines.summary(machine)).map {
-                        (
-                            machine.id,
-                            UsageMachineSummaryPayload(
-                                machineID: machine.id, cost: $0.cost, days: $0.days,
-                                collectedAt: $0.collectedAt.timeIntervalSince1970)
-                        )
-                    }
-                }
+                UsageMachineSummaryPayload.current().map { ($0.machineID, $0) }
             ) { first, _ in first }
         }
         selected = Set(
