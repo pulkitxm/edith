@@ -93,16 +93,16 @@ final class AttentionPageModel {
     private(set) var transferringBackup = false
     private(set) var categorizing = false
 
-    private let repository: AttentionRepository
-    let uiClient: AttentionUIClient?
+    @ObservationIgnored private let repository: AttentionRepository
+    @ObservationIgnored let uiClient: AttentionUIClient?
     private var uiStatus = AttentionUIStatus()
-    private var categorizeTask: Task<Void, Never>?
-    private var backupTask: Task<Void, Never>?
-    private var reloadTask: Task<Void, Never>?
-    private var loadedParts: Set<AttentionSummaryPart> = []
-    private var breakdownTask: Task<Void, Never>?
-    private var searchTask: Task<Void, Never>?
-    private var settingsTask: Task<Void, Never>?
+    @ObservationIgnored private var categorizeTask: Task<Void, Never>?
+    @ObservationIgnored private var backupTask: Task<Void, Never>?
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var loadedParts: Set<AttentionSummaryPart> = []
+    @ObservationIgnored private var breakdownTask: Task<Void, Never>?
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var settingsTask: Task<Void, Never>?
 
     @MainActor
     private final class LoadStorage {
@@ -295,15 +295,15 @@ final class AttentionPageModel {
         if activeFocus != state.activeFocus { activeFocus = state.activeFocus }
         if focusSessions != state.focusSessions { focusSessions = state.focusSessions }
         if classifications != state.classifications { classifications = state.classifications }
-        hasStoredEvents = state.hasStoredEvents
-        extensionInstalled = state.extensionInstalled
-        if let status = state.uiStatus {
-            uiStatus = status; browserConnected = status.browserConnected
+        if hasStoredEvents != state.hasStoredEvents { hasStoredEvents = state.hasStoredEvents }
+        if extensionInstalled != state.extensionInstalled {
+            extensionInstalled = state.extensionInstalled
         }
+        if let status = state.uiStatus { apply(status) }
         loadedParts = parts
         if state.derived != nil { refilterBreakdown() }
         loading.complete(generation)
-        errorMessage = nil
+        if errorMessage != nil { errorMessage = nil }
     }
 
     private func publishFailure(_ message: String, generation: UInt64) {
@@ -682,15 +682,23 @@ final class AttentionPageModel {
             do {
                 let status = try await uiClient.status()
                 guard !Task.isCancelled else { return }
-                uiStatus = status; browserConnected = status.browserConnected
+                apply(status)
             } catch {}
             return
         }
         guard settings.isEnabled, settings.browserTrackingEnabled else {
-            browserConnected = false
+            if browserConnected { browserConnected = false }
             return
         }
-        browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
+        let connected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
+        if browserConnected != connected { browserConnected = connected }
+    }
+
+    private func apply(_ status: AttentionUIStatus) {
+        if uiStatus != status { uiStatus = status }
+        if browserConnected != status.browserConnected {
+            browserConnected = status.browserConnected
+        }
     }
 
     private func remoteBackup(_ operation: String, message: String) {
