@@ -325,7 +325,7 @@ test("host publication checks the catalog once without changing main and rebuild
     readFileSync(".github/workflows/ci.yml", "utf8"),
   );
   const publish = workflow.jobs.publish;
-  expect(publish["timeout-minutes"]).toBe(30);
+  expect(publish["timeout-minutes"]).toBe(150);
   expect(publish.needs).toContain("extensions");
   expect(publish.env.BUILT_SHA).toContain("needs.version.outputs.sha");
   expect(publish.env.GH_TOKEN).toContain("secrets.RELEASE_PUSH_TOKEN");
