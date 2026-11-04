@@ -223,7 +223,11 @@ final class HostNotchPanelAssembly {
     private func position(_ lease: HostNotchSceneLease, record: Record) {
         guard let state else { return }
         container.attach(
-            lease.controller, rectangle: record.slot?.rectangle.frame, native: record.slot != nil)
+            lease.controller, rectangle: record.slot?.rectangle.frame, native: record.slot != nil,
+            anchor: record.slot.map {
+                HostNotchSlotAnchor.identifier(
+                    kind: $0.kind.rawValue, providerID: $0.providerID, tileID: $0.tile.id)
+            })
         lease.apply(
             compact: record.slot?.tile.dense ?? true, visible: state.visible,
             width: record.slot?.rectangle.width ?? container.view.bounds.width)
