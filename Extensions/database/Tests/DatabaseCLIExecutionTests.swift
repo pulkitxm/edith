@@ -3,6 +3,7 @@ import DatabaseCore
 import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
+import SQLite3
 import Testing
 
 @testable import DatabaseExtension
@@ -251,6 +252,40 @@ import Testing
         #expect(list.exitCode == 0)
         #expect(list.stdout.contains("Synthetic CLI SQLite"))
         await fresh.shutdown()
+    }
+
+    @Test func browsingWithoutAPathListsTheConnectionsObjects() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("synthetic.sqlite")
+        var handle: OpaquePointer?
+        #expect(sqlite3_open(file.path, &handle) == SQLITE_OK)
+        let schema = "CREATE TABLE synthetic_items(id INTEGER PRIMARY KEY)"
+        #expect(sqlite3_exec(handle, schema, nil, nil, nil) == SQLITE_OK)
+        sqlite3_close(handle)
+        let engine = DatabaseEngine(
+            metadataFile: root.appendingPathComponent("metadata.sqlite"),
+            secretStore: { try InMemoryDatabaseSecretStore() },
+            adapters: { [SQLiteDatabaseAdapter()] })
+        let connection = try DatabaseConnectionDraft(
+            displayName: "Synthetic Browse SQLite", product: .sqlite, path: file.path,
+            environmentKind: .testing, environmentLabel: "Synthetic",
+            environmentProtection: .standard, readOnlyPolicy: .disabled,
+            productionPolicy: .standard
+        ).definition()
+        _ = try await engine.send(.connectionSave(.init(connection: connection)))
+        let id = connection.id.rawValue.uuidString
+        _ = try await DatabaseCLIExecution.run(
+            ExtensionCLIRequest(arguments: ["connect", id, "--json"]), sender: engine,
+            credentials: { throw CredentialAccess.forbidden })
+        let reply = try await DatabaseCLIExecution.run(
+            ExtensionCLIRequest(arguments: ["browse", id, "--json"]), sender: engine,
+            credentials: { throw CredentialAccess.forbidden })
+        #expect(reply.exitCode == 0)
+        #expect(reply.stdout.contains("synthetic_items"))
+        #expect(reply.stderr.isEmpty)
+        await engine.shutdown()
     }
 
     private func runContextProbe(_ request: ExtensionCLIRequest) async throws -> ExtensionCLIReply {
