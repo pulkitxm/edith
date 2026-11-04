@@ -2210,6 +2210,7 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Models/AttentionPageDerived.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Models/AttentionPageModel.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Models/AttentionPeriod.swift",
+      "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Models/AttentionTimelineRows.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionActivityBrowser.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionAgentsView.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionAllocationPanel.swift",

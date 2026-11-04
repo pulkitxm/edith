@@ -35,6 +35,7 @@ enum AttentionScrollHarness {
     static func host<V: View>(_ view: V, size: CGSize) -> (NSWindow, NSHostingView<V>) {
         _ = application
         let host = NSHostingView(rootView: view)
+        host.sizingOptions = []
         host.frame = CGRect(origin: .zero, size: size)
         let window = OffscreenWindow(
             contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)

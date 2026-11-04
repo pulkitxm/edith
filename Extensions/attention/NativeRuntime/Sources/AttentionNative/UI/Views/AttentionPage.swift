@@ -13,40 +13,111 @@ struct AttentionPage: View {
         _model = State(initialValue: model ?? AttentionPageModel())
     }
 
+    private var presenterHidden: Bool {
+        SurfacePrivacyState.hides(
+            .ability("attention"),
+            values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
+    }
+
+    private var pageHeader: some View {
+        PageHeader(
+            title: { Text("Attention") },
+            trailing: {
+                EmptyView()
+            },
+            accessory: {
+                if !model.needsSetup {
+                    AttentionSectionBar(model: model)
+                    if model.section.usesPeriod {
+                        AttentionPeriodControl(model: model)
+                        AttentionFilterBar(model: model)
+                    }
+                }
+            })
+    }
+
+    @ViewBuilder private var notices: some View {
+        if model.uiClient?.available == false {
+            PageNotice(
+                "Enable Attention in Extensions to use activity tracking and settings.",
+                tone: .information)
+        }
+        if let message = model.message {
+            PageNotice(message, tone: .success)
+        }
+        if model.loaded, let error = model.errorMessage {
+            PageNotice(
+                error, tone: .error,
+                actions: {
+                    Button("Retry") { model.reload() }
+                })
+        }
+    }
+
+    private var hasNotices: Bool {
+        model.uiClient?.available == false || model.message != nil
+            || (model.loaded && model.errorMessage != nil)
+    }
+
+    private var timelineListHeader: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            notices
+            if model.hasFilters {
+                AttentionFilterScopeNotice(model: model)
+            }
+        }
+        .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(
+            .bottom, hasNotices || model.hasFilters ? UIScale.pt(PageMetrics.sectionSpacing) : 0)
+    }
+
+    private var timelineList: some View {
+        AttentionTimelineList(model: model) { timelineListHeader }
+            .opacity(model.activity == .updating ? 0.45 : 1)
+            .animation(.easeOut(duration: 0.15), value: model.activity == .updating)
+            .overlay(alignment: .top) {
+                ContentActivityBadge(model.activity).padding(.top, UIScale.pt(8))
+            }
+            .overlay {
+                if presenterHidden {
+                    AttentionPresenterCover()
+                }
+            }
+    }
+
     var body: some View {
+        Group {
+            if model.showsTimelineList {
+                PageWorkspace {
+                    pageHeader
+                } content: {
+                    timelineList
+                }
+            } else {
+                scaffold
+            }
+        }
+        .disabled(model.uiClient?.available == false || model.uiClient?.stopped == true)
+        .environment(\.attentionUIClient, model.uiClient)
+        .navigationRoute("section", selection: $model.section)
+        .pageRefresh(interval: { model.refreshInterval }, cancel: model.cancelLoading) {
+            guard model.uiClient?.available != false, model.uiClient?.stopped != true else {
+                return
+            }
+            model.reload(
+                preserveSettings: model.loaded && (model.needsSetup || model.section == .settings))
+            await model.waitForReload()
+            await model.checkBrowser()
+        }
+    }
+
+    private var scaffold: some View {
         PageScaffold(
             pinnedHeader: true, scrollIdentity: model.section.rawValue, activity: model.activity
         ) {
-            PageHeader(
-                title: { Text("Attention") },
-                trailing: {
-                    EmptyView()
-                },
-                accessory: {
-                    if !model.needsSetup {
-                        AttentionSectionBar(model: model)
-                        if model.section.usesPeriod {
-                            AttentionPeriodControl(model: model)
-                            AttentionFilterBar(model: model)
-                        }
-                    }
-                })
+            pageHeader
         } content: {
-            if model.uiClient?.available == false {
-                PageNotice(
-                    "Enable Attention in Extensions to use activity tracking and settings.",
-                    tone: .information)
-            }
-            if let message = model.message {
-                PageNotice(message, tone: .success)
-            }
-            if model.loaded, let error = model.errorMessage {
-                PageNotice(
-                    error, tone: .error,
-                    actions: {
-                        Button("Retry") { model.reload() }
-                    })
-            }
+            notices
 
             PageLoading(
                 state: model.loading.state,
@@ -82,26 +153,23 @@ struct AttentionPage: View {
                             case .settings: EmptyView()
                             }
                         }
-                        .presenterCover(
-                            SurfacePrivacyState.hides(
-                                .ability("attention"),
-                                values: ExtensionSharedState.current?.values(for: "presenter")
-                                    ?? [:]))
+                        .presenterCover(presenterHidden)
                     }
                 }
             }
         }
-        .disabled(model.uiClient?.available == false || model.uiClient?.stopped == true)
-        .environment(\.attentionUIClient, model.uiClient)
-        .navigationRoute("section", selection: $model.section)
-        .pageRefresh(interval: { model.refreshInterval }, cancel: model.cancelLoading) {
-            guard model.uiClient?.available != false, model.uiClient?.stopped != true else {
-                return
-            }
-            model.reload(
-                preserveSettings: model.loaded && (model.needsSetup || model.section == .settings))
-            await model.waitForReload()
-            await model.checkBrowser()
+    }
+}
+
+private struct AttentionPresenterCover: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        ZStack {
+            DashSkin.paper(scheme == .dark)
+            Label("Hidden while presenting", systemImage: "eye.slash")
+                .font(.edithText(.callout))
+                .foregroundStyle(.secondary)
         }
     }
 }

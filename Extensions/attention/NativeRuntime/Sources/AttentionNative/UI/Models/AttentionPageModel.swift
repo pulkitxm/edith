@@ -52,6 +52,7 @@ final class AttentionPageModel {
     private(set) var summary: AttentionSummary
     private(set) var dayRibbon: [AttentionRibbonBlock] = []
     private(set) var timeline: [AttentionTimelineDay] = []
+    private(set) var timelineRows: [AttentionTimelineRow] = []
     private(set) var triage: [AttentionEntity] = []
     var focusSessions: [AttentionFocusSession] = []
     var activeFocus: AttentionFocusSession?
@@ -125,6 +126,11 @@ final class AttentionPageModel {
 
     var needsSetup: Bool {
         !settings.trackingEnabled && !settings.browserTrackingEnabled && !hasStoredEvents
+    }
+
+    var showsTimelineList: Bool {
+        section == .timeline && loading.state == .content && !needsSetup && period.showsSpans
+            && !timelineRows.isEmpty && !(hasFilters && !hasActivity)
     }
 
     var hasActivity: Bool {
@@ -290,6 +296,7 @@ final class AttentionPageModel {
             if period.preset == .allTime { period.start = summary.from }
             dayRibbon = derived.dayRibbon
             timeline = derived.timeline
+            timelineRows = derived.timelineRows
             triage = derived.triage
         }
         if activeFocus != state.activeFocus { activeFocus = state.activeFocus }
@@ -348,6 +355,8 @@ final class AttentionPageModel {
         try Task.checkCancellation()
         let status = try await uiClient?.status()
         let summary = snapshot.summary
+        let timeline =
+            retained.union(parts).contains(.timeline) ? AttentionPageDerived.timeline(summary) : []
         let derived: AttentionPageDerivedState? =
             summary == current && retained.isEmpty
             ? nil
@@ -355,8 +364,8 @@ final class AttentionPageModel {
                 summary: summary,
                 dayRibbon: summary.to.timeIntervalSince(summary.from) <= 90_000
                     ? AttentionPageDerived.dayRibbon(summary) : [],
-                timeline: retained.union(parts).contains(.timeline)
-                    ? AttentionPageDerived.timeline(summary) : [],
+                timeline: timeline,
+                timelineRows: AttentionPageDerived.timelineRows(timeline),
                 triage: triage(summary))
         return AttentionPageState(
             settings: snapshot.settings, derived: derived,
@@ -788,6 +797,7 @@ private struct AttentionPageDerivedState: Sendable {
     var summary: AttentionSummary
     var dayRibbon: [AttentionRibbonBlock]
     var timeline: [AttentionTimelineDay]
+    var timelineRows: [AttentionTimelineRow]
     var triage: [AttentionEntity]
 }
 
