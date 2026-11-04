@@ -20,8 +20,7 @@ struct HostSettingsContainer<Content: View>: View {
                     }.pickerStyle(.menu).labelsHidden().accessibilityLabel("Settings category")
                 },
                 accessory: {
-                    Text(HostSettingsSummary.text(section.id)).font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(.secondary)
+                    PageSubtitle(HostSettingsSummary.text(section.id))
                 })
         } content: {
             content().scrollContentBackground(.hidden)

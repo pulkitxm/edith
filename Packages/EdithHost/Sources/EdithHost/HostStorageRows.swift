@@ -136,28 +136,23 @@ struct HostStoragePackageDetails: View {
                     "Shared user data, counted once in the total",
                     measurement.sum(entry.sharedDataScopeIDs))
             }
-            Text(
-                entry.compressedDownloadBytes.map {
-                    "Compressed download: \(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) · version \(entry.catalogVersion ?? "unknown")"
-                } ?? "Compressed download: unknown, no compatible verified catalog entry."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
             ForEach(entry.versions) { version in
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     line(
                         "\(version.package.version) · \(version.state)",
                         version.bytes(in: measurement))
-                    Text(
-                        "\(version.compatible ? "Compatible with this app" : "Incompatible with this app") · ABI \(version.package.hostABI) · \(version.package.architecture) · macOS \(version.package.minimumSystemVersion.description)+"
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    if !version.compatible {
+                        Text(
+                            "Needs a different Edith build · \(version.package.hostABI) · \(version.package.architecture)"
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
                 }
+                .help(
+                    "ABI \(version.package.hostABI) · \(version.package.architecture) · macOS \(version.package.minimumSystemVersion.description)+"
+                )
             }
             if !entry.versions.isEmpty || pendingRemoval {
-                Text(
-                    "Removing deletes every package version above. User data, shared files and selected music folders are kept."
-                )
-                .font(.edithText(.caption)).foregroundStyle(.secondary)
                 HStack {
                     if pendingRemoval {
                         Text("Pending removal, still on disk until released")
@@ -168,6 +163,7 @@ struct HostStoragePackageDetails: View {
                     }
                     .buttonStyle(.edith(.secondary))
                     .disabled(removing || !canRemove)
+                    .help("Deletes every package version above and keeps user data")
                     .accessibilityLabel("Remove \(entry.title) packages, keep user data")
                 }
             }
