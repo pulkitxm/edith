@@ -1,4 +1,6 @@
 import AppKit
+import EdithExtensionUI
+import SwiftUI
 
 @MainActor
 enum HostBackgroundTesting {
@@ -37,5 +39,23 @@ enum HostBackgroundTesting {
             guard let window = notification.object as? NSWindow, window.isVisible else { return }
             MainActor.assumeIsolated { hide(window) }
         }
+    }
+}
+
+struct HostBackgroundTestingVisibility: ViewModifier {
+    var enabled = HostBackgroundTesting.enabled
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.environment(\.windowVisible, true)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func tracksHostWindowVisibility() -> some View {
+        modifier(HostBackgroundTestingVisibility()).tracksWindowVisibility()
     }
 }
