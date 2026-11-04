@@ -650,9 +650,11 @@ struct DashboardView: View {
         guard !groups.isEmpty else { return "Machines" }
         let stale = selectedStaleMachines(now: now)
         if stale.count == 1, let item = stale.first {
-            return "\(item.group.name) stale \(item.freshness.ageLabel)"
+            return item.freshness.isStale
+                ? "\(item.group.name) stale \(item.freshness.ageLabel)"
+                : "\(item.group.name) refresh failed"
         }
-        if stale.count > 1 { return "\(stale.count) stale machines" }
+        if stale.count > 1 { return "\(stale.count) machines need attention" }
         let shown = groups.filter { model.machineIsShown($0) || model.machineIsPartlyShown($0) }
         if shown.count == groups.count { return "All machines" }
         if shown.count == 1, let only = shown.first { return only.name }
@@ -664,7 +666,7 @@ struct DashboardView: View {
     )] {
         model.machineGroups.compactMap { group in
             guard model.machineIsShown(group) || model.machineIsPartlyShown(group),
-                let freshness = model.machineFreshness(group, now: now), freshness.isStale
+                let freshness = model.machineFreshness(group, now: now), freshness.needsAttention
             else { return nil }
             return (group, freshness)
         }

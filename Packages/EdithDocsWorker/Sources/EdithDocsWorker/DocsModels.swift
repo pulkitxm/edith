@@ -28,6 +28,18 @@ public struct DocsSpan: Sendable, Hashable {
     public static func plain(_ spans: [DocsSpan]) -> String {
         spans.map(\.text).joined()
     }
+
+    static let navigationWords: Set<String> = ["back", "to", "see", "also"]
+
+    public static func isNavigation(_ spans: [DocsSpan]) -> Bool {
+        guard spans.contains(where: { $0.link != nil }) else { return false }
+        return spans.allSatisfy { span in
+            span.link != nil
+                || span.text.lowercased().split { !$0.isLetter }.allSatisfy {
+                    navigationWords.contains(String($0))
+                }
+        }
+    }
 }
 
 public struct DocsHeading: Sendable, Hashable, Identifiable {
@@ -104,7 +116,9 @@ public struct DocsPage: Sendable, Hashable, Identifiable {
 
     public var abstract: String {
         for block in blocks {
-            if case .paragraph(let spans) = block { return DocsSpan.plain(spans) }
+            if case .paragraph(let spans) = block, !DocsSpan.isNavigation(spans) {
+                return DocsSpan.plain(spans)
+            }
         }
         return ""
     }

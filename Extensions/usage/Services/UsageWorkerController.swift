@@ -44,6 +44,13 @@ public final class UsageWorkerController {
     private var usageID: UUID?
     private var stopped = false
     private var indexDemanded = false
+    private let machinesVersion: @MainActor () -> String?
+    private let machinesNeedRecovery: @MainActor () -> Bool
+    private var observedMachinesVersion: String??
+    private var recoveryPending = false
+    private var recoveryTriggers: UsageRecoveryTriggers?
+    private var machinesWatch: Task<Void, Never>?
+    static let machinesWatchInterval = Duration.seconds(15)
 
     public init(
         dataDirectory: URL = Repo.dataDir,
@@ -59,8 +66,14 @@ public final class UsageWorkerController {
         },
         clock: @escaping @MainActor () -> Date = Date.init,
         scheduleWake: @escaping UsageWakeScheduler = UsageWake.mainQueue,
+        machinesVersion: @escaping @MainActor () -> String? = UsageRemoteRecovery.machinesVersion,
+        machinesNeedRecovery: @escaping @MainActor () -> Bool = {
+            UsageRemoteRecovery.machinesNeedRecovery()
+        },
         collect: @escaping Collect
     ) {
+        self.machinesVersion = machinesVersion
+        self.machinesNeedRecovery = machinesNeedRecovery
         self.ambientPolicy =
             ambientPolicy
             ?? ExtensionAmbientPolicy(jobs: [
@@ -161,8 +174,33 @@ public final class UsageWorkerController {
             self.refreshing = false
             self.finishRefreshWaiters()
             UsageEvents.post(UsageEvents.refreshFinished)
+            if self.recoveryPending {
+                self.recoveryPending = false
+                self.recoverRemoteMachines()
+            }
         }
         return id.uuidString
+    }
+
+    func observeMachinesAvailability() {
+        guard !stopped else { return }
+        let version = machinesVersion()
+        defer { observedMachinesVersion = .some(version) }
+        guard case let .some(previous) = observedMachinesVersion, previous != version,
+            version != nil
+        else { return }
+        recoverRemoteMachines()
+    }
+
+    func recoverRemoteMachines() {
+        guard !stopped, indexDemanded, machinesVersion() != nil, machinesNeedRecovery() else {
+            return
+        }
+        guard usageID == nil else {
+            recoveryPending = true
+            return
+        }
+        _ = try? requestRefresh(policy: .due)
     }
 
     public func requestLimitsRefresh(force: Bool = true) throws {
@@ -295,6 +333,17 @@ public final class UsageWorkerController {
             backgroundContinuation = nil
             return
         }
+        observeMachinesAvailability()
+        machinesWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: Self.machinesWatchInterval) } catch { return }
+                guard let self, !self.stopped else { return }
+                self.observeMachinesAvailability()
+            }
+        }
+        recoveryTriggers = UsageRecoveryTriggers(
+            woke: { [weak self] in self?.backgroundContinuation?.yield() },
+            networkReturned: { [weak self] in self?.recoverRemoteMachines() })
         let cachedURL = dataDirectory.appendingPathComponent("usage.json")
         backgroundTask = Task { [weak self] in
             let read = Task.detached(priority: .utility) {
@@ -381,6 +430,11 @@ public final class UsageWorkerController {
 
     public func beginShutdown() {
         stopped = true
+        machinesWatch?.cancel()
+        machinesWatch = nil
+        recoveryTriggers?.stop()
+        recoveryTriggers = nil
+        recoveryPending = false
         ambientPolicy.stop()
         backgroundContinuation?.finish()
         backgroundWake?()
