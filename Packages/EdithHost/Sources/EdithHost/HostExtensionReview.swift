@@ -47,7 +47,7 @@ struct HostExtensionReview: View {
 
     static func idealHeight(for id: String) -> Double {
         switch id {
-        case "micMute", "systemStats": 300
+        case "micMute", "systemStats", "audioMixer": 300
         case "attention": 440
         case "machines": 420
         case "lidAwake": 400
