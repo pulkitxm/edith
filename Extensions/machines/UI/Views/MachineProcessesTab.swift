@@ -33,61 +33,53 @@ struct MachineProcessesTab: View {
                 message: model.loading.errorMessage ?? "Waiting for a process sample.",
                 refreshing: model.loading.isRefreshing
             ) {
-                GeometryReader { geometry in
-                    Table(model.rows, selection: $model.selectedPID, columnCustomization: $columns)
-                    {
-                        SwiftUI.TableColumn("Process") { process in
-                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                Text(process.name.isEmpty ? process.cmd : process.name)
-                                    .font(.edithText(.body)).lineLimit(1)
-                                Text(compact ? "\(process.user) · PID \(process.pid)" : process.cmd)
-                                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                                    .lineLimit(1).truncationMode(.middle)
-                            }
-                            .help("PID \(process.pid) · \(process.user)\n\(process.cmd)")
+                Table(model.rows, selection: $model.selectedPID, columnCustomization: $columns) {
+                    SwiftUI.TableColumn("Process") { process in
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(process.name.isEmpty ? process.cmd : process.name)
+                                .font(.edithText(.body)).lineLimit(1)
+                            Text(compact ? "\(process.user) · PID \(process.pid)" : process.cmd)
+                                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
                         }
-                        .width(
-                            MachineTableSizing.tableNameWidth(
-                                viewport: geometry.size.width,
-                                fixedWidth: (compact ? 0 : 100) + 64 + 90
-                                    + (session.isLocal ? 0 : 44),
-                                columnCount: (compact ? 3 : 4) + (session.isLocal ? 0 : 1)))
-                        SwiftUI.TableColumn("User") { Text($0.user).lineLimit(1) }
-                            .width(UIScale.pt(100))
-                            .customizationID("user")
-                            .defaultVisibility(compact ? .hidden : .visible)
-                        SwiftUI.TableColumn("CPU") { process in
-                            Text(String(format: "%.1f%%", process.cpu)).monospacedDigit()
-                                .foregroundStyle(process.cpu > 50 ? DashSkin.warn : .primary)
-                        }
-                        .width(UIScale.pt(64))
-                        SwiftUI.TableColumn("Memory") { process in
-                            Text(ByteFormatter.string(process.rssKB * 1024)).monospacedDigit()
-                        }
-                        .width(UIScale.pt(90))
-                        SwiftUI.TableColumn("End") { process in
-                            Button {
-                                pendingKill = process
-                            } label: {
-                                Image(systemName: "xmark.circle")
-                            }
-                            .buttonStyle(.edith(.iconOnly))
-                            .help("End \(process.name), PID \(process.pid)")
-                            .accessibilityLabel("End \(process.name), PID \(process.pid)")
-                        }
-                        .width(UIScale.pt(44))
-                        .customizationID("end")
-                        .defaultVisibility(session.isLocal ? .hidden : .visible)
-                        .disabledCustomizationBehavior(.visibility)
+                        .help("PID \(process.pid) · \(process.user)\n\(process.cmd)")
                     }
-                    .font(.edithText(.callout))
-                    .accessibilityLabel("Machine processes")
-                    .onChange(of: compact, initial: true) { _, compact in
-                        columns[visibility: "user"] = compact ? .hidden : .visible
+                    .width(min: UIScale.pt(PageMetrics.tableNameMinimumWidth), max: .infinity)
+                    SwiftUI.TableColumn("User") { Text($0.user).lineLimit(1) }
+                        .width(UIScale.pt(100))
+                        .customizationID("user")
+                        .defaultVisibility(compact ? .hidden : .visible)
+                    SwiftUI.TableColumn("CPU") { process in
+                        Text(String(format: "%.1f%%", process.cpu)).monospacedDigit()
+                            .foregroundStyle(process.cpu > 50 ? DashSkin.warn : .primary)
                     }
-                    .overlay {
-                        if model.rows.isEmpty { ContentUnavailableView.search(text: model.query) }
+                    .width(UIScale.pt(64))
+                    SwiftUI.TableColumn("Memory") { process in
+                        Text(ByteFormatter.string(process.rssKB * 1024)).monospacedDigit()
                     }
+                    .width(UIScale.pt(90))
+                    SwiftUI.TableColumn("End") { process in
+                        Button {
+                            pendingKill = process
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                        }
+                        .buttonStyle(.edith(.iconOnly))
+                        .help("End \(process.name), PID \(process.pid)")
+                        .accessibilityLabel("End \(process.name), PID \(process.pid)")
+                    }
+                    .width(UIScale.pt(44))
+                    .customizationID("end")
+                    .defaultVisibility(session.isLocal ? .hidden : .visible)
+                    .disabledCustomizationBehavior(.visibility)
+                }
+                .font(.edithText(.callout))
+                .accessibilityLabel("Machine processes")
+                .onChange(of: compact, initial: true) { _, compact in
+                    columns[visibility: "user"] = compact ? .hidden : .visible
+                }
+                .overlay {
+                    if model.rows.isEmpty { ContentUnavailableView.search(text: model.query) }
                 }
             } placeholder: {
                 MachineProcessRowsSkeleton(showsActions: !session.isLocal)
