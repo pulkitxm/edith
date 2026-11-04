@@ -14,9 +14,11 @@ import Testing
     @Test(.enabled(if: enabled)) func scrollingNavigatorAndLongDocument() async throws {
         let only = ProcessInfo.processInfo.environment["EDITH_SCROLL_CASE"]
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
+        let groups =
+            Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_DOCS_GROUPS"] ?? "") ?? 40
         for scenario in Scenario.allCases where only == nil || only == scenario.rawValue {
             let timing = await Self.measure(
-                scenario, groups: 40, pagesPerGroup: 12, lines: 5000, frames: frames)
+                scenario, groups: groups, pagesPerGroup: 12, lines: 5000, frames: frames)
             print(
                 "docs-scroll \(scenario.rawValue): \(timing) reach=\(Int(timing.offsets.max() ?? 0)) slowAt=\(timing.slowOffsets)"
             )

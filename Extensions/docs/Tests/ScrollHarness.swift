@@ -5,6 +5,7 @@ import SwiftUI
 struct ScrollTiming: CustomStringConvertible {
     var frames: [Double]
     var offsets: [CGFloat] = []
+    var cpu: [Double] = []
 
     var slowOffsets: [Int] {
         zip(frames, offsets).filter { $0.0 > 1000.0 / 60 }.map { Int($0.1) }
@@ -17,10 +18,14 @@ struct ScrollTiming: CustomStringConvertible {
     var total: Double { frames.reduce(0, +) }
     var hitches: Int { frames.filter { $0 > 1000.0 / 60 }.count }
 
+    var cpuMedian: Double { cpu.isEmpty ? 0 : cpu.sorted()[cpu.count / 2] }
+    var cpuWorst: Double { cpu.max() ?? 0 }
+
     var description: String {
         String(
-            format: "frames=%d median=%.2fms p95=%.2fms max=%.2fms over16ms=%d total=%.0fms",
-            frames.count, median, p95, worst, hitches, total)
+            format:
+                "frames=%d median=%.2fms p95=%.2fms max=%.2fms over16ms=%d total=%.0fms cpuMedian=%.2fms cpuMax=%.2fms",
+            frames.count, median, p95, worst, hitches, total, cpuMedian, cpuWorst)
     }
 }
 
@@ -47,6 +52,12 @@ enum ScrollHarness {
         window.contentView = host
         window.orderBack(nil)
         return (window, host)
+    }
+
+    static func threadCPU() -> Double {
+        var spec = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &spec)
+        return Double(spec.tv_sec) + Double(spec.tv_nsec) / 1_000_000_000
     }
 
     static func settle(_ host: NSView, for duration: Duration = .milliseconds(400)) async {
@@ -84,9 +95,11 @@ enum ScrollHarness {
         guard let scroll = scrollView(in: host) else { return ScrollTiming(frames: []) }
         var timings: [Double] = []
         var offsets: [CGFloat] = []
+        var cpus: [Double] = []
         var direction: CGFloat = 1
         for _ in 0..<frames {
             let start = CACurrentMediaTime()
+            let cpuStart = ScrollHarness.threadCPU()
             let clip = scroll.contentView
             let maximum = max(0, (scroll.documentView?.frame.height ?? 0) - clip.bounds.height)
             var y = clip.bounds.origin.y + step * direction
@@ -103,10 +116,11 @@ enum ScrollHarness {
             let elapsed = (CACurrentMediaTime() - start) * 1000
             timings.append(elapsed)
             offsets.append(y)
+            cpus.append((ScrollHarness.threadCPU() - cpuStart) * 1000)
             let rest = frameBudget - elapsed
             if rest > 0 { try? await Task.sleep(for: .microseconds(Int(rest * 1000))) }
         }
-        return ScrollTiming(frames: timings, offsets: offsets)
+        return ScrollTiming(frames: timings, offsets: offsets, cpu: cpus)
     }
 }
 
