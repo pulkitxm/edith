@@ -55,7 +55,7 @@ struct PresenterSidebarScene: View {
                 .accessibilityValue(manual ? "On" : "Off")
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(0)) {
-                    ForEach(PresenterPrivacy.allCases) { category in
+                    ForEach(PresenterPrivacy.listed) { category in
                         Divider()
                         PresenterPrivacyQuickToggle(category: category)
                     }

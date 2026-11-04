@@ -30,6 +30,20 @@ import Testing
         #expect(fixture.context.activeIDs.isEmpty)
     }
 
+    @Test func enabledIDsAreUnknownUntilTheHostPublishesThemAndIgnoreMalformedState() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        #expect(fixture.context.enabledIDs == nil)
+        for raw in ["true", "[1]", "[\"../music\"]", "[\"\"]"] {
+            try fixture.host.publish(["surface.enabledIDs": raw])
+            #expect(fixture.context.enabledIDs == nil)
+        }
+        try fixture.host.publish(["surface.enabledIDs": "[\"database\",\"music\"]"])
+        #expect(fixture.context.enabledIDs == ["database", "music"])
+        try fixture.host.publish(["surface.enabledIDs": "[]"])
+        #expect(fixture.context.enabledIDs == [])
+    }
+
     @Test func runtimeLayoutsAndProfilesRemainInTheHostPreferenceDomain() throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

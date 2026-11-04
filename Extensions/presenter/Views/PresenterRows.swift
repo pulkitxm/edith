@@ -39,7 +39,7 @@ struct PresenterRows: View {
                         )
                     }
                 }
-                ForEach(PresenterPrivacy.allCases) { category in
+                ForEach(PresenterPrivacy.listed) { category in
                     PresenterPrivacySettingToggle(category: category)
                 }
             } header: {
