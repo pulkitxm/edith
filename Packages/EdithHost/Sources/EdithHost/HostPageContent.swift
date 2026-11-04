@@ -17,7 +17,7 @@ struct HostPageContent: View {
     var additionalSettings: ((String) -> AnyView?)? = nil
     var defaults: UserDefaults = SharedDefaults.store
     let select: (String) -> Void
-    private var active: Set<String> { marketplace.surfaceAvailability.activeIDs }
+    private var active: Set<String> { marketplace.surfaceAvailability.navigableIDs }
     private var settingsSections: [HostNavigationSection] {
         HostNavigationCatalog.settingsSections(
             installed: Set(marketplace.installed.keys),
@@ -56,6 +56,10 @@ struct HostPageContent: View {
                     if id != "appMaintenance" { Divider() }
                     content(id, section: child.id)
                 }
+                .navigationRoute(
+                    "tab",
+                    selection: Binding(get: { child.id }, set: { maintenanceSection = $0 }),
+                    isValid: { raw in maintenanceSections.contains { $0.id == raw } })
             } else if let id = destination.extensionID {
                 content(id)
             } else {
@@ -63,10 +67,11 @@ struct HostPageContent: View {
             }
         }
     }
+    private var maintenanceSections: [HostNavigationSection] {
+        HostNavigationCatalog.maintenance.filter { $0.extensionID.map(active.contains) ?? false }
+    }
     private func maintenanceHeader(current: HostNavigationSection, tight: Bool) -> some View {
-        let sections = HostNavigationCatalog.maintenance.filter {
-            $0.extensionID.map(active.contains) ?? false
-        }
+        let sections = maintenanceSections
         return PageHeader(
             current.title,
             trailing: {
