@@ -22,38 +22,73 @@ final class CleanerModel {
     private static let filtersKey = "cleanerFilters"
     static let backgroundEstimateKey = "cleaner.backgroundEstimate"
 
-    private(set) var previewToken = UUID()
+    @ObservationIgnored private(set) var revision = 0
+    private(set) var previewToken = UUID() {
+        didSet { revision &+= 1 }
+    }
     private(set) var categories: [JunkCategory] = [] {
         didSet {
-            try? ExtensionSharedState.current?.publish([
-                "reclaimableBytes": String(reclaimableTotal)
-            ])
+            revision &+= 1
+            refreshList()
+            publishReclaimable()
         }
     }
-    private(set) var scanning = false
-    private(set) var scanned = false
-    private(set) var logs: [String] = []
+    private(set) var list = CleanerListState()
+    @ObservationIgnored private var publishedReclaimable: Int64?
+    private(set) var scanning = false {
+        didSet { revision &+= 1 }
+    }
+    private(set) var scanned = false {
+        didSet { revision &+= 1 }
+    }
+    private(set) var logs: [String] = [] {
+        didSet { revision &+= 1 }
+    }
     var logsExpanded = false {
         didSet { rememberUIState() }
     }
-    private(set) var lastReclaimed: Int64 = 0
-    private(set) var drives: [DriveInfo] = []
-    private(set) var driveOptions: [DriveInfo] = []
+    private(set) var lastReclaimed: Int64 = 0 {
+        didSet { revision &+= 1 }
+    }
+    private(set) var drives: [DriveInfo] = [] {
+        didSet { revision &+= 1 }
+    }
+    private(set) var driveOptions: [DriveInfo] = [] {
+        didSet { revision &+= 1 }
+    }
     let driveOptionsLoad = ContentLoad()
     var loadingDriveOptions: Bool {
         remote ? remoteLoadingDriveOptions || driveRequestInFlight : driveOptionsLoad.isRunning
     }
     private var remoteLoadingDriveOptions = false
     private var driveRequestInFlight = false
-    private(set) var customFolders: [String] = []
-    private(set) var filters = CleanerFilters()
+    private(set) var customFolders: [String] = [] {
+        didSet { revision &+= 1 }
+    }
+    private(set) var filters = CleanerFilters() {
+        didSet {
+            revision &+= 1
+            refreshList()
+        }
+    }
     var search = "" {
-        didSet { rememberUIState() }
+        didSet {
+            rememberUIState()
+            refreshList()
+        }
     }
     private(set) var expanded: Set<String> = [] {
-        didSet { rememberUIState() }
+        didSet {
+            rememberUIState()
+            refreshList()
+        }
     }
-    private var driveSelection: Set<String>?
+    private(set) var itemFilters: [String: String] = [:] {
+        didSet { refreshList() }
+    }
+    private var driveSelection: Set<String>? {
+        didSet { revision &+= 1 }
+    }
     private var scanToken: CleanerCancellation?
     private let defaults: UserDefaults
     private let services: CleanerServices
@@ -73,7 +108,28 @@ final class CleanerModel {
     private var estimateToken: CleanerCancellation?
     private var cleaning = false
     private(set) var stopped = false
-    private(set) var operationTitle = "Scanning…"
+    private(set) var operationTitle = "Scanning…" {
+        didSet { revision &+= 1 }
+    }
+    @ObservationIgnored private var remoteStamp: Int?
+    private let sizeText = CleanerSizeText()
+
+    var uiStamp: Int { revision &* 2 &+ (driveOptionsLoad.isRunning ? 1 : 0) }
+
+    private func refreshList() {
+        let updated = CleanerListState(
+            categories: categories, filters: filters, search: search, expanded: expanded,
+            itemFilters: itemFilters, now: now(), sizeText: sizeText)
+        if updated != list { list = updated }
+    }
+
+    private func publishReclaimable() {
+        guard !remote, publishedReclaimable != list.reclaimableTotal else { return }
+        publishedReclaimable = list.reclaimableTotal
+        try? ExtensionSharedState.current?.publish([
+            "reclaimableBytes": String(list.reclaimableTotal)
+        ])
+    }
 
     init(
         scanned: Bool = false, defaults: UserDefaults = SharedDefaults.store,
@@ -151,7 +207,8 @@ final class CleanerModel {
             scanned: scanned,
             logs: logs, lastReclaimed: lastReclaimed, drives: drives, driveOptions: driveOptions,
             customFolders: customFolders, driveSelection: driveSelection,
-            operationTitle: operationTitle, loadingDriveOptions: driveOptionsLoad.isRunning,
+            operationTitle: operationTitle,
+            loadingDriveOptions: remote ? remoteLoadingDriveOptions : driveOptionsLoad.isRunning,
             filters: filters)
     }
 
@@ -169,28 +226,38 @@ final class CleanerModel {
         else { return }
         let generation = remoteGeneration
         do {
-            let data = try await engineClient.invoke("cleaner.ui.snapshot")
+            let request = try JSONEncoder().encode(CleanerUISnapshotRequest(known: remoteStamp))
+            let data = try await engineClient.invoke("cleaner.ui.snapshot", payload: request)
             guard !stopped, !suspending, !Task.isCancelled, generation == remoteGeneration else {
                 return
             }
-            applyRemote(try JSONDecoder().decode(CleanerUISnapshot.self, from: data))
+            applyRemote(try JSONDecoder().decode(CleanerUIReply.self, from: data))
         } catch is CancellationError {} catch {
             if !stopped, !suspending { log(error.localizedDescription) }
         }
     }
 
     private func seed(_ value: CleanerUISnapshot) {
-        categories = value.categories; previewToken = value.previewToken
-        scanning = value.scanning; scanned = value.scanned; logs = value.logs
-        lastReclaimed = value.lastReclaimed; drives = value.drives
-        driveOptions = value.driveOptions
-        customFolders = value.customFolders; driveSelection = value.driveSelection
-        operationTitle = value.operationTitle
-        remoteLoadingDriveOptions = value.loadingDriveOptions
-        filters = value.filters
+        if categories != value.categories { categories = value.categories }
+        if previewToken != value.previewToken { previewToken = value.previewToken }
+        if scanning != value.scanning { scanning = value.scanning }
+        if scanned != value.scanned { scanned = value.scanned }
+        if logs != value.logs { logs = value.logs }
+        if lastReclaimed != value.lastReclaimed { lastReclaimed = value.lastReclaimed }
+        if drives != value.drives { drives = value.drives }
+        if driveOptions != value.driveOptions { driveOptions = value.driveOptions }
+        if customFolders != value.customFolders { customFolders = value.customFolders }
+        if driveSelection != value.driveSelection { driveSelection = value.driveSelection }
+        if operationTitle != value.operationTitle { operationTitle = value.operationTitle }
+        if remoteLoadingDriveOptions != value.loadingDriveOptions {
+            remoteLoadingDriveOptions = value.loadingDriveOptions
+        }
+        if filters != value.filters { filters = value.filters }
     }
 
-    private func applyRemote(_ value: CleanerUISnapshot) {
+    private func applyRemote(_ reply: CleanerUIReply) {
+        remoteStamp = reply.stamp
+        guard let value = reply.snapshot else { return }
         let wasScanning = scanning
         seed(value)
         Self.uiMemory = UIMemory(
@@ -223,18 +290,29 @@ final class CleanerModel {
         remoteDrain = track { [self] in
             defer { remoteDrain = nil }
             guard let engineClient else { return }
-            var latest: CleanerUISnapshot?
+            var latest: CleanerUIReply?
+            var failed = false
+            defer { if failed { remoteStamp = nil } }
             while !remoteQueue.isEmpty {
-                let request = remoteQueue.removeFirst()
+                var request = remoteQueue.removeFirst()
+                request.known = latest == nil && !failed ? remoteStamp : nil
                 do {
                     let payload = try JSONEncoder().encode(request)
                     let data = try await engineClient.invoke(
                         "cleaner.ui.action", payload: payload, timeout: 30)
                     guard !stopped, !suspending, !Task.isCancelled else { return }
-                    latest = try JSONDecoder().decode(CleanerUISnapshot.self, from: data)
+                    let reply = try JSONDecoder().decode(CleanerUIReply.self, from: data)
+                    if reply.snapshot == nil {
+                        remoteStamp = reply.stamp
+                        Self.uiMemory?.snapshot = uiSnapshot()
+                    } else {
+                        latest = reply
+                    }
                 } catch is CancellationError {
+                    failed = true
                     return
                 } catch {
+                    failed = true
                     guard !stopped, !suspending else { return }
                     log(error.localizedDescription)
                 }
@@ -270,31 +348,19 @@ final class CleanerModel {
         removeExternalConfirmation(path)
     }
 
-    var reclaimableTotal: Int64 { JunkScanner.uniqueBytes(categories.flatMap(\.items)) }
-
-    var visibleCategories: [JunkCategory] { filters.apply(categories, now: now()) }
-
-    var selectedTotal: Int64 {
-        CleanerOperationExecution.selectedItems(in: visibleCategories)
-            .reduce(0) { $0 + $1.sizeBytes }
-    }
-
-    var totalItemCount: Int { visibleCategories.reduce(0) { $0 + $1.items.count } }
-    var hiddenItemCount: Int {
-        categories.reduce(0) { $0 + $1.items.count } - totalItemCount
-    }
-    var selectedItemCount: Int {
-        CleanerOperationExecution.selectedItems(in: visibleCategories).count
-    }
+    var reclaimableTotal: Int64 { list.reclaimableTotal }
+    var visibleCategories: [JunkCategory] { list.visibleCategories }
+    var selectedTotal: Int64 { list.selectedTotal }
+    var totalItemCount: Int { list.totalItemCount }
+    var hiddenItemCount: Int { list.hiddenItemCount }
+    var selectedItemCount: Int { list.selectedItemCount }
 
     func selectedTotal(categoryID: String) -> Int64 {
-        CleanerOperationExecution.selectedItems(in: visibleCategories, categoryID: categoryID)
-            .reduce(0) { $0 + $1.sizeBytes }
+        list.selectionByCategory[categoryID]?.bytes ?? 0
     }
 
     func selectedItemCount(categoryID: String) -> Int {
-        CleanerOperationExecution.selectedItems(in: visibleCategories, categoryID: categoryID)
-            .count
+        list.selectionByCategory[categoryID]?.count ?? 0
     }
 
     var age: CleanerAge {
@@ -334,30 +400,11 @@ final class CleanerModel {
         }
     }
 
-    var overallSelection: JunkSelection {
-        let total = totalItemCount
-        guard total > 0 else { return .none }
-        let selected = selectedItemCount
-        if selected == 0 { return .none }
-        if selected == total { return .all }
-        return .some
-    }
+    var overallSelection: JunkSelection { list.overallSelection }
 
-    var filteredCategories: [JunkCategory] {
-        let visible = visibleCategories
-        guard !search.isEmpty else { return visible }
-        let query = search.lowercased()
-        return visible.compactMap { category in
-            if category.name.lowercased().contains(query) { return category }
-            let items = category.items.filter {
-                $0.name.lowercased().contains(query)
-                    || $0.worktree?.branch?.lowercased().contains(query) == true
-            }
-            guard !items.isEmpty else { return nil }
-            var trimmed = category
-            trimmed.items = items
-            return trimmed
-        }
+    func setItemFilter(_ text: String, categoryID: String) {
+        guard itemFilters[categoryID, default: ""] != text else { return }
+        itemFilters[categoryID] = text.isEmpty ? nil : text
     }
 
     func loadDriveOptions() {
@@ -502,7 +549,7 @@ final class CleanerModel {
             guard owns(token), !token.isCancelled else { return }
             driveOptions = all
             drives = JunkScanner.drivesForScanning(all, selectedDriveIDs: driveSelection)
-            let home = FileManager.default.homeDirectoryForCurrentUser
+            let home = CleanerHome.url
             var roots = drives.map { $0.id == "/" ? home : URL(fileURLWithPath: $0.id) }
             roots += customFolders.filter { isDriveSelected($0) }.map {
                 URL(fileURLWithPath: $0)
@@ -655,36 +702,35 @@ final class CleanerModel {
     func toggleAll() {
         guard !stopped, !suspending else { return }
         defer { if remote { sendRemote("all") } }
-        let selectAll = overallSelection != .all
-        for category in visibleCategories {
-            setSelection(selectAll, categoryID: category.id)
-        }
+        setSelection(overallSelection != .all, categoryIDs: visibleCategories.map(\.id))
     }
 
     func toggleCategory(_ id: String) {
         guard !stopped, !suspending else { return }
         defer { if remote { sendRemote("category", value: id) } }
         guard let visible = visibleCategories.first(where: { $0.id == id }) else { return }
-        setSelection(visible.selection != .all, categoryID: id)
+        setSelection(visible.selection != .all, categoryIDs: [id])
     }
 
-    private func setSelection(_ selected: Bool, categoryID: String) {
-        guard let index = categories.firstIndex(where: { $0.id == categoryID }) else { return }
+    private func setSelection(_ selected: Bool, categoryIDs: [String]) {
         let at = now()
-        let narrowed = categories[index].items.contains { !filters.admits($0, now: at) }
+        var updated = categories
         var itemChoices = overrides
-        for position in categories[index].items.indices {
-            let item = categories[index].items[position]
-            guard !narrowed || filters.admits(item, now: at) else { continue }
-            itemChoices[item.id] = narrowed ? selected : nil
-            categories[index].items[position].selected = selected
+        var categoryChoices = categoryDefaults
+        for categoryID in categoryIDs {
+            guard let index = updated.firstIndex(where: { $0.id == categoryID }) else { continue }
+            let narrowed = updated[index].items.contains { !filters.admits($0, now: at) }
+            for position in updated[index].items.indices {
+                let item = updated[index].items[position]
+                guard !narrowed || filters.admits(item, now: at) else { continue }
+                itemChoices[item.id] = narrowed ? selected : nil
+                updated[index].items[position].selected = selected
+            }
+            if !narrowed { categoryChoices[categoryID] = selected }
         }
         overrides = itemChoices
-        if !narrowed {
-            var categoryChoices = categoryDefaults
-            categoryChoices[categoryID] = selected
-            categoryDefaults = categoryChoices
-        }
+        categoryDefaults = categoryChoices
+        categories = updated
     }
 
     func toggleItem(categoryID: String, itemID: String) {
@@ -693,10 +739,12 @@ final class CleanerModel {
         guard let categoryIndex = categories.firstIndex(where: { $0.id == categoryID }),
             let itemIndex = categories[categoryIndex].items.firstIndex(where: { $0.id == itemID })
         else { return }
-        categories[categoryIndex].items[itemIndex].selected.toggle()
+        var updated = categories
+        updated[categoryIndex].items[itemIndex].selected.toggle()
         var choices = overrides
-        choices[itemID] = categories[categoryIndex].items[itemIndex].selected
+        choices[itemID] = updated[categoryIndex].items[itemIndex].selected
         overrides = choices
+        categories = updated
     }
 
     func toggleExpand(_ id: String) {

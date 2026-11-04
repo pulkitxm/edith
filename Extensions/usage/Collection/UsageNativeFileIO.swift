@@ -19,6 +19,17 @@ enum UsageNativeFileIO {
         else { throw UsageNativeFailure.unsafePath }
     }
 
+    static func ownedDirectory(_ root: URL) throws {
+        try FileManager.default.createDirectory(
+            at: root, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        var status = stat()
+        guard lstat(root.path, &status) == 0,
+            status.st_mode & S_IFMT == S_IFDIR, status.st_uid == getuid(),
+            status.st_mode & 0o022 == 0
+        else { throw UsageNativeFailure.unsafePath }
+    }
+
     static func files(under root: URL, extensions: Set<String>) throws -> [URL] {
         try Task.checkCancellation()
         var status = stat()

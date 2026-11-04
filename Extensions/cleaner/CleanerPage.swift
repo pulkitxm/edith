@@ -10,12 +10,8 @@ struct CleanerPage: View {
         PageWorkspace {
             EmptyView()
         } content: {
-            ScrollView {
-                CleanerCard(dark: scheme == .dark, framed: false, model: model)
-                    .pageContent(compact)
-            }
-            .scrollIndicators(.never)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            CleanerCard(dark: scheme == .dark, compact: compact, model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .pageTask {
             while !Task.isCancelled {

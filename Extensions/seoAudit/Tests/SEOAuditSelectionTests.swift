@@ -19,6 +19,21 @@ import Testing
         #expect(merged.selected == ["https://example.com/a", "https://example.com/b"])
     }
 
+    @Test func discoveryTreatsTheBareSiteAndItsRootAsOnePage() {
+        let merged = SEOAuditSelection.mergeDiscovery(
+            discovered: ["https://example.com"],
+            selected: ["https://example.com"],
+            found: ["https://example.com/", "https://example.com/about"])
+        #expect(merged.discovered == ["https://example.com", "https://example.com/about"])
+        #expect(merged.selected == ["https://example.com", "https://example.com/about"])
+        let repaired = SEOAuditSelection.mergeDiscovery(
+            discovered: ["https://example.com", "https://example.com/"],
+            selected: ["https://example.com", "https://example.com/"],
+            found: ["https://example.com/"])
+        #expect(repaired.discovered == ["https://example.com"])
+        #expect(repaired.selected == ["https://example.com"])
+    }
+
     @Test func chooseRejectsPagesThatWereNotDiscovered() {
         #expect(throws: SEOAuditInputError.self) {
             try SEOAuditSelection.choose(

@@ -8,7 +8,7 @@ public enum BifrostMode: String, CaseIterable, Codable, Sendable {
 
     public var title: String {
         switch self {
-        case .launcher: "Bifrost"
+        case .launcher: "Launcher"
         case .clipboard: "Clipboard History"
         case .files: "Search Files"
         }

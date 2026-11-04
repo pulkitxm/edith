@@ -28,6 +28,7 @@ to the `herdr` CLI, not to the Edith window.
 | `ed herdr send <pane> <message>` | Type a message now, when the agent finishes, or at a time |
 | `ed herdr hooks` | Messages waiting for an agent to finish |
 | `ed herdr layout` | Tabs, saved layouts, and agent terminals in the Edith window |
+| `ed herdr select` | Show one tab in the Edith window |
 | `ed herdr split <agent>` | Open an agent beside the focused pane |
 | `ed herdr move <agent>` | Move an agent into another tab |
 | `ed herdr swap <agent> <agent>` | Swap two agents in the same tab |
@@ -58,6 +59,7 @@ do not need that window.
 - [`ed herdr layout`](./layout.md)
 - [`ed herdr layout save`](./layout-save.md)
 - [`ed herdr layout delete`](./layout-delete.md)
+- [`ed herdr select`](./select.md)
 - [`ed herdr layout apply`](./layout-apply.md)
 - [`ed herdr layout even`](./layout-even.md)
 - [`ed herdr split`](./split.md)

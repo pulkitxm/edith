@@ -11,9 +11,22 @@ struct TimeLapseSources {
     var displayIDs: Set<CGDirectDisplayID> { Set(displays.map(\.displayID)) }
     var windowIDs: Set<CGWindowID> { Set(windows.map(\.windowID)) }
 
+    static func sourceError(_ error: Error) -> Error {
+        let error = error as NSError
+        guard error.domain == SCStreamErrorDomain,
+            error.code == SCStreamError.Code.userDeclined.rawValue
+        else { return error }
+        return TimeLapseError.screenRecordingDenied
+    }
+
     static func load() async throws -> Self {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            true, onScreenWindowsOnly: true)
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(
+                true, onScreenWindowsOnly: true)
+        } catch {
+            throw sourceError(error)
+        }
         try Task.checkCancellation()
         return await Task.detached(priority: .utility) {
             let displays = content.displays.sorted { $0.displayID < $1.displayID }
@@ -159,6 +172,18 @@ actor TimeLapseThumbnailLoader {
         } onCancel: {
             task.cancel()
         }
+    }
+}
+
+enum TimeLapseScreenRecordingAccess {
+    static let settingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
+
+    @MainActor static func request(
+        prompt: () -> Bool = { CGRequestScreenCaptureAccess() },
+        open: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    ) {
+        if !prompt() { open(settingsURL) }
     }
 }
 

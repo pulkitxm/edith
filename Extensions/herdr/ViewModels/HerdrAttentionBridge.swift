@@ -80,7 +80,7 @@ import Foundation
         }
         let context = Context(
             bundleID: HerdrWorker.bounded(bundleID, 256), tags: tags,
-            windowTitle: hidden ? "" : HerdrWorker.bounded(focused?.title ?? "Herdr", 1024))
+            windowTitle: hidden ? "" : HerdrWorker.bounded(focused?.title ?? "Agents", 1024))
         let contextData = try encoder.encode(context)
         guard contextData.count <= 8192 else { throw ExtensionPeerError.invalidRequest }
         _ = try await invoke("attention.context", contextData)

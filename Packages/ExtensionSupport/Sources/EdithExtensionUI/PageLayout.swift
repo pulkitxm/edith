@@ -22,13 +22,7 @@ public enum PageMetrics {
         DashSkin.heading(compact ? compactTitleSize : titleSize)
     }
 
-    public static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int)
-        -> CGFloat
-    {
-        let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
-        return max(
-            0, viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16) - scrollerWidth)
-    }
+    public static let tableNameMinimumWidth = 140.0
 
     public static func cardColumns(
         _ compact: Bool, minimum: Double, maximum: Double = .infinity,

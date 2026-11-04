@@ -1,14 +1,19 @@
 import Foundation
 import EdithExtensionSupport
 
-public struct JunkItem: Codable, Identifiable, Sendable {
+public struct JunkItem: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let path: URL
+    public let standardPath: String
     public var sizeBytes: Int64
     public var selected: Bool
     public var lastModified: Date?
     public var worktree: WorktreeInfo?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, path, sizeBytes, selected, lastModified, worktree
+    }
 
     public init(
         id: String, name: String, path: URL, sizeBytes: Int64, selected: Bool,
@@ -17,10 +22,23 @@ public struct JunkItem: Codable, Identifiable, Sendable {
         self.id = id
         self.name = name
         self.path = path
+        self.standardPath = JunkScanner.standardPath(path)
         self.sizeBytes = sizeBytes
         self.selected = selected
         self.lastModified = lastModified
         self.worktree = worktree
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            path: try container.decode(URL.self, forKey: .path),
+            sizeBytes: try container.decode(Int64.self, forKey: .sizeBytes),
+            selected: try container.decode(Bool.self, forKey: .selected),
+            lastModified: try container.decodeIfPresent(Date.self, forKey: .lastModified),
+            worktree: try container.decodeIfPresent(WorktreeInfo.self, forKey: .worktree))
     }
 }
 
@@ -28,7 +46,7 @@ public enum JunkSelection: Sendable {
     case all, none, some
 }
 
-public struct JunkCategory: Codable, Identifiable, Sendable {
+public struct JunkCategory: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let detail: String
@@ -52,7 +70,7 @@ public struct JunkCategory: Codable, Identifiable, Sendable {
     }
 }
 
-public struct DriveInfo: Codable, Identifiable, Sendable {
+public struct DriveInfo: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let totalBytes: Int64
@@ -428,15 +446,25 @@ public enum JunkScanner {
     }
 
     public static func outermost(_ items: [JunkItem]) -> [JunkItem] {
-        let paths = Set(items.map { $0.path.standardizedFileURL.path })
-        return items.filter { item in
-            var current = item.path.standardizedFileURL.deletingLastPathComponent()
-            while current.path != "/" && !current.path.isEmpty {
-                if paths.contains(current.path) { return false }
-                current = current.deletingLastPathComponent()
+        let standardized = items.map { Substring($0.standardPath) }
+        let paths = Set(standardized)
+        return zip(items, standardized).compactMap { item, path in
+            var current = path
+            while let slash = current.lastIndex(of: "/"), slash != current.startIndex {
+                current = current[..<slash]
+                if paths.contains(current) { return nil }
             }
-            return true
+            return item
         }
+    }
+
+    static func standardPath(_ url: URL) -> String {
+        let path = url.path
+        guard
+            path.contains("/./") || path.contains("/../") || path.contains("//")
+                || path.hasSuffix("/.") || path.hasSuffix("/..")
+        else { return path }
+        return url.standardizedFileURL.path
     }
 
     public static func uniqueBytes(_ items: [JunkItem]) -> Int64 {
@@ -532,9 +560,7 @@ public enum JunkScanner {
     }
 
     public static func format(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
+        bytes.formatted(.byteCount(style: .file))
     }
 
     private static let walkSkip: Set<String> = [
@@ -655,14 +681,16 @@ public enum JunkScanner {
             walk(root, depth: 0, enclosing: [])
         }
 
+        let enclosing = tallies.map { (prefix: $0.path.standardizedFileURL.path + "/", $0.latest) }
         var categories = ProjectRules.categories.compactMap { category -> JunkCategory? in
             guard let items = itemsByCategory[category.id] else { return nil }
             return JunkCategory(
                 id: category.id, name: category.name, detail: category.detail,
                 items: items.map { item in
                     var copy = item
-                    copy.lastModified = later(
-                        item.lastModified, enclosingActivity(item.path, tallies: tallies))
+                    let activity = enclosing.filter { item.standardPath.hasPrefix($0.prefix) }
+                        .compactMap(\.1).max()
+                    copy.lastModified = later(item.lastModified, activity)
                     return copy
                 })
         }
@@ -688,12 +716,6 @@ public enum JunkScanner {
             return sorted
         }
         .sorted { $0.sizeBytes > $1.sizeBytes }
-    }
-
-    private static func enclosingActivity(_ path: URL, tallies: [WorktreeTally]) -> Date? {
-        let itemPath = path.standardizedFileURL.path
-        return tallies.filter { itemPath.hasPrefix($0.path.standardizedFileURL.path + "/") }
-            .compactMap(\.latest).max()
     }
 
     private static func worktreeContainer(_ directory: URL, name: String) -> URL? {

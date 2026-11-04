@@ -87,7 +87,6 @@ struct SocialManagerPage: View {
         .overlay { HerdrDragOverlay(drag: drag, store: model) }
         .herdrDropFrame(HerdrDropGeometry.pageKey)
         .coordinateSpace(name: HerdrDragCoordinator.space)
-        .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
         .onChange(of: UIScale.current) {
             drag.unit = UIScale.current; drag.gap = UIScale.pt(6)

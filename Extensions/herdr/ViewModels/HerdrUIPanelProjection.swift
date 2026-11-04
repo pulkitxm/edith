@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-struct HerdrUIPanelTerminal: Codable {
+struct HerdrUIPanelTerminal: Codable, Equatable {
     let id: String
     let machineID: String
     let machineName: String
@@ -16,7 +16,7 @@ struct HerdrUIPanelTerminal: Codable {
     let seen: Bool
 }
 
-struct HerdrUIPanelState: Codable {
+struct HerdrUIPanelState: Codable, Equatable {
     let panels: [String: HerdrTerminalPanel]
     let focused: String?
     let maximized: Bool

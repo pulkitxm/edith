@@ -8,6 +8,13 @@ final class CleanerCancellation: @unchecked Sendable {
     func cancel() { lock.withLock { cancelled = true } }
 }
 
+enum CleanerHome {
+    static var url: URL {
+        ExtensionEnvironment["EDITH_EXTENSION_FIXTURE_HOME"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+}
+
 struct CleanerServices: Sendable {
     var drives: @Sendable () async -> [DriveInfo] = {
         await BlockingWork.value { JunkScanner.drives() }
@@ -18,7 +25,7 @@ struct CleanerServices: Sendable {
         ) async -> CleanerScanResult = { roots, cancellation, progress in
             await BlockingWork.value {
                 CleanerOperationExecution.scan(
-                    entries: JunkCatalog.entries, roots: roots,
+                    entries: JunkCatalog.entries, roots: roots, home: CleanerHome.url,
                     isCancelled: { cancellation.isCancelled }, progress: progress)
             }
         }

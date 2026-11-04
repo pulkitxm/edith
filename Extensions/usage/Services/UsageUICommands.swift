@@ -12,7 +12,21 @@ struct UsageMachineSummaryPayload: Codable, Equatable, Sendable {
     let machineID: UUID
     let cost: Double
     let days: Int
-    let collectedAt: Double
+    let collectedAt: Double?
+    let refreshFailure: String?
+
+    @MainActor static func current(directory: URL = Repo.dataDir) -> [Self] {
+        let refresh = UsageMachineRefreshLedger.load(directory: directory)
+        return MachineRegistry.machines().filter { $0.id != Machine.localID }.compactMap {
+            machine in
+            let summary = try? UsageCLIMachines.summary(machine)
+            let failure = refresh[machine.id]?.failure
+            guard summary != nil || failure != nil else { return nil }
+            return Self(
+                machineID: machine.id, cost: summary?.cost ?? 0, days: summary?.days ?? 0,
+                collectedAt: summary?.collectedAt.timeIntervalSince1970, refreshFailure: failure)
+        }
+    }
 }
 
 struct UsageUILimits: Codable, Sendable {
@@ -290,21 +304,11 @@ struct UsageUILimits: Codable, Sendable {
             return try encoder.encode(result.value)
         case "usage.ui.machines":
             try empty(object)
-            let machines =
-                SurfaceHostContext.current?.activeIDs.contains("machines") == true
-                ? MachineRegistry.machines().filter { $0.id != Machine.localID } : []
-            return try encoder.encode(machines)
+            return try encoder.encode(
+                MachineRegistry.machines().filter { $0.id != Machine.localID })
         case "usage.ui.machines.summaries":
             try empty(object)
-            let machines =
-                SurfaceHostContext.current?.activeIDs.contains("machines") == true
-                ? MachineRegistry.machines().filter { $0.id != Machine.localID } : []
-            let summaries = machines.compactMap { try? UsageCLIMachines.summary($0) }.map {
-                UsageMachineSummaryPayload(
-                    machineID: $0.machineID, cost: $0.cost, days: $0.days,
-                    collectedAt: $0.collectedAt.timeIntervalSince1970)
-            }
-            return try encoder.encode(summaries)
+            return try encoder.encode(UsageMachineSummaryPayload.current())
         default: throw ExtensionPeerError.invalidRequest
         }
     }

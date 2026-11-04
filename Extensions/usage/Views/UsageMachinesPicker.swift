@@ -82,15 +82,18 @@ struct UsageMachinesPicker: View {
                         .multilineTextAlignment(.leading)
                     if let freshness {
                         HStack(spacing: UIScale.pt(4)) {
-                            if freshness.isStale {
+                            if freshness.needsAttention {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: UIScale.pt(8)))
                             }
                             Text(freshness.statusLabel)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
                         }
                         .font(DashSkin.mono(9.5))
                         .foregroundStyle(
-                            freshness.isStale ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                            freshness.needsAttention
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                         )
                     }
                 }

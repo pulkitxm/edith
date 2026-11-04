@@ -104,11 +104,14 @@ import Foundation
                         to: directory.appendingPathComponent(
                             machine.id.uuidString.lowercased() + ".json"))
                 }
+                UsageMachineRefreshLedger.recordSuccess(machine.id)
                 if !once { setCounted(true, id: machine.id) }
                 if let summary = try summary(machine) { result.collected.append(summary) }
             } catch {
                 try Task.checkCancellation()
-                result.failures.append((machine: machine.name, reason: error.localizedDescription))
+                let reason = UsageMachinesPeer.failureReason(error)
+                UsageMachineRefreshLedger.recordFailure(machine.id, reason: reason)
+                result.failures.append((machine: machine.name, reason: reason))
             }
         }
         return result

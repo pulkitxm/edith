@@ -11,6 +11,8 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
+    var reviewsSelection: Bool { self != .history }
+
     init(hostSection: String?) {
         self = hostSection.flatMap(Self.init(rawValue:)) ?? .updates
     }
@@ -84,8 +86,10 @@ struct AppMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
-            toolbar
-            Divider()
+            if section.reviewsSelection {
+                toolbar
+                Divider()
+            }
         } content: {
             content
         }
@@ -196,6 +200,8 @@ struct AppMaintenanceView: View {
                 PageSkeleton(layout: .list)
                     .pageContent(compact)
             }
+        } else if !section.reviewsSelection {
+            sectionInventory.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if compact {
             VStack(spacing: 0) {
                 sectionInventory.frame(height: UIScale.pt(180))
@@ -384,7 +390,7 @@ struct AppMaintenanceView: View {
         switch section {
         case .updates: updateDetail
         case .removal: removalDetail
-        case .history: historyDetail
+        case .history: EmptyView()
         }
     }
 
@@ -522,20 +528,6 @@ struct AppMaintenanceView: View {
                 message: "Choose updates to review their source, command, and release information.",
                 symbol: "arrow.down.app")
         }
-    }
-
-    private var historyDetail: some View {
-        VStack(spacing: UIScale.pt(14)) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: UIScale.pt(44), weight: .light))
-                .foregroundStyle(.secondary)
-            Text("Update History").font(.edithText(.headline))
-            Text("Each attempt records its source, version, retries, result, and finish time.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: UIScale.pt(380))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var updateSettings: some View {

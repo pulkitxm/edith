@@ -9,6 +9,7 @@ struct DashboardIngestDigest {
     var sourceIndex: [String: Int] = [:]
     var machineGroups: [MachineGroup] = []
     var machineCollectionDates: [String: Date] = [:]
+    var machineRefreshFailures: [String: String] = [:]
     var defaultSources: [String] = []
     var allModels: [String] = []
     var modelIndex: [String: Int] = [:]
@@ -268,6 +269,14 @@ enum DashboardComputation {
                 return (id.uuidString.lowercased(), collectedAt)
             } ?? [],
             uniquingKeysWith: max)
+        digest.machineRefreshFailures = Dictionary(
+            parsed.machines?.compactMap { machine -> (String, String)? in
+                guard let rawID = machine.id, let id = UUID(uuidString: rawID),
+                    let failure = machine.refreshFailure, !failure.isEmpty
+                else { return nil }
+                return (id.uuidString.lowercased(), String(failure.prefix(512)))
+            } ?? [],
+            uniquingKeysWith: { first, _ in first })
         var defaults = (parsed.defaultSources ?? ids).filter { ids.contains($0) }
         if defaults.isEmpty { defaults = ids }
         digest.defaultSources = defaults

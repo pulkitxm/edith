@@ -66,10 +66,16 @@ public enum DocsAsk {
 }
 
 struct DocsSearchIndex: Sendable {
+    struct Passage: Sendable {
+        let terms: Set<String>
+        let keys: Set<String>
+    }
+
     struct Document: Sendable {
         let command: DocsCommand
         let fields: [[String: Double]]
         let lengths: [Double]
+        let passages: [Passage]
         let isGroup: Bool
     }
 
@@ -77,7 +83,9 @@ struct DocsSearchIndex: Sendable {
     static let k1 = 1.2
     static let b = 0.75
     static let relatedWeight = 0.6
-    static let groupPenalty = 0.65
+    static let groupPenalty = 0.5
+    static let passageWeight = 3.0
+    static let keyWeight = 2.0
 
     let documents: [Document]
     let frequency: [String: Int]
@@ -92,6 +100,7 @@ struct DocsSearchIndex: Sendable {
                 parents.insert(words.joined(separator: " "))
             }
         }
+        let paths = Set(commands.map(\.path))
         var documents: [Document] = []
         var frequency: [String: Int] = [:]
         for command in commands {
@@ -103,11 +112,16 @@ struct DocsSearchIndex: Sendable {
             let fields = texts.map { text in
                 DocsTerms.terms(text).reduce(into: [String: Double]()) { $0[$1, default: 0] += 1 }
             }
-            for term in Set(fields.flatMap(\.keys)) { frequency[term, default: 0] += 1 }
+            let passages =
+                page.map {
+                    Self.passages(Self.scope($0, of: command), of: command, among: paths)
+                } ?? []
+            let terms = Set(fields.flatMap(\.keys)).union(passages.flatMap(\.terms))
+            for term in terms { frequency[term, default: 0] += 1 }
             documents.append(
                 Document(
                     command: command, fields: fields,
-                    lengths: fields.map { $0.values.reduce(0, +) },
+                    lengths: fields.map { $0.values.reduce(0, +) }, passages: passages,
                     isGroup: parents.contains(command.path)))
         }
         self.documents = documents
@@ -128,7 +142,7 @@ struct DocsSearchIndex: Sendable {
                 if collecting { parts.append(heading.text) }
                 continue
             }
-            if collecting, case .paragraph = block {
+            if collecting, case .paragraph(let spans) = block, !DocsSpan.isNavigation(spans) {
                 parts.append(block.plainText)
                 if parts.count > 2 { break }
             }
@@ -136,15 +150,95 @@ struct DocsSearchIndex: Sendable {
         return parts.joined(separator: " ")
     }
 
-    func expansions(for request: String) -> (terms: [[String: Double]], words: Set<String>) {
-        var words = DocsTerms.words(request)
-        var index = 0
-        while index + 1 < words.count {
-            let joined = words[index] + words[index + 1]
-            if frequency[DocsTerms.canonical(DocsTerms.stem(joined))] != nil {
-                words.replaceSubrange(index...(index + 1), with: [joined])
+    static func scope(_ page: DocsPage, of command: DocsCommand) -> [DocsBlock] {
+        guard let anchor = command.location.anchor else {
+            return page.command == command.path
+                ? page.blocks : page.blocks.filter { mentions($0, command.path) }
+        }
+        var level: Int?
+        var blocks: [DocsBlock] = []
+        for block in page.blocks {
+            if case .heading(let heading) = block {
+                if let level, heading.level <= level { break }
+                if level == nil, heading.anchor == anchor { level = heading.level }
+                continue
             }
-            index += 1
+            if level != nil { blocks.append(block) }
+        }
+        return blocks
+    }
+
+    static func mentions(_ block: DocsBlock, _ command: String) -> Bool {
+        switch block {
+        case .paragraph, .list: DocsCommandText.mentions(block.plainText, command)
+        case .table(let table):
+            table.rows.contains {
+                $0.first.flatMap { DocsCommandText.path(in: DocsSpan.plain($0)) } == command
+            }
+        case .code(_, let text):
+            text.split(separator: "\n").contains { DocsCommandText.path(in: String($0)) == command }
+        case .heading, .rule, .quote: false
+        }
+    }
+
+    static func passages(
+        _ blocks: [DocsBlock], of command: DocsCommand, among paths: Set<String>
+    ) -> [Passage] {
+        func foreign(_ text: String) -> Bool {
+            guard let path = DocsCommandText.path(in: text), path != command.path else {
+                return false
+            }
+            return paths.contains(path) || !path.hasPrefix(command.path + " ")
+        }
+        let route = Set(DocsTerms.terms(command.route))
+        func passage(_ text: String, keys: String = "") -> Passage? {
+            let terms = Set(DocsTerms.terms(text))
+            return terms.isEmpty
+                ? nil : Passage(terms: terms, keys: Set(DocsTerms.terms(keys)).subtracting(route))
+        }
+        var passages: [Passage] = []
+        for block in blocks {
+            switch block {
+            case .paragraph(let spans):
+                guard !DocsSpan.isNavigation(spans) else { continue }
+                passages += passage(DocsSpan.plain(spans)).map { [$0] } ?? []
+            case .list(let list):
+                passages += list.items.compactMap {
+                    passage($0.map(\.plainText).joined(separator: " "))
+                }
+            case .table(let table):
+                for row in table.rows {
+                    let first = row.first.map(DocsSpan.plain) ?? ""
+                    guard !foreign(first) else { continue }
+                    let keyed = row.first?.first?.style.contains(.code) == true
+                    passages +=
+                        passage(
+                            row.map(DocsSpan.plain).joined(separator: " "),
+                            keys: keyed ? first : ""
+                        ).map { [$0] } ?? []
+                }
+            case .code(_, let text):
+                for line in text.split(separator: "\n").map(String.init) where !foreign(line) {
+                    passages += passage(line).map { [$0] } ?? []
+                }
+            case .quote(let inner):
+                passages += Self.passages(inner, of: command, among: paths)
+            case .heading, .rule:
+                continue
+            }
+        }
+        return passages
+    }
+
+    func expansions(for request: String) -> (terms: [[String: Double]], words: Set<String>) {
+        let words = DocsTerms.words(request)
+        var compounds: [String: [String]] = [:]
+        for (left, right) in zip(words, words.dropFirst()) {
+            let joined = DocsTerms.canonical(DocsTerms.stem(left + right))
+            guard frequency[joined] != nil else { continue }
+            for word in [left, right] where !DocsTerms.stopWords.contains(word) {
+                compounds[DocsTerms.canonical(DocsTerms.stem(word)), default: []].append(joined)
+            }
         }
         var seen: Set<String> = []
         let terms = DocsTerms.terms(words.joined(separator: " ")).compactMap {
@@ -152,6 +246,7 @@ struct DocsSearchIndex: Sendable {
             guard seen.insert(term).inserted else { return nil }
             var expansion = [term: 1.0]
             for related in DocsTerms.related(to: term) { expansion[related] = Self.relatedWeight }
+            for joined in compounds[term] ?? [] { expansion[joined] = 1.0 }
             return expansion
         }
         return (terms, Set(words))
@@ -161,15 +256,36 @@ struct DocsSearchIndex: Sendable {
         let (expansions, words) = expansions(for: request)
         guard !expansions.isEmpty else { return [] }
         let count = Double(documents.count)
+        func idf(_ term: String) -> Double? {
+            frequency[term].map { log(1 + (count - Double($0) + 0.5) / (Double($0) + 0.5)) }
+        }
         var scored: [(Document, Double)] = []
         for document in documents {
             var score = 0.0
             var covered = 0.0
-            for expansion in expansions {
-                var best = 0.0
+            var passageScore = 0.0
+            var passageCoverage = [Double](repeating: 0, count: expansions.count)
+            for passage in document.passages {
+                var values = [Double](repeating: 0, count: expansions.count)
+                var coverage = values
+                for (position, expansion) in expansions.enumerated() {
+                    for (term, weight) in expansion where passage.terms.contains(term) {
+                        guard let idf = idf(term) else { continue }
+                        let key = passage.keys.contains(term) ? Self.keyWeight : 1
+                        values[position] = max(values[position], weight * idf * key)
+                        coverage[position] = max(coverage[position], weight)
+                    }
+                }
+                let total = values.reduce(0, +)
+                if total > passageScore {
+                    passageScore = total
+                    passageCoverage = coverage
+                }
+            }
+            for (position, expansion) in expansions.enumerated() {
+                var best = passageCoverage[position]
                 for (term, weight) in expansion {
-                    guard let df = frequency[term] else { continue }
-                    let idf = log(1 + (count - Double(df) + 0.5) / (Double(df) + 0.5))
+                    guard let idf = idf(term) else { continue }
                     var termScore = 0.0
                     for (field, terms) in document.fields.enumerated() {
                         guard let tf = terms[term] else { continue }
@@ -184,6 +300,7 @@ struct DocsSearchIndex: Sendable {
                 }
                 covered += best
             }
+            score += Self.passageWeight * passageScore
             guard score > 0 else { continue }
             let verb = document.command.route.split(separator: " ").last.map(String.init) ?? ""
             let surface = words.contains(verb) ? 1.3 : 1

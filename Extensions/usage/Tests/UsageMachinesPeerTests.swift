@@ -253,6 +253,150 @@ import Testing
         #expect(await timed.resultReads == 0)
     }
 
+    @Test func missingMachinesProviderKeepsCachedUsageAndExplainsWhy() async throws {
+        let fixture = try MergeFixture(cacheAge: 7_200, document: await nativeDocument())
+        defer { fixture.remove() }
+        let notes = UsageMachinesNotes()
+        let merged = try await UsageMachinesPeer.merge(
+            local: try fixture.local(), policy: .due, directory: fixture.directory,
+            defaults: fixture.defaults, now: { fixture.now },
+            registry: { [fixture.machine] }, currentPeer: { nil },
+            onEvent: { if case let .note(text) = $0 { notes.append(text) } })
+        let status = UsageMachineRefreshLedger.load(directory: fixture.directory)[
+            fixture.machine.id]
+        #expect(status?.failure == UsageMachineRefreshLedger.machinesUnavailable)
+        #expect(status?.succeededAt == nil)
+        #expect(
+            notes.snapshot.contains {
+                $0.contains(UsageMachineRefreshLedger.machinesUnavailable)
+                    && $0.contains("showing the last collected usage")
+            })
+        let entry = try fixture.machineEntry(in: merged)
+        #expect(entry["refreshFailure"] as? String == UsageMachineRefreshLedger.machinesUnavailable)
+        #expect(EdithDate.parseISO(entry["collectedAt"] as? String) != nil)
+        let parsed = try JSONDecoder().decode(DashUsage.self, from: merged)
+        let digest = DashboardComputation.digest(parsed, calendar: Calendar(identifier: .gregorian))
+        #expect(
+            digest.machineRefreshFailures[fixture.machine.id.uuidString.lowercased()]
+                == UsageMachineRefreshLedger.machinesUnavailable)
+    }
+
+    @Test func dueMachinesAreCollectedEveryOtherAmbientRefreshAndRecoverFromFailure()
+        async throws
+    {
+        let document = try await nativeDocument()
+        let fixture = try MergeFixture(cacheAge: 1_790, document: document)
+        defer { fixture.remove() }
+        UsageMachineRefreshLedger.recordFailure(
+            fixture.machine.id, reason: "Connection timed out", at: fixture.now - 900,
+            directory: fixture.directory)
+        let transport = Transport(data: document)
+        let peer = UsageMachinesPeer(
+            active: { true }, invoke: { try await transport.invoke($0, payload: $1) })
+        let merged = try await UsageMachinesPeer.merge(
+            local: try fixture.local(), policy: .due, directory: fixture.directory,
+            defaults: fixture.defaults, now: { fixture.now },
+            registry: { [fixture.machine] }, currentPeer: { peer }, onEvent: { _ in })
+        #expect(await transport.releases == 1)
+        let status = UsageMachineRefreshLedger.load(directory: fixture.directory)[
+            fixture.machine.id]
+        #expect(status?.failure == nil)
+        #expect(status?.succeededAt == fixture.now)
+        #expect(try fixture.machineEntry(in: merged)["refreshFailure"] == nil)
+    }
+
+    @Test func aFailedMachineIsRetriedOnTheNextRefreshEvenWithFreshUsage() async throws {
+        let document = try await nativeDocument()
+        let fixture = try MergeFixture(cacheAge: 120, document: document)
+        defer { fixture.remove() }
+        UsageMachineRefreshLedger.recordFailure(
+            fixture.machine.id, reason: "Connection refused", at: fixture.now - 60,
+            directory: fixture.directory)
+        #expect(
+            UsageMachinesPeer.isDue(fixture.machine, directory: fixture.directory, now: fixture.now)
+        )
+        let transport = Transport(data: document)
+        let peer = UsageMachinesPeer(
+            active: { true }, invoke: { try await transport.invoke($0, payload: $1) })
+        _ = try await UsageMachinesPeer.merge(
+            local: try fixture.local(), policy: .due, directory: fixture.directory,
+            defaults: fixture.defaults, now: { fixture.now },
+            registry: { [fixture.machine] }, currentPeer: { peer }, onEvent: { _ in })
+        #expect(await transport.releases == 1)
+        #expect(
+            UsageMachineRefreshLedger.load(directory: fixture.directory)[fixture.machine.id]?
+                .failure == nil)
+        #expect(
+            !UsageMachinesPeer.isDue(
+                fixture.machine, directory: fixture.directory, now: fixture.now))
+    }
+
+    @MainActor @Test func recentlyCollectedMachinesAreNotRecollectedOrMarkedFailed() async throws {
+        let fixture = try MergeFixture(cacheAge: 600, document: await nativeDocument())
+        defer { fixture.remove() }
+        _ = try await UsageMachinesPeer.merge(
+            local: try fixture.local(), policy: .due, directory: fixture.directory,
+            defaults: fixture.defaults, now: { fixture.now },
+            registry: { [fixture.machine] }, currentPeer: { nil }, onEvent: { _ in })
+        #expect(UsageMachineRefreshLedger.load(directory: fixture.directory).isEmpty)
+        #expect(
+            !UsageRemoteRecovery.machinesNeedRecovery(
+                registry: [fixture.machine], directory: fixture.directory,
+                defaults: fixture.defaults, now: fixture.now))
+        #expect(
+            UsageRemoteRecovery.machinesNeedRecovery(
+                registry: [fixture.machine], directory: fixture.directory,
+                defaults: fixture.defaults, now: fixture.now + 900))
+    }
+
+    private struct MergeFixture {
+        let directory: URL
+        let suite: String
+        let defaults: UserDefaults
+        let machine = Machine(name: "Synthetic box", host: "192.0.2.20")
+        let now = Date(timeIntervalSince1970: 1_791_504_000)
+
+        init(cacheAge: TimeInterval, document: Data) throws {
+            directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+                UUID().uuidString)
+            suite = "usage.machines.merge." + UUID().uuidString
+            defaults = try #require(UserDefaults(suiteName: suite))
+            defaults.set([machine.id.uuidString], forKey: UsageMachinesPeer.selectedDefaultsKey)
+            let cache = directory.appendingPathComponent("machines")
+            try FileManager.default.createDirectory(
+                at: cache, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+            let file = cache.appendingPathComponent(machine.id.uuidString.lowercased() + ".json")
+            try UsageMachinesPeer.canonicalized(document, machine: machine).write(to: file)
+            try FileManager.default.setAttributes(
+                [.modificationDate: now - cacheAge], ofItemAtPath: file.path)
+        }
+
+        func remove() {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        func local() throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": 8, "generatedAt": "2026-10-09T13:00:00Z", "sources": [],
+                "defaultSources": [], "sourceMeta": [:], "sessions": [], "daily": [],
+                "totals": [
+                    "cost": 0, "tokens": 0, "inputTokens": 0, "outputTokens": 0,
+                    "cacheCreationTokens": 0, "cacheReadTokens": 0, "bySource": [:],
+                ],
+            ])
+        }
+
+        func machineEntry(in data: Data) throws -> [String: Any] {
+            let object = try #require(
+                try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let machines = try #require(object["machines"] as? [[String: Any]])
+            return try #require(
+                machines.first { ($0["id"] as? String) == machine.id.uuidString.lowercased() })
+        }
+    }
+
     private func nativeDocument() async throws -> Data {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -300,6 +444,13 @@ enum UsageMachinesInvalidProgress: CaseIterable, Sendable {
 }
 
 private enum UsageMachinesOutputFailure: Error { case rejected }
+
+private final class UsageMachinesNotes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    var snapshot: [String] { lock.withLock { values } }
+    func append(_ value: String) { lock.withLock { values.append(value) } }
+}
 
 private final class UsageMachinesProgressOutput: @unchecked Sendable {
     struct Output { let data: Data; let error: Bool }
