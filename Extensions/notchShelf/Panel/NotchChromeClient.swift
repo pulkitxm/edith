@@ -355,6 +355,12 @@ import Observation
         }
     }
 
+    func slotAnchor(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> String? {
+        slotProvider(tile: tile, kind: kind).map {
+            NotchSlotAnchorView.prefix + kind.rawValue + ":" + $0 + ":" + tile.id
+        }
+    }
+
     func slotHeight(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> Double? {
         guard let provider = slotProvider(tile: tile, kind: kind),
             let id = slotsByKey[kind.rawValue + ":" + provider + ":" + tile.id]
