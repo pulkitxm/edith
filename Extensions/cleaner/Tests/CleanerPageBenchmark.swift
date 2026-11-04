@@ -26,7 +26,7 @@ struct CleanerPageBenchmark {
         return nil
     }
 
-    @Test(arguments: [2_000, 10_000]) func pageCosts(items: Int) async throws {
+    @Test(arguments: [2_000, 5_000]) func pageCosts(items: Int) async throws {
         let suite = "synthetic.cleaner.bench." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -97,35 +97,14 @@ struct CleanerPageBenchmark {
         let roundTripMs = Self.ms(clock.now - toggleStart)
         let clickBytes = bridge.replies.map(\.bytes).max() ?? 0
 
-        func measure(_ action: () -> Void) async throws -> (
-            model: Double, frame: Double, roundTrip: Double
-        ) {
-            bridge.replies.removeAll()
-            let start = clock.now
-            action()
-            let modelMs = Self.ms(clock.now - start)
-            frame()
-            let frameMs = Self.ms(clock.now - start)
-            while bridge.replies.isEmpty { try await Task.sleep(for: .milliseconds(1)) }
-            return (modelMs, frameMs, Self.ms(clock.now - start))
-        }
-        let largest = try #require(ui.categories.max { $0.items.count < $1.items.count })
-        let categoryToggle = try await measure { ui.toggleCategory(largest.id) }
-        let allToggle = try await measure { ui.toggleAll() }
-        let engineStart = clock.now
-        engine.toggleAll()
-        let engineAllMs = Self.ms(clock.now - engineStart)
-
         let tickMean = ticks.reduce(0, +) / Double(ticks.count)
         print(
             String(
                 format:
-                    "CLEANER_BENCH items=%d fullSnapshotKB=%d pollReplyBytes=%d clickReplyBytes=%d expandMs=%.1f idleTickMeanMs=%.1f scrollFrameP50Ms=%.2f scrollFrameP95Ms=%.2f scrollFrameMaxMs=%.1f toggleFrameMs=%.1f toggleRoundTripMs=%.1f categoryFrameMs=%.1f categoryRoundTripMs=%.1f allModelMs=%.1f allFrameMs=%.1f allRoundTripMs=%.1f engineAllMs=%.1f",
+                    "CLEANER_BENCH items=%d fullSnapshotKB=%d pollReplyBytes=%d clickReplyBytes=%d expandMs=%.1f idleTickMeanMs=%.1f scrollFrameP50Ms=%.2f scrollFrameP95Ms=%.2f scrollFrameMaxMs=%.1f toggleFrameMs=%.1f toggleRoundTripMs=%.1f",
                 items, fullKB, pollKB, clickBytes, expandMs, tickMean, frames[frames.count / 2],
                 frames[Int(Double(frames.count) * 0.95)], frames.last ?? 0, toggleMs,
-                roundTripMs, categoryToggle.frame, categoryToggle.roundTrip, allToggle.model,
-                allToggle.frame,
-                allToggle.roundTrip, engineAllMs))
+                roundTripMs))
         await ui.shutdown()
         await engine.shutdown()
     }

@@ -662,7 +662,6 @@
         "Extensions/cleaner/CleanerOperations.swift",
         "Extensions/cleaner/CleanerPage.swift",
         "Extensions/cleaner/CleanerRows.swift",
-        "Extensions/cleaner/CleanerSelection.swift",
         "Extensions/cleaner/CleanerServices.swift",
         "Extensions/cleaner/CleanerViews.swift",
         "Extensions/cleaner/JunkScanner.swift",
