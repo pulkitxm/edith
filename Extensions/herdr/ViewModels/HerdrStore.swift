@@ -491,8 +491,12 @@ final class HerdrStore {
         var ids: [String] = []
         for agent in agents { ids.append(agent.id) }
         for host in hosts { ids.append(HerdrMachineTerminal.agent(for: host).id) }
-        sidebarAgentOrder.remember(ids)
-        sidebarSpaceOrder.remember(HerdrAgentSpace.group(agents).map(\.id))
+        var agentOrder = sidebarAgentOrder
+        agentOrder.remember(ids)
+        if agentOrder.ids != sidebarAgentOrder.ids { sidebarAgentOrder = agentOrder }
+        var spaceOrder = sidebarSpaceOrder
+        spaceOrder.remember(HerdrAgentSpace.group(agents).map(\.id))
+        if spaceOrder.ids != sidebarSpaceOrder.ids { sidebarSpaceOrder = spaceOrder }
     }
 
     func moveSidebarAgent(_ id: String, relativeTo target: String, after: Bool) {
@@ -2694,24 +2698,37 @@ final class HerdrStore {
         let allowed = agents + uiOpenedAgents + hosts.map { HerdrMachineTerminal.agent(for: $0) }
         let existing = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
         let ordered = layout.tabs.flatMap(\.agentIDs)
-        for session in sessions where !ordered.contains(session.id) {
+        let live = Set(ordered)
+        for session in sessions where !live.contains(session.id) {
             session.holder.stop()
             session.quinjet.stop()
         }
-        sessions = ordered.compactMap { id in
+        let next = ordered.compactMap { id in
             let current = allowed.first(where: { $0.id == id })
             var session = existing[id] ?? current.map(makeTab)
             if let current, session?.agent != current { session?.agent = current }
             session?.view = layout.views[id] ?? .agent
             return session
         }
-        tabs = layout.tabs
-        selectedTab = layout.selected
-        savedArrangements = layout.arrangements
-        for (id, view) in layout.views { HerdrAgentViews.set(view, for: id, defaults) }
+        if !HerdrOpenTab.sameSessions(sessions, next) { sessions = next }
+        adopt(\.tabs, layout.tabs)
+        adopt(\.selectedTab, layout.selected)
+        adopt(\.savedArrangements, layout.arrangements)
+        let storedViews = HerdrAgentViews.stored(defaults)
+        for (id, view) in layout.views where (storedViews[id] ?? .agent) != view {
+            HerdrAgentViews.set(view, for: id, defaults)
+        }
+    }
+
+    private func adopt<Value: Equatable>(
+        _ keyPath: ReferenceWritableKeyPath<HerdrStore, Value>, _ value: Value
+    ) {
+        guard self[keyPath: keyPath] != value else { return }
+        self[keyPath: keyPath] = value
     }
 
     func applyUIPreferences(_ values: [String: HerdrUIPreference]) {
+        guard values != uiPreferences else { return }
         let oldMouse = terminalSettings.mouse
         for key in HerdrUIEngine.preferenceKeys where values[key] == nil {
             defaults.removeObject(forKey: key)
@@ -2728,47 +2745,56 @@ final class HerdrStore {
             for tab in sessions { tab.holder.stop() }
             for terminal in terminalPanels.terminals.values { terminal.holder.stop() }
         }
-        railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
-        detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
-        animatesLayout =
-            defaults.object(forKey: AppStorageKeys.Herdr.animatesLayout) as? Bool ?? false
-        railWidth = HerdrPaneSizing.rail(
-            (defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
-                ?? HerdrPaneSizing.railDefault))
-        detailWidth = HerdrPaneSizing.detail(
-            (defaults.object(forKey: AppStorageKeys.Herdr.detailWidth) as? Double
-                ?? HerdrPaneSizing.detailDefault))
-        agentsCollapsed = defaults.bool(forKey: AppStorageKeys.Herdr.agentsCollapsed)
-        terminalsCollapsed = defaults.bool(forKey: AppStorageKeys.Herdr.terminalsCollapsed)
-        spaceGroupingEnabled = defaults.bool(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
-        collapsedSpaces = Set(
-            defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
-        sidebarAgentOrder = HerdrSidebarOrder(
-            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
-        sidebarSpaceOrder = HerdrSidebarOrder(
-            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarSpaceOrder) ?? [])
+        adopt(\.railOpen, defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true)
+        adopt(
+            \.detailOpen, defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true)
+        adopt(
+            \.animatesLayout,
+            defaults.object(forKey: AppStorageKeys.Herdr.animatesLayout) as? Bool ?? false)
+        adopt(
+            \.railWidth,
+            HerdrPaneSizing.rail(
+                (defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
+                    ?? HerdrPaneSizing.railDefault)))
+        adopt(
+            \.detailWidth,
+            HerdrPaneSizing.detail(
+                (defaults.object(forKey: AppStorageKeys.Herdr.detailWidth) as? Double
+                    ?? HerdrPaneSizing.detailDefault)))
+        adopt(\.agentsCollapsed, defaults.bool(forKey: AppStorageKeys.Herdr.agentsCollapsed))
+        adopt(\.terminalsCollapsed, defaults.bool(forKey: AppStorageKeys.Herdr.terminalsCollapsed))
+        adopt(
+            \.spaceGroupingEnabled, defaults.bool(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
+        )
+        adopt(
+            \.collapsedSpaces,
+            Set(defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? []))
+        let agentOrder = defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? []
+        if sidebarAgentOrder.ids != agentOrder { sidebarAgentOrder = HerdrSidebarOrder(agentOrder) }
+        let spaceOrder = defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarSpaceOrder) ?? []
+        if sidebarSpaceOrder.ids != spaceOrder { sidebarSpaceOrder = HerdrSidebarOrder(spaceOrder) }
     }
 
     func adoptUI(_ state: HerdrUIState) {
         adoptingUI = true
         defer { adoptingUI = false }
-        uiMachines = state.machines
-        uiBaseline = state.layout
-        uiJevConfigured = state.jevConfigured ?? false
-        uiOpenedAgents = state.openedAgents
-        hosts = state.hosts
+        adopt(\.uiMachines, state.machines)
+        adopt(\.uiBaseline, state.layout)
+        adopt(\.uiJevConfigured, state.jevConfigured ?? false)
+        adopt(\.uiOpenedAgents, state.openedAgents)
+        adopt(\.hosts, state.hosts)
         adoptSpaces(state)
-        inventoryReceived = true
-        settling = false
-        refreshing = false
+        adopt(\.inventoryReceived, true)
+        adopt(\.settling, false)
+        adopt(\.refreshing, false)
         applyUIPreferences(state.preferences)
         applyUILayout(state.layout)
         terminalPanels.adoptUI(state.panels)
-        agentStartupMessages = state.startupMessages
-        accountSessions = state.accountSessions
+        adopt(\.agentStartupMessages, state.startupMessages)
+        adopt(\.accountSessions, state.accountSessions)
         messaging.adopt(state.hooks)
         uiActivity?.adoptUI(state)
-        uiError = nil
+        adopt(\.uiError, nil)
         terminalUI?.refresh()
     }
 
@@ -2778,7 +2804,7 @@ final class HerdrStore {
     }
 
     private func adoptSpaces(_ state: HerdrUIState) {
-        uiPresentations = state.presentations
+        adopt(\.uiPresentations, state.presentations)
         let detached = state.presentations.filter { $0.location == "herdr.agent" }.map(\.target)
         for id in Array(detachedTabs.keys) where !detached.contains(id) { reattach(id) }
         for id in detached {
@@ -3038,6 +3064,14 @@ struct HerdrOpenTab: Identifiable {
 
     @MainActor var showsDiff: Bool { view.shows(.diff, beside: split.companion) }
     @MainActor var showsFiles: Bool { view.shows(.files, beside: split.companion) }
+
+    static func sameSessions(_ lhs: [HerdrOpenTab], _ rhs: [HerdrOpenTab]) -> Bool {
+        lhs.count == rhs.count
+            && zip(lhs, rhs).allSatisfy { left, right in
+                left.holder === right.holder && left.agent == right.agent
+                    && left.view == right.view && left.machine == right.machine
+            }
+    }
 }
 
 enum HerdrRailHighlight: Equatable {
