@@ -315,14 +315,111 @@ import HostWorkerFixtureSupport
         while await fixture.network.count == 0 { await Task.yield() }
         for _ in 0..<20 { await Task.yield() }
         #expect(marketplace.isBusy("sample") && marketplace.isBusy("second"))
-        #expect(await marketplace.download(id: "sample") == HostMarketplace.operationInProgress)
+        let joined = Task { await marketplace.download(id: "sample") }
+        for _ in 0..<20 { await Task.yield() }
         await fixture.network.release()
         let failures = [await first.value, await second.value]
         #expect(failures.allSatisfy { $0 != nil })
+        #expect(await joined.value == failures[0])
         #expect(await fixture.network.count == 1)
-        #expect(Set(await fixture.archives.urls) == Set(packages.map(\.downloadURL)))
+        let requested = await fixture.archives.urls
+        #expect(
+            requested.filter { $0 == packages[0].downloadURL }.count
+                == requested.filter { $0 == packages[1].downloadURL }.count)
+        #expect(Set(requested) == Set(packages.map(\.downloadURL)))
         #expect(Set(marketplace.failures.keys) == ["sample", "second"])
         #expect(!marketplace.busy)
+        #expect(marketplace.batch == nil)
+    }
+
+    @Test func aBatchShowsQueuedAndDownloadingStateWhileOtherExtensionsStayUsable() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second", "third", "fourth"]
+        let builds = try ids.map { try fixture.build("1.0.0", id: $0) }
+        try fixture.install([fixture.package("1.0.0", id: "other")])
+        await fixture.network.set(data: try fixture.envelope(packages: builds.map(\.package)))
+        let gate = Network()
+        await gate.block()
+        let marketplace = try fixture.marketplace(
+            ids: ids + ["other"], workerMode: { _ in "normal" },
+            serving: Dictionary(
+                uniqueKeysWithValues: builds.map { ($0.package.downloadURL, $0.archive) }),
+            archiveGate: gate)
+        let batch = Task { await marketplace.install(ids: ids) }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while await gate.count < HostMarketplace.concurrentDownloads,
+            ContinuousClock.now < deadline
+        {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(marketplace.batch?.total == ids.count)
+        let phases = ids.compactMap { marketplace.operations[$0]?.phase }
+        #expect(phases.filter { $0 == .downloading }.count == HostMarketplace.concurrentDownloads)
+        #expect(phases.filter { $0 == .queued }.count == 1)
+        let downloading = try #require(
+            ids.compactMap { marketplace.operations[$0] }.first { $0.phase == .downloading })
+        #expect(downloading.receivedBytes * 2 >= downloading.totalBytes - 1)
+        #expect(downloading.receivedBytes > 0)
+        #expect(marketplace.error == nil)
+        #expect(await marketplace.enable(id: "other") == nil)
+        #expect(marketplace.sessions.activeIDs.contains("other"))
+        await gate.release()
+        #expect(await batch.value.isEmpty)
+        #expect(marketplace.batch == nil)
+        #expect(marketplace.operations.isEmpty)
+        #expect(Set(marketplace.installed.keys) == Set(ids + ["other"]))
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func enabledExtensionsThatCannotRunAreDownloadedFirst() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["alpha", "beta", "gamma", "zeta"]
+        try fixture.install(
+            ids.filter { $0 != "zeta" }.map { fixture.package("1.0.0", id: $0) }
+                + [fixture.package("1.0.0", abi: "edith-host-9", id: "zeta")])
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(["zeta"], forKey: "enabledExtensions")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: ids.map { fixture.package("1.1.0", id: $0) }))
+        let gate = Network()
+        await gate.block()
+        let marketplace = try fixture.marketplace(ids: ids, archiveGate: gate)
+        await marketplace.checkForUpdates()
+        #expect(marketplace.downloadPriority("zeta") < marketplace.downloadPriority("alpha"))
+        let batch = Task { await marketplace.updateAll() }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while await gate.count < HostMarketplace.concurrentDownloads,
+            ContinuousClock.now < deadline
+        {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let started = await fixture.archives.urls.map(\.lastPathComponent)
+        #expect(started.contains("zeta.zip"))
+        #expect(!started.contains("gamma.zip"))
+        await gate.release()
+        #expect(Set(await batch.value.keys) == Set(ids))
+        #expect(marketplace.error == nil)
+    }
+
+    @Test func aFailedOrdinaryUpdateStillRecordsTheAutomaticCheck() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.1.0")]))
+        let marketplace = try fixture.marketplace()
+        let now = Date()
+        await marketplace.updateInstalledIfDue(now: now, hostBuild: "build")
+        #expect(marketplace.failures["sample"] != nil)
+        #expect(marketplace.error == nil)
+        let attempts = await fixture.archives.urls.count
+        let fetches = await fixture.network.count
+        #expect(attempts > 0)
+        await marketplace.updateInstalledIfDue(now: now.addingTimeInterval(60), hostBuild: "build")
+        #expect(await fixture.network.count == fetches)
+        #expect(await fixture.archives.urls.count == attempts)
     }
 
     @Test func aTransferThatFailsTwiceInTransitIsRetried() async throws {
@@ -1240,7 +1337,9 @@ import HostWorkerFixtureSupport
             ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil,
             serving: [URL: URL] = [:],
             verificationReceipts: HostBundleVerificationReceipts? = nil,
-            verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil
+            verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil,
+            archiveGate: Network? = nil,
+            transferProgress: HostTransferProgress = HostTransferProgress()
         ) throws
             -> HostMarketplace
         {
@@ -1260,8 +1359,10 @@ import HostWorkerFixtureSupport
                 fetch: { [network] _ in try await network.fetch() })
             let installer = ExtensionPackageInstaller(
                 store: store,
-                download: { [archives] url, _ in
+                download: { [archives] url, bytes in
                     await archives.record(url)
+                    transferProgress.report(url, bytes: bytes / 2)
+                    if let archiveGate { _ = try? await archiveGate.fetch() }
                     guard let archive = serving[url] else { throw MarketplaceError.downloadFailed }
                     let copy = FileManager.default.temporaryDirectory.appendingPathComponent(
                         "download-\(UUID().uuidString).zip")
@@ -1274,7 +1375,7 @@ import HostWorkerFixtureSupport
                     HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
                 }, store: store, catalogClient: client, installer: installer, sessions: sessions,
                 verificationReceipts: verificationReceipts,
-                verifyInstalledBundle: verifyInstalledBundle)
+                verifyInstalledBundle: verifyInstalledBundle, transferProgress: transferProgress)
         }
 
         func package(

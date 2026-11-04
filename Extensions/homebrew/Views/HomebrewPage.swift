@@ -387,6 +387,8 @@ struct HomebrewMaintenanceView: View {
 }
 
 struct HomebrewPackageTable: View {
+    static let versionWidth = 190.0
+    static let actionsWidth = 170.0
     let packages: [HomebrewPackage]
     @Binding var selection: String?
     @State private var columns = TableColumnCustomization<HomebrewPackage>()
@@ -415,10 +417,11 @@ struct HomebrewPackageTable: View {
                 .width(
                     PageMetrics.tableNameWidth(
                         viewport: geometry.size.width,
-                        fixedWidth: (compact ? 0 : 140) + 80 + (compact ? 44 : 220),
+                        fixedWidth: (compact ? 0 : Self.versionWidth) + 80
+                            + (compact ? 44 : Self.actionsWidth),
                         columnCount: compact ? 3 : 4))
                 SwiftUI.TableColumn("Version") { Text($0.versionSummary).monospacedDigit() }
-                    .width(UIScale.pt(140))
+                    .width(UIScale.pt(Self.versionWidth))
                     .customizationID("version")
                     .defaultVisibility(compact ? .hidden : .visible)
                 SwiftUI.TableColumn("Status") { package in
@@ -443,7 +446,7 @@ struct HomebrewPackageTable: View {
                             .disabled(disabled)
                     }
                 }
-                .width(UIScale.pt(compact ? 44 : 220))
+                .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
             }
             .font(.edithText(.callout))
             .accessibilityLabel("Homebrew packages")

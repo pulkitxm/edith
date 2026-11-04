@@ -888,6 +888,7 @@ final class HerdrTerminalPanels {
     }
 
     func adoptUI(_ state: HerdrUIPanelState) {
+        guard state != uiState else { return }
         adoptingUI = true
         defer { adoptingUI = false }
         let current = terminals

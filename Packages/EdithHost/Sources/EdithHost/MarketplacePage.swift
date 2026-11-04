@@ -47,12 +47,15 @@ struct MarketplacePage: View {
     var body: some View {
         PageWorkspace {
             PageHeader("Extensions") {
-                if !marketplace.updatableIDs.isEmpty {
-                    Button(
-                        marketplace.busy
-                            ? "Updating..." : "Update all (\(marketplace.updatableIDs.count))"
-                    ) { Task { await marketplace.updateAll() } }
-                    .buttonStyle(.edith(.primary)).disabled(busy || marketplace.busy)
+                if let batch = marketplace.batch {
+                    HostMarketplaceBatchStatus(
+                        batch: batch, progress: marketplace.batchProgress,
+                        bytesPerSecond: marketplace.batchBytesPerSecond)
+                } else if !marketplace.updatableIDs.isEmpty {
+                    Button("Update all (\(marketplace.updatableIDs.count))") {
+                        Task { await marketplace.updateAll() }
+                    }
+                    .buttonStyle(.edith(.primary)).disabled(busy)
                 }
                 Button("Check for Updates") { Task { await marketplace.checkForUpdates() } }
                     .buttonStyle(.edith(.secondary)).disabled(busy || marketplace.refreshingCatalog)
@@ -238,7 +241,7 @@ struct MarketplacePage: View {
                 "\(shownOn(entry.id) ? "Enabled" : "Disabled") · \(package.version)"
         }
         return marketplace.installedVersions[entry.id]?.isEmpty == false
-            ? "Needs a compatible update" : "Not installed"
+            ? "Update required for this version of Edith" : "Not installed"
     }
 
     private func shownOn(_ id: String) -> Bool {
@@ -248,11 +251,16 @@ struct MarketplacePage: View {
 
     @ViewBuilder private func controls(_ entry: HostExtension) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            if marketplace.isBusy(entry.id) {
-                LoadingProgress(value: marketplace.progress(for: entry.id)).frame(
-                    width: UIScale.pt(90)
-                )
-                .accessibilityLabel("Working on \(entry.title)")
+            if let operation = marketplace.operations[entry.id] {
+                LoadingProgress(value: operation.fraction).frame(width: UIScale.pt(90))
+                    .accessibilityLabel("Working on \(entry.title)")
+                if operation.phase != .working {
+                    Text(operation.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .monospacedDigit().lineLimit(1)
+                }
+            } else if marketplace.isBusy(entry.id) {
+                LoadingProgress(value: 0).frame(width: UIScale.pt(90))
+                    .accessibilityLabel("Working on \(entry.title)")
             } else if marketplace.installed[entry.id] != nil {
                 if marketplace.updateAvailable(id: entry.id) {
                     Button("Update") { Task { await marketplace.download(id: entry.id) } }
@@ -322,6 +330,29 @@ struct MarketplacePage: View {
         DispatchQueue.main.async {
             proxy.scrollTo(entry.id, anchor: .center); selected = entry
         }
+    }
+}
+
+struct HostMarketplaceBatchStatus: View {
+    let batch: HostExtensionBatch
+    let progress: Double
+    let bytesPerSecond: Double
+
+    private var title: String {
+        "Updating \(min(batch.finished + 1, batch.total)) of \(batch.total)"
+    }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            LoadingProgress(value: progress).frame(width: UIScale.pt(80))
+            Text(title).font(.edithText(.callout)).monospacedDigit()
+            if bytesPerSecond >= 1 {
+                Text(HostExtensionOperation.rate(bytesPerSecond)).font(.edithText(.caption))
+                    .foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
     }
 }
 

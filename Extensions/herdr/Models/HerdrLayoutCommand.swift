@@ -113,6 +113,7 @@ public struct HerdrLayoutSnapshot: Codable, Equatable, Sendable {
 
 public enum HerdrLayoutRequest: Codable, Equatable, Sendable {
     case status
+    case select(String)
     case closeTab(String)
     case closeOthers(String)
     case closeRight(String)

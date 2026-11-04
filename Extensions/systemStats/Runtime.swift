@@ -10,6 +10,7 @@ import Foundation
 
 @MainActor
 final class SystemStatsService: ExtensionService {
+    static let title = "Menu Bar Stats"
     private unowned let runtime: ExtensionServiceRuntime
     private var item: SystemStatsStatusItem?
     private let uiDefaults: UserDefaults
@@ -136,7 +137,7 @@ final class SystemStatsService: ExtensionService {
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
                     PageWorkspace {
-                        PageHeader("System Stats")
+                        PageHeader(SystemStatsService.title)
                     } content: {
                         Form {
                             Section("Usage") {
@@ -145,7 +146,7 @@ final class SystemStatsService: ExtensionService {
                                         cpu: presentation.state.cpu,
                                         memory: presentation.state.memory)
                                 } else {
-                                    Text("Enable System Stats to see live readings.")
+                                    Text("Enable \(SystemStatsService.title) to see live readings.")
                                         .settingsCaption()
                                 }
                             }

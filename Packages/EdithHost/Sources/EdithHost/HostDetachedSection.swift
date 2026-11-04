@@ -43,6 +43,6 @@ struct HostDetachedSection: View {
                 "section", selection: Binding(get: { destination.id }, set: { _ in }),
                 isValid: { $0.isEmpty || $0 == destination.id })
         }
-        .tracksWindowVisibility()
+        .tracksHostWindowVisibility()
     }
 }

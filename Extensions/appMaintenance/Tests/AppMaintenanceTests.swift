@@ -27,6 +27,9 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
         #expect(AppMaintenanceSection.removal.uiScope == .removal)
         #expect(AppMaintenanceSection.history.uiScope == .history)
         #expect(AppMaintenanceSection.updates.uiScope == .updates)
+        #expect(AppMaintenanceSection.updates.reviewsSelection)
+        #expect(AppMaintenanceSection.removal.reviewsSelection)
+        #expect(!AppMaintenanceSection.history.reviewsSelection)
     }
 
     @Test func inventoryFindsRegularAppsAndAppliesExactHomebrewUpdates() throws {

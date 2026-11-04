@@ -463,7 +463,7 @@ public struct HostCLIProviderRegistry: Sendable {
                 action: .invoke, id: provider.state.id, operation: executionOperation,
                 payload: request, timeout: command.timeout))
         try Task.checkCancellation()
-        guard try await Self.states(invoke: invoke).contains(provider.state) else {
+        guard try await Self.states(invoke: invoke).contains(where: provider.state.matches) else {
             throw HostCLIError.rejected("The command provider changed before its result arrived.")
         }
         let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: data)

@@ -56,6 +56,23 @@ extension DatabaseCLI {
         return DatabaseTargetIdentifier(connectionID: identifier, object: object)
     }
 
+    static func rootTarget(connectionID: String) async throws -> DatabaseTargetIdentifier {
+        let identifier = try self.connectionID(connectionID)
+        let response = try await send(
+            .connectionGet(DatabaseConnectionGetRequest(connectionID: identifier)))
+        let payload = try self.payload(
+            response.connectionGetResult, response: response, expected: .connectionGet)
+        guard let connection = payload.connection else {
+            throw CLIFailure.notFound(
+                "no saved database connection with id \(connectionID)",
+                hint: "run `ed database connections list --json` to see connection IDs")
+        }
+        return DatabaseTargetIdentifier(
+            connectionID: identifier,
+            object: DatabaseObjectExplorerModel.rootObject(
+                for: DatabaseConnectionSummary(definition: connection)))
+    }
+
     static func pageRequest(limit: Int, continuation: String?) throws -> DatabasePageRequest {
         let size: DatabasePageSize
         do {
@@ -532,8 +549,11 @@ struct DatabaseBrowseCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let target = try DatabaseCLI.target(
-                connectionID: connectionID, kind: kind, path: path, requiresObject: false)
+            let target =
+                path.isEmpty
+                ? try await DatabaseCLI.rootTarget(connectionID: connectionID)
+                : try DatabaseCLI.target(
+                    connectionID: connectionID, kind: kind, path: path, requiresObject: false)
             let page = try DatabaseCLI.pageRequest(limit: limit, continuation: continuation)
             let operation = try DatabaseCLI.operationContext(
                 timeoutMilliseconds: timeoutMilliseconds)

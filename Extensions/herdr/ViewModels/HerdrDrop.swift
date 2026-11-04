@@ -249,7 +249,20 @@ final class HerdrDragCoordinator {
         .make(frames: frames, order: store?.orderedTabIDs ?? [])
     }
 
+    func setFrame(_ frame: CGRect, for key: String, owner: UUID) {
+        frameOwners[key] = owner
+        guard frames[key] != frame else { return }
+        frames[key] = frame
+    }
+
+    func removeFrame(for key: String, owner: UUID) {
+        guard frameOwners[key] == owner else { return }
+        frameOwners[key] = nil
+        frames[key] = nil
+    }
+
     @ObservationIgnored weak var store: HerdrStore?
+    @ObservationIgnored private var frameOwners: [String: UUID] = [:]
     @ObservationIgnored var gap: CGFloat = 6
     @ObservationIgnored var unit: CGFloat = 1
     @ObservationIgnored var onTearOff: ((HerdrAgent) -> Void)?
@@ -397,26 +410,30 @@ final class HerdrDragCoordinator {
     }
 }
 
-struct HerdrDropFrames: PreferenceKey {
-    static let defaultValue: [String: CGRect] = [:]
-
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
-    }
-}
-
 extension View {
     func herdrDropFrame(_ key: String) -> some View {
-        background(
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: HerdrDropFrames.self,
-                    value: [key: proxy.frame(in: .named(HerdrDragCoordinator.space))])
-            })
+        modifier(HerdrDropFrame(key: key))
     }
 
     func herdrDraggable(_ item: HerdrDragItem, simultaneous: Bool = false) -> some View {
         modifier(HerdrDraggable(item: item, simultaneous: simultaneous))
+    }
+}
+
+private struct HerdrDropFrame: ViewModifier {
+    let key: String
+
+    @Environment(HerdrDragCoordinator.self) private var drag: HerdrDragCoordinator?
+    @State private var owner = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) {
+                $0.frame(in: .named(HerdrDragCoordinator.space))
+            } action: { frame in
+                drag?.setFrame(frame, for: key, owner: owner)
+            }
+            .onDisappear { drag?.removeFrame(for: key, owner: owner) }
     }
 }
 

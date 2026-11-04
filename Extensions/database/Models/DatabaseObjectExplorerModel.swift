@@ -97,10 +97,12 @@ final class DatabaseObjectExplorerModel {
             return
         }
         prepare(for: connection)
+        guard let root = Self.rootObject(for: connection) else {
+            loadDatabaseGroups(connection)
+            return
+        }
         switch connection.product {
         case .redis, .valkey:
-            let database = connection.logicalDatabase ?? "0"
-            let object = DatabaseObjectIdentifier(kind: .keyspace, path: [database])
             groups = [
                 DatabaseExplorerGroup(
                     identifier: DatabaseObjectIdentifier(kind: .server, path: []),
@@ -108,54 +110,49 @@ final class DatabaseObjectExplorerModel {
                     isAvailable: true,
                     objects: [
                         DatabaseExplorerObject(
-                            identifier: object,
-                            title: "Database \(database)",
+                            identifier: root,
+                            title: "Database \(root.path.first ?? "0")",
                             estimatedRows: nil,
                             columnCount: nil)
                     ],
                     state: .loaded,
                     nextContinuation: nil)
             ]
-            selectedObject = object
+            selectedObject = root
             state = .loaded
         case .postgresql:
-            loadPostgreSQL(connection)
+            loadPostgreSQL(connection, root: root)
+        default:
+            let group = DatabaseExplorerGroup(
+                identifier: root,
+                title: root.kind == .server ? "Search objects" : root.path.first ?? "",
+                isAvailable: true,
+                objects: [],
+                state: .idle,
+                nextContinuation: nil)
+            groups = [group]
+            state = .loaded
+            loadGroup(group.identifier, connection: connection)
+        }
+    }
+
+    nonisolated static func rootObject(
+        for connection: DatabaseConnectionSummary
+    ) -> DatabaseObjectIdentifier? {
+        switch connection.product {
+        case .redis, .valkey:
+            DatabaseObjectIdentifier(kind: .keyspace, path: [connection.logicalDatabase ?? "0"])
+        case .postgresql:
+            DatabaseObjectIdentifier(
+                kind: .database, path: [connection.defaultDatabase ?? connection.name])
         case .sqlite:
-            let group = DatabaseExplorerGroup(
-                identifier: DatabaseObjectIdentifier(kind: .schema, path: ["main"]),
-                title: "main",
-                isAvailable: true,
-                objects: [],
-                state: .idle,
-                nextContinuation: nil)
-            groups = [group]
-            state = .loaded
-            loadGroup(group.identifier, connection: connection)
+            DatabaseObjectIdentifier(kind: .schema, path: ["main"])
         case .mongoDB:
-            let database = connection.defaultDatabase ?? "admin"
-            let group = DatabaseExplorerGroup(
-                identifier: DatabaseObjectIdentifier(kind: .database, path: [database]),
-                title: database,
-                isAvailable: true,
-                objects: [],
-                state: .idle,
-                nextContinuation: nil)
-            groups = [group]
-            state = .loaded
-            loadGroup(group.identifier, connection: connection)
+            DatabaseObjectIdentifier(kind: .database, path: [connection.defaultDatabase ?? "admin"])
         case .elasticsearch, .openSearch:
-            let group = DatabaseExplorerGroup(
-                identifier: DatabaseObjectIdentifier(kind: .server, path: ["indices"]),
-                title: "Search objects",
-                isAvailable: true,
-                objects: [],
-                state: .idle,
-                nextContinuation: nil)
-            groups = [group]
-            state = .loaded
-            loadGroup(group.identifier, connection: connection)
+            DatabaseObjectIdentifier(kind: .server, path: ["indices"])
         case .mysql, .mariaDB, .clickHouse:
-            loadDatabaseGroups(connection)
+            nil
         }
     }
 
@@ -214,7 +211,9 @@ final class DatabaseObjectExplorerModel {
         }
     }
 
-    private func loadPostgreSQL(_ connection: DatabaseConnectionSummary) {
+    private func loadPostgreSQL(
+        _ connection: DatabaseConnectionSummary, root: DatabaseObjectIdentifier
+    ) {
         activeTask?.cancel()
         let requestGeneration = UUID()
         generation = requestGeneration
@@ -224,11 +223,7 @@ final class DatabaseObjectExplorerModel {
             do {
                 let response = try await sender.send(
                     .browse(
-                        Self.discoveryRequest(
-                            connectionID: connection.id,
-                            object: DatabaseObjectIdentifier(
-                                kind: .database,
-                                path: [connection.defaultDatabase ?? connection.name]))))
+                        Self.discoveryRequest(connectionID: connection.id, object: root)))
                 try Task.checkCancellation()
                 let page = try Self.page(from: response)
                 let groups = try Self.postgreSQLGroups(from: page.records)

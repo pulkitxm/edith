@@ -90,9 +90,12 @@ public enum TimeLapseError: LocalizedError {
     case encoding(String)
     case empty
     case invalidSession
+    case screenRecordingDenied
 
     public var errorDescription: String? {
         switch self {
+        case .screenRecordingDenied:
+            "Edith needs Screen Recording access to list your displays and windows. Allow it in System Settings, then try again."
         case .invalidSettings:
             "Choose a supported recording mode, frame rate, speed and capture quality."
         case .missingSource: "The selected display or windows are unavailable. Refresh sources."
