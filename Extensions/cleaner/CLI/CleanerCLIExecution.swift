@@ -3,12 +3,7 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum CleanerCLIEnvironment {
-    static var home: URL {
-        if ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
-            return ExtensionData.root
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
-    }
+    static var home: URL { CleanerHome.url }
     static var drives: () -> [DriveInfo] = { JunkScanner.drives() }
     static var reclaim: @Sendable ([JunkItem], Progress) -> CleanerCleanResult = { items, token in
         var reclaimed: Int64 = 0
