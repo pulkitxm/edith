@@ -31,7 +31,8 @@ struct HostNotchSlotMotionTests {
         let slot = slot()
         let rectangle = CGRect(x: 10, y: 40, width: 100, height: 60)
         container.attach(slot, rectangle: rectangle, native: true)
-        #expect(slot.view.clipsToBounds)
+        #expect(slot.view.superview?.clipsToBounds == true)
+        #expect(container.placedFrame(of: slot) == rectangle)
     }
 
     @Test func movedSlotGlidesToItsNewFrame() {
@@ -40,7 +41,18 @@ struct HostNotchSlotMotionTests {
         container.attach(slot, rectangle: CGRect(x: 10, y: 0, width: 100, height: 30), native: true)
         container.attach(slot, rectangle: CGRect(x: 40, y: 0, width: 160, height: 30), native: true)
         #expect(container.slotAnimating)
-        #expect(slot.view.frame == CGRect(x: 40, y: 0, width: 160, height: 30))
+        #expect(container.placedFrame(of: slot) == CGRect(x: 40, y: 0, width: 160, height: 30))
+    }
+
+    @Test func detachingACardRemovesItsClip() {
+        let container = container()
+        let slot = slot()
+        container.attach(slot, rectangle: CGRect(x: 10, y: 0, width: 100, height: 30), native: true)
+        let clip = slot.view.superview
+        #expect(clip != nil)
+        slot.view.removeFromSuperview()
+        #expect(clip?.superview == nil)
+        #expect(container.placedFrame(of: slot) == nil)
     }
 
     @Test func unchangedFrameDoesNotRestartTheGlide() {

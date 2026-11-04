@@ -374,6 +374,11 @@ public final class GhosttyTerminalView: NSView {
 
     private func applySize() {
         guard let surface, !bounds.isEmpty else { return }
+        guard
+            Self.shouldApplySize(
+                sized: appliedPixelSize != nil, active: renderingActive,
+                hidden: isHiddenOrHasHiddenAncestor)
+        else { return }
         let scale = window?.backingScaleFactor ?? 2
         let width = UInt32(max(1, bounds.width * scale))
         let height = UInt32(max(1, bounds.height * scale))
@@ -412,6 +417,7 @@ public final class GhosttyTerminalView: NSView {
 
     public override func viewDidUnhide() {
         super.viewDidUnhide()
+        applySize()
         applyPresentationState()
         scheduleDraw()
     }
@@ -424,6 +430,7 @@ public final class GhosttyTerminalView: NSView {
             mouseOverSurface = false
             cancelSelectionGesture()
         }
+        applySize()
         syncFocus()
         applyPresentationState()
         scheduleDraw()
@@ -545,6 +552,10 @@ public final class GhosttyTerminalView: NSView {
 
     static func shouldRender(active: Bool, hidden: Bool, windowVisible: Bool) -> Bool {
         active && !hidden && windowVisible
+    }
+
+    static func shouldApplySize(sized: Bool, active: Bool, hidden: Bool) -> Bool {
+        !sized || (active && !hidden)
     }
 
     static func shouldFocus(active: Bool, keyWindow: Bool, firstResponder: Bool) -> Bool {

@@ -58,6 +58,29 @@ import Testing
         #expect(remote.entriesLoaded)
     }
 
+    @Test func playIsOfferedOnlyWhenTheViewHasSomethingToPlay() async throws {
+        let remote = EmbeddedMusicRemote()
+        var tracks: [String] = []
+        remote.configure { operation, _ in
+            switch operation {
+            case "music.ui.cachedListing": return Data("null".utf8)
+            case "music.ui.read": return try JSONEncoder().encode(self.state(folderTracks: tracks))
+            default: return Data("{}".utf8)
+            }
+        }
+        defer { remote.stop() }
+        remote.navigate(to: "")
+        try await settle { remote.entriesLoaded }
+        #expect(!remote.canPlayView)
+        remote.openFavourites()
+        try await settle { remote.favouritesLoaded }
+        #expect(!remote.canPlayView)
+        tracks = ["fresh.wav"]
+        remote.navigate(to: "")
+        try await settle { !remote.folderTracks.isEmpty }
+        #expect(remote.canPlayView)
+    }
+
     @Test func missingCacheKeepsTheSkeletonUntilTheFreshRead() async throws {
         let remote = EmbeddedMusicRemote()
         let fresh = try JSONEncoder().encode(state(folderTracks: ["A/fresh.wav"]))

@@ -4,7 +4,16 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum HerdrCLICatalog {
+    private static var cached: Data?
+
     static func data() throws -> Data {
+        if let cached { return cached }
+        let data = try build()
+        cached = data
+        return data
+    }
+
+    private static func build() throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "version": 1, "owner": "herdr", "commands": commands(HerdrCLICommand.self, route: []),
             "settings": [], "acceptsInput": true,

@@ -40,7 +40,9 @@ struct HostNotchPanelAssemblyTests {
             owner.requests.contains { $0.extensionID == "notchShelf" && $0.section == "panel.1" })
         let card = try #require(owner.leases.first { $0.request.extensionID == "music" })
         #expect(card.controller.parent === assembly.container)
-        #expect(card.controller.view.frame == state.slots.first?.rectangle.frame)
+        #expect(
+            assembly.container.placedFrame(of: card.controller)
+                == state.slots.first?.rectangle.frame)
         #expect(card.controller.view.superview?.isFlipped == true)
         #expect(card.controller.view.superview !== assembly.container.view)
         #expect(presentations == 1)
@@ -63,7 +65,8 @@ struct HostNotchPanelAssemblyTests {
         await settle { assembly.attachedCount == 2 }
         let card = try #require(owner.leases.first { $0.request.extensionID == "music" })
         let chrome = try #require(owner.leases.first { $0.request.extensionID == "notchShelf" })
-        let point = CGPoint(x: card.controller.view.frame.midX, y: card.controller.view.frame.midY)
+        let placed = try #require(assembly.container.placedFrame(of: card.controller))
+        let point = CGPoint(x: placed.midX, y: placed.midY)
         let hitPoint = assembly.container.view.convert(point, to: assembly.container.view.superview)
         #expect(assembly.container.view.hitTest(hitPoint) === chrome.controller.view)
         #expect(card.controller.parent === assembly.container)
@@ -125,8 +128,9 @@ struct HostNotchPanelAssemblyTests {
             admission: fixture.admission(previousRevision: 1))
         #expect(owner.requests.count == 2)
         #expect(
-            owner.leases.first { $0.request.extensionID == "music" }?.controller.view.frame
-                == moved.rectangle.frame)
+            owner.leases.first { $0.request.extensionID == "music" }.flatMap {
+                assembly.container.placedFrame(of: $0.controller)
+            } == moved.rectangle.frame)
         var tile = slot.tile
         tile.dense = true
         let changed = HostNotchNativeSlot(

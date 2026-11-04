@@ -17,7 +17,7 @@ struct BifrostSettings: View {
     var context: BifrostUIContext? = nil
     var body: some View {
         PageWorkspace {
-            PageHeader("Bifrost")
+            PageHeader(BifrostMode.launcher.title)
         } content: {
             Form { BifrostRows() }.formStyle(.grouped).edithForm()
         }.pageTask { await context?.load() }

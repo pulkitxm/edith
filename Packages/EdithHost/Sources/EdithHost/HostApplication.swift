@@ -54,7 +54,7 @@ struct HostApplication: App {
                     if delegate.launchedAtLogin { delegate.mainWindow()?.close() }
                 }
             }
-            .tracksWindowVisibility()
+            .tracksHostWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)
             .onAppear {
                 UIScale.apply(zoom); applyAppearance(appearance)
