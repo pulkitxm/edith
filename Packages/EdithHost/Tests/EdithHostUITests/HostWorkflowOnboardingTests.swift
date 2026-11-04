@@ -3,6 +3,10 @@ import EdithHostCore
 import ExtensionMarketplace
 import Foundation
 import Testing
+import AppKit
+import SwiftUI
+import EdithExtensionUI
+import HostAccessibilityFixtureSupport
 
 @testable import EdithHost
 
@@ -27,6 +31,72 @@ import Testing
         #expect(!usage.summary.contains("unknown"))
         #expect(usage.summary != herdr.summary)
         #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
+    @Test func reviewShowsOneCostLineAndEachPackageSizeOnItsRow() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.available = [
+            "usage": package("usage", bytes: 2_000_000),
+            "herdr": package("herdr", bytes: 11_000_000),
+        ]
+        _ = TestWindowHost.application
+        let accessibility = try HostAccessibilityFixture.enable()
+        defer { for error in accessibility.restore() { Issue.record(error) } }
+        let model = fixture.model()
+        model.present()
+        model.choose(.agents)
+        for scheme in [ColorScheme.light, .dark] {
+            let host = NSHostingView(
+                rootView: HostWorkflowOnboardingView(model: model, progress: { _ in 0 })
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .environment(\.colorScheme, scheme)
+                    .padding(24)
+                    .frame(width: 760, alignment: .top)
+                    .background(DashSkin.paper(scheme == .dark)))
+            host.frame = CGRect(x: 0, y: 0, width: 760, height: 620)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            var text: [String] = []
+            for _ in 0..<40 where !text.contains(where: { $0.contains("on disk") }) {
+                window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(40))
+                text = Self.strings(in: host)
+            }
+            #expect(text.contains { $0.contains("to download · about") && $0.contains("on disk") })
+            #expect(!text.contains { $0.contains("APFS") || $0.contains("unpacked package") })
+            #expect(
+                text.contains(
+                    ByteCountFormatter.string(fromByteCount: 2_000_000, countStyle: .file)))
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: URL(fileURLWithPath: capture).appendingPathComponent(
+                        "onboarding-review-\(scheme).png"), options: .atomic)
+            }
+            window.orderOut(nil)
+        }
+        #expect(fixture.installs.isEmpty && fixture.active.isEmpty)
+    }
+
+    private static func strings(in view: NSView) -> [String] {
+        var found: [String] = []
+        func visit(_ element: Any) {
+            if let label = (element as AnyObject).accessibilityLabel?(), !label.isEmpty {
+                found.append(label)
+            }
+            if let element = element as? NSAccessibilityElementProtocol & NSObject,
+                let value = element.value(forKey: "accessibilityValue") as? String, !value.isEmpty
+            {
+                found.append(value)
+            }
+            for child in (element as AnyObject).accessibilityChildren?() ?? [] { visit(child) }
+        }
+        visit(view)
+        return found
     }
 
     @Test func downloadedPackageWithoutCatalogMetadataDoesNotInventVersionOrZeroSizes() {

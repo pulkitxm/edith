@@ -86,8 +86,6 @@ struct HostHomePage: View {
 private struct HostHomeHeader: View {
     let dark: Bool
     @Binding var editing: Bool
-    @Environment(\.compactLayout) private var compact
-    @Environment(\.windowVisible) private var visible
     let layouts: SurfaceLayoutStore
     let customize: () -> Void
     @Environment(\.surfaceSampleContent) private var sampleContent
@@ -103,13 +101,6 @@ private struct HostHomeHeader: View {
         return name.split(separator: " ").first.map(String.init) ?? name
     }
 
-    private func clockString(_ now: Date) -> String {
-        let cal = Calendar.current
-        return String(
-            format: "%d:%02d:%02d", ((cal.component(.hour, from: now) + 11) % 12) + 1,
-            cal.component(.minute, from: now), cal.component(.second, from: now))
-    }
-
     private func salutation(_ date: Date) -> String {
         switch Calendar.current.component(.hour, from: date) {
         case 5..<12: "Good morning"
@@ -120,18 +111,14 @@ private struct HostHomeHeader: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: visible ? 1 : 60)) { context in
+        TimelineView(.everyMinute) { context in
             let now = context.date
             PageHeader {
                 greeting(now)
             } trailing: {
-                HStack(spacing: UIScale.pt(16)) {
-                    if !compact { clockBlock(now, alignment: .trailing) }
-                    layoutControls
-                }
+                layoutControls
             } accessory: {
                 subtitle(now)
-                if compact { clockBlock(now, alignment: .leading) }
                 if editing {
                     Text("Drag a widget handle to place it. Drag a corner to resize.")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -142,17 +129,20 @@ private struct HostHomeHeader: View {
 
     private var layoutControls: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button("Auto fit") {
-                layouts.update(.home) {
-                    $0.arrangeAutomatically()
-                    $0.balancedRows = true
+            if editing {
+                Button("Auto fit") {
+                    layouts.update(.home) {
+                        $0.arrangeAutomatically()
+                        $0.balancedRows = true
+                    }
                 }
+                .buttonStyle(.edith(.secondary))
             }
+            Button("Widget editor") { customize() }.buttonStyle(.edith(.secondary))
             Button(editing ? "Done" : "Edit layout") { editing.toggle() }
-            Button("Widget editor") { customize() }
+                .buttonStyle(.edith(editing ? .primary : .secondary))
         }
         .font(.edithText(.caption))
-        .buttonStyle(.edith(.secondary))
     }
 
     private func greeting(_ now: Date) -> some View {
@@ -162,33 +152,7 @@ private struct HostHomeHeader: View {
     }
 
     private func subtitle(_ now: Date) -> some View {
-        Text(
-            now.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
-                .uppercased()
-        )
-        .font(DashSkin.mono(11)).tracking(UIScale.pt(1.6))
-        .foregroundStyle(DashSkin.inkFaint(dark))
-        .lineLimit(1).minimumScaleFactor(0.7)
-    }
-
-    private func clockText(_ date: Date) -> some View {
-        Text(clockString(date))
-            .font(PageMetrics.titleFont(compact))
-            .foregroundStyle(DashSkin.ink(dark))
-            .monospacedDigit()
-            .lineLimit(1).minimumScaleFactor(0.6)
-    }
-
-    private func clockBlock(_ now: Date, alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: UIScale.pt(2)) {
-            clockText(now)
-            Text(
-                "\(Calendar.current.component(.hour, from: now) < 12 ? "AM" : "PM")"
-                    + " · \(TimeZone.current.abbreviation() ?? "local")"
-            )
-            .font(DashSkin.mono(11)).tracking(UIScale.pt(1.2))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-        }
+        PageSubtitle(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
     }
 }
 

@@ -95,47 +95,36 @@ struct HostSidebarFooter: View {
                             music.transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                         if let version = updater.updateReady {
-                            Button {
-                                updater.checkForUpdates()
-                            } label: {
-                                HStack(spacing: UIScale.pt(6)) {
-                                    Image(systemName: "arrow.down.circle.fill")
-                                    Text("Update ready").font(
-                                        .system(size: UIScale.pt(11.5), weight: .semibold))
-                                    Text("v\(version)").font(
-                                        .system(size: UIScale.pt(10.5), weight: .medium)
-                                    ).opacity(0.75)
-                                    Spacer(minLength: 0)
-                                }.foregroundStyle(DashSkin.sage).padding(.horizontal, UIScale.pt(9))
-                                    .frame(height: UIScale.pt(28)).background(
-                                        .thinMaterial,
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                    )
-                            }.buttonStyle(.edith(.borderless)).help("Show update options")
+                            HostSidebarNotice(
+                                symbol: "arrow.down.circle.fill", title: "Update ready",
+                                detail: "v\(version)", tint: DashSkin.sage,
+                                action: updater.checkForUpdates
+                            ).help("Show update options")
                         }
                         utilityRow([.system, .keepAwake])
                         utilityRow([.lidAwake, .keystrokeHighlight])
                         if utilities.contains(.presenter) {
-                            HStack(spacing: 0) {
-                                utility(.presenter, background: false)
-                                Rectangle().fill(
-                                    actions.isOn(.presenter)
-                                        ? Color.white.opacity(0.24) : Color.primary.opacity(0.08)
-                                )
-                                .frame(width: UIScale.pt(1), height: UIScale.pt(28))
+                            HStack(spacing: UIScale.pt(6)) {
+                                utility(.presenter)
                                 Button {
                                     presenterSettings.toggle()
                                 } label: {
-                                    Image(systemName: "chevron.right").font(
-                                        .system(size: UIScale.pt(10), weight: .semibold)
-                                    )
-                                    .symbolEffect(.bounce, value: presenterSettings)
-                                    .frame(width: UIScale.pt(30), height: UIScale.pt(46))
-                                    .contentShape(
-                                        Rectangle())
-                                }.buttonStyle(.edith(.borderless)).help(
-                                    "Choose what Presenter mode blurs"
-                                )
+                                    Image(systemName: "slider.horizontal.3")
+                                        .font(.edithText(.caption))
+                                        .frame(
+                                            width: UIScale.pt(30),
+                                            height: HostSidebarUtilityButton.height
+                                        )
+                                        .background(
+                                            Color.primary.opacity(0.05),
+                                            in: RoundedRectangle(
+                                                cornerRadius: HostSidebarUtilityButton.radius)
+                                        )
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.edith(.borderless))
+                                .foregroundStyle(.secondary)
+                                .help("Choose what Presenter mode blurs")
                                 .accessibilityLabel("Presenter privacy settings")
                                 .popover(isPresented: $presenterSettings, arrowEdge: .leading) {
                                     HostExtensionContent(
@@ -147,32 +136,14 @@ struct HostSidebarFooter: View {
                                     .frame(width: UIScale.pt(250))
                                     .frame(maxHeight: UIScale.pt(440))
                                 }
-                            }.foregroundStyle(
-                                actions.isOn(.presenter)
-                                    ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary)
-                            )
-                            .background(
-                                actions.isOn(.presenter)
-                                    ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                            }
                         }
                         if missingPermissions {
-                            Button(action: openPermissions) {
-                                HStack(spacing: UIScale.pt(6)) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                    Text("Permissions need attention").font(
-                                        .system(size: UIScale.pt(11), weight: .medium))
-                                    Spacer(minLength: 0)
-                                }.foregroundStyle(.orange).padding(.horizontal, UIScale.pt(8))
-                                    .frame(
-                                        height: UIScale.pt(26)
-                                    )
-                                    .background(
-                                        Color.orange.opacity(0.14),
-                                        in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
-                            }.buttonStyle(.edith(.borderless)).help("Open Permissions settings")
+                            HostSidebarNotice(
+                                symbol: "exclamationmark.triangle.fill",
+                                title: "Permissions needed", tint: DashSkin.warn,
+                                action: openPermissions
+                            ).help("Open Permissions settings")
                         }
                     }.padding(UIScale.pt(10))
                 }.transition(utilityTransition)
@@ -211,19 +182,18 @@ struct HostSidebarFooter: View {
     @ViewBuilder private func utilityRow(_ row: [HostSidebarUtility]) -> some View {
         let available = row.filter(utilities.contains)
         if available.count == 2 && sidebarWidth >= 220 {
-            HStack(spacing: UIScale.pt(8)) { ForEach(available) { utility($0) } }
+            HStack(spacing: UIScale.pt(6)) { ForEach(available) { utility($0) } }
                 .transition(utilityTransition)
         } else {
             ForEach(available) { utility($0).transition(utilityTransition) }
         }
     }
 
-    private func utility(_ value: HostSidebarUtility, background: Bool = true) -> some View {
+    private func utility(_ value: HostSidebarUtility) -> some View {
         HostSidebarUtilityButton(
             utility: value,
             active: value != .system && actions.isOn(value),
             theme: theme,
-            background: background,
             action: { perform(value) }
         )
     }
@@ -291,10 +261,11 @@ private struct HostUtilityAlerts: ViewModifier {
 }
 
 struct HostSidebarUtilityButton: View {
+    static var height: CGFloat { UIScale.pt(30) }
+    static var radius: CGFloat { UIScale.pt(8) }
     let utility: HostSidebarUtility
     let active: Bool
     let theme: Color
-    var background = true
     let action: () -> Void
     @State private var clicks = 0
     var body: some View {
@@ -302,21 +273,55 @@ struct HostSidebarUtilityButton: View {
             clicks += 1
             action()
         } label: {
-            VStack(spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(7)) {
                 Image(systemName: utility == .keepAwake && active ? "moon.zzz.fill" : utility.icon)
-                    .font(.system(size: UIScale.pt(14)))
+                    .font(.edithText(.caption))
+                    .frame(width: UIScale.pt(16))
                     .symbolEffect(.bounce, value: utility == .system ? clicks : (active ? 1 : 0))
-                Text(utility.title).font(.system(size: UIScale.pt(10), weight: .medium)).lineLimit(
-                    1)
-            }.frame(maxWidth: .infinity).padding(.vertical, UIScale.pt(8))
-                .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                .background(
-                    background
-                        ? (active ? AnyShapeStyle(theme) : AnyShapeStyle(.thinMaterial))
-                        : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                )
-                .contentShape(Rectangle())
-        }.buttonStyle(.edith(.borderless)).help(utility.help).accessibilityLabel(utility.title)
+                Text(utility.title).font(.edithText(.caption).weight(.medium)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, UIScale.pt(9))
+            .frame(maxWidth: .infinity, minHeight: Self.height)
+            .foregroundStyle(active ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+            .background(
+                active ? theme.opacity(0.16) : Color.primary.opacity(0.05),
+                in: RoundedRectangle(cornerRadius: Self.radius)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless)).help(utility.help).accessibilityLabel(utility.title)
+        .accessibilityValue(utility == .system ? "" : (active ? "On" : "Off"))
+    }
+}
+
+struct HostSidebarNotice: View {
+    let symbol: String
+    let title: String
+    var detail: String? = nil
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: UIScale.pt(7)) {
+                Image(systemName: symbol).frame(width: UIScale.pt(16))
+                Text(title).fontWeight(.medium).lineLimit(1)
+                if let detail { Text(detail).opacity(0.75).lineLimit(1) }
+                Spacer(minLength: 0)
+            }
+            .font(.edithText(.caption))
+            .foregroundStyle(tint)
+            .padding(.horizontal, UIScale.pt(9))
+            .frame(minHeight: HostSidebarUtilityButton.height)
+            .background(
+                tint.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: HostSidebarUtilityButton.radius)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityLabel(detail.map { "\(title), \($0)" } ?? title)
     }
 }
 
