@@ -11,4 +11,8 @@ import Testing
         let title = try #require((package as? [String: Any])?["title"] as? String)
         #expect(BlitzTreePage.title == title)
     }
+
+    @Test func settingsNameTheExtensionByItsCatalogTitle() throws {
+        #expect(BlitzTreeSettings.summaryName == "Disk Map")
+    }
 }

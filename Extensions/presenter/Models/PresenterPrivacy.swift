@@ -88,6 +88,35 @@ public enum PresenterPrivacy: String, CaseIterable, Hashable, Identifiable, Send
         }
     }
 
+    public var providerIDs: Set<String> {
+        switch self {
+        case .music: ["music"]
+        case .money, .usage: ["usage", "codeStats"]
+        case .calendar: ["calendar"]
+        case .agents: ["herdr"]
+        case .attention: ["attention"]
+        case .camera: ["virtualCamera", "notchShelf"]
+        case .studio: ["studio", "downloads", "timeLapse", "audioMixer"]
+        case .database: ["database"]
+        case .memory: ["companion"]
+        case .fleet: ["machines"]
+        case .review: ["quinjet"]
+        case .siteAudit: ["seoAudit"]
+        case .runningApps: ["system", "bifrost"]
+        case .shelf: ["notchShelf", "plugins"]
+        case .browser: ["notchShelf"]
+        }
+    }
+
+    public static func listed(enabledIDs: Set<String>?) -> [PresenterPrivacy] {
+        guard let enabledIDs else { return allCases }
+        return allCases.filter { !$0.providerIDs.isDisjoint(with: enabledIDs) }
+    }
+
+    @MainActor public static var listed: [PresenterPrivacy] {
+        listed(enabledIDs: SurfaceHostContext.current?.enabledIDs)
+    }
+
     public func isEnabled(in defaults: UserDefaults) -> Bool {
         defaults.object(forKey: storageKey) as? Bool ?? fallback
     }

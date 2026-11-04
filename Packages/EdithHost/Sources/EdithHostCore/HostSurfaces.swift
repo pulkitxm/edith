@@ -63,14 +63,19 @@ public final class HostSurfaces {
             return try await endpoint.invoke(command, payload: payload, timeout: 5)
         }
         self.requests = requests
-        let publish: @MainActor () -> Void = {
+        let publish: @MainActor () -> Void = { [weak sessions] in
             releasePresenter()
             let versions = activeVersions()
+            let enabled =
+                sessions.map { $0.enabledIDs.subtracting($0.pendingDisableIDs).intersection(known) }
+                ?? []
             guard let data = try? JSONEncoder().encode(versions.keys.sorted()),
-                let encodedVersions = try? JSONEncoder().encode(versions)
+                let encodedVersions = try? JSONEncoder().encode(versions),
+                let encodedEnabled = try? JSONEncoder().encode(enabled.sorted())
             else { return }
             try? channel.publish([
                 "surface.activeIDs": String(decoding: data, as: UTF8.self),
+                "surface.enabledIDs": String(decoding: encodedEnabled, as: UTF8.self),
                 "surface.activeVersions": String(decoding: encodedVersions, as: UTF8.self),
                 "surface.revision": UUID().uuidString,
             ])
