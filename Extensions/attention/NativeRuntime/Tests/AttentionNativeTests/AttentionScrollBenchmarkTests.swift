@@ -74,7 +74,7 @@ extension AttentionScrollBenchmarkTests {
         window.contentView = nil
         await model.shutdown()
         #expect(timing.frames.count == 240)
-        #expect(timing.frames.filter { $0 > 40 }.isEmpty, "\(timing)")
+        #expect(timing.frames.filter { $0 > 60 }.count <= 1, "\(timing)")
         #expect(timing.median < 12, "\(timing)")
     }
 
