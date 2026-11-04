@@ -112,7 +112,6 @@ struct HerdrPage: View {
         .overlay { HerdrDragOverlay(drag: drag, store: store, hideAgents: hideAgents) }
         .herdrDropFrame(HerdrDropGeometry.pageKey)
         .coordinateSpace(name: HerdrDragCoordinator.space)
-        .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
         .navigationRoute(
             "view", selection: viewBinding, isValid: herdrViewIsValid,
