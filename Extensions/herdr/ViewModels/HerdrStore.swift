@@ -1565,6 +1565,12 @@ final class HerdrStore {
         closeTabs(withIDs: ids)
     }
 
+    func selectConfirmed(_ tabID: String) -> String? {
+        guard tabID == Self.boardID || tab(tabID) != nil else { return "no tab matches \(tabID)" }
+        selectedTab = tabID
+        return nil
+    }
+
     func closeTabConfirmed(_ tabID: String) -> String? {
         guard tab(tabID) != nil else { return "no tab matches \(tabID)" }
         closeTabsConfirmed([tabID])
