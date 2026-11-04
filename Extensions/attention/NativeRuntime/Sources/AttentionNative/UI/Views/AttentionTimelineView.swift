@@ -274,7 +274,9 @@ private struct AttentionTimelineRowView: View {
             }
             .padding(.top, UIScale.pt(AttentionTimelineMetrics.cardPadding))
             .padding(.horizontal, UIScale.pt(AttentionTimelineMetrics.cardPadding))
-            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
+            .frame(
+                maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading
+            )
             .background { AttentionCardSlice(position: .top) }
             .padding(.horizontal, gutter)
         case .empty:
