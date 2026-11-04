@@ -157,13 +157,42 @@ import Testing
         }
     }
 
-    @Test func existingPublicStorageRemainsRejectedByRemoteProjection() async throws {
+    @Test func existingReadableStorageStillProjectsIntoPrivateStaging() async throws {
         let directory = temporary()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o755])
-        try UsageDataLock.withLock(dataDirectory: directory) {}
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        let machine = sampleMachine()
+        let snapshot = try fixture(machine)
+        let transport = Transport(data: snapshot, machine: machine)
+        let projection = service(directory, transport: transport)
+        let receipt = try JSONDecoder().decode(
+            UsageMachinesPeer.Receipt.self,
+            from: await projection.execute(
+                "usage.machines.project", payload: request(machine, snapshot)))
+        #expect(receipt.byteCount > 0)
+        #expect(
+            (try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
+                as? NSNumber)?.intValue == 0o755)
+        for child in ["remote-staging", "remote-archives"] {
+            #expect(
+                (try FileManager.default.attributesOfItem(
+                    atPath: directory.appendingPathComponent(child).path)[.posixPermissions]
+                    as? NSNumber)?.intValue == 0o700)
+        }
+        await projection.shutdown()
+    }
+
+    @Test func writableSharedStorageRemainsRejectedByRemoteProjection() async throws {
+        let directory = temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o775], ofItemAtPath: directory.path)
         let machine = sampleMachine()
         let snapshot = try fixture(machine)
         let transport = Transport(data: snapshot, machine: machine)
@@ -172,9 +201,6 @@ import Testing
             _ = try await projection.execute(
                 "usage.machines.project", payload: request(machine, snapshot))
         }
-        #expect(
-            (try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
-                as? NSNumber)?.intValue == 0o755)
         await projection.shutdown()
     }
 
