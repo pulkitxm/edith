@@ -32,6 +32,15 @@ public struct HostSurfaceAvailability: Sendable {
         installedIDs.intersection(knownIDs).filter { states[$0] == .active || states[$0] == .idle }
     }
 
+    public var navigableIDs: Set<String> {
+        installedIDs.intersection(knownIDs).filter {
+            switch states[$0] {
+            case .active, .idle, .starting: true
+            default: false
+            }
+        }
+    }
+
     public func status(_ widget: SurfaceWidget) -> HostSurfaceAvailabilityState {
         if widget == .clocks || !widget.providerIDs.isDisjoint(with: activeIDs) { return .active }
         let providers = widget.providerIDs.intersection(knownIDs)
