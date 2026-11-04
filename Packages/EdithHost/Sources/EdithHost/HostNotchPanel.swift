@@ -6,21 +6,26 @@ import QuartzCore
 final class HostNotchPanel: NSPanel {
     var acceptsKeyFocus = false
     var transferEvent: NSEvent?
+    private let scrolling = HostNotchScrollRouter()
 
     override func sendEvent(_ event: NSEvent) {
         if [.leftMouseDown, .leftMouseDragged].contains(event.type), event.window === self {
             transferEvent = event
         }
-        if event.type == .scrollWheel,
-            let target = (contentViewController as? HostNotchContainerController)?
-                .chromeScrollTarget(
-                    at: event.locationInWindow, deltaX: event.scrollingDeltaX,
-                    deltaY: event.scrollingDeltaY)
-        {
-            target.scrollWheel(with: event)
+        guard event.type == .scrollWheel,
+            let container = contentViewController as? HostNotchContainerController
+        else {
+            super.sendEvent(event)
             return
         }
-        super.sendEvent(event)
+        scrolling.route(event, resolve: { container.scrollTarget(at: $0, axis: $1) }) {
+            event, target in
+            if let target {
+                target.scrollWheel(with: event)
+            } else {
+                super.sendEvent(event)
+            }
+        }
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if TextEditingCommands.handle(event) { return true }
@@ -70,44 +75,76 @@ final class HostNotchContainerController: NSViewController {
         nativeLayer.frame = view.bounds
         nativeLayer.autoresizingMask = [.width, .height]
         view.addSubview(nativeLayer)
+        anchorObservation = NotificationCenter.default.addObserver(
+            forName: HostNotchSlotAnchor.appeared, object: nil, queue: nil
+        ) { [weak self] note in
+            guard let anchor = note.object as? NSView else { return }
+            MainActor.assumeIsolated { self?.anchorAppeared(anchor) }
+        }
     }
 
-    func chromeScrollTarget(at windowPoint: CGPoint, deltaX: CGFloat, deltaY: CGFloat) -> NSView? {
-        guard isViewLoaded, abs(deltaX) > abs(deltaY) else { return nil }
+    private var anchorObservation: NSObjectProtocol?
+
+    func scrollTarget(at windowPoint: CGPoint, axis: HostNotchScrollAxis) -> NSView? {
+        guard isViewLoaded else { return nil }
         let point = root.convert(windowPoint, from: nil)
-        guard nativeLayer.hitTest(point) != nil else { return nil }
+        if let card = nativeLayer.hitTest(point) {
+            switch HostNotchScrollOwner.find(from: card, axis: axis, boundary: nativeLayer) {
+            case .scroller(let scroller): return scroller
+            case .view: return nil
+            case .none: break
+            }
+        }
         for chrome in root.subviews.reversed() where chrome !== nativeLayer {
-            if let target = chrome.hitTest(point) { return target }
+            guard let hit = chrome.hitTest(point) else { continue }
+            if case .scroller(let scroller) = HostNotchScrollOwner.find(
+                from: hit, axis: axis, boundary: root)
+            {
+                return scroller
+            }
+            return nil
         }
         return nil
     }
 
-    func attach(_ controller: NSViewController, rectangle: CGRect?, native: Bool) {
+    func attach(
+        _ controller: NSViewController, rectangle: CGRect?, native: Bool, anchor: String? = nil
+    ) {
         loadViewIfNeeded()
         if controller.parent !== self { addChild(controller) }
-        let container = native ? nativeLayer : view
-        let alreadyPlaced = controller.view.superview === container
-        if controller.view.superview !== container {
-            if native {
-                container.addSubview(controller.view)
-            } else {
-                container.addSubview(controller.view, positioned: .below, relativeTo: nativeLayer)
+        guard native else {
+            if controller.view.superview !== root {
+                root.addSubview(controller.view, positioned: .below, relativeTo: nativeLayer)
             }
+            controller.view.frame = rectangle ?? view.bounds
+            controller.view.autoresizingMask = [.width, .height]
+            return
         }
+        let card = controller.view
+        let existing = card.superview as? HostNotchSlotClip
+        let clip =
+            existing.flatMap { $0.superview === nativeLayer ? $0 : nil } ?? HostNotchSlotClip()
+        if clip.superview !== nativeLayer {
+            nativeLayer.addSubview(clip)
+            clip.addSubview(card)
+        }
+        clip.anchorIdentifier = anchor
         let target = rectangle ?? view.bounds
-        let slot = controller.view
-        if native {
-            slot.wantsLayer = true
-            slot.clipsToBounds = true
+        if let anchor, let found = anchorView(anchor) {
+            clip.follow(found, below: root)
+            return
         }
-        let wasPlaced = native && alreadyPlaced && slot.frame != target
-        let layer = wasPlaced ? slot.layer : nil
+        clip.stopFollowing()
+        clip.isHidden = false
+        let wasPlaced = existing === clip && clip.frame != target
+        let layer = wasPlaced ? clip.layer : nil
         let fromPosition = layer.map { $0.presentation()?.position ?? $0.position }
         let fromBounds = layer.map { $0.presentation()?.bounds ?? $0.bounds }
-        slot.frame = target
-        slot.autoresizingMask = native ? [] : [.width, .height]
+        clip.frame = target
+        card.frame = clip.bounds
+        card.autoresizingMask = [.width, .height]
         guard wasPlaced, let layer, let fromPosition, let fromBounds else { return }
-        layer.removeAnimation(forKey: "slotGlide")
+        layer.removeAnimation(forKey: HostNotchSlotClip.glideKey)
         let group = CAAnimationGroup()
         let position = glide.animation(
             keyPath: "position", from: NSValue(point: fromPosition),
@@ -116,11 +153,37 @@ final class HostNotchContainerController: NSViewController {
             keyPath: "bounds", from: NSValue(rect: fromBounds), to: NSValue(rect: layer.bounds))
         group.animations = [position, bounds]
         group.duration = max(position.duration, bounds.duration)
-        layer.add(group, forKey: "slotGlide")
+        layer.add(group, forKey: HostNotchSlotClip.glideKey)
+    }
+
+    func placedFrame(of controller: NSViewController) -> CGRect? {
+        guard controller.isViewLoaded, let clip = controller.view.superview as? HostNotchSlotClip,
+            clip.superview === nativeLayer
+        else { return nil }
+        return controller.view.convert(controller.view.bounds, to: root)
+    }
+
+    private func anchorView(_ identifier: String) -> NSView? {
+        for chrome in root.subviews where chrome !== nativeLayer {
+            if let found = HostNotchSlotAnchor.find(identifier, in: chrome) { return found }
+        }
+        return nil
+    }
+
+    private func anchorAppeared(_ anchor: NSView) {
+        guard isViewLoaded, anchor.isDescendant(of: root), !anchor.isDescendant(of: nativeLayer),
+            let identifier = anchor.identifier?.rawValue
+        else { return }
+        for case let clip as HostNotchSlotClip in nativeLayer.subviews
+        where clip.anchorIdentifier == identifier && clip.anchor !== anchor {
+            clip.follow(anchor, below: root)
+        }
     }
 
     var slotAnimating: Bool {
-        nativeLayer.subviews.contains { $0.layer?.animation(forKey: "slotGlide") != nil }
+        nativeLayer.subviews.contains {
+            $0.layer?.animation(forKey: HostNotchSlotClip.glideKey) != nil
+        }
     }
 
     func apply(_ state: HostNotchPanelState, size: CGSize) {

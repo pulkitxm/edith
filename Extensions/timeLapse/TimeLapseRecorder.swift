@@ -31,6 +31,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var preview: CGImage?
     var sourceRevision = 0
     let sourceLoad = ContentLoad()
+    var screenRecordingDenied: Bool {
+        sourceLoad.errorMessage == TimeLapseError.screenRecordingDenied.errorDescription
+    }
     let library: TimeLapseLibraryModel
     private let exportLibrary: TimeLapseExportLibrary?
     private var engineClient: ExtensionEngineClient?

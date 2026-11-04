@@ -78,9 +78,17 @@ enum SEOAuditSelection {
         return SEOAuditProject(name: resolved, baseURL: url.absoluteString)
     }
 
+    static func pageKey(_ value: String) -> String {
+        guard var components = URLComponents(string: value), components.host != nil,
+            components.path.isEmpty
+        else { return value }
+        components.path = "/"
+        return components.string ?? value
+    }
+
     static func unique(_ values: [String]) -> [String] {
         var seen = Set<String>()
-        return values.filter { seen.insert($0).inserted }
+        return values.filter { seen.insert(pageKey($0)).inserted }
     }
 
     static func knownPageURLs(in project: SEOAuditProject) -> [String] {
@@ -94,12 +102,13 @@ enum SEOAuditSelection {
     static func mergeDiscovery(
         discovered: [String], selected: Set<String>, found: [String]
     ) -> (discovered: [String], selected: [String]) {
-        let previous = Set(discovered)
-        var nextSelected = selected
-        nextSelected.formUnion(Set(found).subtracting(previous))
+        let previous = Set(discovered.map(pageKey))
+        var nextSelected = Set(selected.map(pageKey))
+        nextSelected.formUnion(found.map(pageKey).filter { !previous.contains($0) })
         let nextDiscovered = unique(discovered + found)
-        let chosen = nextDiscovered.filter { nextSelected.contains($0) }
-        let extras = nextSelected.subtracting(Set(nextDiscovered)).sorted()
+        let discoveredKeys = Set(nextDiscovered.map(pageKey))
+        let chosen = nextDiscovered.filter { nextSelected.contains(pageKey($0)) }
+        let extras = unique(selected.filter { !discoveredKeys.contains(pageKey($0)) }.sorted())
         return (nextDiscovered, chosen + extras)
     }
 
