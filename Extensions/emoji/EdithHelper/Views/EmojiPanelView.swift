@@ -230,8 +230,8 @@ struct EmojiPanelView: View {
         return Button {
             activate(emoji, copyOnly: false)
         } label: {
-            Text(character)
-                .font(.system(size: 22))
+            Image(nsImage: EmojiGlyphImages.shared.image(for: character))
+                .accessibilityLabel(emoji.name)
                 .frame(width: Self.cellSize, height: Self.cellSize)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
