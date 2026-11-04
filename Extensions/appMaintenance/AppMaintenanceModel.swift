@@ -153,8 +153,12 @@ final class AppMaintenanceModel {
                 + updates.compactMap(\.applicationPath)
                 + [installPlan?.sourceApplication.url.path].compactMap { $0 })
     }
+    @ObservationIgnored private var icons: [String: NSImage] = [:]
     func icon(for path: String) -> NSImage {
-        NSWorkspace.shared.icon(forFile: path)
+        if let cached = icons[path] { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        icons[path] = icon
+        return icon
     }
 
     func reveal(_ url: URL) {

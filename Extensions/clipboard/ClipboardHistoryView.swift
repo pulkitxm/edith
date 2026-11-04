@@ -12,29 +12,25 @@ struct ClipboardHistoryView: View {
     @State private var filterText = ""
     private var entries: [ClipboardEntry] { model.entries }
 
-    private var filtered: [ClipboardEntry] {
-        ClipboardActions.arrange(entries, query: filterText)
-    }
-
-    private var summary: String {
+    private func summary(shown: Int) -> String {
         var parts = [entries.count == 1 ? "1 item" : "\(entries.count) items"]
         parts.append(
             Self.byteCountFormatter.string(fromByteCount: Int64(entries.reduce(0) { $0 + $1.size }))
         )
         let pinned = entries.filter(\.pinned).count
         if pinned > 0 { parts.append("\(pinned) pinned") }
-        let shown = filtered.count
         if shown != entries.count { parts.append("\(shown) shown") }
         return parts.joined(separator: " · ")
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        let filtered = ClipboardActions.arrange(entries, query: filterText)
+        return VStack(spacing: UIScale.pt(0)) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("Clipboard History")
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    Text(summary)
+                    Text(summary(shown: filtered.count))
                         .settingsCaption()
                 }
                 Spacer()
@@ -47,21 +43,37 @@ struct ClipboardHistoryView: View {
             Divider()
             SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
                 .padding(UIScale.pt(10))
-            List(filtered) { entry in
-                row(entry)
+            VirtualList(
+                filtered, rowHeight: { _ in ClipboardHistoryRow.height }, header: { EmptyView() }
+            ) { entry in
+                ClipboardHistoryRow(entry: entry, model: model).id(entry.id)
             }
-            .listStyle(.inset)
         }
         .frame(width: PresentationMetrics.width(480), height: PresentationMetrics.height(520))
         .pageTask(cancel: { model.stop() }) { model.start() }
     }
 
-    private func row(_ entry: ClipboardEntry) -> some View {
-        HStack(alignment: .top, spacing: UIScale.pt(10)) {
+    fileprivate static let byteCountFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter
+    }()
+}
+
+private struct ClipboardHistoryRow: View {
+    @MainActor static var height: CGFloat { UIScale.pt(58) }
+
+    let entry: ClipboardEntry
+    let model: ClipboardHistoryModel
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+
+    var body: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(10)) {
             ClipboardThumbnailView(
                 entry: entry, maxHeight: entry.kind == .text ? 18 : 40, client: model.client
             ) {
-                Image(systemName: icon(for: entry.kind))
+                Image(systemName: icon)
                     .foregroundStyle(.secondary)
                     .frame(width: UIScale.pt(18))
             }
@@ -75,7 +87,9 @@ struct ClipboardHistoryView: View {
                     Text("·")
                     Text(entry.createdAt.formatted(.relative(presentation: .named)))
                     Text("·")
-                    Text(Self.byteCountFormatter.string(fromByteCount: Int64(entry.size)))
+                    Text(
+                        ClipboardHistoryView.byteCountFormatter.string(
+                            fromByteCount: Int64(entry.size)))
                 }
                 .settingsCaption()
             }
@@ -104,11 +118,13 @@ struct ClipboardHistoryView: View {
             }
             .buttonStyle(.edith(.borderless))
         }
-        .padding(.vertical, UIScale.pt(4))
+        .padding(.horizontal, UIScale.pt(14))
+        .frame(height: Self.height)
+        .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }
 
-    private func icon(for kind: ClipboardEntry.Kind) -> String {
-        switch kind {
+    private var icon: String {
+        switch entry.kind {
         case .image: return "photo"
         case .file: return "doc"
         case .richText, .html: return "doc.richtext"
@@ -118,10 +134,4 @@ struct ClipboardHistoryView: View {
         case .data: return "externaldrive"
         }
     }
-
-    private static let byteCountFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }
