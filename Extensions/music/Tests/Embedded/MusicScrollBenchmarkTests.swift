@@ -10,16 +10,21 @@ import Testing
 @MainActor @Suite(.serialized) struct MusicScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
 
-    @Test(.enabled(if: enabled)) func scrollingTracksAndFavouritesWithSyntheticLibrary() async throws
+    @Test(.enabled(if: enabled)) func scrollingTracksAndFavouritesWithSyntheticLibrary()
+        async throws
     {
+        let only = ProcessInfo.processInfo.environment["EDITH_SCROLL_CASE"]
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
         for favourites in [false, true] {
-            for sweep in [false, true] {
+            for pace in MusicScrollPace.allCases
+            where only == nil
+                || only == "\(favourites ? "favourites" : "tracks")-\(pace.rawValue)"
+            {
                 let timing = try await MusicSyntheticLibrary.measure(
                     tracks: 5000, favourites: 1000, showingFavourites: favourites, frames: frames,
-                    sweep: sweep)
+                    pace: pace)
                 print(
-                    "music-scroll \(favourites ? "favourites-1000" : "tracks-5000") \(sweep ? "full-sweep" : "steady"): \(timing)"
+                    "music-scroll \(favourites ? "favourites-1000" : "tracks-5000") \(pace.rawValue): \(timing)"
                 )
             }
         }
@@ -30,6 +35,18 @@ import Testing
             tracks: 600, favourites: 200, showingFavourites: false, frames: 60)
         #expect(timing.worst < 80)
         #expect(timing.median < 12)
+    }
+}
+
+enum MusicScrollPace: String, CaseIterable {
+    case steady, fling, sweep
+
+    @MainActor func step(documentHeight: CGFloat, frames: Int) -> CGFloat {
+        switch self {
+        case .steady: 24
+        case .fling: 100
+        case .sweep: max(24, documentHeight / CGFloat(frames))
+        }
     }
 }
 
@@ -69,7 +86,8 @@ enum MusicSyntheticLibrary {
     }()
 
     static func measure(
-        tracks: Int, favourites: Int, showingFavourites: Bool, frames: Int, sweep: Bool = false
+        tracks: Int, favourites: Int, showingFavourites: Bool, frames: Int,
+        pace: MusicScrollPace = .steady
     ) async throws -> MusicScrollTiming {
         let remote = EmbeddedMusicRemote.shared
         let encoded = try JSONEncoder().encode(state(tracks: tracks, favourites: favourites))
@@ -92,7 +110,9 @@ enum MusicSyntheticLibrary {
             EmbeddedTrackMeta.clear()
         }
         remote.rescan()
-        for _ in 0..<400 where !remote.entriesLoaded { try await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<400 where !remote.entriesLoaded {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         if showingFavourites { remote.openFavourites() }
         let (window, host) = MusicScrollHarness.host(
             EmbeddedMusicPage()
@@ -101,7 +121,7 @@ enum MusicSyntheticLibrary {
             size: CGSize(width: 1280, height: 860))
         await MusicScrollHarness.settle(host, for: .seconds(1))
         let height = MusicScrollHarness.scrollView(in: host)?.documentView?.frame.height ?? 0
-        let step = sweep ? max(24, height / CGFloat(frames)) : 24
+        let step = pace.step(documentHeight: height, frames: frames)
         let timing = await MusicScrollHarness.scroll(host, step: step, frames: frames)
         await MusicScrollHarness.settle(host)
         window.orderOut(nil)
