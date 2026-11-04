@@ -92,6 +92,16 @@ import Testing
         }
     }
 
+    @Test func idleProviderStartedByTheCommandKeepsItsReply() async throws {
+        let fixture = ProviderFixture(idleUntilExecution: true)
+        let registry = try await HostCLIProviderRegistry.load(invoke: {
+            try await fixture.invoke($0)
+        })
+        let reply = try await registry.execute(
+            ["music", "ls"], invoke: { try await fixture.invoke($0) })
+        #expect(reply.stdout == "output without newline" && reply.exitCode == 130)
+    }
+
     @Test func extensionsWithoutACLIAreNeverAskedForACatalog() async throws {
         let operations = OperationLog()
         let states = try HostCLIJSON.array(
@@ -173,16 +183,17 @@ private actor ProviderFixture {
     private var available: Bool
     private let disableOnExecution: Bool
     private let cancelCatalog: Bool
+    private var idle: Bool
     private let timeout: Double
     private var requests: [HostCLIRequest] = []
     private var lastArguments: [String] = []
 
     init(
         available: Bool = true, disableOnExecution: Bool = false, cancelCatalog: Bool = false,
-        timeout: Double = 30
+        idleUntilExecution: Bool = false, timeout: Double = 30
     ) {
         self.available = available; self.disableOnExecution = disableOnExecution;
-        self.cancelCatalog = cancelCatalog
+        self.cancelCatalog = cancelCatalog; self.idle = idleUntilExecution
         self.timeout = timeout
     }
     func actions() -> [HostCLIRequest.Action] { requests.map(\.action) }
@@ -194,8 +205,8 @@ private actor ProviderFixture {
             return try HostCLIJSON.array([
                 .object([
                     "id": .string("music"), "installed": .bool(true), "compatible": .bool(true),
-                    "enabled": .bool(available), "running": .bool(available),
-                    "version": .string("1.2.3"),
+                    "enabled": .bool(available), "running": .bool(available && !idle),
+                    "idle": .bool(idle), "version": .string("1.2.3"),
                     "disablePending": .bool(false), "removalPending": .bool(false),
                 ])
             ]).encoded()
@@ -215,6 +226,7 @@ private actor ProviderFixture {
         lastArguments = try JSONDecoder().decode(ExtensionCLIRequest.self, from: request.payload)
             .arguments
         if disableOnExecution { available = false }
+        idle = false
         return try JSONEncoder().encode(
             ExtensionCLIReply(
                 stdout: "output without newline", stderr: "diagnostic\n", exitCode: 130))
