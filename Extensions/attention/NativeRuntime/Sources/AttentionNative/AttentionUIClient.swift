@@ -2,7 +2,7 @@ internal import EdithExtensionSupport_attention_native
 import Foundation
 import SwiftUI
 
-struct AttentionUIStatus: Codable, Sendable {
+struct AttentionUIStatus: Codable, Equatable, Sendable {
     var extensionInstalled = false
     var browserConnected = false
     var backupAvailable = false
