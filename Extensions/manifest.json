@@ -1005,7 +1005,6 @@
         "Extensions/clipboard/ClipboardPaletteKeymap.swift",
         "Extensions/clipboard/ClipboardPanel.swift",
         "Extensions/clipboard/ClipboardPanelLayout.swift",
-        "Extensions/clipboard/ClipboardPanelList.swift",
         "Extensions/clipboard/ClipboardPanelView.swift",
         "Extensions/clipboard/ClipboardPasteSynth.swift",
         "Extensions/clipboard/ClipboardPasteboardFilter.swift",
