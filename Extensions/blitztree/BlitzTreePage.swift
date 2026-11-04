@@ -251,10 +251,12 @@ struct BlitzTreePage: View {
 }
 
 struct BlitzTreeSettings: View {
+    static let summaryName = BlitzTreePage.title
+
     var body: some View {
         Form {
             Section("Disk space") {
-                LabeledContent("Engine", value: "BlitzTree")
+                LabeledContent("Extension", value: Self.summaryName)
                 Text(
                     "Choose a folder to explore allocated space and review cleanup candidates in Finder."
                 )

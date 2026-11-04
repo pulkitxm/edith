@@ -50,7 +50,9 @@ enum BlitzTreeCommands {
                 model.trash(entry); return try JSONEncoder().encode(model.uiSnapshot())
             }
             return try await perform(model) { model.trash(entry) }
-        default: throw ExtensionPeerError.rejected("BlitzTree does not support this command.")
+        default:
+            throw ExtensionPeerError.rejected(
+                "\(BlitzTreePage.title) does not support this command.")
         }
     }
 
