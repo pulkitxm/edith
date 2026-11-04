@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
-import { withGitHubRetrySync } from "./github-retry.mjs";
+import {
+  withGitHubRetrySync,
+  withRateLimitRecoverySync,
+} from "./github-retry.mjs";
 import {
   assetSnapshot,
   hostAssets,
@@ -18,6 +21,12 @@ import {
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
+
+function rateLimitedExecute(command, args, options) {
+  return withRateLimitRecoverySync(() =>
+    execFileSync(command, args, options),
+  );
+}
 
 export function hostReleasePrerelease(value = "false") {
   if (!["true", "false"].includes(value))
@@ -55,7 +64,7 @@ export function preflightHostRelease({
   tag,
   source,
   rebuild = false,
-  execute = execFileSync,
+  execute = rateLimitedExecute,
   retry = {},
 }) {
   if (
@@ -126,7 +135,7 @@ export async function publishHostRelease({
   rebuild = false,
   sourceTarget = target,
   prerelease = false,
-  execute = execFileSync,
+  execute = rateLimitedExecute,
   retry = {},
   matchesAsset = releaseAssetMatchesFile,
   verifySource = async () => {
