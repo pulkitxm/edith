@@ -183,13 +183,25 @@ final class HerdrStore {
         didSet {
             scheduleUIChange()
             guard selectedTab != oldValue else { return }
+            refreshMarks()
             guard let agent = focusedSession?.agent else { return }
             usage.record(agent)
             revealSpace(containing: agent)
         }
     }
     var tabs: [HerdrTab] = [] {
-        didSet { scheduleTerminalRetarget(from: oldValue); scheduleUIChange() }
+        didSet {
+            scheduleTerminalRetarget(from: oldValue)
+            scheduleUIChange()
+            refreshMarks()
+        }
+    }
+    @ObservationIgnored private lazy var tabMarks = HerdrMarks<String, Bool> { [unowned self] id in
+        _selectedTab == id
+    }
+    @ObservationIgnored private lazy var railMarks = HerdrMarks<String, HerdrRailHighlight> {
+        [unowned self] agentID in
+        Self.railHighlight(for: agentID, selectedTab: _selectedTab, tabs: _tabs)
     }
     private(set) var sessions: [HerdrOpenTab] = [] {
         didSet {
@@ -543,7 +555,8 @@ final class HerdrStore {
     func revealSpace(containing agent: HerdrAgent) {
         guard !agent.isTerminal else { return }
         let spaceID = HerdrAgentSpace.spaceID(agent)
-        guard collapsedSpaces.remove(spaceID) != nil else { return }
+        guard collapsedSpaces.contains(spaceID) else { return }
+        collapsedSpaces.remove(spaceID)
         collapsedSpaceCounts.removeValue(forKey: spaceID)
         persistCollapsedSpaceCounts()
     }
@@ -1072,7 +1085,33 @@ final class HerdrStore {
     }
 
     func railHighlight(for agentID: String) -> HerdrRailHighlight {
-        guard selectedTab != Self.boardID, let tab = currentTab, tab.layout.contains(agentID)
+        Self.railHighlight(for: agentID, selectedTab: selectedTab, tabs: tabs)
+    }
+
+    func shown(_ session: HerdrOpenTab) -> HerdrOpenTab {
+        var shown = session
+        shown.view = shownView(for: session.id)
+        return shown
+    }
+
+    func isTabSelected(_ id: String) -> Bool {
+        tabMarks.value(id)
+    }
+
+    func railMark(for agentID: String) -> HerdrRailHighlight {
+        railMarks.value(agentID)
+    }
+
+    private func refreshMarks() {
+        tabMarks.refresh()
+        railMarks.refresh()
+    }
+
+    private static func railHighlight(
+        for agentID: String, selectedTab: String, tabs: [HerdrTab]
+    ) -> HerdrRailHighlight {
+        guard selectedTab != boardID, let tab = tabs.first(where: { $0.id == selectedTab }),
+            tab.layout.contains(agentID)
         else { return .none }
         guard tab.isSplit else { return .solo }
         return tab.focused == agentID ? .focused : .grouped

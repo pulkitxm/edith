@@ -9,32 +9,40 @@ final class LauncherUsage {
     static let shared = LauncherUsage()
     private static let storageKey = "launcherLastUsed"
 
-    private let defaults: UserDefaults
-    private(set) var history: LauncherUsageHistory
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var timestamps: [String: Date]
+    @ObservationIgnored private var rankings: [String: LauncherUsageRanking] = [:]
 
     init(defaults: UserDefaults = SharedDefaults.store) {
         self.defaults = defaults
-        history = LauncherUsageHistory(
-            timestamps: defaults.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:])
+        timestamps = defaults.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:]
     }
 
     func record(_ keys: [[String]], at date: Date = Date()) {
         let stored = defaults.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:]
-        history.timestamps.merge(stored) { current, other in max(current, other) }
-        for key in keys { history.timestamps[LauncherUsageHistory.encoded(key)] = date }
-        defaults.set(history.timestamps, forKey: Self.storageKey)
-    }
-
-    func lastUsed(_ key: [String]) -> Date {
-        history.lastUsed(key)
+        timestamps.merge(stored) { current, other in max(current, other) }
+        for key in keys { timestamps[LauncherUsageHistory.encoded(key)] = date }
+        defaults.set(timestamps, forKey: Self.storageKey)
+        for (prefix, ranking) in rankings {
+            ranking.adopt(history(withPrefix: prefix))
+        }
     }
 
     func ordered<Item>(_ items: [Item], by key: (Item) -> [String]) -> [Item] {
-        history.ordered(items, by: key)
+        guard let category = items.first.map(key)?.first else { return items }
+        return ranking(category).history.ordered(items, by: key)
     }
 
-    func ordered<Item>(_ items: [Item], date: (Item) -> Date) -> [Item] {
-        history.ordered(items, date: date)
+    private func ranking(_ category: String) -> LauncherUsageRanking {
+        let prefix = LauncherUsageHistory.encoded([category])
+        if let ranking = rankings[prefix] { return ranking }
+        let ranking = LauncherUsageRanking(history(withPrefix: prefix))
+        rankings[prefix] = ranking
+        return ranking
+    }
+
+    private func history(withPrefix prefix: String) -> LauncherUsageHistory {
+        LauncherUsageHistory(timestamps: timestamps.filter { $0.key.hasPrefix(prefix) })
     }
 
     func record(_ agent: HerdrAgent, at date: Date = Date()) {
@@ -49,8 +57,28 @@ final class LauncherUsage {
     }
 }
 
+@MainActor
+@Observable
+final class LauncherUsageRanking {
+    private(set) var history: LauncherUsageHistory
+
+    init(_ history: LauncherUsageHistory) {
+        self.history = history
+    }
+
+    func adopt(_ next: LauncherUsageHistory) {
+        if next.rank != history.rank { history = next }
+    }
+}
+
 struct LauncherUsageHistory: Sendable {
     fileprivate var timestamps: [String: Date]
+
+    var rank: [String] {
+        timestamps.sorted { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
+        }.map(\.key)
+    }
 
     func lastUsed(_ key: [String]) -> Date {
         timestamps[Self.encoded(key)] ?? .distantPast
