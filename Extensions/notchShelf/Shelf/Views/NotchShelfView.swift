@@ -11,6 +11,7 @@ struct NotchShelfContentView: View {
     var isBuiltin = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var tabPill
+    @State private var homeScroll = NotchScrollOffset()
 
     private var isExpanded: Bool { controller.isExpanded(on: displayID) }
     private var isHovering: Bool { controller.isHovering(on: displayID) }
@@ -365,7 +366,7 @@ struct NotchShelfContentView: View {
 
     @ViewBuilder private var tabContent: some View {
         switch controller.activeTab {
-        case .home: NotchHomeTab(controller: controller)
+        case .home: NotchHomeTab(controller: controller, scroll: homeScroll)
         case .agents: providerTab(SurfaceTile(.agents))
         case .browser: EmptyView()
         case .files: filesCanvas
