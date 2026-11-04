@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
-import { withGitHubRetrySync } from "./github-retry.mjs";
+import {
+  rateLimitWait,
+  withGitHubRetrySync,
+  withRateLimitRecovery,
+  withRateLimitRecoverySync,
+} from "./github-retry.mjs";
 import {
   assetSnapshot,
   hostAssets,
@@ -430,6 +435,28 @@ export async function publishHostRelease({
   }
 }
 
+export function preflightHostReleaseWithRecovery({
+  execute = execFileSync,
+  rateLimit = {},
+  ...options
+}) {
+  return withRateLimitRecoverySync(
+    () => preflightHostRelease({ ...options, execute }),
+    { probe: () => rateLimitWait({ execute }), ...rateLimit },
+  );
+}
+
+export function publishHostReleaseWithRecovery({
+  execute = execFileSync,
+  rateLimit = {},
+  ...options
+}) {
+  return withRateLimitRecovery(
+    () => publishHostRelease({ ...options, execute }),
+    { probe: () => rateLimitWait({ execute }), ...rateLimit },
+  );
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -444,7 +471,7 @@ if (
     prerelease: hostReleasePrerelease(process.env.RELEASE_PRERELEASE),
   };
   if (preflight) {
-    preflightHostRelease(configuration);
+    preflightHostReleaseWithRecovery(configuration);
     process.stdout.write("Release assets accepted by the release client.\n");
   } else {
     const target =
@@ -453,7 +480,7 @@ if (
         encoding: "utf8",
       }).trim();
     process.stdout.write(
-      `${JSON.stringify(await publishHostRelease({ ...configuration, target, sourceTarget: process.env.BUILT_SHA ?? target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
+      `${JSON.stringify(await publishHostReleaseWithRecovery({ ...configuration, target, sourceTarget: process.env.BUILT_SHA ?? target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
     );
   }
 }
