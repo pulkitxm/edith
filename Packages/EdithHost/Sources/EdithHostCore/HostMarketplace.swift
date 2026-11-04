@@ -17,7 +17,8 @@ public final class HostMarketplace {
     public private(set) var installedVersions: [String: [ExtensionPackage]] = [:]
     public private(set) var pendingRemovalIDs: Set<String> = []
     public private(set) var available: [String: ExtensionPackage] = [:]
-    public private(set) var operations: [String: Double] = [:]
+    public private(set) var operations: [String: HostExtensionOperation] = [:]
+    public private(set) var batch: HostExtensionBatch?
     public var failures: [String: String] {
         sessions.failureReasons.merging(operationFailures) { _, operation in operation }
     }
@@ -41,7 +42,16 @@ public final class HostMarketplace {
     public private(set) var offline = false
     public var busy: Bool { restoring || !operations.isEmpty }
     public func isBusy(_ id: String) -> Bool { restoring || operations[id] != nil }
-    public func progress(for id: String) -> Double { operations[id] ?? 0 }
+    public func progress(for id: String) -> Double { operations[id]?.fraction ?? 0 }
+    public func hasPendingDownload(_ id: String) -> Bool { downloadJobs[id] != nil }
+    public var batchProgress: Double {
+        guard let batch, batch.total > 0 else { return 0 }
+        let running = batch.ids.filter { !batch.isDone($0) }.map { progress(for: $0) }
+        return min(1, (Double(batch.finished) + running.reduce(0, +)) / Double(batch.total))
+    }
+    public var batchBytesPerSecond: Double {
+        operations.values.filter { $0.phase == .downloading }.map(\.bytesPerSecond).reduce(0, +)
+    }
     public static let operationInProgress =
         "Another operation is running for this extension. Try again when it finishes."
     public static let concurrentDownloads = 3
@@ -64,7 +74,14 @@ public final class HostMarketplace {
     @ObservationIgnored private var catalogRefresh: Task<Void, Never>?
     @ObservationIgnored private var catalogFetch: Task<ExtensionCatalogClient.Result, Error>?
     @ObservationIgnored private var downloadSlots = 0
-    @ObservationIgnored private var downloadQueue: [CheckedContinuation<Void, Never>] = []
+    @ObservationIgnored private var slotWaiters: [HostDownloadSlotWaiter] = []
+    @ObservationIgnored private var slotSequence = 0
+    @ObservationIgnored private var downloadJobs: [String: Task<String?, Never>] = [:]
+    @ObservationIgnored private var idleWaiters: [String: [CheckedContinuation<Void, Never>]] =
+        [:]
+    @ObservationIgnored private var transferOwners: [URL: String] = [:]
+    @ObservationIgnored private var transferBytes: [URL: Int64] = [:]
+    @ObservationIgnored private var transferSamples: [String: HostTransferSample] = [:]
 
     public init(
         identity: HostIdentity,
@@ -74,7 +91,8 @@ public final class HostMarketplace {
         installer: ExtensionPackageInstaller,
         sessions: HostExtensionSessions,
         verificationReceipts: HostBundleVerificationReceipts? = nil,
-        verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil
+        verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil,
+        transferProgress: HostTransferProgress = HostTransferProgress()
     ) throws {
         self.identity = identity
         self.entries = entries
@@ -132,6 +150,9 @@ public final class HostMarketplace {
         try store.completePendingRemovals()
         try store.prune(hostABI: HostContract.compatibility)
         try reloadInstalled()
+        transferProgress.observe { [weak self] url, bytes in
+            Task { @MainActor in self?.recordTransfer(url, bytes: bytes) }
+        }
     }
 
     public static func live(identity: HostIdentity) throws -> HostMarketplace {
@@ -140,38 +161,45 @@ public final class HostMarketplace {
             file: identity.root.appendingPathComponent("ExtensionState/verified-bundles.json"))
         let localCatalog = HostDevelopmentCatalog(
             environment: ProcessInfo.processInfo.environment, development: identity.development)
-        let installer: ExtensionPackageInstaller
+        let transferProgress = HostTransferProgress()
+        let downloader = HostPackageDownloader()
+        let download: ExtensionPackageInstaller.Download = { url, count in
+            let source =
+                localCatalog?.localURL(for: url, repository: MarketplaceConfiguration.repository)
+                ?? url
+            return try await downloader.download(source, expectedBytes: count) { bytes in
+                transferProgress.report(url, bytes: bytes)
+            }
+        }
+        let verify: ExtensionPackageInstaller.Verify
         if identity.development {
-            installer = ExtensionPackageInstaller(
-                store: store,
-                download: { url, count in
-                    let source =
-                        localCatalog?.localURL(
-                            for: url, repository: MarketplaceConfiguration.repository) ?? url
-                    let (temporary, response) = try await URLSession.shared.download(from: source)
-                    guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                        try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize == Int(count)
-                    else {
-                        try? FileManager.default.removeItem(at: temporary)
-                        throw MarketplaceError.downloadFailed
-                    }
-                    return temporary
-                },
-                verify: { directory in
-                    for bundle in try FileManager.default.contentsOfDirectory(
-                        at: directory, includingPropertiesForKeys: nil)
-                    where bundle.pathExtension == "bundle"
-                        || bundle.lastPathComponent == "CameraCarrier.app"
-                    {
-                        try ExtensionCodeSignature.verifyDevelopment(bundle)
-                    }
-                })
+            verify = { directory in
+                for bundle in try FileManager.default.contentsOfDirectory(
+                    at: directory, includingPropertiesForKeys: nil)
+                where bundle.pathExtension == "bundle"
+                    || bundle.lastPathComponent == "CameraCarrier.app"
+                {
+                    try ExtensionCodeSignature.verifyDevelopment(bundle)
+                }
+            }
         } else {
             guard let team = ExtensionCodeSignature.teamIdentifier() else {
                 throw MarketplaceError.invalidSignature
             }
-            installer = .live(store: store, teamIdentifier: team)
+            verify = { directory in
+                _ = try JSONDecoder().decode(
+                    ExtensionPayloadManifest.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("package.json")))
+                for bundle in try FileManager.default.contentsOfDirectory(
+                    at: directory, includingPropertiesForKeys: nil)
+                where bundle.pathExtension == "bundle"
+                    || bundle.lastPathComponent == "CameraCarrier.app"
+                {
+                    try ExtensionCodeSignature.verify(bundle, teamIdentifier: team)
+                }
+            }
         }
+        let installer = ExtensionPackageInstaller(store: store, download: download, verify: verify)
         guard let defaults = UserDefaults(suiteName: identity.defaultsSuite) else {
             throw CocoaError(.fileNoSuchFile)
         }
@@ -190,7 +218,7 @@ public final class HostMarketplace {
             catalogClient: localCatalog?.client(
                 cache: identity.root.appendingPathComponent("development-catalog.json"))
                 ?? .live(cache: identity.root.appendingPathComponent("catalog.json")),
-            installer: installer, sessions: sessions)
+            installer: installer, sessions: sessions, transferProgress: transferProgress)
     }
 
     public func loadCachedCatalog() async {
@@ -212,32 +240,113 @@ public final class HostMarketplace {
         await sessions.restore(packages: installed)
     }
 
-    private func begin(_ id: String) -> Bool {
+    private func begin(
+        _ id: String, phase: HostExtensionOperation.Phase = .working, announce: Bool = true
+    ) -> Bool {
         guard !isBusy(id) else { return false }
-        operations[id] = 0
+        operations[id] = HostExtensionOperation(phase: phase)
         operationFailures[id] = nil
-        error = nil
+        if announce { error = nil }
         return true
     }
 
-    private func finish(_ id: String) { operations[id] = nil }
+    private func finish(_ id: String) {
+        operations[id] = nil
+        for waiter in idleWaiters.removeValue(forKey: id) ?? [] { waiter.resume() }
+    }
 
-    @discardableResult private func fail(_ id: String, _ message: String) -> String {
+    private func waitUntilIdle(_ id: String) async {
+        if operations[id] != nil {
+            await withCheckedContinuation { idleWaiters[id, default: []].append($0) }
+        } else {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    @discardableResult private func fail(
+        _ id: String, _ message: String, announce: Bool = true
+    ) -> String {
         operationFailures[id] = message
-        error = message
+        if announce { error = message }
         return message
     }
 
-    private func acquireDownloadSlot() async {
-        while downloadSlots >= Self.concurrentDownloads {
-            await withCheckedContinuation { downloadQueue.append($0) }
+    private func acquireDownloadSlot(id: String, priority: Int) async {
+        if downloadSlots < Self.concurrentDownloads, slotWaiters.isEmpty {
+            downloadSlots += 1
+            return
         }
-        downloadSlots += 1
+        slotSequence += 1
+        let sequence = slotSequence
+        await withCheckedContinuation { continuation in
+            slotWaiters.append(
+                HostDownloadSlotWaiter(
+                    id: id, priority: priority, sequence: sequence, continuation: continuation))
+        }
     }
 
     private func releaseDownloadSlot() {
-        downloadSlots -= 1
-        if !downloadQueue.isEmpty { downloadQueue.removeFirst().resume() }
+        guard
+            let next = slotWaiters.indices.min(by: {
+                (slotWaiters[$0].priority, slotWaiters[$0].sequence)
+                    < (slotWaiters[$1].priority, slotWaiters[$1].sequence)
+            })
+        else {
+            downloadSlots -= 1
+            return
+        }
+        slotWaiters.remove(at: next).continuation.resume()
+    }
+
+    private func prioritize(_ id: String) {
+        for index in slotWaiters.indices where slotWaiters[index].id == id {
+            slotWaiters[index].priority = 0
+        }
+    }
+
+    func downloadPriority(_ id: String) -> Int {
+        let migrating = downloadedIDs.contains(id) && installed[id] == nil
+        let enabled = sessions.enabledIDs.contains(id)
+        switch (migrating, enabled) {
+        case (true, true): return 1
+        case (true, false): return 2
+        case (false, true): return 3
+        case (false, false): return 4
+        }
+    }
+
+    private func updateOperation(_ id: String, _ change: (inout HostExtensionOperation) -> Void) {
+        guard var operation = operations[id] else { return }
+        change(&operation)
+        operations[id] = operation
+    }
+
+    private func recordTransfer(_ url: URL, bytes: Int64) {
+        guard let owner = transferOwners[url] else { return }
+        transferBytes[url] = bytes
+        let received = transferOwners.filter { $0.value == owner }.keys.reduce(Int64(0)) {
+            $0 + (transferBytes[$1] ?? 0)
+        }
+        let now = ContinuousClock.now
+        var sample = transferSamples[owner] ?? HostTransferSample(instant: now, bytes: 0)
+        let speed = sample.update(bytes: received, at: now)
+        transferSamples[owner] = sample
+        updateOperation(owner) { operation in
+            operation.receivedBytes = received
+            if let speed { operation.bytesPerSecond = speed }
+            if operation.totalBytes > 0 {
+                operation.fraction = max(
+                    operation.fraction, 0.9 * Double(received) / Double(operation.totalBytes))
+            }
+        }
+    }
+
+    private func clearTransfers(_ id: String) {
+        for url in transferOwners.filter({ $0.value == id }).keys {
+            transferOwners[url] = nil
+            transferBytes[url] = nil
+        }
+        transferSamples[id] = nil
     }
 
     private func fetchCatalog() async throws -> ExtensionCatalogClient.Result {
@@ -295,7 +404,7 @@ public final class HostMarketplace {
             automaticallyUpdatesExtensions
             ? await updateAll()
             : await install(ids: incompatibleIDs.sorted().filter { updateAvailable(id: $0) })
-        guard failed.isEmpty else { return }
+        guard incompatibleIDs.isDisjoint(with: failed.keys) else { return }
         preferences.set(now, forKey: "lastAutomaticExtensionCheck")
         preferences.set(hostBuild, forKey: "lastAutomaticExtensionCheckHostBuild")
         preferences.set(HostContract.compatibility, forKey: "lastAutomaticExtensionCheckHostABI")
@@ -424,28 +533,24 @@ public final class HostMarketplace {
                 ?? "Extension downloads are unavailable. Check your connection and try again."
             return Dictionary(uniqueKeysWithValues: ids.map { ($0, fail($0, message)) })
         }
-        var remaining = ids
+        var jobs: [(String, Task<String?, Never>)] = []
         var failed: [String: String] = [:]
-        while !remaining.isEmpty {
-            var occupied = Set<String>()
-            var wave: [String] = []
-            for id in remaining {
-                let plan = try? snapshot.installationPlan(
-                    for: id, hostABI: HostContract.compatibility, architecture: "arm64",
-                    systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
-                let affected = Set(plan?.map(\.id) ?? [id])
-                guard affected.isDisjoint(with: occupied) else { continue }
-                wave.append(id)
-                occupied.formUnion(affected)
-                if wave.count == Self.concurrentDownloads { break }
+        let ordered = ids.sorted {
+            (downloadPriority($0), $0) < (downloadPriority($1), $1)
+        }
+        for id in ordered {
+            if let job = downloadJobs[id] {
+                jobs.append((id, job))
+            } else if let job = schedule(
+                id, priority: downloadPriority(id), expectedPackage: nil, catalog: snapshot)
+            {
+                jobs.append((id, job))
+            } else {
+                failed[id] = Self.operationInProgress
             }
-            let downloads = wave.map { id in
-                (id, Task { await download(id: id, expectedPackage: nil, catalog: snapshot) })
-            }
-            for (id, download) in downloads {
-                if let message = await download.value { failed[id] = message }
-            }
-            remaining.removeAll { wave.contains($0) }
+        }
+        for (id, job) in jobs {
+            if let message = await job.value { failed[id] = message }
         }
         return failed
     }
@@ -453,20 +558,48 @@ public final class HostMarketplace {
     @discardableResult public func download(
         id: String, expectedPackage: ExtensionPackage? = nil
     ) async -> String? {
-        await download(id: id, expectedPackage: expectedPackage, catalog: nil)
+        if let job = downloadJobs[id] {
+            guard expectedPackage == nil else { return Self.operationInProgress }
+            prioritize(id)
+            return await job.value
+        }
+        guard
+            let job = schedule(id, priority: 0, expectedPackage: expectedPackage, catalog: nil)
+        else { return Self.operationInProgress }
+        return await job.value
     }
 
-    private func download(
-        id: String, expectedPackage: ExtensionPackage?, catalog snapshot: ExtensionCatalog?
+    private func schedule(
+        _ id: String, priority: Int, expectedPackage: ExtensionPackage?,
+        catalog: ExtensionCatalog?
+    ) -> Task<String?, Never>? {
+        guard begin(id, phase: .queued, announce: priority == 0) else { return nil }
+        var tracked = batch ?? HostExtensionBatch()
+        tracked.add(id)
+        batch = tracked
+        let job = Task { @MainActor in
+            let failure = await performDownload(
+                id: id, priority: priority, expectedPackage: expectedPackage, catalog: catalog)
+            downloadJobs[id] = nil
+            batch?.complete(id, failed: failure != nil)
+            if downloadJobs.isEmpty { batch = nil }
+            return failure
+        }
+        downloadJobs[id] = job
+        return job
+    }
+
+    private func performDownload(
+        id: String, priority: Int, expectedPackage: ExtensionPackage?,
+        catalog snapshot: ExtensionCatalog?
     ) async -> String? {
-        guard begin(id) else { return Self.operationInProgress }
+        let announce = priority == 0
         var reserved: [String] = []
         defer {
             for dependency in reserved { finish(dependency) }
             finish(id)
+            clearTransfers(id)
         }
-        await acquireDownloadSlot()
-        defer { releaseDownloadSlot() }
         do {
             let catalog: ExtensionCatalog
             if let snapshot {
@@ -478,31 +611,47 @@ public final class HostMarketplace {
                 guard expectedPackage.id == id, available[id] == expectedPackage else {
                     return fail(
                         id,
-                        "The extension package changed. Review its version and size before downloading."
-                    )
+                        "The extension package changed. Review its version and size before downloading.",
+                        announce: announce)
                 }
             }
             let plan = try catalog.installationPlan(
                 for: id, hostABI: HostContract.compatibility, architecture: "arm64",
                 systemVersion: .init(ProcessInfo.processInfo.operatingSystemVersion))
-            for package in plan where package.id != id {
-                guard begin(package.id) else { return fail(id, Self.operationInProgress) }
-                reserved.append(package.id)
+            let dependencies = plan.map(\.id).filter { $0 != id }
+            while let blocked = dependencies.first(where: { isBusy($0) }) {
+                await waitUntilIdle(blocked)
             }
+            for dependency in dependencies
+            where begin(dependency, phase: .queued, announce: announce) {
+                reserved.append(dependency)
+            }
+            await acquireDownloadSlot(id: id, priority: priority)
+            defer { releaseDownloadSlot() }
             let previous = plan.compactMap { installed[$0.id] }
             try await mutateStore { [store] in
                 for package in previous { try store.select(package) }
             }
-            let report: @Sendable (Double) -> Void = { [weak self] value in
+            let transfers = plan.filter { installedVersions[$0.id]?.contains($0) != true }
+            for package in transfers { transferOwners[package.downloadURL] = id }
+            transferSamples[id] = HostTransferSample(instant: .now, bytes: 0)
+            updateOperation(id) { operation in
+                operation.phase = .downloading
+                operation.totalBytes = transfers.reduce(0) { $0 + $1.downloadBytes }
+            }
+            let report: @Sendable (Double, Bool) -> Void = { [weak self] value, installing in
                 Task { @MainActor in
-                    guard self?.operations[id] != nil else { return }
-                    self?.operations[id] = value
+                    self?.updateOperation(id) { operation in
+                        operation.fraction = max(operation.fraction, value)
+                        if installing { operation.phase = .installing }
+                    }
                 }
             }
             _ = try await Self.retryingTransfer {
                 try await installer.install(
                     plan, repository: MarketplaceConfiguration.repository,
-                    progress: { report(0.9 + $0 * 0.1) }, downloaded: { report($0 * 0.9) })
+                    progress: { report(0.9 + $0 * 0.1, true) },
+                    downloaded: { report($0 * 0.9, $0 >= 1) })
             }
             await verifyInstalledBundles(plan)
             var activationFailure: String?
@@ -522,17 +671,20 @@ public final class HostMarketplace {
                 try store.prune(hostABI: HostContract.compatibility)
             }
             try reloadInstalled()
-            if let activationFailure { return fail(id, activationFailure) }
+            if let activationFailure { return fail(id, activationFailure, announce: announce) }
             return failures[id]
         } catch MarketplaceError.packageCleanupPending {
             try? reloadInstalled()
-            return fail(id, "The extension was downloaded. Package files are awaiting cleanup.")
+            return fail(
+                id, "The extension was downloaded. Package files are awaiting cleanup.",
+                announce: announce)
         } catch let error as MarketplaceError
             where error == .rateLimited || error == .incompatiblePackage
         {
-            return fail(id, error.errorDescription ?? "")
+            return fail(id, error.errorDescription ?? "", announce: announce)
         } catch {
-            return fail(id, "The extension could not be downloaded. Try again.")
+            return fail(
+                id, "The extension could not be downloaded. Try again.", announce: announce)
         }
     }
 
