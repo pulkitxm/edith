@@ -136,11 +136,15 @@ test("an exhausted rate limit in the middle of the asset uploads waits for the r
   }
 });
 
-test("publication recovers when the rate limit runs out at any remote call, whether or not the write landed", async () => {
-  const total = await cleanRemoteCallCount();
-  expect(total).toBeGreaterThan(20);
-  for (const landsBeforeFailure of [false, true])
-    for (let call = 1; call <= total; call++) {
+const cleanTotal = await cleanRemoteCallCount();
+
+test("a clean publication makes enough remote calls to exercise recovery", () => {
+  expect(cleanTotal).toBeGreaterThan(20);
+});
+
+for (const landsBeforeFailure of [false, true])
+  for (let call = 1; call <= cleanTotal; call++)
+    test(`publication recovers when the rate limit runs out at remote call ${call} of ${cleanTotal} (write landed: ${landsBeforeFailure})`, async () => {
       const value = fixture();
       try {
         const github = limitedGitHub(value, {
@@ -150,14 +154,10 @@ test("publication recovers when the rate limit runs out at any remote call, whet
         await publishLimited(value, github);
         expect(github.waits).toHaveLength(1);
         expectSinglePublishedRelease(value);
-      } catch (error) {
-        error.message = `exhausted at remote call ${call} of ${total} (landed: ${landsBeforeFailure}): ${error.message}`;
-        throw error;
       } finally {
         value.clean();
       }
-    }
-}, 120_000);
+    }, 30_000);
 
 test("publication survives two consecutive exhausted windows", async () => {
   const value = fixture();
