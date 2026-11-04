@@ -46,22 +46,18 @@ struct HostAboutPage: View {
                     .interpolation(.high)
                     .frame(width: UIScale.pt(88), height: UIScale.pt(88))
                     .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(20), style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: UIScale.pt(12), y: 6)
                     .accessibilityHidden(true)
             }
             VStack(spacing: UIScale.pt(6)) {
                 Text("Edith")
-                    .font(.system(size: UIScale.pt(28), weight: .bold))
-                Text(version)
-                    .font(.system(size: UIScale.pt(12)))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(PageMetrics.titleFont(false))
+                PageSubtitle(version).monospacedDigit()
             }
             Text("Every little Mac utility you'd otherwise pay for, under one roof.")
-                .font(.system(size: UIScale.pt(14), weight: .medium))
+                .font(.edithText(.body).weight(.medium))
                 .multilineTextAlignment(.center)
             Text(story)
-                .font(.system(size: UIScale.pt(13)))
+                .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
@@ -72,7 +68,7 @@ struct HostAboutPage: View {
                 HStack(spacing: UIScale.pt(6)) {
                     githubMark
                     Text("pulkitxm/edith")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                 }
                 .foregroundStyle(theme)
                 .padding(.horizontal, UIScale.pt(16))
@@ -85,7 +81,7 @@ struct HostAboutPage: View {
             .padding(.top, UIScale.pt(2))
             contributorWall
             Text("Made with ♥ by Pulkit")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.caption))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
@@ -109,7 +105,7 @@ struct HostAboutPage: View {
                 .frame(width: UIScale.pt(12), height: UIScale.pt(12))
         } else {
             Image(systemName: "link")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
         }
     }
 
@@ -121,7 +117,7 @@ struct HostAboutPage: View {
         if !contributors.isEmpty {
             VStack(spacing: UIScale.pt(10)) {
                 Text("Contributors")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                 SkeletonGroup {
                     LazyVGrid(columns: avatarColumns, spacing: UIScale.pt(10)) {
@@ -156,7 +152,7 @@ struct HostAboutPage: View {
                     .fill(Color.secondary.opacity(0.18))
                     .overlay {
                         Text(String(person.login.prefix(1)).uppercased())
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.body).weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
             @unknown default:
