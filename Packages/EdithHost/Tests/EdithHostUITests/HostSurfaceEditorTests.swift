@@ -964,7 +964,10 @@ import HostWorkerFixtureSupport
         #expect(fixture.marketplace.installed["calendar"] == nil)
         #expect(fixture.marketplace.installedVersions["calendar"]?.count == 1)
         #expect(
-            find(host, label: state == "removal" ? "Removal pending" : "Needs a compatible update")
+            find(
+                host,
+                label: state == "removal"
+                    ? "Removal pending" : "Update required for this version of Edith")
                 != nil)
         #expect(find(host, label: "Not installed") == nil)
         #expect(find(host, label: "Enable") == nil)

@@ -28,7 +28,8 @@ struct HostExtensionReview: View {
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(entry.id) }
     private var installed: Bool { marketplace.installed[entry.id] != nil }
-    private var busy: Bool { task != nil || marketplace.isBusy(entry.id) || suites.working }
+    private var busy: Bool { owning || marketplace.isBusy(entry.id) }
+    private var owning: Bool { task != nil || suites.working }
     private var pending: Bool {
         marketplace.pendingRemovalIDs.contains(entry.id)
             || marketplace.sessions.pendingDisableIDs.contains(entry.id)
@@ -154,7 +155,7 @@ struct HostExtensionReview: View {
             HStack {
                 if busy { LoadingIndicator().frame(width: UIScale.pt(16), height: UIScale.pt(16)) }
                 Spacer();
-                Button("Done", action: done).keyboardShortcut(.defaultAction).disabled(busy)
+                Button("Done", action: done).keyboardShortcut(.defaultAction).disabled(owning)
             }.padding(.horizontal, UIScale.pt(18)).padding(.vertical, UIScale.pt(12)).background(
                 .bar)
         }
@@ -163,7 +164,7 @@ struct HostExtensionReview: View {
             height: PresentationMetrics.height(Self.idealHeight(for: entry.id))
         )
         .tracksWindowVisibility()
-        .interactiveDismissDisabled(busy)
+        .interactiveDismissDisabled(owning)
         .onDisappear {
             task?.cancel(); navigation?.delivery.reject()
         }

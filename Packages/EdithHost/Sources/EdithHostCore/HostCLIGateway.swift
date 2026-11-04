@@ -22,14 +22,16 @@ import Foundation
         if request.action == .invoke || request.action == .terminal {
             return try await invoke(request, id: id)
         }
-        guard !marketplace.isBusy(id) else {
+        let joinsDownload =
+            [.install, .update].contains(request.action) && marketplace.hasPendingDownload(id)
+        guard joinsDownload || !marketplace.isBusy(id) else {
             throw HostCLIError.rejected(
                 "Another operation is running for this extension. Try again when it finishes.")
         }
         var failure: String?
         switch request.action {
         case .install:
-            if !marketplace.downloadedIDs.contains(id) {
+            if joinsDownload || !marketplace.downloadedIDs.contains(id) {
                 failure = await marketplace.download(id: id)
             }
             if failure == nil, marketplace.installed[id] != nil,
