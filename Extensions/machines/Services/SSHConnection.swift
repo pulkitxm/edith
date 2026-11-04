@@ -126,6 +126,7 @@ public actor SSHConnection {
     private var masterProcess: Process?
     private let socketPath: String
     private let knownHostsArgument: String
+    private let configArguments: [String]
     private let connectTimeout: Int
 
     public init(
@@ -136,13 +137,19 @@ public actor SSHConnection {
         self.connectTimeout = connectTimeout
         let connectionID = controlSocketMode == .isolated ? UUID() : nil
         socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
-        let home =
-            ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
-                URL(fileURLWithPath: $0)
-            } ?? FileManager.default.homeDirectoryForCurrentUser
+        let fixtureHome = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"].map {
+            URL(fileURLWithPath: $0)
+        }
+        let home = fixtureHome ?? FileManager.default.homeDirectoryForCurrentUser
         let userKnownHosts = home.appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =
             "\"\(MachinePaths.knownHostsFile.path)\" \"\(userKnownHosts)\""
+        configArguments = fixtureHome.map { ["-F", Self.fixtureConfigFile($0)] } ?? []
+    }
+
+    nonisolated static func fixtureConfigFile(_ home: URL) -> String {
+        let config = home.appendingPathComponent(".ssh/config").path
+        return FileManager.default.fileExists(atPath: config) ? config : "none"
     }
 
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
@@ -648,7 +655,7 @@ public actor SSHConnection {
     private func runControl(_ control: [String]) async throws -> SSHExecResult {
         let process = Process()
         process.executableURL = Self.executable
-        process.arguments = ["-S", socketPath] + control + [machine.sshTarget]
+        process.arguments = configArguments + ["-S", socketPath] + control + [machine.sshTarget]
         process.environment = environment()
         let stderrPipe = Pipe()
         let buffer = PipeBuffer()
@@ -666,7 +673,7 @@ public actor SSHConnection {
     }
 
     private nonisolated func baseOptions() -> [String] {
-        [
+        configArguments + [
             "-o", "UserKnownHostsFile=\(knownHostsArgument)",
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", "ServerAliveInterval=15",
