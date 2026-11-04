@@ -32,7 +32,7 @@ struct BlitzTreePage: View {
             }
         } content: {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                navigation
+                if let root = model.root { navigation(root) }
                 if let error = model.error {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
@@ -92,7 +92,7 @@ struct BlitzTreePage: View {
             && isDirectory.boolValue
     }
 
-    private var navigation: some View {
+    private func navigation(_ root: String) -> some View {
         HStack {
             Button("Back", systemImage: "chevron.left") {
                 if router?.canGoBack == true {
@@ -102,7 +102,7 @@ struct BlitzTreePage: View {
                 }
             }
             .disabled((router?.canGoBack != true && model.history.isEmpty) || model.removing)
-            Text(model.root ?? "Choose a folder to explore its disk usage")
+            Text(root)
                 .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
