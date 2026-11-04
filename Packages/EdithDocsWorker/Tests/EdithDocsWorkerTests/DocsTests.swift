@@ -88,6 +88,25 @@ enum DocsFixture {
         #expect(page.abstract == "Pass --yes -- then 'quote'.")
     }
 
+    @Test func abstractSkipsBreadcrumbLinks() {
+        let page = DocsParser.page(
+            path: "studio/run.md",
+            markdown: """
+                # `ed studio run`
+
+                [Back to `ed studio`](./README.md)
+
+                [CLI reference](../README.md) | [Studio](./README.md)
+
+                Runs a Studio tool on files.
+                """)
+        #expect(page.abstract == "Runs a Studio tool on files.")
+        #expect(
+            DocsFixture.library.commands.allSatisfy {
+                !$0.summary.hasPrefix("Back to") && !$0.summary.hasPrefix("CLI reference")
+            })
+    }
+
     @Test func everyBundledCommandResolvesToADocumentedSection() throws {
         let library = DocsFixture.library
         let leaves = library.commands.map(\.path)
