@@ -102,6 +102,73 @@ struct UsageWorkerControllerTests {
         await controller.shutdown()
     }
 
+    @Test func machinesProviderReturningRecoversRemoteMachinesAutomatically() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let probe = UsageRecoveryProbe()
+        let controller = UsageWorkerController(
+            dataDirectory: root, machinesVersion: { probe.version },
+            machinesNeedRecovery: { probe.needsRecovery }
+        ) { policy, _ in
+            await log.record(policy)
+            return try emptyDocument()
+        }
+        controller.observeMachinesAvailability()
+        controller.recoverRemoteMachines()
+        #expect(!controller.refreshing)
+        _ = try controller.requestRefresh()
+        await controller.waitForRefresh()
+        probe.version = "1.0.4"
+        controller.observeMachinesAvailability()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.due, .due])
+        controller.observeMachinesAvailability()
+        #expect(!controller.refreshing)
+        probe.version = "1.0.5"
+        probe.needsRecovery = false
+        controller.observeMachinesAvailability()
+        #expect(!controller.refreshing)
+        probe.needsRecovery = true
+        probe.version = nil
+        controller.observeMachinesAvailability()
+        #expect(!controller.refreshing)
+        probe.version = "1.0.6"
+        controller.observeMachinesAvailability()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.due, .due, .due])
+        await controller.shutdown()
+    }
+
+    @Test func recoveryDuringARunningRefreshFollowsUpWhenItFinishes() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let release = UsageBlockedCollection()
+        let probe = UsageRecoveryProbe()
+        let controller = UsageWorkerController(
+            dataDirectory: root, machinesVersion: { probe.version }, machinesNeedRecovery: { true }
+        ) { policy, _ in
+            let first = await log.policies.isEmpty
+            await log.record(policy)
+            if first { await release.wait() }
+            return try emptyDocument()
+        }
+        controller.observeMachinesAvailability()
+        _ = try controller.requestRefresh()
+        try await Task.sleep(for: .milliseconds(50))
+        probe.version = "1.0.4"
+        controller.observeMachinesAvailability()
+        await release.open()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while await log.policies.count < 2, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.due, .due])
+        await controller.shutdown()
+    }
+
     @Test func fixtureHomeOverridesExternalConfigurationAndInvalidPathsAreRejected() {
         let home = "/tmp/sample-home"
         #expect(
@@ -160,6 +227,16 @@ struct UsageBackgroundShutdownTests {
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(fired == ["kept"])
     }
+}
+
+@MainActor final class UsageRecoveryProbe {
+    var version: String?
+    var needsRecovery = true
+}
+
+actor UsageCollectionLog {
+    private(set) var policies: [UsageMachineRefreshPolicy] = []
+    func record(_ policy: UsageMachineRefreshPolicy) { policies.append(policy) }
 }
 
 actor UsageBlockedCollection {
