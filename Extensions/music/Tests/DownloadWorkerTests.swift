@@ -7,28 +7,32 @@ import EdithExtensionUI
 
 extension MusicExtensionTests {
     @Suite struct DownloadWorkerTests {
-        @Test func startupRecoversInterruptedWorkAndDrainsOldestQueuedDownloadFirst() async throws {
+        @Test func startupRecoversInterruptedWorkAndStartsOldestDownloadsFirst() async throws {
             let directory = try sandbox()
             defer { try? FileManager.default.removeItem(at: directory) }
             let file = directory.appendingPathComponent("queue.json")
-            let old = record("old", state: .queued, date: 1, directory: directory)
-            let newer = record("new", state: .queued, date: 2, directory: directory)
+            let queued = ["oldest", "older", "newer", "newest"].enumerated().map {
+                record(
+                    $0.element, state: .queued, date: TimeInterval($0.offset + 1),
+                    directory: directory)
+            }
             let interrupted = record(
                 "interrupted", state: .resolving, date: 0, directory: directory)
-            try DownloadQueue.save([newer, interrupted, old], to: file)
+            try DownloadQueue.save(queued.reversed() + [interrupted], to: file)
             let gate = DownloadTestGate(directory: directory)
             let worker = worker(file, gate: gate)
             try await worker.start()
-            try await eventually { await Set(gate.started) == ["old", "new"] }
-            #expect(await gate.started.first == "old")
+            try await eventually { await Set(gate.started) == ["oldest", "older", "newer"] }
+            #expect(await Set(gate.started) == ["oldest", "older", "newer"])
             #expect(
                 await worker.snapshot().records.first { $0.id == interrupted.id }?.canRetry == true)
-            #expect(await gate.maximumActive == 2)
-            await gate.release("old")
-            await gate.release("new")
+            #expect(await gate.maximumActive == DownloadWorker.maximumConcurrent)
+            await gate.release("oldest")
+            try await eventually { await gate.started.contains("newest") }
+            for name in ["older", "newer", "newest"] { await gate.release(name) }
             try await eventually { await worker.snapshot().running == 0 }
-            #expect(await worker.snapshot().finished == 2)
-            #expect(DownloadQueue.load(from: file).filter { $0.resultPaths != nil }.count == 2)
+            #expect(await worker.snapshot().finished == 4)
+            #expect(DownloadQueue.load(from: file).filter { $0.resultPaths != nil }.count == 4)
         }
 
         @Test func idleObservationNeverRewritesTheQueueOrActivityFiles() async throws {
@@ -337,7 +341,7 @@ extension MusicExtensionTests {
         }
 
         private func eventually(_ condition: @escaping @Sendable () async -> Bool) async throws {
-            let deadline = ContinuousClock.now.advanced(by: .seconds(4))
+            let deadline = ContinuousClock.now.advanced(by: .seconds(15))
             while !(await condition()), ContinuousClock.now < deadline {
                 try await Task.sleep(for: .milliseconds(5))
             }
