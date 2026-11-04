@@ -11,10 +11,15 @@ public enum HerdrResources {
     }
 }
 public enum ProviderLogo {
+    private static let images = NSCache<NSString, NSImage>()
+
     public static func image(named name: String) -> NSImage? {
+        if let cached = images.object(forKey: name as NSString) { return cached }
         guard let url = HerdrResources.url(forResource: name, withExtension: "svg"),
             let image = NSImage(contentsOf: url)
         else { return nil }
-        image.isTemplate = true; return image
+        image.isTemplate = true
+        images.setObject(image, forKey: name as NSString)
+        return image
     }
 }
