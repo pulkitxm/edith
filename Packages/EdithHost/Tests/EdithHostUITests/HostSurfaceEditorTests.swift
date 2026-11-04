@@ -263,6 +263,49 @@ import HostWorkerFixtureSupport
         #expect(await fixture.requests.count == 0)
     }
 
+    @Test(arguments: [false, true])
+    func settingsFormsLineUpWithTheirPageTitle(compact: Bool) async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let defaults = try #require(
+            UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let permissions = HostPermissions(
+            environment: .init(read: { [:] }, request: { _ in }, openSettings: { _ in false }))
+        let width: Double = compact ? 600 : 1200
+        let host = NSHostingView(
+            rootView: HostSettingsContainer(category: .constant("general")) {
+                HostSettingsPage(
+                    marketplace: fixture.marketplace, permissions: permissions,
+                    defaults: defaults, activation: { _ in })
+            }
+            .environment(\.compactLayout, compact)
+            .environment(\.colorScheme, .dark)
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: width, height: 800)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let summary = try #require(find(host, label: "Appearance, window, and welcome tour"))
+        let row = try #require(find(host, label: "Permissions"))
+        let summaryFrame = try #require((summary as AnyObject).accessibilityFrame?())
+        let rowFrame = try #require((row as AnyObject).accessibilityFrame?())
+        #expect(abs(rowFrame.minX - summaryFrame.minX) <= 16, "\(rowFrame) \(summaryFrame)")
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+            let directory = URL(fileURLWithPath: capture, isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            try data.write(
+                to: directory.appendingPathComponent(
+                    "settings-general-\(compact ? "compact" : "regular").png"), options: .atomic)
+        }
+    }
+
     @Test func aboutRestoresOriginalIdentityStoryAndRepositoryWithoutAutomaticRequests()
         async throws
     {
