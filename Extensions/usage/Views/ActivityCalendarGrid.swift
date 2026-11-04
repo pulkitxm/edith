@@ -9,7 +9,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
     var calendar: Calendar = .current
     var showsLegend = true
     @ViewBuilder let detail: (ActivityCalendarDay) -> Detail
-    @State private var hovered: String?
+    @State private var hovered: HoveredCell?
     @State private var availableWidth = 400.0
     @Environment(\.surfacePresentation) private var presentation
     private var adaptiveCellSize: CGFloat {
@@ -39,52 +39,8 @@ struct ActivityCalendarGrid<Detail: View>: View {
                 .frame(width: UIScale.pt(12))
                 GeometryReader { geometry in
                     ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: UIScale.pt(3)) {
-                            ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
-                                VStack(spacing: UIScale.pt(3)) {
-                                    Text(monthLabel(at: index))
-                                        .fixedSize(horizontal: true, vertical: false)
-                                        .frame(
-                                            width: UIScale.pt(adaptiveCellSize),
-                                            height: UIScale.pt(12),
-                                            alignment: .leading)
-                                    ForEach(week.cells) { cell in
-                                        RoundedRectangle(cornerRadius: UIScale.pt(3))
-                                            .fill(
-                                                ActivityCalendarStyle.color(cell.level, dark: dark)
-                                            )
-                                            .frame(
-                                                width: UIScale.pt(adaptiveCellSize),
-                                                height: UIScale.pt(adaptiveCellSize)
-                                            )
-                                            .overlay {
-                                                RoundedRectangle(cornerRadius: UIScale.pt(3))
-                                                    .strokeBorder(
-                                                        DashSkin.ink(dark).opacity(
-                                                            hovered == cell.id ? 0.5 : 0))
-                                            }
-                                            .onHover { inside in
-                                                guard cell.date != nil else { return }
-                                                if inside {
-                                                    hovered = cell.id
-                                                } else if hovered == cell.id {
-                                                    hovered = nil
-                                                }
-                                            }
-                                            .popover(
-                                                isPresented: Binding(
-                                                    get: { hovered == cell.id },
-                                                    set: {
-                                                        if !$0, hovered == cell.id { hovered = nil }
-                                                    }
-                                                ), arrowEdge: .trailing
-                                            ) { detail(cell) }
-                                    }
-                                }
-                                .frame(width: UIScale.pt(adaptiveCellSize), alignment: .leading)
-                            }
-                        }
-                        .frame(minWidth: geometry.size.width, alignment: .leading)
+                        cellCanvas
+                            .frame(minWidth: geometry.size.width, alignment: .leading)
                     }
                     .defaultScrollAnchor(.trailing)
                 }
@@ -116,9 +72,116 @@ struct ActivityCalendarGrid<Detail: View>: View {
         .foregroundStyle(DashSkin.inkFaint(dark))
     }
 
+    private struct HoveredCell: Equatable {
+        let week: Int
+        let row: Int
+        let cell: ActivityCalendarDay
+    }
+
+    private var layout: ActivityCalendarLayout {
+        ActivityCalendarLayout(
+            side: UIScale.pt(adaptiveCellSize), gap: UIScale.pt(3), labelHeight: UIScale.pt(12))
+    }
+
+    private var cellSide: CGFloat { layout.side }
+    private var cellGap: CGFloat { layout.gap }
+    private var labelHeight: CGFloat { layout.labelHeight }
+    private var canvasWidth: CGFloat {
+        max(0, CGFloat(weeks.count) * (cellSide + cellGap) - cellGap)
+    }
+
+    private func origin(week: Int, row: Int) -> CGPoint {
+        layout.origin(week: week, row: row)
+    }
+
+    private var cellCanvas: some View {
+        Canvas { context, _ in
+            let side = cellSide
+            let radius = UIScale.pt(3)
+            let labelColor = DashSkin.inkFaint(dark)
+            for (index, week) in weeks.enumerated() {
+                let label = monthLabel(at: index)
+                if !label.isEmpty {
+                    let text = Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                        labelColor)
+                    context.draw(
+                        context.resolve(text),
+                        at: CGPoint(x: origin(week: index, row: 0).x, y: labelHeight / 2),
+                        anchor: .leading)
+                }
+                for (row, cell) in week.cells.enumerated() where cell.level >= 0 {
+                    let point = origin(week: index, row: row)
+                    let path = Path(
+                        roundedRect: CGRect(x: point.x, y: point.y, width: side, height: side),
+                        cornerRadius: radius)
+                    context.fill(
+                        path, with: .color(ActivityCalendarStyle.color(cell.level, dark: dark)))
+                }
+            }
+        }
+        .frame(width: canvasWidth, height: gridHeight)
+        .overlay(alignment: .topLeading) {
+            if let hovered {
+                let point = origin(week: hovered.week, row: hovered.row)
+                RoundedRectangle(cornerRadius: UIScale.pt(3))
+                    .strokeBorder(DashSkin.ink(dark).opacity(0.5))
+                    .frame(width: cellSide, height: cellSide)
+                    .popover(
+                        isPresented: Binding(
+                            get: { self.hovered == hovered },
+                            set: { if !$0, self.hovered == hovered { self.hovered = nil } }
+                        ), arrowEdge: .trailing
+                    ) { detail(hovered.cell) }
+                    .offset(x: point.x, y: point.y)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location):
+                let next = cell(at: location)
+                if next != hovered { hovered = next }
+            case .ended:
+                if hovered != nil { hovered = nil }
+            }
+        }
+    }
+
+    private func cell(at location: CGPoint) -> HoveredCell? {
+        guard let hit = layout.hit(location, weekCount: weeks.count, rowCount: 7),
+            weeks[hit.week].cells.indices.contains(hit.row)
+        else { return nil }
+        let cell = weeks[hit.week].cells[hit.row]
+        return cell.date == nil ? nil : HoveredCell(week: hit.week, row: hit.row, cell: cell)
+    }
+
     private func monthLabel(at index: Int) -> String {
         let following = weeks.dropFirst(index + 1).prefix(2)
         return following.contains { !$0.monthLabel.isEmpty } ? "" : weeks[index].monthLabel
+    }
+}
+
+struct ActivityCalendarLayout: Equatable {
+    let side: CGFloat
+    let gap: CGFloat
+    let labelHeight: CGFloat
+
+    func origin(week: Int, row: Int) -> CGPoint {
+        CGPoint(
+            x: CGFloat(week) * (side + gap),
+            y: labelHeight + gap + CGFloat(row) * (side + gap))
+    }
+
+    func hit(_ location: CGPoint, weekCount: Int, rowCount: Int) -> (week: Int, row: Int)? {
+        let pitch = side + gap
+        let top = labelHeight + gap
+        guard pitch > 0, location.x >= 0, location.y >= top else { return nil }
+        let week = Int(location.x / pitch)
+        let row = Int((location.y - top) / pitch)
+        guard week < weekCount, row < rowCount else { return nil }
+        let corner = origin(week: week, row: row)
+        guard location.x <= corner.x + side, location.y <= corner.y + side else { return nil }
+        return (week, row)
     }
 }
 
