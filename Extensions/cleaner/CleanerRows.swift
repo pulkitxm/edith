@@ -36,6 +36,18 @@ struct CleanerRow: Identifiable, Equatable, Sendable {
     let kind: Kind
 }
 
+final class CleanerSizeText {
+    private var cache: [Int64: String] = [:]
+
+    func callAsFunction(_ bytes: Int64) -> String {
+        if let cached = cache[bytes] { return cached }
+        if cache.count >= 50_000 { cache.removeAll(keepingCapacity: true) }
+        let text = JunkScanner.format(bytes)
+        cache[bytes] = text
+        return text
+    }
+}
+
 struct CleanerCategorySelection: Equatable, Sendable {
     var count = 0
     var bytes: Int64 = 0
@@ -63,7 +75,8 @@ struct CleanerListState: Equatable, Sendable {
 
     init(
         categories: [JunkCategory], filters: CleanerFilters, search: String,
-        expanded: Set<String>, itemFilters: [String: String], now: Date
+        expanded: Set<String>, itemFilters: [String: String], now: Date,
+        sizeText: CleanerSizeText = CleanerSizeText()
     ) {
         reclaimableTotal = JunkScanner.uniqueBytes(categories.flatMap(\.items))
         visibleCategories = filters.apply(categories, now: now)
@@ -82,7 +95,7 @@ struct CleanerListState: Equatable, Sendable {
         matchesSearch = !displayed.isEmpty
         rows = Self.rows(
             displayed, selection: selectionByCategory, expanded: expanded,
-            itemFilters: itemFilters, now: now)
+            itemFilters: itemFilters, now: now, sizeText: sizeText)
     }
 
     static func searched(_ categories: [JunkCategory], query raw: String) -> [JunkCategory] {
@@ -103,7 +116,8 @@ struct CleanerListState: Equatable, Sendable {
 
     private static func rows(
         _ categories: [JunkCategory], selection: [String: CleanerCategorySelection],
-        expanded: Set<String>, itemFilters: [String: String], now: Date
+        expanded: Set<String>, itemFilters: [String: String], now: Date,
+        sizeText: CleanerSizeText
     ) -> [CleanerRow] {
         var rows: [CleanerRow] = []
         rows.reserveCapacity(categories.count * 2)
@@ -117,7 +131,7 @@ struct CleanerListState: Equatable, Sendable {
                         CleanerCategoryRow(
                             id: category.id, name: category.name, detail: category.detail,
                             itemCount: category.items.count,
-                            sizeText: JunkScanner.format(category.sizeBytes),
+                            sizeText: sizeText(category.sizeBytes),
                             selection: category.selection, selectedCount: chosen.count,
                             selectedBytes: chosen.bytes, expanded: isExpanded))))
             if isExpanded {
@@ -134,7 +148,10 @@ struct CleanerListState: Equatable, Sendable {
                     rows.append(
                         CleanerRow(
                             id: "item\u{0}" + category.id + "\u{0}" + item.id,
-                            kind: .item(Self.item(item, categoryID: category.id, now: now))))
+                            kind: .item(
+                                Self.item(
+                                    item, categoryID: category.id, now: now,
+                                    sizeText: sizeText))))
                 }
             }
             rows.append(CleanerRow(id: "divider\u{0}" + category.id, kind: .divider))
@@ -142,10 +159,12 @@ struct CleanerListState: Equatable, Sendable {
         return rows
     }
 
-    private static func item(_ item: JunkItem, categoryID: String, now: Date) -> CleanerItemRow {
+    private static func item(
+        _ item: JunkItem, categoryID: String, now: Date, sizeText: CleanerSizeText
+    ) -> CleanerItemRow {
         CleanerItemRow(
             id: item.id, categoryID: categoryID, name: item.name, path: item.path,
-            selected: item.selected, sizeText: JunkScanner.format(item.sizeBytes),
+            selected: item.selected, sizeText: sizeText(item.sizeBytes),
             ageText: CleanerAgeText.since(item.lastModified, now: now),
             branch: item.worktree.map { $0.branch ?? "detached" },
             badges: item.worktree.map(badges) ?? [])

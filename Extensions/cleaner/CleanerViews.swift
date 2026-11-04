@@ -3,26 +3,45 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
+private enum CleanerPendingClean: Equatable {
+    case all
+    case category(String)
+
+    var categoryID: String? {
+        if case .category(let id) = self { return id }
+        return nil
+    }
+}
+
 struct CleanerCard: View {
     let dark: Bool
-    var framed = true
-    @State private var model: CleanerModel
+    let compact: Bool
+    let model: CleanerModel
     @State private var showDrivePicker = false
     @State private var pickerScans = false
-    @State private var confirmClean = false
-
-    init(dark: Bool, framed: Bool = true, model: CleanerModel) {
-        self.dark = dark
-        self.framed = framed
-        _model = State(initialValue: model)
-    }
+    @State private var pendingClean: CleanerPendingClean?
 
     var body: some View {
-        Group {
-            if framed {
-                PageCard(title: "Reclaim developer space") { content }
-            } else {
-                content
+        VStack(spacing: UIScale.pt(0)) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(0)) {
+                    controls.padding(.bottom, UIScale.pt(12))
+                    if showsList {
+                        ForEach(model.list.rows) { row in
+                            CleanerRowView(row: row, model: model, dark: dark) {
+                                pendingClean = .category($0)
+                            }
+                            .equatable()
+                        }
+                    }
+                }
+                .pageContent(compact)
+            }
+            .scrollIndicators(.never)
+            if showsList {
+                footer
+                    .pageGutter(compact)
+                    .padding(.vertical, UIScale.pt(10))
             }
         }
         .edithSheet(isPresented: $showDrivePicker) {
@@ -33,52 +52,65 @@ struct CleanerCard: View {
             }
         }
         .confirmationDialog(
-            "Clean \(JunkScanner.format(model.selectedTotal))?",
-            isPresented: $confirmClean, titleVisibility: .visible
-        ) {
-            Button("Move \(model.selectedItemCount) items to Trash", role: .destructive) {
-                model.clean()
+            "Clean \(JunkScanner.format(pendingBytes))?",
+            isPresented: Binding(
+                get: { pendingClean != nil }, set: { if !$0 { pendingClean = nil } }),
+            titleVisibility: .visible, presenting: pendingClean
+        ) { pending in
+            Button("Move \(pendingCount) items to Trash", role: .destructive) {
+                model.clean(categoryID: pending.categoryID)
             }
             Button("Cancel", role: .cancel) {}
-        } message: {
+        } message: { pending in
             Text(
-                "Items go to the Trash, so you can restore them until you empty it. Worktrees are pruned from their repository; their branches stay."
-            )
+                pending == .all
+                    ? "Items go to the Trash, so you can restore them until you empty it. Worktrees are pruned from their repository; their branches stay."
+                    : "Items go to the Trash, so you can restore them until you empty it.")
         }
     }
 
-    private var content: some View {
+    private var showsList: Bool { model.scanned && !model.categories.isEmpty }
+
+    private var pendingBytes: Int64 {
+        guard let pendingClean else { return 0 }
+        return pendingClean.categoryID.map { model.selectedTotal(categoryID: $0) }
+            ?? model.selectedTotal
+    }
+
+    private var pendingCount: Int {
+        guard let pendingClean else { return 0 }
+        return pendingClean.categoryID.map { model.selectedItemCount(categoryID: $0) }
+            ?? model.selectedItemCount
+    }
+
+    @ViewBuilder private var controls: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             if !model.scanned && !model.scanning {
                 intro
             } else {
                 header
                 if model.logsExpanded { logView }
+                if model.lastReclaimed > 0 {
+                    Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
+                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
+                }
                 if model.scanned {
                     drivesView
                     if !model.categories.isEmpty {
                         searchBar
                         CleanerFilterBar(model: model, dark: dark)
                         selectAllRow
-                        if model.filteredCategories.isEmpty {
+                        if !model.list.matchesSearch {
                             Label("No items match these filters", systemImage: "magnifyingglass")
                                 .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
-                        ForEach(model.filteredCategories) { category in
-                            CleanerCategoryRow(model: model, category: category, dark: dark)
-                        }
-                        footer
                     } else {
                         Text("Nothing to clean. You're already tidy.")
                             .font(.system(size: UIScale.pt(12)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
-            }
-            if model.lastReclaimed > 0 {
-                Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
             }
         }
     }
@@ -179,7 +211,9 @@ struct CleanerCard: View {
     }
 
     private var searchBar: some View {
-        SearchField(placeholder: "Filter", text: $model.search)
+        SearchField(
+            placeholder: "Filter",
+            text: Binding(get: { model.search }, set: { model.search = $0 }))
     }
 
     private var selectAllRow: some View {
@@ -187,7 +221,7 @@ struct CleanerCard: View {
             Button {
                 model.toggleAll()
             } label: {
-                Image(systemName: selectAllSymbol)
+                Image(systemName: CleanerRowView.checkbox(model.overallSelection))
                     .foregroundStyle(
                         model.overallSelection == .none ? .secondary : DashSkin.accent(dark))
             }
@@ -206,17 +240,9 @@ struct CleanerCard: View {
         return hidden > 0 ? selected + " · \(hidden) hidden by filters" : selected
     }
 
-    private var selectAllSymbol: String {
-        switch model.overallSelection {
-        case .all: "checkmark.square.fill"
-        case .some: "minus.square.fill"
-        case .none: "square"
-        }
-    }
-
     private var footer: some View {
         Button {
-            confirmClean = true
+            pendingClean = .all
         } label: {
             Text(
                 model.selectedTotal > 0
@@ -230,13 +256,189 @@ struct CleanerCard: View {
         .tint(DashSkin.accent(dark))
         .controlSize(.large)
         .disabled(model.scanning || model.selectedTotal == 0)
-        .padding(.top, UIScale.pt(2))
     }
 
     private func openPicker(scan: Bool) {
         pickerScans = scan
         model.loadDriveOptions()
         showDrivePicker = true
+    }
+}
+
+private struct CleanerRowView: View, Equatable {
+    let row: CleanerRow
+    let model: CleanerModel
+    let dark: Bool
+    let onClean: (String) -> Void
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.row == rhs.row && lhs.dark == rhs.dark
+    }
+
+    static func checkbox(_ selection: JunkSelection) -> String {
+        switch selection {
+        case .all: "checkmark.square.fill"
+        case .some: "minus.square.fill"
+        case .none: "square"
+        }
+    }
+
+    var body: some View {
+        switch row.kind {
+        case .category(let category):
+            CleanerCategoryHeader(category: category, model: model, dark: dark, onClean: onClean)
+        case .itemFilter(let categoryID, let count):
+            SearchField(
+                placeholder: "Filter \(count) items",
+                text: Binding(
+                    get: { model.itemFilters[categoryID] ?? "" },
+                    set: { model.setItemFilter($0, categoryID: categoryID) }),
+                compact: true
+            )
+            .padding(.leading, UIScale.pt(26)).padding(.bottom, UIScale.pt(4))
+        case .item(let item):
+            CleanerItemLine(item: item, model: model, dark: dark)
+                .padding(.bottom, UIScale.pt(4))
+        case .divider:
+            Divider().opacity(0.3)
+        }
+    }
+}
+
+private struct CleanerCategoryHeader: View {
+    let category: CleanerCategoryRow
+    let model: CleanerModel
+    let dark: Bool
+    let onClean: (String) -> Void
+    @State private var hover = false
+
+    var body: some View {
+        ZStack {
+            Button {
+                model.toggleExpand(category.id)
+            } label: {
+                HStack(spacing: UIScale.pt(10)) {
+                    Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                    Image(systemName: category.expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        Text(category.name).font(.system(size: UIScale.pt(13), weight: .medium))
+                        Text(category.detail).font(.system(size: UIScale.pt(10.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
+                    }
+                    Spacer()
+                    Text("\(category.itemCount) items")
+                        .font(.system(size: UIScale.pt(10))).foregroundStyle(
+                            DashSkin.inkFaint(dark))
+                    Text(category.sizeText)
+                        .font(.system(size: UIScale.pt(12), design: .monospaced))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(72), alignment: .trailing)
+                    Text("Clean")
+                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .hidden()
+                        .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
+                }
+                .padding(.horizontal, UIScale.pt(6))
+                .padding(.vertical, UIScale.pt(7))
+                .background(
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .fill(hover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+                )
+            }
+            .buttonStyle(.edith(.borderless))
+            .onHover { hover = $0 }
+            HStack {
+                Button {
+                    model.toggleCategory(category.id)
+                } label: {
+                    Image(systemName: CleanerRowView.checkbox(category.selection))
+                        .foregroundStyle(
+                            category.selection == .none ? .secondary : DashSkin.accent(dark))
+                }
+                .buttonStyle(.edith(.borderless))
+                Spacer()
+                Button("Clean") { onClean(category.id) }
+                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .buttonStyle(.edith(.borderless))
+                    .disabled(category.selectedCount == 0)
+            }
+            .padding(.horizontal, UIScale.pt(6))
+            .padding(.vertical, UIScale.pt(7))
+        }
+    }
+}
+
+private struct CleanerItemLine: View {
+    let item: CleanerItemRow
+    let model: CleanerModel
+    let dark: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            model.toggleItem(categoryID: item.categoryID, itemID: item.id)
+        } label: {
+            HStack(spacing: UIScale.pt(10)) {
+                Image(systemName: item.selected ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .help(item.path.path)
+                    if let branch = item.branch { worktreeLine(branch) }
+                }
+                Spacer()
+                if let age = item.ageText {
+                    Text(age)
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .help("Last edited")
+                }
+                Text(item.sizeText)
+                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(66), alignment: .trailing)
+            }
+            .padding(.leading, UIScale.pt(26)).padding(.trailing, UIScale.pt(6)).padding(
+                .vertical, UIScale.pt(4)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([item.path])
+            }
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(item.path.path, forType: .string)
+            }
+        }
+    }
+
+    private func worktreeLine(_ branch: String) -> some View {
+        HStack(spacing: UIScale.pt(5)) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: UIScale.pt(9)))
+            Text(branch)
+                .font(.system(size: UIScale.pt(10), design: .monospaced))
+                .lineLimit(1).truncationMode(.middle)
+            ForEach(item.badges, id: \.self) { badge in
+                Text(badge)
+                    .font(.system(size: UIScale.pt(8.5), weight: .bold)).tracking(UIScale.pt(0.3))
+                    .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
+                    .background(DashSkin.inkFaint(dark).opacity(0.15), in: Capsule())
+            }
+        }
+        .foregroundStyle(DashSkin.inkFaint(dark))
     }
 }
 
@@ -406,121 +608,6 @@ private struct DrivePickerSheet: View {
     }
 }
 
-private struct CleanerCategoryRow: View {
-    let model: CleanerModel
-    let category: JunkCategory
-    let dark: Bool
-    @State private var itemFilter = ""
-    @State private var headerHover = false
-    @State private var confirmClean = false
-
-    private var isExpanded: Bool { model.expanded.contains(category.id) }
-
-    private var showItemFilter: Bool { category.items.count > 10 }
-
-    private var visibleItems: [JunkItem] {
-        guard !itemFilter.isEmpty else { return category.items }
-        let query = itemFilter.lowercased()
-        return category.items.filter { $0.name.lowercased().contains(query) }
-    }
-
-    var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
-            ZStack {
-                Button {
-                    model.toggleExpand(category.id)
-                } label: {
-                    HStack(spacing: UIScale.pt(10)) {
-                        Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                            Text(category.name).font(.system(size: UIScale.pt(13), weight: .medium))
-                            Text(category.detail).font(.system(size: UIScale.pt(10.5)))
-                                .foregroundStyle(DashSkin.inkFaint(dark)).lineLimit(1)
-                        }
-                        Spacer()
-                        Text("\(category.items.count) items")
-                            .font(.system(size: UIScale.pt(10))).foregroundStyle(
-                                DashSkin.inkFaint(dark))
-                        Text(JunkScanner.format(category.sizeBytes))
-                            .font(.system(size: UIScale.pt(12), design: .monospaced))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(width: UIScale.pt(72), alignment: .trailing)
-                        Text("Clean")
-                            .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                            .hidden()
-                            .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
-                    }
-                    .padding(.horizontal, UIScale.pt(6))
-                    .padding(.vertical, UIScale.pt(7))
-                    .background(
-                        RoundedRectangle(cornerRadius: UIScale.pt(7))
-                            .fill(headerHover ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
-                    )
-                }
-                .buttonStyle(.edith(.borderless))
-                .onHover { headerHover = $0 }
-                HStack {
-                    Button {
-                        model.toggleCategory(category.id)
-                    } label: {
-                        Image(systemName: checkboxSymbol)
-                            .foregroundStyle(
-                                category.selection == .none ? .secondary : DashSkin.accent(dark))
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    Spacer()
-                    Button("Clean") { confirmClean = true }
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .buttonStyle(.edith(.borderless))
-                        .disabled(model.selectedItemCount(categoryID: category.id) == 0)
-                }
-                .padding(.horizontal, UIScale.pt(6))
-                .padding(.vertical, UIScale.pt(7))
-            }
-            if isExpanded {
-                if showItemFilter {
-                    SearchField(
-                        placeholder: "Filter \(category.items.count) items", text: $itemFilter,
-                        compact: true
-                    )
-                    .padding(.leading, UIScale.pt(26)).padding(.bottom, UIScale.pt(4))
-                }
-                ForEach(visibleItems) { item in
-                    CleanerItemRow(
-                        model: model, categoryID: category.id, item: item, dark: dark)
-                }
-                .padding(.bottom, UIScale.pt(4))
-            }
-            Divider().opacity(0.3)
-        }
-        .confirmationDialog(
-            "Clean \(JunkScanner.format(model.selectedTotal(categoryID: category.id)))?",
-            isPresented: $confirmClean, titleVisibility: .visible
-        ) {
-            Button(
-                "Move \(model.selectedItemCount(categoryID: category.id)) items to Trash",
-                role: .destructive
-            ) {
-                model.clean(categoryID: category.id)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Items go to the Trash, so you can restore them until you empty it.")
-        }
-    }
-
-    private var checkboxSymbol: String {
-        switch category.selection {
-        case .all: "checkmark.square.fill"
-        case .some: "minus.square.fill"
-        case .none: "square"
-        }
-    }
-}
-
 private struct CleanerFilterBar: View {
     let model: CleanerModel
     let dark: Bool
@@ -564,92 +651,6 @@ private struct CleanerFilterBar: View {
         Text(text).font(.system(size: UIScale.pt(10), weight: .bold)).tracking(UIScale.pt(0.6))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .frame(minWidth: UIScale.pt(96), alignment: .leading)
-    }
-}
-
-private struct CleanerItemRow: View {
-    let model: CleanerModel
-    let categoryID: String
-    let item: JunkItem
-    let dark: Bool
-    @State private var hovering = false
-
-    var body: some View {
-        Button {
-            model.toggleItem(categoryID: categoryID, itemID: item.id)
-        } label: {
-            HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: item.selected ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(item.selected ? DashSkin.accent(dark) : .secondary)
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text(item.name).font(.system(size: UIScale.pt(11))).lineLimit(1)
-                        .truncationMode(.middle)
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                        .help(item.path.path)
-                    if let worktree = item.worktree { worktreeLine(worktree) }
-                }
-                Spacer()
-                if let age = CleanerAgeText.since(item.lastModified, now: Date()) {
-                    Text(age)
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .help("Last edited")
-                }
-                Text(JunkScanner.format(item.sizeBytes))
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(66), alignment: .trailing)
-            }
-            .padding(.leading, UIScale.pt(26)).padding(.trailing, UIScale.pt(6)).padding(
-                .vertical, UIScale.pt(4)
-            )
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.12) : .clear)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
-        .contextMenu {
-            Button("Reveal in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([item.path])
-            }
-            Button("Copy Path") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(item.path.path, forType: .string)
-            }
-        }
-    }
-
-    private func worktreeLine(_ worktree: WorktreeInfo) -> some View {
-        HStack(spacing: UIScale.pt(5)) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: UIScale.pt(9)))
-            Text(worktree.branch ?? "detached")
-                .font(.system(size: UIScale.pt(10), design: .monospaced))
-                .lineLimit(1).truncationMode(.middle)
-            ForEach(badges(worktree), id: \.self) { badge in
-                Text(badge)
-                    .font(.system(size: UIScale.pt(8.5), weight: .bold)).tracking(UIScale.pt(0.3))
-                    .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
-                    .background(DashSkin.inkFaint(dark).opacity(0.15), in: Capsule())
-            }
-        }
-        .foregroundStyle(DashSkin.inkFaint(dark))
-    }
-
-    private func badges(_ worktree: WorktreeInfo) -> [String] {
-        var badges: [String] = []
-        if worktree.dirty == true { badges.append("UNCOMMITTED") }
-        if let unpushed = worktree.unpushed, unpushed > 0 { badges.append("\(unpushed) UNPUSHED") }
-        if worktree.merged {
-            badges.append("MERGED")
-        } else if worktree.upstreamGone {
-            badges.append("UPSTREAM GONE")
-        }
-        if worktree.locked { badges.append("LOCKED") }
-        return badges
     }
 }
 
