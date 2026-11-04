@@ -1,6 +1,7 @@
 internal import EdithExtensionSupport_attention_native
 internal import EdithExtensionUI
 import AppKit
+import ImageIO
 import SwiftUI
 
 enum AttentionPalette {
@@ -255,7 +256,7 @@ struct AttentionStatusPill: View {
     }
 }
 
-enum AttentionEventIconDescriptor: Equatable {
+enum AttentionEventIconDescriptor: Hashable {
     case application(bundleID: String?)
     case website(URL?)
     case symbol(String)
@@ -308,117 +309,188 @@ struct AttentionResolvedIcon: View {
     let descriptor: AttentionEventIconDescriptor
     let fallbackColor: Color
     var size: CGFloat = 26
-    @State private var faviconImage: NSImage?
-    @State private var applicationImage: NSImage?
-
-    private var faviconURL: URL? {
-        guard case .website(let url) = descriptor else { return nil }
-        return url
-    }
-
-    private var applicationBundleID: String? {
-        guard case .application(let bundleID) = descriptor else { return nil }
-        return bundleID
-    }
-
+    @State private var loaded: AttentionLoadedIcon?
     @Environment(\.attentionUIClient) private var uiClient
+
     var body: some View {
+        let image =
+            loaded?.descriptor == descriptor
+            ? loaded?.image : AttentionIconStore.shared.cached(descriptor)
         Group {
-            switch descriptor {
-            case .application(let bundleID):
-                if let icon = applicationImage
-                    ?? AttentionApplicationIcon.cached(bundleID: bundleID)
-                {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                } else {
-                    fallback("macwindow")
-                }
-            case .website(let url):
-                if url != nil, let faviconImage {
-                    Image(nsImage: faviconImage)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                        .padding(UIScale.pt(3))
-                } else {
-                    fallback("globe")
-                }
-            case .symbol(let systemName):
-                fallback(systemName)
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(descriptor.isWebsite ? UIScale.pt(3) : 0)
+            } else {
+                Image(systemName: descriptor.fallbackSymbol)
+                    .font(.system(size: UIScale.pt(size * 0.62), weight: .medium))
+                    .foregroundStyle(fallbackColor)
             }
         }
         .frame(width: UIScale.pt(size), height: UIScale.pt(size))
         .accessibilityHidden(true)
-        .pageTask(id: faviconURL) {
-            faviconImage = nil
-            guard let faviconURL,
-                let data = try? await faviconData(faviconURL),
-                !Task.isCancelled
-            else { return }
-            faviconImage = NSImage(data: data)
-        }
-        .pageTask(id: applicationBundleID) {
-            applicationImage = nil
-            guard let applicationBundleID,
-                AttentionApplicationIcon.cached(bundleID: applicationBundleID) == nil
-            else { return }
-            let icon: NSImage?
-            if let uiClient {
-                let bytes = try? await uiClient.invoke(
-                    "attention.ui.application.icon",
-                    payload: AttentionPayload.encode(applicationBundleID))
-                let data = bytes.flatMap { try? AttentionPayload.decode(Data?.self, from: $0) }
-                icon = data.flatMap { NSImage(data: $0) }
-            } else {
-                icon = await AttentionApplicationIcon.resolve(bundleID: applicationBundleID)
-            }
-            guard !Task.isCancelled else { return }
-            applicationImage = icon
+        .pageTask(id: descriptor) {
+            let store = AttentionIconStore.shared
+            guard store.needsLoad(descriptor) else { return }
+            let image = await store.load(descriptor, client: uiClient)
+            guard !Task.isCancelled, let image else { return }
+            loaded = AttentionLoadedIcon(descriptor: descriptor, image: image)
         }
     }
+}
 
-    private func faviconData(_ url: URL) async throws -> Data? {
-        if let uiClient {
-            return try AttentionPayload.decode(
-                Data?.self,
-                from: await uiClient.invoke(
-                    AgentFaviconClient.operation, payload: AttentionPayload.encode(url)))
-        }
-        return try await AgentFaviconClient().data(for: url)
+struct AttentionLoadedIcon {
+    let descriptor: AttentionEventIconDescriptor
+    let image: NSImage
+}
+
+extension AttentionEventIconDescriptor {
+    var isWebsite: Bool {
+        if case .website = self { return true }
+        return false
     }
 
-    private func fallback(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: UIScale.pt(size * 0.62), weight: .medium))
-            .foregroundStyle(fallbackColor)
+    var fallbackSymbol: String {
+        switch self {
+        case .application: "macwindow"
+        case .website: "globe"
+        case .symbol(let name): name
+        }
     }
 }
 
 @MainActor
+final class AttentionIconStore {
+    static let shared = AttentionIconStore()
+    nonisolated static let pixelSize = 64
+
+    private let images = NSCache<NSString, NSImage>()
+    private var pending: [AttentionEventIconDescriptor: Task<NSImage?, Never>] = [:]
+    private var missing: Set<AttentionEventIconDescriptor> = []
+
+    init(limit: Int = 600) {
+        images.countLimit = limit
+    }
+
+    func cached(_ descriptor: AttentionEventIconDescriptor) -> NSImage? {
+        guard let key = Self.key(descriptor) else { return nil }
+        return images.object(forKey: key)
+    }
+
+    func needsLoad(_ descriptor: AttentionEventIconDescriptor) -> Bool {
+        guard Self.key(descriptor) != nil else { return false }
+        return cached(descriptor) == nil && !missing.contains(descriptor)
+    }
+
+    func load(
+        _ descriptor: AttentionEventIconDescriptor,
+        fetch: @escaping @MainActor () async -> Data?
+    ) async -> NSImage? {
+        guard let key = Self.key(descriptor) else { return nil }
+        if let image = images.object(forKey: key) { return image }
+        guard !missing.contains(descriptor) else { return nil }
+        if let task = pending[descriptor] { return await task.value }
+        let task = Task { @MainActor in
+            guard let data = await fetch() else { return nil as NSImage? }
+            return await Task.detached(priority: .utility) {
+                AttentionIconStore.thumbnail(data, pixels: AttentionIconStore.pixelSize)
+            }.value
+        }
+        pending[descriptor] = task
+        let image = await task.value
+        pending[descriptor] = nil
+        if let image {
+            images.setObject(image, forKey: key)
+        } else if !Task.isCancelled {
+            missing.insert(descriptor)
+        }
+        return image
+    }
+
+    func load(_ descriptor: AttentionEventIconDescriptor, client: AttentionUIClient?) async
+        -> NSImage?
+    {
+        await load(descriptor) {
+            switch descriptor {
+            case .application(let bundleID?):
+                if let client {
+                    let bytes = try? await client.invoke(
+                        "attention.ui.application.icon",
+                        payload: AttentionPayload.encode(bundleID))
+                    return bytes.flatMap { try? AttentionPayload.decode(Data?.self, from: $0) }
+                }
+                return await AttentionApplicationIcon.png(bundleID: bundleID)
+            case .website(let url?):
+                if let client {
+                    let bytes = try? await client.invoke(
+                        AgentFaviconClient.operation, payload: AttentionPayload.encode(url))
+                    return bytes.flatMap { try? AttentionPayload.decode(Data?.self, from: $0) }
+                }
+                return try? await AgentFaviconClient().data(for: url)
+            default:
+                return nil
+            }
+        }
+    }
+
+    private static func key(_ descriptor: AttentionEventIconDescriptor) -> NSString? {
+        switch descriptor {
+        case .application(let bundleID?) where !bundleID.isEmpty: "app:\(bundleID)" as NSString
+        case .website(let url?): "web:\(url.absoluteString)" as NSString
+        default: nil
+        }
+    }
+
+    nonisolated static func thumbnail(_ data: Data, pixels: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let image = CGImageSourceCreateThumbnailAtIndex(
+                source, 0,
+                [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceShouldCacheImmediately: true,
+                    kCGImageSourceThumbnailMaxPixelSize: pixels,
+                ] as CFDictionary)
+        else { return NSImage(data: data) }
+        return NSImage(
+            cgImage: image, size: NSSize(width: image.width / 2, height: image.height / 2))
+    }
+}
+
 enum AttentionApplicationIcon {
-    private static var cache: [String: NSImage] = [:]
-
-    static func cached(bundleID: String?) -> NSImage? {
-        guard let bundleID, !bundleID.isEmpty else { return nil }
-        return cache[bundleID]
+    static func png(bundleID: String, pixels: Int = AttentionIconStore.pixelSize) async -> Data? {
+        guard !bundleID.isEmpty else { return nil }
+        return await Task.detached(priority: .utility) {
+            guard let icon = lookup(bundleID: bundleID) else { return nil as Data? }
+            return render(icon, pixels: pixels)
+        }.value
     }
 
-    static func resolve(bundleID: String?) async -> NSImage? {
-        guard let bundleID, !bundleID.isEmpty else { return nil }
-        if let cached = cache[bundleID] { return cached }
-        let icon = await Task.detached { lookup(bundleID: bundleID) }.value
-        if let icon { cache[bundleID] = icon }
-        return icon
-    }
-
-    private nonisolated static func lookup(bundleID: String) -> NSImage? {
+    private static func lookup(bundleID: String) -> NSImage? {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.icon
             ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
                 NSWorkspace.shared.icon(forFile: $0.path)
             }
+    }
+
+    static func render(_ icon: NSImage, pixels: Int) -> Data? {
+        guard
+            let bitmap = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+            let context = NSGraphicsContext(bitmapImageRep: bitmap)
+        else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        icon.draw(
+            in: NSRect(x: 0, y: 0, width: pixels, height: pixels), from: .zero,
+            operation: .copy, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])
     }
 }
 

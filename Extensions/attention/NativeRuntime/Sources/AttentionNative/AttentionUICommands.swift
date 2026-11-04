@@ -72,10 +72,7 @@ import Foundation
             let id = try AttentionPayload.decode(String.self, from: payload)
             guard !id.isEmpty, id.utf8.count <= 256 else { throw ExtensionPeerError.invalidRequest }
             let fixture = ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
-            let icon = fixture ? nil : await AttentionApplicationIcon.resolve(bundleID: id)
-            let data = icon?.tiffRepresentation.flatMap {
-                NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
-            }
+            let data = fixture ? nil : await AttentionApplicationIcon.png(bundleID: id)
             return try AttentionPayload.encode(data)
         case "attention.ui.breakdown.copy":
             let request = try AttentionPayload.decode(
