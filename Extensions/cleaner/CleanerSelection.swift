@@ -109,6 +109,8 @@ struct CleanerSelectionIndex {
     private var outerAncestors: [[Int]] = []
     private var innerAncestors: [[Int]] = []
     private var descendants: [[Int]] = []
+    private var scopedQuery: String?
+    private var scoped: [CleanerSelectionScope] = []
 
     init() {}
 
@@ -183,8 +185,20 @@ struct CleanerSelectionIndex {
         categoryPositions[categoryID].flatMap { positions[$0][itemID] }
     }
 
-    func scope(categoryID: String, matching query: String) -> CleanerSelectionScope? {
-        guard let owner = categoryPositions[categoryID] else { return nil }
+    mutating func scope(categoryID: String, matching query: String) -> CleanerSelectionScope? {
+        scopes(matching: query).first { $0.categoryID == categoryID }
+    }
+
+    mutating func scopes(matching query: String) -> [CleanerSelectionScope] {
+        if query != scopedQuery {
+            scoped = ranges.indices.compactMap { matchingScope(owner: $0, query: query) }
+            scopedQuery = query
+        }
+        return scoped
+    }
+
+    private func matchingScope(owner: Int, query: String) -> CleanerSelectionScope? {
+        let categoryID = categoryIDs[owner]
         let range = ranges[owner]
         if query.isEmpty || categoryNames[owner].contains(query) {
             return CleanerSelectionScope(
@@ -195,10 +209,6 @@ struct CleanerSelectionIndex {
         }
         guard !matched.isEmpty else { return nil }
         return CleanerSelectionScope(categoryID: categoryID, positions: matched, whole: false)
-    }
-
-    func scopes(matching query: String) -> [CleanerSelectionScope] {
-        categoryIDs.compactMap { scope(categoryID: $0, matching: query) }
     }
 
     func selection(of scopes: [CleanerSelectionScope]) -> JunkSelection {

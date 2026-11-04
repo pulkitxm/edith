@@ -453,7 +453,9 @@ final class CleanerModel {
 
     var overallSelection: JunkSelection {
         let query = search.lowercased()
-        return query.isEmpty ? stats.selection : index.selection(of: index.scopes(matching: query))
+        guard !query.isEmpty else { return stats.selection }
+        let scopes = index.scopes(matching: query)
+        return index.selection(of: scopes)
     }
 
     func setItemFilter(_ text: String, categoryID: String) {
