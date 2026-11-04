@@ -39,7 +39,7 @@ struct PageTabStrip<ID: Hashable, Content: View>: View {
                     await Task.yield()
                     guard !Task.isCancelled else { return }
                     withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                        proxy.scrollTo(selection, anchor: .center)
+                        proxy.scrollTo(selection)
                     }
                 }
         }
