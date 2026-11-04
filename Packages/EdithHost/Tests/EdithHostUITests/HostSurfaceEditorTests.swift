@@ -1223,10 +1223,20 @@ import HostWorkerFixtureSupport
                             actions.append(utility.id)
                         }
                     }
+                    HostSidebarNotice(
+                        symbol: "arrow.down.circle.fill", title: "Update ready", detail: "v9.9.9",
+                        tint: DashSkin.sage
+                    ) { actions.append("update") }
+                    HostSidebarNotice(
+                        symbol: "exclamationmark.triangle.fill",
+                        title: "Permissions needed", tint: DashSkin.warn
+                    ) { actions.append("permissions") }
                     HostAgentStatusBar(online: true, summary: "2 active") {
                         actions.append("agent")
                     }
-                }.padding(10).environment(\.colorScheme, variant.scheme))
+                }.padding(10).frame(maxHeight: .infinity, alignment: .top)
+                    .background(DashSkin.paper(variant.scheme == .dark))
+                    .environment(\.colorScheme, variant.scheme))
             host.frame = CGRect(x: 0, y: 0, width: variant.width, height: 550)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host; window.orderBack(nil)
@@ -1236,11 +1246,27 @@ import HostWorkerFixtureSupport
                 let button = try #require(find(host, label: utility.title))
                 let frame = try #require((button as AnyObject).accessibilityFrame?())
                 #expect(bounds.insetBy(dx: -1, dy: -1).contains(frame))
+                #expect(frame.height <= UIScale.pt(34))
                 #expect((button as AnyObject).accessibilityPerformPress?() == true)
+            }
+            for label in ["Update ready, v9.9.9", "Permissions needed"] {
+                let notice = try #require(find(host, label: label))
+                #expect((notice as AnyObject).accessibilityPerformPress?() == true)
             }
             let agent = try #require(find(host, label: "Background agent"))
             #expect((agent as AnyObject).accessibilityPerformPress?() == true)
-            #expect(actions == HostSidebarUtility.allCases.map(\.id) + ["agent"])
+            #expect(
+                actions == HostSidebarUtility.allCases.map(\.id) + [
+                    "update", "permissions", "agent",
+                ])
+            if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(
+                    to: URL(fileURLWithPath: capture).appendingPathComponent(
+                        "sidebar-footer-\(variant.name).png"), options: .atomic)
+            }
             #expect(!TestWindowHost.isExposedOnDesktop(window))
             window.orderOut(nil)
         }
