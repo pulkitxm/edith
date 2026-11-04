@@ -37,10 +37,10 @@ final class TerminalSessionHolder {
     private var linkRequest: UUID?
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
-    private var offset: UInt64 = 0
+    @ObservationIgnored private var offset: UInt64 = 0
     private enum Event { case input(Data); case resize(UInt16, UInt16, UInt32, UInt32) }
-    private var events: [Event] = []
-    private var queuedBytes = 0
+    @ObservationIgnored private var events: [Event] = []
+    @ObservationIgnored private var queuedBytes = 0
     private(set) var ghosttyView: GhosttyTerminalView?
     @ObservationIgnored var fileLinks: TerminalFileLinks? {
         didSet { ghosttyView?.fileLinks = fileLinks }
@@ -68,7 +68,7 @@ final class TerminalSessionHolder {
     private var appliedTheme: GhosttyTheme?
     private var presentation: (Bool, Bool)?
     private var hostWindowState: (active: Bool, key: Bool, visible: Bool)?
-    var nativePaneAction: (@MainActor (GhosttyPaneAction) -> Void)?
+    @ObservationIgnored var nativePaneAction: (@MainActor (GhosttyPaneAction) -> Void)?
     func start(
         executable: String, arguments: [String], environment: [String],
         currentDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
@@ -134,6 +134,7 @@ final class TerminalSessionHolder {
         if focus { ghosttyView?.requestFocus() } else { ghosttyView?.cancelFocusRequest() }
     }
     func setHostWindowState(active: Bool, key: Bool, visible: Bool) {
+        if let current = hostWindowState, current == (active, key, visible) { return }
         hostWindowState = (active, key, visible)
         ghosttyView?.setHostWindowState(active: active, key: key && visible)
         synchronizeRendering()

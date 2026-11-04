@@ -134,6 +134,37 @@ import Testing
         #expect(resizes > initial)
     }
 
+    @Test @MainActor func hiddenSurfacesDeferResizeUntilShown() async throws {
+        var resizes = 0
+        let io = GhosttyExternalIO(
+            write: { _ in }, resize: { _, _, _, _ in resizes += 1 }, failure: {})
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
+        let container = NSView(frame: window.contentLayoutRect)
+        let view = GhosttyTerminalView(externalIO: io)
+        view.frame = container.bounds
+        window.contentView = container
+        container.addSubview(view)
+        defer { view.shutdown(); window.contentView = nil }
+        let surface = try #require(view.surface)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        let visibleColumns = ghostty_surface_size(surface).columns
+
+        view.setRenderingActive(false)
+        let hidden = resizes
+        for width in stride(from: 700, through: 1000, by: 20) {
+            view.setFrameSize(NSSize(width: CGFloat(width), height: 400))
+            view.layout()
+        }
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(resizes == hidden)
+        #expect(ghostty_surface_size(surface).columns == visibleColumns)
+
+        view.setRenderingActive(true)
+        for _ in 0..<10 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(resizes == hidden + 1)
+        #expect(ghostty_surface_size(surface).columns > visibleColumns)
+    }
+
     @Test @MainActor func exitedRendererRetainsScreenAndRejectsLateOutput() async throws {
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
         for _ in 0..<8 {
