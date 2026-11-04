@@ -57,6 +57,12 @@ public struct VirtualList<Item: Identifiable & Equatable, Header: View, Row: Vie
         update(context.coordinator, environment: context.environment)
     }
 
+    public func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context)
+        -> CGSize?
+    {
+        CGSize(width: proposal.width ?? 320, height: proposal.height ?? 320)
+    }
+
     private func update(_ coordinator: VirtualListCoordinator<Item>, environment: EnvironmentValues)
     {
         coordinator.environment = environment

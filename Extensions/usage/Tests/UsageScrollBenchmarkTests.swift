@@ -31,6 +31,7 @@ import Testing
         #expect(Set(timing.offsets).count > 10)
         #expect(timing.worst < 80)
         #expect(timing.median < 12)
+        #expect(timing.hitches < 4)
     }
 
     static func measure(
