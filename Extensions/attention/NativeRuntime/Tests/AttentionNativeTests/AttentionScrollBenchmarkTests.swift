@@ -18,7 +18,8 @@ import Testing
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
         for (section, preset) in [
             (AttentionPageSection.overview, AttentionRangePreset.today),
-            (.overview, .last7), (.timeline, .last7), (.breakdown, .last7),
+            (.overview, .last7), (.timeline, .last7), (.breakdown, .last7), (.focus, .last7),
+            (.agents, .last7),
         ] where only == nil || only == "\(section.rawValue)-\(preset.rawValue)" {
             requests.reset()
             let client = fixture.client(counter: requests)
@@ -77,6 +78,34 @@ extension AttentionScrollBenchmarkTests {
         #expect(timing.median < 12, "\(timing)")
     }
 
+    @Test(.enabled(if: enabled)) func expandedActivityBrowser() async throws {
+        let fixture = try AttentionSyntheticHistory.make(
+            days: 7, eventsPerDay: 420, appCount: 500, siteCount: 400)
+        defer { fixture.cleanup() }
+        let counter = AttentionRequestCounter()
+        let model = AttentionPageModel(
+            repository: fixture.repository, uiClient: fixture.client(counter: counter))
+        model.section = .overview
+        model.select(.last7)
+        model.reload()
+        await model.waitForReload()
+        let (window, host) = AttentionScrollHarness.host(
+            ScrollView {
+                AttentionEntitiesPanel(model: model, limit: 600).padding(24)
+            }
+            .environment(\.compactLayout, false)
+            .environment(\.colorScheme, .dark),
+            size: CGSize(width: 1280, height: 860))
+        await AttentionScrollHarness.settle(host, for: .seconds(1))
+        let timing = await AttentionScrollHarness.scroll(host, frames: 300)
+        print(
+            "attention-scroll activity-browser entities=\(model.summary.entities.count) shown=600: \(timing) slowAt=\(timing.slowOffsets)"
+        )
+        window.orderOut(nil)
+        window.contentView = nil
+        await model.shutdown()
+    }
+
     @Test(.enabled(if: enabled)) func realizingEachOverviewPanel() async throws {
         let fixture = try AttentionSyntheticHistory.make(days: 7, eventsPerDay: 420)
         defer { fixture.cleanup() }
@@ -127,10 +156,11 @@ struct AttentionSyntheticHistory {
     let root: URL
     let repository: AttentionRepository
 
-    static let applications = (0..<48).map { ("Sample App \($0)", "test.sample.app\($0)") }
-    static let sites = (0..<32).map { "site\($0).example.com" }
-
-    static func make(days: Int, eventsPerDay: Int) throws -> AttentionSyntheticHistory {
+    static func make(days: Int, eventsPerDay: Int, appCount: Int = 48, siteCount: Int = 32) throws
+        -> AttentionSyntheticHistory
+    {
+        let applications = (0..<appCount).map { ("Sample App \($0)", "test.sample.app\($0)") }
+        let sites = (0..<siteCount).map { "site\($0).example.com" }
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-attention-scroll-\(UUID().uuidString)")
         let repository = AttentionRepository(root: root)
