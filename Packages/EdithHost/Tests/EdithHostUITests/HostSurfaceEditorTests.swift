@@ -1214,7 +1214,7 @@ import HostWorkerFixtureSupport
     @Test func sidebarUtilitiesAdmitOnlyCurrentProviderActions() {
         #expect(
             HostSidebarUtility.allCases.map(\.id) == [
-                "system", "keepAwake", "lidAwake", "keystrokeHighlight", "presenter",
+                "system", "keepAwake", "lidAwake", "keystrokeHighlight", "presenter", "micMute",
             ])
         let controls: [(HostSidebarUtility, String, String)] = [
             (.system, "cleanKeys", "stopCleaning"), (.keepAwake, "enable", "disable"),
@@ -1238,6 +1238,19 @@ import HostWorkerFixtureSupport
                         providerID: utility.id, actions: [.init("open:/tmp", "Open", "folder")]))
                     == nil)
         }
+    }
+
+    @Test func micMuteIsAQuickActionThatFollowsTheMutedMetric() {
+        let unmuted = SurfaceMicSnapshot.make(muted: false)
+        let muted = SurfaceMicSnapshot.make(muted: true)
+        #expect(HostSidebarUtility.micMute.action(in: unmuted)?.id == "toggle")
+        #expect(!HostSidebarUtility.micMute.isOn(unmuted))
+        #expect(HostSidebarUtility.micMute.isOn(muted))
+        #expect(!HostSidebarUtility.micMute.isOn(nil))
+        #expect(
+            HostSidebarUtility.micMute.action(
+                in: SurfaceSnapshot(providerID: "keepAwake", actions: unmuted.actions)) == nil)
+        #expect(SurfaceWidget.actions.providerIDs.contains(HostSidebarUtility.micMute.id))
     }
 
     @Test func originalFooterButtonsRenderAndDispatchAtBothWidthsAndZoom() async throws {
@@ -1633,5 +1646,14 @@ import HostWorkerFixtureSupport
             return NSHostingController(rootView: Text("Owned calendar scene"))
         }
         func endPresentation(id: UUID) { ended.append(id) }
+    }
+}
+
+private enum SurfaceMicSnapshot {
+    static func make(muted: Bool) -> SurfaceSnapshot {
+        SurfaceSnapshot(
+            providerID: "micMute",
+            metrics: [.init("status", "Microphone", muted ? "Muted" : "On")],
+            actions: [.init("toggle", "Toggle mute", "mic.slash")])
     }
 }

@@ -45,6 +45,8 @@ import Testing
         #expect(document.object?["providerIssues"]?.object?.isEmpty == true)
         #expect(try HostCLIHelp.text(["config", "set"]).contains("<key> <value>"))
         #expect(try HostCLIHelp.text(["app", "check-updates"]).contains("--no-wait"))
+        let quit = try HostCLIHelp.text(["app", "quit"])
+        #expect(quit.contains("--completely") && quit.contains("--yes"))
         #expect(
             HostGuideCLI.text.contains("## Databases")
                 && HostGuideCLI.text.contains("## Quinjet review workspaces"))

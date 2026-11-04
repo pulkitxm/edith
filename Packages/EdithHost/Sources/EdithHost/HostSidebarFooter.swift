@@ -4,7 +4,7 @@ import EdithHostCore
 import SwiftUI
 
 enum HostSidebarUtility: String, CaseIterable, Identifiable {
-    case system, keepAwake, lidAwake, keystrokeHighlight, presenter
+    case system, keepAwake, lidAwake, keystrokeHighlight, presenter, micMute
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -13,6 +13,7 @@ enum HostSidebarUtility: String, CaseIterable, Identifiable {
         case .lidAwake: "Lid awake"
         case .keystrokeHighlight: "Keystrokes"
         case .presenter: "Presenter mode"
+        case .micMute: "Mic mute"
         }
     }
     var icon: String {
@@ -22,6 +23,7 @@ enum HostSidebarUtility: String, CaseIterable, Identifiable {
         case .lidAwake: "laptopcomputer"
         case .keystrokeHighlight: "keyboard.badge.ellipsis"
         case .presenter: "theatermasks.fill"
+        case .micMute: "mic.slash"
         }
     }
     var help: String {
@@ -31,6 +33,7 @@ enum HostSidebarUtility: String, CaseIterable, Identifiable {
         case .lidAwake: "Keep this Mac running with the lid closed"
         case .keystrokeHighlight: "Show keyboard input on screen"
         case .presenter: "Blur the private details you choose, everywhere in Edith"
+        case .micMute: "Mute or unmute the microphone"
         }
     }
     func action(in snapshot: SurfaceSnapshot) -> SurfaceAction? {
@@ -41,11 +44,15 @@ enum HostSidebarUtility: String, CaseIterable, Identifiable {
         case .keepAwake, .keystrokeHighlight: allowed = ["enable", "disable"]
         case .lidAwake: allowed = ["on", "off"]
         case .presenter: allowed = ["start", "stop"]
+        case .micMute: allowed = ["toggle"]
         }
         return snapshot.actions.first { allowed.contains($0.id) }
     }
     func isOn(_ snapshot: SurfaceSnapshot?) -> Bool {
         guard let snapshot, let action = action(in: snapshot) else { return false }
+        if self == .micMute {
+            return snapshot.metrics.first { $0.id == "status" }?.value == "Muted"
+        }
         return ["stopCleaning", "disable", "off", "stop"].contains(action.id)
     }
 }
@@ -80,7 +87,7 @@ struct HostSidebarFooter: View {
         .contains { $0.blocksEnabledExtension }
     }
     private var utilities: [HostSidebarUtility] {
-        HostSidebarUtility.allCases.filter { versions[$0.id] != nil }
+        HostSidebarUtility.allCases.filter { $0 != .micMute && versions[$0.id] != nil }
     }
     private var populated: Bool {
         music != nil || !utilities.isEmpty || missingPermissions || updater.updateReady != nil
