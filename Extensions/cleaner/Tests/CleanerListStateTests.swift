@@ -103,6 +103,44 @@ struct CleanerListStateTests {
         #expect(filteredRows.count < category.items.count)
     }
 
+    @Test func selectAllTogglesOffWhenSelectedFoldersAreNested() async throws {
+        let worktree = URL(fileURLWithPath: "/synthetic/code/atlas-feature")
+        let nested = worktree.appendingPathComponent("node_modules")
+        let categories = [
+            JunkCategory(
+                id: Worktrees.categoryID, name: "Git worktrees", detail: "",
+                items: [
+                    JunkItem(
+                        id: worktree.path, name: "atlas-feature", path: worktree,
+                        sizeBytes: 8_192, selected: false)
+                ]),
+            JunkCategory(
+                id: "nodeModules", name: "node_modules", detail: "",
+                items: [
+                    JunkItem(
+                        id: nested.path, name: "atlas-feature/node_modules", path: nested,
+                        sizeBytes: 4_096, selected: false)
+                ]),
+        ]
+        let defaults = try #require(
+            UserDefaults(suiteName: "synthetic.cleaner.nested." + UUID().uuidString))
+        let model = CleanerModel(
+            defaults: defaults,
+            services: CleanerServices(
+                drives: { [] }, scan: { _, _, _ in CleanerScanResult(categories: categories) }))
+        defer { Task { await model.shutdown() } }
+        model.scan()
+        await model.finishWork()
+
+        model.toggleAll()
+        #expect(model.overallSelection == .all)
+        #expect(model.selectedItemCount == 1)
+
+        model.toggleAll()
+        #expect(model.overallSelection == .none)
+        #expect(model.categories.allSatisfy { $0.items.allSatisfy { !$0.selected } })
+    }
+
     @Test func modelRebuildsRowsWhenInputsChange() async throws {
         let defaults = try #require(
             UserDefaults(suiteName: "synthetic.cleaner.rows." + UUID().uuidString))

@@ -60,13 +60,14 @@ struct CleanerListState: Equatable, Sendable {
     var totalItemCount = 0
     var hiddenItemCount = 0
     var selectedItemCount = 0
+    var markedItemCount = 0
     var selectedTotal: Int64 = 0
     var reclaimableTotal: Int64 = 0
     var selectionByCategory: [String: CleanerCategorySelection] = [:]
 
     var overallSelection: JunkSelection {
-        guard totalItemCount > 0, selectedItemCount > 0 else { return .none }
-        return selectedItemCount == totalItemCount ? .all : .some
+        guard totalItemCount > 0, markedItemCount > 0 else { return .none }
+        return markedItemCount == totalItemCount ? .all : .some
     }
 
     static let itemFilterThreshold = 10
@@ -83,6 +84,9 @@ struct CleanerListState: Equatable, Sendable {
         let allCount = categories.reduce(0) { $0 + $1.items.count }
         totalItemCount = visibleCategories.reduce(0) { $0 + $1.items.count }
         hiddenItemCount = allCount - totalItemCount
+        markedItemCount = visibleCategories.reduce(0) { total, category in
+            category.items.reduce(total) { $1.selected ? $0 + 1 : $0 }
+        }
         let selected = CleanerOperationExecution.selectedItems(in: visibleCategories)
         selectedItemCount = selected.count
         selectedTotal = selected.reduce(0) { $0 + $1.sizeBytes }
