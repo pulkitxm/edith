@@ -213,28 +213,65 @@ struct UsageMachinesPeer: Sendable {
         }
     }
 
-    static func merge(
-        local: Data, policy: UsageMachineRefreshPolicy,
-        directory: URL = Repo.dataDir, defaults: UserDefaults = SharedDefaults.store,
-        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
-    ) async throws -> Data {
+    static let dueAge: TimeInterval = 1_200
+
+    static func selectedRemoteMachines(
+        registry: [Machine], directory: URL = Repo.dataDir,
+        defaults: UserDefaults = SharedDefaults.store
+    ) -> [Machine] {
         let saved = Set(
             (defaults.stringArray(forKey: selectedDefaultsKey) ?? []).prefix(128).compactMap(
                 UUID.init(uuidString:)))
-        let registry = await MainActor.run { MachineRegistry.machines() }
         let history = try? UsageDataFiles.readRegularFile(
             at: directory.appendingPathComponent("usage.json"), maximumBytes: 67_108_864)
         let selected = reconciledSelection(saved, registry: registry, history: history)
         if selected != saved {
             defaults.set(selected.map(\.uuidString).sorted(), forKey: selectedDefaultsKey)
         }
-        let machines = registry.filter { selected.contains($0.id) && $0.id != Machine.localID }
-            .prefix(128)
-        let peer = await current()
+        return Array(
+            registry.filter { selected.contains($0.id) && $0.id != Machine.localID }.prefix(128))
+    }
+
+    static func isDue(_ machine: Machine, directory: URL = Repo.dataDir, now: Date = Date())
+        -> Bool
+    {
+        if UsageMachineRefreshLedger.load(directory: directory)[machine.id]?.failure != nil {
+            return true
+        }
+        let file = directory.appendingPathComponent("machines").appendingPathComponent(
+            machine.id.uuidString.lowercased() + ".json")
+        guard
+            let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate
+        else { return true }
+        return now.timeIntervalSince(date) >= dueAge
+    }
+
+    static func failureReason(_ error: Error) -> String {
+        if case ExtensionPeerError.unavailable = error {
+            return UsageMachineRefreshLedger.machinesUnavailable
+        }
+        return String(error.localizedDescription.prefix(512))
+    }
+
+    static func merge(
+        local: Data, policy: UsageMachineRefreshPolicy,
+        directory: URL = Repo.dataDir, defaults: UserDefaults = SharedDefaults.store,
+        now: @escaping @Sendable () -> Date = { Date() },
+        registry: @escaping @Sendable () async -> [Machine] = {
+            await MainActor.run { MachineRegistry.machines() }
+        },
+        currentPeer: @escaping @Sendable () async -> UsageMachinesPeer? = { await current() },
+        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async throws -> Data {
+        let machines = selectedRemoteMachines(
+            registry: await registry(), directory: directory, defaults: defaults)
+        let peer = machines.isEmpty || policy == .skip ? nil : await currentPeer()
         var merged = local
         let cacheDirectory = directory.appendingPathComponent("machines")
         for machine in machines {
             try Task.checkCancellation()
+            let name = String(machine.name.prefix(256))
             let file = cacheDirectory.appendingPathComponent(
                 machine.id.uuidString.lowercased() + ".json")
             var data: Data?
@@ -242,41 +279,70 @@ struct UsageMachinesPeer: Sendable {
                 data = try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864)
             } catch {
                 try Task.checkCancellation()
-                onEvent(
-                    .note(
-                        String(machine.name.prefix(256))
-                            + ": cached usage could not be read and will be recollected"))
+                onEvent(.note(name + ": cached usage could not be read and will be recollected"))
             }
-            let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
-                .contentModificationDate
-            let due = date.map { Date().timeIntervalSince($0) >= 1_800 } ?? true
-            if let peer, policy != .skip, policy == .all || due {
-                do {
-                    onEvent(.note("Collecting " + String(machine.name.prefix(256))))
-                    let collected = try await peer.collect(
-                        machineID: machine.id, force: policy == .all)
-                    let canonical = try canonicalized(collected, machine: machine)
-                    try Task.checkCancellation()
-                    try FileManager.default.createDirectory(
-                        at: cacheDirectory, withIntermediateDirectories: true,
-                        attributes: [.posixPermissions: 0o700])
-                    try UsageDataFiles.write(canonical, to: file)
-                    data = canonical
-                } catch {
-                    try Task.checkCancellation()
+            let due = isDue(machine, directory: directory, now: now())
+            if policy != .skip, policy == .all || due {
+                if let peer {
+                    do {
+                        onEvent(.note("Collecting " + name))
+                        let collected = try await peer.collect(
+                            machineID: machine.id, force: policy == .all)
+                        let canonical = try canonicalized(collected, machine: machine)
+                        try Task.checkCancellation()
+                        try FileManager.default.createDirectory(
+                            at: cacheDirectory, withIntermediateDirectories: true,
+                            attributes: [.posixPermissions: 0o700])
+                        try UsageDataFiles.write(canonical, to: file)
+                        data = canonical
+                        UsageMachineRefreshLedger.recordSuccess(
+                            machine.id, at: now(), directory: directory)
+                    } catch {
+                        try Task.checkCancellation()
+                        let reason = failureReason(error)
+                        UsageMachineRefreshLedger.recordFailure(
+                            machine.id, reason: reason, at: now(), directory: directory)
+                        onEvent(.note(name + ": " + reason))
+                    }
+                } else {
+                    UsageMachineRefreshLedger.recordFailure(
+                        machine.id, reason: UsageMachineRefreshLedger.machinesUnavailable,
+                        at: now(), directory: directory)
                     onEvent(
                         .note(
-                            String(machine.name.prefix(256)) + ": "
-                                + String(error.localizedDescription.prefix(512))))
+                            name + ": " + UsageMachineRefreshLedger.machinesUnavailable
+                                + (data == nil ? "" : "; showing the last collected usage")))
                 }
             }
-            if let data, let combined = UsageHistory.merge(local: merged, cloud: data),
+            if let data,
+                let combined = UsageHistory.merge(
+                    local: merged,
+                    cloud: annotated(
+                        data,
+                        status: UsageMachineRefreshLedger.load(directory: directory)[machine.id])),
                 combined.count <= 67_108_864, UsageHistory.isValidDocument(combined)
             {
                 merged = combined
             }
         }
         return merged
+    }
+
+    static func annotated(_ data: Data, status: UsageMachineRefreshStatus?) -> Data {
+        guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let machines = object["machines"] as? [[String: Any]]
+        else { return data }
+        let formatter = ISO8601DateFormatter()
+        object["machines"] = machines.map { entry in
+            var entry = entry
+            entry["refreshAttemptedAt"] = status.map { formatter.string(from: $0.attemptedAt) }
+            entry["refreshFailure"] = status?.failure
+            return entry
+        }
+        guard let encoded = try? JSONSerialization.data(withJSONObject: object),
+            UsageHistory.isValidDocument(encoded)
+        else { return data }
+        return encoded
     }
 
     static func reconciledSelection(
@@ -348,6 +414,7 @@ struct UsageMachinesPeer: Sendable {
                 try UsageDataFiles.write(filtered, to: usage)
             }
         }
+        UsageMachineRefreshLedger.forget(machineID, directory: directory)
         UsageEvents.post(UsageEvents.usageUpdated)
     }
 

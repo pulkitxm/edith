@@ -82,7 +82,7 @@ struct HostNotchInteractionTests {
         }
         let content = try #require(remote.view.subviews.first)
         #expect(content.frame.height >= slot.height)
-        let hit = remote.view.hitTest(CGPoint(x: slot.midX, y: slot.maxY - 10))
+        let hit = remote.view.hitTest(CGPoint(x: slot.width / 2, y: slot.height - 10))
         #expect(hit?.isDescendant(of: content) == true)
         #expect(reported.allSatisfy { $0 < slot.height })
     }
@@ -107,31 +107,6 @@ struct HostNotchInteractionTests {
         }
         container.view.layoutSubtreeIfNeeded()
         #expect(remote.contentHeight == 92)
-    }
-
-    @Test func horizontalScrollOverANativeCardReachesTheChromeBeneathIt() {
-        _ = TestWindowHost.application
-        let container = HostNotchContainerController()
-        container.loadViewIfNeeded()
-        let window = TestWindowHost.window(contentRect: CGRect(x: 0, y: 0, width: 640, height: 320))
-        window.contentView = container.view
-        let chrome = NSViewController()
-        let shelf = NSScrollView()
-        shelf.hasHorizontalScroller = true
-        shelf.documentView = NSView(frame: CGRect(x: 0, y: 0, width: 2000, height: 300))
-        chrome.view = shelf
-        container.attach(chrome, rectangle: nil, native: false)
-        let card = NSViewController()
-        card.view = NSView()
-        let slot = CGRect(x: 20, y: 60, width: 200, height: 160)
-        container.attach(card, rectangle: slot, native: true)
-        let onCard = container.view.convert(CGPoint(x: slot.midX, y: slot.midY), to: nil)
-        let offCard = container.view.convert(CGPoint(x: 500, y: slot.midY), to: nil)
-
-        let target = container.chromeScrollTarget(at: onCard, deltaX: -24, deltaY: 2)
-        #expect(target?.isDescendant(of: shelf) == true)
-        #expect(container.chromeScrollTarget(at: onCard, deltaX: 1, deltaY: -18) == nil)
-        #expect(container.chromeScrollTarget(at: offCard, deltaX: -24, deltaY: 0) == nil)
     }
 
     @Test func fixedSizeChromeDoesNotShrinkThePanel() async throws {

@@ -82,12 +82,59 @@ struct NotchNativeSlotView: View {
             .background {
                 GeometryReader { geometry in
                     let rectangle = geometry.frame(in: .named("notchPanel"))
-                    let clipped = viewport.map { rectangle.intersection($0) } ?? rectangle
-                    let slot = client.slot(tile: tile, kind: kind, rectangle: clipped)
+                    let reported =
+                        viewport.map { Self.scrollInvariant(rectangle, in: $0) }
+                        ?? rectangle
+                    let slot = client.slot(tile: tile, kind: kind, rectangle: reported)
                     Color.clear.preference(
                         key: NotchSlotFrames.self, value: slot.map { [$0] } ?? [])
                 }
             }
+            .background {
+                if let anchor = client.slotAnchor(tile: tile, kind: kind) {
+                    NotchSlotAnchor(identifier: anchor)
+                }
+            }
+    }
+
+    static func scrollInvariant(_ rectangle: CGRect, in viewport: CGRect) -> CGRect {
+        CGRect(
+            x: viewport.minX, y: viewport.minY,
+            width: min(rectangle.width, viewport.width),
+            height: min(rectangle.height, viewport.height))
+    }
+}
+
+private struct NotchSlotAnchor: NSViewRepresentable {
+    let identifier: String
+    func makeNSView(context: Context) -> NotchSlotAnchorView { NotchSlotAnchorView() }
+    func updateNSView(_ view: NotchSlotAnchorView, context: Context) {
+        view.anchorIdentifier = identifier
+    }
+}
+
+final class NotchSlotAnchorView: NSView {
+    static let prefix = "edith.notch.slot."
+    static let appeared = Notification.Name("edith.notch.slot.anchor")
+
+    var anchorIdentifier: String? {
+        didSet {
+            guard anchorIdentifier != oldValue else { return }
+            identifier = anchorIdentifier.map { NSUserInterfaceItemIdentifier($0) }
+            announce()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        announce()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    private func announce() {
+        guard window != nil, identifier != nil else { return }
+        NotificationCenter.default.post(name: Self.appeared, object: self)
     }
 }
 

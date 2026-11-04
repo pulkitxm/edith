@@ -66,7 +66,6 @@ extension SurfaceGridRenderingTests {
         positions["repositories"] = CGPoint(x: 0, y: 900)
         #expect(positions["overview"].y == 250)
         #expect(positions["repositories"].y == 900)
-        #expect(PageMetrics.tableNameWidth(viewport: 100, fixedWidth: 100, columnCount: 8) == 0)
     }
 
 }

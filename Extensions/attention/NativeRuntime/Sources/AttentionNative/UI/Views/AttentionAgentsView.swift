@@ -95,50 +95,46 @@ struct AttentionAgentTable: View {
 
     var body: some View {
         let peak = totals.reduce(1) { max($0, $1.working) }
-        GeometryReader { geometry in
-            Table(totals, columnCustomization: $columns) {
-                SwiftUI.TableColumn("Agent group") { total in
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(total.key).font(.edithText(.body)).lineLimit(1).help(total.key)
-                        if compact {
-                            Text(
-                                "Waiting \(AttentionFormat.duration(total.blocked)) · You \(AttentionFormat.duration(total.attended)) · \(total.sessions) sessions"
-                            )
-                            .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        GeometryReader { bar in
-                            Capsule().fill(color.opacity(0.8))
-                                .frame(
-                                    width: max(
-                                        2, bar.size.width * max(0, min(1, total.working / peak))))
-                        }.frame(height: UIScale.pt(4)).accessibilityHidden(true)
-                    }.padding(.vertical, UIScale.pt(4))
-                }
-                .width(
-                    PageMetrics.tableNameWidth(
-                        viewport: geometry.size.width,
-                        fixedWidth: compact ? 90 : 330, columnCount: compact ? 2 : 5))
-                SwiftUI.TableColumn("Working") { total in
-                    Text(AttentionFormat.duration(total.working)).monospacedDigit().foregroundStyle(
-                        color)
-                }.width(UIScale.pt(90))
-                SwiftUI.TableColumn("Waiting") { total in
-                    Text(AttentionFormat.duration(total.blocked)).monospacedDigit()
-                }.width(UIScale.pt(90)).customizationID("waiting")
-                    .defaultVisibility(compact ? .hidden : .visible)
-                SwiftUI.TableColumn("You") { total in
-                    Text(AttentionFormat.duration(total.attended)).monospacedDigit()
-                }.width(UIScale.pt(90)).customizationID("you")
-                    .defaultVisibility(compact ? .hidden : .visible)
-                SwiftUI.TableColumn("Sessions") { total in
-                    Text("\(total.sessions)").monospacedDigit()
-                }.width(UIScale.pt(60)).customizationID("sessions")
-                    .defaultVisibility(compact ? .hidden : .visible)
+        Table(totals, columnCustomization: $columns) {
+            SwiftUI.TableColumn("Agent group") { total in
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text(total.key).font(.edithText(.body)).lineLimit(1).help(total.key)
+                    if compact {
+                        Text(
+                            "Waiting \(AttentionFormat.duration(total.blocked)) · You \(AttentionFormat.duration(total.attended)) · \(total.sessions) sessions"
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    GeometryReader { bar in
+                        Capsule().fill(color.opacity(0.8))
+                            .frame(
+                                width: max(
+                                    2, bar.size.width * max(0, min(1, total.working / peak))))
+                    }.frame(height: UIScale.pt(4)).accessibilityHidden(true)
+                }.padding(.vertical, UIScale.pt(4))
             }
-            .tableStyle(.inset)
-            .font(.edithText(.body))
-            .accessibilityLabel("All agent groups")
-        }.frame(height: attentionTableHeight(totals.count))
+            .width(min: UIScale.pt(PageMetrics.tableNameMinimumWidth), max: .infinity)
+            SwiftUI.TableColumn("Working") { total in
+                Text(AttentionFormat.duration(total.working)).monospacedDigit().foregroundStyle(
+                    color)
+            }.width(UIScale.pt(90))
+            SwiftUI.TableColumn("Waiting") { total in
+                Text(AttentionFormat.duration(total.blocked)).monospacedDigit()
+            }.width(UIScale.pt(90)).customizationID("waiting")
+                .defaultVisibility(compact ? .hidden : .visible)
+            SwiftUI.TableColumn("You") { total in
+                Text(AttentionFormat.duration(total.attended)).monospacedDigit()
+            }.width(UIScale.pt(90)).customizationID("you")
+                .defaultVisibility(compact ? .hidden : .visible)
+            SwiftUI.TableColumn("Sessions") { total in
+                Text("\(total.sessions)").monospacedDigit()
+            }.width(UIScale.pt(60)).customizationID("sessions")
+                .defaultVisibility(compact ? .hidden : .visible)
+        }
+        .tableStyle(.inset)
+        .font(.edithText(.body))
+        .accessibilityLabel("All agent groups")
+        .frame(height: attentionTableHeight(totals.count))
     }
 }
 
@@ -149,44 +145,40 @@ struct AttentionAgentSessions: View {
 
     var body: some View {
         AttentionPanel("Sessions", subtitle: "\(sessions.count) sessions in this period.") {
-            GeometryReader { geometry in
-                Table(sessions, columnCustomization: $columns) {
-                    SwiftUI.TableColumn("Session") { session in
-                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            Text(session.title).font(.edithText(.body)).lineLimit(1).help(
-                                session.title)
+            Table(sessions, columnCustomization: $columns) {
+                SwiftUI.TableColumn("Session") { session in
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        Text(session.title).font(.edithText(.body)).lineLimit(1).help(
+                            session.title)
+                        Text(
+                            [session.kind, session.machine, session.project].compactMap { $0 }
+                                .joined(separator: " · ")
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                        if compact {
                             Text(
-                                [session.kind, session.machine, session.project].compactMap { $0 }
-                                    .joined(separator: " · ")
+                                "Waiting \(AttentionFormat.duration(session.blocked)) · Last seen \(AttentionFormat.time(session.lastSeen))"
                             )
                             .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
-                            if compact {
-                                Text(
-                                    "Waiting \(AttentionFormat.duration(session.blocked)) · Last seen \(AttentionFormat.time(session.lastSeen))"
-                                )
-                                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                        }.padding(.vertical, UIScale.pt(4))
-                    }.width(
-                        PageMetrics.tableNameWidth(
-                            viewport: geometry.size.width,
-                            fixedWidth: compact ? 90 : 280, columnCount: compact ? 2 : 4))
-                    SwiftUI.TableColumn("Working") { session in
-                        Text(AttentionFormat.duration(session.working)).monospacedDigit()
-                    }.width(UIScale.pt(90))
-                    SwiftUI.TableColumn("Waiting") { session in
-                        Text(AttentionFormat.duration(session.blocked)).monospacedDigit()
-                    }.width(UIScale.pt(90)).customizationID("waiting")
-                        .defaultVisibility(compact ? .hidden : .visible)
-                    SwiftUI.TableColumn("Last seen") { session in
-                        Text(AttentionFormat.time(session.lastSeen)).monospacedDigit()
-                    }.width(UIScale.pt(100)).customizationID("lastSeen")
-                        .defaultVisibility(compact ? .hidden : .visible)
-                }
-                .tableStyle(.inset)
-                .font(.edithText(.body))
-                .accessibilityLabel("All agent sessions")
-            }.frame(height: attentionTableHeight(sessions.count))
+                        }
+                    }.padding(.vertical, UIScale.pt(4))
+                }.width(min: UIScale.pt(PageMetrics.tableNameMinimumWidth), max: .infinity)
+                SwiftUI.TableColumn("Working") { session in
+                    Text(AttentionFormat.duration(session.working)).monospacedDigit()
+                }.width(UIScale.pt(90))
+                SwiftUI.TableColumn("Waiting") { session in
+                    Text(AttentionFormat.duration(session.blocked)).monospacedDigit()
+                }.width(UIScale.pt(90)).customizationID("waiting")
+                    .defaultVisibility(compact ? .hidden : .visible)
+                SwiftUI.TableColumn("Last seen") { session in
+                    Text(AttentionFormat.time(session.lastSeen)).monospacedDigit()
+                }.width(UIScale.pt(100)).customizationID("lastSeen")
+                    .defaultVisibility(compact ? .hidden : .visible)
+            }
+            .tableStyle(.inset)
+            .font(.edithText(.body))
+            .accessibilityLabel("All agent sessions")
+            .frame(height: attentionTableHeight(sessions.count))
         }
     }
 }

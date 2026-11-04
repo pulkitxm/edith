@@ -56,6 +56,9 @@ extension HerdrStore {
         switch request {
         case .status:
             return nil
+        case let .select(id):
+            revealHerdr()
+            return selectConfirmed(id)
         case let .closeTab(id):
             revealHerdr()
             return closeTabConfirmed(id)

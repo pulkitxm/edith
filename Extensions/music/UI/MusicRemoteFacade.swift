@@ -515,6 +515,9 @@ import Observation
     func playFavourites() { send(.startFavourites) }
     func playFolder(_ folder: EmbeddedMusicFolder) { send(.startFolder, path: folder.relativePath) }
     func playCurrentFolder() { send(.startFolder, path: folderPath) }
+    var canPlayView: Bool {
+        showingFavourites ? !favourites.isEmpty : !(folders.isEmpty && folderTracks.isEmpty)
+    }
     func toggle(_ track: EmbeddedTrack) {
         send(showingFavourites ? .startFavourites : .startTrack, path: track.relativePath)
     }

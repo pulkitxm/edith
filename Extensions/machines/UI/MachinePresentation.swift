@@ -58,15 +58,6 @@ enum MachineNotifications {
     }
 }
 
-enum MachineTableSizing {
-    static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int) -> CGFloat {
-        let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
-        return max(
-            0,
-            viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16) - scrollerWidth)
-    }
-}
-
 enum MachineTerminalEnvironment {
     static func unnested(_ environment: [String]) -> [String] {
         let variables = TerminalLaunchPlan.nestingVariables

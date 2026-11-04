@@ -398,61 +398,54 @@ struct HomebrewPackageTable: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        GeometryReader { geometry in
-            Table(packages, selection: $selection, columnCustomization: $columns) {
-                SwiftUI.TableColumn("Package") { package in
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(package.displayName).font(.edithText(.body)).lineLimit(1)
-                        if let subtitle = package.subtitle {
-                            Text(subtitle).font(.edithText(.caption))
-                                .foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        if compact {
-                            Text(package.versionSummary).font(.edithText(.caption2))
-                                .foregroundStyle(.secondary).lineLimit(1)
-                        }
+        Table(packages, selection: $selection, columnCustomization: $columns) {
+            SwiftUI.TableColumn("Package") { package in
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(package.displayName).font(.edithText(.body)).lineLimit(1)
+                    if let subtitle = package.subtitle {
+                        Text(subtitle).font(.edithText(.caption))
+                            .foregroundStyle(.secondary).lineLimit(1)
                     }
-                    .help("\(package.name)\n\(package.subtitle ?? "")\n\(package.versionSummary)")
-                }
-                .width(
-                    PageMetrics.tableNameWidth(
-                        viewport: geometry.size.width,
-                        fixedWidth: (compact ? 0 : Self.versionWidth) + 80
-                            + (compact ? 44 : Self.actionsWidth),
-                        columnCount: compact ? 3 : 4))
-                SwiftUI.TableColumn("Version") { Text($0.versionSummary).monospacedDigit() }
-                    .width(UIScale.pt(Self.versionWidth))
-                    .customizationID("version")
-                    .defaultVisibility(compact ? .hidden : .visible)
-                SwiftUI.TableColumn("Status") { package in
-                    Text(
-                        package.outdated ? "Update" : package.installed ? "Installed" : "Available"
-                    )
-                    .foregroundStyle(package.outdated ? DashSkin.warn : .secondary)
-                }
-                .width(UIScale.pt(80))
-                SwiftUI.TableColumn("Actions") { package in
                     if compact {
-                        Menu {
-                            packageActions(package)
-                        } label: {
-                            Image(systemName: "ellipsis")
-                        }
-                        .menuStyle(.borderlessButton).menuIndicator(.hidden)
-                        .accessibilityLabel("Actions for \(package.displayName)")
-                        .disabled(disabled)
-                    } else {
-                        HStack(spacing: UIScale.pt(8)) { packageActions(package) }.fixedSize()
-                            .disabled(disabled)
+                        Text(package.versionSummary).font(.edithText(.caption2))
+                            .foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
-                .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
+                .help("\(package.name)\n\(package.subtitle ?? "")\n\(package.versionSummary)")
             }
-            .font(.edithText(.callout))
-            .accessibilityLabel("Homebrew packages")
-            .onChange(of: compact, initial: true) { _, compact in
-                columns[visibility: "version"] = compact ? .hidden : .visible
+            .width(min: UIScale.pt(PageMetrics.tableNameMinimumWidth), max: .infinity)
+            SwiftUI.TableColumn("Version") { Text($0.versionSummary).monospacedDigit() }
+                .width(UIScale.pt(Self.versionWidth))
+                .customizationID("version")
+                .defaultVisibility(compact ? .hidden : .visible)
+            SwiftUI.TableColumn("Status") { package in
+                Text(
+                    package.outdated ? "Update" : package.installed ? "Installed" : "Available"
+                )
+                .foregroundStyle(package.outdated ? DashSkin.warn : .secondary)
             }
+            .width(UIScale.pt(80))
+            SwiftUI.TableColumn("Actions") { package in
+                if compact {
+                    Menu {
+                        packageActions(package)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .accessibilityLabel("Actions for \(package.displayName)")
+                    .disabled(disabled)
+                } else {
+                    HStack(spacing: UIScale.pt(8)) { packageActions(package) }.fixedSize()
+                        .disabled(disabled)
+                }
+            }
+            .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
+        }
+        .font(.edithText(.callout))
+        .accessibilityLabel("Homebrew packages")
+        .onChange(of: compact, initial: true) { _, compact in
+            columns[visibility: "version"] = compact ? .hidden : .visible
         }
     }
 
