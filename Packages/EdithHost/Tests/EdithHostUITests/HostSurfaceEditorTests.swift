@@ -79,10 +79,13 @@ import HostWorkerFixtureSupport
             HostMarketplaceCatalog.filter(entries, query: "hinge", category: "all").map(\.id) == [
                 "hinge"
             ])
-        #expect(Set(entries.map(\.id)) == Set(HostMarketplaceCatalog.subtitles.keys))
+        #expect(entries.allSatisfy { !HostMarketplaceCatalog.tagline($0).isEmpty })
         #expect(
-            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").map(
-                \.id) == ["clipboard"])
+            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").first?
+                .id == "clipboard")
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "clipboard", category: "all").map(\.id)
+                == ["clipboard", "bifrost"])
         #expect(
             HostMarketplaceCatalog.filter(entries, query: "", category: "media").allSatisfy {
                 $0.category == "media"
@@ -110,13 +113,9 @@ import HostWorkerFixtureSupport
         #expect(
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
-        #expect(
-            find(
-                host,
-                label:
-                    "See Claude, Codex and Cursor limits and usage, with alerts before you run out."
-            ) != nil)
-        #expect(find(host, label: "Download") != nil)
+        let usage = try #require(fixture.marketplace.entries.first { $0.id == "usage" })
+        #expect(find(host, label: HostMarketplaceCatalog.tagline(usage)) != nil)
+        #expect(find(host, label: "Get Usage") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
@@ -142,7 +141,7 @@ import HostWorkerFixtureSupport
         #expect(find(host, label: "Keep Awake") != nil)
         #expect(find(host, label: "Calendar") == nil)
         #expect(find(host, label: "Usage") == nil)
-        #expect(find(host, label: "Download") != nil)
+        #expect(find(host, label: "Get Keep Awake") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
@@ -1045,7 +1044,7 @@ import HostWorkerFixtureSupport
                 != nil)
         #expect(find(host, label: "Not installed") == nil)
         #expect(find(host, label: "Enable") == nil)
-        #expect(find(host, label: state == "removal" ? "Remove" : "Update") != nil)
+        #expect(find(host, label: state == "removal" ? "Remove" : "Update Calendar") != nil)
         let bytes = fixture.marketplace.installedBytes
         #expect(bytes >= 128)
         fixture.heldLease?.close()
@@ -1074,8 +1073,8 @@ import HostWorkerFixtureSupport
         #expect(!fixture.marketplace.pendingRemovalIDs.contains("calendar"))
         #expect(fixture.marketplace.installedBytes < bytes)
         #expect(find(host, label: "Not installed") != nil)
-        #expect(find(host, label: "Download") != nil)
-        #expect(find(review, label: "Download") != nil)
+        #expect(find(host, label: "Get Calendar") != nil)
+        #expect(find(review, label: "Get Calendar") != nil)
         #expect(find(review, label: "Remove") == nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(fixture.marketplace.error == nil)
@@ -1139,7 +1138,7 @@ import HostWorkerFixtureSupport
                 find(host, label: "1 extension needs an update for this version of Edith.") != nil)
             let visible = window.convertToScreen(host.convert(host.bounds, to: nil))
             for label in [
-                "Update now", "Update required for this version of Edith", "Calendar enabled",
+                "Update now", "Update required for this version of Edith", "Update Calendar",
             ] {
                 let control = try #require(find(host, label: label))
                 let frame = try #require((control as AnyObject).accessibilityFrame?())
@@ -1182,15 +1181,15 @@ import HostWorkerFixtureSupport
                 )
                 .environment(\.colorScheme, scheme)
                 .environment(\.automaticViewActionsEnabled, false))
-            host.frame = CGRect(x: 0, y: 0, width: 560, height: 620)
+            host.frame = CGRect(x: 0, y: 0, width: 640, height: 680)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host
             window.orderBack(nil)
             await settle(window, host: host)
             for label in [
-                "Calendar", "Update required for this version of Edith",
-                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update", "Remove",
-                "Done",
+                "Calendar", "This version of Edith needs a newer package. Update to keep using it.",
+                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update Calendar",
+                "Remove", "Close",
             ] {
                 #expect(find(host, label: label) != nil, "\(label)")
             }

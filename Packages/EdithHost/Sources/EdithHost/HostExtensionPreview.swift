@@ -5,6 +5,15 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HostExtensionPreview: View {
+    static let previewIDs: Set<String> = [
+        "usage", "herdr", "quinjet", "system", "appMaintenance", "machines", "systemStats",
+        "micMute", "lidAwake", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
+        "music", "focusDim", "windowSweaters", "presenter", "colorPicker", "homebrew",
+        "cleaner", "blitztree", "downloads", "audioMixer",
+    ]
+
+    static func hasPreview(_ id: String) -> Bool { previewIDs.contains(id) }
+
     let entry: HostExtension
     let dark: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -46,7 +55,6 @@ struct HostExtensionPreview: View {
         case "keystrokeHighlight": keystrokeHighlightPreview(phase: phase)
         case "music": musicPreview(animating: animating)
         case "focusDim": focusDimPreview(phase: phase)
-        case "hinge": hingePreview(phase: phase)
         case "windowSweaters": windowSweatersPreview(phase: phase)
         case "presenter": presenterPreview(phase: phase)
         case "colorPicker": colorPickerPreview(phase: phase)
@@ -55,7 +63,7 @@ struct HostExtensionPreview: View {
         case "blitztree": blitzTreePreview
         case "downloads": downloadsPreview(phase: phase)
         case "audioMixer": audioMixerPreview(phase: phase)
-        default: staticPreview
+        default: EmptyView()
         }
     }
 
@@ -499,23 +507,6 @@ struct HostExtensionPreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func hingePreview(phase: Double) -> some View {
-        let fold = (1 - cos(loopProgress(phase, duration: 3.2) * .pi * 2)) / 2
-        return ZStack {
-            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
-                .fill(DashSkin.paper2(dark))
-                .frame(width: UIScale.pt(86), height: UIScale.pt(52))
-                .scaleEffect(x: 1 - fold * 0.18, y: 1 - fold * 0.42, anchor: .bottom)
-                .offset(y: fold * 6)
-            RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)
-                .fill(DashSkin.accent(dark).opacity(0.85))
-                .frame(width: UIScale.pt(70), height: UIScale.pt(36))
-                .scaleEffect(x: 1 - fold * 0.22, y: 1 - fold * 0.5, anchor: .bottom)
-                .offset(y: 4 + fold * 4)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     private func focusDimPreview(phase: Double) -> some View {
         let progress = loopProgress(phase, duration: 3)
         let backOpacity = 0.625 + cos(progress * Double.pi * 2) * 0.375
@@ -775,21 +766,6 @@ struct HostExtensionPreview: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var staticPreview: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
-                .fill(DashSkin.accent(dark).opacity(0.1))
-            RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
-                .strokeBorder(DashSkin.accent(dark).opacity(0.18))
-            Image(systemName: entry.symbolName).font(
-                .system(size: UIScale.pt(22), weight: .semibold)
-            )
-            .foregroundStyle(DashSkin.accent(dark))
-        }
-        .frame(width: UIScale.pt(46), height: UIScale.pt(42))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

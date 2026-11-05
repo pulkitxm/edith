@@ -672,3 +672,25 @@ private actor ExclusiveTracker {
     }
     func leave() { active -= 1 }
 }
+
+private final class ProgressLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Double] = []
+    func add(_ value: Double) { lock.withLock { values.append(value) } }
+    var all: [Double] { lock.withLock { values } }
+}
+
+@Test func dependencyPlansStageTogetherAndReportCompletedShares() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (first, firstArchive) = try fixture.archive()
+    let (second, secondArchive) = try fixture.archive(id: "calendar")
+    let log = ProgressLog()
+    let installed = try await fixture.installer(archives: [
+        first.downloadURL: firstArchive, second.downloadURL: secondArchive,
+    ]).install(
+        [first, second], repository: "example/app", downloaded: { log.add($0) })
+    #expect(Set(installed.map(\.id)) == [first.id, second.id])
+    #expect(try fixture.store.installedPackages().count == 2)
+    #expect(log.all == [0.5, 1])
+}

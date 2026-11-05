@@ -14,6 +14,7 @@ struct HostExtensionReview: View {
     @State private var reviewed: ExtensionPackage?
     @State private var task: Task<Void, Never>?
     @State private var notice: String?
+    @State private var tab: Tab
     @Environment(\.colorScheme) private var scheme
 
     init(
@@ -25,6 +26,9 @@ struct HostExtensionReview: View {
         self.presenter = presenter; self.open = open; self.done = done
         self.navigation = navigation
         _reviewed = State(initialValue: marketplace.available[entry.id])
+        let hasSettings =
+            Self.settingsRequest(id: entry.id, marketplace: marketplace) != nil
+        _tab = State(initialValue: hasSettings && marketplace.installed[entry.id] != nil ? .settings : .about)
     }
 
     private var dark: Bool { scheme == .dark }
@@ -65,12 +69,18 @@ struct HostExtensionReview: View {
         }
     }
 
+    private enum Tab: Hashable { case settings, about }
+
+    private var settingsRequest: HostExtensionContentRequest? {
+        Self.settingsRequest(id: entry.id, marketplace: marketplace)
+    }
+    private var categoryTitle: String? { HostMarketplaceCatalog.suite(for: entry)?.title }
+
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
+            if settingsRequest != nil { settingsHeader; Divider() }
             Group {
-                if let request = Self.settingsRequest(id: entry.id, marketplace: marketplace) {
+                if let request = settingsRequest, tab == .settings {
                     HostExtensionContent(
                         marketplace: marketplace, extensionID: request.extensionID,
                         location: request.location, section: request.section,
@@ -85,32 +95,34 @@ struct HostExtensionReview: View {
             footer
         }
         .frame(
-            width: PresentationMetrics.width(560),
-            height: PresentationMetrics.height(Self.idealHeight(for: entry.id))
+            width: PresentationMetrics.width(640),
+            height: PresentationMetrics.height(max(Self.idealHeight(for: entry.id), 680))
         )
         .pageSurface()
         .tracksWindowVisibility()
         .interactiveDismissDisabled(owning)
+        .onChange(of: marketplace.available[entry.id]) {
+            if reviewed == nil { reviewed = marketplace.available[entry.id] }
+        }
         .onDisappear {
             task?.cancel(); navigation?.delivery.reject()
         }
     }
 
-    private var header: some View {
+    private var settingsHeader: some View {
         HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: entry.symbolName)
-                .font(.system(size: UIScale.pt(16), weight: .semibold))
-                .foregroundStyle(active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                .background(
-                    active ? DashSkin.accent(dark).opacity(0.14) : Color.primary.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            HostExtensionIcon(symbolName: entry.symbolName, active: active, size: 34)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(entry.title).font(.edithText(.headline)).accessibilityAddTraits(.isHeader)
                 Text(state.status).font(.edithText(.caption)).foregroundStyle(.secondary)
                     .lineLimit(1).monospacedDigit()
             }
             Spacer()
+            EdithSegmentedPicker(
+                "View", selection: $tab, options: [Tab.settings, .about],
+                label: { $0 == .settings ? "Settings" : "About" }
+            )
+            .labelsHidden().frame(width: UIScale.pt(170))
             if installed, !marketplace.pendingRemovalIDs.contains(entry.id) {
                 Toggle(
                     isOn: Binding(
@@ -123,17 +135,54 @@ struct HostExtensionReview: View {
                 .accessibilityLabel("\(entry.title) enabled")
             }
         }
-        .padding(.horizontal, UIScale.pt(24)).padding(.vertical, UIScale.pt(16))
+        .padding(.horizontal, UIScale.pt(24)).padding(.vertical, UIScale.pt(14))
     }
 
     private var overview: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            HostExtensionPreview(entry: entry, dark: dark)
-                .frame(maxWidth: .infinity).frame(height: UIScale.pt(88))
-                .background(
-                    DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title)
-                .font(.edithText(.body)).fixedSize(horizontal: false, vertical: true)
+        let guide = entry.guide
+        return VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+            HostExtensionHero(
+                entry: entry, tagline: HostMarketplaceCatalog.tagline(entry),
+                categoryTitle: categoryTitle, active: state.on || installed
+            ) {
+                heroAction
+            }
+            if let notice {
+                Text(notice).font(.edithText(.callout)).foregroundStyle(.orange)
+            }
+            if state.stage == .failed {
+                Text(state.status).font(.edithText(.callout)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let error = marketplace.error {
+                Text(error).font(.edithText(.callout)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let guidance {
+                Text(guidance).font(.edithText(.callout)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let summary = guide?.summary, !summary.isEmpty {
+                Text(summary).font(.edithText(.body)).foregroundStyle(DashSkin.inkSoft(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if HostExtensionPreview.hasPreview(entry.id) {
+                HostExtensionPreview(entry: entry, dark: dark)
+                    .frame(maxWidth: .infinity).frame(height: UIScale.pt(96))
+                    .background(
+                        DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            }
+            if let steps = guide?.pageSteps, !steps.isEmpty {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    PageSectionHeader("How it works")
+                    PageGuideSteps(steps: steps, columns: 1)
+                }
+            }
+            HostExtensionPlacementList(placements: HostExtensionActions.placements(for: entry))
+            HostExtensionPermissionList(
+                required: entry.requiredPermissions, optional: entry.optionalPermissions)
+            if let examples = guide?.examples, !examples.isEmpty {
+                HostExtensionExamples(examples: examples)
+            }
             if let facts = HostMarketplacePackageSummary(
                 candidate: reviewed ?? marketplace.installed[entry.id],
                 downloadedVersions: marketplace.installedVersions[entry.id] ?? []
@@ -141,25 +190,33 @@ struct HostExtensionReview: View {
                 Text(facts).font(.edithText(.caption)).foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            if !permissions.isEmpty {
-                HostPermissionInfoButton(
-                    permissions: permissions,
-                    label: permissions.count == 1
-                        ? permissions[0].displayName : "\(permissions.count) permissions")
-            }
-            Text(guidance).font(.edithText(.callout)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if let notice {
-                Text(notice).font(.edithText(.caption)).foregroundStyle(.orange)
-            }
-            if let error = marketplace.error {
-                Text(error).font(.edithText(.caption)).foregroundStyle(.red)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var guidance: String {
+    @ViewBuilder private var heroAction: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            if pending {
+                EmptyView()
+            } else if !installed, reviewed == nil, !downloaded {
+                Button("Refresh") { refresh() }.buttonStyle(.edith(.primary)).controlSize(.large)
+                    .disabled(busy || marketplace.refreshingCatalog)
+            } else {
+                HostInstallControl(
+                    title: entry.title, state: state, large: true,
+                    canCancel: marketplace.canCancelDownload(entry.id),
+                    perform: handle, cancel: { marketplace.cancelDownload(id: entry.id) })
+                    .disabled(owning && state.progress == nil)
+            }
+            if state.stage == .ready {
+                Text(HostExtensionActions.hint(for: entry)).font(.edithText(.callout))
+                    .foregroundStyle(DashSkin.accent(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var guidance: String? {
         if pendingDisable {
             return
                 "Cleanup is still pending. Home and Notch cards are inactive. System resources may remain until cleanup or macOS approval finishes."
@@ -172,18 +229,11 @@ struct HostExtensionReview: View {
                 return "This version of Edith needs a newer package. Update to keep using it."
             }
             if downloaded { return "No package for this version of Edith is published yet." }
-            return reviewed == nil
-                ? "Verified download information is unavailable. Refresh to review the package."
-                : "Download to add this extension. It starts right away."
+            if reviewed == nil {
+                return "Verified download information is unavailable. Refresh to review the package."
+            }
         }
-        if HostExtensionSettingsPolicy.policy(for: entry.id) == .active {
-            return "Turn this extension on to change its settings."
-        }
-        if let route = HostNavigationCatalog.route(extensionID: entry.id) {
-            let page = HostNavigationCatalog.pages.first { $0.id == route.page }?.title
-            return "Open \(page ?? entry.title) from the sidebar to use this extension."
-        }
-        return "This extension's controls are available from its menu or shortcut."
+        return nil
     }
 
     private var footer: some View {
@@ -194,29 +244,35 @@ struct HostExtensionReview: View {
                 }
                 .buttonStyle(.edith(.borderless)).foregroundStyle(.red)
             }
-            if busy { LoadingIndicator().frame(width: UIScale.pt(16), height: UIScale.pt(16)) }
             Spacer()
-            primary
-            Button("Done", action: done).keyboardShortcut(.defaultAction).disabled(owning)
+            Button("Close") {
+                marketplace.acknowledgeReady(entry.id)
+                done()
+            }
+            .buttonStyle(.edith(.secondary)).keyboardShortcut(.cancelAction).disabled(owning)
         }
         .padding(.horizontal, UIScale.pt(18)).padding(.vertical, UIScale.pt(12))
         .background(.bar)
     }
 
-    @ViewBuilder private var primary: some View {
-        if pending {
-            EmptyView()
-        } else if !installed, reviewed == nil {
-            Button("Refresh") { refresh() }.buttonStyle(.edith(.secondary))
-                .disabled(busy || marketplace.refreshingCatalog)
-        } else if !installed {
-            Button(downloaded ? "Update" : "Download") { download() }
-                .buttonStyle(.edith(.primary)).disabled(busy)
-        } else if marketplace.updateAvailable(id: entry.id) {
-            Button("Update") { perform { await marketplace.download(id: entry.id) } }
-                .buttonStyle(.edith(.primary)).disabled(busy)
-        } else if active, HostNavigationCatalog.route(extensionID: entry.id) != nil, let open {
-            Button("Open", action: open).buttonStyle(.edith(.secondary)).disabled(busy)
+    private func handle(_ action: HostExtensionRowState.Action) {
+        let fresh = !installed
+        switch action {
+        case .open:
+            marketplace.acknowledgeReady(entry.id)
+            if let open { open() } else { done() }
+        case .download:
+            download()
+        case .retry where fresh, .update where fresh:
+            download()
+        case .update:
+            perform { await marketplace.download(id: entry.id) }
+        case .retry:
+            perform { await suites.select(entry, enabled: true) }
+        case .retryDisable:
+            perform { await suites.select(entry, enabled: false) }
+        case .remove:
+            perform { await marketplace.remove(id: entry.id) }
         }
     }
 
@@ -238,7 +294,9 @@ struct HostExtensionReview: View {
 
     private func download() {
         guard let reviewed else { return }
+        let wasInstalled = installed
         perform {
+            notice = nil
             await marketplace.download(id: entry.id, expectedPackage: reviewed)
             guard !Task.isCancelled else { return }
             if marketplace.available[entry.id] != reviewed {
@@ -246,6 +304,7 @@ struct HostExtensionReview: View {
                 notice = "The package changed. Review its version and size before downloading."
             } else if marketplace.installed[entry.id] != nil {
                 await suites.select(entry, enabled: true)
+                if !wasInstalled, active { marketplace.markReady(entry.id) }
             }
         }
     }

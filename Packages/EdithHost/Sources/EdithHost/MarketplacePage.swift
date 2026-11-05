@@ -14,6 +14,7 @@ struct MarketplacePage: View {
     @Binding var requestedSettings: HostSettingsNavigation?
     @State private var search = ""
     @State private var category = "all"
+    @State private var scope = HostMarketplaceScope.all
     @State private var selected: HostExtension?
     @State private var suites: HostSuiteSelection
     @Environment(\.compactLayout) private var compact
@@ -34,12 +35,25 @@ struct MarketplacePage: View {
                 defaults: UserDefaults(suiteName: marketplace.identity.defaultsSuite)!))
     }
 
+    private var catalogEntries: [HostExtension] {
+        marketplace.entries.filter {
+            marketplace.available[$0.id] != nil
+                || marketplace.installedVersions[$0.id]?.isEmpty == false
+        }
+    }
     private var filtered: [HostExtension] {
         HostMarketplaceCatalog.filter(
-            marketplace.entries.filter {
-                marketplace.available[$0.id] != nil
-                    || marketplace.installedVersions[$0.id]?.isEmpty == false
-            }, query: search, category: category)
+            catalogEntries, query: search, category: category, scope: scope,
+            installed: Set(marketplace.installed.keys).union(marketplace.downloadedIDs),
+            updatable: Set(marketplace.updatableIDs))
+    }
+    private var loadingCatalog: Bool {
+        catalogEntries.isEmpty
+            && (marketplace.refreshingCatalog
+                || (!marketplace.catalogKnown && marketplace.error == nil && !marketplace.offline))
+    }
+    private var showsFeatured: Bool {
+        query.isEmpty && category == "all" && scope == .all
     }
     private var dark: Bool { scheme == .dark }
     private var query: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -58,6 +72,9 @@ struct MarketplacePage: View {
                 SearchField(placeholder: "Search extensions", text: $search, typeAhead: true)
                     .accessibilityLabel("Find extensions")
                 HostPageTabPicker(
+                    title: "Show", selection: $scope, options: HostMarketplaceScope.allCases,
+                    label: scopeTitle)
+                HostPageTabPicker(
                     title: "Extension category", selection: $category,
                     options: ["all"] + HostMarketplaceCatalog.suites.map(\.id),
                     label: { id in
@@ -69,15 +86,15 @@ struct MarketplacePage: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(24)) {
                         notices
-                        if filtered.isEmpty, marketplace.refreshingCatalog {
-                            LoadingIndicator("Loading extensions")
-                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+                        if loadingCatalog {
+                            skeletons
                         } else if filtered.isEmpty {
                             empty
                         } else {
-                            ForEach(HostMarketplaceCatalog.suites) { suite in
-                                let entries = filtered.filter { $0.category == suite.id }
-                                if !entries.isEmpty { section(suite, entries: entries) }
+                            if showsFeatured { featuredSection }
+                            ForEach(HostMarketplaceCatalog.groups(filtered), id: \.suite.id) {
+                                group in
+                                section(group.suite, entries: group.entries)
                             }
                         }
                         automaticUpdates
@@ -96,7 +113,7 @@ struct MarketplacePage: View {
                 let entry = marketplace.entries.first(where: { $0.id == id }),
                 HostExtensionReview.settingsRequest(id: id, marketplace: marketplace) != nil
             else { request.delivery.reject(); return }
-            search = ""; category = "all"; selected = entry
+            search = ""; category = "all"; scope = .all; selected = entry
         }
         .onChange(of: selected?.id) {
             if let request = requestedSettings, selected?.id != request.delivery.extensionID {
@@ -106,6 +123,7 @@ struct MarketplacePage: View {
         .onDisappear { requestedSettings?.delivery.reject() }
         .navigationTitle("Extensions")
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: scope)
         .edithSheet(item: $selected) { entry in detail(entry) }
     }
 
@@ -163,20 +181,79 @@ struct MarketplacePage: View {
         }
     }
 
-    private var empty: some View {
-        ContentUnavailableView {
-            Label(
-                query.isEmpty ? "No extensions available" : "No extensions found",
-                systemImage: query.isEmpty ? "puzzlepiece.extension" : "magnifyingglass")
-        } description: {
-            Text(
-                query.isEmpty
-                    ? (marketplace.offline
-                        ? "Connect to the internet to browse extensions."
-                        : "This group has no extensions available.")
-                    : "No extension matches \"\(query)\". Try another search.")
+    private func scopeTitle(_ value: HostMarketplaceScope) -> String {
+        value == .updates && !marketplace.updatableIDs.isEmpty
+            ? "Updates (\(marketplace.updatableIDs.count))" : value.title
+    }
+
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: UIScale.pt(compact ? 260 : 300)), spacing: UIScale.pt(12))]
+    }
+
+    private var skeletons: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            SkeletonBlock(width: 160, height: 16)
+            LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+                ForEach(0..<8, id: \.self) { _ in HostExtensionCardSkeleton() }
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
+    }
+
+    @ViewBuilder private var empty: some View {
+        if !query.isEmpty {
+            PageEmptyState(
+                symbolName: "magnifyingglass", title: "No extensions found",
+                message: "Nothing matches \"\(query)\". Try a different word, or browse by category.",
+                primary: PageAction("Clear search", identifier: "extensions.clear-search") {
+                    search = ""
+                })
+                .frame(minHeight: UIScale.pt(280))
+        } else if scope == .installed {
+            PageEmptyState(
+                symbolName: "puzzlepiece.extension", title: "Nothing installed yet",
+                message: "Extensions add tools to Edith. Pick one from Browse and it is ready in seconds.",
+                primary: PageAction("Browse extensions", identifier: "extensions.browse") {
+                    scope = .all
+                })
+                .frame(minHeight: UIScale.pt(280))
+        } else if scope == .updates {
+            PageEmptyState(
+                symbolName: "checkmark.circle", title: "Everything is up to date",
+                message: "Updates appear here when a newer version of an installed extension is available.",
+                primary: PageAction("Check for updates", identifier: "extensions.check") {
+                    Task { await marketplace.checkForUpdates() }
+                })
+                .frame(minHeight: UIScale.pt(280))
+        } else {
+            PageEmptyState(
+                symbolName: marketplace.offline ? "wifi.slash" : "puzzlepiece.extension",
+                title: "No extensions available",
+                message: marketplace.offline
+                    ? "Connect to the internet to browse extensions."
+                    : "This group has no extensions available right now.",
+                primary: marketplace.offline
+                    ? PageAction("Try again", identifier: "extensions.retry") {
+                        Task { await marketplace.checkForUpdates() }
+                    } : nil
+            )
+            .frame(minHeight: UIScale.pt(280))
+        }
+    }
+
+    private var featuredSection: some View {
+        let featured = HostMarketplaceCatalog.featured(
+            filtered, installed: Set(marketplace.installed.keys))
+        return Group {
+            if !featured.isEmpty {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    PageSectionHeader(
+                        "Recommended", subtitle: "A good place to start. Each one is ready in seconds.")
+                    LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+                        ForEach(featured) { entry in card(entry) }
+                    }
+                }
+            }
+        }
     }
 
     private var automaticUpdates: some View {
@@ -208,23 +285,23 @@ struct MarketplacePage: View {
                 .accessibilityLabel("\(suite.title) suite enabled")
             }
             .padding(.horizontal, UIScale.pt(4))
-            VStack(spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    if index > 0 { Divider().padding(.leading, UIScale.pt(54)) }
-                    row(entry).id(entry.id)
-                }
+            Text(suite.subtitle).font(.edithText(.caption)).foregroundStyle(.secondary)
+                .padding(.horizontal, UIScale.pt(4))
+            LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+                ForEach(entries) { entry in card(entry).id(entry.id) }
             }
-            .edithSurface(cornerRadius: 12)
         }
     }
 
-    private func row(_ entry: HostExtension) -> some View {
+    private func card(_ entry: HostExtension) -> some View {
         let state = HostExtensionRowState(entry, marketplace: marketplace)
-        return HostExtensionRow(
-            entry: entry, state: state,
-            subtitle: HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title,
+        return HostExtensionCard(
+            entry: entry, state: state, tagline: HostMarketplaceCatalog.tagline(entry),
+            hint: state.stage == .ready ? HostExtensionActions.hint(for: entry) : nil,
+            canCancel: marketplace.canCancelDownload(entry.id),
             details: { selected = entry },
             perform: { action in perform(action, entry: entry) },
+            cancel: { marketplace.cancelDownload(id: entry.id) },
             toggle: { value in Task { await suites.select(entry, enabled: value) } })
     }
 
@@ -232,6 +309,7 @@ struct MarketplacePage: View {
         Task {
             switch action {
             case .open:
+                marketplace.acknowledgeReady(entry.id)
                 HostExtensionActions.open(
                     entry, active: true, openPage: openExtension, showDetails: { selected = $0 })
             case .update where marketplace.installed[entry.id] != nil:
@@ -265,8 +343,8 @@ struct MarketplacePage: View {
         guard let id = defaults.string(forKey: HostMarketplaceKeys.expandedExtension),
             let entry = marketplace.entries.first(where: { $0.id == id })
         else { return }
-        defaults.removeObject(forKey: HostMarketplaceKeys.expandedExtension); search = "";
-        category = "all"
+        defaults.removeObject(forKey: HostMarketplaceKeys.expandedExtension); search = ""
+        category = "all"; scope = .all
         DispatchQueue.main.async {
             proxy.scrollTo(entry.id, anchor: .center); selected = entry
         }

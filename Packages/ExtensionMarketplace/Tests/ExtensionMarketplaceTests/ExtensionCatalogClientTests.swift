@@ -230,3 +230,21 @@ private func signedCatalog(_ key: Curve25519.Signing.PrivateKey, revision: Int64
     await #expect(throws: CancellationError.self) { try await task.value }
     #expect(try Data(contentsOf: cache) == data)
 }
+
+@Test func aCatalogValidatorOnlyAppliesToTheBodyItWasRecordedFor() throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let cache = fixture.directory.appendingPathComponent("catalog.json")
+    let validator = CatalogValidator(cache: cache)
+    let body = Data("catalog".utf8)
+    #expect(validator.currentTag() == nil)
+    try body.write(to: cache)
+    validator.record(tag: "\"abc\"", body: body)
+    #expect(validator.currentTag()?.tag == "\"abc\"")
+    #expect(validator.currentTag()?.body == body)
+    try Data("replaced".utf8).write(to: cache)
+    #expect(validator.currentTag() == nil)
+    try body.write(to: cache)
+    validator.record(tag: nil, body: body)
+    #expect(validator.currentTag() == nil)
+}

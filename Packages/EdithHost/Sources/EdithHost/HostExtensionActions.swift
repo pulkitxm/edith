@@ -61,11 +61,46 @@ struct HostExtensionSettingsRoute: Equatable {
 }
 
 enum HostExtensionActions {
+    struct OpenTarget: Equatable {
+        let page: String
+        let section: String?
+    }
+
+    static func openTarget(extensionID: String) -> OpenTarget? {
+        HostNavigationCatalog.route(extensionID: extensionID).map {
+            OpenTarget(page: $0.page, section: $0.section)
+        }
+    }
+
+    static func pageTitles() -> [String: String] {
+        Dictionary(
+            HostNavigationCatalog.pages.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    static func sectionTitles() -> [String: String] {
+        Dictionary(
+            HostNavigationCatalog.maintenance.map { ($0.id, $0.title) },
+            uniquingKeysWith: { first, _ in first })
+    }
+
+    static func placements(for entry: HostExtension) -> [HostExtensionPlacement] {
+        HostExtensionPlacements.placements(
+            for: entry, hasSettings: HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable,
+            route: HostNavigationCatalog.route(extensionID: entry.id), pageTitles: pageTitles(),
+            sectionTitles: sectionTitles())
+    }
+
+    static func hint(for entry: HostExtension) -> String {
+        HostExtensionPlacements.hint(
+            for: entry, route: HostNavigationCatalog.route(extensionID: entry.id),
+            pageTitles: pageTitles(), sectionTitles: sectionTitles())
+    }
+
     static func open(
         _ entry: HostExtension, active: Bool, openPage: ((String) -> Void)?,
         showDetails: (HostExtension) -> Void
     ) {
-        if active, HostNavigationCatalog.route(extensionID: entry.id) != nil,
+        if active, openTarget(extensionID: entry.id) != nil,
             let openPage
         {
             openPage(entry.id)

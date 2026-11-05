@@ -301,6 +301,37 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func aQueuedDownloadCanBeCancelledWithoutInstallingOrReportingAFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        await fixture.network.block()
+        let marketplace = try fixture.marketplace()
+        #expect(!marketplace.cancelDownload(id: "sample"))
+        let download = Task { await marketplace.download(id: "sample") }
+        while await fixture.network.count == 0 { await Task.yield() }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(marketplace.canCancelDownload("sample"))
+        #expect(marketplace.cancelDownload(id: "sample"))
+        await fixture.network.release()
+        #expect(await download.value == HostMarketplace.downloadCancelled)
+        #expect(marketplace.installed["sample"] == nil)
+        #expect(marketplace.failures["sample"] == nil)
+        #expect(!marketplace.busy)
+        #expect(!marketplace.canCancelDownload("sample"))
+    }
+
+    @Test func readyStateIsRememberedUntilAcknowledged() throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace()
+        #expect(marketplace.readyIDs.isEmpty)
+        marketplace.markReady("sample")
+        #expect(marketplace.readyIDs == ["sample"])
+        marketplace.acknowledgeReady("sample")
+        #expect(marketplace.readyIDs.isEmpty)
+    }
+
     @Test func downloadsOfDifferentExtensionsRunTogetherWithTheirOwnStateAndOneCatalogFetch()
         async throws
     {
