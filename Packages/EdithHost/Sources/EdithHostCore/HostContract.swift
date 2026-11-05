@@ -1,5 +1,6 @@
 import EdithExtensionSupport
 import Foundation
+import os
 import ExtensionMarketplace
 
 public enum HostContract {
@@ -216,8 +217,13 @@ public enum HostIndex {
             !["app", "appex"].contains(main.pathExtension)
                 && owner.pathExtension == "xctest" ? owner : main
         let url = try resourceURL(bundleURL: bundle, executableURL: executableURL)
-        return try load(data: Data(contentsOf: url))
+        if let cached = bundledCache.withLock({ $0[url] }) { return cached }
+        let entries = try load(data: Data(contentsOf: url))
+        bundledCache.withLock { $0[url] = entries }
+        return entries
     }
+
+    private static let bundledCache = OSAllocatedUnfairLock(initialState: [URL: [HostExtension]]())
 
     static func resourceURL(bundleURL: URL, executableURL: URL) throws -> URL {
         let resource: URL

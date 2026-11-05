@@ -44,6 +44,7 @@ public enum ContentActivity: Equatable, Sendable {
 
 public enum ContentActivityTiming {
     public static let revealDelay = Duration.milliseconds(180)
+    public static let placeholderDelay = Duration.milliseconds(250)
 }
 
 public struct ContentActivityBadge: View {
@@ -121,12 +122,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                     .saturation(dimmed ? 0.4 : 1)
                     .accessibilityValue(dimmed ? "Updating results" : "")
                     .overlay(alignment: .topTrailing) {
-                        if refreshing, !updating {
-                            LoadingIndicator("Refreshing")
-                                .padding(8)
-                                .background(DashSkin.panel, in: Capsule())
-                                .allowsHitTesting(false)
-                        }
+                        ContentActivityBadge(refreshing && !updating ? .refreshing : .idle)
+                            .padding(UIScale.pt(8))
                     }
             } else if state == .loading {
                 DeferredPlaceholder { SkeletonGroup { placeholder() } }
@@ -172,6 +169,25 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         case .cancelled: "xmark.circle"
         default: "tray"
         }
+    }
+}
+
+extension LoadingContainer where Placeholder == PageSkeleton {
+    public init(
+        state: ContentLoadingState,
+        title: String = "No Content",
+        message: String = "There is nothing to show yet.",
+        layout: PageSkeletonLayout = .list,
+        retry: (() -> Void)? = nil,
+        cancel: (() -> Void)? = nil,
+        refreshing: Bool = false,
+        updating: Bool = false,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            state: state, title: title, message: message, retry: retry, cancel: cancel,
+            refreshing: refreshing, updating: updating, content: content,
+            placeholder: { PageSkeleton(layout: layout) })
     }
 }
 
@@ -454,7 +470,7 @@ private struct DeferredPlaceholder<Placeholder: View>: View {
             }
         }
         .task {
-            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            do { try await Task.sleep(for: ContentActivityTiming.placeholderDelay) } catch { return }
             shown = true
         }
     }

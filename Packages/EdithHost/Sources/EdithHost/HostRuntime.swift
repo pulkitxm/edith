@@ -242,9 +242,10 @@ import SwiftUI
                 await slots.stop()
                 await services.shutdown(); core.shutdown(); control.shutdown()
             }
-            await services.start()
+            async let coreStarted: Void = services.start()
             await loaded.loadCachedCatalog()
             await loaded.restoreEnabledExtensions()
+            await coreStarted
             await loaded.refreshCatalogIfStale()
             await loaded.updateInstalledIfDue()
         } catch { startupError = true }
