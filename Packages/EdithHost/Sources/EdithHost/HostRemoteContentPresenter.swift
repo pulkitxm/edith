@@ -233,6 +233,8 @@ final class HostRemoteViewController: NSViewController {
 
     override func loadView() {
         let view = HostRemoteContainerView()
+        view.wantsLayer = true
+        view.layer?.masksToBounds = true
         view.contentHeight = contentHeight
         view.moved = { [weak self] in self?.terminalInput?.stateChanged() }
         self.view = view

@@ -46,6 +46,7 @@ struct HostExtensionContent: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var visible
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
     private var transitioning: Bool {
@@ -79,6 +80,11 @@ struct HostExtensionContent: View {
             if let controller {
                 HostEmbeddedController(controller: controller, compact: compact, visible: visible)
                     .frame(height: contentHeight.map { CGFloat($0) })
+                    .clipped()
+                    .animation(
+                        Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                        value: contentHeight
+                    )
                     .id(ObjectIdentifier(controller))
             } else if transitioning {
                 PageLoading(state: .loading, title: "Preparing " + title) { EmptyView() }
