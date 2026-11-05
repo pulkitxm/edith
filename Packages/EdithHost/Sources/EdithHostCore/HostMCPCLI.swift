@@ -74,7 +74,7 @@ public actor HostMCPCLI {
                 try await error(id: id, code: -32602, message: "Invalid initialization"); return
             }
             initialized = true
-            let supported = ["2025-11-25"]
+            let supported = Self.protocolVersions
             try await result(
                 id: id,
                 value: .object([
@@ -96,7 +96,9 @@ public actor HostMCPCLI {
         }
         if method == "ping" { try await result(id: id, value: .object([:])); return }
         guard ready else {
-            try await error(id: id, code: -32002, message: "Initialize MCP first"); return
+            try await error(
+                id: id, code: -32600, message: "Server not initialized. Send initialize first.")
+            return
         }
         guard ["tools/list", "tools/call", "resources/list", "resources/read"].contains(method)
         else {
@@ -115,12 +117,12 @@ public actor HostMCPCLI {
                 if method == "tools/call", Self.changesTools(params["name"]?.string) {
                     await self.announceToolChanges()
                 }
-                await self.finish(key, token: token, id: id, value: value, message: nil)
+                await self.finish(key, token: token, id: id, value: value, reply: nil)
             } catch is CancellationError {
-                await self.finish(key, token: token, id: id, value: nil, message: nil)
+                await self.finish(key, token: token, id: id, value: nil, reply: nil)
             } catch {
                 await self.finish(
-                    key, token: token, id: id, value: nil, message: error.localizedDescription)
+                    key, token: token, id: id, value: nil, reply: HostMCPFailure(error))
             }
         }
         jobs[key] = Job(token: token, task: task)
@@ -234,9 +236,14 @@ public actor HostMCPCLI {
             return HostMCPResources.list(index())
         }
         if method == "resources/read" {
-            guard Set(params.keys).isSubset(of: ["uri", "_meta"]), let uri = params["uri"]?.string,
-                let resource = HostMCPResources.read(uri, index: index())
-            else { throw HostCLIError.usage("Unknown resource. Call resources/list.") }
+            guard Set(params.keys).isSubset(of: ["uri", "_meta"]), let uri = params["uri"]?.string
+            else { throw HostCLIError.usage("resources/read needs the uri of a listed resource.") }
+            guard let resource = HostMCPResources.read(uri, index: index()) else {
+                throw HostMCPFailure(
+                    code: HostMCPFailure.resourceNotFound,
+                    message: "Resource not found. Call resources/list for the available URIs.",
+                    data: .object(["uri": .string(uri)]))
+            }
             return resource
         }
         let (registry, coreCatalog) = try await loadCatalogs()
@@ -457,7 +464,7 @@ public actor HostMCPCLI {
         job.task.cancel()
     }
     private func finish(
-        _ key: String, token: UUID, id: HostCLIJSON, value: HostCLIJSON?, message: String?
+        _ key: String, token: UUID, id: HostCLIJSON, value: HostCLIJSON?, reply: HostMCPFailure?
     ) async {
         retired.removeValue(forKey: token)
         guard !stopping, let job = jobs[key], job.token == token else { return }
@@ -465,8 +472,8 @@ public actor HostMCPCLI {
         do {
             if let value {
                 try await result(id: id, value: value)
-            } else if let message {
-                try await error(id: id, code: -32602, message: message)
+            } else if let reply {
+                try await error(id: id, code: reply.code, message: reply.message, data: reply.data)
             }
         } catch { failure = error.localizedDescription; stopping = true; stop() }
     }
@@ -474,11 +481,37 @@ public actor HostMCPCLI {
         try await send(
             HostCLIJSON.object(["jsonrpc": .string("2.0"), "id": id, "result": value]).encoded())
     }
-    private func error(id: HostCLIJSON, code: Int64, message: String) async throws {
+    private func error(id: HostCLIJSON, code: Int64, message: String, data: HostCLIJSON? = nil)
+        async throws
+    {
+        var body: [String: HostCLIJSON] = ["code": .integer(code), "message": .string(message)]
+        if let data { body["data"] = data }
         try await send(
-            HostCLIJSON.object([
-                "jsonrpc": .string("2.0"), "id": id,
-                "error": .object(["code": .integer(code), "message": .string(message)]),
-            ]).encoded())
+            HostCLIJSON.object(["jsonrpc": .string("2.0"), "id": id, "error": .object(body)])
+                .encoded())
+    }
+
+    static let protocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+}
+
+struct HostMCPFailure: Error {
+    static let invalidParams: Int64 = -32602
+    static let internalError: Int64 = -32603
+    static let resourceNotFound: Int64 = -32002
+
+    let code: Int64
+    let message: String
+    let data: HostCLIJSON?
+
+    init(code: Int64, message: String, data: HostCLIJSON? = nil) {
+        self.code = code; self.message = message; self.data = data
+    }
+
+    init(_ error: Error) {
+        switch error {
+        case let failure as HostMCPFailure: self = failure
+        case HostCLIError.usage(let message): self.init(code: Self.invalidParams, message: message)
+        default: self.init(code: Self.internalError, message: error.localizedDescription)
+        }
     }
 }

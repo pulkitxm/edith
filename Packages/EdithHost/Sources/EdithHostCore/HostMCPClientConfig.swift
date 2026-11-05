@@ -4,6 +4,7 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
     case claude, codex, cursor, vscode
 
     public static let serverName = "edith"
+    public static let serverArguments = ["mcp"]
 
     public var title: String {
         switch self {
@@ -18,24 +19,62 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
 
     var containerKey: String { self == .vscode ? "servers" : "mcpServers" }
 
+    var registrationTool: String? {
+        switch self {
+        case .claude: "claude"
+        case .codex: "codex"
+        case .cursor, .vscode: nil
+        }
+    }
+
+    var editsFileWithoutTool: Bool { self != .claude }
+
+    func registerArguments(command: String) -> [String] {
+        switch self {
+        case .claude:
+            ["mcp", "add", "--scope", "user", Self.serverName, "--", command]
+                + Self.serverArguments
+        default: ["mcp", "add", Self.serverName, "--", command] + Self.serverArguments
+        }
+    }
+
+    var unregisterArguments: [String]? {
+        self == .claude ? ["mcp", "remove", "--scope", "user", Self.serverName] : nil
+    }
+
+    func codexDirectory(home: URL, codexHome: String?) -> URL {
+        codexHome.map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codex")
+    }
+
     public func configURL(home: URL, codexHome: String? = nil) -> URL {
         switch self {
         case .claude: home.appendingPathComponent(".claude.json")
         case .codex:
-            (codexHome.map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codex"))
-                .appendingPathComponent("config.toml")
+            codexDirectory(home: home, codexHome: codexHome).appendingPathComponent("config.toml")
         case .cursor: home.appendingPathComponent(".cursor/mcp.json")
         case .vscode:
             home.appendingPathComponent("Library/Application Support/Code/User/mcp.json")
         }
     }
 
+    func presenceURLs(home: URL, codexHome: String?) -> [URL] {
+        switch self {
+        case .claude: [home.appendingPathComponent(".claude"), configURL(home: home)]
+        case .codex: [codexDirectory(home: home, codexHome: codexHome)]
+        case .cursor: [home.appendingPathComponent(".cursor")]
+        case .vscode: [home.appendingPathComponent("Library/Application Support/Code")]
+        }
+    }
+
     func entry(command: String) -> [String: Any] {
         switch self {
         case .claude:
-            ["type": "stdio", "command": command, "args": ["mcp"], "env": [String: String]()]
-        case .vscode: ["type": "stdio", "command": command, "args": ["mcp"]]
-        case .cursor, .codex: ["command": command, "args": ["mcp"]]
+            [
+                "type": "stdio", "command": command, "args": Self.serverArguments,
+                "env": [String: String](),
+            ]
+        case .vscode: ["type": "stdio", "command": command, "args": Self.serverArguments]
+        case .cursor, .codex: ["command": command, "args": Self.serverArguments]
         }
     }
 
@@ -59,10 +98,84 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
     }
 
     static func render(_ document: [String: Any]) -> String {
-        let data = try? JSONSerialization.data(
+        let data =
+            (try? JSONSerialization.data(withJSONObject: document, options: [.sortedKeys]))
+            ?? Data("{}".utf8)
+        if let value = try? JSONDecoder().decode(HostCLIJSON.self, from: data) {
+            return HostCoreCLIJSONFormatter.string(value) + "\n"
+        }
+        let pretty = try? JSONSerialization.data(
             withJSONObject: document,
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
-        return String(decoding: data ?? Data("{}".utf8), as: UTF8.self) + "\n"
+        return String(decoding: pretty ?? data, as: UTF8.self) + "\n"
+    }
+
+    static func shellLine(_ words: [String]) -> String {
+        let safe = CharacterSet(
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@+%,")
+        return words.map { word in
+            if !word.isEmpty, word.unicodeScalars.allSatisfy(safe.contains) { return word }
+            return "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        }.joined(separator: " ")
+    }
+}
+
+public struct HostMCPToolRunner: Sendable {
+    public struct Result: Sendable {
+        public let status: Int32
+        public let output: String
+        public init(status: Int32, output: String) { self.status = status; self.output = output }
+    }
+
+    public let locate: @Sendable (String) -> URL?
+    public let run: @Sendable (URL, [String]) -> Result
+
+    public init(
+        locate: @escaping @Sendable (String) -> URL?,
+        run: @escaping @Sendable (URL, [String]) -> Result
+    ) {
+        self.locate = locate; self.run = run
+    }
+
+    public static let none = HostMCPToolRunner(
+        locate: { _ in nil }, run: { _, _ in Result(status: 127, output: "") })
+
+    public static func system(home: URL, path: [String]) -> HostMCPToolRunner {
+        let directories =
+            path.filter { $0.hasPrefix("/") }
+            + [
+                home.appendingPathComponent(".local/bin").path,
+                home.appendingPathComponent(".claude/local").path,
+                "/opt/homebrew/bin", "/usr/local/bin",
+            ]
+        return HostMCPToolRunner(
+            locate: { name in
+                directories.lazy.map { URL(fileURLWithPath: $0).appendingPathComponent(name) }
+                    .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+            },
+            run: { executable, arguments in
+                let process = Process()
+                let pipe = Pipe()
+                process.executableURL = executable
+                process.arguments = arguments
+                process.standardInput = FileHandle.nullDevice
+                process.standardOutput = pipe
+                process.standardError = pipe
+                var environment = ProcessInfo.processInfo.environment
+                environment["PATH"] = (directories + ["/usr/bin", "/bin"]).joined(separator: ":")
+                process.environment = environment
+                do { try process.run() } catch {
+                    return Result(status: 127, output: error.localizedDescription)
+                }
+                let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: deadline)
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                deadline.cancel()
+                return Result(
+                    status: process.terminationStatus,
+                    output: String(decoding: data.prefix(16 * 1024), as: UTF8.self))
+            })
     }
 }
 
@@ -75,49 +188,67 @@ public struct HostMCPInstaller: Sendable {
         public let client: HostMCPClient
         public let path: String
         public let exists: Bool
+        public let clientFound: Bool
         public let state: State
         public let command: String?
     }
 
     public struct Outcome: Sendable {
-        public enum Action: String, Sendable { case created, updated, unchanged, skipped }
+        public enum Action: String, Sendable {
+            case created, updated, unchanged, skipped, manual, notFound
+        }
         public let client: HostMCPClient
         public let path: String
         public let action: Action
         public let applied: Bool
         public let snippet: String
+        public let run: [String]?
         public let note: String?
         public let backup: String?
+
+        public var runLine: String? { run.map(HostMCPClient.shellLine) }
     }
 
     private let home: URL
     private let command: String
     private let codexHome: String?
+    private let tools: HostMCPToolRunner
 
-    public init(home: URL, command: String, codexHome: String? = nil) {
-        self.home = home; self.command = command; self.codexHome = codexHome
+    public init(
+        home: URL, command: String, codexHome: String? = nil, tools: HostMCPToolRunner = .none
+    ) {
+        self.home = home; self.command = command; self.codexHome = codexHome; self.tools = tools
     }
 
     private func url(_ client: HostMCPClient) -> URL {
         client.configURL(home: home, codexHome: codexHome)
     }
 
+    public func isPresent(_ client: HostMCPClient) -> Bool {
+        if let tool = client.registrationTool, tools.locate(tool) != nil { return true }
+        return client.presenceURLs(home: home, codexHome: codexHome).contains {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+    }
+
     public func inspect(_ client: HostMCPClient) -> Report {
         let file = url(client)
         let text = try? String(contentsOf: file, encoding: .utf8)
         let exists = FileManager.default.fileExists(atPath: file.path)
+        let found = isPresent(client)
         func report(_ state: State, _ registered: String? = nil) -> Report {
             Report(
-                client: client, path: file.path, exists: exists, state: state, command: registered)
+                client: client, path: file.path, exists: exists, clientFound: found, state: state,
+                command: registered)
         }
         guard exists else { return report(.notRegistered) }
         guard let text else { return report(.unreadable) }
         if client.isTOML {
-            guard let block = Self.tomlBlockRange(in: Self.lines(text)) else {
-                return report(.notRegistered)
-            }
-            let registered = Self.tomlCommand(Self.lines(text)[block])
-            return report(registered == command ? .registered : .outdated, registered)
+            let all = Self.lines(text)
+            guard let block = Self.tomlBlockRange(in: all) else { return report(.notRegistered) }
+            let registered = Self.tomlCommand(all[block])
+            let current = registered == command && Self.tomlArgsMatch(all[block])
+            return report(current ? .registered : .outdated, registered)
         }
         guard let root = Self.parseJSON(text) else { return report(.unreadable) }
         guard let container = root[client.containerKey] as? [String: Any] else {
@@ -126,28 +257,68 @@ public struct HostMCPInstaller: Sendable {
         guard let entry = container[HostMCPClient.serverName] else {
             return report(.notRegistered)
         }
-        let registered = (entry as? [String: Any])?["command"] as? String
-        return report(registered == command ? .registered : .outdated, registered)
+        let object = entry as? [String: Any]
+        let registered = object?["command"] as? String
+        let current =
+            registered == command && object?["args"] as? [String] == HostMCPClient.serverArguments
+        return report(current ? .registered : .outdated, registered)
     }
 
     public func status() -> [Report] { HostMCPClient.allCases.map(inspect) }
 
-    public func install(_ client: HostMCPClient, dryRun: Bool) -> Outcome {
+    public func install(_ client: HostMCPClient, dryRun: Bool, onlyIfPresent: Bool = false)
+        -> Outcome
+    {
         let file = url(client)
         let snippet = client.snippet(command: command)
         func outcome(
-            _ action: Outcome.Action, applied: Bool = false, note: String? = nil,
-            backup: String? = nil
+            _ action: Outcome.Action, applied: Bool = false, run: [String]? = nil,
+            note: String? = nil, backup: String? = nil
         ) -> Outcome {
             Outcome(
                 client: client, path: file.path, action: action, applied: applied,
-                snippet: snippet, note: note, backup: backup)
+                snippet: snippet, run: run, note: note, backup: backup)
         }
+        let report = inspect(client)
+        if report.state == .registered { return outcome(.unchanged) }
+        if onlyIfPresent, !isPresent(client) { return outcome(.notFound) }
+        if let tool = client.registrationTool {
+            let register = [tool] + client.registerArguments(command: command)
+            let action: Outcome.Action = report.state == .outdated ? .updated : .created
+            if let executable = tools.locate(tool) {
+                if dryRun { return outcome(action, run: register) }
+                var steps = [Array(register.dropFirst())]
+                if report.state == .outdated, let remove = client.unregisterArguments {
+                    steps.insert(remove, at: 0)
+                }
+                let failure = steps.lazy.compactMap { step -> String? in
+                    let result = tools.run(executable, step)
+                    guard result.status != 0 else { return nil }
+                    let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return "\(HostMCPClient.shellLine([tool] + step)) exited with status \(result.status)"
+                        + (detail.isEmpty ? "." : ": " + String(detail.prefix(400)))
+                }.first
+                guard let failure else { return outcome(action, applied: true, run: register) }
+                if !client.editsFileWithoutTool {
+                    return outcome(.skipped, run: register, note: failure)
+                }
+            } else if !client.editsFileWithoutTool {
+                return outcome(
+                    .manual, run: register, note: "The \(tool) command was not found on this Mac.")
+            }
+        }
+        let edit = installFile(client, file: file, dryRun: dryRun)
+        return outcome(edit.action, applied: edit.applied, note: edit.note, backup: edit.backup)
+    }
+
+    private func installFile(_ client: HostMCPClient, file: URL, dryRun: Bool) -> (
+        action: Outcome.Action, applied: Bool, note: String?, backup: String?
+    ) {
         let exists = FileManager.default.fileExists(atPath: file.path)
         var original = ""
         if exists {
             guard let text = try? String(contentsOf: file, encoding: .utf8) else {
-                return outcome(.skipped, note: "The existing file could not be read as UTF-8.")
+                return (.skipped, false, "The existing file could not be read as UTF-8.", nil)
             }
             original = text
         }
@@ -161,11 +332,11 @@ public struct HostMCPInstaller: Sendable {
                     original, client: client, command: command)
             }
         } catch let failure as Failure {
-            return outcome(.skipped, note: failure.message)
-        } catch { return outcome(.skipped, note: error.localizedDescription) }
-        if unchanged { return outcome(.unchanged) }
+            return (.skipped, false, failure.message, nil)
+        } catch { return (.skipped, false, error.localizedDescription, nil) }
+        if unchanged { return (.unchanged, false, nil, nil) }
         let action: Outcome.Action = exists ? .updated : .created
-        if dryRun { return outcome(action) }
+        if dryRun { return (action, false, nil, nil) }
         do {
             var backup: String?
             if exists {
@@ -185,10 +356,9 @@ public struct HostMCPInstaller: Sendable {
                 try FileManager.default.setAttributes(
                     [.posixPermissions: permissions], ofItemAtPath: file.path)
             }
-            return outcome(action, applied: true, backup: backup)
+            return (action, true, nil, backup)
         } catch {
-            return outcome(
-                .skipped, note: "Could not write the file: \(error.localizedDescription)")
+            return (.skipped, false, "Could not write the file: \(error.localizedDescription)", nil)
         }
     }
 
@@ -263,6 +433,10 @@ public struct HostMCPInstaller: Sendable {
         return array.first
     }
 
+    private static func tomlArgsMatch(_ block: ArraySlice<String>) -> Bool {
+        block.first(where: { key($0, "args") })?.filter { !$0.isWhitespace } == "args=[\"mcp\"]"
+    }
+
     private static func updatedTOML(_ text: String, command: String) throws -> (String, Bool) {
         let desired = HostMCPClient.tomlBlock(command: command)
         var all = lines(text)
@@ -281,10 +455,7 @@ public struct HostMCPInstaller: Sendable {
                     "The existing [mcp_servers.edith] table uses a multi-line args array, so it was left untouched."
             )
         }
-        let compactArgs = block.first(where: { key($0, "args") })?.filter { !$0.isWhitespace }
-        if tomlCommand(block) == command, compactArgs == "args=[\"mcp\"]" {
-            return (text, true)
-        }
+        if tomlCommand(block) == command, tomlArgsMatch(block) { return (text, true) }
         let kept = block.dropFirst().filter { !key($0, "command") && !key($0, "args") }
         let replacement =
             [all[range.lowerBound]]

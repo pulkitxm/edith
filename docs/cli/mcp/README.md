@@ -1,8 +1,8 @@
 # `ed mcp`
 
-`ed mcp` serves every Edith operation to an agent over MCP stdio. It is the
-server the onboarding "Connect your agents" screen registers with Claude Code,
-and the one to point Codex at.
+`ed mcp` serves every Edith operation to an agent over MCP stdio.
+[`ed mcp install`](./install.md) registers it with Claude Code, Codex, Cursor and
+VS Code in one step.
 
 ```
 ed mcp
@@ -29,27 +29,23 @@ here too, so one registration covers both surfaces.
 
 ## Registering it
 
-One command registers Edith with a client, using the `ed` inside the installed app:
+One command registers Edith with every agent client found on this Mac, using the
+`ed` inside the installed app:
 
 ```
-ed mcp install --client claude --dry-run
-ed mcp install --client claude
+ed mcp install --client all --dry-run
 ed mcp install --client all
 ed mcp status
 ```
 
-See [`ed mcp install`](./install.md) and [`ed mcp status`](./status.md). Restart the
-client afterwards. To do it by hand, add this to Claude Code's `~/.claude.json`:
+Claude Code is registered through its own CLI, so this runs:
 
-```json
-{
-  "mcpServers": {
-    "edith": { "type": "stdio", "command": "/Applications/Edith.app/Contents/MacOS/ed", "args": ["mcp"] }
-  }
-}
+```sh
+claude mcp add --scope user edith -- /Applications/Edith.app/Contents/MacOS/ed mcp
 ```
 
-For Codex, add the equivalent block to `~/.codex/config.toml`:
+Codex is registered with `codex mcp add` when the `codex` command is installed,
+and otherwise gets this block in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.edith]
@@ -57,22 +53,36 @@ command = "/Applications/Edith.app/Contents/MacOS/ed"
 args = ["mcp"]
 ```
 
+Cursor gets `mcpServers.edith` in `~/.cursor/mcp.json`, and VS Code gets
+`servers.edith` with `"type": "stdio"` in its user `mcp.json`. See
+[`ed mcp install`](./install.md) and [`ed mcp status`](./status.md). Restart the
+client afterwards.
+
 ## How an agent should use it
 
-1. Call `edith_catalog`. It lists every extension with its status (`enabled`,
-   `installed`, `available`), tagline, summary and example `ed` commands. Pass
-   `query`, `status` or `id` to narrow it; `id` also returns the extension's steps.
-2. Call the matching `edith_*` tool. Tools exist only for installed, enabled
-   extensions.
-3. If the extension is available but not installed, call `edith_extensions_install`
-   with `arguments: ["<id>"]`. Installing changes the Mac, so it previews until
-   `confirm` is true. Ask the user, then confirm. The server sends
-   `notifications/tools/list_changed` once the set of tools changes; list tools again.
-4. Call `edith_app_navigate` with `arguments: ["<id>"]` to show the user the
+The server's `initialize` instructions spell out the same order.
+
+1. Discover. Call `edith_catalog`. It lists every extension with its status
+   (`enabled`, `installed`, `available`), tagline, summary and example `ed`
+   commands. Pass `query`, `status` or `id` to narrow it; `id` also returns the
+   extension's steps.
+2. Call. Use the matching `edith_*` tool. Command tools take an `arguments` array
+   holding the words that follow the command, so `ed usage limits --refresh` is
+   `edith_usage_limits` with `{"arguments": ["--refresh"]}`. Tools exist only for
+   enabled extensions.
+3. Install only when needed. If the extension is available, call
+   `edith_extensions_install` with `{"arguments": ["<id>"]}`. Installing changes
+   the Mac, so it previews until `confirm` is true. Ask the user, then confirm.
+   The server sends `notifications/tools/list_changed` once the set of tools
+   changes; list tools again.
+4. Call `edith_app_navigate` with `{"arguments": ["<id>"]}` to show the user the
    extension's page.
 
 `extensions install`, `update`, `enable`, `disable` and `remove` all follow the
 preview and `confirm` rule, in addition to the destructive routes above.
+
+The server accepts protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`
+and `2024-11-05`, answering with the client's version when it is one of them.
 
 ## Resources
 
@@ -84,6 +94,24 @@ preview and `confirm` rule, in addition to the destructive routes above.
 | `edith://guide/agent` | `ed guide agent`, repository instructions for agents |
 | `edith://guide/mcp` | `ed guide mcp`, this flow in short form |
 | `edith://extensions/<id>` | One extension's tagline, summary, steps, examples and commands |
+
+Reading a URI that is not listed fails with error code `-32002` (resource not
+found) and the URI in `data.uri`.
+
+## Errors
+
+| Code | When |
+| --- | --- |
+| `-32700` | The line is not JSON |
+| `-32600` | Not a JSON-RPC request, or a request sent before `initialize` |
+| `-32601` | Unknown method |
+| `-32602` | Unknown tool or invalid arguments |
+| `-32603` | Edith could not be reached or a provider failed |
+| `-32002` | Unknown resource URI |
+
+A command that runs and fails is not a protocol error: the tool result carries
+the command's stderr with `isError: true`, and so does `edith_catalog` for an
+unknown `id`.
 
 ## Where to go next
 

@@ -179,7 +179,16 @@ extension HostMCPCLI {
             return words.allSatisfy { haystack.contains($0) }
         }
         if let id, entries.isEmpty {
-            throw HostCLIError.usage("Unknown extension id \(id). Call edith_catalog without id.")
+            return .object([
+                "content": .array([
+                    .object([
+                        "type": .string("text"),
+                        "text": .string(
+                            "No extension has the id \(id). Call edith_catalog without id, or with query, to find it."
+                        ),
+                    ])
+                ]), "isError": .bool(true),
+            ])
         }
         var document: [String: HostCLIJSON] = [
             "extensions": .array(
@@ -207,14 +216,17 @@ extension HostMCPCLI {
 
 extension HostMCPCLI {
     static let instructions = """
-        Edith is a macOS app built from downloadable extensions, and this server drives it. \
-        Start by calling edith_catalog (or reading the edith://guide/mcp resource) to see which extensions exist, \
-        whether each is installed, and example commands. Then call the matching edith_* tool: each takes an \
-        arguments array exactly like the ed command line and returns JSON. Tools exist only for installed, \
-        enabled extensions. If the one you need is available but not installed, call edith_extensions_install \
-        with arguments [id]; it previews until confirm is true, so ask the user before confirming, then use the \
-        new tools (the server sends tools/list_changed). To show the user an extension, call edith_app_navigate \
-        with the extension id. Destructive commands also preview unless confirm is true. Read \
-        edith://extensions/<id> for one extension's guide and edith://guide for the full manual.
+        Edith is a macOS app built from extensions. This server lets you drive it. Work in this order:
+        1. Discover. Call edith_catalog first. It lists every extension, whether it is enabled, installed \
+        or available, what it does, and example ed commands. Pass query to search, or id for one extension's steps.
+        2. Call. Use the matching edith_* tool. Command tools take {"arguments": [...]} holding the words that \
+        follow the command on the ed command line, so `ed usage limits --refresh` is edith_usage_limits \
+        with {"arguments": ["--refresh"]}. They return the command's JSON.
+        3. Install only when needed. Tools exist only for enabled extensions. If the one you need is available, \
+        ask the user, then call edith_extensions_install with {"arguments": ["<id>"], "confirm": true}. Without \
+        confirm it only previews. The server then sends notifications/tools/list_changed, so list tools again.
+        Commands that change or remove something also preview until confirm is true; never put --yes in arguments. \
+        Call edith_app_navigate with {"arguments": ["<id>"]} to show the user an extension. More help: the \
+        edith://guide/mcp, edith://extensions/<id> and edith://guide resources.
         """
 }

@@ -721,8 +721,8 @@ public enum HostGuideCLI {
 
         ```
         ed mcp                          one tool per route, JSON in and out
-        ed mcp install --client claude  register it with claude, codex, cursor or vscode
-        ed mcp install --client all --dry-run   preview every change and print the entries
+        ed mcp install --client all     register it with every agent client found
+        ed mcp install --client claude --dry-run   preview one client, write nothing
         ed mcp status                   which clients already have Edith registered
         ```
 
@@ -767,42 +767,46 @@ public enum HostGuideCLI {
         ## Register it
 
         ```
-        ed mcp install --client claude --dry-run    preview, then run without --dry-run
-        ed mcp install --client codex
-        ed mcp install --client cursor
-        ed mcp install --client vscode
-        ed mcp install --client all
+        ed mcp install --client all --dry-run       preview every change, write nothing
+        ed mcp install --client all                 every agent client found on this Mac
+        ed mcp install --client claude              or codex, cursor, vscode
         ed mcp status                               what is registered where
         ```
 
         Each client gets a stdio server named `edith` that runs this app's `ed mcp`.
-        Claude Code is written to `~/.claude.json`, Codex to `~/.codex/config.toml`,
-        Cursor to `~/.cursor/mcp.json` and VS Code to its user `mcp.json`. An existing
-        file is backed up first. A file Edith cannot edit safely is left alone and the
-        exact entry is printed for you to paste. Restart the client afterwards.
+        Claude Code is registered with its own `claude mcp add --scope user`, and Codex
+        with `codex mcp add` when the `codex` command is installed, otherwise in
+        `~/.codex/config.toml`. Cursor is written to `~/.cursor/mcp.json` and VS Code to
+        its user `mcp.json`, each backed up first. A file Edith cannot edit safely is
+        left alone and the exact entry is printed for you to paste. Restart the client
+        afterwards.
 
         ## How an agent should start
 
-        1. Call `edith_catalog` (or read `edith://guide/mcp`). It lists every extension
-           with its status (enabled, installed, available), tagline, summary and
-           example `ed` commands. Pass `id` for one extension's steps.
-        2. Call the matching `edith_*` tool. Each takes an `arguments` array exactly as
-           the `ed` command line does and returns JSON.
-        3. Tools exist only for installed, enabled extensions. If the one you need is
-           available, call `edith_extensions_install` with `arguments: ["<id>"]`. It
-           previews until `confirm` is true, so ask the user before confirming. The
-           server then sends `notifications/tools/list_changed`; list tools again.
+        1. Discover. Call `edith_catalog`. It lists every extension with its status
+           (enabled, installed, available), tagline, summary and example `ed`
+           commands. Pass `query` to search or `id` for one extension's steps.
+        2. Call. Use the matching `edith_*` tool. Command tools take an `arguments`
+           array holding the words that follow the command on the `ed` command line,
+           so `ed usage limits --refresh` is `edith_usage_limits` with
+           `{"arguments": ["--refresh"]}`. They return the command's JSON.
+        3. Install only when needed. Tools exist only for enabled extensions. If the
+           one you need is available, ask the user, then call
+           `edith_extensions_install` with `{"arguments": ["<id>"], "confirm": true}`.
+           Without `confirm` it only previews. The server then sends
+           `notifications/tools/list_changed`; list tools again.
         4. To show the user an extension, call `edith_app_navigate` with
-           `arguments: ["<id>"]`.
+           `{"arguments": ["<id>"]}`.
 
-        Destructive commands preview unless `confirm` is true. Passing `--yes` inside
-        `arguments` is refused.
+        Commands that change or remove something preview unless `confirm` is true.
+        Passing `--yes` inside `arguments` is refused.
 
         ## Resources
 
         `resources/list` returns the manual (`edith://guide`), the agent instructions
         (`edith://guide/agent`), this page (`edith://guide/mcp`) and one guide per
-        extension (`edith://extensions/<id>`), readable with `resources/read`.
+        extension (`edith://extensions/<id>`), readable with `resources/read`. An
+        unknown URI fails with error `-32002`.
         """
 
     public static let agentSnippet = """

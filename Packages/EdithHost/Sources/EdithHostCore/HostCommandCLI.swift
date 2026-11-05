@@ -160,8 +160,10 @@ public struct HostCommandCLI: Sendable {
             guard input.isEmpty else {
                 throw HostCLIError.usage("ed mcp setup commands do not accept stdin.")
             }
-            return try HostMCPSetupCLI(home: tooling.home, executable: tooling.executable)
-                .execute(Array(arguments.dropFirst()))
+            return try HostMCPSetupCLI(
+                home: tooling.home, executable: tooling.executable,
+                tools: .system(home: tooling.home, path: tooling.path)
+            ).execute(Array(arguments.dropFirst()))
         }
         if ["version", "--version"].contains(command) {
             let args = try HostCLIArguments(Array(arguments.dropFirst()), flags: ["--json"])
