@@ -6,6 +6,7 @@ import EdithExtensionUI
 import Carbon.HIToolbox
 import Foundation
 import Security
+import ServiceManagement
 import SwiftUI
 
 @MainActor
@@ -300,7 +301,10 @@ enum CameraCarrierLaunchEnvironment {
                     owner: "virtualCamera",
                     source: layout.privileged,
                     version: version)
-                if privilege.status != .enabled { try privilege.requestApproval() }
+                try Self.approveCarrier(
+                    status: privilege.status,
+                    register: { try ExtensionPrivilegedService.service.register() },
+                    requestApproval: { try privilege.requestApproval() })
                 let payload = try JSONSerialization.data(withJSONObject: ["source": source.path])
                 let result = try await privilege.invoke("installCarrier", payload: payload)
                 guard
@@ -422,6 +426,14 @@ enum CameraCarrierLaunchEnvironment {
         let installedCarrier = !fixture && FileManager.default.fileExists(atPath: installed.path)
         try await client.prepareDisable(providerVisible: installedCarrier)
         defaults.removeObject(forKey: Self.pendingKey)
+    }
+
+    static func approveCarrier(
+        status: SMAppService.Status, register: () throws -> Void,
+        requestApproval: () throws -> Void
+    ) rethrows {
+        if status == .notFound { try register() }
+        if status != .enabled { try requestApproval() }
     }
 
     private static func entitledCarrier(_ source: URL) -> Bool {
