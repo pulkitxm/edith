@@ -602,10 +602,10 @@ struct KitComponentTests {
         #expect((first ?? .max) <= 3 * scale)
     }
 
-    @Test func settingsCaptionIsElevenPoints() {
-        let caption = fitting(Text("Synthetic").settingsCaption())
-        let eleven = fitting(Text("Synthetic").font(.system(size: 11)))
-        #expect(caption == eleven)
+    @Test func settingsSubtitleMatchesTheFormSubtitleSize() {
+        let caption = fitting(Text("Synthetic").settingsSubtitle())
+        let subtitle = fitting(Text("Synthetic").font(.edithText(.body)))
+        #expect(caption == subtitle)
     }
 
     @Test func stepperRowClampsTypedValues() {
@@ -638,6 +638,30 @@ struct KitComponentTests {
                 Form { SettingsIssueSection() }.settingsForm()
             }, height: 500)
         #expect(inkSpan(ready.bitmap, rows: 0..<500) != nil)
+    }
+
+    private func cardEdges(_ bitmap: NSBitmapImageRep, y: Int) throws -> ClosedRange<Int> {
+        let scale = bitmap.pixelsWide / Int(bitmap.size.width)
+        let background = luminance(bitmap, x: 1, y: y * scale)
+        let columns = (0..<bitmap.pixelsWide).filter {
+            abs(luminance(bitmap, x: $0, y: y * scale) - background) > 0.004
+        }
+        return try #require(columns.first) / scale...(try #require(columns.last) / scale)
+    }
+
+    @Test func controlSettingsSkeletonSharesTheFormEdges() async throws {
+        let settings = SyntheticSettings()
+        let loading = try await render(
+            ControlSettingsHost(presentation: settings) { Text("Body") }, width: 640, height: 500)
+        settings.load.setContent()
+        let ready = try await render(
+            ControlSettingsHost(presentation: settings) {
+                Form { Section { Text("Row") } }.settingsForm()
+            }, width: 640, height: 500)
+        let skeleton = try cardEdges(loading.bitmap, y: 30)
+        let form = try cardEdges(ready.bitmap, y: 30)
+        #expect(abs(skeleton.lowerBound - form.lowerBound) <= 1)
+        #expect(abs(skeleton.upperBound - form.upperBound) <= 1)
     }
 
     @Test func analyticsSkeletonReachesTheTrailingEdgeAndCanDropItsFilters() async throws {

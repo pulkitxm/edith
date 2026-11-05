@@ -273,6 +273,10 @@ extension View {
         font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
     }
 
+    public func settingsSubtitle() -> some View {
+        font(.edithText(.body)).foregroundStyle(.secondary)
+    }
+
     public func card() -> some View {
         padding(UIScale.pt(16))
             .frame(maxWidth: .infinity, alignment: .leading)

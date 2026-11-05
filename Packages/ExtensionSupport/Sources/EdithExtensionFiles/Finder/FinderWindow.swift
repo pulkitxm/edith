@@ -34,6 +34,7 @@ struct FinderBody: View {
     var autoFocus = true
     var onFocus: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @Environment(\.finderConnectionsEnabled) private var connectionsEnabled
     @State private var confirmDelete = false
     @State private var width = 0.0
@@ -288,7 +289,8 @@ struct FinderBody: View {
             .fixedSize()
             .help("Actions")
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(8))
         .background(DashSkin.panel)
     }

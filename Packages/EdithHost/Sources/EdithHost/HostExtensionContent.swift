@@ -80,7 +80,7 @@ struct HostExtensionContent: View {
         PageLoading(state: .loading, title: title, layout: inSettings ? .form : .list) {
             EmptyView()
         }
-        .padding(.horizontal, inSettings ? PageMetrics.gutter(compact) : 0)
+        .padding(.horizontal, inSettings ? UIScale.pt(PageMetrics.groupedFormInset) : 0)
         .padding(.vertical, inSettings ? UIScale.pt(PageMetrics.pinnedContentTop) : 0)
     }
 

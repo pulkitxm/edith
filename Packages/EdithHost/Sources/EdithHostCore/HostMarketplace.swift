@@ -25,6 +25,7 @@ public final class HostMarketplace {
     }
     private var operationFailures: [String: String] = [:]
     @ObservationIgnored private var idleShortcuts: HostIdleShortcuts?
+    @ObservationIgnored private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
     public private(set) var restoring = false
     public private(set) var refreshingCatalog = false
     public private(set) var error: String? {
@@ -166,6 +167,18 @@ public final class HostMarketplace {
         try reloadInstalled()
         transferProgress.observe { [weak self] url, bytes in
             Task { @MainActor in self?.recordTransfer(url, bytes: bytes) }
+        }
+        settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            MainActor.assumeIsolated { self?.settingsChanged() }
+        }
+    }
+
+    deinit { IPC.stopObserving(settingsObserver) }
+
+    private func settingsChanged() {
+        idleShortcuts?.synchronize()
+        for id in sessions.idleIDs where operations[id] == nil && sessions.startsAtLaunch(id) {
+            Task { try? await sessions.activate(id) }
         }
     }
 

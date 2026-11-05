@@ -19,7 +19,7 @@ public struct SettingsRow<Trailing: View>: View {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
                 if let subtitle {
-                    Text(subtitle).settingsCaption()
+                    Text(subtitle).settingsSubtitle()
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -252,7 +252,6 @@ public struct SettingsIssueSection: View {
 public struct ControlSettingsHost<Presentation: ControlSettingsPresenting, Content: View>: View {
     let presentation: Presentation
     @ViewBuilder let content: () -> Content
-    @Environment(\.compactLayout) private var compact
 
     public init(presentation: Presentation, @ViewBuilder content: @escaping () -> Content) {
         self.presentation = presentation
@@ -268,7 +267,9 @@ public struct ControlSettingsHost<Presentation: ControlSettingsPresenting, Conte
         ) {
             content()
         }
-        .padding(presentation.load.state == .loading ? PageMetrics.gutter(compact) : 0)
+        .padding(
+            presentation.load.state == .loading ? UIScale.pt(PageMetrics.groupedFormInset) : 0
+        )
         .environment(
             \.settingsIssue,
             presentation.ready

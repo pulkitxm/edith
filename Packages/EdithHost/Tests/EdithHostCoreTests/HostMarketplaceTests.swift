@@ -1,4 +1,6 @@
+import Carbon.HIToolbox
 import CryptoKit
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 import Testing
@@ -27,6 +29,110 @@ import HostWorkerFixtureSupport
         #expect(marketplace.failures["sample"] == nil)
         #expect(marketplace.error == nil)
         #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func anIdleExtensionStartsOnceWhenItsSettingsPageTurnsItOn() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        var workers = 0
+        let marketplace = try fixture.marketplace(entries: [
+            fixture.onDemandEntry(launchWhen: [.init(key: "sampleActive", default: false)])
+        ]) { _ in
+            workers += 1
+            return "normal"
+        }
+        let settings = try await fixture.restoreIdle(marketplace)
+        IPC.post(IPC.Name.settingsChanged)
+        await Task.yield()
+        #expect(marketplace.sessions.states["sample"] == .idle)
+        #expect(workers == 0)
+        settings.set(true, forKey: "sampleActive")
+        for _ in 0..<20 { IPC.post(IPC.Name.settingsChanged) }
+        try await fixture.waitUntil { marketplace.sessions.states["sample"] == .active }
+        for _ in 0..<20 { IPC.post(IPC.Name.settingsChanged) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(workers == 1)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func aFailedIdleStartIsNotRetriedBySettingsChanges() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        var workers = 0
+        let marketplace = try fixture.marketplace(entries: [
+            fixture.onDemandEntry(launchWhen: [.init(key: "sampleActive", default: false)])
+        ]) { _ in
+            workers += 1
+            return "reject-start-with-reason"
+        }
+        marketplace.sessions.retryDelays = []
+        let settings = try await fixture.restoreIdle(marketplace)
+        settings.set(true, forKey: "sampleActive")
+        IPC.post(IPC.Name.settingsChanged)
+        try await fixture.waitUntil { marketplace.sessions.states["sample"] == .failed }
+        for _ in 0..<20 { IPC.post(IPC.Name.settingsChanged) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(workers == 1)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func aRunningOperationHoldsBackAnIdleStart() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        await fixture.network.block()
+        let marketplace = try fixture.marketplace(
+            entries: [
+                fixture.onDemandEntry(launchWhen: [.init(key: "sampleActive", default: false)])
+            ], workerMode: { _ in "normal" })
+        let settings = try await fixture.restoreIdle(marketplace)
+        let download = Task { await marketplace.download(id: "sample") }
+        while await fixture.network.count == 0 { await Task.yield() }
+        settings.set(true, forKey: "sampleActive")
+        IPC.post(IPC.Name.settingsChanged)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(marketplace.sessions.states["sample"] == .idle)
+        #expect(marketplace.cancelDownload(id: "sample"))
+        await fixture.network.release()
+        _ = await download.value
+    }
+
+    @Test func aShortcutChangedOnAnIdleExtensionAppliesWithoutRestarting() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let modifiers = cmdKey | controlKey | optionKey
+        let hotkey = HostHotKey(
+            id: "idleShortcut" + UUID().uuidString, prefix: "idleShortcut", title: "Sample",
+            subtitle: "Synthetic", code: kVK_F16, modifiers: modifiers, label: "F16")
+        defer { HotKeyRegistrar.clear(hotkey.id) }
+        let marketplace = try fixture.marketplace(entries: [
+            fixture.onDemandEntry(hotkeys: [hotkey])
+        ]) { _ in "normal" }
+        let settings = try await fixture.restoreIdle(marketplace)
+        #expect(Self.isHeld(code: kVK_F16, modifiers: modifiers))
+        #expect(!Self.isHeld(code: kVK_F17, modifiers: modifiers))
+        settings.set(kVK_F17, forKey: hotkey.prefix + "Code")
+        IPC.post(IPC.Name.settingsChanged)
+        #expect(!Self.isHeld(code: kVK_F16, modifiers: modifiers))
+        #expect(Self.isHeld(code: kVK_F17, modifiers: modifiers))
+        #expect(marketplace.sessions.states["sample"] == .idle)
+    }
+
+    private static func isHeld(code: Int, modifiers: Int) -> Bool {
+        var reference: EventHotKeyRef?
+        let result = RegisterEventHotKey(
+            UInt32(code), UInt32(modifiers),
+            EventHotKeyID(signature: OSType(0x5445_5354), id: 1), GetApplicationEventTarget(), 0,
+            &reference)
+        if result == noErr, let reference {
+            UnregisterEventHotKey(reference)
+            return false
+        }
+        return result == OSStatus(eventHotKeyExistsErr)
     }
 
     @Test func enablingAMissingPackageReportsFailure() async throws {
@@ -1364,8 +1470,33 @@ import HostWorkerFixtureSupport
                 at: store.root, withIntermediateDirectories: true)
         }
 
+        func onDemandEntry(
+            hotkeys: [HostHotKey] = [], launchWhen: [HostLaunchCondition] = []
+        ) -> HostExtension {
+            HostExtension(
+                id: "sample", title: "sample", symbolName: "square", category: "Tools",
+                background: false, hotkeys: hotkeys, launchWhen: launchWhen)
+        }
+
+        func restoreIdle(_ marketplace: HostMarketplace) async throws -> UserDefaults {
+            let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
+            defaults.set(["sample"], forKey: HostExtensionSessions.enabledExtensionsKey)
+            await marketplace.restoreEnabledExtensions()
+            return try #require(
+                UserDefaults(suiteName: identity.extensionDefaultsSuite("sample")))
+        }
+
+        func waitUntil(_ condition: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(10)
+            while !condition() {
+                guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
         func marketplace(
-            ids: [String] = ["sample"], workerMode: ((ExtensionPackage) -> String)? = nil,
+            ids: [String] = ["sample"], entries: [HostExtension]? = nil,
+            workerMode: ((ExtensionPackage) -> String)? = nil,
             serving: [URL: URL] = [:],
             verificationReceipts: HostBundleVerificationReceipts? = nil,
             verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil,
@@ -1402,9 +1533,11 @@ import HostWorkerFixtureSupport
                 }, verify: { _ in })
             return try HostMarketplace(
                 identity: identity,
-                entries: ids.map {
-                    HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
-                }, store: store, catalogClient: client, installer: installer, sessions: sessions,
+                entries: entries
+                    ?? ids.map {
+                        HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
+                    }, store: store, catalogClient: client, installer: installer,
+                sessions: sessions,
                 verificationReceipts: verificationReceipts,
                 verifyInstalledBundle: verifyInstalledBundle, transferProgress: transferProgress)
         }
@@ -1492,6 +1625,8 @@ import HostWorkerFixtureSupport
             try? FileManager.default.removeItem(at: directory)
             UserDefaults(suiteName: identity.defaultsSuite)?.removePersistentDomain(
                 forName: identity.defaultsSuite)
+            let extensionSuite = identity.extensionDefaultsSuite("sample")
+            UserDefaults(suiteName: extensionSuite)?.removePersistentDomain(forName: extensionSuite)
         }
     }
 }

@@ -133,6 +133,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
                 .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
             }
             .environment(\.pageViewportHeight, contentViewportHeight)
+            .environment(\.pageViewportCenterShift, contentCenterShift)
             .background {
                 GeometryReader { proxy in
                     Color.clear
@@ -151,6 +152,11 @@ public struct PageScaffold<Header: View, Content: View>: View {
     private var contentViewportHeight: CGFloat {
         let top = pinnedHeader ? UIScale.pt(PageMetrics.pinnedContentTop) : scrollingHeaderHeight
         return max(0, viewportHeight - top - UIScale.pt(PageMetrics.bottom))
+    }
+
+    private var contentCenterShift: CGFloat {
+        let top = pinnedHeader ? UIScale.pt(PageMetrics.pinnedContentTop) : 0
+        return (UIScale.pt(PageMetrics.bottom) - top) / 2
     }
 }
 
@@ -253,6 +259,10 @@ private struct PageViewportHeightKey: EnvironmentKey {
     static let defaultValue: CGFloat? = nil
 }
 
+private struct PageViewportCenterShiftKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
 extension EnvironmentValues {
     public var pageColumnWidth: CGFloat? {
         get { self[PageColumnWidthKey.self] }
@@ -263,14 +273,26 @@ extension EnvironmentValues {
         get { self[PageViewportHeightKey.self] }
         set { self[PageViewportHeightKey.self] = newValue }
     }
+
+    var pageViewportCenterShift: CGFloat {
+        get { self[PageViewportCenterShiftKey.self] }
+        set { self[PageViewportCenterShiftKey.self] = newValue }
+    }
 }
 
 private struct PageFillViewport: ViewModifier {
     @Environment(\.pageViewportHeight) private var viewportHeight
+    @Environment(\.pageViewportCenterShift) private var centerShift
 
     func body(content: Content) -> some View {
+        let viewport = viewportHeight
+        let shift = centerShift
         content
-            .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .center)
+            .alignmentGuide(VerticalAlignment.center) { dimensions in
+                let room = max(0, ((viewport ?? 0) - dimensions.height) / 2)
+                return dimensions[VerticalAlignment.center] - min(shift, room)
+            }
+            .frame(maxWidth: .infinity, minHeight: viewport, alignment: .center)
             .environment(\.pageViewportHeight, nil)
     }
 }

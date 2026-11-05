@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import EdithExtensionUI
 import EdithHostCore
 import ExtensionMarketplace
@@ -33,6 +34,35 @@ import Testing
         try await marketplace.sessions.enable(fixture.package)
         try await settle { presenter.created == 2 }
         #expect(marketplace.sessions.generations["docs"] != original)
+        #expect(await marketplace.sessions.shutdown())
+    }
+
+    @Test func anIdleSettingsPageRebuildsOnceItsSwitchStartsTheExtension() async throws {
+        let fixture = try Fixture(launchWhen: [.init(key: "docsActive", default: false)])
+        defer { fixture.clean() }
+        let marketplace = fixture.marketplace
+        let identity = marketplace.identity
+        let presenter = Presenter()
+        try #require(UserDefaults(suiteName: identity.defaultsSuite)).set(
+            ["docs"], forKey: HostExtensionSessions.enabledExtensionsKey)
+        await marketplace.restoreEnabledExtensions()
+        #expect(marketplace.sessions.states["docs"] == .idle)
+        let window = TestWindowHost.window(contentRect: .init(x: 0, y: 0, width: 880, height: 640))
+        window.isReleasedWhenClosed = false
+        window.contentViewController = NSHostingController(
+            rootView: HostExtensionContent(
+                marketplace: marketplace, extensionID: "docs", location: "settings",
+                presenter: presenter, openMarketplace: {}
+            )
+            .environment(\.automaticViewActionsEnabled, true))
+        window.orderBack(nil)
+        defer { window.close() }
+        try await settle { presenter.created == 1 }
+        try #require(UserDefaults(suiteName: identity.extensionDefaultsSuite("docs"))).set(
+            true, forKey: "docsActive")
+        IPC.post(IPC.Name.settingsChanged)
+        try await settle { presenter.created == 2 }
+        #expect(marketplace.sessions.states["docs"] == .active)
         #expect(await marketplace.sessions.shutdown())
     }
 
@@ -72,7 +102,7 @@ import Testing
         let root: URL
         let marketplace: HostMarketplace
         let package: ExtensionPackage
-        init() throws {
+        init(launchWhen: [HostLaunchCondition] = []) throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             let identity = try HostIdentity(
                 identifier: "com.pulkit.edith.tests.content." + UUID().uuidString,
@@ -87,7 +117,11 @@ import Testing
             try store.commit([package])
             marketplace = try HostMarketplace(
                 identity: identity,
-                entries: [.init(id: "docs", title: "Docs", symbolName: "book", category: "agents")],
+                entries: [
+                    .init(
+                        id: "docs", title: "Docs", symbolName: "book", category: "agents",
+                        background: launchWhen.isEmpty, launchWhen: launchWhen)
+                ],
                 store: store,
                 catalogClient: ExtensionCatalogClient(
                     url: URL(string: "https://example.invalid/catalog")!, publicKey: Data(),
@@ -106,6 +140,8 @@ import Testing
         func clean() {
             UserDefaults(suiteName: marketplace.identity.defaultsSuite)?.removePersistentDomain(
                 forName: marketplace.identity.defaultsSuite)
+            let extensionSuite = marketplace.identity.extensionDefaultsSuite("docs")
+            UserDefaults(suiteName: extensionSuite)?.removePersistentDomain(forName: extensionSuite)
             try? FileManager.default.removeItem(at: root)
         }
     }

@@ -94,6 +94,7 @@ public struct EdithTextField: View {
                         .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 }
                 .buttonStyle(.edith(.borderless))
+                .padding(.vertical, -UIScale.pt(4))
                 .help("Clear this field")
                 .accessibilityLabel("Clear \(placeholder)")
             }

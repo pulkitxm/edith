@@ -47,7 +47,7 @@ public struct SurfaceWorldClocks: View {
                     )
                 }
                 if canAdd {
-                    addButton
+                    addButton.frame(maxHeight: .infinity, alignment: .top)
                 }
             }
         }.accessibilityElement(children: .contain)

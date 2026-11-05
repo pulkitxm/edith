@@ -6,8 +6,14 @@ public struct UsageCalendarScale: Codable, Equatable, Sendable {
     private let costCuts: [Double]
 
     public init(days: [DayPoint]) {
-        tokenCuts = ActivityCalendar.cuts(days.map(\.tokens))
-        costCuts = ActivityCalendar.cuts(days.map(\.cost))
+        tokenCuts = Self.evenCuts(days.map(\.tokens))
+        costCuts = Self.evenCuts(days.map(\.cost))
+    }
+
+    private static func evenCuts(_ values: [Double]) -> [Double] {
+        let positive = values.filter { $0 > 0 }.sorted()
+        guard !positive.isEmpty else { return [] }
+        return (1...5).map { positive[(positive.count - 1) * $0 / 6] }
     }
 
     public func level(for day: DayPoint) -> Int {

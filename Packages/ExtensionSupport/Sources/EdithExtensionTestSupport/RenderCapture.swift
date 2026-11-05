@@ -55,6 +55,7 @@ public enum RenderCapture {
         Variant(name: "compact-light", width: 640, height: 700, zoom: 1, scheme: .light),
         Variant(name: "compact-dark", width: 640, height: 700, zoom: 1, scheme: .dark),
         Variant(name: "zoom-light", width: 1100, height: 760, zoom: 1.6, scheme: .light),
+        Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light),
     ]
 
     public static let sheetVariants = [

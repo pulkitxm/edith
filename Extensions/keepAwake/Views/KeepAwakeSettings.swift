@@ -15,7 +15,7 @@ struct KeepAwakeSettings: View {
         Form {
             SettingsIssueSection()
             Section {
-                Toggle(isOn: $preventSleep) {
+                Toggle(isOn: $preventSleep.notifyingSettingsChange()) {
                     Text("Keep awake")
                     Text(
                         preventSleep
