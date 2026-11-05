@@ -231,9 +231,8 @@ private struct EmbeddedSpotifySongRow: View {
                 actions
             } label: {
                 EdithIcon.more.image()
-                    .frame(width: UIScale.pt(24), height: UIScale.pt(32))
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .borderlessMenu().fixedSize()
             .accessibilityLabel("Actions for \(item.title)")
         }
         .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))

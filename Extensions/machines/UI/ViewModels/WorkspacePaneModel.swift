@@ -220,7 +220,7 @@ struct WorkspacePaneView: View {
             }
             .foregroundStyle(DashSkin.ink(dark))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Show a different machine in this pane")
@@ -288,7 +288,7 @@ struct WorkspacePaneView: View {
             } label: {
                 EdithIcon.plus.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Add a view to this pane")
@@ -306,7 +306,7 @@ struct WorkspacePaneView: View {
             } label: {
                 EdithIcon.layoutLeft.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Split or close this pane")

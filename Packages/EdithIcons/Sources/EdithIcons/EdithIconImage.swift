@@ -48,18 +48,6 @@ extension EdithIcon {
         Image(nsImage: nsImage(size: size, tone: tone)).renderingMode(.template)
     }
 
-    public func image(size: CGFloat = 16, tone: EdithIconTone = .duotone, tint: Color) -> Image {
-        let mask = nsImage(size: size, tone: tone)
-        let color = NSColor(tint)
-        let tinted = NSImage(size: mask.size, flipped: false) { rect in
-            mask.draw(in: rect)
-            color.setFill()
-            rect.fill(using: .sourceIn)
-            return true
-        }
-        return Image(nsImage: tinted)
-    }
-
     private func renderBitmap(size: CGFloat, scale: CGFloat, tone: EdithIconTone)
         -> NSBitmapImageRep?
     {

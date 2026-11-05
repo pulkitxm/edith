@@ -567,7 +567,7 @@ struct SocialManagerPage: View {
                 } label: {
                     EdithIconView(.more).foregroundStyle(.secondary)
                 }
-                .menuStyle(.button).buttonStyle(.edith(.borderless)).fixedSize()
+                .borderlessMenu().fixedSize()
                 .accessibilityLabel("Manage \(account.name)")
             }
             HStack {

@@ -106,7 +106,7 @@ struct DatabaseFilterRibbon: View {
         } label: {
             railControlLabel(condensedFilterTitle, icon: .filter)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
@@ -173,7 +173,7 @@ struct DatabaseFilterRibbon: View {
         } label: {
             railControlLabel("Columns", icon: .columns)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(columns.columns.isEmpty)
@@ -193,7 +193,7 @@ struct DatabaseFilterRibbon: View {
         } label: {
             railControlLabel("Filter", icon: .plus)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
@@ -231,12 +231,13 @@ struct DatabaseFilterRibbon: View {
             } label: {
                 conjunctionLabel(data.filterConjunction.title)
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Match all filters or any filter")
         } else {
             conjunctionLabel("AND")
+                .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
                 .help("Redis combines key and type filters")
         }
     }
@@ -245,7 +246,6 @@ struct DatabaseFilterRibbon: View {
         Text(title)
             .font(.system(size: UIScale.pt(9), weight: .medium, design: .monospaced))
             .foregroundStyle(palette.inkFaint)
-            .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
     }
 
     private func filterChip(_ clause: DatabaseWorkspaceFilterClause) -> some View {
@@ -348,7 +348,7 @@ struct DatabaseFilterRibbon: View {
         } label: {
             railControlLabel(sortMenuTitle, icon: .arrowSort)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(sortableFields.isEmpty)
@@ -367,15 +367,6 @@ struct DatabaseFilterRibbon: View {
             .font(.system(size: UIScale.pt(10), weight: .medium))
             .foregroundStyle(palette.inkSoft)
             .lineLimit(1)
-            .padding(.horizontal, UIScale.pt(6))
-            .frame(height: UIScale.pt(28))
-            .background(
-                palette.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
-            }
     }
 
     private var condensedFilterTitle: String {

@@ -201,7 +201,7 @@ struct HerdrNewAgentPopup: View {
         } label: {
             model.layoutChoice.icon.image()
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("Choose how the new agent opens: \(model.layoutChoice.title)")
         .accessibilityLabel("Open as \(model.layoutChoice.title)")

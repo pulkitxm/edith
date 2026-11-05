@@ -269,10 +269,8 @@ struct NotchShelfContentView: View {
                     }
                 } label: {
                     EdithIconView(.window, size: 16)
-                        .foregroundStyle(.tint)
-                        .frame(width: 28, height: 24)
                 }
-                .menuStyle(.button).buttonStyle(.edith(.borderless))
+                .borderlessMenu()
                 .fixedSize().help("Notch presets")
                 if controller.layoutEditing {
                     Button {

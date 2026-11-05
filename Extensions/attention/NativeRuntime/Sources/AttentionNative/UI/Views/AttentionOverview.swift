@@ -267,7 +267,7 @@ struct AttentionCategoryMenu: View {
         } label: {
             EdithIcon.tag.image()
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .frame(width: UIScale.pt(24))
         .help("Change category, productivity or whether it is work or personal")

@@ -33,10 +33,9 @@ struct VirtualCameraMeetingControls: View {
                     Divider()
                     Button("Stop capture") { model.pause(.stopped) }
                 } label: {
-                    EdithIcon.more.image(tint: .themeAccent)
-                        .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                    EdithIcon.more.image()
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
                 .padding(.trailing, -UIScale.pt(Self.menuInset))
                 .help("Preview, playback and pause options")
@@ -125,13 +124,12 @@ struct VirtualCameraMeetingControls: View {
             Label {
                 Text(sourceTitle)
             } icon: {
-                sourceIcon.image(tint: .themeAccent)
+                sourceIcon.image()
             }
             .lineLimit(1).truncationMode(.middle)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: UIScale.pt(28))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .help("Choose your video source")
         .accessibilityLabel("Video source: \(sourceTitle)")
     }

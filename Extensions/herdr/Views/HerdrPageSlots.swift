@@ -91,9 +91,8 @@ struct HerdrMessageMenu: View {
         } label: {
             EdithIcon.send.image()
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Message")

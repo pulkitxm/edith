@@ -376,10 +376,8 @@ private struct SEOAuditProjectRow: View {
             } label: {
                 EdithIcon.more.image()
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .frame(width: UIScale.pt(Self.menuSize), height: UIScale.pt(Self.menuSize))
-                    .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .padding(.trailing, UIScale.pt(Self.horizontalPadding))

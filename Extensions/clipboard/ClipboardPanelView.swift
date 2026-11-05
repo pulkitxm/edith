@@ -162,7 +162,7 @@ struct ClipboardPanelView: View {
             EdithIcon.more.image()
                 .foregroundStyle(.secondary)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Clipboard options")

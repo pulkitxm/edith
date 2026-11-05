@@ -488,7 +488,7 @@ struct HomebrewPackageTable: View {
                     } label: {
                         EdithIcon.more.image()
                     }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .borderlessMenu().menuIndicator(.hidden)
                     .accessibilityLabel("Actions for \(package.displayName)")
                     .disabled(disabled)
                 } else {

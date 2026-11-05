@@ -505,11 +505,8 @@ struct DatabaseConnectionGallery: View {
         } label: {
             EdithIcon.more.image()
                 .foregroundStyle(palette.inkSoft)
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                .background(palette.panel.opacity(0.94), in: Circle())
-                .overlay(Circle().stroke(palette.line, lineWidth: 1))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .padding(.trailing, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
@@ -530,7 +527,7 @@ struct DatabaseConnectionGallery: View {
         } label: {
             Label(
                 connection.isFavorite ? "Remove from favorites" : "Add to favorites",
-                edith: .heart)
+                edith: .heart, tone: connection.isFavorite ? .muted : .duotone)
         }
         Divider()
         Button {
@@ -831,7 +828,7 @@ struct DatabaseFocusedConnectionHeader: View {
             } label: {
                 Label(
                     connection.isFavorite ? "Remove from favorites" : "Add to favorites",
-                    edith: .heart)
+                    edith: .heart, tone: connection.isFavorite ? .muted : .duotone)
             }
             Divider()
             Button {
@@ -858,9 +855,8 @@ struct DatabaseFocusedConnectionHeader: View {
         } label: {
             EdithIcon.more.image()
                 .foregroundStyle(palette.inkSoft)
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(busyConnectionID != nil)

@@ -263,9 +263,8 @@ struct HerdrPaneHeader: View {
         } label: {
             EdithIcon.more.image(size: 12)
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(20), height: UIScale.pt(20))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More for this agent")

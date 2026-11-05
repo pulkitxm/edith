@@ -284,7 +284,7 @@ struct DockerConsoleView: View {
             } label: {
                 EdithIcon.trash.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Reclaim space")

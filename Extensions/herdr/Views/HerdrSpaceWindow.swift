@@ -404,9 +404,8 @@ struct HerdrSpaceView: View {
             }
         } label: {
             EdithIcon.plus.image()
-                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("New terminal (⌘T)")
         .accessibilityLabel("New terminal")
@@ -447,7 +446,7 @@ struct HerdrSpaceView: View {
                 .layoutTop, help: "Split down (⇧⌘D)", enabled: tab != nil
             ) { model.split(.bottom) }
             controlButton(
-                .calculator, help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
+                .grid, help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
             ) { tab?.equalize() }
             controlButton(
                 .close, help: "Close focused pane (⇧⌘W)",

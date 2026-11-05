@@ -182,8 +182,7 @@ struct SocialAccountListRow: View {
             } label: {
                 EdithIconView(.more).accessibilityHidden(true)
             }
-            .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
-            .menuIndicator(.hidden).fixedSize()
+            .borderlessMenu().fixedSize()
             .accessibilityLabel("Manage \(model.accountTitle(account))")
         }
         .padding(UIScale.pt(compactRow ? 8 : compact ? 10 : 14))

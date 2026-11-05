@@ -443,14 +443,14 @@ struct WorkspaceView: View {
             } label: {
                 Label("Layout", edith: .layoutLeft)
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .fixedSize()
             .help("Choose a layout")
 
             Button {
                 model.equalize()
             } label: {
-                EdithIconView(.calculator)
+                EdithIconView(.grid)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Even out the panes")

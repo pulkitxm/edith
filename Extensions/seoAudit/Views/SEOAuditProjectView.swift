@@ -79,8 +79,7 @@ struct SEOAuditProjectView: View {
                     } label: {
                         EdithIcon.more.image()
                     }
-                    .menuStyle(.button)
-                    .menuIndicator(.hidden)
+                    .borderlessMenu()
                     .fixedSize()
                     .accessibilityLabel("Project actions")
                     .disabled(model.isRunning)

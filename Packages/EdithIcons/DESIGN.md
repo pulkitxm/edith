@@ -114,7 +114,7 @@ color, so any theme, accent or ink works.
   an unpinned pin, a disconnected network. Do not draw an outline version.
 
 Off states with their own meaning are real drawings: `eyeOff`, `videoOff`,
-`wifiOff`, `speakerOff` and `micMute`. Filled and unfilled are not separate icons,
+`wifiOff`, `speakerOff`, `micMute` and `pinOff`. Filled and unfilled are not separate icons,
 because every icon is already solid.
 
 ## Optical sizing
@@ -269,7 +269,7 @@ These live in `tools/icons-controls.mjs`.
 | `sync` | Two half loops chasing each other |
 | `history` | A loop running backward around clock hands |
 | `rotate` | A loop around a small tile: turn this object |
-| `seekForward`, `seekBack` | A loop around a play wedge: jump in time |
+| `seekForward`, `seekBack` | A half loop arching over a play wedge: jump in time |
 
 #### Editing and actions
 
@@ -330,6 +330,7 @@ These live in `tools/icons-controls.mjs`.
 | `placeholder` | A plain lozenge: shown for an unknown name |
 | `ring`, `dot`, `radioOn` | An empty ring, a dot, and the two together |
 | `checkbox`, `checkboxOn` | An empty box, and a tick knocked out of a full one |
+| `checkboxMixed` | A bar knocked out of a full box: some of the group is selected |
 
 #### Media
 
@@ -407,10 +408,12 @@ These live in `tools/icons-controls.mjs`.
 | `batteryEmpty`, `batteryLow`, `batteryHalf`, `batteryHigh`, `batteryFull` | A faint cell filling up |
 | `batteryCharging` | A full cell with a bolt knocked out |
 | `sun`, `moon` | Light and dark |
+| `keepAwakeOn` | An open eye held in the crescent: awake through the night |
 | `thermometer` | A bulb with a faint tube |
 | `fan` | Three blades around a hub |
 | `cpu` | A chip with pins |
 | `memory` | A memory stick with its contacts |
+| `driveExternal` | A portable drive on a faint cable |
 | `display`, `displays` | A screen on a faint stand, one or two |
 | `laptop` | A screen on a faint base |
 | `phone` | A slab with a home bar |
@@ -425,6 +428,7 @@ These live in `tools/icons-controls.mjs`.
 | `location` | A map pin |
 | `flag` | A pennant on a pole |
 | `pin` | A thumbtack |
+| `pinOff` | The thumbtack struck through: unpin |
 | `bookmark` | A ribbon with a notch |
 | `tag` | A swing tag on the diagonal |
 | `heart` | A heart: liked and favorite |
@@ -442,7 +446,7 @@ These live in `tools/icons-controls.mjs`.
 | `leaf` | A leaf on a slanted stem, midrib knocked out: nature |
 | `ball` | A ball with two curved seams knocked out: sport and play |
 | `cutlery` | A fork beside a knife: food and meals |
-| `filters` | Three overlapping discs |
+| `filters` | A lit disc over two faint discs, each kept apart: a stack of looks |
 | `contrast` | A disc split into lit and faint halves |
 
 #### Text
@@ -524,8 +528,12 @@ The limits:
   about 15% off its ideal size between steps.
 - Font weight is not followed. Stems stay 2 units in a semibold line.
 - The view is not an `Image`, so a native menu drops it. Use `Label(_, edith:)`
-  or `.image()` there. The label of a `Menu` with `.menuStyle(.borderlessButton)`
-  is native too and ignores template tinting, so it needs `.image(tint:)`.
+  or `.image()` for menu items.
+- The label of a `Menu` with `.menuStyle(.borderlessButton)` is native too: it
+  drops custom views, ignores `foregroundStyle` and draws a template image black.
+  Use `.borderlessMenu()` from `EdithExtensionUI` instead. SwiftUI hosts the label,
+  so any icon works and follows `foregroundStyle`, defaulting to the accent. It
+  keeps the native size and draws the chevron, which `.menuIndicator(.hidden)` hides.
 - `.symbolEffect` does nothing, because these are not symbols.
 
 `Label(_, edith:)` and `Button(_, edith:)` work everywhere, because their icon is

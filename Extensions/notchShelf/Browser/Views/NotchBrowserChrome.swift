@@ -298,11 +298,9 @@ struct NotchBrowserToolbar: View {
                     .presenterCover(NotchPresenterState.shared.hides(.browser))
             } else {
                 EdithIconView(.person, size: 16)
-                    .foregroundStyle(.tint)
             }
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(.borderless))
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .frame(width: 28, height: 26)

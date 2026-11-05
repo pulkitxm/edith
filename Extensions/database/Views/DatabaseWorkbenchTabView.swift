@@ -127,7 +127,7 @@ struct DatabaseWorkbenchTabView: View {
             } label: {
                 EdithIcon.more.image()
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .borderlessMenu().menuIndicator(.hidden).fixedSize()
             .accessibilityLabel("More database actions")
         }
     }
@@ -167,7 +167,7 @@ struct DatabaseWorkbenchTabView: View {
                 } label: {
                     Label("History", edith: .history)
                 }
-                .menuStyle(.borderlessButton).fixedSize()
+                .borderlessMenu().fixedSize()
                 .disabled(data.isLoading || tab?.history.entries.isEmpty != false)
                 .help("Recent queries for this tab, kept in memory only")
                 Button(data.isLoading ? "Cancel" : "Run") {
@@ -353,7 +353,7 @@ struct DatabaseWorkbenchTabView: View {
             } label: {
                 Text("\(data.pageSize) per page").font(.system(size: UIScale.pt(10)))
             }
-            .menuStyle(.borderlessButton).fixedSize().disabled(data.isLoading)
+            .borderlessMenu().fixedSize().disabled(data.isLoading)
             .accessibilityLabel("Page size, \(data.pageSize) rows")
         }.padding(.horizontal, UIScale.pt(12)).frame(height: UIScale.pt(36)).background(
             palette.panel)

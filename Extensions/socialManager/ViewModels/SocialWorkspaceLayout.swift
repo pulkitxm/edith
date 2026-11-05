@@ -152,7 +152,7 @@ struct SocialWorkspaceLayout: View {
                                     }
                                 }
                             }
-                        }.menuStyle(.borderlessButton).fixedSize()
+                        }.borderlessMenu().fixedSize()
                     }
                 }
             }

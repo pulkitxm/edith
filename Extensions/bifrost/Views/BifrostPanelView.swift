@@ -187,11 +187,9 @@ struct BifrostPanelView: View {
                     .font(.system(size: 12))
                     .lineLimit(1)
             }
-            .foregroundStyle(.tint)
             .padding(.trailing, 3)
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(.borderless))
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -210,11 +208,9 @@ struct BifrostPanelView: View {
                     .font(.system(size: 12))
                     .lineLimit(1)
             }
-            .foregroundStyle(.tint)
             .padding(.trailing, 3)
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(.borderless))
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
     }

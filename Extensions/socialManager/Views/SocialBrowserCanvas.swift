@@ -96,8 +96,7 @@ private struct SocialBrowserPane: View {
                 } label: {
                     EdithIconView(.more).accessibilityHidden(true)
                 }
-                .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
-                .menuIndicator(.hidden).fixedSize()
+                .borderlessMenu().fixedSize()
                 .accessibilityLabel("Manage \(account.name) pane")
                 if tab.layout.paneCount > 1 {
                     PageIconChip(

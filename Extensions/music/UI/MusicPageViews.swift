@@ -446,10 +446,8 @@ struct EmbeddedMusicPage: View {
                 } label: {
                     EdithIcon.chevronRight.image(size: 12)
                         .foregroundStyle(.secondary)
-                        .frame(width: UIScale.pt(16), height: UIScale.pt(16))
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("Jump to a folder here")

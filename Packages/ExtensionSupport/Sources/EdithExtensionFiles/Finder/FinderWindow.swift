@@ -235,7 +235,7 @@ struct FinderBody: View {
                 } label: {
                     EdithIcon.arrowSort.image()
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
                 .help("Sort")
             }
@@ -285,7 +285,7 @@ struct FinderBody: View {
             } label: {
                 EdithIcon.more.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .fixedSize()
             .help("Actions")
         }

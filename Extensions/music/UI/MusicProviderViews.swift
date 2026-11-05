@@ -148,7 +148,7 @@ struct EmbeddedMusicProviderContent: View {
                         Label("Connected", edith: .success)
                             .font(.edithText(.caption))
                     }
-                    .menuStyle(.borderlessButton)
+                    .borderlessMenu()
                     .disabled(accounts.youtubeConnecting)
                 }
             }

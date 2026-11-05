@@ -220,7 +220,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
             } label: {
                 EdithIcon.person.image(size: 20)
             }
-            .menuStyle(.borderlessButton).fixedSize().help("Music source and account")
+            .borderlessMenu().fixedSize().help("Music source and account")
         }
         .padding(.horizontal, UIScale.pt(16)).padding(.vertical, UIScale.pt(12))
     }

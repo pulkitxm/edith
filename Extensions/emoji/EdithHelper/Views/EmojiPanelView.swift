@@ -152,7 +152,7 @@ struct EmojiPanelView: View {
             Text(store.skinTone.sample)
                 .font(.system(size: 15))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Default skin tone")

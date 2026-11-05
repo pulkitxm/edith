@@ -781,9 +781,8 @@ struct HerdrPage: View {
         } label: {
             EdithIcon.send.image(size: 12)
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Message agents in \(accessibleTitle)")

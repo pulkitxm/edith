@@ -109,6 +109,11 @@ See "Using the package" in `DESIGN.md` for the full API.
   `Button("Rename", edith: .edit) {}`. They also work inside menus, which
   `EdithIconView` does not.
 - For a real image, use `EdithIcon.plus.image()` or `.nsImage()`.
+- For a borderless `Menu`, use `.borderlessMenu()`, never
+  `.menuStyle(.borderlessButton)`, which draws its label icon black. It follows
+  `foregroundStyle`, defaults to the accent, and shows a chevron unless
+  `.menuIndicator(.hidden)` is set. Items inside a menu still need
+  `Label(_, edith:)` or `.image()`.
 - For a fixed slot in the app, use `PageIcon` or `PageGuideBadge`.
 - For an off state, use `tone: .muted`. Do not draw an outline version.
 - From a string, use `EdithIcon(name:)`. An unknown name shows a placeholder.

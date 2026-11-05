@@ -554,12 +554,8 @@ struct DockerContainerDetail: View {
             } label: {
                 EdithIcon.chevronUpDown.image(size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(7))
-                    .padding(.vertical, UIScale.pt(5))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Switch to another container in this group")

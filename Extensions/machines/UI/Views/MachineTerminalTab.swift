@@ -156,12 +156,11 @@ struct MachineTerminalTab: View {
             HStack(spacing: UIScale.pt(5)) {
                 EdithIcon.terminal.image(size: UIScale.pt(12))
                 Text(selectedWindowsShell.label)
-                EdithIcon.chevronUpDown.image(size: UIScale.pt(12))
             }
             .font(DashSkin.mono(11))
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("Choose the shell for this terminal")
     }

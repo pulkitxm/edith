@@ -210,9 +210,8 @@ private struct HerdrTerminalList: View {
             } label: {
                 EdithIcon.plus.image(size: 12)
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel("New terminal")

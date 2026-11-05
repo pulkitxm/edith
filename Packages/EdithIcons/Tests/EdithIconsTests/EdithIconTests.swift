@@ -234,21 +234,6 @@ private func svgLayer(_ source: String, id: String) -> String {
         #expect(decoded == [.terminal, .gear, .placeholder])
     }
 
-    @MainActor @Test func tintedImageCarriesItsColorWithoutTemplateRendering() throws {
-        let renderer = ImageRenderer(
-            content: EdithIcon.plus.image(size: 16, tint: Color(red: 1, green: 0, blue: 0)))
-        renderer.scale = 2
-        let image = try #require(renderer.nsImage)
-        let bitmap = try #require(
-            image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
-        let center = try #require(
-            bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?
-                .usingColorSpace(.sRGB))
-        #expect(center.redComponent > 0.8)
-        #expect(center.greenComponent < 0.3)
-        #expect(center.alphaComponent > 0.9)
-    }
-
     @MainActor @Test func callSitesCompileAcrossEverySymbolShape() {
         let title = "Dynamic"
         _ = Label("Literal", edith: .plus)
