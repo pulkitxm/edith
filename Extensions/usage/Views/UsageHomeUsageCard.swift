@@ -69,8 +69,10 @@ struct UsageHomeUsageCard: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Loading")
             } else if load.errorMessage == nil {
-                Text("Nothing collected yet. Open Agent Usage and choose Collect usage now to read your agents' history on this Mac.")
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                Text(
+                    "Nothing collected yet. Open Agent Usage and choose Collect usage now to read your agents' history on this Mac."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             if let error = load.errorMessage {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)

@@ -14,19 +14,13 @@ struct SkillInstallSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
-            HStack(alignment: .top, spacing: UIScale.pt(14)) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable().scaledToFit()
-                    .frame(width: UIScale.pt(48), height: UIScale.pt(48))
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    Text(model.installationSucceeded ? "Plugin installed" : "Install plugin")
-                        .font(.system(size: UIScale.pt(21), weight: .semibold))
-                    Text(skill.name).font(.system(size: UIScale.pt(14), weight: .medium))
+            HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                PageGuideBadge(symbolName: skill.symbol, size: 40)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(model.installationSucceeded ? "Skill installed" : "Install skill")
+                        .font(.edithText(.title3)).fontWeight(.semibold)
+                    Text(skill.name).font(.edithText(.body)).foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                    Text("Edith · Remote development").font(
-                        .system(size: UIScale.pt(12), design: .monospaced)
-                    )
-                    .foregroundStyle(.secondary)
                 }
             }
             ScrollView {
@@ -55,7 +49,7 @@ struct SkillInstallSheet: View {
                         DisclosureGroup("Installation output") {
                             ScrollView {
                                 Text(model.installationLog)
-                                    .font(.system(size: UIScale.pt(10), design: .monospaced))
+                                    .font(.edithText(.caption2, design: .monospaced))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -89,7 +83,7 @@ struct SkillInstallSheet: View {
                 }
             }
         }
-        .padding(UIScale.pt(28))
+        .padding(UIScale.pt(24))
         .frame(width: PresentationMetrics.width(600), height: PresentationMetrics.height(560))
         .interactiveDismissDisabled(model.isInstalling)
     }
@@ -97,7 +91,7 @@ struct SkillInstallSheet: View {
     private var targets: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack {
-                Text("Agents on this Mac").font(.system(size: UIScale.pt(13), weight: .semibold))
+                Text("Agents on this Mac").font(.edithText(.headline))
                 Spacer()
                 if model.isDiscovering {
                     SkeletonGroup { SkeletonBlock(width: 84, height: 11) }
@@ -121,7 +115,7 @@ struct SkillInstallSheet: View {
                                 SkillAgentLogo(agent: agent)
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                                     Text(agent.name)
-                                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                                        .font(.edithText(.headline))
                                     Text(
                                         agent.resolvedDirectory(
                                             home: FileManager.default.homeDirectoryForCurrentUser,
@@ -131,7 +125,7 @@ struct SkillInstallSheet: View {
                                                 .path,
                                             with: "~")
                                     )
-                                    .font(.system(size: UIScale.pt(10), design: .monospaced))
+                                    .font(.edithText(.caption2, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1).truncationMode(.middle)
                                 }
@@ -161,11 +155,11 @@ struct SkillInstallSheet: View {
                     ? "This agent is selected for this install. Changing toggles saves a new selection."
                     : "Your selections are remembered for every plugin, including agents you turn off."
             )
-            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             Text(
                 "Agents using the same skills folder share installed skills. Existing versions of this skill will be replaced."
             )
-            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 }

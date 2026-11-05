@@ -29,15 +29,13 @@ struct SkillPreviewSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: UIScale.pt(14)) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable().scaledToFit()
-                    .frame(width: UIScale.pt(44), height: UIScale.pt(44))
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                PageGuideBadge(symbolName: skill.symbol, size: 40)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(skill.name)
-                        .font(.system(size: UIScale.pt(20), weight: .semibold))
+                        .font(.edithText(.title3)).fontWeight(.semibold)
                     Text("SKILL.md")
-                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .font(.edithText(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()

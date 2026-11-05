@@ -75,8 +75,8 @@ struct RateLimitsDialsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 if !showsJumpLink {
                     ProviderSwitchButton(
                         selection: Binding(get: { selected }, set: { selected = $0 }),
@@ -84,12 +84,15 @@ struct RateLimitsDialsView: View {
                 }
                 if presentation?.tile.showTitle != false {
                     Text(presentation?.tile.displayTitle ?? "Rate limits")
-                        .font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
+                        .font(presentation == nil ? .edithText(.headline) : DashSkin.heading(18))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .accessibilityAddTraits(.isHeader)
                 }
                 Spacer()
                 Text(limitCaption)
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .font(.edithText(.callout))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 LimitsRefreshButton(dark: dark) { reload() }
             }
             if selected == .claude, let accounts = latestLimits?.claudeAccounts, !accounts.isEmpty {
@@ -149,20 +152,9 @@ struct RateLimitsDialsView: View {
             }
 
         }
-        .padding(
-            EdgeInsets(
-                top: UIScale.pt(presentation?.padding ?? 16),
-                leading: UIScale.pt(presentation?.padding ?? 16),
-                bottom: UIScale.pt(presentation?.padding ?? 14),
-                trailing: UIScale.pt(presentation?.padding ?? 16))
-        )
+        .padding(UIScale.pt(presentation?.padding ?? PageMetrics.cardPadding))
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .widgetBar(
-            cornerRadius: presentation?.cornerRadius ?? 16,
-            fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark),
-            shadow: .black.opacity(dark ? 0.32 : 0.05)
-        )
+        .modifier(RateLimitsChrome(presentation: presentation, dark: dark))
         .pageTask {
             for await _ in NotificationCenter.default.notifications(
                 named: UsageEvents.limitsUpdated)
@@ -345,8 +337,9 @@ struct RateLimitsDialsView: View {
                     .rotationEffect(.degrees(-90))
                     .animation(
                         Motion.animation(Motion.settle, reduceMotion: reduceMotion), value: p)
-                Text(pct != nil ? "\(Int(p))%" : "-")
-                    .font(DashSkin.heading(30)).foregroundStyle(DashSkin.ink(dark))
+                Text(pct != nil ? "\(Int(p))%" : "--")
+                    .font(DashSkin.heading(pct != nil ? 30 : 22))
+                    .foregroundStyle(pct != nil ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(
@@ -354,11 +347,9 @@ struct RateLimitsDialsView: View {
                         value: pct.map { Int($0) })
             }
             .frame(width: UIScale.pt(104), height: UIScale.pt(104))
-            Text(label).font(DashSkin.mono(9)).tracking(UIScale.pt(1.4))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .lineLimit(1)
+            PageCapsLabel(label)
                 .minimumScaleFactor(0.7)
-            Text(resetText(reset)).font(.system(size: UIScale.pt(11)))
+            Text(resetText(reset)).font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
         }
     }
@@ -376,6 +367,23 @@ struct RateLimitsDialsView: View {
 
     private func color(for percent: Double) -> Color {
         LimitRing.color(percent: percent, warn: warn, critical: crit)
+    }
+}
+
+private struct RateLimitsChrome: ViewModifier {
+    let presentation: SurfacePresentation?
+    let dark: Bool
+
+    func body(content: Content) -> some View {
+        if let presentation {
+            content.widgetBar(
+                cornerRadius: presentation.cornerRadius,
+                fill: DashSkin.paper2(dark),
+                stroke: DashSkin.line(dark),
+                shadow: .black.opacity(dark ? 0.32 : 0.05))
+        } else {
+            content.edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        }
     }
 }
 
@@ -541,19 +549,21 @@ struct LimitsCardView: View {
         PageCard(
             title: selectedProvider == .cursor
                 ? "Cursor models & other models"
-                : selectedProvider == .grok ? "Grok allowance" : "Rate limits - session & weekly"
+                : selectedProvider == .grok ? "Grok allowance" : "Rate limit history"
         ) {
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                if compact {
-                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        providerPicker
-                        accountPicker
-                    }
-                } else {
-                    HStack(spacing: UIScale.pt(14)) {
-                        providerPicker
-                        accountPicker
-                        Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                if providers.count > 1 || !accounts.isEmpty || hasUnassignedHistory {
+                    if compact {
+                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                            providerPicker
+                            accountPicker
+                        }
+                    } else {
+                        HStack(spacing: UIScale.pt(12)) {
+                            providerPicker
+                            accountPicker
+                            Spacer(minLength: 0)
+                        }
                     }
                 }
                 if reloadLoad.errorMessage != nil {
@@ -591,10 +601,8 @@ struct LimitsCardView: View {
                                     ? "No limit history yet. New readings will appear here."
                                     : "Loading limit history…"
                         )
-                        .font(.system(size: UIScale.pt(12))).foregroundStyle(
-                            DashSkin.inkFaint(dark)
-                        )
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(60))
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         LimitsRefreshButton(dark: dark) { reloadAll() }
                     }
                 }

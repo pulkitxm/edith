@@ -30,46 +30,29 @@ struct QuinjetLocalProjectPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text("Open a project")
-                    Text("Choose a Git project to review. Recent ones from this Mac are listed below.")
-                        .font(.system(size: UIScale.pt(12), weight: .regular))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            } trailing: {
-                HStack(spacing: UIScale.pt(8)) {
-                    Button(action: chooseFolder) {
-                        Label("Choose folder", systemImage: "folder.badge.plus")
+            PageHeader(
+                "Open a project",
+                subtitle: model.projects.isEmpty
+                    ? "Choose a Git project to review."
+                    : "Choose a Git project to review. Recent ones from this Mac are listed below."
+            ) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                    if !model.projects.isEmpty {
+                        Button(action: chooseFolder) {
+                            Label("Choose folder", systemImage: "folder.badge.plus")
+                        }
                     }
-                    .buttonStyle(QuinjetToolbarButtonStyle())
-                    Button {
-                        QuinjetWorkOwnership.start { await model.refreshProjects() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(QuinjetToolbarButtonStyle())
-                    .help("Refresh recent projects")
-                    .accessibilityLabel("Refresh recent projects")
+                    PageToolbarButton(
+                        action: { QuinjetWorkOwnership.start { await model.refreshProjects() } },
+                        systemImage: "arrow.clockwise", helperText: "Refresh recent projects")
                 }
             } accessory: {
-                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     QuinjetMachineStrip(
                         machines: machines, selection: tab.machineID, select: selectMachine)
-                    HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        TextField("Search projects and worktrees", text: $model.query)
-                            .textFieldStyle(.plain)
-                    }
-                    .padding(.horizontal, UIScale.pt(11))
-                    .frame(height: UIScale.pt(34))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: UIScale.pt(8))
-                            .strokeBorder(DashSkin.lineStrong(dark))
+                    if !model.projects.isEmpty {
+                        SearchField(
+                            placeholder: "Search projects and worktrees", text: $model.query)
                     }
                 }
             }
@@ -106,18 +89,24 @@ struct QuinjetLocalProjectPicker: View {
             PageEmptyState(
                 symbolName: "exclamationmark.triangle",
                 title: "Recent projects could not be loaded",
-                message: "\(error) Your projects were not changed. You can retry, or pick a folder yourself.",
+                message:
+                    "\(error) Your projects were not changed. You can retry, or pick a folder yourself.",
                 primary: PageAction("Try again", symbolName: "arrow.clockwise") {
                     QuinjetWorkOwnership.start { await model.refreshProjects() }
                 },
-                secondary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
+                secondary: PageAction(
+                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
         } else if model.filteredProjects.isEmpty, !model.query.isEmpty {
             PageEmptyState(
                 symbolName: "magnifyingglass",
                 title: "No project matches \u{201C}\(model.query)\u{201D}",
-                message: "Search looks at project names, branches and paths. Clear the search to see every recent project.",
-                primary: PageAction("Clear search", symbolName: "xmark.circle") { model.query = "" },
-                secondary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
+                message:
+                    "Search looks at project names, branches and paths. Clear the search to see every recent project.",
+                primary: PageAction("Clear search", symbolName: "xmark.circle") {
+                    model.query = ""
+                },
+                secondary: PageAction(
+                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
         } else if model.filteredProjects.isEmpty {
             PageEmptyState(
                 symbolName: "arrow.triangle.branch",
@@ -125,13 +114,17 @@ struct QuinjetLocalProjectPicker: View {
                 message:
                     "Quinjet opens a Git project in a terminal built for reviewing pull requests and changes. Pick a project to begin.",
                 steps: Self.firstRunSteps,
-                primary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder),
-                footnote: "Opening a project only reads it. Nothing is changed until you act in the terminal.")
+                primary: PageAction(
+                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder),
+                footnote:
+                    "Opening a project only reads it. Nothing is changed until you act in the terminal."
+            )
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
-                    spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(
+                        compact, minimum: 330, spacing: PageMetrics.cardSpacing),
+                    spacing: UIScale.pt(PageMetrics.cardSpacing)
                 ) {
                     ForEach(model.filteredProjects) { project in
                         QuinjetProjectCard(
@@ -144,7 +137,6 @@ struct QuinjetLocalProjectPicker: View {
                             })
                     }
                 }
-                .padding(.top, UIScale.pt(2))
                 .pageContent(compact)
             }
         }
@@ -178,16 +170,18 @@ struct QuinjetProjectCard: View {
             Button {
                 if let worktree = project.defaultWorktree { open(worktree) }
             } label: {
-                HStack(spacing: UIScale.pt(11)) {
+                HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     Image(systemName: "folder.fill")
                         .font(.system(size: UIScale.pt(18), weight: .medium))
                         .foregroundStyle(DashSkin.accent(dark))
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(project.name)
-                            .font(.system(size: UIScale.pt(14), weight: .semibold))
+                            .font(.edithText(.headline))
                             .foregroundStyle(DashSkin.ink(dark))
+                            .lineLimit(1)
                         Text(project.defaultWorktree?.path ?? project.commonDir)
-                            .font(DashSkin.mono(9.5))
+                            .font(.edithText(.caption, design: .monospaced))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -201,16 +195,15 @@ struct QuinjetProjectCard: View {
             Button {
                 showsWorktrees = true
             } label: {
-                VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
                     Text(worktreeCount)
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                     Text("opened recently")
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .frame(minWidth: UIScale.pt(118), alignment: .trailing)
                 .padding(.horizontal, UIScale.pt(12))
-                .padding(.vertical, UIScale.pt(10))
+                .padding(.vertical, UIScale.pt(8))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
             .popover(isPresented: $showsWorktrees, arrowEdge: .bottom) {
@@ -223,14 +216,8 @@ struct QuinjetProjectCard: View {
                     })
             }
         }
-        .padding(UIScale.pt(14))
-        .background(
-            DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .strokeBorder(DashSkin.lineStrong(dark))
-        }
+        .padding(UIScale.pt(PageMetrics.cardPadding))
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 
     private var worktreeCount: String {
@@ -254,12 +241,12 @@ struct QuinjetWorktreePicker: View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(8)) {
                 Text(projectName)
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .font(.edithText(.headline))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Text(worktreeCount)
-                    .font(DashSkin.mono(9.5, weight: .medium))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Divider().opacity(0.5)
@@ -291,13 +278,13 @@ struct QuinjetWorktreePicker: View {
                             selectedPath == worktree.path
                                 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                         )
-                        .frame(width: UIScale.pt(15))
+                        .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(worktree.displayName)
-                                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                                .font(.edithText(.callout).weight(.semibold))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Text(worktree.path)
-                                .font(DashSkin.mono(8.5))
+                                .font(.edithText(.caption2, design: .monospaced))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -306,8 +293,8 @@ struct QuinjetWorktreePicker: View {
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(7))
-                    .frame(minHeight: UIScale.pt(42))
+                    .padding(.vertical, UIScale.pt(8))
+                    .frame(minHeight: UIScale.pt(44))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
@@ -332,12 +319,15 @@ struct QuinjetWorktreeCountButtonStyle: ButtonStyle {
                 hovering
                     ? DashSkin.accent(dark).opacity(dark ? 0.2 : 0.13)
                     : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(9))
+                in: RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(9))
-                    .strokeBorder(
-                        hovering ? DashSkin.accent(dark).opacity(0.65) : DashSkin.lineStrong(dark))
+                RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous
+                )
+                .strokeBorder(
+                    hovering ? DashSkin.accent(dark).opacity(0.65) : DashSkin.lineStrong(dark))
             }
             .edithButtonTarget(.toolbar)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -363,31 +353,6 @@ private struct QuinjetWorktreeRowStyle: ButtonStyle {
                         hovering ? DashSkin.accent(dark).opacity(0.3) : Color.clear)
             }
             .edithButtonTarget(.row)
-            .onHover { hovering = $0 }
-    }
-}
-
-struct QuinjetToolbarButtonStyle: ButtonStyle {
-    @Environment(\.colorScheme) private var scheme
-    @State private var hovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        let dark = scheme == .dark
-        configuration.label
-            .font(.system(size: UIScale.pt(11), weight: .medium))
-            .foregroundStyle(DashSkin.ink(dark))
-            .padding(.horizontal, UIScale.pt(10))
-            .frame(height: UIScale.pt(30))
-            .background(
-                hovering ? DashSkin.inkFaint(dark).opacity(0.12) : DashSkin.paper2(dark),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(7))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(7))
-                    .strokeBorder(DashSkin.lineStrong(dark))
-            }
-            .edithButtonTarget(.toolbar)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .onHover { hovering = $0 }
     }
 }

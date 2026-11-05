@@ -53,16 +53,18 @@ struct DocsScreen: View {
         @Bindable var browser = browser
         PageWorkspace {
             PageHeader(
-                "Docs", trailing: { history },
+                "Docs",
+                subtitle:
+                    "Every ed command, with examples. Describe a task or browse the reference.",
+                divider: true, trailing: { history },
                 accessory: { askField(question: $browser.question) })
-            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
         } content: {
             ZStack(alignment: .top) {
                 content
                 if browser.resultsVisible, let answer = browser.answer {
                     DocsAskResults(browser: browser, answer: answer, dark: dark)
                         .pageGutter(compact)
-                        .padding(.top, UIScale.pt(6))
+                        .padding(.top, UIScale.pt(PageMetrics.controlSpacing))
                 }
             }
         }
@@ -93,7 +95,7 @@ struct DocsScreen: View {
                                 filterFocused: $filterFocused, dark: dark
                             )
                             .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
-                            Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                            Rectangle().fill(DashSkin.line(dark)).frame(width: 1)
                         }
                         document(library, width: geometry.size.width)
                     }
@@ -117,13 +119,13 @@ struct DocsScreen: View {
         SkeletonGroup {
             HStack(alignment: .top, spacing: 0) {
                 if !compact {
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         SkeletonBlock(height: 28, corner: 7)
                         ForEach(0..<9, id: \.self) { _ in SkeletonBlock(height: 12) }
                     }
-                    .padding(UIScale.pt(10))
+                    .padding(UIScale.pt(12))
                     .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
-                    Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                    Rectangle().fill(DashSkin.line(dark)).frame(width: 1)
                 }
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     SkeletonBlock(width: 180, height: 10)
@@ -164,7 +166,7 @@ struct DocsScreen: View {
     }
 
     private var history: some View {
-        HStack(spacing: UIScale.pt(14)) {
+        HStack(spacing: UIScale.pt(4)) {
             if compact {
                 Button {
                     navigatorPresented = true
@@ -201,7 +203,7 @@ struct DocsScreen: View {
             .help("Forward (\u{2318}])")
             .accessibilityLabel("Forward")
         }
-        .font(.system(size: UIScale.pt(14), weight: .semibold))
+        .font(.edithText(.body).weight(.semibold))
         .foregroundStyle(DashSkin.inkSoft(dark))
         .buttonStyle(.edith(.toolbar))
     }
@@ -209,14 +211,15 @@ struct DocsScreen: View {
     private func askField(question: Binding<String>) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: UIScale.pt(13), weight: .medium))
+                .font(.edithText(.body).weight(.medium))
                 .foregroundStyle(DashSkin.accent(dark))
+                .accessibilityHidden(true)
             TextField(
-                "Not sure which command to use? Describe it, like \u{201C}free up docker space on my server\u{201D}",
+                "Describe a task, like \u{201C}free up docker space on my server\u{201D}",
                 text: question
             )
             .textFieldStyle(.plain)
-            .font(.system(size: UIScale.pt(13.5)))
+            .font(.edithText(.body))
             .foregroundStyle(DashSkin.ink(dark))
             .focused($askFocused)
             .focusEffectDisabled()
@@ -241,13 +244,15 @@ struct DocsScreen: View {
                 LoadingIndicator()
             }
             Text("\u{2318}K")
-                .font(DashSkin.mono(10.5, weight: .medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.horizontal, UIScale.pt(6))
                 .padding(.vertical, UIScale.pt(2))
                 .background(
                     DashSkin.line(dark).opacity(0.7),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
+                )
+                .accessibilityHidden(true)
         }
         .edithFieldSurface(focused: askFocused)
     }
@@ -298,16 +303,17 @@ private struct DocsAskResults: View {
                     answer.engine.label,
                     systemImage: answer.engine == .jev ? "sparkles" : "text.magnifyingglass"
                 )
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(
                     answer.engine == .jev ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                 Text(answer.engine == .jev ? "picked by Jev" : "matched in the reference")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 Text("\u{2191}\u{2193} to move, Return to open, Esc to clear")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
                 Button {
                     browser.hideResults()
                 } label: {
@@ -325,10 +331,11 @@ private struct DocsAskResults: View {
                 Text(
                     "No command matches that. Try describing the goal in other words, or browse the pages on the left."
                 )
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, UIScale.pt(12))
-                .padding(.bottom, UIScale.pt(10))
+                .padding(.bottom, UIScale.pt(12))
             }
             ForEach(Array(answer.picks.enumerated()), id: \.element.id) { index, pick in
                 Button {
@@ -343,8 +350,17 @@ private struct DocsAskResults: View {
             }
         }
         .padding(.bottom, UIScale.pt(4))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(DashSkin.line(dark)))
+        .background(
+            DashSkin.paper2(dark),
+            in: RoundedRectangle(
+                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(
+                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous
+            )
+            .strokeBorder(DashSkin.line(dark))
+        )
         .shadow(color: .black.opacity(dark ? 0.45 : 0.14), radius: UIScale.pt(18), y: UIScale.pt(8))
     }
 
@@ -352,16 +368,16 @@ private struct DocsAskResults: View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 Text(pick.command.path)
-                    .font(DashSkin.mono(12.5, weight: .semibold))
+                    .font(.edithText(.callout, design: .monospaced).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(pick.command.summary)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
             }
             Spacer(minLength: UIScale.pt(8))
             Text(pick.command.location.path)
-                .font(DashSkin.mono(10.5))
+                .font(.edithText(.caption2, design: .monospaced))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .lineLimit(1)
             HStack(spacing: UIScale.pt(6)) {
@@ -374,7 +390,8 @@ private struct DocsAskResults: View {
                             .frame(width: UIScale.pt(44) * pick.probability, height: UIScale.pt(4))
                     }
                 Text(DocsNavigation.percent(pick.probability))
-                    .font(DashSkin.mono(11, weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
+                    .monospacedDigit()
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(width: UIScale.pt(36), alignment: .trailing)
             }
@@ -398,7 +415,7 @@ private struct DocsNavigator: View {
                 placeholder: "Filter pages  \u{2318}F", text: $filter, compact: true,
                 focus: filterFocused
             )
-            .padding(UIScale.pt(10))
+            .padding(UIScale.pt(12))
             .onChange(of: filter) { browser.noteFilter(filter) }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -409,7 +426,8 @@ private struct DocsNavigator: View {
                             )
                             .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
-                            .padding(UIScale.pt(10))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(UIScale.pt(8))
                         }
                         ForEach(browser.sidebarGroups, id: \.0.id) {
                             group, pages in
@@ -422,7 +440,7 @@ private struct DocsNavigator: View {
                             }
                         }
                     }
-                    .padding(.horizontal, UIScale.pt(8))
+                    .padding(.horizontal, UIScale.pt(12))
                     .padding(.bottom, UIScale.pt(16))
                 }
                 .scrollIndicators(.automatic)
@@ -446,16 +464,17 @@ private struct DocsNavigator: View {
                     .rotationEffect(.degrees(expanded ? 90 : 0))
                     .frame(width: UIScale.pt(10))
                 Text(group.title)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Text("\(count)")
-                    .font(DashSkin.mono(10))
+                    .font(.edithText(.caption))
+                    .monospacedDigit()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .padding(.horizontal, UIScale.pt(6))
-            .padding(.vertical, UIScale.pt(5))
+            .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
@@ -470,9 +489,10 @@ private struct DocsNavigator: View {
         } label: {
             Text(DocsNavigation.title(of: page, in: group))
                 .font(
-                    page.command == nil
-                        ? .system(size: UIScale.pt(12), weight: selected ? .semibold : .regular)
-                        : DashSkin.mono(11.5, weight: selected ? .semibold : .regular)
+                    (page.command == nil
+                        ? Font.edithText(.callout)
+                        : Font.edithText(.callout, design: .monospaced))
+                        .weight(selected ? .semibold : .regular)
                 )
                 .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 .lineLimit(1)
@@ -497,7 +517,8 @@ private struct DocsPageView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    breadcrumb.padding(.top, UIScale.pt(20)).id("docs-top")
+                    breadcrumb.padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                        .id("docs-top")
                     ForEach(DocsBlockRow.rows(page.blocks)) { row in
                         DocsBlockView(
                             block: row.block, width: width, dark: dark,
@@ -505,7 +526,7 @@ private struct DocsPageView: View {
                     }
                 }
                 .frame(width: width, alignment: .leading)
-                .padding(.bottom, UIScale.pt(48))
+                .padding(.bottom, UIScale.pt(PageMetrics.bottom))
                 .frame(maxWidth: .infinity)
             }
             .id(page.path)
@@ -533,10 +554,11 @@ private struct DocsPageView: View {
         HStack(spacing: UIScale.pt(6)) {
             Text(group.map { $0.id.isEmpty ? "ed reference" : $0.title } ?? "ed reference")
             Image(systemName: "chevron.right").font(.system(size: UIScale.pt(8), weight: .bold))
+                .accessibilityHidden(true)
             Text(page.path)
             Spacer(minLength: 0)
         }
-        .font(DashSkin.mono(10.5))
+        .font(.edithText(.caption, design: .monospaced))
         .foregroundStyle(DashSkin.inkFaint(dark))
         .lineLimit(1)
     }
@@ -550,35 +572,30 @@ private struct DocsOutline: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text("ON THIS PAGE")
-                    .font(DashSkin.mono(10, weight: .semibold))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .padding(.bottom, UIScale.pt(6))
+                PageCapsLabel("On this page")
+                    .padding(.bottom, UIScale.pt(8))
                 ForEach(page.outline) { heading in
                     let current = browser.location.anchor == heading.anchor
                     Button {
                         browser.open(DocsLocation(path: page.path, anchor: heading.anchor))
                     } label: {
                         Text(heading.text)
-                            .font(
-                                .system(
-                                    size: UIScale.pt(11.5), weight: current ? .semibold : .regular)
-                            )
+                            .font(.edithText(.callout).weight(current ? .semibold : .regular))
                             .foregroundStyle(
                                 current ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)
                             )
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                             .padding(.leading, UIScale.pt(heading.level == 3 ? 12 : 0))
-                            .padding(.vertical, UIScale.pt(3))
+                            .padding(.vertical, UIScale.pt(4))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
                 }
             }
-            .padding(.top, UIScale.pt(22))
-            .padding(.trailing, UIScale.pt(16))
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+            .padding(.trailing, UIScale.pt(PageMetrics.sectionSpacing))
         }
         .scrollIndicators(.never)
         .opacity(page.outline.isEmpty ? 0 : 1)

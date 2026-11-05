@@ -29,7 +29,7 @@
       {
         "symbolName": "doc.text.magnifyingglass",
         "title": "Read a skill",
-        "detail": "Tap any card to preview exactly what the skill tells your agent, and copy the Markdown if you prefer."
+        "detail": "Click Preview to see exactly what the skill tells your agent, and copy the Markdown if you prefer."
       },
       {
         "symbolName": "person.crop.circle.badge.checkmark",

@@ -130,8 +130,20 @@ import Vision
             }
             let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: bitmap)
+            if let path = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                let directory = URL(fileURLWithPath: path)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                try #require(bitmap.representation(using: .png, properties: [:])).write(
+                    to: directory.appendingPathComponent("usage-limit-history-\(mode).png"))
+            }
+            let image = try #require(bitmap.cgImage)
+            let headerOnly = CGRect(
+                x: 0, y: 0, width: image.width, height: image.height * 45 / 100)
             let recognition = VNRecognizeTextRequest(); recognition.recognitionLevel = .accurate
-            try VNImageRequestHandler(cgImage: #require(bitmap.cgImage)).perform([recognition])
+            try VNImageRequestHandler(
+                cgImage: mode == "empty" ? image : #require(image.cropping(to: headerOnly))
+            ).perform([recognition])
             let text =
                 recognition.results?.compactMap { $0.topCandidates(1).first?.string }.joined(
                     separator: " ") ?? ""

@@ -11,12 +11,13 @@ struct QuinjetProjectGridSkeleton: View {
         SkeletonGroup {
             ScrollView {
                 LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
-                    spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(
+                        compact, minimum: 330, spacing: PageMetrics.cardSpacing),
+                    spacing: UIScale.pt(PageMetrics.cardSpacing)
                 ) {
                     ForEach(0..<rows, id: \.self) { index in
                         HStack(spacing: UIScale.pt(12)) {
-                            HStack(spacing: UIScale.pt(11)) {
+                            HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                                 SkeletonBlock(width: 18, height: 18, corner: 4)
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                                     SkeletonBlock(height: 12)
@@ -36,24 +37,16 @@ struct QuinjetProjectGridSkeleton: View {
                             }
                             .frame(width: UIScale.pt(78), alignment: .trailing)
                             .padding(.horizontal, UIScale.pt(12))
-                            .padding(.vertical, UIScale.pt(10))
+                            .padding(.vertical, UIScale.pt(8))
                             .overlay {
-                                RoundedRectangle(cornerRadius: UIScale.pt(9))
+                                RoundedRectangle(cornerRadius: UIScale.pt(8))
                                     .strokeBorder(DashSkin.lineStrong(dark))
                             }
                         }
-                        .padding(UIScale.pt(14))
-                        .background(
-                            DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                                .strokeBorder(DashSkin.lineStrong(dark))
-                        }
+                        .padding(UIScale.pt(PageMetrics.cardPadding))
+                        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
                     }
                 }
-                .padding(.top, UIScale.pt(2))
                 .pageContent(compact)
             }
         }

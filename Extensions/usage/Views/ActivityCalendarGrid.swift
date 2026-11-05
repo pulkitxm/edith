@@ -20,7 +20,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
 
     private var gridHeight: CGFloat { UIScale.pt(12 + 3 + 7 * adaptiveCellSize + 6 * 3) }
     private var gridWidth: CGFloat {
-        UIScale.pt(16 + CGFloat(weeks.count) * (adaptiveCellSize + 3) - 3)
+        UIScale.pt(16 + CGFloat(weeks.count) * (adaptiveCellSize + 3) - 3 + 20)
     }
     private var weekdays: [String] {
         (0..<7).map { calendar.veryShortWeekdaySymbols[(calendar.firstWeekday - 1 + $0) % 7] }
@@ -57,6 +57,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
                     }
                     Text("More")
                 }
+                .padding(.trailing, presentation == nil ? trailingLabelRoom : 0)
             }
         }
         .frame(
@@ -86,6 +87,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
     private var cellSide: CGFloat { layout.side }
     private var cellGap: CGFloat { layout.gap }
     private var labelHeight: CGFloat { layout.labelHeight }
+    private var trailingLabelRoom: CGFloat { UIScale.pt(20) }
     private var canvasWidth: CGFloat {
         max(0, CGFloat(weeks.count) * (cellSide + cellGap) - cellGap)
     }
@@ -119,7 +121,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
                 }
             }
         }
-        .frame(width: canvasWidth, height: gridHeight)
+        .frame(width: canvasWidth + trailingLabelRoom, height: gridHeight, alignment: .leading)
         .overlay(alignment: .topLeading) {
             if let hovered {
                 let point = origin(week: hovered.week, row: hovered.row)

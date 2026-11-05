@@ -6,11 +6,6 @@ import SwiftUI
 struct PluginsPage: View {
     @State private var previewSkill: EdithSkill?
     @Bindable var model: SkillsModel
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
-    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-
-    private var dark: Bool { scheme == .dark }
 
     private var presentedSkill: Binding<EdithSkill?> {
         Binding(
@@ -33,29 +28,24 @@ struct PluginsPage: View {
     }
 
     var body: some View {
-        PageScaffold {
-            PageHeader {
-                Text("Plugins")
-            } accessory: {
-                Text("Teach your coding agents to use Edith. Pick a skill, then install it.")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-            }
+        PageScaffold(width: .readable) {
+            PageHeader(
+                "Plugins",
+                subtitle:
+                    "Teach your coding agents to use Edith. A skill is a short instruction file: installing one adds a small folder to the agent, and you can remove it any time."
+            )
         } content: {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                PageSectionHeader(
-                    "Edith skills",
-                    subtitle:
-                        "A skill is a short instruction file that teaches your coding agent how to use Edith. Installing one only adds a small folder to the agent, and you can remove it any time."
-                ) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                PageSectionHeader("Edith skills") {
                     if model.agentsLoaded {
                         Text(agentSummary)
-                            .font(.edithText(.caption))
+                            .font(.edithText(.callout))
                             .foregroundStyle(.secondary)
                     } else {
                         SkeletonGroup {
                             SkeletonBlock(width: 164, height: 11)
                         }
+                        .frame(width: UIScale.pt(164), height: UIScale.pt(11))
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Discovering installed agents")
                     }
@@ -87,16 +77,19 @@ struct PluginsPage: View {
                         skill: skill, agents: model.agents,
                         installed: model.installedAgents[skill.id]?.isEmpty == false,
                         disabled: model.isInstalling || !model.agentsLoaded,
+                        unavailableReason: model.agentsLoaded
+                            ? nil : "Looking for agents on this Mac",
                         preview: { previewSkill = skill },
                         install: { agent in
                             Task { await model.present(skill, agentID: agent) }
                         })
                 }
                 Text(
-                    "Install once and every project on this Mac can use it. Tap a card to read the skill first. The arrow next to Install picks a single agent."
+                    "Install once and every project on this Mac can use it. The arrow next to Install picks a single agent."
                 )
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .pageTask {
@@ -116,86 +109,79 @@ private struct SkillCatalogRow: View {
     let agents: [SkillAgent]
     let installed: Bool
     let disabled: Bool
+    var unavailableReason: String?
     let preview: () -> Void
     let install: (String?) -> Void
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         Group {
             if compact {
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    previewContent
-                    HStack {
-                        Spacer(minLength: 0); installActions
-                    }
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    description
+                    actions.frame(maxWidth: .infinity, alignment: .trailing)
                 }
             } else {
-                HStack(spacing: UIScale.pt(16)) {
-                    previewContent
-                    installActions
+                HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    description
+                    actions
                 }
             }
         }
-        .padding(UIScale.pt(22))
-        .background(
-            DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(
-                DashSkin.line(scheme == .dark)))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 
-    private var previewContent: some View {
-        Button(action: preview) {
-            HStack(spacing: UIScale.pt(16)) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable().scaledToFit()
-                    .frame(width: UIScale.pt(40), height: UIScale.pt(40))
-                VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                    Text(skill.name)
-                        .font(.system(size: UIScale.pt(17), weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    Text(skill.summary)
-                        .font(.system(size: UIScale.pt(13)))
-                        .foregroundStyle(.secondary)
-                    Text(skill.detail)
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: UIScale.pt(8))
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: UIScale.pt(16)))
+    private var description: some View {
+        HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            PageGuideBadge(symbolName: skill.symbol, size: 40)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(skill.name)
+                    .font(.edithText(.headline))
+                    .accessibilityAddTraits(.isHeader)
+                Text(skill.summary)
+                    .font(.edithText(.body))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(skill.detail)
+                    .font(.edithText(.callout))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, UIScale.pt(2))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel("Preview \(skill.name)")
-        .help("Preview skill instructions and copy Markdown")
+    }
+
+    private var actions: some View {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            Button("Preview", action: preview)
+                .buttonStyle(.edith(.secondary))
+                .help("Read the skill instructions and copy the Markdown")
+                .accessibilityLabel("Preview \(skill.name)")
+            installActions
+        }
+        .fixedSize()
     }
 
     private var installActions: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: UIScale.pt(2)) {
             Button {
                 install(nil)
             } label: {
-                Text(installed ? "Installed" : "Install")
-                    .help(
-                        installed
-                            ? "Already installed. Tap to reinstall or update."
-                            : "Choose agents and install this skill"
-                    )
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .padding(.horizontal, UIScale.pt(14))
-                    .frame(height: UIScale.pt(30))
-                    .contentShape(Rectangle())
+                if installed {
+                    Label("Installed", systemImage: "checkmark")
+                } else {
+                    Text("Install")
+                }
             }
-            .buttonStyle(.edith(.borderless))
-            Divider().frame(height: UIScale.pt(18))
+            .buttonStyle(.edith(.secondary))
+            .help(
+                unavailableReason
+                    ?? (installed
+                        ? "Already installed. Click to reinstall or update."
+                        : "Choose agents and install this skill"))
             Menu {
                 if agents.isEmpty { Text("No agents found on this Mac") }
                 ForEach(agents) { agent in
@@ -203,7 +189,7 @@ private struct SkillCatalogRow: View {
                         install(agent.id)
                     } label: {
                         Label {
-                            Text("Install for \(agent.name)…")
+                            Text("Install for \(agent.name)\u{2026}")
                         } icon: {
                             if let image = SkillBrand.menuImage(for: agent.id) {
                                 Image(nsImage: image)
@@ -216,20 +202,16 @@ private struct SkillCatalogRow: View {
                 }
             } label: {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(30))
+                    .font(.system(size: UIScale.pt(9), weight: .semibold))
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.edith(.secondary))
             .menuIndicator(.hidden)
             .fixedSize()
+            .help("Install for one agent")
             .accessibilityLabel("Choose an agent for \(skill.name)")
         }
-        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(6)).strokeBorder(.primary.opacity(0.12))
-        )
         .disabled(disabled)
-        .fixedSize()
     }
 }
 
@@ -242,10 +224,10 @@ struct SkillAgentLogo: View {
                 Image(nsImage: image).resizable().scaledToFit()
             } else {
                 Text(String(agent.name.prefix(1)))
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
+                    .font(.edithText(.headline))
             }
         }
-        .frame(width: UIScale.pt(25), height: UIScale.pt(25))
+        .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         .frame(width: UIScale.pt(40), height: UIScale.pt(40))
         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
         .accessibilityHidden(true)
