@@ -333,6 +333,11 @@ final class ControlPresentation {
         }
     }
 
+    func retry() {
+        changed()
+        Task { await refresh() }
+    }
+
     func perform(_ action: String, value: String = "") {
         guard active, ready, !stopped, actions.count < 8 else { return }
         revision += 1
@@ -394,12 +399,6 @@ struct ControlSettingsHost<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
             PageLoading(
                 state: presentation.load.state, title: "Settings unavailable",
                 message: presentation.error ?? "The extension engine is unavailable.",
@@ -414,8 +413,5 @@ struct ControlSettingsHost<Content: View>: View {
         }
     }
 
-    private func retry() {
-        presentation.changed()
-        Task { await presentation.refresh() }
-    }
+    private func retry() { presentation.retry() }
 }

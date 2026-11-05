@@ -406,10 +406,24 @@ struct NotchShelfContentView: View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 if controller.items.isEmpty {
-                    Text("Drop files here to park them")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .frame(width: geo.size.width, height: geo.size.height)
+                    VStack(spacing: 6) {
+                        Image(systemName: "tray.and.arrow.down")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.bottom, 4)
+                        Text("Drop files here to park them")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(
+                            "Drag a file onto the notch, then drag it out again wherever you need it."
+                        )
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .accessibilityElement(children: .combine)
                 } else {
                     ForEach(Array(controller.items.enumerated()), id: \.element.id) {
                         index, item in

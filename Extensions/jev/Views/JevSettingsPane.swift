@@ -8,7 +8,6 @@ struct JevSettingsPane: View {
 
     var body: some View {
         Form {
-            introSection
             keySection
             featuresSection
             activitySection
@@ -19,15 +18,17 @@ struct JevSettingsPane: View {
         }
     }
 
-    private var introSection: some View {
-        Section {
-            if model.status?.hasSavedKey != true, model.status != nil {
-                PageNotice(
-                    "Everything in Edith already works without Jev. Add a TypeSafe API key below only if you want faster, smarter decisions in the features listed here.",
-                    title: "Jev is optional", symbol: "sparkles")
-            }
+    @ViewBuilder private var introNotice: some View {
+        if model.status?.hasSavedKey != true, model.status != nil {
+            PageNotice(
+                "Everything in Edith already works without Jev. Add a TypeSafe API key only if you want faster, smarter decisions in the features listed below.",
+                title: "Jev is optional", symbol: "sparkles"
+            )
+            .padding(.bottom, UIScale.pt(16))
         }
     }
+
+    private var draftIsEmpty: Bool { model.draft.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private var keySection: some View {
         Section {
@@ -35,74 +36,91 @@ struct JevSettingsPane: View {
                 HStack(spacing: UIScale.pt(6)) {
                     Circle()
                         .fill(stateColor)
-                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                        .frame(width: UIScale.pt(8), height: UIScale.pt(8))
                         .accessibilityHidden(true)
                     if let summary = model.status?.summary {
                         Text(summary).foregroundStyle(.secondary)
                     } else {
-                        SkeletonBlock(width: 90, height: 11)
+                        SkeletonBlock(width: 90, height: 12)
                     }
                 }
             }
             if let hint = model.status?.keyHint {
-                LabeledContent("Key", value: hint)
+                LabeledContent("Saved key") {
+                    Text(hint).font(.edithText(.body).monospaced()).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             if let message = model.status?.message {
                 Text(message)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: UIScale.pt(8)) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                Text(model.status?.hasSavedKey == true ? "Replace key" : "API key")
+                Spacer(minLength: UIScale.pt(12))
                 SecureField(
-                    model.status?.hasSavedKey == true
-                        ? "Paste a new key to replace it" : "Paste your TypeSafe API key",
-                    text: $model.draft
+                    "TypeSafe API key", text: $model.draft,
+                    prompt: Text("Paste your TypeSafe API key")
                 )
+                .labelsHidden()
+                .multilineTextAlignment(.leading)
                 .textFieldStyle(.roundedBorder)
+                .frame(minWidth: UIScale.pt(160), maxWidth: UIScale.pt(320))
                 .onSubmit { model.save() }
                 .accessibilityLabel("TypeSafe API key")
                 Button(model.phase == .saving ? "Saving..." : "Save") {
                     model.save()
                 }
-                .disabled(
-                    model.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.isBusy
-                )
-                .help(
-                    model.draft.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? "Paste a key first." : "Saves the key to your Keychain.")
-            }
-            HStack(spacing: UIScale.pt(10)) {
-                Button(model.phase == .loading ? "Checking..." : "Check key") {
-                    model.load(probe: true)
-                }
-                .disabled(model.status?.isConfigured != true || model.isBusy)
-                Button("Remove key", role: .destructive) {
-                    model.remove()
-                }
-                .disabled(model.status?.hasSavedKey != true || model.isBusy)
-                .help(
-                    model.status?.hasSavedKey == true
-                        ? "Deletes the saved key from your Keychain. Features go back to their built-in rules."
-                        : "No key is saved.")
+                .buttonStyle(.edith(draftIsEmpty ? .secondary : .primary))
+                .disabled(draftIsEmpty || model.isBusy)
+                .help(draftIsEmpty ? "Paste a key first." : "Saves the key to your Keychain.")
             }
             if model.status?.hasSavedKey == true {
-                Text(
-                    "Check key sends one tiny test request to confirm the key works and has credits. Remove key deletes it from this Mac's Keychain only."
-                )
-                .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                LabeledContent {
+                    HStack(spacing: UIScale.pt(8)) {
+                        Button(model.phase == .loading ? "Checking..." : "Check key") {
+                            model.load(probe: true)
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        .disabled(model.status?.isConfigured != true || model.isBusy)
+                        Button("Remove key", role: .destructive) {
+                            model.remove()
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        .disabled(model.isBusy)
+                        .help(
+                            "Deletes the saved key from your Keychain. Features go back to their built-in rules."
+                        )
+                    }
+                } label: {
+                    Text("Manage key")
+                    Text(
+                        "Check sends one tiny request to confirm the key works and has credits. Remove deletes it from this Mac only."
+                    )
+                    .font(.edithText(.subheadline))
+                }
             }
             if case .failed(let message) = model.phase {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.orange)
+                PageNotice(message, tone: .warning) {
+                    EmptyView()
+                } actions: {
+                    Button("Try again") { model.load(probe: model.status?.isConfigured == true) }
+                }
             }
         } header: {
-            Text("TypeSafe API key")
+            VStack(alignment: .leading, spacing: 0) {
+                introNotice
+                Text("TypeSafe API key")
+            }
         } footer: {
-            Text(
-                "Jev answers typed questions in about a tenth of a second. Edith only calls it while a key is saved here, and every feature falls back to its own rules without one. The key stays in the Jev extension's Keychain item. Get one at console.typesafe.ai."
-            )
+            HStack(spacing: UIScale.pt(4)) {
+                Text("Edith calls Jev only while a key is saved. The key stays in your Keychain.")
+                Link("Get a key", destination: URL(string: "https://console.typesafe.ai")!)
+            }
+            .font(.edithText(.caption))
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -110,29 +128,33 @@ struct JevSettingsPane: View {
         Section {
             ForEach(JevFeature.catalog) { feature in
                 LabeledContent {
-                    Text(model.status?.isConfigured == true ? "Using Jev" : "Built-in rules")
+                    Text(model.status?.state == .ready ? "Using Jev" : "Built-in rules")
                         .foregroundStyle(.secondary)
                 } label: {
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(feature.title)
-                        Text(feature.detail)
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    Text(feature.title)
+                    Text(feature.detail).font(.edithText(.subheadline))
                 }
             }
         } header: {
             Text("What Jev powers")
+        } footer: {
+            Text(
+                "Without a key, each feature uses its own built-in rules. With one, Jev answers in about a tenth of a second."
+            )
+            .font(.edithText(.caption))
+            .foregroundStyle(.secondary)
         }
     }
 
     private var activitySection: some View {
         Section {
-            LabeledContent("Decisions since launch", value: "\(model.status?.decisions ?? 0)")
-            LabeledContent(
-                "Median latency",
-                value: model.status?.medianMilliseconds.map { "\($0) ms" } ?? "-")
+            LabeledContent("Decisions since launch") {
+                Text("\(model.status?.decisions ?? 0)").monospacedDigit()
+            }
+            LabeledContent("Median response time") {
+                Text(model.status?.medianMilliseconds.map { "\($0) ms" } ?? "None yet")
+                    .monospacedDigit()
+            }
             if let models = model.status?.models, !models.isEmpty {
                 LabeledContent("Models", value: models.joined(separator: ", "))
             }
