@@ -10,7 +10,7 @@ Arguments
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<topic>` | `agent`, case-insensitive | none, meaning the full manual | Which text to print |
+| `<topic>` | `agent` or `mcp` | none, meaning the full manual | Which text to print |
 
 Options
 
@@ -18,7 +18,7 @@ Options
 | --- | --- | --- | --- |
 | `--json` | flag | off | Emit the complete command, alias, argument, option and help catalog as JSON |
 
-The full manual and the `agent` topic are static prose. `--json` emits the parser
+The full manual and the `agent` and `mcp` topics are static prose. `--json` emits the parser
 catalog with `serializationVersion`, the root `command`, every nested
 `subcommand`, aliases, positional arguments, flags, options, accepted values,
 defaults and help text. It is the noninteractive discovery path for automation.

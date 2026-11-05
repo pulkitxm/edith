@@ -103,6 +103,7 @@ public enum HostGuideCLI {
         ed docs show <command>      the reference page for one command
         ed guide                    this text
         ed guide agent              repository instructions making an agent ed-aware
+        ed guide mcp                how an agent discovers and calls Edith over MCP
         ed guide --json             the complete parser command catalog
         ```
 
@@ -715,10 +716,14 @@ public enum HostGuideCLI {
         ## Serving yourself
 
         `ed mcp` exposes available provider operations as MCP tools over stdio, so an
-        agent can call them directly instead of shelling out:
+        agent can call them directly instead of shelling out. `ed guide mcp` explains
+        the flow for agents.
 
         ```
         ed mcp                          one tool per route, JSON in and out
+        ed mcp install --client claude  register it with claude, codex, cursor or vscode
+        ed mcp install --client all --dry-run   preview every change and print the entries
+        ed mcp status                   which clients already have Edith registered
         ```
 
         ## Completions
@@ -751,6 +756,53 @@ public enum HostGuideCLI {
           Edith, not to retry.
         - `ed color pick` returns after requesting desktop UI. It never reads stdin,
           but someone at the logged-in Mac still has to select a colour.
+        """
+
+    public static let mcpText = """
+        # Edith over MCP
+
+        Edith is a macOS app built from downloadable extensions. `ed mcp` lets a coding
+        agent drive it through MCP instead of shelling out.
+
+        ## Register it
+
+        ```
+        ed mcp install --client claude --dry-run    preview, then run without --dry-run
+        ed mcp install --client codex
+        ed mcp install --client cursor
+        ed mcp install --client vscode
+        ed mcp install --client all
+        ed mcp status                               what is registered where
+        ```
+
+        Each client gets a stdio server named `edith` that runs this app's `ed mcp`.
+        Claude Code is written to `~/.claude.json`, Codex to `~/.codex/config.toml`,
+        Cursor to `~/.cursor/mcp.json` and VS Code to its user `mcp.json`. An existing
+        file is backed up first. A file Edith cannot edit safely is left alone and the
+        exact entry is printed for you to paste. Restart the client afterwards.
+
+        ## How an agent should start
+
+        1. Call `edith_catalog` (or read `edith://guide/mcp`). It lists every extension
+           with its status (enabled, installed, available), tagline, summary and
+           example `ed` commands. Pass `id` for one extension's steps.
+        2. Call the matching `edith_*` tool. Each takes an `arguments` array exactly as
+           the `ed` command line does and returns JSON.
+        3. Tools exist only for installed, enabled extensions. If the one you need is
+           available, call `edith_extensions_install` with `arguments: ["<id>"]`. It
+           previews until `confirm` is true, so ask the user before confirming. The
+           server then sends `notifications/tools/list_changed`; list tools again.
+        4. To show the user an extension, call `edith_app_navigate` with
+           `arguments: ["<id>"]`.
+
+        Destructive commands preview unless `confirm` is true. Passing `--yes` inside
+        `arguments` is refused.
+
+        ## Resources
+
+        `resources/list` returns the manual (`edith://guide`), the agent instructions
+        (`edith://guide/agent`), this page (`edith://guide/mcp`) and one guide per
+        extension (`edith://extensions/<id>`), readable with `resources/read`.
         """
 
     public static let agentSnippet = """

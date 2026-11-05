@@ -332,6 +332,14 @@ public enum HostCLIHelp {
         .init(
             "invoke", "Invoke a checked extension engine operation.", flags: ["raw"],
             options: ["json", "timeout"], words: ["id", "operation"]),
-        .init("mcp", "Serve live checked CLI and native tools over bounded stdio.", flags: []),
+        .init(
+            "mcp",
+            "Serve Edith to agents over MCP stdio, discover extensions, and register the server.",
+            flags: []),
+        .init(
+            "mcp install", "Register Edith's MCP server with an agent client.",
+            flags: ["json", "dry-run"], options: ["client", "command"]),
+        .init("mcp status", "Show which agent clients have Edith's MCP server registered.",
+            options: ["command"]),
     ]
 }

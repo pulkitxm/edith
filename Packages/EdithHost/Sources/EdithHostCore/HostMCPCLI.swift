@@ -9,10 +9,12 @@ public actor HostMCPCLI {
         let task: Task<Void, Never>
     }
     private let version: String
-    private let invoke: HostCLIProviderRegistry.Invoke
+    let invoke: HostCLIProviderRegistry.Invoke
     private let send: Send
     private let stop: @Sendable () -> Void
     private let coreExecute: (@Sendable ([String], Data) async throws -> ExtensionCLIReply)?
+    let index: @Sendable () -> [HostExtension]
+    private var servedTools: [String]?
     private var initialized = false
     private var ready = false
     private var stopping = false
@@ -23,10 +25,11 @@ public actor HostMCPCLI {
     public init(
         version: String, invoke: @escaping HostCLIProviderRegistry.Invoke, send: @escaping Send,
         stop: @escaping @Sendable () -> Void = {},
-        coreExecute: (@Sendable ([String], Data) async throws -> ExtensionCLIReply)? = nil
+        coreExecute: (@Sendable ([String], Data) async throws -> ExtensionCLIReply)? = nil,
+        index: @escaping @Sendable () -> [HostExtension] = { (try? HostIndex.bundled()) ?? [] }
     ) {
         self.version = version; self.invoke = invoke; self.send = send
-        self.stop = stop; self.coreExecute = coreExecute
+        self.stop = stop; self.coreExecute = coreExecute; self.index = index
     }
 
     public func run(receive: Receive) async throws {
@@ -81,10 +84,13 @@ public actor HostMCPCLI {
                         "name": .string("edith"), "version": .string(version),
                         "title": .string("Edith"),
                     ]),
-                    "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
-                    "instructions": .string(
-                        "Tools run original commands from compatible enabled downloaded extensions. Destructive commands preview unless confirm is true."
-                    ),
+                    "capabilities": .object([
+                        "tools": .object(["listChanged": .bool(true)]),
+                        "resources": .object([
+                            "listChanged": .bool(false), "subscribe": .bool(false),
+                        ]),
+                    ]),
+                    "instructions": .string(Self.instructions),
                 ]))
             return
         }
@@ -92,7 +98,8 @@ public actor HostMCPCLI {
         guard ready else {
             try await error(id: id, code: -32002, message: "Initialize MCP first"); return
         }
-        guard ["tools/list", "tools/call"].contains(method) else {
+        guard ["tools/list", "tools/call", "resources/list", "resources/read"].contains(method)
+        else {
             try await error(id: id, code: -32601, message: "Method not found"); return
         }
         guard jobs[key] == nil, jobs.count + retired.count < 8 else {
@@ -105,6 +112,9 @@ public actor HostMCPCLI {
             do {
                 let value = try await self.execute(method, params: params)
                 try Task.checkCancellation()
+                if method == "tools/call", Self.changesTools(params["name"]?.string) {
+                    await self.announceToolChanges()
+                }
                 await self.finish(key, token: token, id: id, value: value, message: nil)
             } catch is CancellationError {
                 await self.finish(key, token: token, id: id, value: nil, message: nil)
@@ -160,9 +170,7 @@ public actor HostMCPCLI {
         command.route != ["agent", "activity", "hook"]
     }
 
-    private func execute(_ method: String, params: [String: HostCLIJSON]) async throws
-        -> HostCLIJSON
-    {
+    private func loadCatalogs() async throws -> (HostCLIProviderRegistry, HostCLIProviderCatalog?) {
         let registry = try await HostCLIProviderRegistry.load(invoke: invoke)
         let coreCatalog: HostCLIProviderCatalog?
         do {
@@ -172,25 +180,79 @@ public actor HostMCPCLI {
                         action: .invoke, id: "host", operation: "host.cli.catalog", timeout: 2)),
                 owner: "host")
         } catch is CancellationError { throw CancellationError() } catch { coreCatalog = nil }
+        return (registry, coreCatalog)
+    }
+
+    private func publicTools(_ registry: HostCLIProviderRegistry, _ core: HostCLIProviderCatalog?)
+        async -> [HostCLIJSON]
+    {
+        let commands =
+            registry.providers.flatMap { $0.catalog.allCommands }.filter(Self.publicCommand)
+            + (core?.commands ?? [])
+        let jevConfigured = await jevIsConfigured(registry)
+        let native = registry.providers.flatMap { provider in
+            (provider.catalog.nativeTools ?? []).filter {
+                $0.operation != Self.findOperation || jevConfigured
+            }
+        }.map(\.tool)
+        return (commands.map(Self.tool) + native + [HostMCPResources.catalogTool]).sorted {
+            ($0.object?["name"]?.string ?? "") < ($1.object?["name"]?.string ?? "")
+        }
+    }
+
+    private static func names(_ tools: [HostCLIJSON]) -> [String] {
+        tools.compactMap { $0.object?["name"]?.string }
+    }
+
+    private static let lifecycleTools: Set<String> = [
+        "install", "update", "enable", "disable", "remove", "setup", "sideload",
+    ].reduce(into: []) { $0.insert("edith_extensions_" + $1) }
+
+    private static func changesTools(_ name: String?) -> Bool {
+        name.map(lifecycleTools.contains) ?? false
+    }
+
+    private func announceToolChanges() async {
+        guard let served = servedTools, !stopping, let (registry, core) = try? await loadCatalogs()
+        else { return }
+        let current = Self.names(await publicTools(registry, core))
+        guard current != served, !stopping else { return }
+        servedTools = current
+        try? await send(
+            HostCLIJSON.object([
+                "jsonrpc": .string("2.0"), "method": .string("notifications/tools/list_changed"),
+            ]).encoded())
+    }
+
+    private func execute(_ method: String, params: [String: HostCLIJSON]) async throws
+        -> HostCLIJSON
+    {
+        if method == "resources/list" {
+            guard Set(params.keys).isSubset(of: ["_meta"]) else {
+                throw HostCLIError.usage("Resource pagination is not supported.")
+            }
+            return HostMCPResources.list(index())
+        }
+        if method == "resources/read" {
+            guard Set(params.keys).isSubset(of: ["uri", "_meta"]), let uri = params["uri"]?.string,
+                let resource = HostMCPResources.read(uri, index: index())
+            else { throw HostCLIError.usage("Unknown resource. Call resources/list.") }
+            return resource
+        }
+        let (registry, coreCatalog) = try await loadCatalogs()
         if method == "tools/list" {
             guard Set(params.keys).isSubset(of: ["_meta"]) else {
                 throw HostCLIError.usage("Tool pagination is not supported.")
             }
-            let commands =
-                registry.providers.flatMap { $0.catalog.allCommands }.filter(Self.publicCommand)
-                + (coreCatalog?.commands ?? [])
-            let jevConfigured = await jevIsConfigured(registry)
-            let native = registry.providers.flatMap { provider in
-                (provider.catalog.nativeTools ?? []).filter {
-                    $0.operation != Self.findOperation || jevConfigured
-                }
-            }.map(\.tool)
-            return .object([
-                "tools": .array(
-                    (commands.map(Self.tool) + native).sorted {
-                        ($0.object?["name"]?.string ?? "") < ($1.object?["name"]?.string ?? "")
-                    })
-            ])
+            let tools = await publicTools(registry, coreCatalog)
+            servedTools = Self.names(tools)
+            return .object(["tools": .array(tools)])
+        }
+        if params["name"]?.string == HostMCPResources.catalogToolName {
+            guard Set(params.keys).isSubset(of: ["name", "arguments", "_meta"]),
+                params["arguments"] == nil || params["arguments"]?.object != nil
+            else { throw HostCLIError.usage("Invalid catalog arguments.") }
+            return try await catalog(params["arguments"]?.object ?? [:])
         }
         if let name = params["name"]?.string,
             let provider = registry.providers.first(where: {
@@ -254,9 +316,7 @@ public actor HostMCPCLI {
             throw HostCLIError.usage(
                 "Pass confirm: true instead of a confirmation flag inside arguments.")
         }
-        if command.destructive, object["confirm"] != .bool(true),
-            command.route.first == "agent" || command.route == ["extensions", "setup"]
-        {
+        if Self.needsConfirmation(command), object["confirm"] != .bool(true) {
             let preview = try HostCLIJSON.object([
                 "preview": .bool(true), "requiresConfirmation": .bool(true),
                 "command": .strings(command.route + arguments),
@@ -309,6 +369,35 @@ public actor HostMCPCLI {
         }
     }
 
+    private static let confirmedRoutes: Set<[String]> = [
+        ["extensions", "install"], ["extensions", "update"], ["extensions", "enable"],
+        ["extensions", "disable"], ["extensions", "remove"],
+    ]
+
+    private static func previewsOnly(_ command: HostCLIProviderCommand) -> Bool {
+        command.destructive
+            && (command.route.first == "agent" || command.route == ["extensions", "setup"])
+    }
+
+    private static func needsConfirmation(_ command: HostCLIProviderCommand) -> Bool {
+        previewsOnly(command) || confirmedRoutes.contains(command.route)
+    }
+
+    private static func summary(_ command: HostCLIProviderCommand) -> String {
+        switch command.route {
+        case ["extensions", "install"]:
+            return
+                "Install and start one extension. arguments: [id] from edith_catalog. Changes this Mac, so ask the user first."
+        case ["extensions", "ls"]:
+            return
+                "List extensions and their install state. edith_catalog adds guides and examples."
+        case ["app", "navigate"]:
+            return
+                "Show a page in the Edith app. arguments: [route]; an extension's route is its id."
+        default: return command.summary
+        }
+    }
+
     private static func tool(_ command: HostCLIProviderCommand) -> HostCLIJSON {
         var properties: [String: HostCLIJSON] = [
             "arguments": .object([
@@ -316,7 +405,7 @@ public actor HostMCPCLI {
                 "maxItems": .integer(128),
             ])
         ]
-        if command.destructive {
+        if command.destructive || needsConfirmation(command) {
             properties["confirm"] = .object([
                 "type": .string("boolean"),
                 "description": .string("Leave false to preview. Pass true to apply."),
@@ -333,8 +422,9 @@ public actor HostMCPCLI {
             "name": .string(command.toolName),
             "title": .string("ed " + command.route.joined(separator: " ")),
             "description": .string(
-                command.summary
-                    + (command.destructive ? " Previews by default; pass confirm to apply." : "")),
+                summary(command)
+                    + (command.destructive || needsConfirmation(command)
+                        ? " Previews by default; pass confirm to apply." : "")),
             "inputSchema": .object([
                 "type": .string("object"), "properties": .object(properties),
                 "additionalProperties": .bool(false),

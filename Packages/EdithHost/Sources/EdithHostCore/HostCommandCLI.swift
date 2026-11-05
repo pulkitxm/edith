@@ -156,6 +156,13 @@ public struct HostCommandCLI: Sendable {
         if Self.coreCommands.contains(command), arguments.last == "--help" {
             return try HostCLIOutput.text(HostCLIHelp.text(Array(arguments.dropLast())))
         }
+        if command == "mcp" {
+            guard input.isEmpty else {
+                throw HostCLIError.usage("ed mcp setup commands do not accept stdin.")
+            }
+            return try HostMCPSetupCLI(home: tooling.home, executable: tooling.executable)
+                .execute(Array(arguments.dropFirst()))
+        }
         if ["version", "--version"].contains(command) {
             let args = try HostCLIArguments(Array(arguments.dropFirst()), flags: ["--json"])
             try args.require(words: 0...0, flags: ["--json"])
@@ -180,11 +187,12 @@ public struct HostCommandCLI: Sendable {
                 return try HostCLIOutput.json(
                     HostCLIHelp.document(version: version, registry: registry))
             }
-            guard args.words.isEmpty || args.words == ["agent"] else {
-                throw HostCLIError.usage("Unknown guide topic.")
+            let topics = ["agent": HostGuideCLI.agentSnippet, "mcp": HostGuideCLI.mcpText]
+            guard args.words.isEmpty || topics[args.words[0]] != nil else {
+                throw HostCLIError.usage("Unknown guide topic. Use agent or mcp.")
             }
             return try HostCLIOutput.text(
-                args.words.isEmpty ? HostGuideCLI.text : HostGuideCLI.agentSnippet)
+                args.words.first.flatMap { topics[$0] } ?? HostGuideCLI.text)
         }
         if command == "schema" {
             guard arguments.count == 1 else {

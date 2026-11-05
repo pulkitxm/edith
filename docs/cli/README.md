@@ -48,7 +48,7 @@ report still exits 0, so read `verified`, `state.phase`, `state.runtimePhase`,
 | [`ed config`](./config/README.md) | Every setting the UI exposes, and the full setting catalogue |
 | [`ed app`](./app/README.md) | App identity, diagnostics, paths, external links, and one-shot actions |
 | [`ed agent`](./agent/README.md) | The headless background agent: registration, live state and its job table |
-| [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP |
+| [`ed mcp`](./mcp/README.md) | Serving every Edith operation to an agent over MCP, and registering it with Claude, Codex, Cursor and VS Code |
 | [`ed jev`](./jev/README.md) | The TypeSafe Jev key, its status, and raw typed decisions |
 | [`ed docs`](./docs/README.md) | This reference in the app and on the command line, and asking which command handles a request |
 | [`ed extensions`](./extensions/README.md) | Installing, updating, enabling and removing extensions, checking readiness, planning setup, and recovering failures |
