@@ -163,14 +163,14 @@ public enum BifrostQuery {
     static func applicationResult(_ application: BifrostApplication, score: Int) -> BifrostResult {
         BifrostResult(
             id: "app:" + application.path, kind: .application, title: application.name,
-            subtitle: readablePath(application.path), symbolName: "app.dashed",
+            subtitle: readablePath(application.path), icon: .selection,
             iconPath: application.path, action: .launch(path: application.path), score: score)
     }
 
     static func commandResult(_ command: BifrostCommand, score: Int) -> BifrostResult {
         BifrostResult(
             id: "command:" + command.id, kind: .command, title: command.title,
-            subtitle: command.subtitle, symbolName: command.symbolName,
+            subtitle: command.subtitle, icon: command.icon,
             action: .run(commandID: command.id), score: score)
     }
 
@@ -180,14 +180,14 @@ public enum BifrostQuery {
         let subtitle = argument.isEmpty ? entry.subtitle : "\(entry.subtitle) \u{2014} \(argument)"
         return BifrostResult(
             id: entry.id, kind: entry.kind, title: entry.title, subtitle: subtitle,
-            symbolName: entry.symbolName, iconPath: entry.iconPath, action: entry.action,
+            icon: entry.icon, iconPath: entry.iconPath, action: entry.action,
             score: score, copyText: entry.copyText)
     }
 
     static func calculationResult(_ calculation: BifrostCalculation) -> BifrostResult {
         BifrostResult(
             id: "calc:" + calculation.expression, kind: .calculation, title: calculation.display,
-            subtitle: calculation.expression, symbolName: "function",
+            subtitle: calculation.expression, icon: .calculator,
             action: .copy(text: calculation.copyText), score: Int.max,
             answer: BifrostAnswer(
                 input: calculation.expression, output: calculation.display))
@@ -197,7 +197,7 @@ public enum BifrostQuery {
         BifrostResult(
             id: "convert:" + conversion.source.id + ">" + conversion.target.id,
             kind: .conversion, title: conversion.display, subtitle: conversion.detail,
-            symbolName: "arrow.left.arrow.right", action: .copy(text: conversion.copyText),
+            icon: .arrowSwap, action: .copy(text: conversion.copyText),
             score: Int.max,
             answer: BifrostAnswer(
                 input: "\(BifrostNumberFormat.grouped(conversion.value)) "
@@ -211,7 +211,7 @@ public enum BifrostQuery {
         BifrostResult(
             id: "money:" + money.source.code + ">" + money.target.code,
             kind: .conversion, title: money.display, subtitle: money.detail,
-            symbolName: "arrow.left.arrow.right", action: .copy(text: money.copyText),
+            icon: .arrowSwap, action: .copy(text: money.copyText),
             score: Int.max,
             answer: BifrostAnswer(
                 input: BifrostCurrencyCatalog.format(money.value, code: money.source.code),

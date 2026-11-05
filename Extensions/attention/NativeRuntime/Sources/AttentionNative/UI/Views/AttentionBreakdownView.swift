@@ -27,7 +27,7 @@ struct AttentionBreakdownView: View {
                         Button {
                             copy(rows, title: dimension?.title ?? "Activity")
                         } label: {
-                            Label("Copy CSV", systemImage: "doc.on.doc")
+                            Label("Copy CSV", edith: .copy)
                         }.buttonStyle(.edith(.secondary)).disabled(rows.isEmpty)
                     }
                 }
@@ -47,7 +47,7 @@ struct AttentionBreakdownView: View {
                     AttentionEmpty(
                         text: dimensions.isEmpty
                             ? "No activity recorded in this period" : "Nothing matches the filters",
-                        symbol: "magnifyingglass")
+                        icon: .search)
                 } else {
                     ranking(rows)
                     Divider()

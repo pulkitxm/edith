@@ -21,11 +21,11 @@ import Testing
     private static let commands = [
         BifrostCommand(
             id: "emoji.pick", title: "Emoji Picker", subtitle: "Type an emoji",
-            symbolName: "face.smiling", abilityID: "emoji",
+            icon: .emoji, abilityID: "emoji",
             notification: Notification.Name("fixture.emoji"), terms: ["emoji"]),
         BifrostCommand(
             id: "clipboard.open", title: "Clipboard History", subtitle: "Paste something",
-            symbolName: "doc.on.clipboard", abilityID: "clipboard",
+            icon: .clipboard, abilityID: "clipboard",
             notification: Notification.Name("fixture.clipboard"), terms: ["paste"]),
     ]
 

@@ -25,7 +25,7 @@ struct BifrostRows: View {
                         "Launcher is off",
                         message:
                             "Turn it on to open apps and search from one bar, and to change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if let error {
                 Section {

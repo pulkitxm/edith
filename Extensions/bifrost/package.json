@@ -1,7 +1,7 @@
 {
   "id": "bifrost",
   "title": "Launcher",
-  "symbolName": "rainbow",
+  "icon": "bifrost",
   "category": "desk",
   "background": true,
   "commands": [
@@ -28,22 +28,22 @@
     "summary": "Press the shortcut anywhere to open a search bar. Type an app name to launch it, a sum or unit conversion to get the answer, or a word to search files, clipboard history, snippets and quicklinks. Nothing is changed until you pick a result.",
     "steps": [
       {
-        "symbolName": "keyboard",
+        "icon": "keyboard",
         "title": "Press Option+Space",
         "detail": "The bar opens over whatever you are doing. Change the shortcut in settings."
       },
       {
-        "symbolName": "text.cursor",
+        "icon": "textCursor",
         "title": "Type what you want",
         "detail": "An app name, 12 * 8, 5 km in miles, or part of a file name."
       },
       {
-        "symbolName": "return",
+        "icon": "enter",
         "title": "Press Return",
         "detail": "The top result opens or copies. Use the arrow keys to pick another."
       },
       {
-        "symbolName": "slider.horizontal.3",
+        "icon": "adjust",
         "title": "Add your own",
         "detail": "Create quicklinks, snippets and shell commands in the extension settings."
       }

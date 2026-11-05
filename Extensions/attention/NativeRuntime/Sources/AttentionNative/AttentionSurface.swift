@@ -62,7 +62,7 @@ final class AttentionSurface {
                     String($0.id.prefix(512)), sourceID: $0.source.rawValue,
                     title: String($0.name.prefix(1024)), detail: $0.category.name,
                     value: AttentionFormat.duration($0.duration),
-                    icon: $0.domain == nil ? "app" : "globe",
+                    icon: $0.domain == nil ? .appTile : .globe,
                     progress: active > 0 ? min(1, $0.duration / active) : nil)
             },
             sources: AttentionEventSource.allCases.map {
@@ -83,7 +83,7 @@ final class AttentionSurface {
                         session.id, sourceID: "focus", title: String(session.name.prefix(300)),
                         field: "session")
                 ],
-                actions: [.init("focus.finish", "Finish", "stop.fill")],
+                actions: [.init("focus.finish", "Finish", .stop)],
                 facts: [
                     "focusEndsAt": session.startedAt.addingTimeInterval(session.plannedDuration)
                         .timeIntervalSince1970
@@ -93,7 +93,7 @@ final class AttentionSurface {
         return SurfaceSnapshot(
             providerID: "attention",
             metrics: [.init("remaining", "Focus", "\(tile.focusMinutes) min")],
-            actions: [.init("focus.start.\(tile.focusMinutes)", "Start focus", "play.fill")],
+            actions: [.init("focus.start.\(tile.focusMinutes)", "Start focus", .play)],
             updatedAt: now)
     }
 }

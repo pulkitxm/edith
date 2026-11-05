@@ -115,7 +115,7 @@ struct AttentionAllocationPanel: View {
                 } label: {
                     Label(
                         "\(AttentionFormat.duration(summary.unclassifiedDuration)) needs categorization",
-                        systemImage: "tag"
+                        edith: .tag
                     )
                     .font(.edithText(.callout).weight(.medium))
                 }

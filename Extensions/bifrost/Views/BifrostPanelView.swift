@@ -129,7 +129,7 @@ struct BifrostPanelView: View {
                 Button {
                     leaveMode()
                 } label: {
-                    Image(systemName: "chevron.backward")
+                    EdithIconView(.chevronLeft)
                         .font(.system(size: 13, weight: .semibold))
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(.white.opacity(0.10)))
@@ -182,15 +182,16 @@ struct BifrostPanelView: View {
             }
         } label: {
             HStack(spacing: 5) {
+                EdithIconView(.chevronUpDown, size: 12)
                 Text(store.scope.title)
                     .font(.system(size: 12))
                     .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tint)
+            .padding(.trailing, 3)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.edith(.borderless))
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -204,15 +205,16 @@ struct BifrostPanelView: View {
             }
         } label: {
             HStack(spacing: 5) {
+                EdithIconView(.chevronUpDown, size: 12)
                 Text(title)
                     .font(.system(size: 12))
                     .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tint)
+            .padding(.trailing, 3)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.edith(.borderless))
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -300,7 +302,7 @@ struct BifrostPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Image(systemName: store.mode.symbolName)
+            EdithIconView(store.mode.icon)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
             Text(store.mode.title)
@@ -515,7 +517,7 @@ struct BifrostAnswerCard: View {
         HStack(spacing: 0) {
             side(answer.input, caption: answer.inputCaption)
             VStack(spacing: 5) {
-                Image(systemName: "arrow.right")
+                EdithIconView(.arrowRight)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if let footnote = answer.footnote {
@@ -579,8 +581,7 @@ struct BifrostResultIcon: View {
             } else if result.iconPath != nil {
                 BifrostSkeletonSquare()
             } else {
-                Image(systemName: result.symbolName)
-                    .font(.system(size: 15, weight: .medium))
+                EdithIconView(result.icon, size: 16)
                     .foregroundStyle(.secondary)
             }
         }

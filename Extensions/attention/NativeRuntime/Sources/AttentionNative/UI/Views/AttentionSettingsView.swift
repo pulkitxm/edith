@@ -170,7 +170,7 @@ struct AttentionSettingsView: View {
                         Button(role: .destructive) {
                             model.settings.ignoredBundleIDs.removeAll { $0 == bundleID }
                         } label: {
-                            Image(systemName: "minus.circle")
+                            EdithIconView(.removeFilled)
                         }
                         .buttonStyle(.edith(.iconOnly))
                     }
@@ -264,7 +264,7 @@ private struct AttentionCategoriesEditor: View {
                     Button(role: .destructive) {
                         model.removeCategory(category.id)
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(builtIn)
@@ -327,7 +327,7 @@ private struct AttentionRuleEditor: View {
                 }
                 .labelsHidden()
                 .frame(width: UIScale.pt(180))
-                Button(role: .destructive, action: remove) { Image(systemName: "trash") }
+                Button(role: .destructive, action: remove) { EdithIconView(.trash) }
                     .buttonStyle(.edith(.iconOnly))
             }
             HStack(spacing: UIScale.pt(8)) {

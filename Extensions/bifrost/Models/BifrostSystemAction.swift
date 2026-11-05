@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public enum BifrostSystemAction: String, CaseIterable, Codable, Hashable, Sendable {
@@ -49,20 +50,20 @@ public enum BifrostSystemAction: String, CaseIterable, Codable, Hashable, Sendab
         }
     }
 
-    public var symbolName: String {
+    public var icon: EdithIcon {
         switch self {
-        case .lockScreen: "lock.fill"
-        case .sleepMac: "moon.fill"
-        case .sleepDisplays: "display"
-        case .startScreenSaver: "photo.on.rectangle"
-        case .logOut: "rectangle.portrait.and.arrow.right"
-        case .restartMac: "arrow.clockwise"
-        case .shutDownMac: "power"
-        case .emptyTrash: "trash"
-        case .toggleAppearance: "circle.lefthalf.filled"
-        case .toggleHiddenFiles: "eye"
-        case .quitAllApps: "xmark.app"
-        case .ejectAllDisks: "eject"
+        case .lockScreen: .lock
+        case .sleepMac: .moon
+        case .sleepDisplays: .display
+        case .startScreenSaver: .photoStack
+        case .logOut: .signOut
+        case .restartMac: .refresh
+        case .shutDownMac: .power
+        case .emptyTrash: .trash
+        case .toggleAppearance: .contrast
+        case .toggleHiddenFiles: .eye
+        case .quitAllApps: .close
+        case .ejectAllDisks: .eject
         }
     }
 

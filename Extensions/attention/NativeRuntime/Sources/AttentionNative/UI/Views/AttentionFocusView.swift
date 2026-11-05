@@ -15,7 +15,7 @@ struct AttentionFocusView: View {
             if model.hasFilters {
                 PageNotice(
                     "Detected deep work follows the filters. Focus sessions you started are always listed in full.",
-                    symbol: "scope")
+                    icon: .scan)
             }
             AttentionPanel(
                 model.activeFocus == nil ? "Start a focus session" : "Focusing",
@@ -73,7 +73,7 @@ struct AttentionFocusView: View {
                     AttentionEmpty(
                         text:
                             "No deep work block yet. A block counts after a long, mostly uninterrupted stretch in productive apps.",
-                        symbol: "brain.head.profile")
+                        icon: .companion)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
@@ -115,7 +115,7 @@ struct AttentionFocusView: View {
             ) {
                 if model.focusSessions.isEmpty {
                     AttentionEmpty(
-                        text: "No completed focus sessions in this period", symbol: "timer")
+                        text: "No completed focus sessions in this period", icon: .timer)
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(model.focusSessions.enumerated()), id: \.element.id) {

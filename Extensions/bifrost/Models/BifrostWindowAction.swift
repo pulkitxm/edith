@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import CoreGraphics
 import Foundation
 
@@ -63,26 +64,26 @@ public enum BifrostWindowAction: String, CaseIterable, Codable, Hashable, Sendab
         }
     }
 
-    public var symbolName: String {
+    public var icon: EdithIcon {
         switch self {
-        case .leftHalf, .firstThird, .firstTwoThirds: "rectangle.lefthalf.filled"
-        case .rightHalf, .lastThird, .lastTwoThirds: "rectangle.righthalf.filled"
-        case .topHalf: "rectangle.tophalf.filled"
-        case .bottomHalf: "rectangle.bottomhalf.filled"
+        case .leftHalf, .firstThird, .firstTwoThirds: .layoutLeft
+        case .rightHalf, .lastThird, .lastTwoThirds: .layoutRight
+        case .topHalf: .layoutTop
+        case .bottomHalf: .layoutBottom
         case .topLeftQuarter, .topRightQuarter, .bottomLeftQuarter, .bottomRightQuarter:
-            "rectangle.split.2x2"
-        case .centerThird, .centerWindow: "rectangle.center.inset.filled"
-        case .maximize, .almostMaximize: "arrow.up.left.and.arrow.down.right"
-        case .maximizeHeight: "arrow.up.and.down"
-        case .maximizeWidth: "arrow.left.and.right"
-        case .restore: "arrow.uturn.backward"
-        case .larger: "plus.magnifyingglass"
-        case .smaller: "minus.magnifyingglass"
-        case .nudgeLeft: "arrow.left"
-        case .nudgeRight: "arrow.right"
-        case .nudgeUp: "arrow.up"
-        case .nudgeDown: "arrow.down"
-        case .nextDisplay, .previousDisplay: "display.2"
+            .grid
+        case .centerThird, .centerWindow: .layoutCenter
+        case .maximize, .almostMaximize: .expand
+        case .maximizeHeight: .resizeVertical
+        case .maximizeWidth: .resizeHorizontal
+        case .restore: .undo
+        case .larger: .zoomIn
+        case .smaller: .zoomOut
+        case .nudgeLeft: .arrowLeft
+        case .nudgeRight: .arrowRight
+        case .nudgeUp: .arrowUp
+        case .nudgeDown: .arrowDown
+        case .nextDisplay, .previousDisplay: .displays
         }
     }
 

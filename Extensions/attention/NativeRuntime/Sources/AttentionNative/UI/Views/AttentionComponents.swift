@@ -208,12 +208,12 @@ struct AttentionLegendRow: View {
 
 struct AttentionEmpty: View {
     let text: String
-    var symbol = "tray"
+    var icon = EdithIcon.tray
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: UIScale.pt(8)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(18)))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             Text(text)
@@ -245,7 +245,7 @@ struct AttentionStatusPill: View {
 enum AttentionEventIconDescriptor: Hashable {
     case application(bundleID: String?)
     case website(URL?)
-    case symbol(String)
+    case icon(EdithIcon)
 
     init(event: AttentionEvent) {
         switch event.source {
@@ -254,11 +254,11 @@ enum AttentionEventIconDescriptor: Hashable {
         case .browser:
             self = .website(Self.remoteURL(event.faviconURL))
         case .media:
-            self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
+            self = .icon(event.media?.kind == "audio" ? .music : .play)
         case .manual:
-            self = .symbol("hand.tap")
+            self = .icon(.cursor)
         case .agent:
-            self = .symbol("sparkles")
+            self = .icon(.herdr)
         }
     }
 
@@ -274,11 +274,11 @@ enum AttentionEventIconDescriptor: Hashable {
             case .browser:
                 self = .website(nil)
             case .media:
-                self = .symbol("music.note")
+                self = .icon(.music)
             case .manual:
-                self = .symbol("hand.tap")
+                self = .icon(.cursor)
             case .agent:
-                self = .symbol("sparkles")
+                self = .icon(.herdr)
             }
         }
     }
@@ -310,7 +310,7 @@ struct AttentionResolvedIcon: View {
                     .scaledToFit()
                     .padding(descriptor.isWebsite ? UIScale.pt(3) : 0)
             } else {
-                Image(systemName: descriptor.fallbackSymbol)
+                EdithIconView(descriptor.fallbackIcon)
                     .font(.system(size: UIScale.pt(size * 0.62), weight: .medium))
                     .foregroundStyle(fallbackColor)
             }
@@ -338,11 +338,11 @@ extension AttentionEventIconDescriptor {
         return false
     }
 
-    var fallbackSymbol: String {
+    var fallbackIcon: EdithIcon {
         switch self {
-        case .application: "macwindow"
-        case .website: "globe"
-        case .symbol(let name): name
+        case .application: .window
+        case .website: .globe
+        case .icon(let icon): icon
         }
     }
 }

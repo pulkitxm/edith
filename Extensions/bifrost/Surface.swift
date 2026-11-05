@@ -67,15 +67,15 @@ import Foundation
         let rows = Array(store.applications.prefix(40)).map { application in
             SurfaceDataRow(
                 Self.actionID(application), sourceID: "applications",
-                title: String(application.name.prefix(120)), icon: "app",
-                actions: [.init(Self.actionID(application), "Launch", "arrow.up.right")]
+                title: String(application.name.prefix(120)), icon: .appTile,
+                actions: [.init(Self.actionID(application), "Launch", .arrowUpRight)]
             )
         }
         return .init(
             providerID: "bifrost",
             metrics: [.init("apps", "Indexed apps", "\(store.applications.count)")],
             rows: rows,
-            actions: [.init("open", "Open launcher", "magnifyingglass")],
+            actions: [.init("open", "Open launcher", .search)],
             sources: [.init("applications", "Applications")],
             updatedAt: store.indexedAt)
     }
@@ -89,7 +89,7 @@ import Foundation
                 store.run(
                     .init(
                         id: id, kind: .application, title: application.name, subtitle: "",
-                        symbolName: "app", action: .launch(path: application.path), score: 0))
+                        icon: .appTile, action: .launch(path: application.path), score: 0))
             else { throw ExtensionPeerError.invalidRequest }
         }
     }

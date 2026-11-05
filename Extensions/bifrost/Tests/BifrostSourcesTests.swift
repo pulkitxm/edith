@@ -148,7 +148,7 @@ import Testing
         let result = BifrostQuery.entryResult(entry, score: 10)
         #expect(result.copyText == "https://docs.example")
         let plain = BifrostResult(
-            id: "x", kind: .command, title: "T", subtitle: "S", symbolName: "gear",
+            id: "x", kind: .command, title: "T", subtitle: "S", icon: .gear,
             action: .copy(text: "plain"), score: 1)
         #expect(plain.copyText == "plain")
     }
@@ -363,7 +363,7 @@ import Testing
     @Test func everyActionHasATitleAndSymbol() {
         for action in BifrostWindowAction.allCases {
             #expect(!action.title.isEmpty)
-            #expect(!action.symbolName.isEmpty)
+            #expect(action.icon != .placeholder)
         }
         #expect(BifrostWindowAction.allCases.count == 27)
     }

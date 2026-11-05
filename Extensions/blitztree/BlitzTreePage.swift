@@ -85,7 +85,7 @@ struct BlitzTreePage: View {
                     Button {
                         model.scan(root, remember: false)
                     } label: {
-                        Label("Rescan", systemImage: "arrow.clockwise").font(.edithText(.body))
+                        Label("Rescan", edith: .refresh).font(.edithText(.body))
                     }
                     .buttonStyle(.edith(.secondary))
                     .disabled(model.removing || model.scanning)
@@ -97,7 +97,7 @@ struct BlitzTreePage: View {
                 Button {
                     chooseFolder()
                 } label: {
-                    Label("Choose folder…", systemImage: "folder").font(.edithText(.body))
+                    Label("Choose folder…", edith: .folder).font(.edithText(.body))
                 }
                 .buttonStyle(.edith(.secondary))
                 .disabled(model.removing)
@@ -115,27 +115,27 @@ struct BlitzTreePage: View {
 
     private var introState: some View {
         PageEmptyState(
-            symbolName: "square.grid.3x3.fill",
+            icon: .blitztree,
             title: "See where your space goes",
             message:
                 "Disk Map measures a folder and draws it as blocks sized by how much space each file or folder uses.",
             steps: [
                 PageGuideStep(
-                    symbolName: "folder", title: "1. Pick a folder",
+                    icon: .folder, title: "1. Pick a folder",
                     detail: "Start with your home folder or any drive. Nothing is changed."),
                 PageGuideStep(
-                    symbolName: "square.grid.3x3.fill", title: "2. Explore",
+                    icon: .blitztree, title: "2. Explore",
                     detail:
                         "Click a block to open that folder. The largest items are listed below it."
                 ),
                 PageGuideStep(
-                    symbolName: "trash", title: "3. Free up space",
+                    icon: .trash, title: "3. Free up space",
                     detail:
                         "Reveal items in Finder, or move them to the Trash where you can put them back."
                 ),
             ],
             primary: PageAction(
-                "Scan my home folder", symbolName: "house", identifier: "blitztree.scan-home"
+                "Scan my home folder", icon: .home, identifier: "blitztree.scan-home"
             ) {
                 model.scan(NSHomeDirectory())
             },
@@ -153,7 +153,7 @@ struct BlitzTreePage: View {
             if let root = model.root { location(root) }
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    PageGuideBadge(symbolName: "square.grid.3x3.fill", size: 40)
+                    PageGuideBadge(icon: .blitztree, size: 40)
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text("Measuring \(folderName(model.root))")
                             .font(.edithText(.headline)).lineLimit(1).truncationMode(.middle)
@@ -187,11 +187,11 @@ struct BlitzTreePage: View {
 
     private var failedState: some View {
         PageEmptyState(
-            symbolName: "exclamationmark.triangle",
+            icon: .warning,
             title: "This folder could not be scanned",
             message: model.error ?? "The scan stopped before it finished.",
             primary: PageAction(
-                "Try again", symbolName: "arrow.clockwise", identifier: "blitztree.retry"
+                "Try again", icon: .refresh, identifier: "blitztree.retry"
             ) {
                 if let root = model.root { model.scan(root, remember: false) }
             },
@@ -207,11 +207,11 @@ struct BlitzTreePage: View {
 
     private var cancelledState: some View {
         PageEmptyState(
-            symbolName: "stop.circle",
+            icon: .stop,
             title: "Scan stopped",
             message: "No results were kept. Start again whenever you are ready.",
             primary: PageAction(
-                "Scan again", symbolName: "arrow.clockwise", identifier: "blitztree.retry"
+                "Scan again", icon: .refresh, identifier: "blitztree.retry"
             ) {
                 if let root = model.root { model.scan(root, remember: false) }
             },
@@ -253,13 +253,13 @@ struct BlitzTreePage: View {
                     model.back()
                 }
             } label: {
-                Image(systemName: "chevron.left")
+                EdithIconView(.chevronLeft)
             }
             .buttonStyle(.edith(.toolbar))
             .disabled((router?.canGoBack != true && model.history.isEmpty) || model.removing)
             .help("Back to the previous folder")
             .accessibilityLabel("Back")
-            Image(systemName: "folder.fill")
+            EdithIconView(.folder)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
             Text(root)
@@ -284,14 +284,14 @@ struct BlitzTreePage: View {
         ) {
             PageMetric(
                 title: "Space used", value: bytes(report.summary.allocatedBytes),
-                symbol: "internaldrive")
-            PageMetric(title: "Files", value: report.summary.fileCount.formatted(), symbol: "doc")
+                icon: .drive)
+            PageMetric(title: "Files", value: report.summary.fileCount.formatted(), icon: .doc)
             PageMetric(
                 title: "Folders", value: report.summary.directoryCount.formatted(),
-                symbol: "folder")
+                icon: .folder)
             PageMetric(
                 title: "Scan time", value: String(format: "%.1f s", report.scanSeconds),
-                symbol: "clock")
+                icon: .clock)
         }
         if !report.coverage.complete {
             PageNotice(
@@ -395,7 +395,7 @@ struct BlitzTreePage: View {
 
     private func entryRow(_ entry: BlitzTreeReport.Entry) -> some View {
         HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: entry.isDirectory ? "folder.fill" : "doc.fill")
+            EdithIconView(entry.isDirectory ? .folder : .doc)
                 .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(entry.isDirectory ? DashSkin.accent(dark) : Color.secondary)
                 .frame(width: UIScale.pt(20))
@@ -416,7 +416,7 @@ struct BlitzTreePage: View {
             .buttonStyle(.edith(.borderless))
             .help(entry.isDirectory ? "Open this folder" : "Show in Finder")
             if !entry.complete {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .foregroundStyle(.orange)
                     .help("This entry was only partially scanned")
             }
@@ -428,7 +428,7 @@ struct BlitzTreePage: View {
                 Button {
                     reveal(entry)
                 } label: {
-                    Image(systemName: "magnifyingglass")
+                    EdithIconView(.search)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Show in Finder")
@@ -436,7 +436,7 @@ struct BlitzTreePage: View {
                 Button {
                     pendingRemoval = entry
                 } label: {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help(

@@ -63,7 +63,7 @@ struct AttentionFilterMenu: View {
         PageMenuChip(
             model.categoryFilter.map { model.category($0).name }
                 ?? model.levelFilter?.title ?? model.sphereFilter?.title ?? "All activity",
-            systemImage: "line.3.horizontal.decrease", active: model.hasFilters
+            icon: .filter, active: model.hasFilters
         ) {
             Button("All activity") { model.clearFilters() }
             Section("Productivity") {
@@ -94,11 +94,11 @@ struct AttentionTimelineView: View {
                 AttentionEmpty(
                     text:
                         "The timeline shows up to eight days at a time. Pick a shorter range above.",
-                    symbol: "calendar")
+                    icon: .calendar)
             }
         } else {
             AttentionPanel("Timeline") {
-                AttentionEmpty(text: "No activity in this period", symbol: "moon.zzz")
+                AttentionEmpty(text: "No activity in this period", icon: .moon)
             }
         }
     }

@@ -46,16 +46,16 @@ final class AudioMixerSurface {
                 identity, sourceID: Self.text(app.bundleID), title: Self.text(app.name),
                 detail: Self.text(app.bundleID),
                 value: muted ? "Muted" : String(Int((app.volume * 100).rounded())) + "%",
-                icon: muted ? "speaker.slash" : "speaker.wave.2",
+                icon: muted ? .speakerOff : .speaker,
                 actions: [
                     .init(
                         (muted ? "restore:" : "mute:") + identity,
                         muted ? "Restore volume" : "Mute",
-                        muted ? "speaker.wave.2" : "speaker.slash", field: "volume")
+                        muted ? .speaker : .speakerOff, field: "volume")
                 ],
                 sliders: [
                     .init(
-                        "volume:" + identity, "Volume", "speaker.wave.2.fill",
+                        "volume:" + identity, "Volume", .speaker,
                         value: Double(app.volume), field: "volume")
                 ])
         }

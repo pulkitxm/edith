@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public enum BifrostSource: String, CaseIterable, Codable, Hashable, Sendable {
@@ -37,16 +38,16 @@ public enum BifrostSource: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    public var symbolName: String {
+    public var icon: EdithIcon {
         switch self {
-        case .quicklinks: "link"
-        case .snippets: "text.append"
-        case .shellCommands: "terminal"
-        case .appleShortcuts: "square.stack.3d.down.right"
-        case .windowActions: "rectangle.split.2x1"
-        case .systemActions: "switch.2"
-        case .runningApplications: "bolt"
-        case .openWindows: "macwindow.on.rectangle"
+        case .quicklinks: .link
+        case .snippets: .textAdd
+        case .shellCommands: .terminal
+        case .appleShortcuts: .layers
+        case .windowActions: .layoutLeft
+        case .systemActions: .toolbox
+        case .runningApplications: .bolt
+        case .openWindows: .windows
         }
     }
 

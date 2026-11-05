@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public enum BifrostClipboardFeed {
@@ -34,7 +35,7 @@ public enum BifrostClipboardFeed {
                 BifrostResult(
                     id: "clip:" + entry.id, kind: .clip, title: title,
                     subtitle: entry.sourceApp ?? kind.capitalized,
-                    symbolName: symbol(for: kind),
+                    icon: icon(for: kind),
                     action: .clipboardCopy(id: entry.id), score: 0,
                     detail: detail(
                         for: entry, kind: kind, now: now, bytes: bytes(of: entry),
@@ -70,12 +71,12 @@ public enum BifrostClipboardFeed {
         }
     }
 
-    public static func symbol(for kind: String) -> String {
+    public static func icon(for kind: String) -> EdithIcon {
         switch kind {
-        case "image": "photo"
-        case "link": "link"
-        case "file": "doc"
-        default: "text.alignleft"
+        case "image": .photo
+        case "link": .link
+        case "file": .doc
+        default: .textLines
         }
     }
 

@@ -463,8 +463,8 @@ import Testing
         let manual = AttentionEvent(startedAt: now, duration: 30, source: .manual)
 
         #expect(AttentionEventIconDescriptor(event: website) == .website(nil))
-        #expect(AttentionEventIconDescriptor(event: media) == .symbol("music.note"))
-        #expect(AttentionEventIconDescriptor(event: manual) == .symbol("hand.tap"))
+        #expect(AttentionEventIconDescriptor(event: media) == .icon(.music))
+        #expect(AttentionEventIconDescriptor(event: manual) == .icon(.cursor))
     }
 
     @Test func summaryIconsPreferFaviconsThenApplicationBundles() {

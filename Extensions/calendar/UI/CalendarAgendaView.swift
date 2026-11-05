@@ -222,18 +222,18 @@ private struct CalendarEventRow: View {
     @ViewBuilder
     private var metadataItems: some View {
         if let calendar = CalendarText.calendarName(for: event) {
-            CalendarMetadataLabel(systemImage: "calendar", text: calendar)
+            CalendarMetadataLabel(icon: .calendar, text: calendar)
         }
         if let location = CalendarText.visibleLocation(for: event) {
-            CalendarMetadataLabel(systemImage: "mappin.and.ellipse", text: location)
+            CalendarMetadataLabel(icon: .location, text: location)
                 .presenterBlur(blurEvents)
         }
         if let attendees = CalendarText.attendeeSummary(for: event) {
-            CalendarMetadataLabel(systemImage: "person.2", text: attendees)
+            CalendarMetadataLabel(icon: .people, text: attendees)
                 .presenterBlur(blurEvents)
         }
         if event.isRecurring {
-            CalendarMetadataLabel(systemImage: "repeat", text: "Recurring")
+            CalendarMetadataLabel(icon: .repeatAll, text: "Recurring")
         }
     }
 
@@ -241,7 +241,7 @@ private struct CalendarEventRow: View {
         HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             if let url = MeetingLink.url(for: event) {
                 PageChip(
-                    "Join", systemImage: "video.fill", active: true,
+                    "Join", icon: .video, active: true,
                     tint: accentColor
                 ) {
                     onOpenMeeting(event)
@@ -251,12 +251,12 @@ private struct CalendarEventRow: View {
                         ? "Join meeting" : "Join meeting at \(url.host ?? url.absoluteString)")
             }
             if CalendarEventActions.locationURL(for: event) != nil {
-                PageChip("Directions", systemImage: "map") {
+                PageChip("Directions", icon: .map) {
                     onDirections(event)
                 }
                 .help("Open this location in Maps")
             }
-            PageChip("Details", systemImage: detailsExpanded ? "chevron.up" : "chevron.down") {
+            PageChip("Details", icon: detailsExpanded ? .chevronUp : .chevronDown) {
                 detailsExpanded.toggle()
             }
             .help(detailsExpanded ? "Hide event details" : "Show event details")
@@ -272,7 +272,7 @@ private struct CalendarEventRow: View {
             }
             .presenterBlur(blurEvents)
             if let attendees = CalendarText.attendeeNames(for: event) {
-                CalendarDetailLabel(title: "Attendees", value: attendees, systemImage: "person.2")
+                CalendarDetailLabel(title: "Attendees", value: attendees, icon: .people)
                     .presenterBlur(blurEvents)
             }
             if let notes = CalendarText.notes(for: event) {
@@ -305,14 +305,14 @@ private struct CalendarEventRow: View {
     private var summaryDetails: some View {
         if let organizer = CalendarText.organizerSummary(for: event) {
             CalendarDetailLabel(
-                title: "Organizer", value: organizer, systemImage: "person.crop.circle")
+                title: "Organizer", value: organizer, icon: .person)
         }
         if let response = CalendarText.responseSummary(for: event) {
             CalendarDetailLabel(
-                title: "Responses", value: response, systemImage: "checkmark.circle")
+                title: "Responses", value: response, icon: .success)
         }
         if event.hasAlarms {
-            CalendarDetailLabel(title: "Reminder", value: "On", systemImage: "bell")
+            CalendarDetailLabel(title: "Reminder", value: "On", icon: .bell)
         }
     }
 }
@@ -320,11 +320,11 @@ private struct CalendarEventRow: View {
 private struct CalendarDetailLabel: View {
     let title: String
     let value: String
-    let systemImage: String
+    let icon: EdithIcon
 
     var body: some View {
         HStack(spacing: UIScale.pt(4)) {
-            Image(systemName: systemImage)
+            EdithIconView(icon)
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
             Text(title)
@@ -338,11 +338,11 @@ private struct CalendarDetailLabel: View {
 }
 
 private struct CalendarMetadataLabel: View {
-    let systemImage: String
+    let icon: EdithIcon
     let text: String
 
     var body: some View {
-        Label(text, systemImage: systemImage)
+        Label(text, edith: icon)
             .font(.edithText(.caption))
             .foregroundStyle(.secondary)
             .lineLimit(1)

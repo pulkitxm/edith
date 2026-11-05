@@ -150,7 +150,7 @@ struct BifrostLibrarySection<Item: Identifiable & Codable & Equatable, Fields: V
                     Button {
                         remove(item.wrappedValue.id)
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Delete this \(noun.singular)")

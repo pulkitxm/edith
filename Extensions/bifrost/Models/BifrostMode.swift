@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public enum BifrostMode: String, CaseIterable, Codable, Sendable {
@@ -30,11 +31,11 @@ public enum BifrostMode: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var symbolName: String {
+    public var icon: EdithIcon {
         switch self {
-        case .launcher: "rainbow"
-        case .clipboard: "doc.on.clipboard"
-        case .files: "magnifyingglass"
+        case .launcher: .bifrost
+        case .clipboard: .clipboard
+        case .files: .search
         }
     }
 

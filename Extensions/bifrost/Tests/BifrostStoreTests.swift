@@ -269,7 +269,7 @@ import Testing
             built.append(
                 BifrostResult(
                     id: "app:/\(title).app", kind: .application, title: title,
-                    subtitle: "/Applications", symbolName: "app.dashed",
+                    subtitle: "/Applications", icon: .selection,
                     action: .launch(path: "/\(title).app"), score: 1))
         }
         return built

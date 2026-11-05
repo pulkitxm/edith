@@ -83,38 +83,38 @@ struct AttentionHeadline: View {
                     summary.screenTime(excludingIdle: model.excludeIdleTime)),
                 detail: model.excludeIdleTime
                     ? "idle and locked time excluded" : "includes idle and locked time",
-                symbol: "clock", tint: quiet)
+                icon: .clock, tint: quiet)
             PageMetric(
                 title: "Idle / locked", value: AttentionFormat.duration(summary.idleDuration),
                 detail: "idle after \(Int(model.settings.idleThreshold / 60))m without input",
-                symbol: "moon.zzz", tint: quiet)
+                icon: .moon, tint: quiet)
             PageMetric(
                 title: "Active", value: AttentionFormat.duration(active),
                 detail:
                     "\(AttentionFormat.duration(summary.duration(AttentionSphere.work))) work · \(AttentionFormat.duration(summary.duration(AttentionSphere.personal))) personal",
-                symbol: "cursorarrow", tint: quiet)
+                icon: .cursor, tint: quiet)
             PageMetric(
                 title: "Productive", value: AttentionFormat.duration(productive),
                 detail: AttentionFormat.share(
-                    productive, of: active, previous: previous?.productive), symbol: "scope",
+                    productive, of: active, previous: previous?.productive), icon: .scan,
                 tint: accent)
             PageMetric(
                 title: "Distracting", value: AttentionFormat.duration(distracting),
                 detail: AttentionFormat.share(
                     distracting, of: active, previous: previous?.distracting),
-                symbol: "arrow.down.right",
+                icon: .arrowDownRight,
                 tint: AttentionPalette.level(.veryDistracting, dark: dark))
             PageMetric(
                 title: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
                 detail: summary.focusBlocks.isEmpty
                     ? "no block of \(Int(model.settings.focusBlockMinimum / 60))m yet"
                     : "\(summary.focusBlocks.count) blocks, longest \(AttentionFormat.duration(longestBlock))",
-                symbol: "brain.head.profile", tint: quiet)
+                icon: .companion, tint: quiet)
             PageMetric(
                 title: "Switches", value: String(format: "%.0f/h", perHour),
                 detail:
                     "\(summary.contextSwitches) total · \(AttentionFormat.duration(summary.medianStretch)) median stretch",
-                symbol: "arrow.triangle.2.circlepath", tint: quiet)
+                icon: .sync, tint: quiet)
             PageMetric(
                 title: "Agent work", value: AttentionFormat.duration(summary.agents.working),
                 detail: summary.agents.isEmpty
@@ -122,7 +122,7 @@ struct AttentionHeadline: View {
                     : AttentionFormat.joined(
                         "peak \(summary.agents.peakConcurrent) at once",
                         AttentionFormat.delta(summary.agents.working, previous?.agentWorking)),
-                symbol: "sparkles", tint: quiet)
+                icon: .herdr, tint: quiet)
         }
     }
 }
@@ -144,7 +144,7 @@ struct AttentionDayPanel: View {
                 : "Active time per day, split by productivity."
         ) {
             if summary.activeDuration == 0 {
-                AttentionEmpty(text: "No active time in this period", symbol: "moon.zzz")
+                AttentionEmpty(text: "No active time in this period", icon: .moon)
             } else {
                 if model.period.isSingleDay {
                     AttentionDayRibbon(blocks: model.dayRibbon, day: day)
@@ -200,7 +200,7 @@ struct AttentionHoursPanel: View {
                 : "Active time by weekday and hour. Darker is busier."
         ) {
             if summary.hours.isEmpty {
-                AttentionEmpty(text: "No active hours yet", symbol: "clock")
+                AttentionEmpty(text: "No active hours yet", icon: .clock)
             } else if model.period.isSingleDay {
                 AttentionHourBars(cells: summary.hours)
             } else {
@@ -228,7 +228,7 @@ struct AttentionCategoryMenu: View {
                                     model.assign(entity: entity, to: category.id)
                                 } label: {
                                     if category.id == entity.category.id {
-                                        Label(category.name, systemImage: "checkmark")
+                                        Label(category.name, edith: .check)
                                     } else {
                                         Text(category.name)
                                     }
@@ -244,7 +244,7 @@ struct AttentionCategoryMenu: View {
                         model.assign(entity: entity, productivity: level)
                     } label: {
                         if level == entity.productivity {
-                            Label(level.title, systemImage: "checkmark")
+                            Label(level.title, edith: .check)
                         } else {
                             Text(level.title)
                         }
@@ -257,7 +257,7 @@ struct AttentionCategoryMenu: View {
                         model.assign(entity: entity, sphere: sphere)
                     } label: {
                         if sphere == entity.sphere {
-                            Label(sphere.title, systemImage: "checkmark")
+                            Label(sphere.title, edith: .check)
                         } else {
                             Text(sphere.title)
                         }
@@ -265,8 +265,7 @@ struct AttentionCategoryMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "tag")
-                .font(.edithText(.callout))
+            EdithIcon.tag.image()
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -434,7 +433,7 @@ struct AttentionEdithPanel: View {
             if rows.isEmpty {
                 AttentionEmpty(
                     text: "Time in Edith appears here with its page, machine and agent",
-                    symbol: "rectangle.3.group")
+                    icon: .window)
             } else {
                 AttentionRankList(rows: Array(rows))
             }
@@ -463,7 +462,7 @@ struct AttentionSwitchingPanel: View {
                 }
             }
             if summary.transitions.isEmpty {
-                AttentionEmpty(text: "No switches yet", symbol: "arrow.left.arrow.right")
+                AttentionEmpty(text: "No switches yet", icon: .arrowSwap)
             } else {
                 Text("Most common switches")
                     .font(.edithText(.subheadline).weight(.semibold))
@@ -472,7 +471,7 @@ struct AttentionSwitchingPanel: View {
                     ForEach(summary.transitions.prefix(6)) { transition in
                         HStack(spacing: UIScale.pt(6)) {
                             Text(transition.from).lineLimit(1)
-                            Image(systemName: "arrow.right")
+                            EdithIconView(.arrowRight)
                                 .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(transition.to).lineLimit(1)
@@ -523,7 +522,7 @@ struct AttentionAgentsSummaryPanel: View {
                     text: model.settings.agentTrackingEnabled
                         ? "Agent work appears as Herdr sessions run"
                         : "Agent tracking is off in Attention settings",
-                    symbol: "sparkles")
+                    icon: .herdr)
             } else {
                 AttentionRankList(
                     rows: agents.machines.prefix(5).map {
@@ -562,12 +561,12 @@ struct AttentionListeningPanel: View {
             subtitle: "Edith's player, Spotify, Apple Music and background browser tabs."
         ) {
             if music.isEmpty {
-                AttentionEmpty(text: "Nothing played in this period", symbol: "music.note")
+                AttentionEmpty(text: "Nothing played in this period", icon: .music)
             } else {
                 VStack(spacing: UIScale.pt(7)) {
                     ForEach(music.prefix(6)) { item in
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(systemName: "music.note")
+                            EdithIconView(.music)
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                                 .frame(width: UIScale.pt(20))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {

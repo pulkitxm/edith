@@ -173,7 +173,7 @@ private struct AttentionPresenterCover: View {
     var body: some View {
         ZStack {
             DashSkin.paper(scheme == .dark)
-            Label("Hidden while presenting", systemImage: "eye.slash")
+            Label("Hidden while presenting", edith: .eyeOff)
                 .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
         }
@@ -225,14 +225,14 @@ private struct AttentionIdleMenu: View {
 
     var body: some View {
         PageMenuChip(
-            model.excludeIdleTime ? "Exclude idle" : "Include idle", systemImage: "moon.zzz",
+            model.excludeIdleTime ? "Exclude idle" : "Include idle", icon: .moon,
             active: !model.excludeIdleTime
         ) {
             Button {
                 model.excludeIdleTime = true
             } label: {
                 if model.excludeIdleTime {
-                    Label("Exclude idle time", systemImage: "checkmark")
+                    Label("Exclude idle time", edith: .check)
                 } else {
                     Text("Exclude idle time")
                 }
@@ -243,7 +243,7 @@ private struct AttentionIdleMenu: View {
                 if model.excludeIdleTime {
                     Text("Include idle time")
                 } else {
-                    Label("Include idle time", systemImage: "checkmark")
+                    Label("Include idle time", edith: .check)
                 }
             }
         }
@@ -257,7 +257,7 @@ private struct AttentionWindowMenu: View {
     var body: some View {
         let window = model.window
         PageMenuChip(
-            window.isAll ? "All hours" : window.title, systemImage: "clock", active: !window.isAll
+            window.isAll ? "All hours" : window.title, icon: .clock, active: !window.isAll
         ) {
             Section("Days") {
                 ForEach(AttentionDayFilter.allCases) { filter in
@@ -307,7 +307,7 @@ private struct AttentionWindowMenu: View {
 
     private func toggle(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+            if on { Label(title, edith: .check) } else { Text(title) }
         }
     }
 }
@@ -339,7 +339,7 @@ private struct AttentionSetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             VStack(spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "hourglass")
+                PageGuideBadge(icon: .hourglass)
                 Text("See where your attention actually goes")
                     .font(.edithText(.title2)).fontWeight(.semibold)
                     .multilineTextAlignment(.center)
@@ -354,13 +354,13 @@ private struct AttentionSetupView: View {
                 PageGuideSteps(
                     steps: [
                         PageGuideStep(
-                            symbolName: "checklist", title: "Pick sources",
+                            icon: .stepTools, title: "Pick sources",
                             detail: "Apps, and optionally your browser."),
                         PageGuideStep(
-                            symbolName: "lock.shield", title: "Set privacy",
+                            icon: .shield, title: "Set privacy",
                             detail: "Choose how much detail is stored."),
                         PageGuideStep(
-                            symbolName: "play.circle", title: "Begin tracking",
+                            icon: .play, title: "Begin tracking",
                             detail: "Charts appear after a few minutes of use."),
                     ], columns: compact ? 1 : 3)
             }
@@ -376,12 +376,12 @@ private struct AttentionSetupView: View {
                 Divider()
                 Toggle(isOn: $applicationTracking) {
                     SourceLabel(
-                        icon: "macwindow", title: "Applications",
+                        icon: .window, title: "Applications",
                         subtitle: "Foreground app, active time, idle time, sleep and lock state")
                 }
                 Toggle(isOn: $browserTracking) {
                     SourceLabel(
-                        icon: "globe", title: "Browser detail",
+                        icon: .globe, title: "Browser detail",
                         subtitle: "Focused site, tab changes, favicons, profiles and optional media"
                     )
                 }
@@ -473,7 +473,7 @@ private struct AttentionFilterScopeNotice: View {
                 + AttentionFormat.duration(summary.activeDuration) + " of "
                 + AttentionFormat.duration(summary.activeDuration + summary.unmatchedDuration)
                 + " active time. Idle time is left out while filtering.",
-            symbol: "line.3.horizontal.decrease.circle",
+            icon: .filter,
             actions: {
                 Button("Clear filters") { model.clearFilters() }
             })
@@ -485,13 +485,13 @@ private struct AttentionNoMatchView: View {
 
     var body: some View {
         PageEmptyState(
-            symbolName: "line.3.horizontal.decrease.circle",
+            icon: .filter,
             title: "Nothing matches these filters",
             message:
                 "No activity in \(model.period.title()) matches the current filters. "
                 + AttentionFormat.duration(model.summary.unmatchedDuration)
                 + " of other activity is hidden.",
-            primary: PageAction("Clear filters", symbolName: "xmark.circle") {
+            primary: PageAction("Clear filters", icon: .closeFilled) {
                 model.clearFilters()
             }
         )
@@ -504,11 +504,11 @@ private struct AttentionEmptyPeriodView: View {
 
     var body: some View {
         PageEmptyState(
-            symbolName: "calendar",
+            icon: .calendar,
             title: "No activity in \(model.period.title())",
             message: model.period.retentionNote().map { $0 + "." }
                 ?? "Attention recorded nothing in this period. Pick another range to see it.",
-            primary: PageAction("Show today", symbolName: "arrow.uturn.backward") {
+            primary: PageAction("Show today", icon: .undo) {
                 model.select(.preset(.today))
             }
         )
@@ -524,21 +524,21 @@ private struct AttentionCollectingView: View {
     var body: some View {
         VStack(spacing: UIScale.pt(16)) {
             PageEmptyState(
-                symbolName: enabled ? "waveform.path.ecg" : "pause.circle",
+                icon: enabled ? .pulse : .pause,
                 title: enabled ? "Tracking is on, waiting for activity" : "Tracking is paused",
                 message: enabled
                     ? "Use your Mac normally. Charts appear within a minute or two of the first app or site you use. This page updates by itself."
                     : "Attention is not recording. Your existing history and settings stay on this Mac.",
                 primary: enabled
-                    ? PageAction("Review sources", symbolName: "slider.horizontal.3") {
+                    ? PageAction("Review sources", icon: .adjust) {
                         model.section = .settings
                     }
-                    : PageAction("Turn tracking on", symbolName: "play.fill") {
+                    : PageAction("Turn tracking on", icon: .play) {
                         model.setAttentionEnabled(true)
                     },
                 secondary: enabled
                     ? nil
-                    : PageAction("Open settings", symbolName: "gearshape") {
+                    : PageAction("Open settings", icon: .gear) {
                         model.section = .settings
                     }
             )
@@ -585,13 +585,13 @@ struct SetupStep: View {
 }
 
 struct SourceLabel: View {
-    let icon: String
+    let icon: EdithIcon
     let title: String
     let subtitle: String
 
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(8)) {
-            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(20))
+            EdithIconView(icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(20))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title).font(.edithText(.body).weight(.semibold))
                 Text(subtitle).font(.edithText(.subheadline)).foregroundStyle(.secondary)

@@ -21,10 +21,10 @@ struct BifrostSettings: View {
             if let context, !context.loaded {
                 if let error = context.error {
                     PageEmptyState(
-                        symbolName: "exclamationmark.triangle",
+                        icon: .warning,
                         title: "Launcher settings did not load",
                         message: error + " Your shortcuts, snippets and quicklinks are safe.",
-                        primary: PageAction("Try Again", symbolName: "arrow.clockwise") {
+                        primary: PageAction("Try Again", icon: .refresh) {
                             Task { await context.load() }
                         })
                 } else {

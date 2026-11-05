@@ -40,7 +40,7 @@ public enum BifrostEntryCatalog {
         let keyword = trimmed(quicklink.keyword)
         return BifrostEntry(
             id: "quicklink:" + quicklink.id, kind: .quicklink, title: quicklink.name,
-            subtitle: quicklink.target, symbolName: "link",
+            subtitle: quicklink.target, icon: .link,
             terms: ["quicklink", "link", "open"] + (keyword.map { [$0] } ?? []),
             action: .quicklink(id: quicklink.id), copyText: quicklink.target,
             keyword: keyword)
@@ -50,7 +50,7 @@ public enum BifrostEntryCatalog {
         let keyword = trimmed(snippet.keyword)
         return BifrostEntry(
             id: "snippet:" + snippet.id, kind: .snippet, title: snippet.name,
-            subtitle: snippet.preview, symbolName: "text.append",
+            subtitle: snippet.preview, icon: .textAdd,
             terms: ["snippet", "text", "paste"] + (keyword.map { [$0] } ?? []),
             action: .snippet(id: snippet.id), copyText: snippet.content, keyword: keyword)
     }
@@ -59,7 +59,7 @@ public enum BifrostEntryCatalog {
         let keyword = trimmed(command.keyword)
         return BifrostEntry(
             id: "shell:" + command.id, kind: .shellCommand, title: command.name,
-            subtitle: command.script, symbolName: "terminal",
+            subtitle: command.script, icon: .terminal,
             terms: ["command", "shell", "script", "run"] + (keyword.map { [$0] } ?? []),
             action: .shell(id: command.id), copyText: command.script, keyword: keyword)
     }
@@ -67,7 +67,7 @@ public enum BifrostEntryCatalog {
     public static func entry(forShortcut name: String) -> BifrostEntry {
         BifrostEntry(
             id: "shortcut:" + name, kind: .shortcut, title: name, subtitle: "Apple Shortcut",
-            symbolName: "square.stack.3d.down.right",
+            icon: .layers,
             terms: ["shortcut", "shortcuts", "automation", "run"],
             action: .shortcut(name: name), copyText: name)
     }
@@ -75,14 +75,14 @@ public enum BifrostEntryCatalog {
     public static func entry(for action: BifrostWindowAction) -> BifrostEntry {
         BifrostEntry(
             id: "window:" + action.rawValue, kind: .windowAction, title: action.title,
-            subtitle: "Move or resize the front window", symbolName: action.symbolName,
+            subtitle: "Move or resize the front window", icon: action.icon,
             terms: action.keywords, action: .window(action), copyText: action.title)
     }
 
     public static func entry(for action: BifrostSystemAction) -> BifrostEntry {
         BifrostEntry(
             id: "system:" + action.rawValue, kind: .systemAction, title: action.title,
-            subtitle: action.subtitle, symbolName: action.symbolName, terms: action.keywords,
+            subtitle: action.subtitle, icon: action.icon, terms: action.keywords,
             action: .system(action), copyText: action.title)
     }
 
@@ -92,13 +92,13 @@ public enum BifrostEntryCatalog {
         [
             BifrostEntry(
                 id: "activate:" + application.bundleID, kind: .runningApp,
-                title: application.name, subtitle: "Switch to this app", symbolName: "bolt",
+                title: application.name, subtitle: "Switch to this app", icon: .bolt,
                 iconPath: application.path, terms: ["running", "switch", "focus"],
                 action: .activate(bundleID: application.bundleID), copyText: application.name),
             BifrostEntry(
                 id: "quit:" + application.bundleID, kind: .runningApp,
                 title: "Quit \(application.name)", subtitle: "Ask this app to quit",
-                symbolName: "xmark.circle", iconPath: application.path,
+                icon: .closeFilled, iconPath: application.path,
                 terms: ["quit", "close", "exit"],
                 action: .quit(bundleID: application.bundleID), copyText: application.name),
         ]
@@ -107,7 +107,7 @@ public enum BifrostEntryCatalog {
     public static func entry(for window: BifrostWindowHandle) -> BifrostEntry {
         BifrostEntry(
             id: "focus:\(window.windowNumber)", kind: .openWindow, title: window.title,
-            subtitle: window.ownerName, symbolName: "macwindow.on.rectangle",
+            subtitle: window.ownerName, icon: .windows,
             terms: ["window", "switch", window.ownerName],
             action: .focusWindow(processID: window.processID, title: window.title),
             copyText: window.title)

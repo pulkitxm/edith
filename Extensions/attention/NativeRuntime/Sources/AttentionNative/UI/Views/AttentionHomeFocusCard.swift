@@ -49,7 +49,7 @@ import SwiftUI
             if tile.showTitle || tile.showActions {
                 HStack {
                     if tile.showTitle {
-                        Label(tile.displayTitle, systemImage: tile.widget.icon).font(
+                        Label(tile.displayTitle, edith: tile.widget.icon).font(
                             .edithText(.headline)
                         )
                         .lineLimit(1)
@@ -59,7 +59,7 @@ import SwiftUI
                         Button {
                             open(tile.widget.destination)
                         } label: {
-                            Image(systemName: "arrow.up.right")
+                            EdithIconView(.arrowUpRight)
                         }
                         .buttonStyle(.edith(.borderless)).help("Open \(tile.widget.title)")
                         .accessibilityLabel("Open \(tile.widget.title)")

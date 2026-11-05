@@ -63,7 +63,7 @@ struct AudioMixerView: View {
             .accessibilityLabel("Loading apps that are playing sound")
         } else if engine.apps.isEmpty, engine.errorMessage == nil {
             PageEmptyState(
-                symbolName: "speaker.wave.2",
+                icon: .speaker,
                 title: "Nothing is playing sound right now",
                 message:
                     "Apps show up here while they make sound. Start music or a video, then set each app's volume separately.",
@@ -131,7 +131,7 @@ struct AudioMixerView: View {
             Button {
                 engine.setVolume(app, muted ? 1 : 0)
             } label: {
-                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                EdithIconView(muted ? .speakerOff : .speaker)
                     .frame(width: UIScale.pt(20))
             }
             .buttonStyle(.edith(.iconOnly))
@@ -159,7 +159,7 @@ struct AudioMixerView: View {
                     .accessibilityLabel("Loading apps that are playing sound")
                 } else if engine.apps.isEmpty, engine.errorMessage == nil {
                     VStack(spacing: 4) {
-                        Image(systemName: "speaker.wave.2")
+                        EdithIconView(.speaker)
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
                             .padding(.bottom, 4)
@@ -205,7 +205,7 @@ struct AudioMixerView: View {
         if let icon = app.icon {
             Image(nsImage: icon).resizable().frame(width: side, height: side)
         } else {
-            Image(systemName: "app.fill")
+            EdithIconView(.appTile)
                 .font(.system(size: side * 0.8))
                 .foregroundStyle(notch ? .white.opacity(0.7) : .secondary)
                 .frame(width: side, height: side)
@@ -227,7 +227,7 @@ struct AudioMixerView: View {
     private func notchError(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 6) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                 Text(message).fixedSize(horizontal: false, vertical: true)
             }
             .font(.system(size: 11))

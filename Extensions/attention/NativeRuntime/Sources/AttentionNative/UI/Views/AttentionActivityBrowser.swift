@@ -76,7 +76,7 @@ struct AttentionEntitiesPanel: View {
                 }
             }
             if items.isEmpty {
-                AttentionEmpty(text: "No activity matches your search", symbol: "magnifyingglass")
+                AttentionEmpty(text: "No activity matches your search", icon: .search)
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: UIScale.pt(20)) {

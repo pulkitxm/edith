@@ -107,7 +107,7 @@ import Testing
         let results = ["Meeting moved to 3:30", "https://docs.example.com", "#1A73E8"].map {
             BifrostResult(
                 id: $0, kind: .clip, title: $0, subtitle: "Fixture Notes",
-                symbolName: "doc.on.clipboard", action: .copy(text: $0), score: 1, detail: detail)
+                icon: .clipboard, action: .copy(text: $0), score: 1, detail: detail)
         }
         for variant in Self.variants {
             try await RenderCapture.render("launcher-split", variant: variant) {
