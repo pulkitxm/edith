@@ -556,14 +556,14 @@ struct CompanionCaptureScreen: View {
     private var waitingBanner: some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "tray.full")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.accent(dark))
             Text(
                 model.waiting.count == 1
                     ? "1 recording is waiting for Memory"
                     : "\(model.waiting.count) recordings are waiting for Memory"
             )
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: 0)
             CompanionButton(
@@ -605,12 +605,12 @@ struct CompanionCaptureScreen: View {
                 }
                 if let outcome = model.outcome {
                     Text(outcome)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.ok)
                 }
                 if let error = model.error {
                     Text(error)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.warn)
                         .multilineTextAlignment(.center)
                 }
@@ -655,7 +655,7 @@ struct CompanionCaptureScreen: View {
                                 ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
                     }
                 Image(systemName: model.phase == .recording ? "stop.fill" : "mic.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                    .font(.edithText(.title))
                     .foregroundStyle(
                         model.phase == .recording ? Color.white : DashSkin.accent(dark))
             }
@@ -691,12 +691,12 @@ struct CompanionCaptureScreen: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                     if model.transcript.isEmpty {
                         Text(transcriptHint)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else {
                         Text(model.transcript)
-                            .font(.system(size: UIScale.pt(12.5)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -728,7 +728,7 @@ struct CompanionCaptureScreen: View {
         PageCard(title: "Write", note: "a quick note straight to memory", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 TextEditor(text: $model.note)
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                     .scrollContentBackground(.hidden)
                     .padding(UIScale.pt(8))
@@ -752,7 +752,7 @@ struct CompanionCaptureScreen: View {
                             || model.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if let outcome = model.noteOutcome {
                         Text(outcome)
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }

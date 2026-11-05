@@ -48,11 +48,11 @@ struct HerdrSearchPopup: View {
     private var field: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: UIScale.pt(14), weight: .medium))
+                .font(.edithText(.title3).weight(.medium))
                 .foregroundStyle(.secondary)
             TextField("Search open agents by their history…", text: $model.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(15)))
+                .font(.edithText(.title3))
                 .focused($fieldFocused)
                 .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                     model.move(press.key == .upArrow ? -1 : 1)
@@ -170,13 +170,13 @@ struct HerdrSearchPopup: View {
     {
         HStack(spacing: UIScale.pt(6)) {
             Image(systemName: icon)
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
             Text(title.uppercased())
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .tracking(0.6)
             Spacer(minLength: UIScale.pt(8))
             Text(status)
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(failed ? AnyShapeStyle(DashSkin.danger) : AnyShapeStyle(.tertiary))
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -189,7 +189,7 @@ struct HerdrSearchPopup: View {
 
     private func note(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.tertiary)
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(6))
@@ -207,21 +207,21 @@ struct HerdrSearchPopup: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text(row.title)
-                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .lineLimit(1)
                             .presenterTextBlur(hide, fontSize: 12.5)
                         liveBadge(row.agent)
                         Spacer(minLength: 0)
                         if let date = row.hit?.lastActivityDate {
                             Text(date.formatted(.relative(presentation: .named)))
-                                .font(.system(size: UIScale.pt(10)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(1)
                         }
                     }
                     if !row.snippet.isEmpty {
                         Text(highlighted(row.snippet))
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .presenterTextBlur(hide, fontSize: 11)
@@ -234,7 +234,7 @@ struct HerdrSearchPopup: View {
                 }
                 if selected {
                     Text("Open ↩")
-                        .font(.system(size: UIScale.pt(10), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .foregroundStyle(.secondary)
                         .padding(.top, UIScale.pt(1))
                 }
@@ -256,7 +256,7 @@ struct HerdrSearchPopup: View {
                 .fill(HerdrStatusColor.color(agent.status, dark: dark))
                 .frame(width: UIScale.pt(6), height: UIScale.pt(6))
             Text(agent.status.title)
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, UIScale.pt(6))
@@ -286,7 +286,7 @@ struct HerdrSearchPopup: View {
                 let upper = AttributedString.Index(wordEnd, within: result)
             {
                 result[lower..<upper].foregroundColor = .primary
-                result[lower..<upper].font = .system(size: UIScale.pt(11), weight: .semibold)
+                result[lower..<upper].font = .edithText(.subheadline).weight(.semibold)
             }
             start = wordEnd
         }
@@ -299,7 +299,7 @@ struct HerdrSearchPopup: View {
             Spacer()
             Text(engineNote)
         }
-        .font(.system(size: UIScale.pt(10)))
+        .font(.edithText(.caption))
         .foregroundStyle(.tertiary)
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(8))

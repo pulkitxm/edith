@@ -69,10 +69,14 @@ struct SkillInstallSheet: View {
                 }
                 Spacer()
                 Button(model.installationSucceeded ? "Done" : "Cancel") { dismiss() }
+                    .buttonStyle(.edith(.secondary))
                     .keyboardShortcut(.cancelAction)
                     .disabled(model.isInstalling)
                 if !model.installationSucceeded {
-                    Button("Install for \(targetCount)") {
+                    Button(
+                        model.selectedAgentIDs.isEmpty
+                            ? "Choose an agent" : "Install for \(targetCount)"
+                    ) {
                         Task { await model.install() }
                     }
                     .buttonStyle(.edith(.primary))

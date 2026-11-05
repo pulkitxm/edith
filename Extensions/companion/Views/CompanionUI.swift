@@ -58,7 +58,7 @@ struct CompanionLinkButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(destructive ? DashSkin.danger : DashSkin.accent(dark))
                 .underline(hovering && !disabled)
                 .contentShape(Rectangle())
@@ -79,7 +79,7 @@ struct CompanionFieldLabel: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+            .font(.edithText(.caption).weight(.semibold))
             .tracking(UIScale.pt(0.9))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }
@@ -105,11 +105,11 @@ struct CompanionLabeledField: View {
                 onSubmit: onSubmit)
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.danger)
             } else if let help {
                 Text(help)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -138,7 +138,7 @@ struct CompanionSecureField: View {
                 Spacer(minLength: 0)
                 if let detail {
                     Text(detail)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(
                             detailEmphasis ? DashSkin.inkSoft(dark) : DashSkin.inkFaint(dark)
                         )
@@ -152,7 +152,7 @@ struct CompanionSecureField: View {
             }
             SecureField(placeholder, text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .focused($focused)
                 .focusEffectDisabled()
@@ -176,7 +176,7 @@ struct AnswerField: View {
         TextField(placeholder, text: $text, axis: .vertical)
             .textFieldStyle(.plain)
             .lineLimit(2...6)
-            .font(.system(size: UIScale.pt(12.5)))
+            .font(.edithText(.callout))
             .foregroundStyle(DashSkin.ink(dark))
             .focused($focused)
             .focusEffectDisabled()
@@ -218,10 +218,10 @@ struct CompanionStatusLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(5)) {
             Image(systemName: icon)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(color)
             Text(text)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(tone == .info ? DashSkin.inkFaint(dark) : DashSkin.inkSoft(dark))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -246,10 +246,10 @@ struct CompanionDangerRow: View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(consequence)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -283,14 +283,14 @@ struct CompanionConfirmSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: UIScale.pt(20)))
+                    .font(.edithText(.title))
                     .foregroundStyle(DashSkin.danger)
                 Text(title)
                     .font(DashSkin.heading(20))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Text(message)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {

@@ -10,6 +10,7 @@ struct QuinjetPage: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
@@ -119,7 +120,8 @@ struct QuinjetPage: View {
             terminalMenu
             themeMenu
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(8))
         .background(DashSkin.panel)
     }
@@ -246,7 +248,7 @@ private struct QuinjetTabButton: View {
                         systemName: tab.worktree == nil
                             ? "plus.square" : "arrow.triangle.branch"
                     )
-                    .font(.system(size: UIScale.pt(9.5)))
+                    .font(.edithText(.caption))
                     Text(tab.title)
                         .font(.edithText(.callout).weight(.medium))
                         .lineLimit(1)
@@ -307,12 +309,18 @@ private struct QuinjetTerminalWorkspace: View {
                 .background(DashSkin.warn.opacity(0.1))
             }
             if tab.launchConfiguration.terminal == .embedded {
-                TerminalPane(
-                    holder: tab.holder,
-                    palette: palette,
-                    active: presented
-                )
-                .id(tab.holder.generation)
+                ZStack {
+                    Color.clear
+                    TerminalPane(
+                        holder: tab.holder,
+                        palette: palette,
+                        active: presented
+                    )
+                    .id(tab.holder.generation)
+                    if !tab.holder.started, tab.errorMessage == nil {
+                        TerminalLoadingSkeleton(palette: palette)
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 externalWorkspace
@@ -407,7 +415,7 @@ private struct QuinjetTerminalWorkspace: View {
             Color(nsColor: palette.background)
             VStack(spacing: UIScale.pt(20)) {
                 Image(systemName: "macwindow.on.rectangle")
-                    .font(.system(size: UIScale.pt(30), weight: .medium))
+                    .font(.edithText(.largeTitle).weight(.medium))
                     .foregroundStyle(Color(nsColor: palette.caret))
                 VStack(spacing: UIScale.pt(6)) {
                     Text("Open in cmux")

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -64,8 +65,8 @@ struct HomebrewPageRenderTests {
     }
 
     static func capture(_ name: String, model: HomebrewPageModel) async throws {
-        for variant in HomebrewRenderCapture.variants {
-            _ = try await HomebrewRenderCapture.render(name, variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            _ = try await RenderCapture.render(name, variant: variant) {
                 HomebrewMaintenanceView(model: model)
             }
         }
@@ -112,4 +113,9 @@ struct HomebrewPageRenderTests {
         try await Self.capture("homebrew-discover", model: model)
         model.cancelDiscovery()
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

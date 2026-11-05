@@ -214,7 +214,7 @@ struct WorkspacePaneView: View {
                         .frame(width: UIScale.pt(5), height: UIScale.pt(5))
                 }
                 Text(machine?.name ?? "Machine")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: UIScale.pt(7), weight: .bold))
@@ -341,7 +341,7 @@ struct WorkspacePaneView: View {
                             ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
                             : tab.target.screen.title
                     )
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .lineLimit(1)
                     Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }

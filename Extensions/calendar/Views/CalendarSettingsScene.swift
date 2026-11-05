@@ -43,7 +43,7 @@ struct CalendarSettingsScene: View {
                 Text("Calendar")
             }
         }
-        .edithForm()
+        .settingsForm()
         .pageTask(cancel: store.suspend) { await store.observe() }
     }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -46,7 +47,7 @@ import Testing
     }
 
     @Test func settingsRenderEveryStateAtEverySize() async throws {
-        try await SettingsRenderCapture.withAccessibility {
+        try await RenderCapture.withAccessibility {
             let off = try await Self.loaded(preventSleep: false)
             let on = try await Self.loaded(preventSleep: true)
             let stale = try await Self.loaded(preventSleep: true, failingActions: true)
@@ -68,8 +69,8 @@ import Testing
             ]
             for (name, model, preventSleep, label) in cases {
                 SharedDefaults.store.set(preventSleep, forKey: "preventSleep")
-                for variant in SettingsRenderCapture.variants {
-                    let host = try await SettingsRenderCapture.render(
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
                         "keepAwake-settings-\(name)", variant: variant
                     ) {
                         ControlSettingsHost(presentation: model) {
@@ -78,7 +79,7 @@ import Testing
                     }
                     if name != "loading" {
                         #expect(
-                            SettingsRenderCapture.find(host, label: label) != nil,
+                            RenderCapture.find(rendered.host, label: label) != nil,
                             "\(name) \(variant.name) is missing \(label)")
                     }
                 }
@@ -86,4 +87,9 @@ import Testing
             SharedDefaults.store.removeObject(forKey: "preventSleep")
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -93,7 +94,7 @@ import Testing
                         && bitmap.tiffRepresentation?.isEmpty == false)
             }
         }
-        #expect(app.windows.allSatisfy { !$0.isVisible })
+        #expect(app.windows.allSatisfy { !TestWindowHost.isExposedOnDesktop($0) })
     }
     @available(macOS 14.4, *) private final class RetryTap: AudioMixerTapControlling {
         func setGain(_ value: Float) {}

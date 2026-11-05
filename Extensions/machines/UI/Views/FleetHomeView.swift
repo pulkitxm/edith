@@ -45,7 +45,7 @@ struct FleetHomeView: View {
         let fleet = model.fleet
         return HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "square.stack.3d.up")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(FleetFirstRun.onlineSummary(fleet))
                 .font(.edithText(.callout).weight(.medium))
@@ -78,11 +78,10 @@ struct FleetHomeView: View {
     private var metricsGrid: some View {
         let fleet = model.fleet
         return LazyVGrid(
-            columns: [
-                GridItem(
-                    .adaptive(minimum: UIScale.pt(260)),
-                    spacing: UIScale.pt(PageMetrics.cardSpacing))
-            ],
+            columns: Array(
+                repeating: GridItem(
+                    .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
+                count: 2),
             spacing: UIScale.pt(PageMetrics.cardSpacing)
         ) {
             MetricCard(
@@ -142,7 +141,7 @@ struct FleetHomeView: View {
                 ForEach(model.fleet.alerts) { alert in
                     HStack(spacing: UIScale.pt(8)) {
                         Image(systemName: alert.symbol)
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(
                                 alert.kind == .updates ? DashSkin.gold : DashSkin.warn
                             )
@@ -199,13 +198,18 @@ private struct FleetMachineRow: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                         HStack(spacing: UIScale.pt(12)) {
                             Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
-                                .font(.system(size: UIScale.pt(13)))
+                                .font(.edithText(.body))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                Text(snapshot.name).font(.edithText(.body).weight(.medium)).lineLimit(1)
-                                Text(snapshot.online ? snapshot.os : "Not connected")
+                                Text(snapshot.name).font(.edithText(.body).weight(.medium))
+                                    .lineLimit(1)
+                                Text(snapshot.online ? snapshot.os : offlineDetail)
                                     .font(.edithText(.caption)).foregroundStyle(
-                                        DashSkin.inkFaint(dark))
+                                        DashSkin.inkFaint(dark)
+                                    )
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(snapshot.connectionFailure ?? "")
                             }
                             Spacer(minLength: 0)
                             if hostsCompanion {
@@ -213,8 +217,10 @@ private struct FleetMachineRow: View {
                                     DashSkin.accent(dark))
                             }
                             if snapshot.online {
-                                Text("\(snapshot.cores) cores").font(.edithText(.caption).monospacedDigit())
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                Text("\(snapshot.cores) cores").font(
+                                    .edithText(.caption).monospacedDigit()
+                                )
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             Image(systemName: "chevron.right").font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -235,7 +241,7 @@ private struct FleetMachineRow: View {
                 } else {
                     HStack(spacing: UIScale.pt(12)) {
                         Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
-                            .font(.system(size: UIScale.pt(13)))
+                            .font(.edithText(.body))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .frame(width: UIScale.pt(18))
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
@@ -268,9 +274,12 @@ private struct FleetMachineRow: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(60), alignment: .trailing)
                         } else {
-                            Text("Offline")
+                            Text(offlineDetail)
                                 .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(snapshot.connectionFailure ?? "")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         Image(systemName: "chevron.right")
@@ -289,6 +298,10 @@ private struct FleetMachineRow: View {
         }
         .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
+    }
+
+    private var offlineDetail: String {
+        snapshot.connectionFailure ?? "Open this machine to connect"
     }
 
     private func meter(_ label: String, percent: Double, color: Color) -> some View {
@@ -346,7 +359,8 @@ private struct FleetFirstRunCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .widgetBar(
             cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark))
+            stroke: DashSkin.line(dark)
+        )
         .accessibilityElement(children: .contain)
     }
 
@@ -394,20 +408,4 @@ enum MachinesMode: String {
     case fleet
     case workspace
     case machine
-}
-
-struct FleetChip: View {
-    let title: String
-    let subtitle: String
-    let symbol: String
-    let selected: Bool
-    let dark: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        SelectableChipRow(
-            icon: symbol, title: title, subtitle: subtitle, selected: selected, dark: dark,
-            onSelect: onSelect
-        ) { EmptyView() }
-    }
 }

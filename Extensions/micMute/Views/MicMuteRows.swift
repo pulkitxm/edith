@@ -8,10 +8,10 @@ struct MicMuteRows: View {
         var inMenuBar = true
 
     var body: some View {
-        ControlSettingsIssueSection()
+        SettingsIssueSection()
         Section {
             if presentation.active {
-                LabeledContent("Microphones") {
+                SettingsRow("Microphones") {
                     Label(
                         presentation.state.muted ? "Muted" : "Live",
                         systemImage: presentation.state.muted ? "mic.slash.fill" : "mic.fill"
@@ -19,24 +19,14 @@ struct MicMuteRows: View {
                     .foregroundStyle(presentation.state.muted ? Color.red : Color.secondary)
                 }
             }
-            LabeledContent {
-                HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
-            } label: {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Shortcut")
-                    Text(
-                        "Mutes or unmutes every microphone from any app. Click to record a new one."
-                    )
-                    .settingsCaption()
-                }
-            }
+            SettingsShortcutRow(
+                keyPrefix: "micHotKey", defaultLabel: "⌘⇧M",
+                purpose: "Mutes or unmutes every microphone from any app."
+            )
             .disabled(!presentation.active)
             Toggle(isOn: $inMenuBar.notifyingSettingsChange()) {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Show in the menu bar")
-                    Text("The icon shows whether you are muted. Click it to switch.")
-                        .settingsCaption()
-                }
+                Text("Show in the menu bar")
+                Text("The icon shows whether you are muted. Click it to switch.")
             }
             .disabled(!presentation.active)
         } header: {

@@ -179,7 +179,7 @@ struct HerdrPaneHeader: View {
                             agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.title)
                         .font(
-                            .system(size: UIScale.pt(11), weight: focused ? .semibold : .medium)
+                            .edithText(.subheadline).weight(focused ? .semibold : .medium)
                         )
                         .foregroundStyle(focused ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                         .lineLimit(1)
@@ -263,7 +263,7 @@ struct HerdrPaneHeader: View {
             menuItems
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(20), height: UIScale.pt(20))
         }

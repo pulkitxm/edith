@@ -457,7 +457,7 @@ struct WorkspaceView: View {
             .help("Even out the panes")
 
             Text("\(model.layout.paneCount) pane\(model.layout.paneCount == 1 ? "" : "s")")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)
         }

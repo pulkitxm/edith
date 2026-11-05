@@ -90,7 +90,7 @@ struct HerdrMessageMenu: View {
             }
         } label: {
             Image(systemName: "paperplane")
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }

@@ -22,6 +22,7 @@ struct QuinjetSettingsPage: View {
                 if let error = model.error {
                     Text(error).font(.edithText(.caption)).foregroundStyle(.red)
                     Button("Retry") { Task { await model.read() } }
+                        .buttonStyle(.edith(.secondary))
                 }
             }
             .disabled(model.loading)

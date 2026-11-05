@@ -168,7 +168,7 @@ private struct HerdrTerminalList: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(2)) {
             Text("Terminals")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)
             newTerminalButton
@@ -234,17 +234,14 @@ private struct HerdrTerminalList: View {
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "terminal")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(
                             terminal.running
                                 ? HerdrStatusColor.color(.working, dark: dark)
                                 : DashSkin.inkFaint(dark))
                     VStack(alignment: .leading, spacing: 0) {
                         Text(terminal.title)
-                            .font(
-                                .system(
-                                    size: UIScale.pt(12), weight: selected ? .semibold : .medium)
-                            )
+                            .font(.edithText(.callout).weight(selected ? .semibold : .medium))
                             .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -396,7 +393,9 @@ struct HerdrPanelTerminalView: View {
             }
         }
         .background(Color(nsColor: palette.background))
-        .task(id: "\(terminal.pane ?? "")|\(terminal.holder.generation)|\(mouse.rawValue)") { await start() }
+        .task(id: "\(terminal.pane ?? "")|\(terminal.holder.generation)|\(mouse.rawValue)") {
+            await start()
+        }
         .task(id: terminal.pane) {
             guard store.uiClient == nil, let pane = terminal.pane else { return }
             await terminal.scroll.watch(
@@ -425,7 +424,7 @@ struct HerdrPanelTerminalView: View {
     {
         VStack(spacing: UIScale.pt(10)) {
             Text(message)
-                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(Color(nsColor: palette.foreground))
                 .multilineTextAlignment(.center)
             Button(action, action: perform)
@@ -465,7 +464,7 @@ struct HerdrTerminalBusyBadge: View {
                 SkeletonBlock(width: 12, height: 12, corner: 6)
             }
             Text(title)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(Color(nsColor: palette.foreground))
         }
         .padding(.horizontal, UIScale.pt(14))

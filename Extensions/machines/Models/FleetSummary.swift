@@ -21,6 +21,7 @@ public struct MachineSnapshot: Equatable, Sendable {
     public var updatesAvailable: Int?
     public var hottestTemperature: Double?
     public var os: String
+    public var connectionFailure: String?
 
     public init(
         id: UUID, name: String, isLocal: Bool, online: Bool, cores: Int, cpuPercent: Double,
@@ -28,7 +29,7 @@ public struct MachineSnapshot: Equatable, Sendable {
         swapUsedKB: Int64 = 0, diskTotalKB: Int64 = 0, diskUsedKB: Int64 = 0,
         loadOne: Double = 0, uptime: Double = 0, containersRunning: Int = 0,
         containersTotal: Int = 0, updatesAvailable: Int? = nil,
-        hottestTemperature: Double? = nil, os: String = ""
+        hottestTemperature: Double? = nil, os: String = "", connectionFailure: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -49,6 +50,7 @@ public struct MachineSnapshot: Equatable, Sendable {
         self.updatesAvailable = updatesAvailable
         self.hottestTemperature = hottestTemperature
         self.os = os
+        self.connectionFailure = connectionFailure
     }
 
     public var memoryPercent: Double {

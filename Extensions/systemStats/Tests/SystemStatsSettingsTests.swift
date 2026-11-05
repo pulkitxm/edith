@@ -29,7 +29,7 @@ private final class SettingsFixtureBridge: NSObject {
             if delay { delayed = (request, completion); return }
             let payload = try ControlPresentationContract.execute(
                 request.operation, payload: request.payload, defaults: defaults,
-                state: ControlPresentationState(cpu: 12, memory: 34))
+                state: ControlPresentationState())
             completion(
                 try ExtensionEngineWire.encode(
                     ExtensionEngineReply(token: request.token, ok: true, payload: payload))
@@ -71,7 +71,6 @@ struct SystemStatsSettingsTests {
         defer { model.stop() }
         await model.refresh()
         #expect(model.ready)
-        #expect(model.state.cpu == 12)
         let rows = SystemStatsRows(presentation: model, defaults: local)
         #expect(rows.modeBinding.wrappedValue == "auto")
         rows.modeBinding.wrappedValue = "custom"

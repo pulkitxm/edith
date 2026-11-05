@@ -45,13 +45,13 @@ struct HerdrTabButton: View, Equatable {
                     weight: .semibold)
             }
             Text(title)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .lineLimit(1)
                 .hidden()
                 .overlay(alignment: .leading) {
                     Text(title)
                         .font(
-                            .system(size: UIScale.pt(12), weight: selected ? .semibold : .medium)
+                            .edithText(.callout).weight(selected ? .semibold : .medium)
                         )
                         .lineLimit(1)
                         .presenterTextBlur(blurTitle, fontSize: 12)
@@ -77,7 +77,7 @@ struct HerdrTabButton: View, Equatable {
                     Image(
                         systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
                     )
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(
                         store.copiedID == agent.id
                             ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
@@ -227,7 +227,7 @@ struct HerdrTabBarActions: View {
             layoutPopoverOpen.toggle()
         } label: {
             Image(systemName: tab.isSplit ? "square.grid.2x2" : "plus.rectangle.on.rectangle")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 .padding(UIScale.pt(4))
@@ -255,10 +255,7 @@ struct HerdrTabBarActions: View {
                     store.setView(mode, for: tab.id)
                 } label: {
                     Image(systemName: mode.icon)
-                        .font(
-                            .system(
-                                size: UIScale.pt(11), weight: selected ? .semibold : .medium)
-                        )
+                        .font(.edithText(.subheadline).weight(selected ? .semibold : .medium))
                         .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                         .frame(width: UIScale.pt(26), height: UIScale.pt(22))
                         .background(selected ? DashSkin.accent(dark).opacity(0.18) : Color.clear)
@@ -282,7 +279,7 @@ struct HerdrTabBarActions: View {
             }
         } label: {
             Image(systemName: "apple.terminal")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(open ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 .padding(UIScale.pt(4))
@@ -308,7 +305,7 @@ struct HerdrTabBarActions: View {
             }
         } label: {
             Image(systemName: "sidebar.right")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 .padding(UIScale.pt(4))

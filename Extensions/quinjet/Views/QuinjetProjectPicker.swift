@@ -64,7 +64,7 @@ struct QuinjetLocalProjectPicker: View {
     @ViewBuilder
     private var content: some View {
         if model.loadingProjects, model.projects.isEmpty {
-            QuinjetProjectGridSkeleton(dark: dark)
+            QuinjetProjectListSkeleton(dark: dark)
         } else if model.projectError == QuinjetClientError.notInstalled.errorDescription,
             model.projects.isEmpty
         {
@@ -121,21 +121,11 @@ struct QuinjetLocalProjectPicker: View {
             )
         } else {
             ScrollView {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(
-                        compact, minimum: 330, spacing: PageMetrics.cardSpacing),
-                    spacing: UIScale.pt(PageMetrics.cardSpacing)
-                ) {
-                    ForEach(model.filteredProjects) { project in
-                        QuinjetProjectCard(
-                            project: project,
-                            open: { worktree in
-                                model.open(
-                                    worktree, projectName: project.name,
-                                    available: project.availableWorktrees, in: tab,
-                                    launchEnabled: launchEnabled, configuration: configuration)
-                            })
-                    }
+                QuinjetProjectList(projects: model.filteredProjects) { project, worktree in
+                    model.open(
+                        worktree, projectName: project.name,
+                        available: project.availableWorktrees, in: tab,
+                        launchEnabled: launchEnabled, configuration: configuration)
                 }
                 .pageContent(compact)
             }
@@ -156,7 +146,32 @@ struct QuinjetLocalProjectPicker: View {
     }
 }
 
-struct QuinjetProjectCard: View {
+enum QuinjetProjectRowMetrics {
+    static let spacing = 12.0
+    static var dividerInset: Double { PageMetrics.cardPadding }
+}
+
+struct QuinjetProjectList: View {
+    let projects: [QuinjetProject]
+    let open: (QuinjetProject, QuinjetWorktree) -> Void
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
+                if index > 0 {
+                    Divider().padding(.leading, UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
+                }
+                QuinjetProjectRow(project: project) { open(project, $0) }
+            }
+        }
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
+    }
+}
+
+struct QuinjetProjectRow: View {
     let project: QuinjetProject
     let open: (QuinjetWorktree) -> Void
 
@@ -166,13 +181,13 @@ struct QuinjetProjectCard: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        HStack(spacing: UIScale.pt(QuinjetProjectRowMetrics.spacing)) {
             Button {
                 if let worktree = project.defaultWorktree { open(worktree) }
             } label: {
                 HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     Image(systemName: "folder.fill")
-                        .font(.system(size: UIScale.pt(18), weight: .medium))
+                        .font(.edithText(.title2).weight(.medium))
                         .foregroundStyle(DashSkin.accent(dark))
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -216,8 +231,8 @@ struct QuinjetProjectCard: View {
                     })
             }
         }
-        .padding(UIScale.pt(PageMetrics.cardPadding))
-        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+        .padding(.vertical, UIScale.pt(10))
     }
 
     private var worktreeCount: String {
@@ -273,7 +288,7 @@ struct QuinjetWorktreePicker: View {
                             systemName: selectedPath == worktree.path
                                 ? "checkmark.circle.fill" : "arrow.triangle.branch"
                         )
-                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .font(.edithText(.subheadline).weight(.medium))
                         .foregroundStyle(
                             selectedPath == worktree.path
                                 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)

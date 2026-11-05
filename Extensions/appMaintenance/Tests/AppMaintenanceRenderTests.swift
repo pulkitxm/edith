@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -84,7 +85,42 @@ struct AppMaintenanceRenderFixture {
                 return applications
             },
             now: { Date(timeIntervalSince1970: 1_793_000_000) },
-            discover: { _, _, _, _ in updates })
+            discover: { _, _, _, _ in updates },
+            scan: { url, _ in Self.plan(for: url, in: applications) })
+    }
+
+    nonisolated static func plan(
+        for url: URL, in applications: [InstalledApplication]
+    ) -> AppMaintenancePlan {
+        let application = applications.first { $0.url == url } ?? applications[0]
+        let identity = AppMaintenanceFileIdentity(device: 1, inode: 1)
+        let root = URL(fileURLWithPath: "/synthetic/Users/alex/Library", isDirectory: true)
+        func item(
+            _ id: String, _ url: URL, _ category: AppMaintenanceCategory, _ size: Int64
+        ) -> AppMaintenanceItem {
+            AppMaintenanceItem(
+                id: id, url: url, category: category, sizeBytes: size, identity: identity)
+        }
+        return AppMaintenancePlan(
+            application: application,
+            items: [
+                item("app", url, .application, 412_000_000),
+                item(
+                    "support",
+                    root.appendingPathComponent("Application Support/\(application.name)"),
+                    .support, 96_000_000),
+                item(
+                    "caches", root.appendingPathComponent("Caches/\(application.bundleID)"),
+                    .caches, 38_000_000),
+                item(
+                    "preferences",
+                    root.appendingPathComponent("Preferences/\(application.bundleID).plist"),
+                    .preferences, 8_192),
+                item(
+                    "logs", root.appendingPathComponent("Logs/\(application.name)"), .logs,
+                    1_200_000),
+            ],
+            roots: [root], applicationInfoIdentity: identity)
     }
 
     func remove() {
@@ -106,8 +142,8 @@ struct AppMaintenanceRenderTests {
     static func capture(
         _ name: String, model: AppMaintenanceModel, section: AppMaintenanceSection
     ) async throws {
-        for variant in AppMaintenanceRenderCapture.variants {
-            _ = try await AppMaintenanceRenderCapture.render(name, variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            _ = try await RenderCapture.render(name, variant: variant) {
                 AppMaintenanceView(model: model, section: section)
             }
         }
@@ -153,6 +189,69 @@ struct AppMaintenanceRenderTests {
         await model.shutdown()
     }
 
+    @Test func removalDetailReviewsTheSelectedAppsFiles() async throws {
+        let fixture = try AppMaintenanceRenderFixture(updates: true, history: false)
+        defer { fixture.remove() }
+        let model = fixture.model()
+        await Self.ready(model)
+        let application = try #require(model.applications.first)
+        model.select(application)
+        for _ in 0..<300 where model.plan == nil {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        let plan = try #require(model.plan)
+        #expect(plan.items.count == 5)
+        #expect(model.selectedItems.count == 5)
+        #expect(plan.items.allSatisfy { $0.url.path.hasPrefix("/synthetic") || $0.id == "app" })
+        try await Self.capture("maintenance-removal-detail", model: model, section: .removal)
+        model.setSelected(false, item: plan.items[1])
+        #expect(model.selectedItems.count == 4)
+        #expect(model.selectedBytes == 412_000_000 + 38_000_000 + 8_192 + 1_200_000)
+        try await RenderCapture.withAccessibility {
+            let rendered = try await RenderCapture.render(
+                "maintenance-removal-partial", variant: RenderCapture.variants[0]
+            ) {
+                AppMaintenanceView(model: model, section: .removal)
+            }
+            #expect(
+                RenderCapture.find(rendered.host, label: "Move 4 items to Trash") != nil)
+        }
+        await model.shutdown()
+    }
+
+    @Test func settingsRenderEverywhereTheyAppear() async throws {
+        let fixture = try AppMaintenanceRenderFixture(updates: false, history: false)
+        defer { fixture.remove() }
+        let model = fixture.model()
+        await Self.ready(model)
+        let settings = MaintenanceSettingsModel(send: { command, _ in
+            command == "maintenance.ui.settings.read"
+                ? try JSONEncoder().encode(MaintenanceUISettings())
+                : try JSONEncoder().encode("cask")
+        })
+        await settings.load()
+        settings.packageError = "The Homebrew preference could not be read."
+        try await RenderCapture.withAccessibility {
+            for variant in RenderCapture.layoutVariants {
+                let page = try await RenderCapture.render(
+                    "maintenance-settings", variant: variant
+                ) {
+                    AppMaintenanceSettings(model: settings)
+                }
+                #expect(RenderCapture.find(page.host, label: "Default package kind") != nil)
+                #expect(RenderCapture.find(page.host, label: "Try Again") != nil)
+                let popover = try await RenderCapture.render(
+                    "maintenance-update-settings", variant: variant
+                ) {
+                    AppMaintenanceUpdateSettings(model: model)
+                }
+                #expect(RenderCapture.find(popover.host, label: "Reset") != nil)
+            }
+        }
+        settings.stop()
+        await model.shutdown()
+    }
+
     @Test func historyListsFinishedUpdates() async throws {
         let fixture = try AppMaintenanceRenderFixture(updates: false, history: true)
         defer { fixture.remove() }
@@ -161,4 +260,9 @@ struct AppMaintenanceRenderTests {
         try await Self.capture("maintenance-history", model: model, section: .history)
         await model.shutdown()
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

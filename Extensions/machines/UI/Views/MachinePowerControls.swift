@@ -15,7 +15,7 @@ private struct PowerIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(hovering && enabled ? tint : DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(20))
                 .background(
@@ -111,7 +111,7 @@ struct MachinePowerControls: View {
             Image(systemName: messageIsFailure ? "exclamationmark.triangle" : "checkmark")
                 .font(.system(size: UIScale.pt(9.5), weight: .semibold))
             Text(text)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }

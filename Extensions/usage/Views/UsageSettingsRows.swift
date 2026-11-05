@@ -24,7 +24,8 @@ private struct ClaudeStatusLineRow: View {
                             ? "Checking Claude Code's settings"
                             : connected == true
                                 ? "Remove the Edith status line from Claude Code"
-                                : "Add a status line to Claude Code that reports your limits to Edith")
+                                : "Add a status line to Claude Code that reports your limits to Edith"
+                    )
             }
         }
         .onDisappear {
@@ -300,7 +301,7 @@ struct UsageSettingsRows: View {
                         ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
                         : "White and Black force a single tint. Pick Custom to color by risk stage."
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
             }
         }
 
@@ -450,7 +451,7 @@ struct UsageSettingsRows: View {
             Text(
                 "Alerts use your local clock and fire once per window. With Jev enabled, on-pace, outlook and headroom alerts only go out when Jev thinks they are worth the interruption."
             )
-            .font(.system(size: UIScale.pt(10)))
+            .font(.edithText(.caption))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

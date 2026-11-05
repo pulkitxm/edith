@@ -97,7 +97,7 @@ public struct ProviderSwitchButton: View {
                             Spacer(minLength: 12)
                             if selection == provider {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                    .font(.edithText(.caption).weight(.semibold))
                             }
                         }
                         .foregroundStyle(.primary)

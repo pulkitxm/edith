@@ -67,11 +67,14 @@ import Vision
                         let image = try #require(bitmap.cgImage)
                         let recognition = VNRecognizeTextRequest();
                         recognition.recognitionLevel = .accurate
+                        recognition.revision = VNRecognizeTextRequestRevision2
                         try VNImageRequestHandler(cgImage: image).perform([recognition])
                         let text =
                             recognition.results?.compactMap { $0.topCandidates(1).first?.string }
                             .joined(separator: " ") ?? ""
-                        #expect(text.localizedCaseInsensitiveContains(name))
+                        #expect(
+                            text.localizedCaseInsensitiveContains(name),
+                            Comment(rawValue: "\(name) \(width) \(scale) \(scheme): \(text)"))
                         #expect(!text.contains("Loading limit history"))
                         #expect(!text.contains("Older samples"))
                         #expect(host.window == nil)

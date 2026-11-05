@@ -55,8 +55,10 @@ struct DockerContainerRowsSkeleton: View {
                     SkeletonBlock(width: 12, height: 9, corner: 2)
                     Spacer(minLength: 0)
                     SkeletonBlock(width: 20, height: 16, corner: 5)
+                        .frame(width: UIScale.pt(DockerRowMetrics.toolbarButton))
+                        .padding(.trailing, UIScale.pt(DockerRowMetrics.openColumn))
                 }
-                .padding(.horizontal, UIScale.pt(16))
+                .dockerPaneInset()
                 .padding(.vertical, UIScale.pt(6))
                 ForEach(0..<rows, id: \.self) { index in
                     HStack(spacing: UIScale.pt(12)) {
@@ -70,15 +72,17 @@ struct DockerContainerRowsSkeleton: View {
                         .frame(maxWidth: UIScale.pt(230), alignment: .leading)
                         SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(112))
                         SkeletonBlock(height: 18, corner: 9).frame(maxWidth: UIScale.pt(92))
+                        Spacer(minLength: 0)
                         SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(32))
                         SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(48))
-                        Spacer(minLength: 0)
-                        HStack(spacing: UIScale.pt(4)) {
+                        HStack(spacing: UIScale.pt(DockerRowMetrics.actionSpacing)) {
                             SkeletonBlock(width: 20, height: 20, corner: 6)
+                                .frame(width: UIScale.pt(DockerRowMetrics.toolbarButton))
                             SkeletonBlock(width: 20, height: 20, corner: 6)
+                                .frame(width: UIScale.pt(DockerRowMetrics.toolbarButton))
                         }
                     }
-                    .padding(.horizontal, UIScale.pt(16))
+                    .dockerPaneInset()
                     .padding(.vertical, UIScale.pt(9))
                     Divider().opacity(0.2)
                 }

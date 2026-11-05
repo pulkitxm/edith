@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -60,8 +61,8 @@ struct SystemPageRenderTests {
 
     static func capture(_ name: String, model: RunningAppsModel) async throws {
         let presentation = SystemPresentationState(channel: nil)
-        for variant in SystemRenderCapture.variants {
-            _ = try await SystemRenderCapture.render(name, variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            _ = try await RenderCapture.render(name, variant: variant) {
                 SystemPage(model: model, presentation: presentation)
             }
         }
@@ -103,4 +104,9 @@ struct SystemPageRenderTests {
         try await Self.capture("system-status", model: model)
         model.shutdown()
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

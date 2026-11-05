@@ -5,7 +5,7 @@ struct ZoomableRoot<Content: View>: View {
 
     var body: some View {
         content
-            .font(.system(size: UIScale.pt(13)))
+            .font(.edithText(.body))
             .controlSize(UIScale.controlSize)
             .disclosureGroupStyle(EdithDisclosureGroupStyle())
             .themedControls()

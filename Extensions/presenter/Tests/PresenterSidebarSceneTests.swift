@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -54,7 +55,7 @@ import Testing
                         "location": "sidebar.utility", "section": "privacy",
                     ])
                 })
-            let window = PresenterTestWindowHost.window(
+            let window = TestWindowHost.window(
                 contentRect: CGRect(
                     x: 0, y: 0, width: UIScale.pt(250), height: UIScale.pt(480)))
             window.contentViewController = controller
@@ -78,7 +79,7 @@ import Testing
             state.visible = true; state.compact = false
             await settle(window)
             #expect(controller.view.fittingSize.height.isFinite)
-            #expect(!PresenterTestWindowHost.isExposedOnDesktop(window))
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
             window.orderOut(nil); window.contentViewController = nil
             let restored = try #require(
                 PresenterSidebarScene.controller([
@@ -119,7 +120,7 @@ import Testing
     }
 
     private func accessibility() -> () -> Void {
-        _ = PresenterTestWindowHost.application
+        _ = TestWindowHost.application
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
             NSAccessibility.Attribute(rawValue: $0)
         }

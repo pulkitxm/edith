@@ -7,7 +7,7 @@ struct QuinjetToolbarButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let dark = scheme == .dark
         configuration.label
-            .font(.system(size: UIScale.pt(11), weight: .medium))
+            .font(.edithText(.subheadline).weight(.medium))
             .foregroundStyle(DashSkin.ink(dark))
             .padding(.horizontal, UIScale.pt(10))
             .frame(height: UIScale.pt(30))

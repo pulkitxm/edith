@@ -23,11 +23,11 @@ struct HerdrLayoutPopover: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Layout")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.headline))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text(count == 1 ? "1 agent" : "\(count) agents")
-                    .font(DashSkin.mono(10, weight: .medium))
+                    .font(.edithText(.caption).weight(.medium).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             if tab.isSplit {
@@ -67,7 +67,7 @@ struct HerdrLayoutPopover: View {
                                 }
                                 Text(template.title)
                             }
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .font(.edithText(.caption).weight(.medium))
                             .foregroundStyle(
                                 template == current ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                             )
@@ -94,7 +94,11 @@ struct HerdrLayoutPopover: View {
 
     private var adjustments: some View {
         section("Adjust") {
-            HStack(spacing: UIScale.pt(6)) {
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: UIScale.pt(6)), count: 4),
+                spacing: UIScale.pt(6)
+            ) {
                 action("rotate.right", "Rotate") { store.rotate(tab.id) }
                 action("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip") {
                     store.mirror(tab.id, .horizontal)
@@ -154,7 +158,7 @@ struct HerdrLayoutPopover: View {
                         .help("Show every open tab together in this one")
                     }
                     if !candidates.isEmpty {
-                        Menu("Add Agent") {
+                        PageMenuChip("Add Agent", systemImage: "plus") {
                             ForEach(candidates) { agent in
                                 Menu(hideAgents ? agent.kind : agent.title) {
                                     Button("Add to This Tab") {
@@ -165,14 +169,12 @@ struct HerdrLayoutPopover: View {
                                 }
                             }
                         }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
                         .help("Open another agent beside the focused one")
                     }
                 }
                 if otherTabs.isEmpty, candidates.isEmpty {
                     Text("Open more agents to place them side by side.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -183,13 +185,13 @@ struct HerdrLayoutPopover: View {
         HStack(spacing: UIScale.pt(8)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Animate Changes")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(
                     store.animatesLayout
                         ? "Tabs and panes glide into place" : "Tabs and panes switch instantly"
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer(minLength: 0)
@@ -206,7 +208,7 @@ struct HerdrLayoutPopover: View {
     {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             Text(title)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             content()
         }
@@ -220,12 +222,11 @@ struct HerdrLayoutPopover: View {
         } label: {
             VStack(spacing: UIScale.pt(3)) {
                 Image(systemName: systemImage)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .frame(height: UIScale.pt(16))
                 Text(title)
-                    .font(.system(size: UIScale.pt(9), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
             .frame(maxWidth: .infinity)
@@ -284,14 +285,14 @@ struct HerdrTabSummary: View {
         HStack(spacing: UIScale.pt(6)) {
             HerdrKindMarks(agents: agents, dark: dark)
             Text(agents.map(\.title).joined(separator: " · "))
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .presenterTextBlur(hideAgents, fontSize: 11.5)
             Spacer(minLength: 0)
             Image(systemName: "plus.rectangle.on.rectangle")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(.horizontal, UIScale.pt(8))

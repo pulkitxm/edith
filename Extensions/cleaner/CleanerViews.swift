@@ -54,62 +54,56 @@ struct CleanerCard: View {
     }
 
     private var firstRun: some View {
-        ScrollView {
-            PageEmptyState(
-                symbolName: "sparkles.rectangle.stack",
-                title: "Get back disk space",
-                message:
-                    "Cleaner looks through your projects and caches for build output, downloaded packages, old Xcode data and unused git worktrees. You decide what goes.",
-                steps: [
-                    PageGuideStep(
-                        symbolName: "magnifyingglass", title: "1. Scan",
-                        detail: "Takes about a minute. It only reads folders and changes nothing."),
-                    PageGuideStep(
-                        symbolName: "checklist", title: "2. Review",
-                        detail:
-                            "See what each item is and how much space it frees. Untick anything to keep."
-                    ),
-                    PageGuideStep(
-                        symbolName: "trash", title: "3. Clean",
-                        detail:
-                            "Selected items move to the Trash, so you can restore them until you empty it."
-                    ),
-                ],
-                primary: PageAction(
-                    "Scan my Mac", symbolName: "magnifyingglass", identifier: "cleaner.scan"
-                ) { pickDrives(.scan) },
-                secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
-                    pickDrives(.choose)
-                },
-                footnote:
-                    "Most of what it finds is rebuilt automatically the next time a project needs it."
-            )
-            .frame(minHeight: UIScale.pt(compact ? 520 : 600))
-        }
+        PageEmptyState(
+            symbolName: "sparkles.rectangle.stack",
+            title: "Get back disk space",
+            message:
+                "Cleaner looks through your projects and caches for build output, downloaded packages, old Xcode data and unused git worktrees. You decide what goes.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "magnifyingglass", title: "1. Scan",
+                    detail: "Takes about a minute. It only reads folders and changes nothing."),
+                PageGuideStep(
+                    symbolName: "checklist", title: "2. Review",
+                    detail:
+                        "See what each item is and how much space it frees. Untick anything to keep."
+                ),
+                PageGuideStep(
+                    symbolName: "trash", title: "3. Clean",
+                    detail:
+                        "Selected items move to the Trash, so you can restore them until you empty it."
+                ),
+            ],
+            primary: PageAction(
+                "Scan my Mac", symbolName: "magnifyingglass", identifier: "cleaner.scan"
+            ) { pickDrives(.scan) },
+            secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
+                pickDrives(.choose)
+            },
+            footnote:
+                "Most of what it finds is rebuilt automatically the next time a project needs it."
+        )
         .scrollIndicators(.never)
     }
 
     private var nothingToClean: some View {
-        ScrollView {
-            PageEmptyState(
-                symbolName: "checkmark.seal",
-                title: "Nothing to clean",
-                message:
-                    "The scan found no caches or leftovers worth removing in the places it searched. If your projects live somewhere else, add that folder and scan again.",
-                primary: PageAction(
-                    "Scan again", symbolName: "arrow.clockwise", identifier: "cleaner.scan"
-                ) {
-                    pickDrives(.scan)
-                },
-                secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
-                    pickDrives(.choose)
-                },
-                footnote: model.lastReclaimed > 0
-                    ? "Moved \(JunkScanner.format(model.lastReclaimed)) to the Trash. Empty the Trash to free the space."
-                    : nil
-            )
-            .frame(minHeight: UIScale.pt(420))
-        }
+        PageEmptyState(
+            symbolName: "checkmark.seal",
+            title: "Nothing to clean",
+            message:
+                "The scan found no caches or leftovers worth removing in the places it searched. If your projects live somewhere else, add that folder and scan again.",
+            primary: PageAction(
+                "Scan again", symbolName: "arrow.clockwise", identifier: "cleaner.scan"
+            ) {
+                pickDrives(.scan)
+            },
+            secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
+                pickDrives(.choose)
+            },
+            footnote: model.lastReclaimed > 0
+                ? "Moved \(JunkScanner.format(model.lastReclaimed)) to the Trash. Empty the Trash to free the space."
+                : nil
+        )
         .scrollIndicators(.never)
     }
 

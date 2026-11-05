@@ -81,19 +81,19 @@ struct HerdrMessageSheet: View {
                 .presenterTextBlur(hideAgents && initial.single != nil, fontSize: 17)
             if let agent = initial.single {
                 Text("\(HerdrKind.displayName(for: agent.kind)) · \(agent.status.title)")
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else if let group = initial.group {
                 let count = initial.recipients.count
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     if let scopeTitle = initial.scopeTitle {
                         Text(scopeTitle)
-                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                            .font(.edithText(.subheadline).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .presenterTextBlur(hideAgents && initial.redactScope, fontSize: 11.5)
                     }
                     Text("\(count) \(count == 1 ? "agent" : "agents"). \(group.detail)")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -106,7 +106,7 @@ struct HerdrMessageSheet: View {
             messageField
             if let waitingNote {
                 Text(waitingNote)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.accent(dark))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -117,7 +117,7 @@ struct HerdrMessageSheet: View {
             }
             if let error = messaging.errorMessage {
                 Text(error)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.red)
             }
         }
@@ -127,14 +127,14 @@ struct HerdrMessageSheet: View {
         ZStack(alignment: .topLeading) {
             if text.isEmpty {
                 Text("Write a message")
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .padding(.top, UIScale.pt(8))
                     .padding(.leading, UIScale.pt(12))
                     .allowsHitTesting(false)
             }
             TextEditor(text: $text)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .scrollContentBackground(.hidden)
                 .focused($editorFocused)
@@ -154,7 +154,7 @@ struct HerdrMessageSheet: View {
         switch mode {
         case .now, .whenFinished:
             Text(timingDetail)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
         case .after:
@@ -188,7 +188,7 @@ struct HerdrMessageSheet: View {
         let names = initial.recipients.prefix(6).map(\.title)
         let rest = initial.recipients.count - names.count
         return Text(names.joined(separator: ", ") + (rest > 0 ? " and \(rest) more" : ""))
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .lineLimit(2)
             .presenterTextBlur(hideAgents, fontSize: 11)
@@ -207,11 +207,11 @@ struct HerdrMessageSheet: View {
                         .foregroundStyle(outcome.delivered ? Color.green : Color.orange)
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                             Text(agent.title)
-                                .font(.system(size: UIScale.pt(12), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .presenterTextBlur(hideAgents, fontSize: 12)
                             Text("\(agent.machineName) · \(outcome.summary)")
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
                     }
@@ -227,7 +227,7 @@ struct HerdrMessageSheet: View {
             if let outcomes {
                 let delivered = outcomes.values.filter(\.delivered).count
                 Text("Submitted to \(delivered) of \(initial.recipients.count)")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 Spacer()
                 Button("Done") { dismiss() }

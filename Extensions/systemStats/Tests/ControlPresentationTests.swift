@@ -71,7 +71,7 @@ import Testing
         continuation?.resume(
             returning: try ControlPresentationContract.snapshot(
                 defaults: defaults,
-                state: ControlPresentationState(muted: true, cpu: 80, memory: 75)))
+                state: ControlPresentationState(muted: true)))
         await read.value
         #expect(!model.state.muted)
         model.perform("foreign")
@@ -101,7 +101,7 @@ import Testing
         }
         let packet = try ControlPresentationContract.snapshot(
             defaults: engine,
-            state: ControlPresentationState(muted: true, cpu: 32, memory: 48))
+            state: ControlPresentationState(muted: true))
         let model = ControlPresentation(client: nil, defaults: local) { operation, _ in
             #expect(operation == "systemStats.ui.read")
             return packet
@@ -109,7 +109,6 @@ import Testing
         await model.refresh()
         #expect(model.ready)
         #expect(model.state.muted)
-        #expect(model.state.cpu == 32)
         for key in ControlPresentationContract.readable {
             #expect(
                 NSDictionary(dictionary: ["value": local.object(forKey: key) ?? NSNull()])

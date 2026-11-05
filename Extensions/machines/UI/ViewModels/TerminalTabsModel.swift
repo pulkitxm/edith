@@ -114,6 +114,7 @@ final class TerminalTabsModel {
 }
 
 struct TerminalTabsView: View {
+    @Environment(\.compactLayout) private var compact
     let session: MachineSession
     var presented = true
     @State var model = TerminalTabsModel()
@@ -140,7 +141,7 @@ struct TerminalTabsView: View {
                 }
                 if model.tabs.isEmpty {
                     Text("No terminals open.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -194,7 +195,7 @@ struct TerminalTabsView: View {
                                 Image(systemName: "terminal")
                                     .font(.system(size: UIScale.pt(9.5)))
                                 Text(tab.title)
-                                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                                    .font(.edithText(.subheadline).weight(.medium))
                                 if model.tabs.count > 1 {
                                     Button {
                                         model.closeTab(tab.id)
@@ -231,7 +232,7 @@ struct TerminalTabsView: View {
 
             Toggle("Broadcast", isOn: $model.broadcast)
                 .toggleStyle(.checkbox)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .help("Type once, send to every tab")
 
             Button {
@@ -242,7 +243,8 @@ struct TerminalTabsView: View {
             .buttonStyle(.edith(.toolbar))
             .help("Open terminals in their own window")
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(9))
         .background(DashSkin.panel)
     }
@@ -257,11 +259,11 @@ struct TerminalTabsView: View {
             Button("Send", action: sendBroadcast)
             if let broadcastError {
                 Text(broadcastError)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.danger)
             }
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(7))
         .background(DashSkin.warn.opacity(0.1))
     }

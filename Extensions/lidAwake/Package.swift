@@ -18,6 +18,10 @@ let package = Package(
             path: ".", exclude: ["Tests", "Privileged/LidAwakePrivilegedRuntime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "LidAwakeExtensionTests", dependencies: ["LidAwakeExtension"], path: "Tests",
+            name: "LidAwakeExtensionTests",
+            dependencies: [
+                "LidAwakeExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ], path: "Tests",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

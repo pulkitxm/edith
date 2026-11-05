@@ -8,6 +8,6 @@ struct LidAwakeSettings: View {
         Form {
             LidAwakeRows(operations: model.operations, chooseSession: model.setSession)
         }
-        .edithForm()
+        .settingsForm()
     }
 }

@@ -200,7 +200,7 @@ struct HerdrNewAgentPopup: View {
             }
         } label: {
             Image(systemName: model.layoutChoice.symbolName)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
         }
         .menuStyle(.borderlessButton)
         .fixedSize()

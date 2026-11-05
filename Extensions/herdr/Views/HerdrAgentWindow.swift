@@ -167,7 +167,7 @@ struct HerdrTitlebarViewPicker: View {
                 }
             } label: {
                 Image(systemName: "sidebar.right")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark).opacity(0.72))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .padding(UIScale.pt(2))
@@ -205,7 +205,7 @@ private struct HerdrTitlebarViewButton: View {
     var body: some View {
         Button(action: select) {
             Label(mode.shortTitle, systemImage: mode.icon)
-                .font(.system(size: UIScale.pt(10), weight: selected ? .semibold : .medium))
+                .font(.edithText(.caption).weight(selected ? .semibold : .medium))
                 .foregroundStyle(foreground)
                 .padding(.horizontal, UIScale.pt(7))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))

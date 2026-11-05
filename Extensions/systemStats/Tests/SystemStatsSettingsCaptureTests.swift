@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -62,19 +63,16 @@ private struct Unavailable: LocalizedError {
 }
 
 @MainActor @Suite(.serialized) struct SystemStatsSettingsCaptureTests {
-    @Test func settingsAndPageRenderEveryStateAtEverySize() async throws {
-        try await SettingsRenderCapture.withAccessibility {
+    @Test func settingsRenderEveryStateAtEverySize() async throws {
+        try await RenderCapture.withAccessibility {
             let automatic = try await ControlFixture.loaded(
-                [AppStorageKeys.MenuBar.statsColorMode: "auto"],
-                state: ControlPresentationState(cpu: 23, memory: 61))
-            let custom = try await ControlFixture.loaded(
-                [
-                    AppStorageKeys.MenuBar.statsColorMode: "custom",
-                    AppStorageKeys.MenuBar.statsColorHex: "4F8EF7",
-                ], state: ControlPresentationState(cpu: 87, memory: 42))
+                [AppStorageKeys.MenuBar.statsColorMode: "auto"])
+            let custom = try await ControlFixture.loaded([
+                AppStorageKeys.MenuBar.statsColorMode: "custom",
+                AppStorageKeys.MenuBar.statsColorHex: "4F8EF7",
+            ])
             let stale = try await ControlFixture.loaded(
-                [AppStorageKeys.MenuBar.statsColorMode: "auto"],
-                state: ControlPresentationState(cpu: 23, memory: 61), failingAfterLoad: true)
+                [AppStorageKeys.MenuBar.statsColorMode: "auto"], failingAfterLoad: true)
             let loading = ControlFixture.loading()
             let failed = await ControlFixture.failed()
             let inactive = ControlFixture.inactive()
@@ -82,47 +80,42 @@ private struct Unavailable: LocalizedError {
             #expect(automatic.ready && custom.ready)
             #expect(stale.error != nil && failed.error != nil)
             let off = "Menu Bar Stats is turned off. Turn it on in Extensions to change these."
-            let cases: [(String, ControlPresentation, String, String?, String?)] = [
-                ("automatic", automatic, "auto", "Color", "Memory"),
-                ("custom", custom, "custom", "Custom color", "CPU"),
-                ("stale", stale, "auto", "Retry", "Retry"),
-                ("loading", loading, "auto", nil, nil),
-                ("error", failed, "auto", "Retry", "Retry"),
-                ("inactive", inactive, "auto", off, off),
+            let cases: [(String, ControlPresentation, String, String?)] = [
+                ("automatic", automatic, "auto", "Color"),
+                ("custom", custom, "custom", "Custom color"),
+                ("stale", stale, "auto", "Retry"),
+                ("loading", loading, "auto", nil),
+                ("error", failed, "auto", "Retry"),
+                ("inactive", inactive, "auto", off),
             ]
             let defaults = SharedDefaults.store
-            for (name, model, mode, settingsLabel, pageLabel) in cases {
+            for (name, model, mode, label) in cases {
                 defaults.set(mode, forKey: AppStorageKeys.MenuBar.statsColorMode)
                 defaults.set("4F8EF7", forKey: AppStorageKeys.MenuBar.statsColorHex)
-                for variant in SettingsRenderCapture.variants {
-                    let settings = try await SettingsRenderCapture.render(
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
                         "systemStats-settings-\(name)", variant: variant
                     ) {
                         ControlSettingsHost(presentation: model) {
                             Form {
-                                ControlSettingsIssueSection()
+                                SettingsIssueSection()
                                 SystemStatsRows(presentation: model, defaults: defaults)
                             }
-                            .edithForm()
+                            .settingsForm()
                         }
                     }
-                    if let settingsLabel {
+                    if let label {
                         #expect(
-                            SettingsRenderCapture.find(settings, label: settingsLabel) != nil,
-                            "settings \(name) \(variant.name) is missing \(settingsLabel)")
-                    }
-                    let page = try await SettingsRenderCapture.render(
-                        "systemStats-page-\(name)", variant: variant
-                    ) {
-                        SystemStatsPage(presentation: model, defaults: defaults)
-                    }
-                    if let pageLabel {
-                        #expect(
-                            SettingsRenderCapture.find(page, label: pageLabel) != nil,
-                            "page \(name) \(variant.name) is missing \(pageLabel)")
+                            RenderCapture.find(rendered.host, label: label) != nil,
+                            "\(name) \(variant.name) is missing \(label)")
                     }
                 }
             }
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

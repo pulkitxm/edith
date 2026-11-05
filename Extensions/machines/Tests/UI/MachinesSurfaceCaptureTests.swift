@@ -7,6 +7,7 @@ import Testing
 
 @MainActor enum MachinesCaptureRig {
     static let regular = CGSize(width: 1_100, height: 760)
+    static let wide = CGSize(width: 1_600, height: 900)
     static let compact = CGSize(width: 640, height: 700)
 
     static var directory: URL? {
@@ -35,6 +36,7 @@ import Testing
                     view()
                         .environment(\.compactLayout, size.width < UIScale.pt(720))
                         .environment(\.colorScheme, dark ? .dark : .light)
+                        .environment(\.controlActiveState, .key)
                         .environment(\.machineConnectionsEnabled, true)
                         .environment(\.terminalLaunchEnabled, false)
                         .environment(\.automaticViewActionsEnabled, automatic)
@@ -62,7 +64,8 @@ import Testing
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             let suffix = "\(Int(size.width))x\(Int(size.height))-\(dark ? "dark" : "light")"
             let zoomSuffix = zoom == 1 ? "" : "-zoom\(zoom)"
-            try data.write(to: directory.appendingPathComponent("\(name)-\(suffix)\(zoomSuffix).png"))
+            try data.write(
+                to: directory.appendingPathComponent("\(name)-\(suffix)\(zoomSuffix).png"))
         }
         return bitmap
     }
@@ -87,6 +90,7 @@ import Testing
         for size in [regular, compact] {
             for dark in [false, true] { all.append((size, dark, 1)) }
         }
+        all.append((wide, false, 1))
         if zoomed { all.append((regular, false, 1.6)) }
         return all
     }
@@ -277,6 +281,143 @@ import Testing
                 }
                 #expect(MachinesCaptureRig.distinctColors(bitmap) > 8)
             }
+        }
+    }
+}
+
+extension MachinesSurfaceCaptureTests {
+    private static let busySample = MachineSample(
+        ts: 2, dt: 2, cpu: MachineCPU(total: 64),
+        mem: MachineMemory(totalKB: 33_554_432, availKB: 9_000_000, usedKB: 24_554_432),
+        load: [1.42, 1.1, 0.87], uptime: 432_000,
+        procs: [
+            MachineProcess(
+                pid: 4_121, user: "deploy", cpu: 61.4, mem: 12.1, rssKB: 4_100_000,
+                name: "postgres", cmd: "/usr/lib/postgresql/16/bin/postgres -D /var/lib/data"),
+            MachineProcess(
+                pid: 2_210, user: "root", cpu: 18.2, mem: 3.4, rssKB: 1_140_000,
+                name: "dockerd", cmd: "/usr/bin/dockerd -H fd://"),
+            MachineProcess(
+                pid: 9_001, user: "deploy", cpu: 4.6, mem: 1.9, rssKB: 640_000, name: "node",
+                cmd: "node dist/server.js --port 8080"),
+        ])
+
+    private static let containers = [
+        DockerContainer(
+            id: "c1", names: ["web"], image: "nginx:1.27", command: "nginx -g daemon off;",
+            state: .running, status: "Up 3 days", composeProject: "shop", composeService: "web",
+            cpuPercent: 2.4, memUsedBytes: 48_000_000, memLimitBytes: 512_000_000),
+        DockerContainer(
+            id: "c2", names: ["db"], image: "postgres:16", command: "postgres",
+            state: .running, status: "Up 3 days", composeProject: "shop", composeService: "db",
+            cpuPercent: 12.1, memUsedBytes: 810_000_000, memLimitBytes: 2_000_000_000),
+        DockerContainer(
+            id: "c3", names: ["worker"], image: "shop/worker:latest", command: "bin/worker",
+            state: .exited, status: "Exited (1) 2 hours ago"),
+    ]
+
+    private func captureClient() throws -> (MachineUIClient, MachinesModel) {
+        let transport = try #require(
+            ExtensionEngineClient(bridge: SilentMachineBridge(), presentationID: UUID()))
+        let client = MachineUIClient(client: transport)
+        let model = MachinesModel(uiClient: client)
+        MachinesModel.shared = model
+        WorkspaceModel.shared = WorkspaceModel(machines: model)
+        return (client, model)
+    }
+
+    private func connected(
+        _ machine: Machine, client: MachineUIClient
+    ) -> MachineUISessionState {
+        var state = MachineSession(machine: machine, uiClient: client).uiState()
+        state.state = .connected(latencyMillis: 12)
+        state.sample = Self.busySample
+        state.hello = MachineHello(
+            os: "Ubuntu 24.04 LTS", osID: "ubuntu", kernel: "6.8.0", arch: "x86_64",
+            host: "build-server", cpuModel: "AMD EPYC 7443P", cores: 24,
+            memTotalKB: 33_554_432, virtual: false)
+        state.docker = DockerAvailability(
+            status: .available(serverVersion: "27.3", hasCompose: true))
+        state.containersLoaded = true
+        state.containers = Self.containers
+        state.images = [
+            DockerImage(
+                id: "i1", repository: "nginx", tag: "1.27", createdSince: "2 weeks ago",
+                sizeBytes: 188_000_000, dangling: false)
+        ]
+        state.volumes = [
+            DockerVolume(
+                name: "shop_data", driver: "local", mountpoint: "/var/lib/docker/volumes/shop",
+                sizeBytes: 4_200_000_000, containerCount: 1)
+        ]
+        state.histories = Array(
+            repeating: (0..<40).map { 30 + 20 * sin(Double($0) / 4) }, count: 8)
+        return state
+    }
+
+    @Test(arguments: MachineTab.allCases)
+    func everyMachineTabFitsRegularCompactAndZoomedWindows(_ tab: MachineTab) async throws {
+        guard MachinesCaptureRig.isolated else {
+            Issue.record("Capture requires an isolated synthetic fixture."); return
+        }
+        let previousMachines = MachinesModel.shared
+        let previousWorkspace = WorkspaceModel.shared
+        defer {
+            MachinesModel.shared = previousMachines
+            WorkspaceModel.shared = previousWorkspace
+        }
+        let (client, model) = try captureClient()
+        defer { client.shutdown() }
+        model.applyUIState(
+            MachineUIState(
+                machines: [Self.buildServer, Self.garagePi], forwards: [], snippets: [],
+                sessions: [connected(Self.buildServer, client: client)],
+                workspaces: WorkspaceStore()))
+        model.selection = Self.buildServer.id
+        SharedDefaults.store.set(MachinesMode.machine.rawValue, forKey: MachineSettingsKeys.mode)
+        SharedDefaults.store.set(tab.rawValue, forKey: MachineSettingsKeys.tab)
+        SharedDefaults.store.set(
+            Self.buildServer.id.uuidString, forKey: MachineSettingsKeys.selection)
+        #expect(model.session(for: Self.buildServer.id).state.isConnected)
+        for (size, dark, zoom) in MachinesCaptureRig.variants() {
+            let bitmap = try await MachinesCaptureRig.capture(
+                "machine-tab-\(tab.rawValue)", size: size, dark: dark, zoom: zoom, automatic: true
+            ) { MachinesPage() }
+            #expect(MachinesCaptureRig.distinctColors(bitmap) > 8)
+        }
+    }
+
+    @Test func offlineFleetRowExplainsWhatToDoNext() async throws {
+        guard MachinesCaptureRig.isolated else {
+            Issue.record("Capture requires an isolated synthetic fixture."); return
+        }
+        let previousMachines = MachinesModel.shared
+        let previousWorkspace = WorkspaceModel.shared
+        defer {
+            MachinesModel.shared = previousMachines
+            WorkspaceModel.shared = previousWorkspace
+        }
+        let (client, model) = try captureClient()
+        defer { client.shutdown() }
+        var offline = MachineSession(machine: Self.mediaBox, uiClient: client).uiState()
+        offline.state = .failed(
+            message: "media.example.invalid did not answer on port 22 within 10 seconds.",
+            recoverable: true)
+        var idle = MachineSession(machine: Self.garagePi, uiClient: client).uiState()
+        idle.state = .disconnected
+        model.applyUIState(
+            MachineUIState(
+                machines: [Self.buildServer, Self.garagePi, Self.mediaBox], forwards: [],
+                snippets: [],
+                sessions: [connected(Self.buildServer, client: client), idle, offline],
+                workspaces: WorkspaceStore()))
+        SharedDefaults.store.set(MachinesMode.fleet.rawValue, forKey: MachineSettingsKeys.mode)
+        #expect(model.session(for: Self.mediaBox.id).state.isRetryable)
+        for (size, dark, zoom) in MachinesCaptureRig.variants() {
+            let bitmap = try await MachinesCaptureRig.capture(
+                "fleet-offline", size: size, dark: dark, zoom: zoom
+            ) { MachinesPage() }
+            #expect(MachinesCaptureRig.distinctColors(bitmap) > 12)
         }
     }
 }

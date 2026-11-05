@@ -42,26 +42,10 @@ struct AppMaintenanceView: View {
         get { model.preferences.installDestination }
         nonmutating set { model.updatePreferences { $0.installDestination = newValue } }
     }
-    private var updateAutoRefresh: Bool {
-        get { model.preferences.autoRefresh }
-        nonmutating set { model.updatePreferences { $0.autoRefresh = newValue } }
-    }
-    private var updateNotifications: Bool {
-        get { model.preferences.notifications }
-        nonmutating set { model.updatePreferences { $0.notifications = newValue } }
-    }
-    private var updateRefreshInterval: Double {
-        get { model.preferences.refreshInterval }
-        nonmutating set { model.updatePreferences { $0.refreshInterval = newValue } }
-    }
-    private var updateConcurrency: Int {
-        get { model.preferences.concurrency }
-        nonmutating set { model.updatePreferences { $0.concurrency = newValue } }
-    }
-    private var updateRetries: Int {
-        get { model.preferences.retries }
-        nonmutating set { model.updatePreferences { $0.retries = newValue } }
-    }
+    private var updateAutoRefresh: Bool { model.preferences.autoRefresh }
+    private var updateRefreshInterval: Double { model.preferences.refreshInterval }
+    private var updateConcurrency: Int { model.preferences.concurrency }
+    private var updateRetries: Int { model.preferences.retries }
 
     private var filteredApplications: [InstalledApplication] {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,6 +95,8 @@ struct AppMaintenanceView: View {
         } content: {
             content
         }
+        .font(.edithText(.body))
+        .controlSize(UIScale.controlSize)
         .onChange(of: section, initial: true) { _, section in model.scope = section.uiScope }
         .onChange(of: model.focusedUpdateID) { Task { await model.refreshRemote() } }
         .pageRefresh(interval: {
@@ -211,8 +197,17 @@ struct AppMaintenanceView: View {
                     }
                 }
             } label: {
-                Label("Install to: \(installDestination.title)", systemImage: "folder")
+                HStack(spacing: UIScale.pt(6)) {
+                    Label("Install to: \(installDestination.title)", systemImage: "folder")
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
             }
+            .menuStyle(.button)
+            .buttonStyle(.edith(.secondary))
+            .menuIndicator(.hidden)
             .help("Where apps from disk images are installed.")
             Button {
                 showingUpdateSettings.toggle()
@@ -220,7 +215,9 @@ struct AppMaintenanceView: View {
                 Label("Update settings", systemImage: "gearshape")
             }
             .buttonStyle(.edith(.secondary))
-            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+            .popover(isPresented: $showingUpdateSettings) {
+                AppMaintenanceUpdateSettings(model: model)
+            }
             if let checked = model.lastUpdateRefresh, !model.checkingUpdates {
                 Text("Last checked \(checked.formatted(.relative(presentation: .named)))")
                     .font(.edithText(.caption))
@@ -237,17 +234,20 @@ struct AppMaintenanceView: View {
         if model.phase == .loading {
             ScrollView {
                 PageSkeleton(layout: .list)
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     .pageContent(compact)
             }
         } else if section == .updates, updatesState != .list {
-            updatesStateView.frame(maxWidth: .infinity, maxHeight: .infinity)
+            updatesStateView.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if !section.reviewsSelection {
             sectionInventory.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if compact {
-            VStack(spacing: 0) {
-                sectionInventory.frame(height: UIScale.pt(240))
-                Divider()
-                detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    sectionInventory.frame(height: min(UIScale.pt(240), proxy.size.height * 0.36))
+                    Divider()
+                    detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         } else {
             HSplitView {
@@ -282,6 +282,7 @@ struct AppMaintenanceView: View {
                 PageSkeleton(layout: .list)
                 Button("Cancel check") { model.cancel() }.buttonStyle(.edith(.secondary))
             }
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         case .failed:
             PageEmptyState(
@@ -357,7 +358,8 @@ struct AppMaintenanceView: View {
     private var removalInventory: some View {
         VStack(spacing: 0) {
             SearchField(placeholder: "Search your apps", text: $query)
-                .padding(UIScale.pt(12))
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
                 ContentStatusView(
@@ -394,7 +396,7 @@ struct AppMaintenanceView: View {
                 if updates > 0 { Text("\(updates) with updates available") }
             }
             .settingsCaption()
-            .padding(.horizontal, UIScale.pt(12))
+            .pageGutter(compact)
             .frame(height: UIScale.pt(34))
         }
     }
@@ -402,7 +404,8 @@ struct AppMaintenanceView: View {
     private var updateInventory: some View {
         VStack(spacing: 0) {
             SearchField(placeholder: "Search available updates", text: $query)
-                .padding(UIScale.pt(12))
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {
                 ContentStatusView(
@@ -430,7 +433,7 @@ struct AppMaintenanceView: View {
                 Text("\(model.selectedUpdateIDs.count) ticked to update")
             }
             .settingsCaption()
-            .padding(.horizontal, UIScale.pt(12))
+            .pageGutter(compact)
             .frame(height: UIScale.pt(34))
         }
     }
@@ -568,7 +571,8 @@ struct AppMaintenanceView: View {
                     AppMaintenanceUpdateSkeleton()
                 }
                 Button("Cancel") { model.cancel() }
-                    .padding(UIScale.pt(22))
+                    .pageGutter(compact)
+                    .padding(.vertical, UIScale.pt(22))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let item = model.focusedUpdate {
@@ -664,7 +668,8 @@ struct AppMaintenanceView: View {
                             : "You will be asked to confirm before anything runs.")
                 }
             }
-            .padding(UIScale.pt(22))
+            .pageGutter(compact)
+            .padding(.vertical, UIScale.pt(22))
         } else {
             ContentStatusView(
                 "Select an update",
@@ -672,43 +677,6 @@ struct AppMaintenanceView: View {
                     "Click an update on the left to read its release notes and see exactly what will run.",
                 symbol: "arrow.down.app")
         }
-    }
-
-    private var updateSettings: some View {
-        Form {
-            Toggle(
-                "Check automatically",
-                isOn: Binding(get: { updateAutoRefresh }, set: { updateAutoRefresh = $0 }))
-            Picker(
-                "Check",
-                selection: Binding(
-                    get: { updateRefreshInterval }, set: { updateRefreshInterval = $0 })
-            ) {
-                Text("Hourly").tag(3_600.0)
-                Text("Daily").tag(86_400.0)
-                Text("Weekly").tag(604_800.0)
-            }
-            .disabled(!updateAutoRefresh)
-            Toggle(
-                "Notifications",
-                isOn: Binding(get: { updateNotifications }, set: { updateNotifications = $0 }))
-            Stepper(
-                "Run \(updateConcurrency) at once",
-                value: Binding(get: { updateConcurrency }, set: { updateConcurrency = $0 }),
-                in: 1...4)
-            Stepper(
-                "Retry failed updates \(updateRetries) \(updateRetries == 1 ? "time" : "times")",
-                value: Binding(get: { updateRetries }, set: { updateRetries = $0 }), in: 0...3)
-            Button("Reset Ignored, Snoozed, and Excluded Apps") {
-                model.resetUpdatePolicies()
-            }
-            Text(
-                "Automatic refresh only checks for updates and can notify you. Updates always wait for you to run them."
-            )
-            .settingsCaption()
-        }
-        .edithForm()
-        .frame(width: UIScale.pt(380), height: UIScale.pt(320))
     }
 
     private func copy(_ value: String) {
@@ -726,7 +694,7 @@ struct AppMaintenanceView: View {
                     .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(application.name)
-                        .font(.system(size: UIScale.pt(17), weight: .semibold))
+                        .font(.edithText(.title3)).fontWeight(.semibold)
                     Text("\(application.bundleID) · \(application.version)")
                         .settingsCaption()
                     if let update = application.update {
@@ -744,14 +712,16 @@ struct AppMaintenanceView: View {
                 } label: {
                     Label("Reveal", systemImage: "folder")
                 }
+                .buttonStyle(.edith(.secondary))
             }
-            .padding(UIScale.pt(18))
+            .pageGutter(compact)
+            .padding(.vertical, UIScale.pt(16))
             Divider()
             List {
                 ForEach(AppMaintenanceCategory.allCases, id: \.self) { category in
                     let items = plan.items.filter { $0.category == category }
                     if !items.isEmpty {
-                        Section(category.rawValue) {
+                        Section {
                             ForEach(items) { item in
                                 AppMaintenanceItemRow(
                                     model: model, item: item,
@@ -759,11 +729,16 @@ struct AppMaintenanceView: View {
                                         get: { model.selectedItemIDs.contains(item.id) },
                                         set: { model.setSelected($0, item: item) }))
                             }
+                        } header: {
+                            Text(category.rawValue)
+                                .font(.edithText(.caption)).fontWeight(.semibold)
                         }
                     }
                 }
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, PageMetrics.gutter(compact) - UIScale.pt(16))
             Divider()
             VStack(spacing: UIScale.pt(8)) {
                 statusMessage
@@ -791,7 +766,8 @@ struct AppMaintenanceView: View {
                             : "You will be asked to confirm. Items can be restored from the Trash.")
                 }
             }
-            .padding(UIScale.pt(16))
+            .pageGutter(compact)
+            .padding(.vertical, UIScale.pt(16))
         }
     }
 
@@ -814,6 +790,51 @@ enum AppMaintenanceRowMetrics {
     static var update: CGFloat { CGFloat(UIScale.pt(46)) }
 }
 
+struct AppMaintenanceUpdateSettings: View {
+    let model: AppMaintenanceModel
+
+    private func preference<Value>(
+        _ keyPath: WritableKeyPath<MaintenanceUISettings, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { model.preferences[keyPath: keyPath] },
+            set: { value in model.updatePreferences { $0[keyPath: keyPath] = value } })
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Check automatically", isOn: preference(\.autoRefresh))
+                Picker("Check", selection: preference(\.refreshInterval)) {
+                    Text("Hourly").tag(3_600.0)
+                    Text("Daily").tag(86_400.0)
+                    Text("Weekly").tag(604_800.0)
+                }
+                .disabled(!model.preferences.autoRefresh)
+                Toggle("Notifications", isOn: preference(\.notifications))
+                SettingsStepperRow(
+                    "Updates to run at once", value: preference(\.concurrency), in: 1...4)
+                SettingsStepperRow(
+                    "Retry failed updates", value: preference(\.retries), in: 0...3)
+                SettingsRow(
+                    "Ignored and snoozed apps",
+                    subtitle: "Brings back every app you ignored, snoozed or excluded."
+                ) {
+                    Button("Reset") { model.resetUpdatePolicies() }
+                        .buttonStyle(.edith(.secondary))
+                }
+            } footer: {
+                Text(
+                    "Automatic refresh only checks for updates and can notify you. Updates always wait for you to run them."
+                )
+                .settingsCaption()
+            }
+        }
+        .settingsForm()
+        .frame(width: UIScale.pt(420), height: UIScale.pt(360))
+    }
+}
+
 struct AppMaintenanceApplicationRowItem: Identifiable, Equatable {
     let application: InstalledApplication
     let selected: Bool
@@ -833,6 +854,7 @@ private struct AppMaintenanceApplicationRow: View {
     let tint: Color
     let select: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         Button(action: select) {
@@ -859,7 +881,7 @@ private struct AppMaintenanceApplicationRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(EdithButtonStyle(.selection, selected: entry.selected, tint: tint))
-        .padding(.horizontal, UIScale.pt(8))
+        .padding(.horizontal, PageMetrics.gutter(compact) - UIScale.pt(9))
         .frame(maxHeight: .infinity)
     }
 }
@@ -871,6 +893,7 @@ private struct AppMaintenanceUpdateRow: View {
     let setSelected: (Bool) -> Void
     let focus: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         HStack(spacing: UIScale.pt(9)) {
@@ -878,8 +901,8 @@ private struct AppMaintenanceUpdateRow: View {
                 "",
                 isOn: Binding(get: { entry.selected }, set: setSelected)
             )
-            .labelsHidden()
-            .toggleStyle(.checkbox)
+            .toggleStyle(.edithCheckboxMark)
+            .accessibilityLabel("Update \(entry.item.name)")
             Button(action: focus) {
                 HStack(spacing: UIScale.pt(9)) {
                     if let icon {
@@ -910,7 +933,7 @@ private struct AppMaintenanceUpdateRow: View {
             }
             .buttonStyle(EdithButtonStyle(.borderless, selected: entry.focused, tint: tint))
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .pageGutter(compact)
         .frame(maxHeight: .infinity)
         .background(entry.focused ? tint.opacity(0.2) : Color.clear)
     }
@@ -924,13 +947,14 @@ private struct AppMaintenanceItemRow: View {
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Toggle("", isOn: $selected)
-                .labelsHidden()
-                .toggleStyle(.checkbox)
+                .toggleStyle(.edithCheckboxMark)
+                .accessibilityLabel("Remove \(item.url.lastPathComponent)")
             Image(nsImage: model.icon(for: item.url.path))
                 .resizable()
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(item.url.lastPathComponent)
+                    .font(.edithText(.body))
                     .lineLimit(1)
                 Text(
                     (item.url.deletingLastPathComponent().path as NSString)
@@ -973,7 +997,7 @@ private struct AppMaintenanceInstallReview: View {
                     .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Install \(plan.sourceApplication.name)")
-                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                        .font(.edithText(.title3)).fontWeight(.semibold)
                     Text(
                         "\(plan.sourceApplication.bundleID) · \(plan.sourceApplication.version)"
                     )
@@ -1040,6 +1064,8 @@ private struct AppMaintenanceInstallReview: View {
 }
 
 private struct AppMaintenanceUpdateSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             HStack(spacing: UIScale.pt(14)) {
@@ -1063,7 +1089,8 @@ private struct AppMaintenanceUpdateSkeleton: View {
                 SkeletonBlock(width: 126, height: 32, corner: 7)
             }
         }
-        .padding(UIScale.pt(22))
+        .pageGutter(compact)
+        .padding(.vertical, UIScale.pt(22))
     }
 }
 
@@ -1104,6 +1131,8 @@ private struct AppMaintenanceDetailSkeleton: View {
 }
 
 private struct AppMaintenanceRemovalSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
     var body: some View {
         SkeletonGroup {
             VStack(spacing: 0) {
@@ -1117,14 +1146,15 @@ private struct AppMaintenanceRemovalSkeleton: View {
                     Spacer()
                     SkeletonBlock(width: 72, height: 28, corner: 7)
                 }
-                .padding(UIScale.pt(18))
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(16))
                 Divider()
                 VStack(spacing: 0) {
                     HStack {
                         SkeletonBlock(width: 76, height: 9)
                         Spacer()
                     }
-                    .padding(.horizontal, UIScale.pt(16))
+                    .pageGutter(compact)
                     .padding(.top, UIScale.pt(14))
                     .padding(.bottom, UIScale.pt(7))
                     ForEach(0..<6, id: \.self) { index in
@@ -1141,7 +1171,7 @@ private struct AppMaintenanceRemovalSkeleton: View {
                             SkeletonBlock(width: 48, height: 8)
                             SkeletonBlock(width: 24, height: 24, corner: 6)
                         }
-                        .padding(.horizontal, UIScale.pt(16))
+                        .pageGutter(compact)
                         .padding(.vertical, UIScale.pt(9))
                     }
                     Spacer(minLength: 0)
@@ -1155,7 +1185,8 @@ private struct AppMaintenanceRemovalSkeleton: View {
                     Spacer()
                     SkeletonBlock(width: 104, height: 32, corner: 7)
                 }
-                .padding(UIScale.pt(16))
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(16))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

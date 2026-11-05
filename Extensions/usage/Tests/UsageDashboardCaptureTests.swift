@@ -29,6 +29,7 @@ struct UsageDashboardCaptureTests {
     static let variants = [
         Variant(name: "regular-light", size: CGSize(width: 1100, height: 760), scheme: .light),
         Variant(name: "regular-dark", size: CGSize(width: 1100, height: 760), scheme: .dark),
+        Variant(name: "wide-light", size: CGSize(width: 1600, height: 900), scheme: .light),
         Variant(name: "compact-light", size: CGSize(width: 640, height: 700), scheme: .light),
         Variant(name: "compact-dark", size: CGSize(width: 640, height: 700), scheme: .dark),
     ]
@@ -101,6 +102,93 @@ struct UsageDashboardCaptureTests {
                 name: "full", size: CGSize(width: 1100, height: 2900), scheme: .light)
             let lines = try await Self.render(scene, variant: full, name: "populated-full")
             #expect(lines.contains { $0.text.localizedCaseInsensitiveContains("Agent usage") })
+            let wideFull = Variant(
+                name: "full-wide", size: CGSize(width: 1600, height: 2900), scheme: .light)
+            _ = try await Self.render(scene, variant: wideFull, name: "populated-full-wide")
+        }
+    }
+
+    @Test func filterPopoversAndDrilldownRenderInEveryScheme() async throws {
+        let zoom = UIScale.current
+        defer { UIScale.apply(zoom) }
+        let scene = try await Self.scene(.populated)
+        defer { scene.model.shutdown() }
+        let model = scene.model
+        #expect(!model.allProjectPaths.isEmpty)
+        model.projListOpen = true
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let start = try #require(calendar.date(byAdding: .day, value: -90, to: today))
+        let from = try #require(calendar.date(byAdding: .day, value: -20, to: today))
+        var selection: Set<String> = ["claude-code"]
+        for (name, dark, scale) in [
+            ("light", false, 1.0), ("dark", true, 1.0), ("zoom", false, 1.6),
+        ] {
+            UIScale.apply(scale)
+            let surfaces: [(String, CGSize?, AnyView)] = [
+                (
+                    "filter-select", nil,
+                    AnyView(
+                        FilterMultiSelect(
+                            options: [
+                                FilterSelectOption(id: "claude-code", label: "Claude Code"),
+                                FilterSelectOption(id: "codex", label: "Codex"),
+                                FilterSelectOption(id: "gemini", label: "Gemini CLI"),
+                            ],
+                            selection: Binding(get: { selection }, set: { selection = $0 }),
+                            dark: dark, dismiss: {}))
+                ),
+                (
+                    "folder-scope", nil,
+                    AnyView(FolderScopePicker(model: model, dark: dark, dismiss: {}))
+                ),
+                (
+                    "machines-picker", nil,
+                    AnyView(UsageMachinesPicker(model: model, dark: dark, dismiss: {}))
+                ),
+                (
+                    "date-range", nil,
+                    AnyView(
+                        DashboardDateRangePicker(
+                            from: from, to: today, bounds: start...today, onApply: { _, _ in },
+                            onCancel: {}))
+                ),
+                (
+                    "project-drilldown", CGSize(width: 980, height: 620),
+                    AnyView(
+                        ScrollView {
+                            ProjectDrilldownView(model: model, dark: dark).padding(16)
+                        })
+                ),
+            ]
+            for (surface, size, view) in surfaces {
+                let host = NSHostingView(
+                    rootView:
+                        view
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                        .environment(\.controlActiveState, .key)
+                        .background(DashSkin.paper(dark))
+                        .transaction { $0.animation = nil })
+                let target = size.map { CGSize(width: $0.width * scale, height: $0.height * scale) }
+                let (window, _) = UsageScrollHarness.host(
+                    host.rootView, size: target ?? host.fittingSize)
+                defer { window.orderOut(nil) }
+                let content = try #require(window.contentView)
+                content.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                await UsageScrollHarness.settle(content, for: .milliseconds(300))
+                let bitmap = try #require(
+                    content.bitmapImageRepForCachingDisplay(in: content.bounds))
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                #expect(png.count > 1_000)
+                if let root = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                    let directory = URL(fileURLWithPath: root)
+                    try FileManager.default.createDirectory(
+                        at: directory, withIntermediateDirectories: true)
+                    try png.write(
+                        to: directory.appendingPathComponent("usage-\(surface)-\(name).png"))
+                }
+            }
         }
     }
 
@@ -255,7 +343,8 @@ struct UsageDashboardCaptureTests {
         return try JSONSerialization.data(withJSONObject: [
             "sources": sources, "defaultSources": sources,
             "sourceMeta": [
-                "claude-code": ["label": "Claude Code"], "codex": ["label": "Codex"],
+                "claude-code": ["label": "Claude Code"],
+                "codex": ["label": "Codex", "machine": "build-box", "tool": "Codex"],
             ],
             "generatedAt": ISO8601DateFormatter().string(from: Date()),
             "sessions": [], "daily": days,

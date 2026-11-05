@@ -389,7 +389,7 @@ struct CompanionLibraryScreen: View {
             }
             if let error = model.error {
                 Text(error)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
             }
         }
@@ -616,7 +616,7 @@ struct CompanionLibraryScreen: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 Text(hit.snippet)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(2)
             }
@@ -650,7 +650,7 @@ struct CompanionLibraryScreen: View {
                 HStack {
                     if let detail = model.detail {
                         Text(detailMeta(detail))
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     Spacer()
@@ -658,7 +658,7 @@ struct CompanionLibraryScreen: View {
                         Task { await model.openExternally() }
                     } label: {
                         Image(systemName: "arrow.up.forward.app")
-                            .font(.system(size: UIScale.pt(12.5)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -667,7 +667,7 @@ struct CompanionLibraryScreen: View {
                         model.closeDetail()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: UIScale.pt(13)))
+                            .font(.edithText(.body))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -730,7 +730,7 @@ struct CompanionLibraryScreen: View {
         VoicePlayerBar(playback: model.playback, dark: dark)
         ScrollView {
             Text(detail.body ?? "")
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -752,7 +752,7 @@ struct CompanionLibraryScreen: View {
         } else {
             ScrollView {
                 Text(detail.body ?? "")
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -789,7 +789,7 @@ struct CompanionLibraryScreen: View {
     private func signalBar(label: String, detail: String, fraction: Double) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             Text(label)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(44), alignment: .leading)
             GeometryReader { geometry in
@@ -802,7 +802,7 @@ struct CompanionLibraryScreen: View {
             }
             .frame(height: UIScale.pt(6))
             Text(detail)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
@@ -819,7 +819,7 @@ struct VoicePlayerBar: View {
                 playback.toggle()
             } label: {
                 Image(systemName: playback.playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                    .font(.edithText(.title))
                     .foregroundStyle(
                         playback.loaded ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
             }
@@ -836,7 +836,7 @@ struct VoicePlayerBar: View {
             }
             .frame(height: UIScale.pt(5))
             Text("\(timeLabel(playback.currentTime)) / \(timeLabel(playback.duration))")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }

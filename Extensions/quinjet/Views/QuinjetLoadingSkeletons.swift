@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-struct QuinjetProjectGridSkeleton: View {
+struct QuinjetProjectListSkeleton: View {
     let dark: Bool
     var rows = 6
     @Environment(\.compactLayout) private var compact
@@ -10,13 +10,14 @@ struct QuinjetProjectGridSkeleton: View {
     var body: some View {
         SkeletonGroup {
             ScrollView {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(
-                        compact, minimum: 330, spacing: PageMetrics.cardSpacing),
-                    spacing: UIScale.pt(PageMetrics.cardSpacing)
-                ) {
+                LazyVStack(spacing: 0) {
                     ForEach(0..<rows, id: \.self) { index in
-                        HStack(spacing: UIScale.pt(12)) {
+                        if index > 0 {
+                            Divider()
+                                .padding(
+                                    .leading, UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
+                        }
+                        HStack(spacing: UIScale.pt(QuinjetProjectRowMetrics.spacing)) {
                             HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                                 SkeletonBlock(width: 18, height: 18, corner: 4)
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -43,10 +44,11 @@ struct QuinjetProjectGridSkeleton: View {
                                     .strokeBorder(DashSkin.lineStrong(dark))
                             }
                         }
-                        .padding(UIScale.pt(PageMetrics.cardPadding))
-                        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+                        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+                        .padding(.vertical, UIScale.pt(10))
                     }
                 }
+                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
                 .pageContent(compact)
             }
         }

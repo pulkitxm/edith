@@ -1,4 +1,6 @@
 import AppKit
+import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -64,8 +66,8 @@ enum BlitzTreeRenderFixture {
 @Suite(.serialized)
 struct BlitzTreePageRenderTests {
     static func capture(_ name: String, model: BlitzTreeModel) async throws {
-        for variant in BlitzTreeRenderCapture.variants {
-            _ = try await BlitzTreeRenderCapture.render(name, variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            _ = try await RenderCapture.render(name, variant: variant) {
                 BlitzTreePage(model: model)
             }
         }
@@ -113,13 +115,41 @@ struct BlitzTreePageRenderTests {
         #expect(model.report?.report.inventory.largestChildren.count == 9)
         try await Self.capture("diskmap-results", model: model)
         model.list = .candidates
-        _ = try await BlitzTreeRenderCapture.render(
+        _ = try await RenderCapture.render(
             "diskmap-results-candidates",
             variant: .init(name: "tall", width: 1100, height: 1500, zoom: 1, scheme: .light)
         ) {
             BlitzTreePage(model: model)
         }
         await model.shutdown()
+    }
+
+    @Test func treemapFollowsTheAppTheme() async throws {
+        let defaults = SharedDefaults.store
+        let stored = defaults.string(forKey: AppStorageKeys.General.theme)
+        defer {
+            if let stored {
+                defaults.set(stored, forKey: AppStorageKeys.General.theme)
+            } else {
+                defaults.removeObject(forKey: AppStorageKeys.General.theme)
+            }
+        }
+        let report = BlitzTreeRenderFixture.report()
+        let variant = RenderCapture.Variant(
+            name: "regular-light", width: 720, height: 320, zoom: 1, scheme: .light)
+        var samples: [String: [String]] = [:]
+        for theme in AppTheme.allCases where theme != .accent {
+            defaults.set(theme.rawValue, forKey: AppStorageKeys.General.theme)
+            let rendered = try await RenderCapture.render(
+                "diskmap-theme-\(theme.rawValue)", variant: variant
+            ) {
+                BlitzTreeMap(report: report, activate: { _ in })
+            }
+            samples[theme.rawValue] = stride(from: 40, to: 700, by: 60).map { x in
+                rendered.bitmap.colorAt(x: x, y: 200)?.description ?? ""
+            }
+        }
+        #expect(Set(samples.values).count == samples.count)
     }
 
     @Test func failureExplainsRecovery() async throws {
@@ -138,8 +168,8 @@ struct BlitzTreePageRenderTests {
         let (model, gate) = Self.heldModel()
         model.scan(BlitzTreeRenderFixture.root)
         while !(await gate.waiting) { await Task.yield() }
-        let variant = BlitzTreeRenderCapture.variants[0]
-        _ = try await BlitzTreeRenderCapture.render("diskmap-leave", variant: variant) {
+        let variant = RenderCapture.variants[0]
+        _ = try await RenderCapture.render("diskmap-leave", variant: variant) {
             BlitzTreePage(model: model)
         }
         try await Task.sleep(for: .milliseconds(50))
@@ -149,4 +179,9 @@ struct BlitzTreePageRenderTests {
         #expect(model.report?.root == BlitzTreeRenderFixture.root)
         await model.shutdown()
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

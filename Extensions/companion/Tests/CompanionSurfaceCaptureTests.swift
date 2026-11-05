@@ -45,6 +45,7 @@ private struct SetupReply: Encodable {
     var backend = BackendReply()
     var setup = SetupReply()
     var holdsRequests = false
+    var seedsMind = false
     private var uploads: [UUID: Data] = [:]
 
     var bridge: CompanionUIBridge {
@@ -55,6 +56,9 @@ private struct SetupReply: Encodable {
                 return try encoder.encode(backend)
             case "companion.ui.setup":
                 return try encoder.encode(setup)
+            case "companion.ui.capture":
+                return try encoder.encode(
+                    CompanionCaptureState(CompanionCaptureModel(remote: nil, transport: .shared)))
             case "companion.ui.upload":
                 guard reachable else { throw ExtensionPeerError.unavailable }
                 if holdsRequests { try await Task.sleep(for: .seconds(60)) }
@@ -89,13 +93,154 @@ private struct SetupReply: Encodable {
                     checks: [CompanionCheck(name: "database", ok: true, detail: "answering")]))
         case "status": return try encoder.encode(status)
         case "episodes": return try encoder.encode(episodes)
-        default: return Data("[]".utf8)
+        default: return try CompanionCaptureMind.body(path, enabled: seedsMind, encoder: encoder)
+        }
+    }
+}
+
+private enum CompanionCaptureMind {
+    static let citations = [
+        CompanionAskCitation(
+            episodeId: "e1", quote: "The launch moved to the second week of March.",
+            support: "direct", title: "Launch planning notes", occurredAt: "2026-10-14T09:00:00Z"),
+        CompanionAskCitation(
+            episodeId: "e2", quote: "Design review is booked for Thursday.", support: "partial",
+            title: "Standup with the design team", occurredAt: "2026-10-20T10:30:00Z"),
+    ]
+
+    static func body(_ path: String, enabled: Bool, encoder: JSONEncoder) throws -> Data {
+        guard enabled else { return Data("[]".utf8) }
+        switch path {
+        case "beliefs":
+            return try encoder.encode([
+                CompanionBelief(
+                    id: "b1", statement: "You plan releases around design review, not engineering.",
+                    kind: "pattern", confidence: 0.82, firstFormed: "2026-09-02T09:00:00Z",
+                    evidenceEpisodeIds: ["e1", "e2"], status: "active"),
+                CompanionBelief(
+                    id: "b2", statement: "You prefer async updates over standups.",
+                    kind: "preference", confidence: 0.64, firstFormed: "2026-08-18T09:00:00Z",
+                    evidenceEpisodeIds: ["e2"], status: "superseded"),
+            ])
+        case "claims":
+            return try encoder.encode([
+                CompanionClaim(
+                    id: "c1", statement: "The launch moved to the second week of March.",
+                    claimType: "fact", testable: true, assertedAt: "2026-10-14T09:00:00Z",
+                    episodeId: "e1", verdict: "corroborated", verdictNote: "Matches the calendar.",
+                    observationIds: ["o1"]),
+                CompanionClaim(
+                    id: "c2", statement: "The billing migration finishes this week.",
+                    claimType: "commitment", testable: true, assertedAt: "2026-10-22T09:00:00Z",
+                    episodeId: nil, verdict: nil, verdictNote: nil, observationIds: nil),
+            ])
+        case "observations":
+            return try encoder.encode([
+                CompanionObservation(
+                    id: "o1", source: "calendar", observedAt: "2026-10-14T09:00:00Z",
+                    kind: "event", summary: "Launch review moved to March 11."),
+                CompanionObservation(
+                    id: "o2", source: "github", observedAt: "2026-10-21T17:00:00Z", kind: "commit",
+                    summary: "Merged 4 pull requests in the billing repository."),
+            ])
+        case "runs":
+            return try encoder.encode([
+                CompanionRun(
+                    id: "r1", startedAt: "2026-11-04T02:00:00Z",
+                    finishedAt: "2026-11-04T02:04:00Z", ok: true, steps: [])
+            ])
+        case "core":
+            return try encoder.encode([
+                CompanionCoreSection(
+                    section: "persona", content: "Founder building a macOS app.", tokens: 12,
+                    updatedAt: "2026-11-01T09:00:00Z", updatedBy: "you")
+            ])
+        case "calibration":
+            return try encoder.encode([
+                CompanionCalibration(
+                    domain: "timelines", direction: "optimistic", samples: 14,
+                    averageMagnitude: 0.28),
+                CompanionCalibration(
+                    domain: "estimates", direction: "accurate", samples: 9, averageMagnitude: 0.04),
+            ])
+        case "hypotheses":
+            return try encoder.encode([
+                CompanionHypothesis(
+                    id: "h1", statement: "Launch dates slip when design review moves.",
+                    mechanism: "Review sets the final scope.", status: "testing", prior: 0.5,
+                    posterior: 0.71, testCount: 3, alternativeExplanations: [],
+                    formedAt: "2026-10-01T09:00:00Z", generatedBy: "nightly")
+            ])
+        case "predictions":
+            return try encoder.encode([
+                CompanionPrediction(
+                    id: "p1", hypothesisId: "h1", statement: "The launch date moves again.",
+                    observable: "Calendar change before March 1.",
+                    windowStart: "2026-11-01T00:00:00Z", windowEnd: "2027-03-01T00:00:00Z",
+                    resolvedAt: nil, outcome: nil)
+            ])
+        case "discrepancies":
+            return try encoder.encode([
+                CompanionDiscrepancy(
+                    id: "d1", claim: "You said the migration would finish on Friday.",
+                    kind: "timeline", magnitude: 0.6, detectedAt: "2026-10-30T09:00:00Z",
+                    dismissed: false, userResponse: nil)
+            ])
+        case "questions":
+            return try encoder.encode(
+                CompanionQuestionList(
+                    questions: [], muted: ["health"], askedToday: 1, dailyBudget: 3))
+        case "settings/reason":
+            return try encoder.encode(
+                CompanionReasonSettings(
+                    provider: "anthropic", url: "https://api.example.invalid",
+                    model: "reason-large",
+                    hasApiKey: true, apiKeyHint: "…7f2a", configured: true,
+                    description: "Hosted reasoning model"))
+        case "settings/connectors":
+            return try encoder.encode(
+                CompanionConnectorSettings(
+                    github: CompanionConnectorState(configured: true, detail: "2 repositories"),
+                    notion: CompanionConnectorState(configured: false, detail: "Not connected"),
+                    sources: ["calendar", "github"], importable: ["chatgpt"]))
+        case "conversations":
+            return try encoder.encode([
+                CompanionConversation(
+                    id: "t1", title: "When is the launch?", createdAt: "2026-11-02T09:00:00Z",
+                    lastActiveAt: "2026-11-02T09:05:00Z", messageCount: 2,
+                    lastMessage: "The launch moved to the second week of March."),
+                CompanionConversation(
+                    id: "t2", title: "Billing migration status",
+                    createdAt: "2026-10-29T09:00:00Z", lastActiveAt: "2026-10-29T09:10:00Z",
+                    messageCount: 4, lastMessage: "Four pull requests are merged."),
+            ])
+        case "conversations/t1":
+            return try encoder.encode(
+                CompanionConversationDetail(
+                    id: "t1", title: "When is the launch?", createdAt: "2026-11-02T09:00:00Z",
+                    messages: [
+                        CompanionMessage(
+                            id: "m1", role: "user",
+                            content: "When is the launch, and what could move it?",
+                            citations: nil, model: nil, latencyMs: nil,
+                            createdAt: "2026-11-02T09:00:00Z"),
+                        CompanionMessage(
+                            id: "m2", role: "assistant",
+                            content:
+                                "The launch moved to the **second week of March** [1].\n\nTwo things could move it again:\n\n- Design review, booked for Thursday [2]\n- The billing migration, which is not finished yet",
+                            citations: citations, model: "reason-large", latencyMs: 2_140,
+                            createdAt: "2026-11-02T09:00:04Z"),
+                    ]))
+        default:
+            return Data("[]".utf8)
         }
     }
 }
 
 @MainActor private enum CompanionCaptureRig {
     static let regular = CGSize(width: 1_100, height: 760)
+    static let wide = CGSize(width: 1_600, height: 900)
+    static let tall = CGSize(width: 1_600, height: 1_500)
     static let compact = CGSize(width: 640, height: 700)
     static let sheet = CGSize(width: 760, height: 560)
 
@@ -107,8 +252,9 @@ private struct SetupReply: Encodable {
 
     static var variants: [(CGSize, Bool, Double)] {
         [
-            (regular, false, 1), (regular, true, 1), (compact, false, 1), (compact, true, 1),
-            (regular, false, 1.6),
+            (regular, false, 1), (regular, true, 1), (wide, false, 1), (tall, false, 1),
+            (compact, false, 1),
+            (compact, true, 1), (regular, false, 1.6),
         ]
     }
 
@@ -128,6 +274,7 @@ private struct SetupReply: Encodable {
                     view()
                         .environment(\.compactLayout, size.width < UIScale.pt(720))
                         .environment(\.colorScheme, dark ? .dark : .light)
+                        .environment(\.controlActiveState, .key)
                         .environment(\.windowVisible, true)
                 })
         host.sizingOptions = []
@@ -286,6 +433,48 @@ private struct SetupReply: Encodable {
         stub.backend.hosts = Self.hosts
         stub.backend.selectedHostID = Self.hosts[1].id
         try await page(tab: .setup, stub: stub, name: "backend")
+    }
+
+    private var seededStub: CompanionCaptureStub {
+        let stub = CompanionCaptureStub()
+        stub.seedsMind = true
+        stub.status = CompanionStatus(
+            sources: 2, episodes: 12, claims: 6, observations: 40, chunks: 180, pendingEpisodes: 0,
+            latestIngestedAt: "2026-11-01T09:00:00Z")
+        stub.episodes = CompanionSyntheticMemory.episodes(12)
+        stub.backend.hosts = Self.hosts
+        stub.backend.selectedHostID = Self.hosts[1].id
+        return stub
+    }
+
+    @Test(arguments: [CompanionTab.capture, .desk, .mind, .settings])
+    func everyPopulatedMemoryTabFits(_ tab: CompanionTab) async throws {
+        guard Self.isolated else {
+            Issue.record("Capture requires an isolated synthetic fixture."); return
+        }
+        try await page(tab: tab, stub: seededStub, name: "\(tab.rawValue)-populated")
+    }
+
+    @Test func aChatTranscriptShowsCitationsAndTheNextQuestion() async throws {
+        guard Self.isolated else {
+            Issue.record("Capture requires an isolated synthetic fixture."); return
+        }
+        let stub = seededStub
+        SharedDefaults.store.set(CompanionTab.chat.rawValue, forKey: AppStorageKeys.Companion.tab)
+        SharedDefaults.store.set(true, forKey: AppStorageKeys.Companion.setupDeclined)
+        for (size, dark, zoom) in CompanionCaptureRig.variants {
+            let session = CompanionWorkspaceSession(remote: stub.bridge)
+            await session.chat.open("t1")
+            #expect(session.chat.messages.count == 2)
+            #expect(session.chat.messages.last?.citations.count == 2)
+            let bitmap = try await CompanionCaptureRig.capture(
+                "chat-transcript", size: size, dark: dark, zoom: zoom
+            ) {
+                CompanionPage(session: session)
+            }
+            #expect(CompanionCaptureRig.distinctColors(bitmap) > 6)
+            await session.cancelAndWait()
+        }
     }
 
     @Test func setupWalksThroughEveryStep() async throws {

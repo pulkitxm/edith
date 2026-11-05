@@ -145,6 +145,7 @@ struct BlitzTreePage: View {
             footnote: "Large folders can take a minute. Files that only live in iCloud are skipped."
         )
         .frame(minHeight: emptyHeight)
+        .pageFillViewport()
     }
 
     private var scanningState: some View {
@@ -201,6 +202,7 @@ struct BlitzTreePage: View {
                 "If macOS blocked access, allow Edith in System Settings > Privacy & Security > Files and Folders."
         )
         .frame(minHeight: emptyHeight)
+        .pageFillViewport()
     }
 
     private var cancelledState: some View {
@@ -218,6 +220,7 @@ struct BlitzTreePage: View {
             }
         )
         .frame(minHeight: emptyHeight)
+        .pageFillViewport()
     }
 
     private var folderBinding: Binding<String> {
@@ -464,19 +467,17 @@ struct BlitzTreePage: View {
 }
 
 struct BlitzTreeSettings: View {
-    static let summaryName = BlitzTreePage.title
-
     var body: some View {
         Form {
             Section("Disk space") {
-                LabeledContent("Extension", value: Self.summaryName)
-                Text(
-                    "Open Disk Map from the sidebar, choose a folder, and Edith draws what takes the most space. Nothing is deleted unless you move an item to the Trash."
+                SettingsRow(
+                    BlitzTreePage.title,
+                    subtitle:
+                        "Open Disk Map from the sidebar, choose a folder, and Edith draws what takes the most space. Nothing is deleted unless you move an item to the Trash."
                 )
-                .settingsCaption()
             }
         }
-        .edithForm()
+        .settingsForm()
     }
 }
 

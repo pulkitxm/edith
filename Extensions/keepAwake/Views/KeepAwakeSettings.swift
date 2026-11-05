@@ -13,18 +13,14 @@ struct KeepAwakeSettings: View {
 
     var body: some View {
         Form {
-            ControlSettingsIssueSection()
+            SettingsIssueSection()
             Section {
                 Toggle(isOn: $preventSleep) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text("Keep awake")
-                        Text(
-                            preventSleep
-                                ? "On. Your Mac and display stay awake until you turn this off."
-                                : "Off. Your Mac follows its normal sleep settings."
-                        )
-                        .settingsCaption()
-                    }
+                    Text("Keep awake")
+                    Text(
+                        preventSleep
+                            ? "On. Your Mac and display stay awake until you turn this off."
+                            : "Off. Your Mac follows its normal sleep settings.")
                 }
                 .accessibilityLabel("Keep awake")
                 .accessibilityIdentifier("keepAwake.preventSleep")
@@ -38,7 +34,7 @@ struct KeepAwakeSettings: View {
                 .settingsCaption()
             }
         }
-        .edithForm()
+        .settingsForm()
         .onChange(of: preventSleep) { synchronize() }
     }
 }

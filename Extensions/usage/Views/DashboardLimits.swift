@@ -128,25 +128,26 @@ struct RateLimitsDialsView: View {
                             Text(extra)
                         }
                     }
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let credits = credits(for: selected) {
                     Text(creditsText(credits))
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let point {
                     Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
-                        .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
+                        .font(.edithText(.caption).monospacedDigit()).foregroundStyle(
+                            DashSkin.inkFaint(dark))
                 }
                 if let error = latestLimits?.providers.first(where: { $0.provider == selected })?
                     .error
                 {
                     Text(error)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -416,7 +417,7 @@ struct LimitsRefreshButton: View {
                     }
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -591,15 +592,22 @@ struct LimitsCardView: View {
                         }
                         chart.id(selectedProvider.rawValue + ":" + accountScope)
                     }
+                } else if reloadLoad.errorMessage == nil,
+                    loadedProvider != selectedProvider || loadedAccountScope != accountScope
+                {
+                    SkeletonGroup {
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            SkeletonBlock(width: 180, height: 22)
+                            SkeletonBlock(height: 120)
+                        }
+                    }
+                    .accessibilityLabel("Loading limit history")
                 } else {
                     HStack {
                         Text(
                             reloadLoad.errorMessage != nil
                                 ? "Limit history is unavailable. Try Refresh."
-                                : loadedProvider == selectedProvider
-                                    && loadedAccountScope == accountScope
-                                    ? "No limit history yet. New readings will appear here."
-                                    : "Loading limit history…"
+                                : "No limit history yet. New readings will appear here."
                         )
                         .font(.edithText(.callout)).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -761,7 +769,7 @@ struct LimitsCardView: View {
                 Text("Drag chart to inspect").foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .font(.system(size: UIScale.pt(10.5), weight: .medium, design: .monospaced))
+        .font(.edithText(.caption, design: .monospaced).weight(.medium))
     }
 
     private var chart: some View {
@@ -808,7 +816,7 @@ struct LimitsCardView: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.08))
                 AxisValueLabel {
                     if let v = value.as(Int.self) {
-                        Text("\(v)%").font(.system(size: UIScale.pt(8)))
+                        Text("\(v)%").font(.edithText(.caption))
                     }
                 }
             }
@@ -817,7 +825,7 @@ struct LimitsCardView: View {
             AxisMarks(values: .automatic(desiredCount: spanDays < 2 ? 5 : 6)) { value in
                 AxisValueLabel {
                     if let d = value.as(Date.self) {
-                        Text(tick(d, spanDays: spanDays)).font(.system(size: UIScale.pt(8)))
+                        Text(tick(d, spanDays: spanDays)).font(.edithText(.caption))
                             .foregroundStyle(
                                 .tertiary)
                     }

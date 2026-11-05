@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -63,7 +64,7 @@ private struct Unavailable: LocalizedError {
 
 @MainActor @Suite(.serialized) struct PresenterSettingsCaptureTests {
     @Test func settingsRenderEveryStateAtEverySize() async throws {
-        try await SettingsRenderCapture.withAccessibility {
+        try await RenderCapture.withAccessibility {
             let preferences: [String: Any] = [
                 "presenterEnabled": true, "presenterMode": false, "presenterAutoEnabled": true,
             ]
@@ -79,8 +80,8 @@ private struct Unavailable: LocalizedError {
             defer { [ready, manual, stale, loading, failed].forEach { $0.stop() } }
             #expect(ready.ready && manual.ready && stale.error != nil && failed.error != nil)
             let cases: [(String, ControlPresentation, Bool, Bool, String?)] = [
-                ("auto", ready, false, true, "Shortcut"),
-                ("manual", manual, true, false, "Shortcut"),
+                ("auto", ready, false, true, "Keyboard shortcut"),
+                ("manual", manual, true, false, "Keyboard shortcut"),
                 ("stale", stale, false, true, "Retry"),
                 ("loading", loading, false, false, nil),
                 ("error", failed, false, false, "Retry"),
@@ -89,21 +90,26 @@ private struct Unavailable: LocalizedError {
             for (name, model, mode, auto, label) in cases {
                 defaults.set(mode, forKey: AppStorageKeys.Presenter.mode)
                 defaults.set(auto, forKey: AppStorageKeys.Presenter.autoEnabled)
-                for variant in SettingsRenderCapture.variants {
-                    let host = try await SettingsRenderCapture.render(
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
                         "presenter-settings-\(name)", variant: variant
                     ) {
                         ControlSettingsHost(presentation: model) {
-                            Form { PresenterRows(presentation: model) }.edithForm()
+                            Form { PresenterRows(presentation: model) }.settingsForm()
                         }
                     }
                     if let label {
                         #expect(
-                            SettingsRenderCapture.find(host, label: label) != nil,
+                            RenderCapture.find(rendered.host, label: label) != nil,
                             "\(name) \(variant.name) is missing \(label)")
                     }
                 }
             }
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

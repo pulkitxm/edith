@@ -7,12 +7,15 @@ import SwiftUI
 @MainActor
 struct AudioMixerPage: View {
     let engine: any AudioMixerPresenting
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         PageWorkspace {
             PageHeader(
                 "Audio Mixer", subtitle: "Set the volume of each app that is playing sound.",
-                divider: true)
+                divider: true
+            )
+            .environment(\.pageColumnWidth, compact ? nil : UIScale.pt(PageMetrics.readableWidth))
         } content: {
             AudioMixerView(engine: engine)
         }
@@ -99,8 +102,11 @@ struct AudioMixerView: View {
             SkeletonBlock(width: 24, height: 24)
             SkeletonBlock(width: index == 1 ? 72 : 104, height: 12)
             Spacer(minLength: UIScale.pt(12))
-            SkeletonBlock(width: 180, height: 6)
+            SkeletonBlock(height: 6)
+                .frame(minWidth: UIScale.pt(120), maxWidth: UIScale.pt(320))
             SkeletonBlock(width: 36, height: 12)
+                .frame(width: UIScale.pt(48), alignment: .trailing)
+            SkeletonBlock(width: 20, height: 20)
         }
         .frame(height: UIScale.pt(44))
     }

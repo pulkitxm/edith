@@ -30,6 +30,7 @@ struct HerdrSettingsPage: View {
                 Section {
                     Text(error).font(.edithText(.callout))
                     Button("Retry") { Task { await model.read() } }
+                        .buttonStyle(.edith(.secondary))
                 }
             }
         }

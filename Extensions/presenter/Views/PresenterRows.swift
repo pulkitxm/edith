@@ -26,21 +26,16 @@ struct PresenterRows: View {
     private var jevConfigured: Bool { presentation.state.jevConfigured }
 
     var body: some View {
-        ControlSettingsIssueSection()
+        SettingsIssueSection()
         Section {
             Toggle(isOn: $presenterMode.notifyingSettingsChange()) {
-                PresenterRowLabel(
-                    "Manual presenter mode",
-                    detail:
-                        "Blurs the details you pick below, everywhere in Edith, until you turn it off."
-                )
+                Text("Manual presenter mode")
+                Text(
+                    "Blurs the details you pick below, everywhere in Edith, until you turn it off.")
             }
-            LabeledContent {
-                HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")
-            } label: {
-                PresenterRowLabel(
-                    "Shortcut", detail: "Turns presenter mode on or off from any app.")
-            }
+            SettingsShortcutRow(
+                keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P",
+                purpose: "Turns presenter mode on or off from any app.")
         } header: {
             Text("Presenter mode")
         } footer: {
@@ -58,52 +53,43 @@ struct PresenterRows: View {
 
         Section {
             Toggle(isOn: $autoEnabled.notifyingSettingsChange()) {
-                PresenterRowLabel(
-                    "Auto presenter mode",
-                    detail:
-                        "Turns presenter mode on by itself when your screen is shared or recorded."
-                )
+                Text("Auto presenter mode")
+                Text("Turns presenter mode on by itself when your screen is shared or recorded.")
             }
             Group {
                 Toggle(isOn: $hideMenuBarNumbers.notifyingSettingsChange()) {
-                    PresenterRowLabel(
-                        "Hide menu bar numbers",
-                        detail: "Hides usage percentages in the menu bar while presenting.")
+                    Text("Hide menu bar numbers")
+                    Text("Hides usage percentages in the menu bar while presenting.")
                 }
                 Toggle(isOn: $detectRecording.notifyingSettingsChange()) {
-                    PresenterRowLabel(
-                        "Detect screen recordings",
-                        detail: "Includes QuickTime and Shift-Command-5 recordings.")
+                    Text("Detect screen recordings")
+                    Text("Includes QuickTime and Shift-Command-5 recordings.")
                 }
                 Toggle(isOn: $detectScreenSharing.notifyingSettingsChange()) {
-                    PresenterRowLabel(
-                        "Detect macOS Screen Sharing",
-                        detail: "Includes Screen Sharing and Remote Management sessions.")
+                    Text("Detect macOS Screen Sharing")
+                    Text("Includes Screen Sharing and Remote Management sessions.")
                 }
                 Toggle(isOn: $detectMirroring.notifyingSettingsChange()) {
-                    PresenterRowLabel(
-                        "Count mirrored displays",
-                        detail: "Includes mirroring to a projector, TV or AirPlay.")
+                    Text("Count mirrored displays")
+                    Text("Includes mirroring to a projector, TV or AirPlay.")
                 }
                 Toggle(isOn: $askJev.notifyingSettingsChange()) {
-                    PresenterRowLabel(
-                        "Ask Jev about shared screens",
-                        detail: jevConfigured
+                    Text("Ask Jev about shared screens")
+                    Text(
+                        jevConfigured
                             ? "When no rule matches during a call, Jev checks the window titles."
                             : "Save a Jev key in the Jev settings to use this.")
                 }
                 .disabled(!jevConfigured)
             }
             .disabled(!autoEnabled)
-            LabeledContent {
+            SettingsRow(
+                "Screen Recording access",
+                subtitle: "Optional. Lets detection read share window titles. Nothing is recorded."
+            ) {
                 Button("Open Settings") { presentation.perform("screenRecording") }
                     .buttonStyle(.edith(.secondary))
                     .disabled(!presentation.active)
-            } label: {
-                PresenterRowLabel(
-                    "Screen Recording access",
-                    detail:
-                        "Optional. Lets detection read share window titles. Nothing is recorded.")
             }
         } header: {
             Text("Auto detection")
@@ -112,23 +98,6 @@ struct PresenterRows: View {
                 "Without Screen Recording access, detection uses app and window position instead. Asking Jev sends the owner, title and size of up to 25 on-screen windows to TypeSafe, so they leave this Mac."
             )
             .settingsCaption()
-        }
-    }
-}
-
-struct PresenterRowLabel: View {
-    let title: String
-    let detail: String
-
-    init(_ title: String, detail: String) {
-        self.title = title
-        self.detail = detail
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(title)
-            Text(detail).settingsCaption().fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -145,7 +114,8 @@ struct PresenterPrivacySettingToggle: View {
 
     var body: some View {
         Toggle(isOn: $stored.notifyingSettingsChange()) {
-            PresenterRowLabel(category.title, detail: category.summary)
+            Text(category.title)
+            Text(category.summary)
         }
     }
 }

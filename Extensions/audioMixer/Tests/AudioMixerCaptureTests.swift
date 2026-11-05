@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -59,8 +60,8 @@ private final class FixtureMixer: AudioMixerPresenting {
             ),
         ]
         for (name, mixer, zoomed) in states {
-            for variant in SurfaceCapture.variants where zoomed || variant.zoom == 1 {
-                try await SurfaceCapture.render("mixer-page-\(name)", variant: variant) {
+            for variant in RenderCapture.layoutVariants where zoomed || variant.zoom == 1 {
+                try await RenderCapture.render("mixer-page-\(name)", variant: variant) {
                     ExtensionPageHost { AudioMixerPage(engine: mixer) }
                 }
             }
@@ -70,8 +71,8 @@ private final class FixtureMixer: AudioMixerPresenting {
 
     @Test func notchTabCoversEmptyPopulatedAndError() async throws {
         guard #available(macOS 14.4, *) else { return }
-        let notch = SurfaceCapture.Variant(
-            name: "notch", size: CGSize(width: 560, height: 220), scheme: .dark, zoom: 1)
+        let notch = RenderCapture.Variant(
+            name: "notch", width: 560, height: 220, zoom: 1, scheme: .dark)
         for (name, mixer) in [
             ("loading", FixtureMixer(loaded: false)), ("empty", FixtureMixer()),
             ("populated", FixtureMixer(apps: FixtureMixer.playing)),
@@ -82,17 +83,22 @@ private final class FixtureMixer: AudioMixerPresenting {
                     errorMessage: "Could not change Tunes's volume.")
             ),
         ] {
-            try await SurfaceCapture.render("mixer-notch-\(name)", variant: notch) {
+            try await RenderCapture.render("mixer-notch-\(name)", variant: notch) {
                 ExtensionPageHost { AudioMixerView(engine: mixer, notch: true).background(.black) }
             }
         }
     }
 
     @Test func settingsExplainWhereTheMixerLives() async throws {
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("mixer-settings", variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            try await RenderCapture.render("mixer-settings", variant: variant) {
                 ExtensionPageHost { AudioMixerSettingsPage() }
             }
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

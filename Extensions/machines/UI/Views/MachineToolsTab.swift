@@ -32,7 +32,7 @@ struct MachineToolsTab: View {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 if let message {
                     Text(message)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .padding(UIScale.pt(10))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +107,7 @@ struct MachineToolsTab: View {
                                 .fill(healthColor)
                                 .frame(width: UIScale.pt(6), height: UIScale.pt(6))
                             Text(subtitle(for: mount))
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                         }
@@ -131,7 +131,7 @@ struct MachineToolsTab: View {
                     )
                     .font(
                         session.mountsAvailable
-                            ? DashSkin.mono(11) : .system(size: UIScale.pt(11.5))
+                            ? DashSkin.mono(11) : .edithText(.subheadline)
                     )
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
@@ -228,7 +228,7 @@ struct MachineToolsTab: View {
                             Button("Open") {
                                 session.openForward(forward)
                             }
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                         }
                         Toggle(
                             "",
@@ -259,12 +259,12 @@ struct MachineToolsTab: View {
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     if !compact {
                         Image(systemName: "arrow.right")
-                            .font(.system(size: UIScale.pt(10)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     TextField("Remote host", text: $newForwardHost)
                         .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: compact ? .infinity : UIScale.pt(130))
+                        .frame(maxWidth: .infinity)
                     TextField("Remote port", text: $newForwardRemote)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
@@ -282,7 +282,7 @@ struct MachineToolsTab: View {
                     HStack(spacing: UIScale.pt(10)) {
                         VStack(alignment: .leading, spacing: 0) {
                             Text(snippet.title)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Text(snippet.command)
                                 .font(DashSkin.mono(10))
@@ -292,7 +292,7 @@ struct MachineToolsTab: View {
                         Spacer(minLength: 0)
                         Button("Run") { run(snippet) }
                             .disabled(runningSnippet || !session.state.isConnected)
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                         Button {
                             pendingSnippetRemoval = snippet
                         } label: {
@@ -367,20 +367,20 @@ struct MachineToolsTab: View {
                         )
                         .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                     Text(service.displayName)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
                     Text(service.describes)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     Button("Restart") { runService("restart", unit: service.unit) }
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                     Button(service.isRunning ? "Stop" : "Start") {
                         runService(service.isRunning ? "stop" : "start", unit: service.unit)
                     }
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 }
             }
         }

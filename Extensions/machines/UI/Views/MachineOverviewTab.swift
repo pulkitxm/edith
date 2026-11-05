@@ -277,7 +277,7 @@ struct NetworkMetricCard: View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .center) {
                 Text("INTERNET SPEED")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .tracking(UIScale.pt(0.7))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
@@ -319,7 +319,7 @@ struct NetworkMetricCard: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Label(title, systemImage: systemImage)
-                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(color)
             Text(value.map(InternetSpeedFormatter.string) ?? "–")
                 .font(DashSkin.heading(17))
@@ -344,17 +344,17 @@ struct NetworkMetricCard: View {
             .accessibilityLabel("Testing internet speed again")
         } else if let error {
             Text(error)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.danger)
                 .lineLimit(1)
                 .help(error)
         } else if let measurement {
             Text("Tested \(measurement.measuredAt, style: .relative)")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         } else {
             Text("Waiting to test this machine")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -422,6 +422,8 @@ struct MachineOverviewTab: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
+    @State private var viewportHeight: CGFloat = 0
+
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
@@ -440,7 +442,13 @@ struct MachineOverviewTab: View {
             .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
         .machineActivity(session, kind: .internetSpeed)
+    }
+
+    private var promptHeight: CGFloat {
+        let chrome = UIScale.pt(PageMetrics.pinnedContentTop) + UIScale.pt(PageMetrics.bottom)
+        return max(UIScale.pt(360), viewportHeight - chrome)
     }
 
     @ViewBuilder
@@ -485,7 +493,7 @@ struct MachineOverviewTab: View {
             footnote: prompt == .retry ? "Check that the machine is on and on your network." : nil,
             tint: prompt == .retry ? DashSkin.warn : nil
         )
-        .frame(minHeight: UIScale.pt(360))
+        .frame(minHeight: promptHeight)
         .widgetBar(
             cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
             stroke: DashSkin.line(dark))
@@ -494,7 +502,7 @@ struct MachineOverviewTab: View {
     private var identityCard: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(uptimeText)
                 .font(.edithText(.callout).weight(.medium))
@@ -568,7 +576,7 @@ struct MachineOverviewTab: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack {
                         Text(disk.mount)
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                         Spacer()
@@ -595,7 +603,7 @@ struct MachineOverviewTab: View {
             ForEach(sample.net.ifaces.filter { !$0.virtual }, id: \.n) { iface in
                 HStack {
                     Text(iface.n)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Label(ByteFormatter.rate(iface.rxBps), systemImage: "arrow.down")
@@ -614,7 +622,7 @@ struct MachineOverviewTab: View {
             if let gpu = slow.gpu {
                 HStack {
                     Text(gpu.name)
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text(
@@ -627,7 +635,7 @@ struct MachineOverviewTab: View {
             if let battery = slow.battery {
                 HStack {
                     Text("Battery")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text("\(battery.percent)%  ·  \(battery.status)")
@@ -643,7 +651,7 @@ struct MachineOverviewTab: View {
                     ForEach(slow.temps, id: \.label) { temp in
                         HStack(spacing: UIScale.pt(6)) {
                             Text(temp.label)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                                 .lineLimit(1)
                             Spacer(minLength: 0)
@@ -665,12 +673,12 @@ struct MachineOverviewTab: View {
                     "\(updates) package update\(updates == 1 ? "" : "s") available",
                     systemImage: "shippingbox.and.arrow.backward"
                 )
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             }
             ForEach(session.facts.who, id: \.self) { line in
                 Label(line, systemImage: "person")
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }

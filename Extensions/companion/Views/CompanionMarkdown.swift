@@ -41,9 +41,8 @@ struct MarkdownBody: View {
             Text(title)
                 .font(
                     documentStyle
-                        ? .system(
-                            size: UIScale.pt(level == 1 ? 24 : level == 2 ? 18 : 15),
-                            weight: .semibold)
+                        ? Font.edithText(level == 1 ? .title : level == 2 ? .title2 : .title3)
+                            .weight(.semibold)
                         : DashSkin.heading(
                             level == 1 ? size + 4.5 : level == 2 ? size + 2.5 : size + 1,
                             weight: .semibold)

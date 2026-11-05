@@ -150,32 +150,33 @@ import SwiftUI
 struct AppMaintenanceSettings: View {
     @Bindable var model: MaintenanceSettingsModel
 
+    private var failure: String? { model.errorMessage ?? model.packageError }
+
     var body: some View {
         Form {
-            Section("Maintenance") {
+            if let failure {
+                Section {
+                    SettingsErrorRow("Couldn’t sync these settings", message: failure) {
+                        Task { await model.load() }
+                    }
+                    .disabled(model.stopped)
+                }
+            }
+            Section {
                 Picker(
-                    "Default package kind",
                     selection: Binding(get: { model.packageKind }, set: model.setPackageKind)
                 ) {
                     Text("Formulae").tag("formula")
                     Text("Casks").tag("cask")
+                } label: {
+                    Text("Default package kind")
+                    Text(
+                        "Which Homebrew list opens first: command line tools (formulae) or Mac apps (casks)."
+                    )
                 }
                 .accessibilityLabel("Default package kind")
                 .disabled(!model.packageLoaded || model.stopped)
-                Text(
-                    "Which Homebrew list opens first: command line tools (formulae) or Mac apps (casks)."
-                )
-                .settingsCaption()
-                if let error = model.packageError {
-                    Text(error).settingsCaption().foregroundStyle(.red)
-                }
-                LabeledContent("Removal", value: "Review first, then move to Trash")
-                Text(
-                    "Manage Homebrew packages, verify single-app disk images, and select exact support files before removal."
-                )
-                .settingsCaption()
                 Picker(
-                    "Disk image destination",
                     selection: Binding(
                         get: { model.preferences.installDestination }, set: model.setDestination)
                 ) {
@@ -183,22 +184,23 @@ struct AppMaintenanceSettings: View {
                         destination in
                         Text(destination.title).tag(destination.rawValue)
                     }
+                } label: {
+                    Text("Disk image destination")
+                    Text("Where apps installed from a .dmg are placed.")
                 }
                 .accessibilityLabel("Disk image destination")
                 .disabled(!model.loaded || model.stopped)
-                Text("Where apps installed from a .dmg are placed.").settingsCaption()
-                LabeledContent("Location", value: "Main sidebar")
-                if let error = model.errorMessage {
-                    Text(error).settingsCaption().foregroundStyle(.red)
-                }
-                if model.errorMessage != nil || model.packageError != nil {
-                    Button("Retry") { Task { await model.load() } }
-                        .disabled(model.stopped)
-                }
+            } header: {
+                Text("Maintenance")
+            } footer: {
+                Text(
+                    "Removing an app always shows you the exact files first, then moves them to the Trash."
+                )
+                .settingsCaption()
             }
             .opacity(model.stopped ? 0.5 : 1)
         }
-        .formStyle(.grouped)
+        .settingsForm()
         .pageTask { await model.load() }
     }
 }

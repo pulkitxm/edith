@@ -27,6 +27,7 @@ import Vision
     static let variants = [
         Variant(name: "regular-light", size: CGSize(width: 1100, height: 760), scheme: .light),
         Variant(name: "regular-dark", size: CGSize(width: 1100, height: 760), scheme: .dark),
+        Variant(name: "wide-light", size: CGSize(width: 1600, height: 900), scheme: .light),
         Variant(name: "compact-light", size: CGSize(width: 640, height: 700), scheme: .light),
         Variant(name: "compact-dark", size: CGSize(width: 640, height: 700), scheme: .dark),
         Variant(

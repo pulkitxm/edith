@@ -13,6 +13,6 @@ import Testing
     }
 
     @Test func settingsNameTheExtensionByItsCatalogTitle() throws {
-        #expect(BlitzTreeSettings.summaryName == "Disk Map")
+        #expect(BlitzTreePage.title == "Disk Map")
     }
 }

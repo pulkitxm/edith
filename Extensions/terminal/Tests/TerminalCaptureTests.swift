@@ -16,6 +16,7 @@ import Testing
     static let variants: [(name: String, size: NSSize, dark: Bool, scale: Double)] = [
         ("regular-light", NSSize(width: 1100, height: 760), false, 1),
         ("regular-dark", NSSize(width: 1100, height: 760), true, 1),
+        ("wide-light", NSSize(width: 1600, height: 900), false, 1),
         ("compact-light", NSSize(width: 640, height: 700), false, 1),
         ("compact-dark", NSSize(width: 640, height: 700), true, 1),
         ("zoom-dark", NSSize(width: 1100, height: 760), true, 1.6),
@@ -67,6 +68,45 @@ import Testing
             try Self.capture(host, name: "terminal-\(fixture.rawValue)-\(variant.name)")
             model.stopAll()
             engine.stop()
+            window.contentView = nil
+        }
+    }
+
+    @Test func statusBarsFitActionsAndLongMessagesAtEverySize() async throws {
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        let exit = "Session ended with status 1."
+        let failure =
+            "Could not paste 3 files into this session because the destination folder no longer exists on disk."
+        for variant in Self.variants {
+            UIScale.apply(variant.scale)
+            let host = NSHostingView(
+                rootView:
+                    VStack(spacing: 0) {
+                        Spacer()
+                        TerminalStatusBar(
+                            symbolName: "exclamationmark.triangle.fill", message: failure,
+                            tint: DashSkin.danger)
+                        TerminalStatusBar(
+                            symbolName: "stop.circle", message: exit,
+                            tint: DashSkin.inkSoft(variant.dark), actionTitle: "Restart")
+                    }
+                    .background(
+                        Color(nsColor: TerminalPalette.edith(dark: variant.dark).background)
+                    )
+                    .environment(\.colorScheme, variant.dark ? .dark : .light)
+                    .environment(\.controlActiveState, .key))
+            host.sizingOptions = []
+            host.frame = NSRect(origin: .zero, size: variant.size)
+            let window = TerminalTestFixture.window(variant.size)
+            window.appearance = NSAppearance(named: variant.dark ? .darkAqua : .aqua)
+            window.contentView = host
+            window.layoutIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(80))
+            host.layoutSubtreeIfNeeded()
+            #expect(host.fittingSize.width <= variant.size.width)
+            try Self.capture(host, name: "terminal-status-bars-\(variant.name)")
             window.contentView = nil
         }
     }

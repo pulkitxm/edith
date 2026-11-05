@@ -1,11 +1,25 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
 import Testing
 
 @testable import CalendarExtension
+
+extension RenderCapture {
+    fileprivate static let cardVariants = [
+        Variant(name: "light", width: 420, height: 300, zoom: 1, scheme: .light),
+        Variant(name: "dark", width: 420, height: 300, zoom: 1, scheme: .dark),
+        Variant(name: "zoomed", width: 560, height: 420, zoom: 1.6, scheme: .dark),
+    ]
+
+    fileprivate static let notchVariants = [
+        Variant(name: "regular", width: 340, height: 260, zoom: 1, scheme: .dark),
+        Variant(name: "zoomed", width: 420, height: 320, zoom: 1.6, scheme: .dark),
+    ]
+}
 
 @MainActor @Suite(.serialized) struct CalendarRenderCaptureTests {
     private struct Unavailable: LocalizedError {
@@ -90,23 +104,8 @@ import Testing
         return store
     }
 
-    private func withAccessibility<T>(_ body: () async throws -> T) async rethrows -> T {
-        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
-            NSAccessibility.Attribute(rawValue: $0)
-        }
-        let prior = attributes.map { NSApp.accessibilityAttributeValue($0) }
-        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
-        defer {
-            for (attribute, value) in zip(attributes, prior) {
-                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
-            }
-        }
-        return try await body()
-    }
-
     @Test func pageRendersEveryStateAtEverySize() async throws {
-        _ = CalendarRenderCapture.application
-        try await withAccessibility {
+        try await RenderCapture.withAccessibility {
             let permission = await Self.store(authorized: false, events: [])
             let empty = await Self.store(authorized: true, events: [])
             let populated = await Self.store(authorized: true, events: Self.events)
@@ -128,14 +127,14 @@ import Testing
                 ("stale", stale, "Synthetic team standup"),
             ]
             for (name, store, label) in cases {
-                for variant in CalendarRenderCapture.pageVariants {
-                    let host = try await CalendarRenderCapture.render(
-                        "page-\(name)", variant: variant
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
+                        "calendar-page-\(name)", variant: variant
                     ) {
                         CalendarPage(store: store)
                     }
                     #expect(
-                        CalendarRenderCapture.find(host, label: label) != nil,
+                        RenderCapture.find(rendered.host, label: label) != nil,
                         "\(name) \(variant.name) is missing \(label)")
                 }
             }
@@ -143,8 +142,7 @@ import Testing
     }
 
     @Test func homeAndNotchRenderEveryState() async throws {
-        _ = CalendarRenderCapture.application
-        try await withAccessibility {
+        try await RenderCapture.withAccessibility {
             let permission = await Self.store(authorized: false, events: [])
             let empty = await Self.store(authorized: true, events: [])
             let populated = await Self.store(authorized: true, events: Self.events)
@@ -163,9 +161,9 @@ import Testing
                 ("loading", loading, nil, nil),
             ]
             for (name, store, homeLabel, notchLabel) in cases {
-                for variant in CalendarRenderCapture.cardVariants {
-                    let host = try await CalendarRenderCapture.render(
-                        "home-\(name)", variant: variant
+                for variant in RenderCapture.cardVariants {
+                    let rendered = try await RenderCapture.render(
+                        "calendar-home-\(name)", variant: variant
                     ) {
                         HomeMeetingsCard(dark: variant.scheme == .dark, store: store, open: {})
                             .environment(
@@ -175,19 +173,23 @@ import Testing
                             .padding(UIScale.pt(16))
                     }
                     if let homeLabel {
-                        #expect(CalendarRenderCapture.find(host, label: homeLabel) != nil)
+                        #expect(RenderCapture.find(rendered.host, label: homeLabel) != nil)
                     }
                 }
-                for variant in CalendarRenderCapture.notchVariants {
-                    let host = try await CalendarRenderCapture.render(
-                        "notch-\(name)", variant: variant, background: .black
+                for variant in RenderCapture.notchVariants {
+                    let rendered = try await RenderCapture.render(
+                        "calendar-notch-\(name)", variant: variant
                     ) {
                         CalendarNotchScene(tile: tile, store: store, open: {})
                             .padding(12)
+                            .frame(
+                                maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading
+                            )
+                            .background(.black)
                     }
                     if let notchLabel {
                         #expect(
-                            CalendarRenderCapture.find(host, label: notchLabel) != nil,
+                            RenderCapture.find(rendered.host, label: notchLabel) != nil,
                             "notch \(name) \(variant.name) is missing \(notchLabel)")
                     }
                 }
@@ -196,8 +198,7 @@ import Testing
     }
 
     @Test func settingsRenderBothAccessStates() async throws {
-        _ = CalendarRenderCapture.application
-        try await withAccessibility {
+        try await RenderCapture.withAccessibility {
             let denied = await Self.store(authorized: false, events: [])
             let allowed = await Self.store(authorized: true, events: Self.events)
             defer {
@@ -208,15 +209,20 @@ import Testing
                 ("denied", denied, "Allow Calendar Access"),
                 ("allowed", allowed, "Open Calendar App"),
             ] {
-                for variant in CalendarRenderCapture.pageVariants {
-                    let host = try await CalendarRenderCapture.render(
-                        "settings-\(name)", variant: variant
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
+                        "calendar-settings-\(name)", variant: variant
                     ) {
                         CalendarSettingsScene(store: store)
                     }
-                    #expect(CalendarRenderCapture.find(host, label: label) != nil)
+                    #expect(RenderCapture.find(rendered.host, label: label) != nil)
                 }
             }
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

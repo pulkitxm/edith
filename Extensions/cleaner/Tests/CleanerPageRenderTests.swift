@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -106,8 +107,8 @@ struct CleanerPageRenderTests {
     }
 
     static func capture(_ name: String, model: CleanerModel) async throws {
-        for variant in CleanerRenderCapture.variants {
-            _ = try await CleanerRenderCapture.render(name, variant: variant) {
+        for variant in RenderCapture.layoutVariants {
+            _ = try await RenderCapture.render(name, variant: variant) {
                 CleanerPage(model: model)
             }
         }
@@ -170,8 +171,8 @@ struct CleanerPageRenderTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(model.driveOptions.count == 2)
-        for variant in CleanerRenderCapture.variants where variant.width > 1000 {
-            _ = try await CleanerRenderCapture.render("cleaner-picker", variant: variant) {
+        for variant in RenderCapture.layoutVariants where variant.width > 1000 {
+            _ = try await RenderCapture.render("cleaner-picker", variant: variant) {
                 ZStack {
                     Color.black.opacity(0.2)
                     DrivePickerSheet(
@@ -184,4 +185,9 @@ struct CleanerPageRenderTests {
         }
         await model.shutdown()
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

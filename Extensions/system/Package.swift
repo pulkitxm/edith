@@ -19,6 +19,10 @@ let package = Package(
             path: ".", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "SystemExtensionTests", dependencies: ["SystemExtension"], path: "Tests",
+            name: "SystemExtensionTests",
+            dependencies: [
+                "SystemExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ], path: "Tests",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

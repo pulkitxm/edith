@@ -367,12 +367,12 @@ struct CompanionSettingsScreen: View {
                 PageGrid {
                     reasonerCard
                     connectorsCard
-                    dataCard
                 } secondary: {
                     healthCard
                     connectionCard
-                    dangerCard
+                    dataCard
                 } full: {
+                    dangerCard
                 }
             }
         }
@@ -398,7 +398,7 @@ struct CompanionSettingsScreen: View {
         PageCard(title: "Settings", note: "Memory is unreachable") {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Text(error)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 CompanionButton(title: "Try again", role: .primary) {
@@ -446,7 +446,7 @@ struct CompanionSettingsScreen: View {
                         "Stored with Memory and applied to the running service. "
                             + "Never written to this Mac's defaults or the iCloud settings backup."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
 
@@ -472,7 +472,7 @@ struct CompanionSettingsScreen: View {
                         text: status, tone: model.reasonerStatusIsError ? .error : .ok)
                 } else if let current = model.current {
                     Text(current.description)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -493,7 +493,7 @@ struct CompanionSettingsScreen: View {
                 .accessibilityLabel("Loading Memory health")
             } else if home.checks.isEmpty {
                 Text(home.error ?? "No health checks were returned.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             } else {
                 LazyVGrid(
@@ -507,7 +507,7 @@ struct CompanionSettingsScreen: View {
                                 .fill(check.ok ? DashSkin.ok : DashSkin.warn)
                                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                             Text("\(check.name) · \(check.detail)")
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(
                                     check.ok ? DashSkin.inkSoft(dark) : DashSkin.warn
                                 )
@@ -599,7 +599,7 @@ struct CompanionSettingsScreen: View {
                             + "effect without a restart. Calendar, music and YouTube have no "
                             + "live API worth using, so they come from an export you re-import."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
 
@@ -625,7 +625,7 @@ struct CompanionSettingsScreen: View {
                         "Not a usable URL; the app keeps talking to \(endpoint)",
                         systemImage: "exclamationmark.triangle.fill"
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.danger)
                 } else {
                     Text(
@@ -634,7 +634,7 @@ struct CompanionSettingsScreen: View {
                                 + "you press Return or leave the field."
                             : "Applies to \(endpointDraft) on Return, or when you leave the field."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -662,18 +662,18 @@ struct CompanionSettingsScreen: View {
     }
 
     private var dataCard: some View {
-        PageCard(title: "Your data", note: "it leaves whenever you say") {
+        PageCard(title: "Your data", note: "it leaves whenever you say", fill: true) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text("Export everything")
-                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                         Text(
                             "Episodes, conversations, beliefs, observations and media, "
                                 + "written to a folder as a restorable bundle. Tokens stay behind."
                         )
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -688,13 +688,13 @@ struct CompanionSettingsScreen: View {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text("Import a bundle")
-                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                         Text(
                             "Merges an exported bundle back in. Nothing is overwritten and "
                                 + "what already exists is skipped, so importing twice is safe."
                         )
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -797,6 +797,7 @@ struct CompanionSettingsScreen: View {
                 Text("Operation unavailable")
                     .font(DashSkin.heading(17))
                 Button("Done") { destructiveOperation = nil }
+                    .buttonStyle(.edith(.secondary))
                     .keyboardShortcut(.cancelAction)
             }
             .padding(UIScale.pt(24))

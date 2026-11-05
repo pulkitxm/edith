@@ -175,7 +175,7 @@ struct DockerConsoleView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(session.machine.name.uppercased())
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .tracking(UIScale.pt(0.6))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.horizontal, UIScale.pt(12))
@@ -188,10 +188,10 @@ struct DockerConsoleView: View {
                 } label: {
                     HStack(spacing: UIScale.pt(8)) {
                         Image(systemName: item.icon)
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.subheadline))
                             .frame(width: UIScale.pt(16))
                         Text(item.title)
-                            .font(.system(size: UIScale.pt(12.5)))
+                            .font(.edithText(.callout))
                         Spacer(minLength: 0)
                         if item == .containers, !session.containers.isEmpty {
                             Text("\(session.containers.filter { $0.state.isRunning }.count)")
@@ -218,10 +218,10 @@ struct DockerConsoleView: View {
             if let usage = session.diskUsage.first(where: { $0.type == "Images" }) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("IMAGES")
-                        .font(.system(size: UIScale.pt(8.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Text(ByteFormatter.string(usage.sizeBytes))
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                 }
                 .padding(UIScale.pt(12))
@@ -248,9 +248,9 @@ struct DockerConsoleView: View {
                 header
                 if let error {
                     Text(error)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .padding(.horizontal, UIScale.pt(16))
+                        .dockerPaneInset()
                         .padding(.vertical, UIScale.pt(7))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(DashSkin.danger.opacity(0.12))
@@ -289,7 +289,7 @@ struct DockerConsoleView: View {
             .fixedSize()
             .help("Reclaim space")
         }
-        .padding(.horizontal, UIScale.pt(16))
+        .dockerPaneInset()
         .padding(.vertical, UIScale.pt(12))
     }
 
@@ -446,13 +446,13 @@ struct DockerUnavailableView: View {
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(30)))
+                .font(.edithText(.largeTitle))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(title)
                 .font(DashSkin.heading(18))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(detail)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(420))
@@ -510,4 +510,24 @@ enum DockerWindow {
                     title: "Docker \u{00B7} \(session.machine.name)"))
         }
     }
+}
+
+enum DockerRowMetrics {
+    static let toolbarButton = 28.0
+    static let actionSpacing = 2.0
+    static var openColumn: Double { toolbarButton + actionSpacing }
+}
+
+private struct DockerPaneInset: ViewModifier {
+    @Environment(\.compactLayout) private var compact
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, UIScale.pt(16))
+            .padding(.trailing, PageMetrics.gutter(compact))
+    }
+}
+
+extension View {
+    func dockerPaneInset() -> some View { modifier(DockerPaneInset()) }
 }

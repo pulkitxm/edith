@@ -129,7 +129,7 @@ struct CompanionBackendScreen: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     HStack(spacing: UIScale.pt(7)) {
                         Text(host.name)
-                            .font(.system(size: UIScale.pt(13), weight: .medium))
+                            .font(.edithText(.body).weight(.medium))
                             .foregroundStyle(DashSkin.ink(dark))
                         if host.hostsTheStack {
                             MindChip(label: "hosts it", tone: .green)
@@ -139,11 +139,11 @@ struct CompanionBackendScreen: View {
                         }
                     }
                     Text(host.summary)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     ForEach(Array(host.blockers.enumerated()), id: \.offset) { _, blocker in
                         Text("\(blocker.headline) · \(blocker.fix)")
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.warn)
                     }
                 }
@@ -162,7 +162,7 @@ struct CompanionBackendScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if model.services.isEmpty {
                     Text("Nothing is running on that machine yet.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 } else {
                     ForEach(model.services, id: \.service) { service in
@@ -171,14 +171,14 @@ struct CompanionBackendScreen: View {
                                 .fill(service.running ? DashSkin.ok : DashSkin.warn)
                                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                             Text(service.service)
-                                .font(.system(size: UIScale.pt(12), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Text(service.status)
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer(minLength: 0)
                             Text(service.ports)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                     }
@@ -219,7 +219,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var configurationCard: some View {
-        PageCard(title: "Configuration", note: "ports and models") {
+        PageCard(title: "Configuration", note: "ports and models", fill: true) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
                     portField("API port", value: $model.config.apiPort)
@@ -261,7 +261,9 @@ struct CompanionBackendScreen: View {
     }
 
     private var secretsCard: some View {
-        PageCard(title: "Keys and tokens", note: "kept in your Keychain") {
+        PageCard(
+            title: "Keys and tokens", note: "kept in your Keychain", fill: model.deployment == nil
+        ) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 secretField(
                     "Anthropic API key", kind: .anthropicKey, text: $model.secrets.anthropicKey)
@@ -299,7 +301,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var teardownCard: some View {
-        PageCard(title: "Danger zone", note: "the stack, not just the app") {
+        PageCard(title: "Danger zone", note: "the stack, not just the app", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 CompanionDangerRow(
                     title: "Destroy the stack and its data",
@@ -333,7 +335,7 @@ struct CompanionBackendScreen: View {
         PageCard(title: "Last output", note: "from its host") {
             ScrollView {
                 Text(model.lastLog)
-                    .font(.system(size: UIScale.pt(11), design: .monospaced))
+                    .font(.edithText(.subheadline, design: .monospaced))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -345,25 +347,9 @@ struct CompanionBackendScreen: View {
     private func portField(_ label: String, value: Binding<Int>) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             CompanionFieldLabel(text: label)
-            CompanionPortInput(value: value)
+            EdithNumberField(
+                value: value, width: UIScale.pt(PageMetrics.settingsNumberWidth), grouped: false)
         }
-    }
-}
-
-private struct CompanionPortInput: View {
-    @Binding var value: Int
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        TextField("", value: $value, format: .number.grouping(.never))
-            .textFieldStyle(.plain)
-            .font(.edithText(.callout).monospacedDigit())
-            .multilineTextAlignment(.trailing)
-            .labelsHidden()
-            .focused($focused)
-            .focusEffectDisabled()
-            .frame(width: UIScale.pt(84))
-            .edithFieldSurface(focused: focused, compact: true)
     }
 }
 

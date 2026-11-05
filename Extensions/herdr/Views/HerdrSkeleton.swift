@@ -31,8 +31,10 @@ struct HerdrSkeleton: View {
                 Spacer(minLength: 0)
                 SkeletonBlock(width: 34, height: 13, corner: 6.5)
             }
-            SkeletonBlock(width: index.isMultiple(of: 2) ? 152 : 188, height: 12)
-            SkeletonBlock(width: index.isMultiple(of: 3) ? 118 : 164, height: 9)
+            SkeletonBlock(height: 12)
+                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 2) ? 152 : 188))
+            SkeletonBlock(height: 9)
+                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 3) ? 118 : 164))
         }
         .padding(UIScale.pt(12))
         .frame(maxWidth: .infinity, alignment: .leading)

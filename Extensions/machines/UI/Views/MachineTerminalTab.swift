@@ -115,7 +115,7 @@ struct MachineTerminalTab: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             if let message = holder.exitMessage {
                 Text(message)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
             }
             Spacer(minLength: 0)
@@ -124,7 +124,7 @@ struct MachineTerminalTab: View {
             }
             if let action = presentation.action {
                 Button(action.title) { perform(action) }
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
@@ -174,14 +174,14 @@ struct MachineTerminalTab: View {
             } else {
                 VStack(spacing: UIScale.pt(10)) {
                     Image(systemName: presentation.symbol)
-                        .font(.system(size: UIScale.pt(24), weight: .light))
+                        .font(.edithText(.title).weight(.light))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Text(presentation.title)
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                     if let detail = presentation.detail {
                         Text(detail)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: UIScale.pt(520))
@@ -409,7 +409,7 @@ struct ContainerTerminalSheet: View {
                 Spacer()
                 if let message = holder.exitMessage {
                     Text(message)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.warn)
                 }
                 Button("Done") {

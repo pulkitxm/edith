@@ -32,9 +32,8 @@ struct HerdrAgentViewToggle: View {
                     .font(.system(size: UIScale.pt(compactStyle ? 9 : 10), weight: .semibold))
                 Text(option.shortTitle)
                     .font(
-                        .system(
-                            size: UIScale.pt(compactStyle ? 10 : 11),
-                            weight: selected ? .semibold : .medium)
+                        .edithText(compactStyle ? .caption : .subheadline)
+                            .weight(selected ? .semibold : .medium)
                     )
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

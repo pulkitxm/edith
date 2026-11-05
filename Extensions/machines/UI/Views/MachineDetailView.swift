@@ -64,7 +64,7 @@ struct MachineDetailView: View {
     }
 
     private var tabStrip: some View {
-        MachinePageTabStrip(selection: tab) {
+        PageTabStrip(selection: tab) {
             HStack(spacing: UIScale.pt(4)) {
                 let items = MachineTab.tabs(
                     isLocal: session.isLocal, hasDocker: session.docker.isInstalled)
@@ -78,9 +78,9 @@ struct MachineDetailView: View {
                     } label: {
                         HStack(spacing: UIScale.pt(6)) {
                             Image(systemName: item.icon)
-                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                                .font(.edithText(.subheadline).weight(.medium))
                             Text(item.title)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .lineLimit(1)
                         }
                         .padding(.horizontal, UIScale.pt(11))
@@ -171,7 +171,7 @@ struct ConnectionPill: View {
                     .fill(MachineStatusStyle.color(session.state, dark: dark))
                     .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                 Text(MachineStatusStyle.label(session.state))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -180,7 +180,7 @@ struct ConnectionPill: View {
             if session.state.isRetryable {
                 Button("Retry") { session.retry() }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
         }

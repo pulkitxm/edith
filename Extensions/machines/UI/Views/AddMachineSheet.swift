@@ -303,7 +303,8 @@ struct AddMachineSheet: View {
                 .buttonStyle(.edith(.secondary))
                 .disabled(!isValid || testState == .testing)
                 .fixedSize()
-                helpText(isValid ? "Checks the address and sign-in before you save." : missingDetails)
+                helpText(
+                    isValid ? "Checks the address and sign-in before you save." : missingDetails)
                 Spacer(minLength: 0)
             }
             switch testState {
@@ -369,7 +370,7 @@ struct AddMachineSheet: View {
             Text(title)
                 .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-            AddMachineInput(placeholder: placeholder, text: text)
+            EdithTextField(placeholder: placeholder, text: text)
         }
     }
 
@@ -378,7 +379,8 @@ struct AddMachineSheet: View {
             Text(title)
                 .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-            AddMachineInput(placeholder: "", text: text, secure: true)
+            EdithSecureField(placeholder: "", text: text)
+                .accessibilityLabel(title)
         }
     }
 
@@ -395,9 +397,11 @@ struct AddMachineSheet: View {
     }
 
     private func load() async {
-        let loader = loadConfiguration ?? MachinesModel.shared.uiClient.map { client in
-            { try await client.configuration() }
-        }
+        let loader =
+            loadConfiguration
+            ?? MachinesModel.shared.uiClient.map { client in
+                { try await client.configuration() }
+            }
         guard let loader else {
             testState = .failure(MachineUIError.unavailable.localizedDescription)
             return
@@ -520,32 +524,5 @@ struct AddMachineSheet: View {
                 sudo: sudoPassword.isEmpty ? nil : sudoPassword,
                 forgetSudo: forgetSudoPassword && sudoPassword.isEmpty))
         dismiss()
-    }
-}
-
-private struct AddMachineInput: View {
-    let placeholder: String
-    @Binding var text: String
-    var secure = false
-    @FocusState private var focused: Bool
-    @Environment(\.colorScheme) private var scheme
-
-    private var prompt: Text {
-        Text(placeholder).foregroundStyle(DashSkin.inkFaint(scheme == .dark).opacity(0.7))
-    }
-
-    var body: some View {
-        Group {
-            if secure {
-                SecureField("", text: $text)
-            } else {
-                TextField("", text: $text, prompt: prompt)
-            }
-        }
-        .textFieldStyle(.plain)
-        .font(.edithText(.callout))
-        .focused($focused)
-        .focusEffectDisabled()
-        .edithFieldSurface(focused: focused)
     }
 }

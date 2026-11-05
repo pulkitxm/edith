@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -63,7 +64,7 @@ private struct Unavailable: LocalizedError {
 
 @MainActor @Suite(.serialized) struct MicMuteSettingsCaptureTests {
     @Test func settingsRenderEveryStateAtEverySize() async throws {
-        try await SettingsRenderCapture.withAccessibility {
+        try await RenderCapture.withAccessibility {
             let preferences: [String: Any] = ["micMuteEnabled": true, "micMuteInMenuBar": true]
             let live = try await ControlFixture.loaded(preferences)
             let muted = try await ControlFixture.loaded(
@@ -89,21 +90,26 @@ private struct Unavailable: LocalizedError {
                 ),
             ]
             for (name, model, label) in cases {
-                for variant in SettingsRenderCapture.variants {
-                    let host = try await SettingsRenderCapture.render(
+                for variant in RenderCapture.layoutVariants {
+                    let rendered = try await RenderCapture.render(
                         "micMute-settings-\(name)", variant: variant
                     ) {
                         ControlSettingsHost(presentation: model) {
-                            Form { MicMuteRows(presentation: model) }.edithForm()
+                            Form { MicMuteRows(presentation: model) }.settingsForm()
                         }
                     }
                     if let label {
                         #expect(
-                            SettingsRenderCapture.find(host, label: label) != nil,
+                            RenderCapture.find(rendered.host, label: label) != nil,
                             "\(name) \(variant.name) is missing \(label)")
                     }
                 }
             }
         }
     }
+}
+
+extension RenderCapture {
+    fileprivate static let layoutVariants =
+        variants + [Variant(name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)]
 }

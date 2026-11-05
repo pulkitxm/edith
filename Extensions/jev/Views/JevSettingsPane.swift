@@ -3,6 +3,8 @@ import EdithExtensionUI
 import SwiftUI
 
 struct JevSettingsPane: View {
+    private static let formHeaderInset = 10.0
+
     @Bindable var model: JevSettingsModel
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
@@ -24,6 +26,7 @@ struct JevSettingsPane: View {
                 "Everything in Edith already works without Jev. Add a TypeSafe API key only if you want faster, smarter decisions in the features listed below.",
                 title: "Jev is optional", symbol: "sparkles"
             )
+            .padding(.horizontal, -Self.formHeaderInset)
             .padding(.bottom, UIScale.pt(16))
         }
     }
@@ -127,12 +130,17 @@ struct JevSettingsPane: View {
     private var featuresSection: some View {
         Section {
             ForEach(JevFeature.catalog) { feature in
-                LabeledContent {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(feature.title)
+                        Text(feature.detail)
+                            .font(.edithText(.subheadline))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                     Text(model.status?.state == .ready ? "Using Jev" : "Built-in rules")
                         .foregroundStyle(.secondary)
-                } label: {
-                    Text(feature.title)
-                    Text(feature.detail).font(.edithText(.subheadline))
                 }
             }
         } header: {

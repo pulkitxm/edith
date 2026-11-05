@@ -355,10 +355,10 @@ struct HerdrSpaceView: View {
                         HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
                     } else {
                         Image(systemName: "terminal")
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                            .font(.edithText(.caption).weight(.semibold))
                     }
                     Text(tab.title)
-                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .font(.edithText(.subheadline).weight(.medium))
                         .lineLimit(1)
                 }
                 .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
@@ -404,7 +404,7 @@ struct HerdrSpaceView: View {
             }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: UIScale.pt(11), weight: .bold))
+                .font(.edithText(.subheadline).weight(.bold))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
         .menuStyle(.borderlessButton)
@@ -423,7 +423,7 @@ struct HerdrSpaceView: View {
                         tab?.setAgentView(mode, defaults: store.uiDefaults)
                     } label: {
                         Label(mode.shortTitle, systemImage: mode.icon)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                            .font(.edithText(.caption).weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))
                     }
                     .buttonStyle(
@@ -469,7 +469,7 @@ struct HerdrSpaceView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
         .buttonStyle(.edith(.toolbar, selected: selected, tint: DashSkin.accent(dark)))
@@ -482,9 +482,9 @@ struct HerdrSpaceView: View {
         if model.tabs.isEmpty {
             VStack(spacing: UIScale.pt(12)) {
                 Image(systemName: "terminal")
-                    .font(.system(size: UIScale.pt(28), weight: .light))
+                    .font(.edithText(.largeTitle).weight(.light))
                 Text("No terminals open")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                 Button("New Terminal") { model.addTerminal() }
                     .buttonStyle(.edith(.primary))
             }
@@ -664,11 +664,11 @@ private struct HerdrSpaceTerminalView: View {
             } else {
                 VStack(spacing: UIScale.pt(9)) {
                     Image(systemName: "questionmark.circle")
-                        .font(.system(size: UIScale.pt(24), weight: .light))
+                        .font(.edithText(.title).weight(.light))
                     Text("Machine unavailable")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                     Text("Add this machine in Edith to open its terminal.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

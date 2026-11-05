@@ -92,6 +92,11 @@ struct DashboardView: View {
             errorMessage: model.contentLoad.errorMessage)
     }
 
+    private var emptyStateFillsPage: Bool {
+        !showLog && client?.notice == nil && client?.failure == nil
+            && UsageWorkerOperations.controller?.notice == nil
+    }
+
     var body: some View {
         PageScaffold(pinnedHeader: true) {
             masthead
@@ -127,6 +132,7 @@ struct DashboardView: View {
                     footnote:
                         "Only token counts and model names are read. Your prompts and code stay where they are."
                 )
+                .fillingPage(emptyStateFillsPage)
             case .firstRun:
                 PageEmptyState(
                     symbolName: "chart.bar.fill",
@@ -143,6 +149,7 @@ struct DashboardView: View {
                     footnote:
                         "Nothing is uploaded and nothing is changed. If you have not used an agent yet, there is nothing to count until you do."
                 )
+                .fillingPage(emptyStateFillsPage)
             case .failed(let message):
                 PageEmptyState(
                     symbolName: "exclamationmark.triangle",
@@ -154,16 +161,19 @@ struct DashboardView: View {
                     },
                     secondary: PageAction("Show the log", symbolName: "terminal") {
                         withAnimation(.easeOut(duration: 0.15)) { showLog = true }
-                    })
+                    }
+                )
+                .fillingPage(emptyStateFillsPage)
             case .none:
                 PageLoading(
                     state: model.contentLoad.state, title: "No usage data yet",
+                    errorTitle: "Usage could not be read",
                     message: model.contentLoad.errorMessage ?? "Collect usage to fill this page.",
                     layout: .analytics,
                     refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
                     retry: refresh.requestRefresh
                 ) {
-                    kpiGrid(compact: compactLayout)
+                    kpiGrid
                     activityRow(compact: compactLayout)
                     LimitsCardView(theme: acc, dark: dark)
                     BudgetCardView(theme: acc, dark: dark)
@@ -286,12 +296,12 @@ struct DashboardView: View {
         model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
-    private func kpiGrid(compact: Bool) -> some View {
+    private var kpiGrid: some View {
         VStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-            metricGrid(Array(model.kpis.prefix(4)), compact: compact)
+            metricGrid(Array(model.kpis.prefix(4)))
             if model.kpis.count > 4 {
                 if showMoreMetrics {
-                    metricGrid(Array(model.kpis.dropFirst(4)), compact: compact)
+                    metricGrid(Array(model.kpis.dropFirst(4)))
                 }
                 Button {
                     withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
@@ -317,45 +327,14 @@ struct DashboardView: View {
         }
     }
 
-    private func metricGrid(_ metrics: [KPI], compact: Bool) -> some View {
-        let columns = Array(
-            repeating: GridItem(
-                .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
-            count: compact ? 2 : 4)
-        return LazyVGrid(columns: columns, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+    private func metricGrid(_ metrics: [KPI]) -> some View {
+        PageMetricGrid(maximumColumns: 4) {
             ForEach(metrics) { kpi in
-                HStack(spacing: UIScale.pt(0)) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        PageCapsLabel(kpi.label)
-                        Text(kpi.value)
-                            .font(DashSkin.heading(26))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: kpi.value
-                            )
-                            .presenterBlur(
-                                (kpi.sensitiveValue && blurMoney) || (kpi.usageValue && blurUsage))
-                        Text(kpi.sub)
-                            .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .contentTransition(.numericText())
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: kpi.sub
-                            )
-                            .presenterBlur(
-                                (kpi.sensitiveSub && blurMoney) || (kpi.usageSub && blurUsage))
-                    }
-                    .padding(UIScale.pt(PageMetrics.cardPadding))
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+                PageMetric(
+                    title: kpi.label, value: kpi.value, detail: kpi.sub,
+                    valueBlurred: (kpi.sensitiveValue && blurMoney)
+                        || (kpi.usageValue && blurUsage),
+                    detailBlurred: (kpi.sensitiveSub && blurMoney) || (kpi.usageSub && blurUsage))
             }
         }
     }
@@ -390,12 +369,12 @@ struct DashboardView: View {
                 }
             } else {
                 HStack(alignment: .top, spacing: UIScale.pt(24)) {
-                    heatmap.layoutPriority(1)
+                    heatmap.frame(maxWidth: .infinity, alignment: .leading)
                     Rectangle().fill(DashSkin.line(dark)).frame(width: 1)
                     UsageActivitySummaryView(
                         summary: summary, axis: .vertical, blurTokens: blurUsage
                     )
-                    .frame(minWidth: UIScale.pt(156), maxWidth: .infinity, alignment: .leading)
+                    .frame(width: UIScale.pt(156), alignment: .leading)
                 }
             }
         }
@@ -947,8 +926,9 @@ struct ActivityHeatmap: View {
     var blur = false
     var blurTokens = false
     var body: some View {
-        let weeks = scale.weeks(days: days)
-        ActivityCalendarGrid(weeks: weeks, dark: dark) { day in
+        ActivityCalendarGrid(
+            weeks: Self.kitWeeks(scale.weeks(days: days)), dark: dark, fillsWidth: true
+        ) { day in
             if let detail = model.heatDetail[day.id] {
                 HeatCard(
                     detail: detail, model: model, dark: dark, blur: blur, blurTokens: blurTokens)
@@ -958,5 +938,25 @@ struct ActivityHeatmap: View {
                     .padding(UIScale.pt(12))
             }
         }
+    }
+
+    private static func kitWeeks(
+        _ weeks: [ActivityCalendarWeek]
+    ) -> [EdithExtensionUI.ActivityCalendarWeek] {
+        weeks.map { week in
+            EdithExtensionUI.ActivityCalendarWeek(
+                id: week.id, monthLabel: week.monthLabel,
+                cells: week.cells.map {
+                    EdithExtensionUI.ActivityCalendarDay(
+                        id: $0.id, date: $0.date, value: $0.value,
+                        level: $0.level > 0 ? ($0.level * 3 + 1) / 2 : $0.level)
+                })
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder fileprivate func fillingPage(_ fills: Bool) -> some View {
+        if fills { pageFillViewport() } else { self }
     }
 }

@@ -193,7 +193,7 @@ struct CompanionPage: View {
                         Task { await home.refresh() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .font(.edithText(.subheadline).weight(.medium))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .contentShape(Rectangle())
                     }
@@ -208,7 +208,7 @@ struct CompanionPage: View {
                                 .fill(healthTint)
                                 .frame(width: UIScale.pt(8), height: UIScale.pt(8))
                             Text(home.hasAttemptedRefresh ? home.state.label : "checking…")
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         .contentShape(Rectangle())
@@ -251,10 +251,11 @@ struct CompanionPage: View {
 
     private var tabBar: some View {
         PageTabPicker(
-            title: "Memory section",
+            "Memory section",
             selection: Binding(get: { tab }, set: select),
             options: CompanionTab.allCases, label: { $0.title }
         )
+        .frame(maxWidth: .infinity, alignment: .leading)
         .pageGutter(compact)
         .padding(.bottom, UIScale.pt(12))
     }
@@ -281,13 +282,13 @@ struct CompanionPage: View {
                     DashSkin.accent(dark), style: StrokeStyle(lineWidth: 1.5, dash: [7, 5]))
             VStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "tray.and.arrow.down")
-                    .font(.system(size: UIScale.pt(26)))
+                    .font(.edithText(.largeTitle))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")
                     .font(DashSkin.heading(20, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Notes, recordings, photos, video, PDFs")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }

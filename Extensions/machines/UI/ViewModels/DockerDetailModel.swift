@@ -529,7 +529,7 @@ struct DockerContainerDetail: View {
                 }
                 Button("Remove", role: .destructive, action: onRemove)
             }
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.subheadline))
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(12))
@@ -553,7 +553,7 @@ struct DockerContainerDetail: View {
                 }
             } label: {
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .padding(.horizontal, UIScale.pt(7))
                     .padding(.vertical, UIScale.pt(5))
@@ -578,7 +578,7 @@ struct DockerContainerDetail: View {
                 .fill(live.state.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             Text(live.status)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
@@ -597,7 +597,7 @@ struct DockerContainerDetail: View {
                 } label: {
                     Text(item.title)
                         .lineLimit(1)
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .padding(.horizontal, UIScale.pt(11))
                         .padding(.vertical, UIScale.pt(5))
                         .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
@@ -615,13 +615,13 @@ struct DockerContainerDetail: View {
                     .frame(width: UIScale.pt(180))
                 Toggle("Timestamps", isOn: $model.showTimestamps)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Toggle("Follow", isOn: $model.follow)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Toggle("Wrap", isOn: $model.wrapLines)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Button {
                     model.logFontSize = max(9, model.logFontSize - 1)
                 } label: {
@@ -686,19 +686,19 @@ struct DockerContainerDetail: View {
                 })
             if visible.isEmpty {
                 Text(model.logFilter.isEmpty ? "No output yet." : "Nothing matches that filter.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if model.streamEnded {
                 HStack(spacing: UIScale.pt(8)) {
                     Text("The log stream ended.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button("Reattach") {
                         model.startLogs(session: session, container: live)
                     }
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                 }
                 .padding(.horizontal, UIScale.pt(12))
                 .padding(.vertical, UIScale.pt(7))
@@ -717,6 +717,7 @@ struct DockerContainerDetail: View {
                         message, tone: .error,
                         actions: {
                             Button("Retry") { loadGeneration &+= 1 }
+                                .buttonStyle(.edith(.secondary))
                         })
                 }
                 if let inspect = model.inspect {
@@ -733,12 +734,13 @@ struct DockerContainerDetail: View {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(DashSkin.warn)
                         Text("Could not read this container's configuration.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                         Button("Retry") {
                             loadGeneration &+= 1
                         }
-                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .buttonStyle(.edith(.secondary))
+                        .font(.edithText(.subheadline).weight(.medium))
                     }
                 } else {
                     DockerInspectSkeleton()
@@ -753,7 +755,7 @@ struct DockerContainerDetail: View {
         return VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(spacing: UIScale.pt(6)) {
                 Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .tracking(UIScale.pt(0.6))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if !shown.isEmpty {
@@ -822,7 +824,7 @@ struct DockerContainerDetail: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             HStack {
                 Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 Text(value)
@@ -842,7 +844,7 @@ struct DockerContainerDetail: View {
     private func statItem(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
-                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(value)
                 .font(DashSkin.mono(12))
@@ -858,6 +860,7 @@ struct DockerContainerDetail: View {
                     message, tone: .error,
                     actions: {
                         Button("Retry") { loadGeneration &+= 1 }
+                            .buttonStyle(.edith(.secondary))
                     })
             }
             if !model.processesLoad.hasContent,
@@ -869,17 +872,18 @@ struct DockerContainerDetail: View {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(DashSkin.warn)
                     Text("Could not read this container's processes.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button("Retry") {
                         loadGeneration &+= 1
                     }
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .buttonStyle(.edith(.secondary))
+                    .font(.edithText(.subheadline).weight(.medium))
                 }
                 .padding(UIScale.pt(16))
             } else if model.processes.isEmpty {
                 Text("No processes are running in this container.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(UIScale.pt(16))
@@ -891,7 +895,7 @@ struct DockerContainerDetail: View {
                                 .font(DashSkin.mono(10.5))
                                 .frame(width: UIScale.pt(56), alignment: .leading)
                             Text(process.user)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .frame(width: UIScale.pt(80), alignment: .leading)
                             Text(process.command)
                                 .font(DashSkin.mono(10.5))
@@ -941,6 +945,7 @@ struct DockerContainerDetail: View {
                             message, tone: .error,
                             actions: {
                                 Button("Retry") { loadGeneration &+= 1 }
+                                    .buttonStyle(.edith(.secondary))
                             })
                     }
                     if !model.filesLoad.hasContent,
@@ -952,15 +957,16 @@ struct DockerContainerDetail: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundStyle(DashSkin.warn)
                             Text("Could not read this folder.")
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Button("Retry") { loadGeneration &+= 1 }
-                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                                .buttonStyle(.edith(.secondary))
+                                .font(.edithText(.subheadline).weight(.medium))
                         }
                         .padding(UIScale.pt(16))
                     } else if model.files.isEmpty {
                         Text("This folder is empty.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(UIScale.pt(16))
@@ -971,7 +977,7 @@ struct DockerContainerDetail: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(15))
                             Text(entry.name)
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Spacer(minLength: 0)
                             if !entry.isDirectory {

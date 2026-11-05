@@ -311,7 +311,7 @@ struct HerdrPage: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .contentShape(Rectangle())
@@ -354,7 +354,7 @@ struct HerdrPage: View {
             }
         } label: {
             Image(systemName: "sidebar.left")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 .padding(UIScale.pt(4))
@@ -524,14 +524,7 @@ struct HerdrPage: View {
                     let cards = listedAgents.filter { $0.status == status }
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         columnHeader(status, count: cards.count)
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(200)),
-                                    spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top)
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(8)
-                        ) {
+                        LazyVStack(spacing: UIScale.pt(8)) {
                             if boardLoading {
                                 HerdrSkeleton(dark: dark, rows: 1)
                             } else if cards.isEmpty {
@@ -570,7 +563,7 @@ struct HerdrPage: View {
     private func boardLanes(available: CGFloat) -> some View {
         let statuses = visibleColumns
         let gaps = UIScale.pt(PageMetrics.cardSpacing) * CGFloat(max(0, statuses.count - 1))
-        let width = min((available - gaps) / CGFloat(max(1, statuses.count)), UIScale.pt(320))
+        let width = (available - gaps) / CGFloat(max(1, statuses.count))
         return HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             ForEach(statuses, id: \.self) { status in
                 column(status, width: width)
@@ -644,11 +637,11 @@ struct HerdrPage: View {
                         .foregroundStyle(
                             agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.kind)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                     Spacer(minLength: 0)
                     if open {
                         Text("Open")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(DashSkin.accent(dark))
                             .padding(.horizontal, UIScale.pt(6))
                             .padding(.vertical, UIScale.pt(2))
@@ -659,7 +652,7 @@ struct HerdrPage: View {
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 Text(agent.title)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
+                    .font(.edithText(.body).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -761,7 +754,7 @@ struct HerdrPage: View {
                     }
                 } label: {
                     Text(allCollapsed ? "Expand all" : "Collapse all")
-                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .contentShape(Rectangle())
                 }
@@ -787,7 +780,7 @@ struct HerdrPage: View {
                 agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
         } label: {
             Image(systemName: "paperplane")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
@@ -814,7 +807,7 @@ struct HerdrPage: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .rotationEffect(.degrees(collapsed ? 0 : 90))
                     Text(space.title)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                         .presenterTextBlur(hideAgents, fontSize: 10.5)
@@ -849,7 +842,7 @@ struct HerdrPage: View {
                 newAgentSpace = space
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
@@ -865,7 +858,7 @@ struct HerdrPage: View {
                 openSpace(space)
             } label: {
                 Image(systemName: "macwindow")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }

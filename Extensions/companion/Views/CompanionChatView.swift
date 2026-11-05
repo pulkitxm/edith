@@ -527,9 +527,9 @@ struct CompanionChatScreen: View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(5)) {
                 Image(systemName: "arrow.down")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                 Text("Latest")
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
             }
             .foregroundStyle(DashSkin.ink(dark))
             .padding(.horizontal, UIScale.pt(11))
@@ -556,7 +556,7 @@ struct CompanionChatScreen: View {
         HStack(spacing: UIScale.pt(10)) {
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             Text(label)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .fixedSize()
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
@@ -632,7 +632,7 @@ struct CompanionChatScreen: View {
             HStack {
                 Spacer(minLength: UIScale.pt(80))
                 Text(message.content)
-                    .font(.system(size: UIScale.pt(13)))
+                    .font(.edithText(.body))
                     .foregroundStyle(DashSkin.ink(dark))
                     .textSelection(.enabled)
                     .padding(.horizontal, UIScale.pt(13))
@@ -658,7 +658,7 @@ struct CompanionChatScreen: View {
                 }
                 if message.stopped {
                     Text("stopped")
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 if !message.citations.isEmpty {
@@ -687,10 +687,10 @@ struct CompanionChatScreen: View {
     private func failureStrip(_ failure: CompanionChatModel.ChatFailure) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.warn)
             Text(failure.message)
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(2)
             Spacer(minLength: 0)
@@ -761,10 +761,10 @@ struct CompanionChatScreen: View {
                         ForEach(council.answers, id: \.persona) { answer in
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(answer.label)
-                                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                    .font(.edithText(.callout).weight(.semibold))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 Text(answer.answer)
-                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.inkSoft(dark))
                                     .textSelection(.enabled)
                             }
@@ -775,12 +775,12 @@ struct CompanionChatScreen: View {
                 Divider().opacity(0.3)
                 if !council.crux.isEmpty {
                     Text("the crux: \(council.crux)")
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                 }
                 if !council.cruxQuestion.isEmpty {
                     Text(council.cruxQuestion)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 CompanionLinkButton(title: "Close") { model.dismissCouncil() }
@@ -798,7 +798,7 @@ struct CompanionChatScreen: View {
             TextField("Talk to your memory…", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...8)
-                .font(.system(size: UIScale.pt(13.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.ink(dark))
                 .tint(DashSkin.accent(dark))
                 .focused($composerFocused)
@@ -831,7 +831,7 @@ struct CompanionChatScreen: View {
                 model.stop()
             } label: {
                 Image(systemName: "stop.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                    .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
             }
             .buttonStyle(.edith(.borderless))
@@ -842,7 +842,7 @@ struct CompanionChatScreen: View {
                 model.send()
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                    .font(.edithText(.title))
                     .foregroundStyle(
                         draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
             }
@@ -1033,24 +1033,19 @@ private struct CitationChip: View {
         } label: {
             HStack(spacing: UIScale.pt(4)) {
                 Text("\(index)")
-                    .font(.system(size: UIScale.pt(10), weight: .bold))
+                    .font(.edithText(.caption).weight(.bold))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text(
                     "\(citation.title) · \(String(citation.occurredAt.prefix(10))) · \(supportLabel)"
                 )
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: UIScale.pt(220))
             }
-            .padding(.horizontal, UIScale.pt(9))
-            .padding(.vertical, UIScale.pt(3))
-            .background(DashSkin.paper(dark), in: Capsule())
-            .overlay { Capsule().strokeBorder(DashSkin.line(dark)) }
-            .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip())
         .help("Preview this citation")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -1058,11 +1053,11 @@ private struct CitationChip: View {
                     .font(DashSkin.heading(15, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("\(String(citation.occurredAt.prefix(10))) · \(supportLabel)")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if !citation.quote.isEmpty {
                     Text("\u{201C}\(citation.quote)\u{201D}")
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .italic()
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .textSelection(.enabled)
@@ -1097,13 +1092,13 @@ private struct ConversationRow: View {
             Button(action: open) {
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                     Text(conversation.title.isEmpty ? "Untitled" : conversation.title)
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
                     Text(
                         "\(String(conversation.lastActiveAt.prefix(10))) · \(conversation.messageCount) messages"
                     )
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

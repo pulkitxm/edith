@@ -10,14 +10,12 @@ import Foundation
 
 @MainActor
 final class SystemStatsService: ExtensionService {
-    static let title = "Menu Bar Stats"
     private unowned let runtime: ExtensionServiceRuntime
     private var item: SystemStatsStatusItem?
     private let uiDefaults: UserDefaults
     private var presentation: ControlPresentation?
     private var presentationStops: [UUID: Task<Void, Never>] = [:]
     private var draining = false
-    private var settingsDetail = false
     private let follow = SystemStatsFollow()
     private var fixture: WorkerFixtureAdmission?
     private var cliStreams: ExtensionCLIStreams?
@@ -89,9 +87,7 @@ final class SystemStatsService: ExtensionService {
             }
             return try ControlPresentationContract.execute(
                 command, payload: payload, defaults: SharedDefaults.store,
-                state: ControlPresentationState(
-                    cpu: self.item?.snapshot.cpu ?? 0,
-                    memory: self.item?.snapshot.memory ?? 0))
+                state: ControlPresentationState())
         }
         guard let item = self.item else {
             throw ExtensionPeerError.unavailable
@@ -113,31 +109,18 @@ final class SystemStatsService: ExtensionService {
     func configureUI(_ configuration: ExtensionUIConfiguration) -> Bool {
         guard !draining, presentationStops.isEmpty,
             configuration.defaultsSuite
-                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"]
-        else { return false }
-        let settings = SystemStatsSettingsScene.accepts(configuration.input)
-        guard
-            settings
-                || (!configuration.uiOnly && configuration.location == "main"
-                    && configuration.section == "systemStats")
+                == ExtensionEnvironment.values["EDITH_SHARED_DEFAULTS_SUITE"],
+            SystemStatsSettingsScene.accepts(configuration.input)
         else { return false }
         _ = retirePresentation()
-        settingsDetail = settings
         presentation = ControlPresentation(client: configuration.engineClient, defaults: uiDefaults)
         return true
     }
 
     func view(for presentation: UUID) -> NSViewController? {
-        guard let presentation = self.presentation else { return nil }
-        if settingsDetail {
-            return SystemStatsSettingsScene.controller(
-                presentation: presentation, defaults: uiDefaults)
+        self.presentation.map {
+            SystemStatsSettingsScene.controller(presentation: $0, defaults: uiDefaults)
         }
-        let defaults = uiDefaults
-        return NSHostingController(
-            rootView: ExtensionPageHost {
-                SystemStatsPage(presentation: presentation, defaults: defaults)
-            })
     }
 
     func stopUI() -> [Task<Void, Never>] {

@@ -220,7 +220,7 @@ private struct QuinjetRemoteProjectPicker: View {
     private var recentContent: some View {
         let projects = model.filteredProjects(for: remote)
         if model.isLoadingProjects(for: remote), projects.isEmpty {
-            QuinjetProjectGridSkeleton(dark: dark)
+            QuinjetProjectListSkeleton(dark: dark)
                 .accessibilityLabel("Loading recent projects from \(machine.name)")
         } else if let error = model.projectError(for: remote), projects.isEmpty {
             PageEmptyState(
@@ -245,20 +245,11 @@ private struct QuinjetRemoteProjectPicker: View {
                     : PageAction("Clear search", symbolName: "xmark.circle") { model.query = "" })
         } else {
             ScrollView {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
-                    spacing: UIScale.pt(14)
-                ) {
-                    ForEach(projects) { project in
-                        QuinjetProjectCard(
-                            project: project,
-                            open: { worktree in
-                                model.open(
-                                    worktree, projectName: project.name,
-                                    available: project.availableWorktrees, remote: remote, in: tab,
-                                    launchEnabled: launchEnabled, configuration: configuration)
-                            })
-                    }
+                QuinjetProjectList(projects: projects) { project, worktree in
+                    model.open(
+                        worktree, projectName: project.name,
+                        available: project.availableWorktrees, remote: remote, in: tab,
+                        launchEnabled: launchEnabled, configuration: configuration)
                 }
                 .padding(.top, UIScale.pt(2))
                 .pageContent(compact)
@@ -463,7 +454,7 @@ private struct QuinjetPreparingMachineSkeleton: View {
                     }
                 }
             }
-            QuinjetProjectGridSkeleton(dark: dark)
+            QuinjetProjectListSkeleton(dark: dark)
                 .pageContent(compact)
         }
         .accessibilityElement(children: .contain)
@@ -508,55 +499,16 @@ private struct QuinjetMachineChip: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var dark: Bool { scheme == .dark }
-
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: UIScale.pt(8)) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: UIScale.pt(6), height: UIScale.pt(6))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(machine.name)
-                        .font(.edithText(.caption).weight(.semibold))
-                    Text(local ? "Local machine" : machine.subtitle)
-                        .font(.edithText(.caption2))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            }
-            .padding(.horizontal, UIScale.pt(10))
-            .frame(height: UIScale.pt(34))
-        }
-        .buttonStyle(QuinjetMachineChipStyle(selected: selected, dark: dark))
+        PageChip(machine.name, dot: statusColor, active: selected, action: select)
+            .help(local ? "This Mac" : machine.subtitle)
     }
 
     private var statusColor: Color {
         if local || session.state.isConnected { return .green }
         if session.state.isBusy { return .orange }
         if session.state.failureMessage != nil { return .red }
-        return DashSkin.inkFaint(dark)
-    }
-}
-
-private struct QuinjetMachineChipStyle: ButtonStyle {
-    let selected: Bool
-    let dark: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(DashSkin.ink(dark))
-            .background(
-                selected ? DashSkin.accent(dark).opacity(0.14) : DashSkin.paper2(dark),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.7) : DashSkin.lineStrong(dark))
-            }
-            .edithButtonTarget(.selection)
-            .opacity(configuration.isPressed ? 0.75 : 1)
+        return DashSkin.inkFaint(scheme == .dark)
     }
 }
 

@@ -54,15 +54,26 @@ struct LidAwakeRows: View {
 
     private var error: String? { operations.errorMessage ?? operations.lastSnapshot?.lastError }
 
+    private var statusKnown: Bool { operations.lastSnapshot != nil }
+
     private var activeDetail: String {
-        if operations.lastSnapshot?.batterySuspended == true {
+        Self.activeDetail(snapshot: operations.lastSnapshot, failed: error != nil)
+    }
+
+    static func activeDetail(snapshot: LidAwakeSnapshot?, failed: Bool) -> String {
+        guard let snapshot else {
+            return failed
+                ? "Status unknown. Edith could not reach Lid Awake."
+                : "Checking the current state."
+        }
+        if snapshot.batterySuspended {
             return "Paused because the battery is low. It resumes after charging."
         }
-        if active, let seconds = operations.lastSnapshot?.remainingSeconds, seconds > 0 {
+        if snapshot.active, let seconds = snapshot.remainingSeconds, seconds > 0 {
             let minutes = Int((seconds / 60).rounded(.up))
             return "On. Turns off in \(minutes) min."
         }
-        return active
+        return snapshot.active
             ? "On. Your Mac keeps running when you close the lid."
             : "Off. Closing the lid sleeps the Mac, even with Keep Awake on."
     }
@@ -71,54 +82,47 @@ struct LidAwakeRows: View {
         Group {
             if let error {
                 Section {
-                    HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text("Lid Awake couldn't apply the last change")
-                            Text(error).settingsCaption().fixedSize(
-                                horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: UIScale.pt(8))
-                        Button("Retry") { operations.refreshStatus() }
-                            .buttonStyle(.edith(.secondary))
-                    }
+                    SettingsErrorRow(
+                        statusKnown
+                            ? "Lid Awake couldn’t apply the last change"
+                            : "Couldn’t read Lid Awake’s status",
+                        message: error, retryTitle: "Retry"
+                    ) { operations.refreshStatus() }
                 }
             }
             Section {
                 Toggle(isOn: activeBinding) {
-                    LidAwakeRowLabel("Keep running with lid closed", detail: activeDetail)
+                    Text("Keep running with lid closed")
+                    Text(activeDetail)
                 }
+                .accessibilityLabel("Keep running with lid closed")
+                .accessibilityValue(activeDetail)
                 Picker(selection: sessionBinding) {
                     ForEach(LidAwakeSession.allCases, id: \.self) { session in
                         Text(session.title).tag(session)
                     }
                 } label: {
-                    LidAwakeRowLabel("How long", detail: "Lid Awake turns itself off after this.")
+                    Text("How long")
+                    Text("Lid Awake turns itself off after this.")
                 }
+                .accessibilityLabel("How long")
                 Picker(selection: batteryBinding) {
                     Text("Off").tag(0)
                     Text("10% battery").tag(10)
                     Text("20% battery").tag(20)
                     Text("30% battery").tag(30)
                 } label: {
-                    LidAwakeRowLabel(
-                        "Auto-pause below",
-                        detail:
-                            "On battery, Lid Awake pauses at this level until the Mac is charged."
-                    )
+                    Text("Auto-pause below")
+                    Text("On battery, Lid Awake pauses at this level until the Mac is charged.")
                 }
+                .accessibilityLabel("Auto-pause below")
                 Toggle(isOn: restoration.binding) {
-                    LidAwakeRowLabel(
-                        "Restore normal sleep when Edith quits",
-                        detail: "Recommended. Turning Lid Awake off always restores it.")
+                    Text("Restore normal sleep when Edith quits")
+                    Text("Recommended. Turning Lid Awake off always restores it.")
                 }
                 if operations.applying {
-                    LabeledContent {
+                    SettingsRow("Updating sleep settings") {
                         SkeletonGroup { SkeletonBlock(width: 120, height: 8, corner: 4) }
-                    } label: {
-                        Text("Updating sleep settings").foregroundStyle(.secondary)
                     }
                     .accessibilityLabel("Applying system sleep state")
                 }
@@ -126,13 +130,13 @@ struct LidAwakeRows: View {
                 Text("Lid closed")
             } footer: {
                 Text(
-                    enabled
+                    enabled || !statusKnown
                         ? "The first time, macOS may ask you to approve Edith's helper in Login Items. With the lid closed the Mac still uses power and makes heat, so do not put it in a bag while this is on."
                         : "Lid Awake is turned off. Turn it on in Extensions to use these controls."
                 )
                 .settingsCaption()
             }
-            .disabled(!enabled || operations.applying)
+            .disabled(!statusKnown || !enabled || operations.applying)
             Section {
                 Text(
                     "The lid-awake idea was inspired by Awayke, an MIT-licensed macOS utility by daemonphantom."
@@ -233,21 +237,4 @@ final class LidAwakeRestorationControl {
     }
 
     func cancelDisable() { confirmingDisabled = false }
-}
-
-struct LidAwakeRowLabel: View {
-    let title: String
-    let detail: String
-
-    init(_ title: String, detail: String) {
-        self.title = title
-        self.detail = detail
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(title)
-            Text(detail).settingsCaption().fixedSize(horizontal: false, vertical: true)
-        }
-    }
 }

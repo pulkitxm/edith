@@ -31,6 +31,12 @@ import Testing
                 name: "regular-dark", size: CGSize(width: 1100, height: 760), dark: true,
                 compact: false, scale: 1),
             Variant(
+                name: "wide-light", size: CGSize(width: 1600, height: 900), dark: false,
+                compact: false, scale: 1),
+            Variant(
+                name: "extra-wide-light", size: CGSize(width: 2000, height: 1000), dark: false,
+                compact: false, scale: 1),
+            Variant(
                 name: "compact-light", size: CGSize(width: 640, height: 700), dark: false,
                 compact: true, scale: 1),
             Variant(

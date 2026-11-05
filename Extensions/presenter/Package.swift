@@ -23,6 +23,7 @@ let package = Package(
                 "PresenterExtension",
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ], path: "Tests",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

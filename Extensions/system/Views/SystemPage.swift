@@ -371,15 +371,12 @@ struct SystemSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Text("Keyboard cleaning")
-                    InfoDot(
-                        "Locks the keyboard for a few seconds so you can wipe it without typing anything by accident. Click Done cleaning with the mouse, or wait for the timer, to unlock."
-                    )
-                    Spacer()
-                    if started {
-                        Text("Keyboard locked. Look for the full-screen overlay.").settingsCaption()
-                    }
+                SettingsRow(
+                    "Keyboard cleaning",
+                    subtitle: started
+                        ? "Keyboard locked. Look for the full-screen overlay."
+                        : "Locks the keyboard for a few seconds so you can wipe it. Click Done cleaning with the mouse, or wait for the timer, to unlock."
+                ) {
                     Button("Start cleaning mode") {
                         Task { await clean() }
                         started = true
@@ -389,10 +386,11 @@ struct SystemSettings: View {
                             if !Task.isCancelled { started = false }
                         }
                     }
+                    .buttonStyle(.edith(.secondary))
                 }
             }
         }
-        .edithForm()
+        .settingsForm()
         .onDisappear { reset?.cancel() }
     }
 }

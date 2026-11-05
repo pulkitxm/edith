@@ -49,7 +49,7 @@ struct DashboardDateRangePicker: View {
         HStack(spacing: UIScale.pt(10)) {
             rangeEndpoint("From", selection.from, active: false)
             Image(systemName: "arrow.right")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             rangeEndpoint("To", selection.to, active: selection.choosingEnd)
         }
@@ -58,10 +58,10 @@ struct DashboardDateRangePicker: View {
     private func rangeEndpoint(_ label: String, _ date: Date, active: Bool) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
-                .font(DashSkin.mono(8, weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(Self.endpointFormatter.string(from: date))
-                .font(DashSkin.mono(11, weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold).monospacedDigit())
                 .foregroundStyle(DashSkin.ink(dark))
         }
         .padding(.horizontal, UIScale.pt(10))
@@ -80,7 +80,7 @@ struct DashboardDateRangePicker: View {
             calendarNavigation("chevron.left", offset: -1)
             Spacer()
             Text(Self.monthFormatter.string(from: visibleMonth))
-                .font(DashSkin.heading(UIScale.pt(15), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
             calendarNavigation("chevron.right", offset: 1)
@@ -98,7 +98,7 @@ struct DashboardDateRangePicker: View {
             visibleMonth = target
         } label: {
             Image(systemName: icon)
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(24))
                 .widgetBar(
                     cornerRadius: 7, fill: DashSkin.paper(dark), stroke: DashSkin.line(dark))
@@ -110,9 +110,9 @@ struct DashboardDateRangePicker: View {
 
     private var weekdayHeader: some View {
         LazyVGrid(columns: dayColumns, spacing: 0) {
-            ForEach(weekdaySymbols, id: \.self) { symbol in
+            ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol.uppercased())
-                    .font(DashSkin.mono(8, weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(height: UIScale.pt(18))
             }
@@ -138,7 +138,9 @@ struct DashboardDateRangePicker: View {
             select(date)
         } label: {
             Text("\(calendar.component(.day, from: date))")
-                .font(DashSkin.mono(10, weight: endpoint ? .bold : .regular))
+                .font(
+                    .edithText(.subheadline).weight(endpoint ? .bold : .regular).monospacedDigit()
+                )
                 .foregroundStyle(
                     endpoint ? Color.white : DashSkin.ink(dark).opacity(sameMonth ? 1 : 0.38)
                 )
@@ -160,55 +162,36 @@ struct DashboardDateRangePicker: View {
     }
 
     private var shortcutRow: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             shortcut("7 days", days: 7)
             shortcut("30 days", days: 30)
-            Button("Month to date") {
+            PageChip("Month to date") {
                 selection.setMonthToDate(bounds: bounds, calendar: calendar)
                 visibleMonth = calendar.startOfMonth(containing: selection.to)
             }
-            .buttonStyle(.edith(.borderless))
-            .font(DashSkin.mono(9))
-            .foregroundStyle(DashSkin.inkSoft(dark))
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(5))
-            .widgetBar(cornerRadius: 7, fill: DashSkin.paper(dark), stroke: DashSkin.line(dark))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func shortcut(_ title: String, days: Int) -> some View {
-        Button(title) {
+        PageChip(title) {
             selection.setTrailing(days: days, bounds: bounds, calendar: calendar)
             visibleMonth = calendar.startOfMonth(containing: selection.to)
         }
-        .buttonStyle(.edith(.borderless))
-        .font(DashSkin.mono(9))
-        .foregroundStyle(DashSkin.inkSoft(dark))
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(5))
-        .widgetBar(cornerRadius: 7, fill: DashSkin.paper(dark), stroke: DashSkin.line(dark))
     }
 
     private var actionRow: some View {
-        HStack {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             Text(selection.choosingEnd ? "Choose an end date" : "Range ready")
-                .font(DashSkin.mono(9))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer()
             Button("Cancel", action: onCancel)
-                .buttonStyle(.edith(.borderless))
-                .font(DashSkin.mono(10))
-                .foregroundStyle(DashSkin.inkSoft(dark))
+                .buttonStyle(.edith(.secondary))
             Button("Apply") {
                 onApply(selection.from, selection.to)
             }
-            .buttonStyle(.edith(.borderless))
-            .font(DashSkin.mono(10, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, UIScale.pt(12))
-            .padding(.vertical, UIScale.pt(6))
-            .background(accent, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            .buttonStyle(.edith(.primary))
         }
         .padding(.top, UIScale.pt(2))
     }

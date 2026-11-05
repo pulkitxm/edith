@@ -17,6 +17,10 @@ let package = Package(
             ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "JevExtensionTests", dependencies: ["JevExtension"], path: "Tests",
-            swiftSettings: [.swiftLanguageMode(.v5)]),
+            name: "JevExtensionTests",
+            dependencies: [
+                "JevExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
+            path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

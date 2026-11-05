@@ -344,7 +344,7 @@ private struct DocsCodeBlock: View {
                     Label(
                         copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc"
                     )
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(copied ? DashSkin.ok : DashSkin.inkSoft(dark))
                 }
                 .buttonStyle(.edith(.borderless))

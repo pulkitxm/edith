@@ -114,15 +114,17 @@ struct MachinesPage: View {
 
     private var machineStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(10)) {
-                FleetChip(
-                    title: "All machines", subtitle: "Summary", symbol: "square.grid.2x2",
-                    selected: mode == .fleet, dark: dark
-                ) { modeRaw = MachinesMode.fleet.rawValue }
-                FleetChip(
-                    title: "Workspace", subtitle: "Split panes",
-                    symbol: "rectangle.split.2x1", selected: mode == .workspace, dark: dark
-                ) { modeRaw = MachinesMode.workspace.rawValue }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                PageChip("All machines", systemImage: "square.grid.2x2", active: mode == .fleet) {
+                    modeRaw = MachinesMode.fleet.rawValue
+                }
+                .help("A summary of every machine")
+                PageChip(
+                    "Workspace", systemImage: "rectangle.split.2x1", active: mode == .workspace
+                ) {
+                    modeRaw = MachinesMode.workspace.rawValue
+                }
+                .help("Terminals, files and logs in split panes across your machines")
                 if connectionsEnabled {
                     ForEach(model.allMachines) { machine in
                         MachineChip(
@@ -243,32 +245,28 @@ private struct MachineChip: View {
     let onRemove: () -> Void
 
     var body: some View {
-        SelectableChipRow(
-            icon: isLocal ? "laptopcomputer" : "server.rack",
-            title: machine.name,
-            subtitle: isLocal ? "Local" : machine.subtitle,
-            selected: selected, dark: dark,
-            onSelect: {
-                if NSEvent.modifierFlags.contains(.command) {
-                    onDetach()
-                } else {
-                    onSelect()
-                }
+        Button {
+            if NSEvent.modifierFlags.contains(.command) {
+                onDetach()
+            } else {
+                onSelect()
             }
-        ) {
+        } label: {
             HStack(spacing: UIScale.pt(6)) {
+                PageChipLabel(
+                    machine.name, dot: MachineStatusStyle.color(session.state, dark: dark))
                 if machine.sshClipboardEnabled {
                     Image(systemName: sshClipboardState.symbol)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(sshClipboardColor)
                         .help(sshClipboardState.label)
                 }
-                Circle()
-                    .fill(MachineStatusStyle.color(session.state, dark: dark))
-                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             }
         }
-        .help("\(machine.name) (⌘-click to open in its own window)")
+        .buttonStyle(.pageChip(active: selected))
+        .fixedSize()
+        .help("\(isLocal ? "This Mac" : machine.subtitle) (⌘-click to open in its own window)")
+        .accessibilityLabel(machine.name)
         .contextMenu {
             Button("Open in New Window", action: onDetach)
             if !isLocal {

@@ -298,7 +298,7 @@ struct CompanionSetupSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: UIScale.pt(17)))
+                    .font(.edithText(.title2))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Memory")
                     .font(DashSkin.heading(19, weight: .semibold))
@@ -355,7 +355,7 @@ struct CompanionSetupSheet: View {
                         .foregroundStyle(DashSkin.accent(dark))
                 } else {
                     Text("\(step.rawValue + 1)")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(
                             state == "current" ? DashSkin.paper(dark) : DashSkin.inkFaint(dark))
                 }
@@ -493,7 +493,7 @@ struct CompanionSetupSheet: View {
         } label: {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
                 Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.system(size: UIScale.pt(16)))
+                    .font(.edithText(.title3))
                     .foregroundStyle(
                         host.canHostTheStack || host.hostsTheStack
                             ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
@@ -718,7 +718,7 @@ struct CompanionSetupSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                    .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
                 stepHeading("Memory is ready")
             }

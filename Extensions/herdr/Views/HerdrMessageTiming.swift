@@ -19,14 +19,14 @@ struct HerdrValueDial: View {
         VStack(spacing: UIScale.pt(2)) {
             stepButton("chevron.up", step)
             Text(display(value))
-                .font(.system(size: UIScale.pt(32), weight: .semibold, design: .rounded))
+                .font(.edithText(.largeTitle, design: .rounded).weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(minWidth: UIScale.pt(64))
                 .contentShape(Rectangle())
                 .gesture(scrub)
             Text(label)
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .textCase(.uppercase)
             stepButton("chevron.down", -step)
@@ -57,12 +57,12 @@ struct HerdrValueDial: View {
             nudge(delta)
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(11), weight: .bold))
+                .font(.edithText(.subheadline).weight(.bold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(36), height: UIScale.pt(22))
                 .contentShape(Rectangle())
         }
-        .edithButtonTarget(.borderless)
+        .buttonStyle(.edith(.borderless))
     }
 
     private func nudge(_ delta: Int) {
@@ -80,32 +80,13 @@ struct HerdrValueDial: View {
 
 struct HerdrTimingChoice: View {
     @Binding var mode: HerdrMessageDraft.Delivery
-    @Environment(\.colorScheme) private var scheme
-
-    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            ForEach(HerdrMessageDraft.Delivery.allCases) { option in
-                let selected = mode == option
-                Button {
-                    mode = option
-                } label: {
-                    Text(option.title)
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, UIScale.pt(7))
-                        .foregroundStyle(selected ? Color.white : DashSkin.ink(dark))
-                        .background(
-                            selected ? DashSkin.accent(dark) : DashSkin.paper2(dark),
-                            in: Capsule())
-                }
-                .edithButtonTarget(.borderless)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("When to send")
+        EdithSegmentedPicker(
+            "When to send", selection: $mode, options: HerdrMessageDraft.Delivery.allCases,
+            label: \.title
+        )
+        .labelsHidden()
     }
 }
 
@@ -123,10 +104,10 @@ struct HerdrAfterPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text(delayTitle)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(moment)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.accent(dark))
             presetRow
             HStack(spacing: UIScale.pt(8)) {
@@ -142,25 +123,12 @@ struct HerdrAfterPicker: View {
     }
 
     private var presetRow: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             ForEach(Self.presets, id: \.0) { preset in
-                let selected = hours == preset.1 && minutes == preset.2
-                Button {
+                PageChip(preset.0, active: hours == preset.1 && minutes == preset.2) {
                     hours = preset.1
                     minutes = preset.2
-                } label: {
-                    Text(preset.0)
-                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, UIScale.pt(6))
-                        .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                        .background(DashSkin.paper2(dark), in: Capsule())
-                        .overlay {
-                            Capsule().strokeBorder(
-                                selected ? DashSkin.accent(dark) : Color.clear, lineWidth: 1)
-                        }
                 }
-                .edithButtonTarget(.borderless)
             }
         }
     }
@@ -182,7 +150,7 @@ struct HerdrAtPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text(passed ? "That time has already passed" : leadingCapital(moment))
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .foregroundStyle(passed ? Color.orange : DashSkin.ink(dark))
             dayStrip
             HStack(spacing: UIScale.pt(8)) {
@@ -203,57 +171,44 @@ struct HerdrAtPicker: View {
 
     private var dayStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(6)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 ForEach(0..<7, id: \.self) { offset in
-                    let selected = dayOffset == offset
-                    Button {
+                    PageChip(dayTitle(offset), active: dayOffset == offset) {
                         dayOffset = offset
-                    } label: {
-                        Text(dayTitle(offset))
-                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                            .padding(.horizontal, UIScale.pt(10))
-                            .padding(.vertical, UIScale.pt(6))
-                            .foregroundStyle(selected ? Color.white : DashSkin.ink(dark))
-                            .background(
-                                selected ? DashSkin.accent(dark) : DashSkin.paper2(dark),
-                                in: Capsule())
                     }
-                    .edithButtonTarget(.borderless)
                 }
             }
+            .padding(.vertical, UIScale.pt(1))
         }
-        .frame(height: UIScale.pt(32))
+    }
+
+    private enum Period: String, CaseIterable, Hashable {
+        case am = "AM"
+        case pm = "PM"
+    }
+
+    private var periodSelection: Binding<Period> {
+        Binding(
+            get: { hour >= 12 ? .pm : .am },
+            set: { next in
+                guard (next == .pm) != (hour >= 12) else { return }
+                hour = (hour + 12) % 24
+            })
     }
 
     private var period: some View {
-        VStack(spacing: UIScale.pt(6)) {
-            periodButton("AM", afternoon: false)
-            periodButton("PM", afternoon: true)
-        }
+        EdithSegmentedPicker(
+            "Morning or afternoon", selection: periodSelection, options: Period.allCases,
+            label: \.rawValue
+        )
+        .labelsHidden()
         .frame(maxWidth: .infinity)
-    }
-
-    private func periodButton(_ title: String, afternoon: Bool) -> some View {
-        let selected = (hour >= 12) == afternoon
-        return Button {
-            guard selected == false else { return }
-            hour = (hour + 12) % 24
-        } label: {
-            Text(title)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, UIScale.pt(10))
-                .foregroundStyle(selected ? Color.white : DashSkin.ink(dark))
-                .background(
-                    selected ? DashSkin.accent(dark) : DashSkin.paper2(dark), in: Capsule())
-        }
-        .edithButtonTarget(.borderless)
     }
 
     private var suggestionRow: some View {
         let start = calendar.startOfDay(for: now)
         let day = calendar.date(byAdding: .day, value: dayOffset, to: start) ?? start
-        return HStack(spacing: UIScale.pt(6)) {
+        return HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             ForEach(Self.suggestions, id: \.self) { suggestion in
                 suggestionButton(suggestion, on: day)
             }
@@ -264,23 +219,13 @@ struct HerdrAtPicker: View {
     private func suggestionButton(_ suggestion: Int, on day: Date) -> some View {
         let when = calendar.date(bySettingHour: suggestion, minute: 0, second: 0, of: day)
         if let when, when > now {
-            let selected = hour == suggestion && minute == 0
-            Button {
+            PageChip(
+                HerdrHookSchedule.clockText(when, calendar: calendar),
+                active: hour == suggestion && minute == 0
+            ) {
                 hour = suggestion
                 minute = 0
-            } label: {
-                Text(HerdrHookSchedule.clockText(when, calendar: calendar))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .padding(.horizontal, UIScale.pt(10))
-                    .padding(.vertical, UIScale.pt(6))
-                    .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                    .background(DashSkin.paper2(dark), in: Capsule())
-                    .overlay {
-                        Capsule().strokeBorder(
-                            selected ? DashSkin.accent(dark) : Color.clear, lineWidth: 1)
-                    }
             }
-            .edithButtonTarget(.borderless)
         }
     }
 

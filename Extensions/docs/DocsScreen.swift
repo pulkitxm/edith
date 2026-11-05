@@ -110,13 +110,14 @@ struct DocsScreen: View {
                         Task { await browser.retryLoad() }
                     })
             } else {
-                loadingSkeleton
+                GeometryReader { proxy in loadingSkeleton(width: proxy.size.width) }
             }
         }
     }
 
-    private var loadingSkeleton: some View {
-        SkeletonGroup {
+    private func loadingSkeleton(width: Double) -> some View {
+        let columns = readingColumns(width: width)
+        return SkeletonGroup {
             HStack(alignment: .top, spacing: 0) {
                 if !compact {
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -132,9 +133,17 @@ struct DocsScreen: View {
                     SkeletonBlock(width: 320, height: 24)
                     ForEach(0..<6, id: \.self) { _ in SkeletonBlock(height: 12) }
                 }
-                .padding(UIScale.pt(24))
-                .frame(maxWidth: UIScale.pt(DocsNavigation.readableWidth), alignment: .leading)
-                Spacer(minLength: 0)
+                .frame(width: columns.content, alignment: .leading)
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                .frame(maxWidth: .infinity)
+                if columns.outline {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        SkeletonBlock(width: 84, height: 9)
+                        ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 96, height: 10) }
+                    }
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                    .frame(width: UIScale.pt(DocsNavigation.outlineWidth), alignment: .leading)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -173,6 +182,7 @@ struct DocsScreen: View {
                 } label: {
                     Image(systemName: "sidebar.left")
                 }
+                .help("Browse the reference")
                 .accessibilityLabel("Browse reference")
                 .popover(isPresented: $navigatorPresented) {
                     @Bindable var browser = browser
@@ -257,20 +267,25 @@ struct DocsScreen: View {
         .edithFieldSurface(focused: askFocused)
     }
 
-    private func document(_ library: DocsLibrary, width: Double) -> some View {
+    private func readingColumns(width: Double) -> (content: Double, outline: Bool) {
         let outline = !compact && width >= UIScale.pt(DocsNavigation.outlineThreshold)
         let column =
             width - (compact ? 0 : UIScale.pt(DocsNavigation.navigationWidth + 1))
             - (outline ? UIScale.pt(DocsNavigation.outlineWidth) : 0)
         let content = min(
             column - PageMetrics.gutter(compact) * 2, UIScale.pt(DocsNavigation.readableWidth))
+        return (max(content, 0), outline)
+    }
+
+    private func document(_ library: DocsLibrary, width: Double) -> some View {
+        let columns = readingColumns(width: width)
         return HStack(spacing: 0) {
             if let page = browser.page {
                 DocsPageView(
                     browser: browser, page: page,
-                    group: library.groups.first { $0.id == page.group }, width: max(content, 0),
+                    group: library.groups.first { $0.id == page.group }, width: columns.content,
                     dark: dark)
-                if outline {
+                if columns.outline {
                     DocsOutline(browser: browser, page: page, dark: dark)
                         .frame(width: UIScale.pt(DocsNavigation.outlineWidth))
                 }
@@ -318,7 +333,7 @@ private struct DocsAskResults: View {
                     browser.hideResults()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: UIScale.pt(10), weight: .bold))
+                        .font(.edithText(.caption).weight(.bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .buttonStyle(.edith(.borderless))

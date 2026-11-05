@@ -117,7 +117,7 @@ final class MicMuteService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { MicMuteRows(presentation: presentation) }.edithForm()
+                    Form { MicMuteRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

@@ -278,7 +278,7 @@ struct MachineControlCenterButton: View {
             presented.toggle()
         } label: {
             Image(systemName: "switch.2")
-                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(
                     hovering ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                 )
@@ -315,10 +315,10 @@ struct MachineControlCenterButton: View {
         } else if let level = model.snapshot?.batteryLevel {
             HStack(spacing: UIScale.pt(4)) {
                 Text("\(level)%")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .monospacedDigit()
                 Image(systemName: batterySymbol(level: level))
-                    .font(.system(size: UIScale.pt(15), weight: .medium))
+                    .font(.edithText(.title3).weight(.medium))
                     .symbolRenderingMode(.hierarchical)
             }
             .foregroundStyle(batteryColor(level: level))
@@ -450,10 +450,10 @@ struct MachineControlCenterView: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "switch.2")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.accent(dark))
             Text(session.machine.name)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -470,7 +470,7 @@ struct MachineControlCenterView: View {
                 Task { await model.refresh(reportFailure: true, clearsMessage: true) }
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                     .contentShape(Rectangle())
             }
@@ -527,7 +527,7 @@ struct MachineControlCenterView: View {
                     ? "bolt.horizontal.circle"
                     : model.resultFailed ? "exclamationmark.triangle" : "switch.2"
             )
-            .font(.system(size: UIScale.pt(12.5), weight: .medium))
+            .font(.edithText(.callout).weight(.medium))
             .foregroundStyle(model.resultFailed ? DashSkin.danger : DashSkin.ink(dark))
             Text(
                 model.resultMessage
@@ -535,7 +535,7 @@ struct MachineControlCenterView: View {
                         ? "Reconnect this machine to check its available settings."
                         : "This machine did not report any supported controls.")
             )
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .fixedSize(horizontal: false, vertical: true)
             if model.requiresConnection {
@@ -681,11 +681,11 @@ struct MachineControlCenterView: View {
         return VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
                 Text(title)
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer(minLength: 0)
                 Text("\(value.wrappedValue)%")
@@ -719,11 +719,11 @@ struct MachineControlCenterView: View {
         } label: {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
                 Text(title)
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Toggle("", isOn: .constant(value))
@@ -746,7 +746,7 @@ struct MachineControlCenterView: View {
     private var coolingControls: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             Text("COOLING")
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .tracking(UIScale.pt(0.7))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.horizontal, UIScale.pt(8))
@@ -755,11 +755,11 @@ struct MachineControlCenterView: View {
                 if index > 0 { controlDivider }
                 HStack(spacing: UIScale.pt(9)) {
                     Image(systemName: "fan")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(18))
                     Text(fan.label)
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer(minLength: 0)
                     Text("\(fan.rpm.formatted()) rpm")
@@ -784,11 +784,11 @@ struct MachineControlCenterView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: "thermometer.medium")
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
                 Text("Thermal profile")
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer(minLength: 0)
                 Picker("Profile", selection: $model.selectedProfile) {
@@ -803,11 +803,11 @@ struct MachineControlCenterView: View {
             }
             HStack(spacing: UIScale.pt(9)) {
                 Image(systemName: "timer")
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
                 Text("Duration")
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer(minLength: 0)
                 Picker("Duration", selection: $model.duration) {
@@ -825,7 +825,7 @@ struct MachineControlCenterView: View {
             }
             HStack(spacing: UIScale.pt(8)) {
                 Text(profileStatus(profile))
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(2)
                 Spacer(minLength: 0)
@@ -841,9 +841,9 @@ struct MachineControlCenterView: View {
                 systemName: model.resultFailed
                     ? "exclamationmark.triangle" : "checkmark.circle.fill"
             )
-            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .font(.edithText(.caption).weight(.medium))
             Text(message)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }

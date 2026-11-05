@@ -286,7 +286,7 @@ final class MachinesModel {
             containersTotal: session.containers.count,
             updatesAvailable: session.facts.updatesAvailable,
             hottestTemperature: slow?.temps.map(\.c).max(),
-            os: session.hello?.os ?? "")
+            os: session.hello?.os ?? "", connectionFailure: session.state.failureMessage)
     }
 
     var snapshots: [MachineSnapshot] {

@@ -45,8 +45,7 @@ struct HomebrewMaintenanceView: View {
             }
         } content: {
             if model.status?.available == false {
-                ScrollView { unavailableCard.frame(minHeight: UIScale.pt(460)) }
-                    .scrollIndicators(.never)
+                unavailableCard.scrollIndicators(.never)
             } else {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     operationCard
@@ -58,8 +57,7 @@ struct HomebrewMaintenanceView: View {
                         if listingState == .packages {
                             packageCard
                         } else {
-                            ScrollView { listingEmptyState.frame(minHeight: UIScale.pt(360)) }
-                                .scrollIndicators(.never)
+                            listingEmptyState.scrollIndicators(.never)
                         }
                     } placeholder: {
                         PageSkeleton(layout: .list)
@@ -500,8 +498,14 @@ struct HomebrewPackageTable: View {
                     .accessibilityLabel("Actions for \(package.displayName)")
                     .disabled(disabled)
                 } else {
-                    HStack(spacing: UIScale.pt(8)) { packageActions(package) }.fixedSize()
-                        .disabled(disabled)
+                    HStack(spacing: UIScale.pt(8)) {
+                        if package.installed, !package.outdated {
+                            upgradeButton(package).hidden()
+                        }
+                        packageActions(package)
+                    }
+                    .fixedSize()
+                    .disabled(disabled)
                 }
             }
             .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
@@ -522,10 +526,7 @@ struct HomebrewPackageTable: View {
     @ViewBuilder
     private func packageActions(_ package: HomebrewPackage) -> some View {
         if package.installed {
-            if package.outdated {
-                Button("Upgrade") { perform(.upgrade, package) }
-                    .buttonStyle(.edith(.secondary, tint: accent))
-            }
+            if package.outdated { upgradeButton(package) }
             Button("Uninstall", role: .destructive) { perform(.uninstall, package) }
                 .buttonStyle(.edith(.borderless))
                 .foregroundStyle(DashSkin.danger)
@@ -533,6 +534,11 @@ struct HomebrewPackageTable: View {
             Button("Install") { perform(.install, package) }
                 .buttonStyle(.edith(.primary, tint: accent))
         }
+    }
+
+    private func upgradeButton(_ package: HomebrewPackage) -> some View {
+        Button("Upgrade") { perform(.upgrade, package) }
+            .buttonStyle(.edith(.secondary, tint: accent))
     }
 }
 

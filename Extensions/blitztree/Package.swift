@@ -13,6 +13,10 @@ let package = Package(
             ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "BlitzTreeExtensionTests", dependencies: ["BlitzTreeExtension"], path: "Tests",
+            name: "BlitzTreeExtensionTests",
+            dependencies: [
+                "BlitzTreeExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ], path: "Tests",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])
