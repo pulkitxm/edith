@@ -30,7 +30,8 @@ struct UsageHomeActivityCard: View {
             } else if !model.loadAttempted {
                 UsageActivityHeatmapSkeleton()
             } else {
-                Text("No usage activity yet").foregroundStyle(.secondary)
+                Text("No activity yet. Open Agent Usage to collect your history.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
         .pageTask { await model.load() }

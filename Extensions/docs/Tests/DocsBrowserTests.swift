@@ -184,6 +184,10 @@ private actor SlowDocsPeer: JevDeciding {
     }
 }
 
+final class HealthFlag: @unchecked Sendable {
+    var value = false
+}
+
 @Suite(.serialized) @MainActor
 struct DocsRemoteTests {
     @Test func originalNavigationUsesOwnedEngineSourcesAndAsk() async throws {
@@ -226,6 +230,26 @@ struct DocsRemoteTests {
         #expect(second.expandedGroups == first.expandedGroups)
         #expect(second.question == "list sessions")
         second.shutdown()
+        DocsSession.last = nil
+    }
+
+    @Test func failedLoadIsReportedAndRetryRecovers() async throws {
+        DocsSession.last = nil
+        let engine = DocsBrowser(library: DocsBrowserTests.library)
+        let healthy = HealthFlag()
+        let remote = DocsBrowser(
+            remote: DocsUIBridge(invoke: { command, payload in
+                guard healthy.value else { throw ExtensionPeerError.unavailable }
+                return try await DocsUIBridge.execute(command, payload: payload, browser: engine)
+            }), local: .none)
+        await remote.load()
+        #expect(remote.library == nil)
+        #expect(remote.loadFailed)
+        healthy.value = true
+        await remote.retryLoad()
+        #expect(remote.library != nil)
+        #expect(!remote.loadFailed)
+        remote.shutdown()
         DocsSession.last = nil
     }
 

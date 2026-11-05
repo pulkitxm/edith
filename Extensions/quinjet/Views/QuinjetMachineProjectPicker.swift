@@ -30,15 +30,14 @@ struct QuinjetProjectPicker: View {
             } else if let machine = selectedMachine,
                 let error = tab.folderPicker?.errorMessage ?? tab.errorMessage
             {
-                ContentUnavailableView {
-                    Label("Machine unavailable", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Try again") { select(machine) }
-                    Button("Use This Mac") { select(machines.localMachine) }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PageEmptyState(
+                    symbolName: "exclamationmark.triangle",
+                    title: "\(machine.name) is not reachable",
+                    message: "\(error) Nothing was changed on that machine.",
+                    primary: PageAction("Try again", symbolName: "arrow.clockwise") { select(machine) },
+                    secondary: PageAction("Use this Mac", symbolName: "laptopcomputer") {
+                        select(machines.localMachine)
+                    })
             } else {
                 QuinjetPreparingMachineSkeleton(
                     machines: machines, selection: tab.machineID,
@@ -247,28 +246,25 @@ private struct QuinjetRemoteProjectPicker: View {
             QuinjetProjectGridSkeleton(dark: dark)
                 .accessibilityLabel("Loading recent projects from \(machine.name)")
         } else if let error = model.projectError(for: remote), projects.isEmpty {
-            ContentUnavailableView {
-                Label("Projects unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Try again") {
+            PageEmptyState(
+                symbolName: "exclamationmark.triangle",
+                title: "Recent projects could not be loaded",
+                message: "\(error) Nothing was changed on \(machine.name).",
+                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
                     QuinjetWorkOwnership.start { await model.refreshProjects(for: remote) }
-                }
-                Button("Browse folders") { mode = .browse }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                },
+                secondary: PageAction("Browse folders", symbolName: "folder") { mode = .browse })
         } else if projects.isEmpty {
-            ContentUnavailableView {
-                Label(
-                    model.query.isEmpty ? "No recent projects" : "No matching projects",
-                    systemImage: "folder")
-            } description: {
-                Text("Browse a project folder on this machine to open it in Quinjet.")
-            } actions: {
-                Button("Browse folders") { mode = .browse }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                symbolName: "folder",
+                title: model.query.isEmpty
+                    ? "No recent projects on \(machine.name)" : "No project matches that search",
+                message: model.query.isEmpty
+                    ? "Browse the folders on \(machine.name) and pick a Git project to review. Opening a project only reads it."
+                    : "Search looks at project names, branches and paths. Clear it to see every recent project.",
+                primary: PageAction("Browse folders", symbolName: "folder") { mode = .browse },
+                secondary: model.query.isEmpty
+                    ? nil : PageAction("Clear search", symbolName: "xmark.circle") { model.query = "" })
         } else {
             ScrollView {
                 LazyVGrid(
@@ -298,23 +294,21 @@ private struct QuinjetRemoteProjectPicker: View {
             QuinjetFolderBrowserSkeleton(dark: dark)
                 .accessibilityLabel("Connecting to \(machine.name)")
         } else if let error = picker.errorMessage, picker.entries.isEmpty {
-            ContentUnavailableView {
-                Label("Folder unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Try again") { QuinjetWorkOwnership.start { await picker.start() } }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                symbolName: "exclamationmark.triangle",
+                title: "Folders could not be listed",
+                message: "\(error) Nothing was changed on \(machine.name).",
+                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    QuinjetWorkOwnership.start { await picker.start() }
+                })
         } else if let error = tab.errorMessage {
-            ContentUnavailableView {
-                Label("Project unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Choose another folder") { tab.errorMessage = nil }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                symbolName: "exclamationmark.triangle",
+                title: "That folder could not be opened",
+                message: "\(error) Pick a different folder, ideally one that is a Git project.",
+                primary: PageAction("Choose another folder", symbolName: "folder") {
+                    tab.errorMessage = nil
+                })
         } else {
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(5)) {

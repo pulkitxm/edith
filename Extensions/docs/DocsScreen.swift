@@ -98,16 +98,46 @@ struct DocsScreen: View {
                         document(library, width: geometry.size.width)
                     }
                 }
+            } else if browser.loadFailed {
+                PageEmptyState(
+                    symbolName: "book.closed",
+                    title: "The reference could not be loaded",
+                    message:
+                        "Edith could not read its bundled command reference. Nothing was changed. Try again, or reinstall the Docs extension if it keeps failing.",
+                    primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                        Task { await browser.retryLoad() }
+                    })
             } else {
-                VStack(spacing: UIScale.pt(10)) {
-                    LoadingIndicator()
-                    Text("Loading the reference")
-                        .font(.system(size: UIScale.pt(12)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                loadingSkeleton
             }
         }
+    }
+
+    private var loadingSkeleton: some View {
+        SkeletonGroup {
+            HStack(alignment: .top, spacing: 0) {
+                if !compact {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        SkeletonBlock(height: 28, corner: 7)
+                        ForEach(0..<9, id: \.self) { _ in SkeletonBlock(height: 12) }
+                    }
+                    .padding(UIScale.pt(10))
+                    .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
+                    Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    SkeletonBlock(width: 180, height: 10)
+                    SkeletonBlock(width: 320, height: 24)
+                    ForEach(0..<6, id: \.self) { _ in SkeletonBlock(height: 12) }
+                }
+                .padding(UIScale.pt(24))
+                .frame(maxWidth: UIScale.pt(DocsNavigation.readableWidth), alignment: .leading)
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading the reference")
     }
 
     private var pageBinding: Binding<String> {
@@ -182,7 +212,7 @@ struct DocsScreen: View {
                 .font(.system(size: UIScale.pt(13), weight: .medium))
                 .foregroundStyle(DashSkin.accent(dark))
             TextField(
-                "Ask which command does something, like \u{201C}free up docker space on my server\u{201D}",
+                "Not sure which command to use? Describe it, like \u{201C}free up docker space on my server\u{201D}",
                 text: question
             )
             .textFieldStyle(.plain)
@@ -292,11 +322,13 @@ private struct DocsAskResults: View {
             .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(8))
             if answer.picks.isEmpty {
-                Text("Nothing in the reference matches that. Try other words.")
-                    .font(.system(size: UIScale.pt(12.5)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(12))
-                    .padding(.bottom, UIScale.pt(10))
+                Text(
+                    "No command matches that. Try describing the goal in other words, or browse the pages on the left."
+                )
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .padding(.horizontal, UIScale.pt(12))
+                .padding(.bottom, UIScale.pt(10))
             }
             ForEach(Array(answer.picks.enumerated()), id: \.element.id) { index, pick in
                 Button {
@@ -371,6 +403,14 @@ private struct DocsNavigator: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                        if filtering && browser.sidebarGroups.isEmpty {
+                            Text(
+                                "No pages match \u{201C}\(browser.appliedFilter)\u{201D}. Check the spelling or clear the filter."
+                            )
+                            .font(.edithText(.caption))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .padding(UIScale.pt(10))
+                        }
                         ForEach(browser.sidebarGroups, id: \.0.id) {
                             group, pages in
                             let expanded = filtering || browser.expandedGroups.contains(group.id)

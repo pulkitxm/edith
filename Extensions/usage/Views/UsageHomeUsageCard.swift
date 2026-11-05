@@ -53,9 +53,23 @@ struct UsageHomeUsageCard: View {
                             || (scene?.presenter ?? UsagePresenterState.shared).usage)
                 )
             } else if load.isRunning {
-                LoadingIndicator()
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        HStack(spacing: UIScale.pt(16)) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                                    SkeletonBlock(width: 56, height: 18)
+                                    SkeletonBlock(width: 44, height: 9)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading")
             } else if load.errorMessage == nil {
-                Text("No usage records yet. Refresh Agent Usage to collect your history.")
+                Text("Nothing collected yet. Open Agent Usage and choose Collect usage now to read your agents' history on this Mac.")
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             if let error = load.errorMessage {

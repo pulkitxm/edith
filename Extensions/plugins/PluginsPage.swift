@@ -24,24 +24,33 @@ struct PluginsPage: View {
             })
     }
 
+    private var agentSummary: String {
+        switch model.agents.count {
+        case 0: "No agents found on this Mac"
+        case 1: "1 agent found on this Mac"
+        default: "\(model.agents.count) agents found on this Mac"
+        }
+    }
+
     var body: some View {
         PageScaffold {
             PageHeader {
                 Text("Plugins")
             } accessory: {
-                Text("Skills built for Edith, ready for your agents.")
+                Text("Teach your coding agents to use Edith. Pick a skill, then install it.")
                     .font(.system(size: UIScale.pt(13)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         } content: {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                HStack {
-                    Text("Edith skills")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    Spacer()
+                PageSectionHeader(
+                    "Edith skills",
+                    subtitle:
+                        "A skill is a short instruction file that teaches your coding agent how to use Edith. Installing one only adds a small folder to the agent, and you can remove it any time."
+                ) {
                     if model.agentsLoaded {
-                        Text("\(model.agents.count) agents found on this Mac")
-                            .font(.system(size: UIScale.pt(11)))
+                        Text(agentSummary)
+                            .font(.edithText(.caption))
                             .foregroundStyle(.secondary)
                     } else {
                         SkeletonGroup {
@@ -49,6 +58,28 @@ struct PluginsPage: View {
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Discovering installed agents")
+                    }
+                }
+                if model.agentsLoaded && model.agents.isEmpty {
+                    PageNotice(
+                        "Edith could not find a coding agent such as Claude Code, Cursor or Codex on this Mac. You can still preview any skill and copy its Markdown into your agent by hand.",
+                        title: "No agents found", tone: .warning,
+                        symbol: "person.crop.circle.badge.questionmark"
+                    ) {
+                        EmptyView()
+                    } actions: {
+                        Button("Check again") { Task { await model.discoverAgents() } }
+                            .buttonStyle(.edith(.secondary))
+                    }
+                } else if model.agentsLoaded && !model.installerAvailable {
+                    PageNotice(
+                        "Installing needs Node.js 22.20 or later (the npx command), which was not found. Previewing and copying skills still works.",
+                        title: "Installer unavailable", tone: .warning
+                    ) {
+                        EmptyView()
+                    } actions: {
+                        Button("Check again") { Task { await model.discoverAgents() } }
+                            .buttonStyle(.edith(.secondary))
                     }
                 }
                 ForEach(model.skills) { skill in
@@ -62,7 +93,7 @@ struct PluginsPage: View {
                         })
                 }
                 Text(
-                    "Install once for all your projects. Choose your agents at each install, with your preferences remembered."
+                    "Install once and every project on this Mac can use it. Tap a card to read the skill first. The arrow next to Install picks a single agent."
                 )
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
@@ -153,6 +184,11 @@ private struct SkillCatalogRow: View {
                 install(nil)
             } label: {
                 Text(installed ? "Installed" : "Install")
+                    .help(
+                        installed
+                            ? "Already installed. Tap to reinstall or update."
+                            : "Choose agents and install this skill"
+                    )
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .padding(.horizontal, UIScale.pt(14))
                     .frame(height: UIScale.pt(30))

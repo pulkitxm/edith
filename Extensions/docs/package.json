@@ -21,5 +21,36 @@
   "notchCards": [
     "extension:docs"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Find the right Edith command by describing what you want to do.",
+    "summary": "A searchable, offline reference for every ed command. Type a goal in plain words and Docs ranks the commands that fit. Nothing you read here changes your settings or your machine.",
+    "steps": [
+      {
+        "symbolName": "sparkle.magnifyingglass",
+        "title": "Describe your goal",
+        "detail": "Type something like \"free up docker space\" in the ask bar at the top, or press Command K."
+      },
+      {
+        "symbolName": "list.bullet.rectangle",
+        "title": "Pick a match",
+        "detail": "Use the arrow keys to move through the ranked commands and press Return to open one."
+      },
+      {
+        "symbolName": "book.closed",
+        "title": "Read the page",
+        "detail": "Every page explains the command, shows examples, and links to related commands."
+      },
+      {
+        "symbolName": "line.3.horizontal.decrease",
+        "title": "Browse or filter",
+        "detail": "Use the list on the left, or press Command F to filter pages by name."
+      }
+    ],
+    "examples": [
+      "ed docs ls",
+      "ed docs ask \"restart the background agent\"",
+      "ed docs show herdr ls"
+    ]
+  }
 }

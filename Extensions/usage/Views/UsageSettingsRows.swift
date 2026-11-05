@@ -10,7 +10,7 @@ private struct ClaudeStatusLineRow: View {
     @State private var operation: Task<Void, Never>?
 
     var body: some View {
-        LabeledContent("Claude Code status line") {
+        LabeledContent("Show limits inside Claude Code") {
             HStack(spacing: 8) {
                 if let failure {
                     Text(failure).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -19,6 +19,12 @@ private struct ClaudeStatusLineRow: View {
                     .foregroundStyle(.secondary)
                 Button(connected == true ? "Disconnect" : "Connect") { toggle() }
                     .disabled(connected == nil)
+                    .help(
+                        connected == nil
+                            ? "Checking Claude Code's settings"
+                            : connected == true
+                                ? "Remove the Edith status line from Claude Code"
+                                : "Add a status line to Claude Code that reports your limits to Edith")
             }
         }
         .onDisappear {
@@ -157,6 +163,10 @@ struct UsageSettingsRows: View {
         UsageMachineSettingsRows()
         Section {
             Group {
+                Text(
+                    "Limits show how much of each plan's allowance you have used. Edith checks only the providers you leave on, using the sign-ins already on this Mac."
+                )
+                .settingsCaption()
                 Toggle(
                     "Claude limits",
                     isOn: $claudeEnabled

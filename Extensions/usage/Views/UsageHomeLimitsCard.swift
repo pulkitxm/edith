@@ -48,7 +48,21 @@ struct UsageHomeLimitsCard: View {
             if let snapshot {
                 data(snapshot).presenterCover(scene.presenter.hides("Usage"))
             } else if load.isRunning {
-                LoadingIndicator()
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        HStack(spacing: UIScale.pt(16)) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                                    SkeletonBlock(width: 56, height: 18)
+                                    SkeletonBlock(width: 44, height: 9)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading")
             } else if !active {
                 Text("Automatic updates are paused.").font(.edithText(.caption)).foregroundStyle(
                     .secondary)

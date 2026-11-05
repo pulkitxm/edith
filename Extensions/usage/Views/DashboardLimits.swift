@@ -95,6 +95,8 @@ struct RateLimitsDialsView: View {
             if selected == .claude, let accounts = latestLimits?.claudeAccounts, !accounts.isEmpty {
                 ClaudeAccountLimitsView(accounts: accounts, compact: compact)
                     .presenterCover(UsagePresenterState.shared.hides("Usage"))
+            } else if providers.isEmpty, reloadLoad.hasContent, !showsJumpLink {
+                limitsSetupHint
             } else if showsJumpLink {
                 providerOverview
             } else {
@@ -173,11 +175,6 @@ struct RateLimitsDialsView: View {
             }
         }
         .onChange(of: selectedRaw) { if automaticActionsEnabled, windowVisible { reload() } }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UsageEvents.limitsUpdated)
-        ) { _ in
-            if automaticActionsEnabled, windowVisible { reload() }
-        }
         .pageRefresh(
             interval: { .seconds(60) },
             cancel: {
@@ -189,10 +186,21 @@ struct RateLimitsDialsView: View {
         }
     }
 
+    private var limitsSetupHint: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text("No rate limits to show yet").font(.edithText(.callout)).fontWeight(.semibold)
+            Text(
+                "Limits show how much of your Claude, Codex, Cursor or Grok allowance is used. Sign in to one of them on this Mac, then press the refresh button above."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     @ViewBuilder private var providerOverview: some View {
         if providers.isEmpty {
-            Text("Connect a provider in Agent Usage to see its limits.")
-                .font(.edithText(.callout)).foregroundStyle(.secondary)
+            limitsSetupHint
         } else {
             SurfaceFittedGrid(count: providers.count, minimum: 240) {
                 ForEach(providers) { provider in
@@ -408,7 +416,8 @@ struct LimitsRefreshButton: View {
         }
         .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
-        .help("Refresh limits now")
+        .help("Check your rate limits now")
+        .accessibilityLabel("Refresh rate limits")
         .onDisappear {
             timeoutTask?.cancel(); timeoutTask = nil
         }
@@ -420,12 +429,6 @@ struct LimitsRefreshButton: View {
                 refreshing = false
                 onRefreshed()
             }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UsageEvents.limitsUpdated)
-        ) { _ in
-            refreshing = false
-            onRefreshed()
         }
     }
 }

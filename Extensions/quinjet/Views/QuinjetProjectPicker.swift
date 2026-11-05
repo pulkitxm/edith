@@ -16,12 +16,24 @@ struct QuinjetLocalProjectPicker: View {
 
     private var dark: Bool { scheme == .dark }
 
+    static let firstRunSteps = [
+        PageGuideStep(
+            symbolName: "folder", title: "Pick a Git project",
+            detail: "Choose a folder or one of your recent projects."),
+        PageGuideStep(
+            symbolName: "arrow.triangle.branch", title: "Choose a worktree",
+            detail: "Each branch checkout gets its own review session."),
+        PageGuideStep(
+            symbolName: "terminal", title: "Review in the terminal",
+            detail: "Quinjet starts in the folder and you review from there."),
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PageHeader {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Open a project")
-                    Text("Recent workspaces on this Mac")
+                    Text("Choose a Git project to review. Recent ones from this Mac are listed below.")
                         .font(.system(size: UIScale.pt(12), weight: .regular))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -38,6 +50,7 @@ struct QuinjetLocalProjectPicker: View {
                     }
                     .buttonStyle(QuinjetToolbarButtonStyle())
                     .help("Refresh recent projects")
+                    .accessibilityLabel("Refresh recent projects")
                 }
             } accessory: {
                 VStack(alignment: .leading, spacing: UIScale.pt(9)) {
@@ -69,30 +82,51 @@ struct QuinjetLocalProjectPicker: View {
     private var content: some View {
         if model.loadingProjects, model.projects.isEmpty {
             QuinjetProjectGridSkeleton(dark: dark)
+        } else if model.projectError == QuinjetClientError.notInstalled.errorDescription,
+            model.projects.isEmpty
+        {
+            PageEmptyState(
+                symbolName: "arrow.down.circle",
+                title: "Install the Quinjet tool first",
+                message:
+                    "This page drives the quinjet command line tool, which is not on this Mac yet. Installing it adds one command and does not touch your projects.",
+                steps: [
+                    PageGuideStep(
+                        symbolName: "terminal", title: "Run one command",
+                        detail: "Run ed tools install quinjet in a terminal."),
+                    PageGuideStep(
+                        symbolName: "arrow.clockwise", title: "Check again",
+                        detail: "Come back here and press Check again."),
+                ],
+                primary: PageAction("Check again", symbolName: "arrow.clockwise") {
+                    QuinjetWorkOwnership.start { await model.refreshProjects() }
+                },
+                footnote: "Prefer Homebrew? Run brew install pulkitxm/tap/quinjet.")
         } else if let error = model.projectError, model.projects.isEmpty {
-            ContentUnavailableView {
-                Label("Projects unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Choose folder", action: chooseFolder)
-                Button("Try again") { QuinjetWorkOwnership.start { await model.refreshProjects() } }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                symbolName: "exclamationmark.triangle",
+                title: "Recent projects could not be loaded",
+                message: "\(error) Your projects were not changed. You can retry, or pick a folder yourself.",
+                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    QuinjetWorkOwnership.start { await model.refreshProjects() }
+                },
+                secondary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
+        } else if model.filteredProjects.isEmpty, !model.query.isEmpty {
+            PageEmptyState(
+                symbolName: "magnifyingglass",
+                title: "No project matches \u{201C}\(model.query)\u{201D}",
+                message: "Search looks at project names, branches and paths. Clear the search to see every recent project.",
+                primary: PageAction("Clear search", symbolName: "xmark.circle") { model.query = "" },
+                secondary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
         } else if model.filteredProjects.isEmpty {
-            ContentUnavailableView {
-                Label(
-                    model.query.isEmpty ? "No recent projects" : "No matching projects",
-                    systemImage: "folder")
-            } description: {
-                Text(
-                    model.query.isEmpty
-                        ? "Choose a Git project to open it in Quinjet."
-                        : "Try a project name, branch, or path.")
-            } actions: {
-                Button("Choose folder", action: chooseFolder)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                symbolName: "arrow.triangle.branch",
+                title: "Review code with an AI agent, side by side",
+                message:
+                    "Quinjet opens a Git project in a terminal built for reviewing pull requests and changes. Pick a project to begin.",
+                steps: Self.firstRunSteps,
+                primary: PageAction("Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder),
+                footnote: "Opening a project only reads it. Nothing is changed until you act in the terminal.")
         } else {
             ScrollView {
                 LazyVGrid(

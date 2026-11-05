@@ -41,7 +41,7 @@ struct QuinjetPage: View {
             await model.refreshProjects()
             if model.isRemote {
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
+                    try? await Task.sleep(for: .seconds(1), tolerance: .milliseconds(500))
                     guard !Task.isCancelled else { return }
                     await model.refreshUI()
                 }
@@ -114,7 +114,8 @@ struct QuinjetPage: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.edith(.toolbar))
-            .help("New Quinjet review")
+            .help("Start another review in a new tab")
+            .accessibilityLabel("New review tab")
             terminalMenu
             themeMenu
         }

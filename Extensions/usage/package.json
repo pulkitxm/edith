@@ -27,5 +27,37 @@
     "limits",
     "extension:usage"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See what your coding agents cost and how close you are to their limits.",
+    "summary": "Usage reads the history that agents like Claude Code and Codex keep on this Mac, then shows tokens, cost and rate limits by day, model and project. Nothing is uploaded, and your prompts and code are never read.",
+    "steps": [
+      {
+        "symbolName": "arrow.clockwise",
+        "title": "Collect your history",
+        "detail": "Open Usage and press Collect usage now. The first run can take a few minutes."
+      },
+      {
+        "symbolName": "chart.bar",
+        "title": "Explore the numbers",
+        "detail": "Filter by range, model, project or machine to see where tokens and money go."
+      },
+      {
+        "symbolName": "gauge.with.dots.needle.67percent",
+        "title": "Watch your limits",
+        "detail": "Rate limits show how much of each plan you have used and when it resets."
+      },
+      {
+        "symbolName": "bell.badge",
+        "title": "Get warned early",
+        "detail": "Turn on limit alerts in settings to hear about it before you run out."
+      }
+    ],
+    "examples": [
+      "ed usage summary",
+      "ed usage limits",
+      "ed usage daily",
+      "ed usage refresh"
+    ]
+  }
 }

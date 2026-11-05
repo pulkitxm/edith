@@ -73,6 +73,24 @@ struct DashboardView: View {
                 }))
     }
 
+    private static let firstRunSteps = [
+        PageGuideStep(
+            symbolName: "folder.badge.gearshape", title: "Collect",
+            detail: "Edith reads your agents' local history. This runs on your Mac."),
+        PageGuideStep(
+            symbolName: "chart.bar", title: "Explore",
+            detail: "See cost and tokens by day, model, project and machine."),
+        PageGuideStep(
+            symbolName: "gauge.with.dots.needle.67percent", title: "Watch your limits",
+            detail: "Track how much of each plan's allowance you have used."),
+    ]
+
+    private var emptyState: UsageEmptyState {
+        UsageEmptyState.resolve(
+            state: model.contentLoad.state, loaded: model.loaded, updating: refresh.updating,
+            errorMessage: model.contentLoad.errorMessage)
+    }
+
     var body: some View {
         PageScaffold(pinnedHeader: true) {
             VStack(spacing: 0) {
@@ -84,11 +102,6 @@ struct DashboardView: View {
                 Divider()
             }
         } content: {
-            if !model.loaded, model.contentLoad.state == .loading {
-                PageNotice(
-                    "Loading usage data. The first collection can take a few minutes.",
-                    tone: .information)
-            }
             if showLog { logView }
             if let notice = client?.notice
                 ?? UsageWorkerOperations.controller?.notice
@@ -107,18 +120,61 @@ struct DashboardView: View {
                         Button("Retry", action: refresh.requestRefresh)
                     })
             }
-            PageLoading(
-                state: model.contentLoad.state, title: "No usage data yet",
-                message: model.contentLoad.errorMessage ?? "Reload to run the bundled collector.",
-                layout: .analytics,
-                refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
-                retry: refresh.requestRefresh
-            ) {
-                kpiGrid(compact: compactLayout)
-                activityRow(compact: compactLayout)
-                LimitsCardView(theme: acc, dark: dark)
-                BudgetCardView(theme: acc, dark: dark)
-                charts(compact: compactLayout)
+            switch emptyState {
+            case .collecting:
+                PageEmptyState(
+                    symbolName: "chart.bar.doc.horizontal",
+                    title: "Collecting your usage",
+                    message:
+                        "Edith is reading the history your coding agents keep on this Mac. The first collection can take a few minutes, and the dashboard fills in as soon as it finishes.",
+                    secondary: PageAction("Watch the log", symbolName: "terminal") {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    },
+                    footnote:
+                        "Only token counts and model names are read. Your prompts and code stay where they are."
+                )
+            case .firstRun:
+                PageEmptyState(
+                    symbolName: "chart.bar.fill",
+                    title: "See what your coding agents cost",
+                    message:
+                        "Agent Usage adds up the tokens, cost and rate limits from agents like Claude Code and Codex, all from files already on this Mac.",
+                    steps: Self.firstRunSteps,
+                    primary: PageAction("Collect usage now", symbolName: "arrow.clockwise") {
+                        refresh.requestRefresh()
+                    },
+                    secondary: PageAction("Show the log", symbolName: "terminal") {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    },
+                    footnote:
+                        "Nothing is uploaded and nothing is changed. If you have not used an agent yet, there is nothing to count until you do."
+                )
+            case .failed(let message):
+                PageEmptyState(
+                    symbolName: "exclamationmark.triangle",
+                    title: "Usage could not be read",
+                    message:
+                        "\(message) Your usage files were not changed. Collecting again usually fixes this.",
+                    primary: PageAction("Collect again", symbolName: "arrow.clockwise") {
+                        refresh.requestRefresh()
+                    },
+                    secondary: PageAction("Show the log", symbolName: "terminal") {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    })
+            case .none:
+                PageLoading(
+                    state: model.contentLoad.state, title: "No usage data yet",
+                    message: model.contentLoad.errorMessage ?? "Collect usage to fill this page.",
+                    layout: .analytics,
+                    refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
+                    retry: refresh.requestRefresh
+                ) {
+                    kpiGrid(compact: compactLayout)
+                    activityRow(compact: compactLayout)
+                    LimitsCardView(theme: acc, dark: dark)
+                    BudgetCardView(theme: acc, dark: dark)
+                    charts(compact: compactLayout)
+                }
             }
         }
         .exportCardPresentation(item: $sharePresentation)
@@ -173,6 +229,9 @@ struct DashboardView: View {
                     }
                 }
                 .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                Text("Tokens, cost and rate limits from your coding agents, collected on this Mac.")
+                    .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
             }
         }.accessibilityElement(children: .contain).accessibilityLabel("Agent usage")
     }
@@ -182,13 +241,13 @@ struct DashboardView: View {
             PageToolbarButton(
                 action: refresh.requestRefresh,
                 systemImage: "arrow.clockwise",
-                helperText: "Refresh usage data",
+                helperText: "Collect new usage now",
                 isLoading: refresh.updating
             )
             PageToolbarButton(
                 action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
                 systemImage: "terminal",
-                helperText: "Show collector log",
+                helperText: showLog ? "Hide the collector log" : "Show the collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
             ExportCardButton(isEnabled: model.loaded, help: "Share usage cards") {
@@ -468,6 +527,7 @@ struct DashboardView: View {
     private var resetButton: some View {
         Button("Reset") { model.reset() }
             .buttonStyle(.edith(.borderless))
+            .help("Clear every range and scope filter")
             .font(DashSkin.mono(11))
             .foregroundStyle(acc)
             .padding(.horizontal, UIScale.pt(6))

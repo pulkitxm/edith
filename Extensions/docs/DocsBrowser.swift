@@ -41,6 +41,7 @@ final class DocsBrowser {
     private(set) var flashAnchor: String?
     private(set) var answer: DocsPresentationAnswer?
     private(set) var asking = false
+    private(set) var loadFailed = false
     private(set) var resultsVisible = false
     private var askSerial = 0
     var expandedGroups: Set<String> = [""] { didSet { remember() } }
@@ -107,9 +108,17 @@ final class DocsBrowser {
             await loadTask.value
             return
         }
+        loadFailed = false
         let task = Task { await loadFresh() }
         loadTask = task
         await task.value
+        loadTask = nil
+        if library == nil, !stopped, !Task.isCancelled { loadFailed = true }
+    }
+
+    func retryLoad() async {
+        guard library == nil else { return }
+        await load()
     }
 
     private func loadFresh() async {
