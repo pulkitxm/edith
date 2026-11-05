@@ -62,14 +62,9 @@ import Security
                 let lease = try environment.lease(host, source, version)
                 self.lease = lease
                 let exited = try await lease.begin()
-                let obsTransport =
-                    Bundle.main.object(forInfoDictionaryKey: "EdithCameraTransport") as? String
-                    == "obs"
                 let controller = CameraSystemExtensionController(
-                    identifier: host + ".camera",
-                    broker: obsTransport
-                        ? CameraOBSTransportBroker() : environment.broker(),
-                    initiallyActive: obsTransport ? false : !exited,
+                    identifier: host + ".camera", broker: environment.broker(),
+                    initiallyActive: !exited,
                     providerExited: {
                         let deadline = ContinuousClock.now.advanced(by: .seconds(30))
                         repeat {
@@ -81,7 +76,6 @@ import Security
                 session = CameraCarrierSession(
                     controller: controller,
                     send: { [environment] in try environment.output.write(contentsOf: $0) },
-                    obsTransport: obsTransport,
                     prepareDisableResources: { try await lease.retireMicrophone() },
                     releaseResources: { try await lease.release() },
                     exited: { [weak self, environment] in
@@ -231,15 +225,5 @@ enum CameraCarrierCaller {
             let values = information as? [String: Any]
         else { throw CocoaError(.fileReadNoPermission) }
         return values
-    }
-}
-
-@MainActor private final class CameraOBSTransportBroker: CameraSystemExtensionSubmitting {
-    func submit(
-        _ operation: CameraSystemExtensionOperation, identifier: String,
-        completion: @escaping @MainActor (CameraSystemExtensionEvent) -> Void
-    ) {
-        completion(
-            .failed("Video uses OBS Virtual Camera. No camera provider is installed by Edith."))
     }
 }

@@ -23,27 +23,12 @@ test("camera carrier metadata permits only the matching sealed roles and identit
     { minimumSystemVersion: "13.0.0" },
     { applicationIdentifier: "../arbitrary" },
     { providerEntitlement: "com.apple.developer.cmio.extension" },
+    { providerRole: undefined },
+    { installEntitlement: undefined },
+    { transport: "obs" },
   ])
     expect(() =>
       validateCameraCarrierDefinition({ ...definition, ...change }),
-    ).toThrow();
-});
-
-test("OBS microphone carriers require no provider role or installation entitlement", () => {
-  const obs = {
-    role: "cameraCarrier",
-    transport: "obs",
-    applicationIdentifier: "com.pulkit.edith.cameraCarrier",
-    minimumSystemVersion: "14.0.0",
-  };
-  expect(validateCameraCarrierDefinition(obs)).toEqual(obs);
-  for (const change of [
-    { providerRole: "cameraProvider" },
-    { installEntitlement: "com.apple.developer.system-extension.install" },
-    { transport: "unrecognized" },
-  ])
-    expect(() =>
-      validateCameraCarrierDefinition({ ...obs, ...change }),
     ).toThrow();
 });
 
