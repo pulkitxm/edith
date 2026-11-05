@@ -197,7 +197,7 @@ public struct PageDateRangePicker: View {
     }
 
     private func foreground(_ day: DateFilterDay, endpoint: Bool) -> Color {
-        if endpoint { return DashSkin.paper2(dark) }
+        if endpoint { return DashSkin.onAccent(dark) }
         let inMonth = DateFilterMonth(containing: day) == draft.visibleMonth
         return (day == today ? accent : DashSkin.ink(dark)).opacity(inMonth ? 1 : 0.38)
     }
@@ -231,7 +231,7 @@ public struct PageDateRangePicker: View {
             }
             if keyboardActive, gridFocused, day == draft.cursor {
                 Circle().strokeBorder(
-                    endpoint ? DashSkin.paper2(dark) : accent, lineWidth: UIScale.pt(1.5))
+                    endpoint ? DashSkin.onAccent(dark) : accent, lineWidth: UIScale.pt(1.5))
             }
         }
         .frame(maxWidth: markHeight, maxHeight: markHeight)

@@ -48,7 +48,6 @@ struct BifrostPanelView: View {
         }
         .clipShape(shape)
         .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 1))
-        .tint(DashSkin.accent(true))
         .environment(\.colorScheme, .dark)
         .onAppear {
             searchFocused = true

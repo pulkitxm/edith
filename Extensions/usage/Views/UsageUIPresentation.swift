@@ -187,7 +187,7 @@ private struct UsagePresentationView: View {
             case .dashboard:
                 DashboardView(model: scene.model, client: scene.client, presenter: scene.presenter)
             case .settings:
-                Form { UsageSettingsRows() }.formStyle(.grouped)
+                Form { UsageSettingsRows() }.edithForm()
                     .disabled(scene.readOnly || scene.client?.prepared != true)
             default:
                 if let tile = scene.route.tile { UsageHomeScene(tile: tile, scene: scene) }

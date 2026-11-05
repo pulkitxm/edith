@@ -46,7 +46,7 @@ struct CodeStatsTrendCard: View {
                 .labelsHidden()
                 .fixedSize()
                 Toggle("Cumulative", isOn: $cumulative)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                 Spacer()
                 if let brushed, zooms {
@@ -212,7 +212,7 @@ struct CodeStatsRepositoryCards: View {
                 note: "Top 10, click to filter, right-click a row below to exclude"
             ) {
                 Toggle("Log scale", isOn: $logScale)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(
@@ -427,6 +427,7 @@ private struct CodeStatsRepositoryTable: View {
                 SwiftUI.TableColumn("Last active") { row in Text(row.lastDay).monospacedDigit() }
                     .width(UIScale.pt(100))
             }
+            .themedSelection()
             .tableStyle(.inset)
             .frame(height: UIScale.pt(min(420, max(100, Double(sorted.count) * 30 + 32))))
             .accessibilityLabel("Repository activity")

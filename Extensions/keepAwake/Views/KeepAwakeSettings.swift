@@ -24,7 +24,9 @@ struct KeepAwakeSettings: View {
                 }
                 .accessibilityLabel("Keep awake")
                 .accessibilityIdentifier("keepAwake.preventSleep")
-                .accessibilityAction(.default) { preventSleep.toggle() }
+                .accessibilityAction(.default) {
+                    $preventSleep.notifyingSettingsChange().wrappedValue.toggle()
+                }
             } header: {
                 Text("Stay awake")
             } footer: {

@@ -9,14 +9,17 @@ struct TimeLapseSettingsPage: View {
     var body: some View {
         Form {
             Section("Recorder") {
-                Button("Open Screen Recorder") { ExtensionPresentation.showWindow() }
-                Text(
-                    "Record displays or selected windows at normal speed, or choose Time-lapse. Choose export quality after stopping."
-                )
-                .settingsCaption()
+                SettingsRow(
+                    "Screen Recorder",
+                    subtitle:
+                        "Record displays or selected windows at normal speed, or choose Time-lapse. Choose export quality after stopping."
+                ) {
+                    Button("Open Screen Recorder") { ExtensionPresentation.showWindow() }
+                        .buttonStyle(.edith(.secondary))
+                }
             }
         }
-        .edithForm()
+        .settingsForm()
     }
 }
 

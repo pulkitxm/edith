@@ -884,7 +884,7 @@ struct HostSurfaceEditor: View {
                 Toggle("Single column", isOn: $previewCompact)
             }
         }
-        .toggleStyle(.switch).font(.edithText(.caption))
+        .toggleStyle(.edithSwitch).font(.edithText(.caption))
     }
 
     private var notchTabs: some View {

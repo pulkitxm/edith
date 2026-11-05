@@ -312,7 +312,7 @@ struct DatabaseConnectionCreationSheet: View {
                     "Require TLS with full certificate verification",
                     isOn: boolBinding(\.tlsEnabled)
                 )
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
                 .font(.edithText(.callout).weight(.medium))
             }
         }

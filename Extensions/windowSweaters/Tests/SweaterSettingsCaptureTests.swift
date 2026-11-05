@@ -64,7 +64,7 @@ import Testing
                 #expect(
                     RenderCapture.find(
                         rendered.host,
-                        label: "Your choice is saved, so there is nothing else to do.") != nil)
+                        label: "Your choice is saved and takes effect as soon as it runs.") != nil)
             }
         }
     }

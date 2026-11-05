@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -48,6 +49,14 @@ import Testing
             cursor: 0, privacy: false)
     }
 
+    private func withSession(_ body: (MusicCaptureSession) async throws -> Void) async throws {
+        try await RenderCapture.exclusiveScale {
+            let session = MusicCaptureSession()
+            defer { session.restore() }
+            try await body(session)
+        }
+    }
+
     private func configure(_ library: Library) async throws {
         let remote = EmbeddedMusicRemote.shared
         remote.stop()
@@ -80,103 +89,106 @@ import Testing
     }
 
     @Test func pageFooterAndSidebarRenderEveryStateAtBothWidthsThemesAndZoom() async throws {
-        let session = MusicCaptureSession()
-        defer { session.restore() }
-        for library in [Library.loading, .empty, .populated, .spotify] {
-            try await configure(library)
-            for (width, height) in [(1600.0, 1000.0), (1100.0, 760.0), (640.0, 700.0)] {
-                for scheme in [ColorScheme.light, .dark] {
-                    let name = "page-\(library)-\(Int(width))-\(scheme)"
-                    let view = try await session.render(
-                        route: .page, width: width, height: height, scheme: scheme, name: name)
-                    #expect(abs(view.bounds.width - width) < 1, Comment(rawValue: name))
+        try await withSession { session in
+            for library in [Library.loading, .empty, .populated, .spotify] {
+                try await configure(library)
+                for (width, height) in [(1600.0, 1000.0), (1100.0, 760.0), (640.0, 700.0)] {
+                    for scheme in [ColorScheme.light, .dark] {
+                        let name = "page-\(library)-\(Int(width))-\(scheme)"
+                        let view = try await session.render(
+                            route: .page, width: width, height: height, scheme: scheme, name: name)
+                        #expect(abs(view.bounds.width - width) < 1, Comment(rawValue: name))
+                    }
                 }
             }
+            try await configure(.populated)
+            session.zoom(1.6)
+            _ = try await session.render(
+                route: .page, width: 1100, height: 760, scheme: .light, name: "page-populated-zoom")
+            session.zoom(1)
+            SharedDefaults.store.set(true, forKey: AppStorageKeys.Music.gridView)
+            _ = try await session.render(
+                route: .page, width: 1100, height: 760, scheme: .dark, name: "page-grid-1100-dark")
+            _ = try await session.render(
+                route: .page, width: 1600, height: 1000, scheme: .light,
+                name: "page-grid-1600-light")
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.gridView)
         }
-        try await configure(.populated)
-        session.zoom(1.6)
-        _ = try await session.render(
-            route: .page, width: 1100, height: 760, scheme: .light, name: "page-populated-zoom")
-        session.zoom(1)
-        SharedDefaults.store.set(true, forKey: AppStorageKeys.Music.gridView)
-        _ = try await session.render(
-            route: .page, width: 1100, height: 760, scheme: .dark, name: "page-grid-1100-dark")
-        _ = try await session.render(
-            route: .page, width: 1600, height: 1000, scheme: .light, name: "page-grid-1600-light")
-        SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.gridView)
     }
 
     @Test func settingsDownloadsDetailHomeAndNotchRenderAtBothWidthsAndThemes() async throws {
-        let session = MusicCaptureSession()
-        defer { session.restore() }
-        try await configure(.populated)
-        let settings = EmbeddedMusicSettingsModel(expectedVersion: nil) { _, _ in
-            try JSONEncoder().encode(
-                EmbeddedMusicUISettings(
-                    version: "fixture", preferences: EmbeddedMusicUIPreferences()))
-        }
-        defer { settings.stop() }
-        await settings.refresh()
-        #expect(settings.loaded)
-        let track = EmbeddedTrack(
-            url: Self.root.appendingPathComponent("Morning Static.m4a"),
-            relativePath: "Morning Static.m4a")
-        let downloader = EmbeddedYoutubeDownloader()
-        try downloader.apply(Self.downloadsState)
-        let tile = SurfaceTile(.music)
-        for (zoom, width, height) in [
-            (1.0, 1600.0, 1000.0), (1.0, 1100.0, 760.0), (1.0, 640.0, 700.0), (1.6, 1100.0, 760.0),
-        ] {
-            session.zoom(zoom)
-            for scheme in [ColorScheme.light, .dark] {
-                let suffix = "\(Int(width))-\(scheme)-\(zoom)"
-                _ = try await session.render(
-                    width: width, height: height, scheme: scheme, name: "settings-\(suffix)"
-                ) { EmbeddedMusicSettings(model: settings) }
-                _ = try await session.render(
-                    width: width, height: height, scheme: scheme, name: "downloads-\(suffix)"
-                ) { EmbeddedDownloadSheet(isPage: true, downloader: downloader) }
-                _ = try await session.render(
-                    width: width, height: height, scheme: scheme, name: "detail-\(suffix)"
-                ) {
-                    EmbeddedMusicDetailSheet(
-                        track: track, availableSize: CGSize(width: width, height: height),
-                        theme: .themeAccent, beginRename: false, onRename: { _ in },
-                        onDelete: {}, onOpenFolder: { _ in }, onClose: {})
-                }
-                _ = try await session.render(
-                    width: min(width, 540), height: 340, scheme: scheme, name: "home-\(suffix)"
-                ) { EmbeddedMusicHomeScene(tile: tile) }
+        try await withSession { session in
+            try await configure(.populated)
+            let settings = EmbeddedMusicSettingsModel(expectedVersion: nil) { _, _ in
+                try JSONEncoder().encode(
+                    EmbeddedMusicUISettings(
+                        version: "fixture", preferences: EmbeddedMusicUIPreferences()))
             }
+            defer { settings.stop() }
+            await settings.refresh()
+            #expect(settings.loaded)
+            let track = EmbeddedTrack(
+                url: Self.root.appendingPathComponent("Morning Static.m4a"),
+                relativePath: "Morning Static.m4a")
+            let downloader = EmbeddedYoutubeDownloader()
+            try downloader.apply(Self.downloadsState)
+            let tile = SurfaceTile(.music)
+            for (zoom, width, height) in [
+                (1.0, 1600.0, 1000.0), (1.0, 1100.0, 760.0), (1.0, 640.0, 700.0),
+                (1.6, 1100.0, 760.0),
+            ] {
+                session.zoom(zoom)
+                for scheme in [ColorScheme.light, .dark] {
+                    let suffix = "\(Int(width))-\(scheme)-\(zoom)"
+                    _ = try await session.render(
+                        width: width, height: height, scheme: scheme, name: "settings-\(suffix)"
+                    ) { EmbeddedMusicSettings(model: settings) }
+                    _ = try await session.render(
+                        width: width, height: height, scheme: scheme, name: "downloads-\(suffix)"
+                    ) { EmbeddedDownloadSheet(isPage: true, downloader: downloader) }
+                    _ = try await session.render(
+                        width: width, height: height, scheme: scheme, name: "detail-\(suffix)"
+                    ) {
+                        EmbeddedMusicDetailSheet(
+                            track: track, availableSize: CGSize(width: width, height: height),
+                            theme: .themeAccent, beginRename: false, onRename: { _ in },
+                            onDelete: {}, onOpenFolder: { _ in }, onClose: {})
+                    }
+                    _ = try await session.render(
+                        width: min(width, 540), height: 340, scheme: scheme, name: "home-\(suffix)"
+                    ) { EmbeddedMusicHomeScene(tile: tile) }
+                }
+            }
+            session.zoom(1)
+            #expect(downloader.items.count == 3)
         }
-        session.zoom(1)
-        #expect(downloader.items.count == 3)
     }
 
     @Test func notchCardRendersPlayingAndEmpty() async throws {
-        let session = MusicCaptureSession()
-        defer { session.restore() }
-        let playing = MusicSurfacePlayback(
-            sourceID: "local", sourceTitle: "Local library", trackKey: "Mock Collection/Mock.mov",
-            title: "Morning Static", artist: "Synthetic Artist", playing: true, elapsed: 74,
-            duration: 212, volume: 0.6, shuffle: false, repeating: false)
-        let context: NSDictionary = [
-            "location": "notch", "section": EmbeddedMusicNotchRoute.Section.card.rawValue,
-            "target": "notch", "tile": try JSONEncoder().encode(SurfaceTile(.music)),
-        ]
-        let route = try #require(EmbeddedMusicNotchRoute(context: context))
-        for (name, states) in [("playing", [playing]), ("empty", [])] {
-            let service = MusicSurface(
-                read: { _ in states }, perform: { _ in }, appIcon: { _ in nil },
-                privacyValues: { ["active": "0", "blurMusic": "1"] })
-            let model = EmbeddedMusicNotchModel(
-                request: route.request, presentationID: UUID(), invoke: service.execute)
-            await model.refresh()
-            #expect((model.nowPlaying != nil) == !states.isEmpty)
-            _ = try await session.render(
-                width: 420, height: 160, scheme: .dark, name: "notch-\(name)"
-            ) {
-                EmbeddedMusicNotchScene(route: route, model: model).background(.black)
+        try await withSession { session in
+            let playing = MusicSurfacePlayback(
+                sourceID: "local", sourceTitle: "Local library",
+                trackKey: "Mock Collection/Mock.mov",
+                title: "Morning Static", artist: "Synthetic Artist", playing: true, elapsed: 74,
+                duration: 212, volume: 0.6, shuffle: false, repeating: false)
+            let context: NSDictionary = [
+                "location": "notch", "section": EmbeddedMusicNotchRoute.Section.card.rawValue,
+                "target": "notch", "tile": try JSONEncoder().encode(SurfaceTile(.music)),
+            ]
+            let route = try #require(EmbeddedMusicNotchRoute(context: context))
+            for (name, states) in [("playing", [playing]), ("empty", [])] {
+                let service = MusicSurface(
+                    read: { _ in states }, perform: { _ in }, appIcon: { _ in nil },
+                    privacyValues: { ["active": "0", "blurMusic": "1"] })
+                let model = EmbeddedMusicNotchModel(
+                    request: route.request, presentationID: UUID(), invoke: service.execute)
+                await model.refresh()
+                #expect((model.nowPlaying != nil) == !states.isEmpty)
+                _ = try await session.render(
+                    width: 420, height: 160, scheme: .dark, name: "notch-\(name)"
+                ) {
+                    EmbeddedMusicNotchScene(route: route, model: model).background(.black)
+                }
             }
         }
     }
@@ -204,38 +216,40 @@ import Testing
     }
 
     @Test func footerAndSidebarReportTheHeightTheyDraw() async throws {
-        let session = MusicCaptureSession()
-        defer { session.restore() }
-        for library in [Library.populated, .nothingPlaying] {
-            try await configure(library)
-            for zoom in [1.0, 1.6] {
-                session.zoom(zoom)
-                for scheme in [ColorScheme.light, .dark] {
-                    for width in [1100.0, 640.0] {
-                        let name = "footer-\(library)-\(Int(width))-\(scheme)-\(zoom)"
-                        let footer = try await session.render(
-                            route: .footer, width: width, height: nil, scheme: scheme, name: name)
-                        #expect(
-                            abs(
-                                footer.bounds.height
-                                    - UIScale.pt(EmbeddedMusicFooter.expandedHeight))
-                                < 1, Comment(rawValue: name))
+        try await withSession { session in
+            for library in [Library.populated, .nothingPlaying] {
+                try await configure(library)
+                for zoom in [1.0, 1.6] {
+                    session.zoom(zoom)
+                    for scheme in [ColorScheme.light, .dark] {
+                        for width in [1100.0, 640.0] {
+                            let name = "footer-\(library)-\(Int(width))-\(scheme)-\(zoom)"
+                            let footer = try await session.render(
+                                route: .footer, width: width, height: nil, scheme: scheme,
+                                name: name)
+                            #expect(
+                                abs(
+                                    footer.bounds.height
+                                        - UIScale.pt(EmbeddedMusicFooter.expandedHeight))
+                                    < 1, Comment(rawValue: name))
+                        }
+                        let name = "sidebar-\(library)-\(scheme)-\(zoom)"
+                        let pill = try await session.render(
+                            route: .sidebar, width: 232, height: nil, scheme: scheme, name: name)
+                        let expected = UIScale.pt(EmbeddedMusicSidebarPill.height)
+                        #expect(abs(pill.bounds.height - expected) < 1, Comment(rawValue: name))
                     }
-                    let name = "sidebar-\(library)-\(scheme)-\(zoom)"
-                    let pill = try await session.render(
-                        route: .sidebar, width: 232, height: nil, scheme: scheme, name: name)
-                    let expected = UIScale.pt(EmbeddedMusicSidebarPill.height)
-                    #expect(abs(pill.bounds.height - expected) < 1, Comment(rawValue: name))
                 }
             }
+            session.zoom(1)
+            try await configure(.populated)
+            SharedDefaults.store.set(true, forKey: AppStorageKeys.Music.barCollapsed)
+            let collapsed = try await session.render(
+                route: .footer, width: 1100, height: nil, scheme: .light, name: "footer-collapsed")
+            #expect(
+                abs(collapsed.bounds.height - UIScale.pt(EmbeddedMusicFooter.collapsedHeight)) < 1)
+            SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.barCollapsed)
         }
-        session.zoom(1)
-        try await configure(.populated)
-        SharedDefaults.store.set(true, forKey: AppStorageKeys.Music.barCollapsed)
-        let collapsed = try await session.render(
-            route: .footer, width: 1100, height: nil, scheme: .light, name: "footer-collapsed")
-        #expect(abs(collapsed.bounds.height - UIScale.pt(EmbeddedMusicFooter.collapsedHeight)) < 1)
-        SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.barCollapsed)
     }
 }
 

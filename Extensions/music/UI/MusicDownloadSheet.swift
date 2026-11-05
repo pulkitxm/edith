@@ -469,7 +469,7 @@ struct EmbeddedDownloadSheet: View {
                     Text(parsedCount > 1 ? "Download \(parsedCount) links" : "Download")
                         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(canStart ? Color.themeOnAccent : .white)
                 .padding(.horizontal, UIScale.pt(18))
                 .padding(.vertical, UIScale.pt(9))
                 .background(canStart ? theme : Color.gray.opacity(0.35))

@@ -254,6 +254,7 @@ struct DatabaseWorkbenchView: View {
                         }
                     }
                 }
+                .themedSelection()
                 .frame(width: UIScale.pt(280), height: UIScale.pt(360))
             }
             .buttonStyle(.edith(.toolbar))

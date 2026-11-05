@@ -444,7 +444,7 @@ struct DatabaseFilterRibbon: View {
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Spacer(minLength: 0)
                     Toggle("Enabled", isOn: clauseEnabledBinding(id))
-                        .toggleStyle(.switch)
+                        .toggleStyle(.edithSwitch)
                         .controlSize(.small)
                 }
                 filterEditorControl("Field") {

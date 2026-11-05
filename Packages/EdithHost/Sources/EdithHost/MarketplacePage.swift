@@ -345,8 +345,7 @@ struct MarketplacePage: View {
             Toggle(
                 "Update extensions automatically", isOn: $marketplace.automaticallyUpdatesExtensions
             )
-            .labelsHidden().toggleStyle(.switch).controlSize(.small)
-            .tint(DashSkin.accent(dark))
+            .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
         }
         .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
         .padding(.vertical, UIScale.pt(12))
@@ -373,8 +372,8 @@ struct MarketplacePage: View {
                                     Task { await suites.setEnabled(value, suite: suite) }
                                 })
                         )
-                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                        .tint(DashSkin.accent(dark)).disabled(suites.working)
+                        .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
+                        .disabled(suites.working)
                     }
                 }
             }

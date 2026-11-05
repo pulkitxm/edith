@@ -38,17 +38,13 @@ open class Highlighter {
 
         guard let bundle = DocumentResources.bundle else { return nil }
 
-        guard let highlightPath: String = bundle.path(forResource: "highlight.min", ofType: "js")
-        else {
-            return nil
-        }
-
         do {
-            guard let context = JSContext() else {
+            guard let highlightJs = try DocumentResources.highlightScript(in: bundle),
+                let context = JSContext()
+            else {
                 return nil
             }
 
-            let highlightJs: String = try String(contentsOfFile: highlightPath)
             let _ = context.evaluateScript(highlightJs)
 
             guard let hljs = context.globalObject.objectForKeyedSubscript("hljs") else {

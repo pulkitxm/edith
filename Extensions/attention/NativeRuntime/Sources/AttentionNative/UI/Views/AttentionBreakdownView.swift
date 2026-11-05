@@ -173,6 +173,7 @@ struct AttentionBreakdownView: View {
             }
             .width(UIScale.pt(70))
         }
+        .themedSelection()
         .tableStyle(.inset)
         .frame(height: UIScale.pt(420))
         .accessibilityLabel("Activity groups")

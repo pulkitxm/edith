@@ -267,7 +267,7 @@ struct AddMachineSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             PageCapsLabel("Clipboard")
             Toggle("Sync clipboard with this machine", isOn: $sshClipboardEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
                 .font(.edithText(.body))
                 .disabled(authKind != .agent)
             helpText(sshClipboardHelp)

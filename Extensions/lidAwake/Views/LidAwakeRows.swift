@@ -142,11 +142,10 @@ struct LidAwakeRows: View {
                     "The lid-awake idea was inspired by Awayke, an MIT-licensed macOS utility by daemonphantom."
                 )
                 .foregroundStyle(.secondary)
-                Link(
+                EdithLink(
                     "View Awayke on GitHub",
                     destination: URL(string: "https://github.com/daemonphantom/Awayke")!
                 )
-                .foregroundStyle(Color.themeAccent)
             } header: {
                 Text("Acknowledgement")
             }

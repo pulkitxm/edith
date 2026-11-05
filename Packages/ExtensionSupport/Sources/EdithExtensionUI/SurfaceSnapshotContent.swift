@@ -26,7 +26,7 @@ public struct SurfaceSnapshotContent: View {
                             Text(metric.title).font(.edithText(.caption)).foregroundStyle(
                                 .secondary)
                             if let fraction = metric.fraction, tile.shows("progress") {
-                                ProgressView(value: fraction)
+                                LoadingProgress(value: fraction)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -62,7 +62,7 @@ public struct SurfaceSnapshotContent: View {
                             }
                         }.font(.edithText(.callout))
                         if let progress = row.progress, tile.shows("progress") {
-                            ProgressView(value: progress)
+                            LoadingProgress(value: progress)
                         }
                         if tile.showActions {
                             sliders(row.sliders)

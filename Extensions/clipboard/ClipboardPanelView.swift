@@ -54,7 +54,6 @@ struct ClipboardPanelView: View {
             }
         }
         .frame(width: ClipboardPanelLayout.width)
-        .tint(themeColor(themeName))
         .onAppear { resetForShow() }
         .onReceive(NotificationCenter.default.publisher(for: ClipboardPanel.willShow)) { _ in
             resetForShow()
@@ -194,7 +193,7 @@ struct ClipboardPanelView: View {
                     Capsule().fill(
                         active ? themeColor(themeName) : Color.secondary.opacity(0.12))
                 )
-                .foregroundStyle(active ? Color.white : Color.primary)
+                .foregroundStyle(active ? themeOnAccentColor(themeName) : Color.primary)
                 .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
@@ -479,7 +478,7 @@ private struct ClipboardPanelRow: View {
     var body: some View {
         let entry = model.entry
         let selected = selection.id == entry.id
-        let secondary = selected ? Color.white.opacity(0.75) : Color.secondary
+        let secondary = selected ? themeOnAccentColor(themeName).opacity(0.75) : Color.secondary
         Button {
             activate(entry)
         } label: {
@@ -512,7 +511,7 @@ private struct ClipboardPanelRow: View {
             .padding(.horizontal, ClipboardPanelLayout.contentInset)
             .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(selected ? Color.white : Color.primary)
+            .foregroundStyle(selected ? themeOnAccentColor(themeName) : Color.primary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
@@ -569,6 +568,6 @@ private struct ClipboardPanelRow: View {
     private func symbol(selected: Bool) -> some View {
         Image(systemName: model.category.symbol)
             .font(.system(size: 14))
-            .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
+            .foregroundStyle(selected ? Color.themeOnAccent.opacity(0.85) : Color.secondary)
     }
 }

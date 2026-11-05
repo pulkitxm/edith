@@ -172,7 +172,7 @@ struct HostSettingsPage: View {
                 get: { themeName == "accent" },
                 set: { $themeName.wrappedValue = $0 ? "accent" : lastPaletteTheme })
         )
-        .toggleStyle(.switch)
+        .toggleStyle(.edithSwitch)
         ForEach(themePalette, id: \.name) { entry in
             swatch(entry.name, color: entry.color)
         }
@@ -202,7 +202,7 @@ struct HostSettingsPage: View {
                 if themeName == name {
                     Image(systemName: "checkmark")
                         .font(.system(size: UIScale.pt(9), weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme(storedName: name).onAccent)
                 }
             }
         }

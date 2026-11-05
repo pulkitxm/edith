@@ -83,10 +83,14 @@ private enum ShareColors {
     }
 
     static var espresso: Color {
-        themed(Color(red: 0.105, green: 0.082, blue: 0.068)) { DashSkin.paper(true, theme: $0) }
+        themed(Color(red: 0.105, green: 0.082, blue: 0.068)) {
+            ExportCardStyle.paper(true, theme: $0)
+        }
     }
     static var cocoa: Color {
-        themed(Color(red: 0.19, green: 0.14, blue: 0.115)) { DashSkin.paper2(true, theme: $0) }
+        themed(Color(red: 0.19, green: 0.14, blue: 0.115)) {
+            ExportCardStyle.paper2(true, theme: $0)
+        }
     }
     static var rust: Color {
         themed(Color(red: 0.85, green: 0.36, blue: 0.245)) { $0.accent(dark: false) }
@@ -95,7 +99,7 @@ private enum ShareColors {
         themed(Color(red: 0.94, green: 0.56, blue: 0.42)) { $0.accent(dark: true) }
     }
     static var cream: Color {
-        themed(Color(red: 0.975, green: 0.94, blue: 0.875)) { DashSkin.ink(true, theme: $0) }
+        themed(Color(red: 0.975, green: 0.94, blue: 0.875)) { ExportCardStyle.ink(true, theme: $0) }
     }
     static var sage: Color {
         themed(Color(red: 0.49, green: 0.62, blue: 0.53)) { $0.accent(dark: true) }
@@ -104,7 +108,9 @@ private enum ShareColors {
         themed(Color(red: 0.49, green: 0.65, blue: 0.74)) { $0.accent(dark: true) }
     }
     static var sand: Color {
-        themed(Color(red: 0.76, green: 0.67, blue: 0.53)) { DashSkin.inkSoft(true, theme: $0) }
+        themed(Color(red: 0.76, green: 0.67, blue: 0.53)) {
+            ExportCardStyle.inkSoft(true, theme: $0)
+        }
     }
 }
 

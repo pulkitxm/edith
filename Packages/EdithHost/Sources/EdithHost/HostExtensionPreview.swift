@@ -393,7 +393,7 @@ struct HostExtensionPreview: View {
             micMuteArt(phase: phase, entry: slashEntry, exit: slashExit, strength: barStrength)
             Text(muted ? "Muted" : "Live")
                 .font(.system(size: UIScale.pt(9), weight: .semibold))
-                .foregroundStyle(muted ? Color.white : DashSkin.ink(dark))
+                .foregroundStyle(muted ? DashSkin.onAccent(dark) : DashSkin.ink(dark))
                 .padding(.horizontal, UIScale.pt(9))
                 .frame(height: UIScale.pt(20))
                 .background(
@@ -491,7 +491,7 @@ struct HostExtensionPreview: View {
                     if index == 0 {
                         Text("Join")
                             .font(.system(size: UIScale.pt(8), weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(DashSkin.onAccent(dark))
                             .padding(.horizontal, UIScale.pt(8))
                             .frame(height: UIScale.pt(16))
                             .background(
@@ -560,7 +560,7 @@ struct HostExtensionPreview: View {
                 .overlay {
                     Image(systemName: "music.note")
                         .font(.system(size: UIScale.pt(24), weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DashSkin.onAccent(dark))
                 }
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 HStack(alignment: .center, spacing: UIScale.pt(6)) {

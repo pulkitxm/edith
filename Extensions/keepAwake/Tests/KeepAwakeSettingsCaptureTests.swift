@@ -46,6 +46,31 @@ import Testing
         return model
     }
 
+    @Test func turningItOnAnnouncesTheChangeSoAnIdleExtensionStarts() async throws {
+        try await RenderCapture.withAccessibility {
+            SharedDefaults.store.removeObject(forKey: "preventSleep")
+            defer { SharedDefaults.store.removeObject(forKey: "preventSleep") }
+            let received = FailureSwitch()
+            let observer = IPC.observe(IPC.Name.settingsChanged) {
+                MainActor.assumeIsolated { received.on = true }
+            }
+            defer { IPC.stopObserving(observer) }
+            let rendered = try await RenderCapture.render(
+                "keepAwake-toggle", variant: RenderCapture.variants[0]
+            ) {
+                KeepAwakeSettings(defaults: SharedDefaults.store, synchronize: {})
+            }
+            let element = try #require(RenderCapture.find(rendered.host, label: "Keep awake"))
+            _ = element.perform(NSSelectorFromString("accessibilityPerformPress"))
+            let deadline = ContinuousClock.now + .seconds(2)
+            while !received.on, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(received.on)
+            #expect(SharedDefaults.store.bool(forKey: "preventSleep"))
+        }
+    }
+
     @Test func settingsRenderEveryStateAtEverySize() async throws {
         try await RenderCapture.withAccessibility {
             let off = try await Self.loaded(preventSleep: false)

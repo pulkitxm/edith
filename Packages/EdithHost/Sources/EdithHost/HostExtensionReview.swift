@@ -151,8 +151,8 @@ struct HostExtensionReview: View {
                             perform { await suites.select(entry, enabled: wanted) }
                         })
                 ) { Text("\(entry.title) enabled") }
-                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                .tint(DashSkin.accent(dark)).disabled(busy)
+                .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
+                .disabled(busy)
                 .accessibilityLabel("\(entry.title) enabled")
             }
         }

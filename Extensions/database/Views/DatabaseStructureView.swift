@@ -60,6 +60,7 @@ struct DatabaseStructureView: View {
                     SwiftUI.TableColumn("Default") { Text(flag($0.field.hasDefault)) }.width(70)
                     SwiftUI.TableColumn("Generated") { Text(flag($0.field.isGenerated)) }.width(80)
                 }
+                .themedSelection()
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .accessibilityLabel("Object field structure")
             }

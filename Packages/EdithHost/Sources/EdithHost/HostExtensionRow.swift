@@ -119,8 +119,8 @@ struct HostExtensionRow: View {
             if !compact, state.progress == nil { status.layoutPriority(1) }
             action
             Toggle("", isOn: Binding(get: { state.on }, set: toggle))
-                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                .tint(DashSkin.accent(dark)).disabled(!state.canToggle)
+                .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
+                .disabled(!state.canToggle)
                 .accessibilityLabel("\(entry.title) enabled")
         }
         .frame(minHeight: UIScale.pt(HostExtensionRowMetrics.contentHeight))

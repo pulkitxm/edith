@@ -612,8 +612,7 @@ struct AppMaintenanceView: View {
                         }
                         .frame(maxHeight: UIScale.pt(180))
                         if let releaseURL = item.releaseURL {
-                            Link("Open release information", destination: releaseURL)
-                                .foregroundStyle(theme)
+                            EdithLink("Open release information", destination: releaseURL)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -737,6 +736,7 @@ struct AppMaintenanceView: View {
                     }
                 }
             }
+            .themedSelection()
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
             .padding(.horizontal, PageMetrics.gutter(compact) - UIScale.pt(16))

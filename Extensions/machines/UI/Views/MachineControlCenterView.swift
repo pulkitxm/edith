@@ -728,7 +728,7 @@ struct MachineControlCenterView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Toggle("", isOn: .constant(value))
                     .labelsHidden()
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                     .allowsHitTesting(false)
             }

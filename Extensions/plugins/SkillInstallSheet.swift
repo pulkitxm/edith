@@ -143,7 +143,7 @@ struct SkillInstallSheet: View {
                                 )
                                 .labelsHidden()
                                 .accessibilityLabel(agent.name)
-                                .toggleStyle(.switch).controlSize(.small).fixedSize()
+                                .toggleStyle(.edithSwitch).controlSize(.small).fixedSize()
                             }
                             .padding(.horizontal, UIScale.pt(12))
                             .padding(.vertical, UIScale.pt(10))

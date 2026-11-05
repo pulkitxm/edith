@@ -66,7 +66,7 @@ struct HerdrFilterButton: View {
             let count = chips.count + (store.accountFilter == nil ? 0 : 1)
             Text(count > 9 ? "9+" : "\(count)")
                 .font(DashSkin.mono(8, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(DashSkin.onAccent(dark))
                 .padding(.horizontal, UIScale.pt(3))
                 .padding(.vertical, UIScale.pt(1))
                 .background(DashSkin.accent(dark), in: Capsule())

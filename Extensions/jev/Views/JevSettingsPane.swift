@@ -120,8 +120,7 @@ struct JevSettingsPane: View {
         } footer: {
             HStack(spacing: UIScale.pt(4)) {
                 Text("Edith calls Jev only while a key is saved. The key stays in your Keychain.")
-                Link("Get a key", destination: URL(string: "https://console.typesafe.ai")!)
-                    .foregroundStyle(Color.themeAccent)
+                EdithLink("Get a key", destination: URL(string: "https://console.typesafe.ai")!)
             }
             .font(.edithText(.caption))
             .foregroundStyle(.secondary)

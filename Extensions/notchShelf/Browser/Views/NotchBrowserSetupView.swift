@@ -109,7 +109,7 @@ struct NotchBrowserSetupView: View {
                 Button(actionTitle, action: action)
                     .buttonStyle(.edith(.borderless))
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(DashSkin.onAccent(true))
                     .padding(.horizontal, 12)
                     .frame(height: 26)
                     .background(DashSkin.accent(true), in: Capsule())

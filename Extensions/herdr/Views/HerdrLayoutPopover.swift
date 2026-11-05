@@ -197,7 +197,7 @@ struct HerdrLayoutPopover: View {
             Spacer(minLength: 0)
             Toggle("Animate Changes", isOn: $store.animatesLayout)
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
                 .controlSize(.mini)
         }
         .help("Glide tabs and panes into place instead of switching instantly")

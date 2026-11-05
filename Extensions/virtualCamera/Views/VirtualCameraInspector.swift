@@ -90,7 +90,7 @@ struct VirtualCameraToggleRow: View {
             Spacer(minLength: UIScale.pt(8))
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
                 .controlSize(UIScale.controlSize)
         }
     }
@@ -271,7 +271,7 @@ struct VirtualCameraFramePanel: View {
                     isOn: model.stateBinding(\.sharpZoom), dark: dark)
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.edithSwitch)
         .controlSize(UIScale.controlSize)
         .font(.edithText(.callout))
     }
@@ -580,7 +580,7 @@ struct VirtualCameraOverlayPanel: View {
                 }
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.edithSwitch)
         .controlSize(UIScale.controlSize)
         .font(.edithText(.callout))
     }
@@ -710,7 +710,7 @@ struct VirtualCameraOutputPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .toggleStyle(.switch)
+        .toggleStyle(.edithSwitch)
         .controlSize(UIScale.controlSize)
         .font(.edithText(.callout))
     }

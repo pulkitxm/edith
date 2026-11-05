@@ -159,7 +159,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                 isOn: Binding(get: { store.animatesLayout }, set: { store.animatesLayout = $0 })
             )
             .labelsHidden()
-            .toggleStyle(.switch)
+            .toggleStyle(.edithSwitch)
             .controlSize(.mini)
         }
         .help("Glide tabs and panes into place instead of switching instantly")

@@ -221,7 +221,9 @@ struct NotchShelfContentView: View {
                 } label: {
                     Image(systemName: tab.icon)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(active ? Color.black : Color.white.opacity(0.6))
+                        .foregroundStyle(
+                            active ? DashSkin.onAccent(true) : Color.white.opacity(0.6)
+                        )
                         .frame(width: 26, height: 22)
                         .background(
                             active ? DashSkin.accent(true) : Color.clear, in: Capsule()
@@ -331,7 +333,7 @@ struct NotchShelfContentView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .foregroundStyle(active ? Color.black : Color.white.opacity(0.65))
+            .foregroundStyle(active ? DashSkin.onAccent(true) : Color.white.opacity(0.65))
             .background {
                 if active {
                     Capsule()

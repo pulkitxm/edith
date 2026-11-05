@@ -72,6 +72,7 @@ struct MachineProcessesTab: View {
                     .defaultVisibility(session.isLocal ? .hidden : .visible)
                     .disabledCustomizationBehavior(.visibility)
                 }
+                .themedSelection()
                 .alternatingRowBackgrounds(.disabled)
                 .font(.edithText(.callout))
                 .accessibilityLabel("Machine processes")

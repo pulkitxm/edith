@@ -32,7 +32,7 @@ private struct AttentionToggleRow: View {
 
     var body: some View {
         AttentionSettingRow(title) {
-            Toggle(title, isOn: $isOn).toggleStyle(.switch)
+            Toggle(title, isOn: $isOn).toggleStyle(.edithSwitch)
         }
     }
 }
@@ -58,7 +58,7 @@ struct AttentionSettingsView: View {
                             get: { model.settings.isEnabled },
                             set: { model.setAttentionEnabled($0) })
                     )
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .labelsHidden()
                 }
             }

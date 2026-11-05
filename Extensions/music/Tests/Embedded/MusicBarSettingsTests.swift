@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -476,6 +477,10 @@ import Testing
     }
 
     @Test func originalSettingsControlsRenderUnshownAtBothWidthsThemesAndZoom() async throws {
+        try await RenderCapture.exclusiveScale { try await renderSettingsControls() }
+    }
+
+    private func renderSettingsControls() async throws {
         let model = EmbeddedMusicSettingsModel(expectedVersion: "1.2.3") { _, _ in
             try self.reply(collapsed: true, autoHide: true)
         }

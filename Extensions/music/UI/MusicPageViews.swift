@@ -1449,7 +1449,7 @@ struct EmbeddedMusicDetailSheet: View {
                 } label: {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: UIScale.pt(19), weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.themeOnAccent)
                         .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                         .contentShape(Circle())
                 }
@@ -1541,7 +1541,7 @@ struct EmbeddedMusicDetailSheet: View {
             Label("Rename", systemImage: "checkmark")
                 .frame(maxWidth: .infinity)
                 .frame(height: UIScale.pt(Self.renameButtonHeight))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.themeOnAccent)
         }
         .buttonStyle(.edith(.borderless))
         .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
@@ -1814,7 +1814,7 @@ struct EmbeddedMusicFooter: View {
             .help("Previous track")
             glassButton(
                 remote.isPlaying ? "pause.fill" : "play.fill",
-                diameter: 42, iconSize: 15, iconColor: .white, tint: theme
+                diameter: 42, iconSize: 15, iconColor: .themeOnAccent, tint: theme
             ) {
                 remote.playPause()
             }
@@ -1875,7 +1875,7 @@ struct EmbeddedMusicFooter: View {
                 let liked = remote.favouritePaths.contains(track.relativePath)
                 glassButton(
                     liked ? "heart.fill" : "heart", diameter: 34, iconSize: 12,
-                    iconColor: liked ? .white : .secondary,
+                    iconColor: liked ? .themeOnAccent : .secondary,
                     tint: liked ? theme : nil
                 ) {
                     remote.toggleFavourite(track)
@@ -1884,7 +1884,7 @@ struct EmbeddedMusicFooter: View {
             }
             glassButton(
                 "shuffle", diameter: 34, iconSize: 12,
-                iconColor: remote.shuffling ? .white : .secondary,
+                iconColor: remote.shuffling ? .themeOnAccent : .secondary,
                 tint: remote.shuffling ? theme : nil
             ) {
                 remote.toggleShuffle()
@@ -1892,7 +1892,7 @@ struct EmbeddedMusicFooter: View {
             .help(remote.shuffling ? "Shuffling this folder and everything in it" : "Play in order")
             glassButton(
                 "repeat", diameter: 34, iconSize: 12,
-                iconColor: remote.looping ? .white : .secondary,
+                iconColor: remote.looping ? .themeOnAccent : .secondary,
                 tint: remote.looping ? theme : nil
             ) {
                 remote.toggleLoop()

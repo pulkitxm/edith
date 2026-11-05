@@ -220,7 +220,7 @@ struct StudioInputTile: View {
                 if ordered {
                     Text("\(index + 1)")
                         .font(.edithText(.caption).weight(.bold)).monospacedDigit()
-                        .foregroundStyle(.white)
+                        .foregroundStyle(DashSkin.onAccent(scheme == .dark))
                         .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                         .background(DashSkin.accent(scheme == .dark), in: Circle())
                         .padding(UIScale.pt(6))

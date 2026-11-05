@@ -266,7 +266,8 @@ struct UsageRefreshTransactionTests {
         held.release()
         await controller.waitForRefresh()
         #expect(controller.failure == nil)
-        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
+        #expect(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
     }
 
     @Test func transactionReportsBusyOnlyAfterItsPatienceRunsOut() async throws {

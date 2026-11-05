@@ -70,9 +70,40 @@ public enum RenderCapture {
         }
     }
 
+    @TaskLocal private static var holdsScale = false
+    private static var scaleHeld = false
+    private static var scaleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    public static func exclusiveScale<T>(_ body: @MainActor () async throws -> T) async rethrows
+        -> T
+    {
+        if holdsScale { return try await body() }
+        if scaleHeld {
+            await withCheckedContinuation { scaleWaiters.append($0) }
+        }
+        scaleHeld = true
+        defer {
+            if scaleWaiters.isEmpty {
+                scaleHeld = false
+            } else {
+                scaleWaiters.removeFirst().resume()
+            }
+        }
+        return try await $holdsScale.withValue(true) { try await body() }
+    }
+
     @discardableResult
     public static func render<Content: View>(
         _ name: String, variant: Variant, settle: Duration = .milliseconds(450),
+        @ViewBuilder content: () -> Content
+    ) async throws -> Rendered {
+        try await exclusiveScale {
+            try await renderHoldingScale(name, variant: variant, settle: settle, content: content)
+        }
+    }
+
+    private static func renderHoldingScale<Content: View>(
+        _ name: String, variant: Variant, settle: Duration,
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         let label = "\(name)-\(variant.name)"
@@ -96,6 +127,7 @@ public enum RenderCapture {
             content()
                 .frame(width: variant.width, height: variant.height, alignment: .topLeading)
                 .background(DashSkin.paper(variant.scheme == .dark))
+                .themedControls()
                 .environment(\.compactLayout, variant.compact)
                 .environment(\.colorScheme, variant.scheme)
                 .environment(\.automaticViewActionsEnabled, false)

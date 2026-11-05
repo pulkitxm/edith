@@ -657,7 +657,7 @@ struct CompanionCaptureScreen: View {
                 Image(systemName: model.phase == .recording ? "stop.fill" : "mic.fill")
                     .font(.edithText(.title))
                     .foregroundStyle(
-                        model.phase == .recording ? Color.white : DashSkin.accent(dark))
+                        model.phase == .recording ? DashSkin.onAccent(dark) : DashSkin.accent(dark))
             }
             .contentShape(Circle())
         }

@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -342,6 +343,10 @@ import Testing
     }
 
     @Test func originalEmbeddedControllersRenderAtBothWidthsThemesAndZoom() async throws {
+        try await RenderCapture.exclusiveScale { try await renderEmbeddedControllers() }
+    }
+
+    private func renderEmbeddedControllers() async throws {
         let application = NSApplication.shared
         let priorPolicy = application.activationPolicy()
         let priorAppearance = application.appearance

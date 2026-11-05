@@ -23,7 +23,9 @@ public struct SettingsRow<Trailing: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityHint(subtitle ?? "")
             Spacer(minLength: UIScale.pt(PageMetrics.controlSpacing))
             trailing()
         }

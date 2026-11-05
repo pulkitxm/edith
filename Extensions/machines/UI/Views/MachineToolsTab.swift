@@ -237,7 +237,7 @@ struct MachineToolsTab: View {
                                 set: { toggleForward(forward, on: $0) })
                         )
                         .labelsHidden()
-                        .toggleStyle(.switch)
+                        .toggleStyle(.edithSwitch)
                         .controlSize(.mini)
                         .disabled(!session.state.isConnected)
                         Button {

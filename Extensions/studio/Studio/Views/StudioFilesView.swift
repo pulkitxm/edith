@@ -283,7 +283,9 @@ struct StudioQuickButton: View {
                 .font(.edithText(.caption).weight(.semibold))
                 .lineLimit(1)
                 .fixedSize()
-                .foregroundStyle(primary ? Color.white : DashSkin.ink(scheme == .dark))
+                .foregroundStyle(
+                    primary ? DashSkin.onAccent(scheme == .dark) : DashSkin.ink(scheme == .dark)
+                )
                 .padding(.vertical, UIScale.pt(5))
                 .padding(.horizontal, UIScale.pt(8))
                 .background(

@@ -75,7 +75,6 @@ struct EmojiPanelView: View {
             categoryBar
         }
         .frame(width: EmojiPanel.width, height: EmojiPanel.height)
-        .tint(themeColor(themeName))
         .onAppear { resetForShow() }
         .onReceive(NotificationCenter.default.publisher(for: EmojiPanel.willShow)) { _ in
             resetForShow()

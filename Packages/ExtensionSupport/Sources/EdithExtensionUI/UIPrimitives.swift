@@ -127,6 +127,7 @@ private struct EdithButtonBody<Label: View>: View {
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.controlActiveState) private var activeState
     @Environment(\.isEnabled) private var enabled
@@ -186,7 +187,10 @@ private struct EdithButtonBody<Label: View>: View {
 
     private var foreground: Color {
         switch role {
-        case .primary, .destructive:
+        case .primary:
+            return tint.map { OnAccent.foreground(on: $0, dark: scheme == .dark) }
+                ?? themeOnAccentColor(themeName)
+        case .destructive:
             return .white
         case .toolbar, .iconOnly:
             return tint ?? .primary

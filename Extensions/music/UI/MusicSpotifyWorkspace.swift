@@ -249,7 +249,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     navigate(.library("liked"))
                 } label: {
                     HStack {
-                        Image(systemName: "heart.fill").foregroundStyle(.white)
+                        Image(systemName: "heart.fill").foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                             .background(
                                 LinearGradient(
@@ -345,7 +345,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     Button {
                         library.play(item)
                     } label: {
-                        Image(systemName: "play.fill").foregroundStyle(.white)
+                        Image(systemName: "play.fill").foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48)).background(
                                 accent, in: Circle())
                     }.buttonStyle(.edith(.borderless)).accessibilityLabel("Play \(item.title)")

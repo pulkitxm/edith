@@ -29,7 +29,7 @@ struct WorkspaceFilterButton<Content: View>: View {
                 Text(count > 9 ? "9+" : "\(count)")
                     .font(.edithText(.caption2).weight(.bold))
                     .monospacedDigit()
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DashSkin.onAccent(dark))
                     .padding(.horizontal, UIScale.pt(3))
                     .padding(.vertical, UIScale.pt(1))
                     .background(DashSkin.accent(dark), in: Capsule())

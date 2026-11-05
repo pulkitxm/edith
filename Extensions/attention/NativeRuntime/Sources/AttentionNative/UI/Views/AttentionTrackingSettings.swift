@@ -85,7 +85,7 @@ struct AttentionTrackingSettings: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .pageTask { await model.load() }
     }
 }

@@ -146,6 +146,10 @@ enum TimeLapseCapture {
             Self.recording(mode: .standard, seconds: 12, interrupted: true),
         ]
         for variant in TimeLapseCapture.Variant.all {
+            try await TimeLapseCapture.render(
+                "settings", variant: variant,
+                expecting: ["Screen Recorder", "Open Screen Recorder"],
+                view: TimeLapseSettingsPage().background(DashSkin.canvas))
             let denied = TimeLapseRecorder()
             let request = denied.sourceLoad.begin()
             denied.sourceLoad.fail(

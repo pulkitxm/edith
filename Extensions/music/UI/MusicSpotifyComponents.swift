@@ -74,7 +74,7 @@ private struct EmbeddedSpotifyCollectionCard: View {
                         onPlay(item)
                     } label: {
                         Image(systemName: "play.fill")
-                            .font(.edithText(.body)).foregroundStyle(.white)
+                            .font(.edithText(.body)).foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                             .background(DashSkin.accent(scheme == .dark), in: Circle())
                     }

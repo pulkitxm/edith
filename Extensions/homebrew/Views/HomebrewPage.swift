@@ -509,6 +509,7 @@ struct HomebrewPackageTable: View {
             }
             .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
         }
+        .themedSelection()
         .font(.edithText(.callout))
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
         .overlay {

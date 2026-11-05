@@ -198,13 +198,13 @@ public struct QuinjetHostTheme: Equatable, Sendable {
                     muted: 0x5c5247, text: 0x241f1a, textStrong: 0x100f0d)
         }
         return Neutrals(
-            background: rgb(DashSkin.paper(dark, theme: theme)),
-            panel: rgb(DashSkin.paper2(dark, theme: theme)),
-            panelAlt: rgb(DashSkin.grid(dark, theme: theme)),
-            border: rgb(DashSkin.lineStrong(dark, theme: theme)),
-            muted: rgb(DashSkin.inkSoft(dark, theme: theme)),
-            text: rgb(DashSkin.ink(dark, theme: theme)),
-            textStrong: rgb(DashSkin.ink(dark, theme: theme)))
+            background: rgb(DashSkin.paper(dark)),
+            panel: rgb(DashSkin.paper2(dark)),
+            panelAlt: rgb(DashSkin.grid(dark)),
+            border: rgb(DashSkin.lineStrong(dark)),
+            muted: rgb(DashSkin.inkSoft(dark)),
+            text: rgb(DashSkin.ink(dark)),
+            textStrong: rgb(DashSkin.ink(dark)))
     }
 
     private static func rgb(_ color: Color) -> UInt32 {

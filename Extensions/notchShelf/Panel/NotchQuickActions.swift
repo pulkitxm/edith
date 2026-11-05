@@ -229,7 +229,8 @@ struct NotchQuickActionsView: View {
     private func actionTile(
         _ icon: String, _ title: String, active: Bool, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let activeInk = OnAccent.foreground(on: tile.highlightColor, dark: true)
+        return Button(action: action) {
             VStack(spacing: 6) {
                 if tile.shows("icons") {
                     Image(systemName: icon).font(.system(size: 17, weight: .medium))
@@ -237,11 +238,11 @@ struct NotchQuickActionsView: View {
                 Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 if tile.showDetails, !tile.dense, tile.shows("descriptions") {
                     Text(detail(title)).font(.edithText(.caption2))
-                        .foregroundStyle(active ? .black.opacity(0.65) : .secondary)
+                        .foregroundStyle(active ? activeInk.opacity(0.65) : .secondary)
                         .lineLimit(2).multilineTextAlignment(.center)
                 }
             }.padding(8).frame(maxWidth: .infinity, maxHeight: .infinity)
-                .foregroundStyle(active ? Color.black : Color.white.opacity(0.85))
+                .foregroundStyle(active ? activeInk : Color.white.opacity(0.85))
                 .background(
                     active ? tile.highlightColor : Color.white.opacity(0.055),
                     in: RoundedRectangle(cornerRadius: 10))

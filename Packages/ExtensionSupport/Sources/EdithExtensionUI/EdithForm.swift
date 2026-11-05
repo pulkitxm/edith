@@ -25,6 +25,7 @@ private struct EdithFormStyle: ViewModifier {
         content
             .formStyle(.grouped)
             .labeledContentStyle(EdithFormRowStyle())
+            .toggleStyle(.edithSwitch)
             .font(.edithText(.body))
             .tint(themeColor(themeName))
             .scrollContentBackground(.hidden)

@@ -38,8 +38,8 @@ struct WindowSweatersRows: View {
             }
             if active && !presentation.active {
                 SettingsNoticeRow(
-                    "Starts the next time Edith opens",
-                    message: "Your choice is saved, so there is nothing else to do.",
+                    "Starts when this extension is enabled",
+                    message: "Your choice is saved and takes effect as soon as it runs.",
                     symbol: "clock.fill")
             }
             Picker(selection: $pattern.notifyingSettingsChange()) {

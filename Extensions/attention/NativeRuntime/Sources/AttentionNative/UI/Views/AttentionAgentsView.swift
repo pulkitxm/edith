@@ -123,6 +123,7 @@ struct AttentionAgentTable: View {
             }.width(UIScale.pt(60)).customizationID("sessions")
                 .defaultVisibility(compact ? .hidden : .visible)
         }
+        .themedSelection()
         .tableStyle(.inset)
         .font(.edithText(.body))
         .accessibilityLabel("All agent groups")
@@ -167,6 +168,7 @@ struct AttentionAgentSessions: View {
                 }.width(UIScale.pt(100)).customizationID("lastSeen")
                     .defaultVisibility(compact ? .hidden : .visible)
             }
+            .themedSelection()
             .tableStyle(.inset)
             .font(.edithText(.body))
             .accessibilityLabel("All agent sessions")

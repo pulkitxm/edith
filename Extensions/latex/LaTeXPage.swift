@@ -514,8 +514,7 @@ struct LaTeXPage: View {
                             model.busy || model.dirty)
                     }
                     if let buildURL = model.buildURL {
-                        Link("View PDF build", destination: buildURL)
-                            .foregroundStyle(Color.themeAccent)
+                        EdithLink("View PDF build", destination: buildURL)
                     }
                     if let data = model.pdfPreview {
                         LaTeXPDFPane(data: data, generation: model.buildGeneration)
@@ -533,12 +532,11 @@ struct LaTeXPage: View {
                             )
                         }
                     }
-                    Link(
+                    EdithLink(
                         "Builds & PDF artifacts",
                         destination: URL(
                             string: "https://github.com/\(project.repository)/actions")!
                     )
-                    .foregroundStyle(Color.themeAccent)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
@@ -562,12 +560,11 @@ struct LaTeXPage: View {
                                     LaTeXMergeOptions(model: model)
                                 }
                             }
-                            Link(
+                            EdithLink(
                                 "Builds & PDF artifacts",
                                 destination: URL(
                                     string: "https://github.com/\(project.repository)/actions")!
                             )
-                            .foregroundStyle(Color.themeAccent)
                             Text(
                                 "No repository clone is created. Repository edits stay in memory until you submit them."
                             )
@@ -584,11 +581,10 @@ private struct LaTeXChecks: View {
     let review: LaTeXReview
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Link(
+            EdithLink(
                 "#\(review.pullRequest.number) · \(review.pullRequest.title)",
                 destination: URL(string: review.pullRequest.url)!
             )
-            .foregroundStyle(Color.themeAccent)
             .font(.edithText(.headline))
             Text(review.pullRequest.state.capitalized).font(.edithText(.caption)).foregroundStyle(
                 .secondary)
@@ -603,7 +599,7 @@ private struct LaTeXChecks: View {
                     Text("\(check.workflow) · \(check.name): \(check.status)").font(
                         .edithText(.caption))
                     if let url = URL(string: check.link), url.scheme == "https" {
-                        Link("View run", destination: url).foregroundStyle(Color.themeAccent)
+                        EdithLink("View run", destination: url)
                     }
                 }
             }
@@ -645,8 +641,7 @@ private struct LaTeXReviewWorkspace: View {
                         }
                         Spacer()
                         if let url = URL(string: review.pullRequest.url), url.scheme == "https" {
-                            Link("GitHub", destination: url).font(.edithText(.subheadline))
-                                .foregroundStyle(Color.themeAccent)
+                            EdithLink("GitHub", destination: url).font(.edithText(.subheadline))
                         }
                     }
                     HStack {
@@ -706,8 +701,7 @@ private struct LaTeXReviewWorkspace: View {
                                     }
                                     Spacer()
                                     if let url = URL(string: check.link), url.scheme == "https" {
-                                        Link("View run", destination: url)
-                                            .foregroundStyle(Color.themeAccent)
+                                        EdithLink("View run", destination: url)
                                     }
                                 }.padding(UIScale.pt(14)).background(
                                     .quaternary, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))

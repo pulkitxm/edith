@@ -200,7 +200,7 @@ struct DatabaseConnectionManagementSheet: View {
                         "Show this connection in favorites",
                         isOn: draftBinding(\.isFavorite, fallback: draft.isFavorite)
                     )
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .font(.edithText(.callout).weight(.medium))
                 }
             }
@@ -317,7 +317,7 @@ struct DatabaseConnectionManagementSheet: View {
                             }
                         }
                         Toggle("Show this connection in favorites", isOn: .constant(false))
-                            .toggleStyle(.switch)
+                            .toggleStyle(.edithSwitch)
                             .font(.edithText(.callout).weight(.medium))
                     }
                 }

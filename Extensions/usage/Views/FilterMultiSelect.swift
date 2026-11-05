@@ -202,7 +202,7 @@ private struct FilterSelectRow: View {
             if checked {
                 Image(systemName: "checkmark")
                     .font(.system(size: UIScale.pt(8.5), weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DashSkin.onAccent(dark))
             }
         }
         .frame(width: UIScale.pt(15), height: UIScale.pt(15))

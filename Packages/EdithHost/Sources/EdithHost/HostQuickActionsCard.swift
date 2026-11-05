@@ -145,7 +145,9 @@ struct HostQuickActionsCard: View {
                 if !compact, tile.showDetails, tile.shows("descriptions") {
                     Text(utility.cardSubtitle)
                         .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(on ? .white.opacity(0.8) : DashSkin.inkFaint(dark))
+                        .foregroundStyle(
+                            on ? DashSkin.onAccent(dark).opacity(0.8) : DashSkin.inkFaint(dark)
+                        )
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -154,7 +156,7 @@ struct HostQuickActionsCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, UIScale.pt(compact ? 8 : 16))
             .padding(.horizontal, UIScale.pt(8))
-            .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+            .foregroundStyle(on ? DashSkin.onAccent(dark) : DashSkin.ink(dark))
             .background(
                 on ? AnyShapeStyle(theme) : AnyShapeStyle(.primary.opacity(0.05)),
                 in: RoundedRectangle(cornerRadius: UIScale.pt(12))

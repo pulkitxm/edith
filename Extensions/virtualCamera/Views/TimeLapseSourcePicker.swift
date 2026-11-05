@@ -153,7 +153,7 @@ struct ScreenCaptureSourcePicker: View {
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
                         isOn: $selection.systemAudio
                     ).labelsHidden()
-                        .toggleStyle(.switch)
+                        .toggleStyle(.edithSwitch)
                 }.font(.edithText(.callout))
                 if selection.mode == "windows" {
                     Text("Audio follows the selected apps, including their other windows.")

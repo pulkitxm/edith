@@ -33,21 +33,25 @@ struct EmbeddedMusicSettings: View {
         PageWorkspace {
             PageHeader(
                 "Music settings",
+                subtitle: "Library, streaming accounts and playback.",
                 trailing: {
                     if let done {
                         Button("Done", action: done).buttonStyle(.edith(.secondary))
                             .keyboardShortcut(.cancelAction)
                     }
-                },
-                accessory: {
-                    Text("Library, streaming accounts and playback.").font(.edithText(.caption))
-                        .foregroundStyle(.secondary)
                 }
             )
             .environment(\.pageColumnWidth, formWidth)
         } content: {
             Form {
                 Section {
+                    SettingsRow(
+                        "Library tools",
+                        subtitle:
+                            "These tools save audio, videos, images and posts to your library."
+                    ) {
+                        Button("Check Again") { tools.refresh() }.buttonStyle(.edith(.secondary))
+                    }
                     ForEach(EmbeddedMusicTools.names, id: \.self) { name in
                         SettingsRow(name, subtitle: EmbeddedMusicTools.purpose(of: name)) {
                             toolStatus(name)
@@ -61,12 +65,6 @@ struct EmbeddedMusicSettings: View {
                     }
                 } header: {
                     Text("Command-line tools")
-                } footer: {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("These tools save audio, videos, images and posts to your library.")
-                        Spacer(minLength: 0)
-                        Button("Check Again") { tools.refresh() }.buttonStyle(.edith(.toolbar))
-                    }
                 }
                 Section("Library") {
                     SettingsRow(
@@ -145,16 +143,15 @@ struct EmbeddedMusicBarRows: View {
 
     var body: some View {
         Section {
-            Toggle(
-                "Collapse to a progress line",
-                isOn: model.boolean(.barCollapsed, \.barCollapsed))
+            Toggle(isOn: model.boolean(.barCollapsed, \.barCollapsed)) {
+                Text("Collapse to a progress line")
+                Text("The chevron at the right end of the bar toggles the collapsed state too.")
+            }
             Toggle(
                 "Hide when nothing is playing",
                 isOn: model.boolean(.barAutoHide, \.barAutoHide))
         } header: {
             Text("Player bar")
-        } footer: {
-            Text("The chevron at the right end of the bar toggles the collapsed state too.")
         }
         .disabled(!model.loaded || model.closed)
         .opacity(model.loaded && !model.closed ? 1 : 0.5)

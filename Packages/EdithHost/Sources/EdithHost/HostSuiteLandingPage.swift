@@ -192,11 +192,9 @@ struct HostSuiteAbilityRow: View {
                         isOn: Binding(
                             get: { active },
                             set: { value in Task { await suites.select(entry, enabled: value) } })
-                    ).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(
-                        DashSkin.accent(dark)
-                    )
-                    .disabled(pending).accessibilityLabel(entry.title + " enabled")
-                    .help(active ? "Turn off " + entry.title : "Turn on " + entry.title)
+                    ).labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
+                        .disabled(pending).accessibilityLabel(entry.title + " enabled")
+                        .help(active ? "Turn off " + entry.title : "Turn on " + entry.title)
                 } else {
                     Button("Get", action: review).buttonStyle(.edith(.secondary))
                         .disabled(marketplace.pendingRemovalIDs.contains(entry.id))

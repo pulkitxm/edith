@@ -280,7 +280,7 @@ private struct EdithCheckboxBody: View {
                     if marked {
                         Image(systemName: configuration.isMixed ? "minus" : "checkmark")
                             .font(.system(size: UIScale.pt(9), weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(themeOnAccentColor(themeName))
                     }
                 }
                 .frame(width: UIScale.pt(16), height: UIScale.pt(16))

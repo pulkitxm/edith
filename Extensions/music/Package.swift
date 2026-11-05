@@ -26,7 +26,11 @@ let package = Package(
             ],
             path: "UI", swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "MusicEmbeddedUITests", dependencies: ["MusicEmbeddedUI", "MusicExtension"],
+            name: "MusicEmbeddedUITests",
+            dependencies: [
+                "MusicEmbeddedUI", "MusicExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
             path: "Tests/Embedded",
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

@@ -58,7 +58,7 @@ struct StudioOptionField: View {
             StudioChoiceField(choices: choices, selection: text)
         case .toggle:
             Toggle(option.label, isOn: bool)
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
                 .controlSize(.small)
                 .font(.edithText(.callout))
         case let .integer(range, unit):

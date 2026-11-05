@@ -87,11 +87,13 @@ private struct CodeStatsPhaseStepper: View {
                         if index < step {
                             Image(systemName: "checkmark")
                                 .font(.edithText(.caption).weight(.bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(DashSkin.onAccent(dark))
                         } else {
                             Text("\(index + 1)")
                                 .font(.edithText(.caption).weight(.semibold))
-                                .foregroundStyle(index == step ? .white : DashSkin.inkSoft(dark))
+                                .foregroundStyle(
+                                    index == step ? DashSkin.onAccent(dark) : DashSkin.inkSoft(dark)
+                                )
                         }
                     }
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
