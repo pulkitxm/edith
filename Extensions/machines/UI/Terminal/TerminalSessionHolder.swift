@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import GhosttyTerminal
 import Observation
 import Foundation
@@ -380,7 +381,8 @@ final class TerminalSessionHolder {
         }
         let view = GhosttyTerminalView(
             externalIO: externalIO, workingDirectory: currentWorkingDirectory,
-            allowsLocalFileLinks: engineRequest?.machineID == Machine.localID, theme: theme)
+            allowsLocalFileLinks: engineRequest?.machineID == Machine.localID, theme: theme,
+            overlayIcons: EdithIcon.terminalOverlay(TerminalOverlayIcons.init))
         let viewGeneration = generation
         view.onClose = { [weak self, weak view] exitCode in
             Task { @MainActor in

@@ -277,7 +277,7 @@ struct HostSidebarUtilityButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(7)) {
-                EdithIconView(utility.icon)
+                EdithIconView(utility == .keepAwake && active ? .keepAwakeOn : utility.icon)
                     .font(.edithText(.caption))
                     .frame(width: UIScale.pt(16))
                 Text(utility.title).font(.edithText(.caption).weight(.medium)).lineLimit(1)

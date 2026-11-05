@@ -162,7 +162,9 @@ struct NotchQuickActionsView: View {
                     }
                 }
                 if client.activeIDs.contains("keepAwake") {
-                    actionTile(.moon, "Keep awake", active: activeAwake) {
+                    actionTile(
+                        activeAwake ? .keepAwakeOn : .moon, "Keep awake", active: activeAwake
+                    ) {
                         perform("keepAwake", activeAwake ? "disable" : "enable")
                     }
                 }

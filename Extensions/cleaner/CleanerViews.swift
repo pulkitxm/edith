@@ -292,7 +292,7 @@ struct CleanerCard: View {
                 WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
                     ForEach(model.drives) { drive in
                         CleanerLocationChip(
-                            icon: .drive,
+                            icon: drive.isExternal ? .driveExternal : .drive,
                             title: drive.name,
                             detail: JunkScanner.format(drive.totalBytes), dark: dark)
                     }
@@ -472,7 +472,7 @@ private struct CleanerRowView: View, Equatable {
     static func checkbox(_ selection: JunkSelection) -> EdithIcon {
         switch selection {
         case .all: .checkboxOn
-        case .some: .minus
+        case .some: .checkboxMixed
         case .none: .checkbox
         }
     }
@@ -693,7 +693,7 @@ struct DrivePickerSheet: View {
                         } label: {
                             locationRow(
                                 selected: model.isDriveSelected(drive.id),
-                                icon: .drive,
+                                icon: drive.isExternal ? .driveExternal : .drive,
                                 title: drive.name,
                                 detail: "\(JunkScanner.format(drive.totalBytes)) capacity",
                                 trailingSpace: false)

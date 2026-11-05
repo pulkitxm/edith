@@ -50,9 +50,9 @@ struct ClipboardNotchList: View {
             Button {
                 history.mutate(.init(entry.pinned ? .unpin : .pin, ids: [entry.id]))
             } label: {
-                EdithIconView(.pin)
+                EdithIconView(.pin, tone: entry.pinned ? .duotone : .muted)
                     .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(entry.pinned ? 0.9 : 0.45))
+                    .foregroundStyle(.white.opacity(0.9))
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
             }

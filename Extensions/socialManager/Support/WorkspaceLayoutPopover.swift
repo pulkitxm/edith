@@ -113,7 +113,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                 action(.resizeVertical, "Flip Up") {
                     store.mirror(tab.id, .vertical)
                 }
-                action(.calculator, "Even Out") { store.equalize(tab.id) }
+                action(.grid, "Even Out") { store.equalize(tab.id) }
                 action(
                     tab.zoomed == nil
                         ? .expand

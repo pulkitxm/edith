@@ -268,7 +268,7 @@ struct DatabaseSafetyReviewPresentation: Equatable {
             DatabaseSafetyReviewFact(
                 id: "environment", label: "Environment",
                 value: Self.environmentDescription(environment),
-                icon: environment.kind == .production ? .warning : .building),
+                icon: environment.kind == .production ? .warning : .leaf),
             DatabaseSafetyReviewFact(
                 id: "context", label: effect.context.kind.displayName,
                 value: Self.identifier(effect.context.value),

@@ -132,7 +132,7 @@ struct HostQuickActionsCard: View {
         } label: {
             VStack(spacing: UIScale.pt(6)) {
                 if tile.shows("icons") {
-                    EdithIconView(utility.cardIcon)
+                    EdithIconView(utility == .keepAwake && on ? .keepAwakeOn : utility.cardIcon)
                         .font(.system(size: UIScale.pt(21)))
                         .frame(height: UIScale.pt(26))
                 }

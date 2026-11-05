@@ -585,7 +585,7 @@ struct MachineControlCenterView: View {
         if snapshot?.muted != nil {
             if hasControl(before: 2) { controlDivider }
             toggleRow(
-                "Mute", icon: .speakerOff,
+                "Mute", icon: model.muted ? .speakerOff : .speakerLow,
                 value: model.muted
             ) {
                 model.muted = $0
@@ -639,7 +639,7 @@ struct MachineControlCenterView: View {
             if hasControl(before: 7) { controlDivider }
             toggleRow(
                 "Caffeinate",
-                icon: .coffee,
+                icon: .coffee, tone: model.caffeinateEnabled ? .duotone : .muted,
                 value: model.caffeinateEnabled
             ) {
                 model.caffeinateEnabled = $0
@@ -710,14 +710,15 @@ struct MachineControlCenterView: View {
     }
 
     private func toggleRow(
-        _ title: String, icon: EdithIcon, value: Bool, onChange: @escaping (Bool) -> Void
+        _ title: String, icon: EdithIcon, tone: EdithIconTone = .duotone, value: Bool,
+        onChange: @escaping (Bool) -> Void
     ) -> some View {
         Button {
             guard !controlsDisabled else { return }
             onChange(!value)
         } label: {
             HStack(spacing: UIScale.pt(9)) {
-                EdithIconView(icon)
+                EdithIconView(icon, tone: tone)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))

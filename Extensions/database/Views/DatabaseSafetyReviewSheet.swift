@@ -166,7 +166,7 @@ struct DatabaseSafetyReviewSheet: View {
                 let expired = timeline.date >= presentation.expiresAt
                 DatabaseSafetyPill(
                     title: expirationTitle(now: timeline.date),
-                    icon: .clock,
+                    icon: expired ? .hourglass : .clock,
                     accentColor: expired ? DashSkin.danger : palette.accent,
                     dark: dark)
             }
@@ -583,9 +583,11 @@ struct DatabaseSafetyReviewSheet: View {
 
     private func confirmationStatusIcon(_ state: DatabaseSafetyConfirmationState) -> EdithIcon {
         switch state {
-        case .empty, .expired: .clock
+        case .empty: .clock
+        case .expired: .hourglass
         case .mismatch: .closeFilled
-        case .ready, .completed: .success
+        case .ready: .success
+        case .completed: activePhase.isAccepted ? .clock : .success
         case .executing: .bolt
         case .outcomeUnknown: .help
         case .partiallyApplied: .warning

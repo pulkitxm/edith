@@ -60,7 +60,7 @@ import Foundation
                     .init("copy/" + entry.id, "Copy", .copy, field: field),
                     .init(
                         "pin/" + entry.id, entry.pinned ? "Unpin" : "Pin",
-                        .pin, field: field),
+                        entry.pinned ? .pinOff : .pin, field: field),
                 ], thumbnail: previews[entry.id])
         }
         return .init(

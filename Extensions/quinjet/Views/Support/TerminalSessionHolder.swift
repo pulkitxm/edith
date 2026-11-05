@@ -275,7 +275,7 @@ final class TerminalSessionHolder {
             externalIO: io, workingDirectory: descriptor?.directory,
             allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
-            theme: theme, overlayIcons: .edith)
+            theme: theme, overlayIcons: EdithIcon.terminalOverlay(TerminalOverlayIcons.init))
         if let hostWindowState {
             view.setHostWindowState(
                 active: hostWindowState.active, key: hostWindowState.key && hostWindowState.visible)
@@ -511,14 +511,5 @@ final class TerminalSessionHolder {
         let input = queuedGhosttyInput
         guard deliverGhosttyInput(view, input) else { return }
         queuedGhosttyInput = ""
-    }
-}
-
-extension TerminalOverlayIcons {
-    static var edith: TerminalOverlayIcons {
-        TerminalOverlayIcons(
-            link: EdithIcon.external.nsImage(size: 12), file: EdithIcon.folder.nsImage(size: 12),
-            previous: EdithIcon.chevronUp.nsImage(), next: EdithIcon.chevronDown.nsImage(),
-            close: EdithIcon.close.nsImage())
     }
 }

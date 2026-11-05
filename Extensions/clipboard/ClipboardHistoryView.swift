@@ -110,7 +110,7 @@ private struct ClipboardHistoryRow: View {
             Button {
                 model.mutate(.init(entry.pinned ? .unpin : .pin, ids: [entry.id]))
             } label: {
-                EdithIconView(.pin)
+                EdithIconView(.pin, tone: entry.pinned ? .duotone : .muted)
                     .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
             .buttonStyle(.edith(.borderless))

@@ -61,7 +61,7 @@ enum ColorPickerSurface {
                     .init("copy/" + entry.id, "Copy", .copy),
                     .init(
                         "pin/" + entry.id, entry.pinned ? "Unpin" : "Pin",
-                        .pin),
+                        entry.pinned ? .pinOff : .pin),
                 ])
         }
         return .init(

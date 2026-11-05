@@ -173,7 +173,7 @@ enum CompanionSurfaceProjection {
                         } ?? "Date unavailable",
                         value: bounded(kindTitle($0.kind), bytes: 256),
                         icon: $0.kind == "voice"
-                            ? .waveform : .docText,
+                            ? .waveform : $0.kind == "pdf" ? .doc : .docText,
                         actions: [.init("episode/" + $0.id, "Open in Memory", .arrowUpRight)])
                 }
             if !episodes.isEmpty {

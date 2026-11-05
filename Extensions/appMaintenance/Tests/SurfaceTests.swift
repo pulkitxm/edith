@@ -20,7 +20,7 @@ struct AppMaintenanceSurfaceTests {
         #expect(snapshot.rows.first?.sourceID == "appStore")
         #expect(snapshot.rows.first?.detail == "1 → 2")
         #expect(snapshot.rows.flatMap(\.actions).isEmpty)
-        tile.sourceIDs = ["sparkle"]
+        tile.sourceIDs = [AppUpdateSource.sparkle.rawValue]
         #expect(AppMaintenanceSurface.snapshot(model, tile: tile).rows.isEmpty)
         _ = try SurfaceSnapshot.decode(snapshot.encoded(), providerID: "appMaintenance")
     }
