@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+  <path id="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/>
+  <path id="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/>
+</svg>

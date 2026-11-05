@@ -66,34 +66,56 @@ Reject your own drawing if any of these apply:
 2. Write the concept in one line: the object, and what it does. If you cannot,
    the concept is not ready.
 3. Sketch the concept in at least two ways, and pick the one that reads at 16pt.
-4. Draw `svg/<name>.16.svg` and `svg/<name>.20.svg` as flat outlines: one path
-   `id="primary"`, optionally one path `id="secondary"`, `fill-rule="evenodd"`,
-   absolute `M L H V Q C Z` commands only. Outline strokes and flatten booleans.
-5. Generate and test, from `Packages/EdithIcons`:
+4. Draw both cuts in `tools/icons-controls.mjs`, or `tools/icons-app.mjs` for a
+   tool, suite or permission. The tools compute the slits and booleans. Never
+   edit `svg/` by hand: it is written from these files. For a control, keep to
+   one plate, the 12 unit optical box, and even units where you can.
+5. Build, generate and test, from `Packages/EdithIcons`. Run `bun install` in
+   `tools/` once first.
 
    ```sh
+   bun tools/build.mjs
    bun scripts/generate.ts
    bun scripts/generate.ts --check
+   bun tools/audit.mjs
    swift test
    ```
 
-   Never edit `EdithIcon.generated.swift` by hand.
-6. Render at 16, 20, 24, 32, 40, 60 and 80 points, at 1x and 2x, in dark and light,
-   and in a non-default theme. Open the images and look at the pixels, zoomed.
-   Fix blurred stems, uneven optical weight and anything that merges at 16pt.
+   Never edit `EdithIcon.generated.swift` or `names.json` by hand. The audit must
+   report no off-grid axis edges.
+6. Render every review sheet with `bun tools/sheets.mjs`. It writes to `local/icons/`
+   at 16, 20, 24, 28, 32, 40, 64 and 128 points, at 1x and 2x, in dark and light,
+   in other themes, beside real 13pt text and inside native controls. Open the
+   images and look at the pixels, zoomed. Fix blurred stems, uneven optical weight
+   and anything that merges at 16pt. While drawing, `bun tools/sheets.mjs plus,trash`
+   renders only those icons to `local/icons/focus.png`.
 7. Compare the new icon beside its neighbors in the set. It fails if it looks
    heavier, lighter or from a different hand, or if it is confusable at 16pt with
-   another icon. A set is only as good as its weakest icon.
-8. Add a row to the concept table in `DESIGN.md`.
+   another icon. Check `local/icons/confusable-16pt.txt`: a pair near the top that
+   is not a deliberate variant needs a new silhouette. A set is only as good as
+   its weakest icon.
+8. Add a row to the concept table in `DESIGN.md`. Describe the object and what it
+   does, never the symbol it replaces.
 
 ## Using an icon
 
 Use the shared views so size, zoom, theme and pixel alignment are handled for you.
 `EdithExtensionUI` re-exports the package, so extensions need no extra dependency.
-See "Using the package" in `DESIGN.md` for the current API.
+See "Using the package" in `DESIGN.md` for the full API.
+
+- Next to text, use `EdithIconView(.plus)` with no size. It follows the surrounding
+  font, and `.font(...)` still works.
+- For a title and an icon, use `Label("Rename", edith: .edit)` or
+  `Button("Rename", edith: .edit) {}`. They also work inside menus, which
+  `EdithIconView` does not.
+- For a real image, use `EdithIcon.plus.image()` or `.nsImage()`.
+- For a fixed slot in the app, use `PageIcon` or `PageGuideBadge`.
+- For an off state, use `tone: .muted`. Do not draw an outline version.
+- From a string, use `EdithIcon(name:)`. An unknown name shows a placeholder.
 
 - Extension manifests name their icons by Edith icon name, and
   `bun scripts/extension-index.mjs --check` rejects a name that does not exist.
+  Scripts read valid names from `Packages/EdithIcons/names.json`.
 - Color comes from the surrounding `foregroundStyle`. Use the kit's accent for
   heroes and `inkSoft` for dense rows.
 - Icons are decorative to VoiceOver. The surrounding control carries the label.

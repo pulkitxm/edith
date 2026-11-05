@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "edith-icon-tools",
+      "dependencies": {
+        "pathkit-wasm": "1.0.0",
+      },
+    },
+  },
+  "packages": {
+    "pathkit-wasm": ["pathkit-wasm@1.0.0", "", {}, "sha512-oREIcGpwnBBto6PfB3C20aIw9jBPLcSNVF1AlL5tGlXsoL2zqWVuD0mi8WMJQHHNemm6aR1hHH2lz+TO551Fgw=="],
+  }
+}

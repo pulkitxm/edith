@@ -1,4 +1,27 @@
 import SwiftUI
+import os
+
+enum EdithIconPathStore {
+    private struct Key: Hashable {
+        let icon: EdithIcon
+        let layer: EdithIconLayer
+        let cut: EdithIconCut
+    }
+
+    private static let paths = OSAllocatedUnfairLock(initialState: [Key: Path]())
+    private static let parses = OSAllocatedUnfairLock(initialState: 0)
+
+    static var parseCount: Int { parses.withLock { $0 } }
+
+    static func path(_ icon: EdithIcon, layer: EdithIconLayer, cut: EdithIconCut) -> Path {
+        let key = Key(icon: icon, layer: layer, cut: cut)
+        if let path = paths.withLock({ $0[key] }) { return path }
+        let path = EdithIconPathParser.path(from: icon.pathData(layer, cut: cut))
+        parses.withLock { $0 += 1 }
+        paths.withLock { $0[key] = path }
+        return path
+    }
+}
 
 enum EdithIconPathParser {
     static func path(from data: String) -> Path {
