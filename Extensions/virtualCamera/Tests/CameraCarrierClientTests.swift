@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 import Testing
 @testable import VirtualCameraExtension
 
@@ -9,8 +10,10 @@ private final class CameraControlProbe: CameraCarrierControlling {
     var changed: ((CameraCarrierStatus) -> Void)?
     var restartRequired = false
     var calls: [String] = []
+    var failure: Error?
     func activate() async throws {
         calls.append("activate");
+        if let failure { throw failure }
         publish(.init(phase: "active", ownsProvider: true, pending: false))
     }
     func deactivate() async throws {
@@ -250,6 +253,67 @@ private final class CameraControlProbe: CameraCarrierControlling {
         #expect(client.currentStatus?.ownsProvider == true)
         #expect(client.calls == ["activate", "deactivate"])
         await manager.shutdown()
+    }
+
+    @Test(arguments: [true, false]) func installFailureSurvivesRefreshUntilTheCameraAppears(
+        carrierStarted: Bool
+    ) async throws {
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "camera-failure-\(UUID().uuidString).app")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var visible = false
+        let client = CameraControlProbe()
+        if !carrierStarted { client.currentStatus = nil }
+        client.failure = CocoaError(.featureUnsupported)
+        let manager = VirtualCameraExtensionManager(
+            environment: .init(
+                bundleURL: bundle, hasInstallEntitlement: { true }, deviceVisible: { visible },
+                canPrepareLocation: true), client: client)
+        try FileManager.default.createDirectory(
+            at: manager.extensionBundleURL, withIntermediateDirectories: true)
+        manager.refresh()
+        manager.install()
+        try await wait { if case .failed = manager.phase { true } else { false } }
+        let failed = manager.phase
+        manager.refresh()
+        manager.refreshDetached()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(manager.phase == failed)
+        #expect(failed.canInstall)
+        client.failure = nil
+        manager.install()
+        try await wait { manager.phase == .installed }
+        #expect(client.calls == ["activate", "activate"])
+        client.failure = CocoaError(.featureUnsupported)
+        await manager.shutdown()
+        if !carrierStarted {
+            let late = VirtualCameraExtensionManager(
+                environment: .init(
+                    bundleURL: bundle, hasInstallEntitlement: { true },
+                    deviceVisible: { visible }, canPrepareLocation: true), client: client)
+            client.currentStatus = nil
+            late.refresh()
+            late.install()
+            try await wait { if case .failed = late.phase { true } else { false } }
+            visible = true
+            late.refresh()
+            #expect(late.phase == .installed)
+            await late.shutdown()
+        }
+    }
+
+    @Test func installRegistersACarrierMacOSHasNeverSeen() {
+        func steps(_ status: SMAppService.Status) -> [String] {
+            var steps: [String] = []
+            CameraAppWorker.approveCarrier(
+                status: status, register: { steps.append("register") },
+                requestApproval: { steps.append("approve") })
+            return steps
+        }
+        #expect(steps(.notFound) == ["register", "approve"])
+        #expect(steps(.notRegistered) == ["approve"])
+        #expect(steps(.requiresApproval) == ["approve"])
+        #expect(steps(.enabled).isEmpty)
     }
 
     @Test func closedManagerIgnoresLateCarrierPublication() async {
