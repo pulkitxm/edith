@@ -22,7 +22,7 @@ public struct PageCard<Content: View>: View {
             if let title {
                 PageSectionHeader(title) {
                     if let note {
-                        Text(note).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        Text(note).font(.edithText(.callout)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -51,8 +51,9 @@ public struct PagePanel<Header: View, Content: View>: View {
             header()
             content()
         }
-        .padding(UIScale.pt(16))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .edithSurface(cornerRadius: 14)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        .environment(\.pageViewportHeight, nil)
     }
 }

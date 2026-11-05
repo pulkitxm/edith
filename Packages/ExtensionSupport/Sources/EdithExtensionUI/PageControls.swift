@@ -24,7 +24,7 @@ public struct PageToolbarButton: View {
                     Image(systemName: systemImage).foregroundStyle(tint ?? .primary)
                 }
             }
-            .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+            .frame(width: UIScale.pt(20), height: UIScale.pt(24))
         }
         .buttonStyle(.edith(.toolbar))
         .disabled(isLoading)

@@ -20,18 +20,23 @@ public struct PageMetric: View {
     public var body: some View {
         PageCard {
             HStack(spacing: UIScale.pt(6)) {
-                if let symbol { Image(systemName: symbol).foregroundStyle(tint ?? .secondary) }
-                Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
+                if let symbol {
+                    Image(systemName: symbol).foregroundStyle(tint ?? .secondary)
+                        .accessibilityHidden(true)
+                }
+                Text(title).foregroundStyle(.secondary).lineLimit(1)
             }
+            .font(.edithText(.subheadline).weight(.medium))
             Text(value).font(.edithText(.title2)).fontWeight(.semibold).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6).contentTransition(.numericText())
             if let trend {
                 Label(trend, systemImage: trendPositive ? "arrow.up.right" : "arrow.down.right")
-                    .font(.edithText(.caption)).foregroundStyle(trendPositive ? .green : .red)
+                    .font(.edithText(.subheadline).weight(.medium))
+                    .foregroundStyle(trendPositive ? .green : .red)
                     .help("Compared with the previous period of the same length")
             }
             if let detail {
-                Text(detail).font(.edithText(.caption)).foregroundStyle(.secondary)
+                Text(detail).font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -37,6 +37,11 @@ public struct PageLoading<Content: View>: View {
     }
 
     public var body: some View {
+        container
+            .modifier(PageLoadingFill(active: !state.presentsContent && state != .loading))
+    }
+
+    private var container: some View {
         LoadingContainer(
             state: state, title: title, message: message, retry: retry, cancel: cancel,
             refreshing: activity == nil && refreshing, updating: activity == .updating
@@ -54,6 +59,18 @@ public struct PageLoading<Content: View>: View {
     }
 }
 
+private struct PageLoadingFill: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.pageFillViewport()
+        } else {
+            content
+        }
+    }
+}
+
 public struct PageSkeleton: View {
     var layout: PageSkeletonLayout = .list
     @Environment(\.compactLayout) private var compact
@@ -67,7 +84,8 @@ public struct PageSkeleton: View {
                 switch layout {
                 case .analytics:
                     LazyVGrid(
-                        columns: PageMetrics.cardColumns(compact, minimum: 170, spacing: 12),
+                        columns: PageMetrics.cardColumns(
+                            false, minimum: compact ? 132 : 170, spacing: 12),
                         spacing: UIScale.pt(PageMetrics.cardSpacing)
                     ) {
                         ForEach(0..<4, id: \.self) { _ in
@@ -117,10 +135,13 @@ public struct PageSkeletonControls: View {
     public init() {}
     public var body: some View {
         HStack(spacing: UIScale.pt(8)) {
-            SkeletonBlock(width: 120, height: 28, corner: 7)
-            SkeletonBlock(width: 88, height: 28, corner: 7)
+            SkeletonBlock(
+                width: 120, height: PageMetrics.chipHeight, corner: PageMetrics.chipCornerRadius)
+            SkeletonBlock(
+                width: 88, height: PageMetrics.chipHeight, corner: PageMetrics.chipCornerRadius)
             Spacer(minLength: 0)
-            SkeletonBlock(width: 28, height: 28, corner: 7)
+            SkeletonBlock(
+                width: 32, height: PageMetrics.chipHeight, corner: PageMetrics.chipCornerRadius)
         }
     }
 }

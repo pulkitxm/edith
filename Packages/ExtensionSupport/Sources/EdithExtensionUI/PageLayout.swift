@@ -4,16 +4,29 @@ import SwiftUI
 
 public enum PageMetrics {
     public static let gutter = 24.0
-    public static let compactGutter = 18.0
-    public static let top = 18.0
+    public static let compactGutter = 16.0
+    public static let top = 20.0
     public static let headerBottom = 16.0
+    public static let headerSpacing = 16.0
+    public static let subtitleSpacing = 4.0
     public static let pinnedContentTop = 20.0
-    public static let bottom = 28.0
+    public static let bottom = 32.0
     public static let titleSize = 28.0
     public static let compactTitleSize = 24.0
     public static let sectionSpacing = 16.0
     public static let cardSpacing = 12.0
+    public static let cardPadding = 16.0
+    public static let cardCornerRadius = 14.0
+    public static let controlSpacing = 8.0
+    public static let controlHeight = 32.0
+    public static let chipHeight = 26.0
+    public static let chipCornerRadius = 8.0
+    public static let filterRowSpacing = 12.0
+    public static let filterLabelSpacing = 12.0
     public static let readableWidth = 980.0
+
+    public static var chipFont: Font { .edithText(.subheadline).weight(.medium) }
+    public static var capsFont: Font { .edithText(.caption2).weight(.semibold) }
 
     public static func gutter(_ compact: Bool) -> CGFloat {
         UIScale.pt(compact ? compactGutter : gutter)
@@ -27,7 +40,7 @@ public enum PageMetrics {
 
     public static func cardColumns(
         _ compact: Bool, minimum: Double, maximum: Double = .infinity,
-        spacing: Double? = nil, alignment: Alignment = .center
+        spacing: Double? = nil, alignment: Alignment = .top
     ) -> [GridItem] {
         let maximum = UIScale.pt(maximum)
         return [
@@ -60,6 +73,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
+    @State private var viewportHeight: CGFloat = 0
 
     public init(
         width: PageContentWidth = .fluid, pinnedHeader: Bool = false, scrollIdentity: String = "",
@@ -89,6 +103,22 @@ public struct PageScaffold<Header: View, Content: View>: View {
                     .pageContent(compact, width: width)
                 }
                 .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
+            }
+            .environment(
+                \.pageViewportHeight,
+                pinnedHeader
+                    ? max(
+                        0,
+                        viewportHeight
+                            - UIScale.pt(PageMetrics.pinnedContentTop + PageMetrics.bottom))
+                    : nil
+            )
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { viewportHeight = proxy.size.height }
+                        .onChange(of: proxy.size.height) { _, height in viewportHeight = height }
+                }
             }
             .overlay(alignment: .top) {
                 ContentActivityBadge(activity)
@@ -190,7 +220,32 @@ private struct PageTask<ID: Equatable>: ViewModifier {
     }
 }
 
+private struct PageViewportHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var pageViewportHeight: CGFloat? {
+        get { self[PageViewportHeightKey.self] }
+        set { self[PageViewportHeightKey.self] = newValue }
+    }
+}
+
+private struct PageFillViewport: ViewModifier {
+    @Environment(\.pageViewportHeight) private var viewportHeight
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .center)
+            .environment(\.pageViewportHeight, nil)
+    }
+}
+
 extension View {
+    public func pageFillViewport() -> some View {
+        modifier(PageFillViewport())
+    }
+
     public func pageSurface() -> some View {
         modifier(PageSurface())
     }
@@ -273,13 +328,15 @@ public struct PageSectionHeader<Trailing: View>: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(title)
                 .font(.edithText(.headline))
+                .accessibilityAddTraits(.isHeader)
             if let subtitle {
                 Text(subtitle)
-                    .font(.edithText(.caption))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -292,7 +349,8 @@ public struct PageSubtitle: View {
     public init(_ text: Text) { self.text = text }
 
     public var body: some View {
-        text.font(.edithText(.callout)).foregroundStyle(.secondary).lineLimit(2)
+        text.font(.edithText(.body)).foregroundStyle(.secondary).lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -301,41 +359,60 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
     @Environment(\.colorScheme) private var scheme
 
     private let title: () -> Title
+    private let subtitle: String?
+    private let divider: Bool
     private let trailing: () -> Trailing
     private let accessory: () -> Accessory
 
     public init(
+        subtitle: String? = nil, divider: Bool = false,
         @ViewBuilder title: @escaping () -> Title,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
         @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
     ) {
         self.title = title
+        self.subtitle = subtitle
+        self.divider = divider
         self.trailing = trailing
         self.accessory = accessory
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                    heading.fixedSize(horizontal: true, vertical: false)
-                    Spacer(minLength: UIScale.pt(8))
-                    trailing().fixedSize(horizontal: true, vertical: false)
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    heading
-                    ScrollView(.horizontal) {
-                        trailing()
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.headerSpacing)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                            heading.fixedSize(horizontal: true, vertical: false)
+                            Spacer(minLength: UIScale.pt(8))
+                            actions.fixedSize(horizontal: true, vertical: false)
+                        }
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            heading
+                            ScrollView(.horizontal) {
+                                actions
+                            }
+                            .scrollIndicators(.never)
+                        }
                     }
-                    .scrollIndicators(.automatic)
+                    if let subtitle {
+                        PageSubtitle(subtitle)
+                            .frame(maxWidth: UIScale.pt(720), alignment: .leading)
+                    }
                 }
+                accessory()
             }
-            accessory()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageGutter(compact)
+            .padding(.top, UIScale.pt(PageMetrics.top))
+            .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
+            if divider { PageHeaderDivider() }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .pageGutter(compact)
-        .padding(.top, UIScale.pt(PageMetrics.top))
-        .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
+    }
+
+    private var actions: some View {
+        trailing()
+            .buttonStyle(.edith(.secondary))
     }
 
     private var heading: some View {
@@ -344,15 +421,32 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
             .foregroundStyle(DashSkin.ink(scheme == .dark))
             .lineLimit(2)
             .minimumScaleFactor(0.8)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
 extension PageHeader where Title == Text {
     public init(
-        _ title: String,
+        _ title: String, subtitle: String? = nil, divider: Bool = false,
         @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
         @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
     ) {
-        self.init(title: { Text(title) }, trailing: trailing, accessory: accessory)
+        self.init(
+            subtitle: subtitle, divider: divider, title: { Text(title) }, trailing: trailing,
+            accessory: accessory)
+    }
+}
+
+public struct PageHeaderDivider: View {
+    @Environment(\.colorScheme) private var scheme
+
+    public init() {}
+
+    public var body: some View {
+        Rectangle()
+            .fill(DashSkin.line(scheme == .dark))
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
     }
 }

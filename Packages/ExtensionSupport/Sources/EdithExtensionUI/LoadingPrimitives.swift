@@ -155,9 +155,9 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 
     private var unavailableTitle: String {
         switch state {
-        case .offline: "Offline"
-        case .error: "Couldn’t Load Content"
-        case .cancelled: "Loading Cancelled"
+        case .offline: "You’re offline"
+        case .error: "Couldn’t load content"
+        case .cancelled: "Loading cancelled"
         default: title
         }
     }
@@ -215,32 +215,21 @@ public struct ContentStatusView: View {
     }
 
     public var body: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(32), weight: .light))
-                .foregroundStyle(.secondary)
-            Text(title).font(.edithText(.title2)).fontWeight(.semibold)
-            Text(message)
-                .font(.edithText(.body))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(8)) { actions }
-                VStack(spacing: UIScale.pt(8)) { actions }
-            }.fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(UIScale.pt(24))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(220))
-        .accessibilityElement(children: .contain)
+        PageEmptyState(
+            symbolName: symbol, title: title, message: message, tint: tint,
+            leading: secondaryAction.map { PageAction(secondaryTitle, perform: $0) },
+            trailing: action.map {
+                PageAction(actionTitle, symbolName: "arrow.clockwise", perform: $0)
+            }
+        )
+        .frame(minHeight: UIScale.pt(260))
     }
 
-    @ViewBuilder private var actions: some View {
-        if let action {
-            Button(actionTitle, action: action).buttonStyle(.edith(.secondary))
-        }
-        if let secondaryAction {
-            Button(secondaryTitle, action: secondaryAction).buttonStyle(.edith(.borderless))
+    private var tint: Color? {
+        switch symbol {
+        case "exclamationmark.triangle", "exclamationmark.octagon": .orange
+        case "wifi.slash", "xmark.circle", "tray": .secondary
+        default: nil
         }
     }
 }
@@ -470,7 +459,9 @@ private struct DeferredPlaceholder<Placeholder: View>: View {
             }
         }
         .task {
-            do { try await Task.sleep(for: ContentActivityTiming.placeholderDelay) } catch { return }
+            do { try await Task.sleep(for: ContentActivityTiming.placeholderDelay) } catch {
+                return
+            }
             shown = true
         }
     }
