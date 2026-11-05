@@ -35,6 +35,8 @@ public enum ExtensionPrivilegedService {
     private let source: URL
     private let version: String
     private let serviceStatus: @MainActor () -> SMAppService.Status
+    private let registerService: @MainActor () throws -> Void
+    private let openApproval: @MainActor () -> Void
     private let connect:
         @MainActor (@escaping @MainActor () -> Void) -> any ExtensionPrivilegedTransport
     private var channel: (any ExtensionPrivilegedTransport)?
@@ -48,6 +50,8 @@ public enum ExtensionPrivilegedService {
         self.init(
             owner: owner, source: source, version: version, mode: mode,
             status: { ExtensionPrivilegedService.service.status },
+            register: { try ExtensionPrivilegedService.service.register() },
+            openApproval: { SMAppService.openSystemSettingsLoginItems() },
             connect: {
                 let hostIdentifier: String?
                 if case .connectOnly(let identifier) = mode {
@@ -62,12 +66,15 @@ public enum ExtensionPrivilegedService {
     init(
         owner: String, source: URL, version: String, mode: Mode = .managed,
         status: @escaping @MainActor () -> SMAppService.Status,
+        register: @escaping @MainActor () throws -> Void = {},
+        openApproval: @escaping @MainActor () -> Void = {},
         connect:
             @escaping @MainActor (@escaping @MainActor () -> Void) ->
             any ExtensionPrivilegedTransport
     ) {
         self.owner = owner; self.source = source; self.version = version; self.mode = mode
-        serviceStatus = status; self.connect = connect
+        serviceStatus = status; registerService = register; self.openApproval = openApproval
+        self.connect = connect
     }
 
     public var status: SMAppService.Status {
@@ -82,9 +89,8 @@ public enum ExtensionPrivilegedService {
             throw ExtensionPeerError.rejected(
                 "Open Edith and approve its privileged service before using this extension.")
         }
-        let service = ExtensionPrivilegedService.service
-        if service.status == .notRegistered { try service.register() }
-        if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+        if [.notRegistered, .notFound].contains(serviceStatus()) { try registerService() }
+        if serviceStatus() == .requiresApproval { openApproval() }
     }
 
     public func invoke(_ command: String, payload: Data) async throws -> Data {

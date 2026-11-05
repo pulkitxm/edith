@@ -570,6 +570,34 @@ private func lidAwakeProcessIDs(at url: URL) throws -> [pid_t] {
                 == true)
     }
 
+    @Test @MainActor func sleepRequestsRegisterAnUnknownCarrierBeforeRefusing() async throws {
+        var state = LidAwakePrivilegedClientState.notFound
+        var approvals = 0
+        var commands: [String] = []
+        let client = LidAwakePrivilegedClient(
+            state: { state },
+            invoke: { command, _ in
+                commands.append(command); return Data()
+            },
+            release: {}, shutdown: {},
+            approve: {
+                approvals += 1; state = .enabled
+            })
+        try await client.setSleepDisabled(true)
+        #expect(approvals == 1 && commands == ["setSleepDisabled"])
+        state = .notFound
+        let missing = LidAwakePrivilegedClient(
+            state: { .notFound },
+            invoke: { command, _ in
+                commands.append(command); return Data()
+            },
+            release: {}, shutdown: {}, approve: { approvals += 1 })
+        await #expect(throws: LidAwakePrivilegedClientError.self) {
+            try await missing.setSleepDisabled(true)
+        }
+        #expect(approvals == 2 && commands == ["setSleepDisabled"])
+    }
+
     @Test func privilegedRequestsDoNotRetryWhileApprovalIsPending() {
         let error = LidAwakePrivilegedClient.requestError(for: .awaitingApproval)
         #expect(error?.errorDescription?.contains("Approve Edith") == true)
