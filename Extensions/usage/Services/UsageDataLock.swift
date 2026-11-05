@@ -3,10 +3,12 @@ import Foundation
 
 public enum UsageDataLockError: LocalizedError, Equatable, Sendable {
     case unavailable(String)
+    case contended(String)
 
     public var errorDescription: String? {
         switch self {
         case .unavailable(let path): "usage data lock unavailable at \(path)"
+        case .contended(let path): "usage data lock is held by another operation at \(path)"
         }
     }
 }
@@ -54,9 +56,13 @@ public final class UsageDataLock: @unchecked Sendable {
             while true {
                 try Task.checkCancellation()
                 if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { break }
-                guard !nonblocking, errno == EWOULDBLOCK || errno == EINTR,
-                    ContinuousClock.now < deadline
-                else { throw UsageDataLockError.unavailable(url.path) }
+                let failure = errno
+                guard failure == EWOULDBLOCK || failure == EINTR else {
+                    throw UsageDataLockError.unavailable(url.path)
+                }
+                guard !nonblocking, ContinuousClock.now < deadline else {
+                    throw UsageDataLockError.contended(url.path)
+                }
                 Thread.sleep(forTimeInterval: delay)
                 delay = min(0.05, delay * 2)
             }
@@ -202,11 +208,14 @@ public enum UsageDataTransaction {
         try FileManager.default.createDirectory(
             at: dataDirectory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
-        guard
-            let transaction = try? UsageDataLock.acquire(
+        let transaction: UsageDataLock
+        do {
+            transaction = try UsageDataLock.acquire(
                 at: dataDirectory.appendingPathComponent("usage-transaction.lock"),
                 nonblocking: true)
-        else { throw UsageDataTransactionError.refreshBusy }
+        } catch UsageDataLockError.contended {
+            throw UsageDataTransactionError.refreshBusy
+        }
         defer { transaction.release() }
         willAcquireDataLock?()
         return try UsageDataLock.withLock(dataDirectory: dataDirectory, body)
