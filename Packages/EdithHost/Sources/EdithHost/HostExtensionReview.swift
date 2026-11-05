@@ -96,9 +96,12 @@ struct HostExtensionReview: View {
                 } else {
                     ScrollView { overview.padding(UIScale.pt(HostExtensionDetailLayout.padding)) }
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+            .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity)
+            .clipped()
             Divider()
-            footer
+            footer.fixedSize(horizontal: false, vertical: true).layoutPriority(1)
         }
         .frame(
             width: PresentationMetrics.width(640),

@@ -95,9 +95,7 @@ test("pages default to detachable and sections name a known page", () => {
   const paged = {
     ...declaration,
     category: "agents",
-    pages: [
-      { id: "samplePage", title: "Sample", icon: "bookmark", order: 1 },
-    ],
+    pages: [{ id: "samplePage", title: "Sample", icon: "bookmark", order: 1 }],
     sections: [
       {
         page: "appMaintenance",

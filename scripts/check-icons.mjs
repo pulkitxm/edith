@@ -88,9 +88,7 @@ function trackedFiles(pattern) {
 }
 
 if (import.meta.main) {
-  const map = JSON.parse(
-    readFileSync(`${OWN_PACKAGE}symbol-map.json`, "utf8"),
-  );
+  const map = JSON.parse(readFileSync(`${OWN_PACKAGE}symbol-map.json`, "utf8"));
   const symbolNames = new Set(
     Object.keys(map.symbols).filter((name) => name.includes(".")),
   );

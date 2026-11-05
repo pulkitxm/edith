@@ -119,7 +119,8 @@ import Testing
         return count
     }
 
-    @Test @MainActor func exportCardsFollowTheSelectedThemeInsteadOfTheHouseEspresso() async throws {
+    @Test @MainActor func exportCardsFollowTheSelectedThemeInsteadOfTheHouseEspresso() async throws
+    {
         let defaults = ExtensionScope.process.defaults()
         let prior = defaults.string(forKey: AppStorageKeys.General.theme)
         defer { defaults.set(prior, forKey: AppStorageKeys.General.theme) }

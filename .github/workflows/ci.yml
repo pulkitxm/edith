@@ -306,6 +306,15 @@ jobs:
         run: |
           read -r -a targets <<< "$TARGETS"
           make "${targets[@]}"
+      - name: Crash reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for report in ~/Library/Logs/DiagnosticReports/*.ips; do
+            echo "::group::$(basename "$report")"
+            head -c 40000 "$report"
+            echo "::endgroup::"
+          done
 
   companion:
     name: companion

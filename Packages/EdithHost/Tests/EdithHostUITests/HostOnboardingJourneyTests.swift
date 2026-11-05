@@ -272,13 +272,13 @@ import Testing
     @Test func requestsRunOneAtATime() async {
         let fixture = Fixture()
         defer { fixture.remove() }
-        fixture.system.requestDelay = .milliseconds(80)
+        fixture.system.requestDelay = .seconds(2)
         let model = fixture.model()
         model.present()
         model.choose(.desk)
         model.continueFromTools()
         async let first: Void = model.requestPermission(.screenRecording)
-        try? await Task.sleep(for: .milliseconds(20))
+        while fixture.system.requests.isEmpty { await Task.yield() }
         await model.requestPermission(.inputMonitoring)
         await first
         #expect(fixture.system.requests == [.screenRecording])

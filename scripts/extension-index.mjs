@@ -184,13 +184,17 @@ function guide(declaration, directory) {
   if (typeof declaration !== "object" || Array.isArray(declaration))
     fail("must be an object");
   const allowed = ["tagline", "summary", "steps", "examples"];
-  const unknown = Object.keys(declaration).filter((key) => !allowed.includes(key));
+  const unknown = Object.keys(declaration).filter(
+    (key) => !allowed.includes(key),
+  );
   if (unknown.length) fail(`has unknown keys ${unknown.join(", ")}`);
   for (const key of ["tagline", "summary"])
     if (typeof declaration[key] !== "string" || !declaration[key].trim())
       fail(`needs ${key}`);
-  if (declaration.tagline.length > 90) fail("tagline must be 90 characters or fewer");
-  if (declaration.summary.length > 280) fail("summary must be 280 characters or fewer");
+  if (declaration.tagline.length > 90)
+    fail("tagline must be 90 characters or fewer");
+  if (declaration.summary.length > 280)
+    fail("summary must be 280 characters or fewer");
   const steps = declaration.steps;
   if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4)
     fail("needs two to four steps");
@@ -207,7 +211,9 @@ function guide(declaration, directory) {
   if (
     !Array.isArray(examples) ||
     examples.length > 4 ||
-    examples.some((example) => typeof example !== "string" || !example.startsWith("ed "))
+    examples.some(
+      (example) => typeof example !== "string" || !example.startsWith("ed "),
+    )
   )
     fail("examples must be up to four ed commands");
   return { ...declaration, examples };

@@ -209,7 +209,7 @@ struct HostExtensionPreview: View {
                 Text(key)
                     .font(.system(size: UIScale.pt(10), weight: .semibold, design: .rounded))
                     .foregroundStyle(DashSkin.ink(dark))
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(25))
+                    .frame(width: UIScale.pt(30), height: UIScale.pt(28))
                     .background(
                         DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
                     )

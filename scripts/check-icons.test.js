@@ -13,9 +13,7 @@ describe("check-icons", () => {
       'NSImage(systemSymbolName: "gear", accessibilityDescription: nil)',
       "view.symbolEffect(.pulse)",
     ].join("\n");
-    expect(violations(text).map(({ line }) => line)).toEqual([
-      1, 2, 3, 3, 4,
-    ]);
+    expect(violations(text).map(({ line }) => line)).toEqual([1, 2, 3, 3, 4]);
   });
 
   test("flags a symbol name kept in a string", () => {
