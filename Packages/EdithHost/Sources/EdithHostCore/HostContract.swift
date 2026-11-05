@@ -105,6 +105,32 @@ public struct HostPageSection: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
+public struct HostGuideStep: Codable, Hashable, Sendable {
+    public let symbolName: String
+    public let title: String
+    public let detail: String
+
+    public init(symbolName: String, title: String, detail: String) {
+        self.symbolName = symbolName
+        self.title = title
+        self.detail = detail
+    }
+}
+
+public struct HostExtensionGuide: Codable, Hashable, Sendable {
+    public let tagline: String
+    public let summary: String
+    public let steps: [HostGuideStep]
+    public let examples: [String]
+
+    public init(tagline: String, summary: String, steps: [HostGuideStep], examples: [String] = []) {
+        self.tagline = tagline
+        self.summary = summary
+        self.steps = steps
+        self.examples = examples
+    }
+}
+
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -119,13 +145,14 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let homeCards: [String]
     public let notchCards: [String]
     public let notchTabs: [String]
+    public let guide: HostExtensionGuide?
 
     public init(
         id: String, title: String, symbolName: String, category: String,
         background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
         launchWhen: [HostLaunchCondition] = [], pages: [HostPage] = [],
         sections: [HostPageSection] = [], homeCards: [String] = [],
-        notchCards: [String] = [], notchTabs: [String] = []
+        notchCards: [String] = [], notchTabs: [String] = [], guide: HostExtensionGuide? = nil
     ) {
         self.id = id
         self.title = title
@@ -140,6 +167,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.homeCards = homeCards
         self.notchCards = notchCards
         self.notchTabs = notchTabs
+        self.guide = guide
     }
 }
 

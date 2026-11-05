@@ -161,6 +161,42 @@ function section(declaration, directory) {
   return declaration;
 }
 
+function guide(declaration, directory) {
+  if (declaration === undefined) return undefined;
+  const fail = (reason) => {
+    throw new Error(`${directory}: guide ${reason}`);
+  };
+  if (typeof declaration !== "object" || Array.isArray(declaration))
+    fail("must be an object");
+  const allowed = ["tagline", "summary", "steps", "examples"];
+  const unknown = Object.keys(declaration).filter((key) => !allowed.includes(key));
+  if (unknown.length) fail(`has unknown keys ${unknown.join(", ")}`);
+  for (const key of ["tagline", "summary"])
+    if (typeof declaration[key] !== "string" || !declaration[key].trim())
+      fail(`needs ${key}`);
+  if (declaration.tagline.length > 90) fail("tagline must be 90 characters or fewer");
+  if (declaration.summary.length > 280) fail("summary must be 280 characters or fewer");
+  const steps = declaration.steps;
+  if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4)
+    fail("needs two to four steps");
+  const stepKeys = ["symbolName", "title", "detail"];
+  for (const step of steps)
+    if (
+      typeof step !== "object" ||
+      Object.keys(step).some((key) => !stepKeys.includes(key)) ||
+      stepKeys.some((key) => typeof step[key] !== "string" || !step[key].trim())
+    )
+      fail(`steps need ${stepKeys.join(", ")}`);
+  const examples = declaration.examples ?? [];
+  if (
+    !Array.isArray(examples) ||
+    examples.length > 4 ||
+    examples.some((example) => typeof example !== "string" || !example.startsWith("ed "))
+  )
+    fail("examples must be up to four ed commands");
+  return { ...declaration, examples };
+}
+
 function hotkey(declaration, directory) {
   const keys = ["id", "prefix", "title", "subtitle", "shortcut"];
   if (
@@ -189,6 +225,7 @@ export function validateDeclaration(declaration, directory) {
     "homeCards",
     "notchCards",
     "notchTabs",
+    "guide",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
@@ -253,6 +290,9 @@ export function validateDeclaration(declaration, directory) {
     hotkeys: (declaration.hotkeys ?? []).map((entry) =>
       hotkey(entry, directory),
     ),
+    ...(declaration.guide === undefined
+      ? {}
+      : { guide: guide(declaration.guide, directory) }),
   };
 }
 
