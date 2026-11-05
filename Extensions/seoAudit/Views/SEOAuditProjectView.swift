@@ -54,7 +54,9 @@ struct SEOAuditProjectView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every saved run and page result for this project will be removed from this Mac.")
+            Text(
+                "Every saved run and page result for this project will be removed from this Mac. The website itself is not affected."
+            )
         }
         .edithSheet(isPresented: $pageSelectionPresented) {
             SEOAuditPageSelectionSheet(model: model)
@@ -165,14 +167,20 @@ struct SEOAuditProjectView: View {
                         .font(DashSkin.mono(8.5, weight: .bold))
                         .tracking(0.8)
                         .foregroundStyle(DashSkin.accent(dark))
-                    Text("Discover, choose, then audit")
+                    Text("1. Find pages, 2. choose, 3. run the audit")
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                 }
                 Spacer()
                 if model.lighthouseResolved, !model.lighthouseAvailable {
-                    Label("Lighthouse is not on PATH", systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: UIScale.pt(10), weight: .medium))
-                        .foregroundStyle(DashSkin.warn)
+                    Label(
+                        "Lighthouse is not installed (optional)",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .help(
+                        "Lighthouse adds performance and accessibility scores. Install it with npm install -g lighthouse. Audits still check titles, descriptions and links without it."
+                    )
+                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .foregroundStyle(DashSkin.warn)
                 }
             }
             ViewThatFits(in: .horizontal) {
@@ -200,7 +208,7 @@ struct SEOAuditProjectView: View {
     private var discoveryCommand: some View {
         commandCell(
             icon: "point.3.connected.trianglepath.dotted", label: "DISCOVERED",
-            value: String(model.discoveredPageURLs.count), detail: "pages from sitemap"
+            value: String(model.discoveredPageURLs.count), detail: "pages found in your sitemap"
         ) {
             Button(action: model.discoverPages) {
                 Label(
@@ -209,6 +217,9 @@ struct SEOAuditProjectView: View {
             }
             .buttonStyle(.edith(.secondary))
             .disabled(model.isRunning)
+            .help(
+                model.isRunning
+                    ? "Available when the audit finishes." : "Read the sitemap to list your pages")
         }
     }
 
@@ -220,6 +231,9 @@ struct SEOAuditProjectView: View {
             Button("Choose pages") { pageSelectionPresented = true }
                 .buttonStyle(.edith(.secondary))
                 .disabled(model.discoveredPageURLs.isEmpty || model.isRunning)
+                .help(
+                    model.discoveredPageURLs.isEmpty
+                        ? "Find pages first." : "Pick which pages to audit")
         }
     }
 
@@ -227,12 +241,17 @@ struct SEOAuditProjectView: View {
         commandCell(
             icon: "gauge.with.needle", label: "LIGHTHOUSE",
             value: model.lighthouseEnabled ? "On" : "Off",
-            detail: model.lighthouseEnabled ? "4 categories per page" : "metadata only"
+            detail: model.lighthouseEnabled
+                ? "scores for speed, accessibility, SEO" : "titles, descriptions and links only"
         ) {
             Toggle("Include", isOn: $model.lighthouseEnabled)
                 .toggleStyle(.checkbox)
                 .font(.system(size: UIScale.pt(10.5), weight: .medium))
                 .disabled(!model.lighthouseAvailable || model.isRunning)
+                .help(
+                    model.lighthouseAvailable
+                        ? "Adds a Lighthouse score to each page. Slower."
+                        : "Install the Lighthouse CLI to enable page scores.")
         }
     }
 
@@ -253,6 +272,11 @@ struct SEOAuditProjectView: View {
             }
             .buttonStyle(.edith(.primary))
             .disabled(model.selectedPageCount == 0 || model.isRunning)
+            .help(
+                model.isRunning
+                    ? "An audit is already running."
+                    : model.selectedPageCount == 0
+                        ? "Find and choose at least one page first." : "Start the audit")
         }
         .padding(UIScale.pt(12))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -420,17 +444,42 @@ struct SEOAuditProjectView: View {
         if model.selectedRun == nil, model.stage == .discovering {
             SEOAuditPageRowsSkeleton(dark: dark, rows: 3)
         } else if model.selectedRun == nil {
-            emptyState(
-                model.discoveredPageURLs.isEmpty ? "Discover the sitemap" : "Pages are ready",
-                model.discoveredPageURLs.isEmpty
-                    ? "Find pages first, then choose exactly what to audit."
-                    : "Choose pages and run your first audit."
-            )
+            if model.discoveredPageURLs.isEmpty {
+                PageEmptyState(
+                    symbolName: "point.3.connected.trianglepath.dotted",
+                    title: "Find the pages to audit",
+                    message:
+                        "Edith reads \(project.baseURL.isEmpty ? "your site" : project.baseURL)'s sitemap to list its pages. Then you choose which ones to check. Nothing is changed on your site.",
+                    primary: PageAction(
+                        "Find pages", symbolName: "magnifyingglass", identifier: "seo.discover",
+                        perform: model.discoverPages)
+                )
+                .frame(minHeight: UIScale.pt(300))
+            } else {
+                PageEmptyState(
+                    symbolName: "play.circle",
+                    title: "\(model.discoveredPageURLs.count) pages ready to audit",
+                    message:
+                        "\(model.selectedPageCount) are selected. Run the audit to check each page's titles, descriptions, headings and share cards.",
+                    primary: PageAction(
+                        "Run audit", symbolName: "play.fill", identifier: "seo.run",
+                        perform: model.auditSelectedPages),
+                    secondary: PageAction("Choose pages") { pageSelectionPresented = true }
+                )
+                .frame(minHeight: UIScale.pt(300))
+            }
         } else if model.visiblePages.isEmpty, model.isRunning {
             SEOAuditPageRowsSkeleton(dark: dark, rows: pendingSkeletonRows)
         } else if model.visiblePages.isEmpty {
-            emptyState(
-                "No pages match", "Clear the filters to see every page.")
+            PageEmptyState(
+                symbolName: "line.3.horizontal.decrease.circle", title: "No pages match",
+                message: "Nothing in this run fits the current filter.",
+                primary: PageAction("Clear filters") {
+                    model.query = ""
+                    model.severity = nil
+                }
+            )
+            .frame(minHeight: UIScale.pt(240))
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 PageSectionHeader(
@@ -473,18 +522,6 @@ struct SEOAuditProjectView: View {
         case .discovering, .lighthouse, .saving: 1
         case .idle: 1
         }
-    }
-
-    private func emptyState(_ title: String, _ detail: String) -> some View {
-        VStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: UIScale.pt(26), weight: .light))
-                .foregroundStyle(.tertiary)
-            Text(title).font(.system(size: UIScale.pt(14), weight: .semibold))
-            Text(detail).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(44))
     }
 }
 

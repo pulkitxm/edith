@@ -147,9 +147,22 @@ struct DatabaseConnectionGallery: View {
                 symbol: "cylinder.split.1x2",
                 title: "Connect your first database",
                 detail:
-                    "Add a saved connection to browse tables, inspect records, and edit supported data.",
+                    "Save a connection once, then browse tables, search records and edit data with a preview before every change.",
                 actionTitle: "Add connection",
-                action: createConnection)
+                action: createConnection,
+                steps: [
+                    PageGuideStep(
+                        symbolName: "server.rack", title: "Choose a database",
+                        detail: "PostgreSQL, MySQL, SQLite, MongoDB, Redis and more."),
+                    PageGuideStep(
+                        symbolName: "key", title: "Enter its details",
+                        detail:
+                            "Host and login, or a file for SQLite. Passwords go to your Keychain."),
+                    PageGuideStep(
+                        symbolName: "checkmark.shield", title: "Edit with confidence",
+                        detail: "Every change is previewed and needs your confirmation."),
+                ],
+                footnote: "Nothing connects until you open a saved connection.")
         case .filteredEmpty(let search):
             emptyState(
                 symbol: "magnifyingglass",
@@ -513,35 +526,20 @@ struct DatabaseConnectionGallery: View {
         title: String,
         detail: String,
         actionTitle: String,
-        action: @escaping () -> Void
+        action: @escaping () -> Void,
+        steps: [PageGuideStep] = [],
+        footnote: String? = nil
     ) -> some View {
-        VStack(spacing: UIScale.pt(14)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(14))
-                    .fill(palette.accent.opacity(0.1))
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(28), weight: .light))
-                    .foregroundStyle(palette.accent)
-            }
-            .frame(width: UIScale.pt(60), height: UIScale.pt(60))
-            .accessibilityHidden(true)
-            VStack(spacing: UIScale.pt(6)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(palette.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(actionTitle, action: action)
-                .buttonStyle(.edith(.primary, tint: palette.accent))
-        }
-        .frame(maxWidth: UIScale.pt(480))
-        .padding(.vertical, UIScale.pt(56))
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
+        PageEmptyState(
+            symbolName: symbol,
+            title: title,
+            message: detail,
+            steps: steps,
+            primary: PageAction(
+                actionTitle, symbolName: steps.isEmpty ? nil : "plus", perform: action),
+            footnote: footnote
+        )
+        .frame(minHeight: UIScale.pt(320))
     }
 
     private func reload() {

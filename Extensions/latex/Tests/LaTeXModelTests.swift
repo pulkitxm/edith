@@ -103,7 +103,7 @@ import EdithExtensionUI
             LaTeXPage(model: repoModel, opensEditor: true), size: CGSize(width: 1100, height: 800))
         let text = try auditText(host)
         #expect(text.contains("Create pull request"))
-        #expect(text.contains("GitHub build"))
+        #expect(text.contains("No PDF built yet"))
         #expect(!text.contains("Save & compile"))
         try capture(host, name: "latex-repository")
     }

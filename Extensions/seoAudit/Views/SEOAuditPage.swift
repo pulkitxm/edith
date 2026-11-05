@@ -84,7 +84,7 @@ private struct SEOAuditProjectsView: View {
                 Text("Site Audit")
             } accessory: {
                 HStack(spacing: UIScale.pt(14)) {
-                    Text("Crawl every page, inspect every share card, and keep each run local.")
+                    Text("Check a website for SEO problems. Results stay on this Mac.")
                         .font(.system(size: UIScale.pt(13)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button(action: model.presentNewProject) {
@@ -92,6 +92,10 @@ private struct SEOAuditProjectsView: View {
                     }
                     .buttonStyle(.edith(.primary))
                     .disabled(model.isRunning)
+                    .help(
+                        model.isRunning
+                            ? "Wait for the running audit to finish or stop it first."
+                            : "Add a website to audit")
                 }
             }
         } content: {
@@ -124,7 +128,9 @@ private struct SEOAuditProjectsView: View {
                 projectBeingDeleted = nil
             }
         } message: {
-            Text("This removes the project and its complete local audit history.")
+            Text(
+                "This removes the project and every saved audit run for it from this Mac. The website itself is not affected."
+            )
         }
     }
 
@@ -142,22 +148,29 @@ private struct SEOAuditProjectsView: View {
     @ViewBuilder
     private var projectContent: some View {
         if model.projects.isEmpty {
-            VStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "square.stack.3d.up.slash")
-                    .font(.system(size: UIScale.pt(28), weight: .light))
-                    .foregroundStyle(.tertiary)
-                Text("No projects yet")
-                    .font(DashSkin.heading(20))
-                Text("Your first completed crawl will stay here with its full history.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                Button(action: model.presentNewProject) {
-                    Label("Create a project", systemImage: "plus")
-                }
-                .buttonStyle(.edith(.primary))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(52))
+            PageEmptyState(
+                symbolName: "doc.text.magnifyingglass",
+                title: "Check your website for SEO problems",
+                message:
+                    "Enter your site's address and Edith finds its pages, then checks titles, descriptions, share cards and more, one page at a time.",
+                steps: [
+                    PageGuideStep(
+                        symbolName: "link", title: "Add your site",
+                        detail: "Type a URL such as example.com or localhost:3000."),
+                    PageGuideStep(
+                        symbolName: "point.3.connected.trianglepath.dotted",
+                        title: "Find its pages",
+                        detail: "Edith reads your sitemap, then you choose which pages to check."),
+                    PageGuideStep(
+                        symbolName: "list.clipboard", title: "Read the report",
+                        detail: "See issues per page, how it looks when shared, and past runs."),
+                ],
+                primary: PageAction(
+                    "Add your site", symbolName: "plus", identifier: "seo.new-project",
+                    perform: model.presentNewProject),
+                footnote:
+                    "Audits only read your public pages. Results are saved on this Mac and never uploaded."
+            )
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 PageSectionHeader(
@@ -203,9 +216,11 @@ private struct SEOAuditNewProjectSheet: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("New audit project")
                         .font(DashSkin.heading(23))
-                    Text("Add the site once. Every audit run stays attached to this project.")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Add the site once. Every audit of it is saved under this project so you can compare runs."
+                    )
+                    .font(.system(size: UIScale.pt(11.5)))
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
             }
@@ -217,7 +232,8 @@ private struct SEOAuditNewProjectSheet: View {
                     onSubmit: { Task { await model.beginNewProject() } })
                 fieldLabel("Project name")
                 EdithTextField(
-                    placeholder: "Optional", text: $model.projectName, icon: "folder")
+                    placeholder: "Optional, defaults to the site address", text: $model.projectName,
+                    icon: "folder")
             }
             HStack(spacing: UIScale.pt(10)) {
                 capability("Sitemap discovery", "point.3.connected.trianglepath.dotted", true)
@@ -236,12 +252,12 @@ private struct SEOAuditNewProjectSheet: View {
                 .keyboardShortcut(.cancelAction)
                 Spacer()
                 if model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Enter a site URL to continue")
+                    Text("Enter your site's address to continue")
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.secondary)
                 }
                 Button(action: { Task { await model.beginNewProject() } }) {
-                    Label("Create and discover", systemImage: "arrow.right")
+                    Label("Create and find pages", systemImage: "arrow.right")
                 }
                 .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)

@@ -10,6 +10,8 @@ struct LaTeXPage: View {
     @State private var editing = false
     @State private var adding = false
     @State private var showingReview = false
+    @State private var addLocation = LaTeXLocation.disk
+    @State private var confirmingRemoval = false
     @State private var inspector = "PDF"
     @State private var layout = "Split"
     let model: LaTeXModel
@@ -35,7 +37,7 @@ struct LaTeXPage: View {
         }
         .pageTask { await model.start() }
         .edithSheet(isPresented: $adding, dismissible: nil) {
-            LaTeXAddProject(model: model, onAdded: { editing = true })
+            LaTeXAddProject(model: model, location: addLocation, onAdded: { editing = true })
         }
         .onChange(of: model.editorRequest) { _, generation in
             if generation > 0 { editing = true }
@@ -49,31 +51,76 @@ struct LaTeXPage: View {
         PageScaffold {
             PageHeader("LaTeX projects") {
                 Button {
-                    adding = true
+                    beginAdding(.disk)
                 } label: {
                     Label("Add project", systemImage: "plus")
                 }
+                .buttonStyle(.edith(.primary))
                 .disabled(model.busy || model.load.isRunning)
+                .help(
+                    model.load.isRunning
+                        ? "Wait for your projects to finish loading." : "Add a LaTeX project")
             } accessory: {
-                Text("Your documents, on this Mac and on GitHub.")
+                Text("Write documents, see the PDF beside them. On this Mac or on GitHub.")
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         } content: {
-            PageLoading(
-                state: model.projects.isEmpty ? model.load.state : .content,
-                title: "Your first LaTeX project",
-                message: model.load.errorMessage
-                    ?? "Add a .tex file from this Mac or a source path in a GitHub repository.",
-                layout: .cards, retry: { model.launch { await model.start() } }
-            ) {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 300, spacing: 16),
-                    spacing: UIScale.pt(16)
+            if model.projects.isEmpty && model.load.state == .empty {
+                firstRun
+            } else {
+                PageLoading(
+                    state: model.projects.isEmpty ? model.load.state : .content,
+                    title: "Could not load your projects",
+                    message: model.load.errorMessage
+                        ?? "Your LaTeX library could not be read. Try again.",
+                    layout: .cards, retry: { model.launch { await model.start() } }
                 ) {
-                    ForEach(model.projects) { project in projectCard(project) }
+                    LazyVGrid(
+                        columns: PageMetrics.cardColumns(compact, minimum: 300, spacing: 16),
+                        spacing: UIScale.pt(16)
+                    ) {
+                        ForEach(model.projects) { project in projectCard(project) }
+                    }
                 }
             }
         }
+    }
+
+    private var firstRun: some View {
+        PageEmptyState(
+            symbolName: "doc.richtext",
+            title: "Write LaTeX and see the PDF as you go",
+            message:
+                "Add a .tex file and Edith opens an editor with a live PDF preview. Your files are never moved or deleted.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "doc.badge.plus", title: "Add a document",
+                    detail: "Pick a .tex file on this Mac, or one inside a GitHub repository."),
+                PageGuideStep(
+                    symbolName: "pencil", title: "Edit the source",
+                    detail:
+                        "Use the editor on the left. Find, undo and insert helpers are built in."),
+                PageGuideStep(
+                    symbolName: "doc.text.magnifyingglass", title: "Compile and preview",
+                    detail:
+                        "Press Save & compile (Command-S) to build the PDF and see it on the right."
+                ),
+            ],
+            primary: PageAction(
+                "Choose a .tex file", symbolName: "doc.badge.plus",
+                identifier: "latex.add-disk"
+            ) { beginAdding(.disk) },
+            secondary: PageAction(
+                "Use a GitHub repository", symbolName: "arrow.triangle.branch",
+                identifier: "latex.add-github"
+            ) { beginAdding(.github) },
+            footnote: "Nothing is installed or uploaded until you add a project and compile it."
+        )
+    }
+
+    private func beginAdding(_ location: LaTeXLocation) {
+        addLocation = location
+        adding = true
     }
 
     private func projectCard(_ project: LaTeXProject) -> some View {
@@ -181,9 +228,16 @@ struct LaTeXPage: View {
             } else if model.load.isRunning {
                 PageSkeleton(layout: .editor).padding(UIScale.pt(16))
             } else {
-                ContentUnavailableView(
-                    "Source unavailable", systemImage: "doc.questionmark",
-                    description: Text("Retry loading the project above."))
+                PageEmptyState(
+                    symbolName: "doc.questionmark",
+                    title: "Could not open this source file",
+                    message: model.load.errorMessage
+                        ?? "The file may have moved or been renamed. Your project entry is still in the library.",
+                    primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                        model.launch { await model.reload() }
+                    },
+                    secondary: PageAction("Back to projects") { editing = false }
+                )
             }
         }
     }
@@ -245,15 +299,33 @@ struct LaTeXPage: View {
                             model.revealSource()
                         }
                     }
-                    Button("Remove from library", role: .destructive) { model.remove() }
+                    Button("Remove from library", role: .destructive) {
+                        confirmingRemoval = true
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
                 .disabled(model.dirty || model.busy || model.load.isRunning)
+                .help(
+                    model.dirty
+                        ? "Save or discard your edits before using these actions."
+                        : "More actions")
             }
         }
         .pageGutter(compact)
         .padding(.vertical, UIScale.pt(14))
+        .confirmationDialog(
+            "Remove \(project.name) from your library?", isPresented: $confirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove from library", role: .destructive) { model.remove() }
+        } message: {
+            Text(
+                project.location == .disk
+                    ? "Only the entry in Edith is removed. Your .tex file and PDF stay where they are."
+                    : "Only the entry in Edith is removed. The repository, its files and any pull request are not changed."
+            )
+        }
     }
 
     private var editor: some View {
@@ -354,11 +426,14 @@ struct LaTeXPage: View {
                 {
                     LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
-                    ContentUnavailableView(
-                        "Ready to compile", systemImage: "doc.richtext",
-                        description: Text("Save & compile creates a PDF beside your source file.")
+                    PageEmptyState(
+                        symbolName: "doc.richtext", title: "No PDF yet",
+                        message:
+                            "Save & compile builds your document and shows the PDF here. The PDF is saved beside your .tex file.",
+                        primary: PageAction(
+                            "Save & compile", symbolName: "hammer", identifier: "latex.compile"
+                        ) { model.saveAndCompile() }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }.padding(UIScale.pt(16))
         } else {
@@ -379,17 +454,18 @@ struct LaTeXPage: View {
                     if let data = model.pdfPreview {
                         LaTeXPDFPane(data: data, generation: model.buildGeneration)
                     } else {
-                        ContentUnavailableView(
-                            model.buildingPDF
-                                ? "Building PDF"
-                                : model.hasRepositoryBuild ? "Ready to recompile" : "GitHub build",
-                            systemImage: "doc.richtext",
-                            description: Text(
-                                model.hasRepositoryBuild
+                        if model.buildingPDF {
+                            PageSkeleton(layout: .editor)
+                        } else {
+                            PageEmptyState(
+                                symbolName: "doc.richtext",
+                                title: model.hasRepositoryBuild
+                                    ? "Ready to recompile" : "No PDF built yet",
+                                message: model.hasRepositoryBuild
                                     ? "Recompile builds the saved revision on GitHub. The PDF opens here when it finishes."
                                     : "Create a pull request to build this document on GitHub. The PDF opens here when it finishes."
                             )
-                        ).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
                     Link(
                         "Builds & PDF artifacts",

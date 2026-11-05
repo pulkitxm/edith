@@ -106,24 +106,17 @@ struct DatabaseServiceRecoveryView: View {
     }
 
     private var recoveryContent: some View {
-        VStack(spacing: UIScale.pt(18)) {
-            Image(systemName: "wrench.and.screwdriver.fill")
-                .font(.system(size: UIScale.pt(34), weight: .medium))
-                .foregroundStyle(DashSkin.warn)
-                .accessibilityHidden(true)
-            VStack(spacing: UIScale.pt(7)) {
-                Text("Database needs a quick repair")
-                    .font(.system(size: UIScale.pt(20), weight: .semibold))
-                Text(
-                    "Edith can repair its local database tools and reopen your saved connections."
-                )
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            Button("Repair and continue", action: repair)
-                .buttonStyle(.edith(.primary, tint: theme))
+        VStack(spacing: UIScale.pt(8)) {
+            PageEmptyState(
+                symbolName: "wrench.and.screwdriver.fill",
+                title: "Database needs a quick repair",
+                message:
+                    "Edith's local database tools did not start. Repairing refreshes them and reopens your saved connections. Your connections and data are not touched.",
+                primary: PageAction(
+                    "Repair and continue", symbolName: "arrow.triangle.2.circlepath",
+                    identifier: "database.repair", perform: repair)
+            )
+            .frame(minHeight: UIScale.pt(280))
             DisclosureGroup("Technical details", isExpanded: $showsDetails) {
                 Text(detail)
                     .font(.system(size: UIScale.pt(11), design: .monospaced))
@@ -135,8 +128,8 @@ struct DatabaseServiceRecoveryView: View {
             .font(.system(size: UIScale.pt(11.5)))
             .frame(maxWidth: UIScale.pt(420))
         }
-        .frame(maxWidth: UIScale.pt(560))
-        .padding(UIScale.pt(36))
+        .frame(maxWidth: UIScale.pt(720))
+        .padding(UIScale.pt(24))
         .frame(maxWidth: .infinity)
     }
 }

@@ -6,12 +6,22 @@ public enum LaTeXLocation: String, Codable, CaseIterable, Sendable {
     case github
 
     public var title: String { self == .disk ? "On disk" : "GitHub repository" }
+    public var summary: String {
+        self == .disk
+            ? "The .tex file stays on this Mac. Save & compile writes a PDF beside it."
+            : "The source lives in a GitHub repository. Saving opens a pull request and GitHub builds the PDF."
+    }
 }
 
 public enum LaTeXCompiler: String, Codable, CaseIterable, Sendable {
     case tectonic
     case pdfLatex
     public var title: String { self == .tectonic ? "Tectonic" : "pdfLaTeX" }
+    public var summary: String {
+        self == .tectonic
+            ? "Tectonic downloads the packages your document needs automatically. Best for most documents."
+            : "pdfLaTeX is the classic compiler. Choose it if your document or journal template expects it."
+    }
 }
 
 public struct LaTeXProject: Identifiable, Codable, Equatable, Sendable {
