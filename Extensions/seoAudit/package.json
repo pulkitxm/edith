@@ -1,7 +1,7 @@
 {
   "id": "seoAudit",
   "title": "Site Audit",
-  "symbolName": "doc.text.magnifyingglass",
+  "icon": "seoAudit",
   "category": "developer",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "seoAudit",
       "title": "Site Audit",
-      "symbolName": "doc.text.magnifyingglass",
+      "icon": "seoAudit",
       "order": 3
     }
   ],
@@ -27,22 +27,22 @@
     "summary": "Add your site's address and Edith lists its pages from the sitemap, then checks titles, descriptions, headings and share cards. Add Lighthouse for performance scores. Reports are saved on this Mac so you can compare runs. Your site is only read, never changed.",
     "steps": [
       {
-        "symbolName": "link",
+        "icon": "link",
         "title": "Add your site",
         "detail": "Enter a URL like example.com or localhost:3000."
       },
       {
-        "symbolName": "point.3.connected.trianglepath.dotted",
+        "icon": "nodes",
         "title": "Find pages",
         "detail": "Edith reads your sitemap and lists what it finds."
       },
       {
-        "symbolName": "checklist",
+        "icon": "stepTools",
         "title": "Choose and run",
         "detail": "Pick the pages to check and start the audit."
       },
       {
-        "symbolName": "list.clipboard",
+        "icon": "clipboard",
         "title": "Read the report",
         "detail": "Open a page to see its issues and how it looks when shared."
       }

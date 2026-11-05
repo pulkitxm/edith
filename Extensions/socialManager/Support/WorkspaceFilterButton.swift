@@ -18,7 +18,7 @@ struct WorkspaceFilterButton<Content: View>: View {
 
     var body: some View {
         Button(action: onPress) {
-            Image(systemName: "line.3.horizontal.decrease")
+            EdithIconView(.filter)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .accessibilityHidden(true)
         }

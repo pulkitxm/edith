@@ -94,20 +94,18 @@ private struct SocialBrowserPane: View {
                 Menu {
                     paneActions
                 } label: {
-                    Image(systemName: "ellipsis").accessibilityHidden(true)
+                    EdithIconView(.more).accessibilityHidden(true)
                 }
                 .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
                 .menuIndicator(.hidden).fixedSize()
                 .accessibilityLabel("Manage \(account.name) pane")
                 if tab.layout.paneCount > 1 {
                     PageIconChip(
-                        systemImage: tab.zoomed == key
-                            ? "arrow.down.right.and.arrow.up.left"
-                            : "arrow.up.left.and.arrow.down.right",
+                        icon: tab.zoomed == key ? .collapse : .expand,
                         label: tab.zoomed == key ? "Restore panes" : "Maximize \(account.name)"
                     ) { model.toggleZoom(key) }
                 }
-                PageIconChip(systemImage: "xmark", label: "Close \(account.name)") {
+                PageIconChip(icon: .close, label: "Close \(account.name)") {
                     model.closeAccount(key)
                 }
             }
@@ -125,7 +123,7 @@ private struct SocialBrowserPane: View {
                             Button {
                                 session.closePage(page)
                             } label: {
-                                Image(systemName: "xmark")
+                                EdithIconView(.close)
                             }
                             .accessibilityLabel("Close website tab \(page.title)")
                         }
@@ -248,19 +246,19 @@ struct SocialBrowserContent: View {
 
     private var navigation: some View {
         HStack(spacing: UIScale.pt(8)) {
-            PageIconChip(systemImage: "chevron.left", label: "Back") { page.webView.goBack() }
+            PageIconChip(icon: .chevronLeft, label: "Back") { page.webView.goBack() }
                 .disabled(!page.canGoBack)
-            PageIconChip(systemImage: "chevron.right", label: "Forward") {
+            PageIconChip(icon: .chevronRight, label: "Forward") {
                 page.webView.goForward()
             }
             .disabled(!page.canGoForward)
             PageIconChip(
-                systemImage: page.isLoading ? "xmark" : "arrow.clockwise",
+                icon: page.isLoading ? .close : .refresh,
                 label: page.isLoading ? "Stop loading" : "Reload"
             ) {
                 page.isLoading ? page.webView.stopLoading() : page.retry()
             }
-            PageIconChip(systemImage: "house", label: "Platform home") {
+            PageIconChip(icon: .home, label: "Platform home") {
                 page.webView.load(URLRequest(url: website))
             }
             EdithTextField(
@@ -296,13 +294,13 @@ struct SocialBrowserContent: View {
             Button {
                 page.find(backwards: true)
             } label: {
-                Image(systemName: "chevron.up")
+                EdithIconView(.chevronUp)
             }
             .accessibilityLabel("Previous match")
             Button {
                 page.find()
             } label: {
-                Image(systemName: "chevron.down")
+                EdithIconView(.chevronDown)
             }
             .accessibilityLabel("Next match")
             Button("Done") { page.hideFind() }

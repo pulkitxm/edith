@@ -1,7 +1,7 @@
 {
   "id": "socialManager",
   "title": "Social Manager",
-  "symbolName": "person.crop.rectangle.stack",
+  "icon": "people",
   "category": "media",
   "background": false,
   "commands": [],
@@ -9,7 +9,7 @@
     {
       "id": "socialManager",
       "title": "Social Manager",
-      "symbolName": "person.crop.rectangle.stack",
+      "icon": "people",
       "order": 2,
       "detachable": false
     }
@@ -26,17 +26,17 @@
     "summary": "Group the accounts for each person, brand or client into a profile. Every account keeps its own login on this Mac, so you can open several at once without signing in and out.",
     "steps": [
       {
-        "symbolName": "person.crop.circle.badge.plus",
+        "icon": "personAdd",
         "title": "Create a profile",
         "detail": "Name it after a person, brand or client."
       },
       {
-        "symbolName": "plus.app",
+        "icon": "plus",
         "title": "Add accounts",
         "detail": "Pick Instagram, YouTube, X, LinkedIn or any website and sign in once."
       },
       {
-        "symbolName": "rectangle.split.2x1",
+        "icon": "layoutLeft",
         "title": "Open them side by side",
         "detail": "Use tabs or resizable panes to work across platforms."
       }

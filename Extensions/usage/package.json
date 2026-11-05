@@ -1,7 +1,7 @@
 {
   "id": "usage",
   "title": "Usage",
-  "symbolName": "chart.bar.fill",
+  "icon": "usage",
   "category": "agents",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "dashboard",
       "title": "Usage",
-      "symbolName": "chart.bar.fill",
+      "icon": "usage",
       "order": 1
     }
   ],
@@ -33,22 +33,22 @@
     "summary": "Usage reads the history that agents like Claude Code and Codex keep on this Mac, then shows tokens, cost and rate limits by day, model and project. Nothing is uploaded, and your prompts and code are never read.",
     "steps": [
       {
-        "symbolName": "arrow.clockwise",
+        "icon": "refresh",
         "title": "Collect your history",
         "detail": "Open Usage and press Collect usage now. The first run can take a few minutes."
       },
       {
-        "symbolName": "chart.bar",
+        "icon": "chartBar",
         "title": "Explore the numbers",
         "detail": "Filter by range, model, project or machine to see where tokens and money go."
       },
       {
-        "symbolName": "gauge.with.dots.needle.67percent",
+        "icon": "gauge",
         "title": "Watch your limits",
         "detail": "Rate limits show how much of each plan you have used and when it resets."
       },
       {
-        "symbolName": "bell.badge",
+        "icon": "bell",
         "title": "Get warned early",
         "detail": "Turn on limit alerts in settings to hear about it before you run out."
       }

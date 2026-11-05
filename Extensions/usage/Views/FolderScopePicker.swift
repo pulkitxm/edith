@@ -92,7 +92,7 @@ struct FolderScopePicker: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "folder")
+                EdithIconView(selected ? .success : .folder)
                     .font(.edithText(.caption))
                     .foregroundStyle(
                         selected || tint ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))

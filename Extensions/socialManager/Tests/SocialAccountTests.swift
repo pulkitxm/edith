@@ -17,6 +17,20 @@ struct SocialAccountTests {
         }
     }
 
+    @Test func platformsSavedWithSymbolNamesKeepASensibleIcon() throws {
+        let saved = """
+            [{"id":"A0000000-0000-0000-0000-000000000006","name":"Gmail",
+            "website":"https://mail.google.com","symbol":"envelope"},
+            {"id":"\(UUID().uuidString)","name":"Forum",
+            "website":"https://forum.example.com","symbol":"globe"}]
+            """
+        let platforms = try JSONDecoder().decode([SocialPlatform].self, from: Data(saved.utf8))
+        #expect(platforms.map(\.icon) == [.mail, .globe])
+        let encoded = try JSONEncoder().encode(platforms)
+        #expect(try JSONDecoder().decode([SocialPlatform].self, from: encoded) == platforms)
+        #expect(String(decoding: encoded, as: UTF8.self).contains("\"icon\":\"mail\""))
+    }
+
     @Test func accountsRetainIndependentIdentitiesAcrossRestartsAndRenames() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)

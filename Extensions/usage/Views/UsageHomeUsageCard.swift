@@ -26,7 +26,7 @@ struct UsageHomeUsageCard: View {
             if tile.showTitle || tile.showActions {
                 HStack {
                     if tile.showTitle {
-                        Label(tile.displayTitle, systemImage: tile.widget.icon)
+                        Label(tile.displayTitle, edith: tile.widget.icon)
                             .font(.edithText(.headline)).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -34,13 +34,13 @@ struct UsageHomeUsageCard: View {
                         Button {
                             retry += 1
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            EdithIconView(.refresh)
                         }
                         .help("Refresh usage").accessibilityLabel("Refresh usage")
                         Button {
                             if let scene { Task { try? await scene.open() } }
                         } label: {
-                            Image(systemName: "arrow.up.right")
+                            EdithIconView(.arrowUpRight)
                         }
                         .help("Open Agent Usage").accessibilityLabel("Open Agent Usage")
                     }

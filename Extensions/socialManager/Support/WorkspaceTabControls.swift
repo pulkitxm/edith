@@ -29,7 +29,7 @@ struct WorkspaceLayoutButton<Content: View>: View {
         Button {
             presented.toggle()
         } label: {
-            Image(systemName: split ? "square.grid.2x2" : "plus.rectangle.on.rectangle")
+            EdithIconView(split ? .grid : .plus)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .accessibilityHidden(true)
         }

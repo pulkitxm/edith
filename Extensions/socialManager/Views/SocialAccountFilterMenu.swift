@@ -126,11 +126,10 @@ struct SocialAccountFilterMenu: View {
             section: { $0.section }, activate: model.activateAccountFilter, dismiss: dismiss
         ) { row, highlighted, action in
             WorkspaceFilterRowButton(highlighted: highlighted, action: action) {
-                Image(
-                    systemName: row.action == .clear
-                        ? "xmark" : row.selected ? "checkmark.circle.fill" : "circle"
+                EdithIconView(
+                    row.action == .clear ? .close : row.selected ? .success : .ring,
+                    size: UIScale.pt(12)
                 )
-                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(row.selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                 Text(row.title)

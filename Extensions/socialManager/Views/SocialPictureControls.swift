@@ -40,7 +40,7 @@ struct SocialPicturePicker: View {
                 Image(nsImage: image).resizable().scaledToFill()
                     .frame(width: UIScale.pt(52), height: UIScale.pt(52)).clipShape(Circle())
             } else {
-                Image(systemName: "person.crop.circle").font(.edithText(.largeTitle))
+                EdithIconView(.person).font(.edithText(.largeTitle))
             }
             Button("Choose picture…") { choosingPicture = true }
             if preview != nil || (!removingPicture && savedImage != nil) {

@@ -1,7 +1,7 @@
 {
   "id": "windowSweaters",
   "title": "Window Sweaters",
-  "symbolName": "square.dashed",
+  "icon": "selection",
   "category": "labs",
   "background": false,
   "commands": [],
@@ -23,22 +23,22 @@
     "summary": "Window Sweaters draws a knitted border around your windows so each app is easy to tell apart at a glance. It is purely visual and never changes your windows. Switch it off any time and your colours are kept.",
     "steps": [
       {
-        "symbolName": "switch.2",
+        "icon": "toolbox",
         "title": "Keep sweaters on",
         "detail": "The toggle in settings adds or removes the knitting on every window."
       },
       {
-        "symbolName": "paintpalette",
+        "icon": "palette",
         "title": "Choose a pattern",
         "detail": "Give each app its own knitting, or use one pattern and colour for all windows."
       },
       {
-        "symbolName": "slider.horizontal.3",
+        "icon": "adjust",
         "title": "Adjust the fit",
         "detail": "Set band width, stitch size and how much unfocused windows dim."
       },
       {
-        "symbolName": "nosign",
+        "icon": "blocked",
         "title": "Skip some apps",
         "detail": "List apps that should keep their plain window edges."
       }

@@ -200,7 +200,7 @@ private struct FilterSelectRow: View {
                 .strokeBorder(
                     checked ? Color.clear : DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
             if checked {
-                Image(systemName: "checkmark")
+                EdithIconView(.check)
                     .font(.system(size: UIScale.pt(8.5), weight: .bold))
                     .foregroundStyle(DashSkin.onAccent(dark))
             }

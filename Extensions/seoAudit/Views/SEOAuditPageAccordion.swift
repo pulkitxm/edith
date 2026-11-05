@@ -48,7 +48,7 @@ struct SEOAuditPageAccordion: View {
                         if page.errorCount > 0 { issuePill(String(page.errorCount), .error) }
                         if page.warningCount > 0 { issuePill(String(page.warningCount), .warning) }
                         score
-                        Image(systemName: "chevron.right")
+                        EdithIconView(.chevronRight)
                             .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(.tertiary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -76,7 +76,7 @@ struct SEOAuditPageAccordion: View {
     private var statusMark: some View {
         ZStack {
             Circle().fill(statusColor.opacity(0.14))
-            Image(systemName: page.error == nil ? "checkmark" : "xmark")
+            EdithIconView(page.error == nil ? .check : .close)
                 .font(.edithText(.caption).weight(.bold))
                 .foregroundStyle(statusColor)
         }
@@ -112,14 +112,14 @@ struct SEOAuditPageAccordion: View {
             WrapHStack(spacing: UIScale.pt(10)) {
                 if let url = URL(string: page.url) {
                     Link(destination: url) {
-                        Label("Open page", systemImage: "arrow.up.right")
+                        Label("Open page", edith: .arrowUpRight)
                     }
                     .buttonStyle(.edith(.secondary))
                 }
                 Button(action: runLighthouse) {
                     Label(
                         page.hasLighthouseScores ? "Run Lighthouse again" : "Run Lighthouse",
-                        systemImage: "gauge.with.needle")
+                        edith: .gauge)
                 }
                 .buttonStyle(.edith(.secondary))
                 .disabled(!lighthouseAvailable || lighthouseRunning)
@@ -155,7 +155,7 @@ struct SEOAuditPageAccordion: View {
     private var openGraphPreview: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(6)) {
-                Label(socialPlatform.title, systemImage: socialPlatform.icon)
+                Label(socialPlatform.title, edith: socialPlatform.icon)
                     .font(.edithText(.caption).weight(.semibold))
                 Spacer(minLength: UIScale.pt(8))
                 Text(previewFormatLabel)
@@ -335,7 +335,7 @@ struct SEOAuditPageAccordion: View {
     private var previewFormatLabel: String { socialCard.formatLabel }
 
     private var previewFallback: some View {
-        Image(systemName: "photo")
+        EdithIconView(.photo)
             .font(.system(size: UIScale.pt(24), weight: .light))
             .foregroundStyle(.tertiary)
     }
@@ -361,7 +361,7 @@ struct SEOAuditPageAccordion: View {
                     }
                 } else {
                     HStack(spacing: UIScale.pt(9)) {
-                        Image(systemName: "gauge.open.with.lines.needle.33percent")
+                        EdithIconView(.gauge)
                             .foregroundStyle(DashSkin.accent(dark))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text("No Lighthouse report for this page")

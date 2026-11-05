@@ -9,7 +9,7 @@ enum WindowSweatersSurface {
             actions: [
                 .init(
                     active ? "disable" : "enable", active ? "Turn off" : "Turn on",
-                    "square.dashed")
+                    .selection)
             ], updatedAt: Date())
     }
 }

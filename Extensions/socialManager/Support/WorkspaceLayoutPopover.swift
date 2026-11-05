@@ -72,7 +72,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                                 selected: template == current, dark: dark)
                             HStack(spacing: UIScale.pt(3)) {
                                 if template.isSaved {
-                                    Image(systemName: "bookmark.fill")
+                                    EdithIconView(.bookmark)
                                         .font(.system(size: UIScale.pt(8)))
                                         .foregroundStyle(DashSkin.accent(dark))
                                 }
@@ -106,22 +106,22 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
     private var adjustments: some View {
         section("Adjust") {
             HStack(spacing: UIScale.pt(6)) {
-                action("rotate.right", "Rotate") { store.rotate(tab.id) }
-                action("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip") {
+                action(.rotate, "Rotate") { store.rotate(tab.id) }
+                action(.resizeHorizontal, "Flip") {
                     store.mirror(tab.id, .horizontal)
                 }
-                action("arrow.up.and.down.righttriangle.up.righttriangle.down", "Flip Up") {
+                action(.resizeVertical, "Flip Up") {
                     store.mirror(tab.id, .vertical)
                 }
-                action("equal.square", "Even Out") { store.equalize(tab.id) }
+                action(.calculator, "Even Out") { store.equalize(tab.id) }
                 action(
                     tab.zoomed == nil
-                        ? "arrow.up.left.and.arrow.down.right"
-                        : "arrow.down.right.and.arrow.up.left",
+                        ? .expand
+                        : .collapse,
                     tab.zoomed == nil ? "Zoom" : "Restore"
                 ) { store.toggleZoom(tab.focused) }
-                action("rectangle.split.3x1", "Separate") { store.separate(tab.id) }
-                action("bookmark", "Save") {
+                action(.columns, "Separate") { store.separate(tab.id) }
+                action(.bookmark, "Save") {
                     layoutName = ""
                     naming = true
                 }
@@ -173,15 +173,14 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         WorkspaceLayoutSection(title: title, content: content)
     }
 
-    private func action(_ systemImage: String, _ title: String, run: @escaping () -> Void)
+    private func action(_ icon: EdithIcon, _ title: String, run: @escaping () -> Void)
         -> some View
     {
         Button {
             perform(run)
         } label: {
             VStack(spacing: UIScale.pt(3)) {
-                Image(systemName: systemImage)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                EdithIconView(icon, size: UIScale.pt(16))
                     .frame(height: UIScale.pt(16))
                 Text(title)
                     .font(.edithText(.caption).weight(.medium))

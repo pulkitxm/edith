@@ -65,19 +65,19 @@ struct SEOAuditProjectView: View {
             project.name, subtitle: project.baseURL, divider: true,
             trailing: {
                 HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-                    Button("Projects", systemImage: "chevron.left", action: model.closeProject)
+                    Button("Projects", edith: .chevronLeft, action: model.closeProject)
                         .help(
                             model.isRunning
                                 ? "View projects while this audit continues" : "Back to projects")
                     if model.isRunning {
                         Button("Stop", role: .destructive, action: model.cancel)
                     } else {
-                        Button("New project", systemImage: "plus", action: model.leaveForNewProject)
+                        Button("New project", edith: .plus, action: model.leaveForNewProject)
                     }
                     Menu {
                         Button("Delete Project", role: .destructive) { confirmsDeletion = true }
                     } label: {
-                        Image(systemName: "ellipsis")
+                        EdithIcon.more.image()
                     }
                     .menuStyle(.button)
                     .menuIndicator(.hidden)
@@ -98,24 +98,24 @@ struct SEOAuditProjectView: View {
         PageMetricGrid(maximumColumns: 4) {
             metric(
                 "Pages", model.selectedRun.map { String($0.pages.count) } ?? "0", "in this run",
-                "doc.on.doc")
+                .doc)
             metric(
                 "Issues", model.selectedRun.map { String($0.issueCount) } ?? "0",
-                "across all pages", "exclamationmark.triangle")
+                "across all pages", .warning)
             metric(
                 "Average", model.selectedRun?.averageScore.map(String.init) ?? "n/a",
-                "Lighthouse score", "gauge.with.needle")
+                "Lighthouse score", .gauge)
             metric(
                 "Runs", String(project.runs.count), "saved on this Mac",
-                "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                .history)
         }
     }
 
-    private func metric(_ title: String, _ value: String, _ detail: String, _ icon: String)
+    private func metric(_ title: String, _ value: String, _ detail: String, _ icon: EdithIcon)
         -> some View
     {
         PageMetric(
-            title: title, value: value, detail: detail, symbol: icon,
+            title: title, value: value, detail: detail, icon: icon,
             tint: DashSkin.accent(dark))
     }
 
@@ -172,7 +172,7 @@ struct SEOAuditProjectView: View {
             if model.lighthouseResolved, !model.lighthouseAvailable {
                 Label(
                     "Lighthouse is not installed, so scores are skipped. Audits still check titles, descriptions and links.",
-                    systemImage: "exclamationmark.triangle.fill"
+                    edith: .warning
                 )
                 .help("Install it with npm install -g lighthouse.")
                 .font(.edithText(.callout))
@@ -184,13 +184,13 @@ struct SEOAuditProjectView: View {
 
     private var discoveryCommand: some View {
         commandCell(
-            icon: "point.3.connected.trianglepath.dotted", label: "Found",
+            icon: .nodes, label: "Found",
             value: String(model.discoveredPageURLs.count), detail: "pages found in your sitemap"
         ) {
             Button(action: model.discoverPages) {
                 Label(
                     model.discoveredPageURLs.isEmpty ? "Find pages" : "Find again",
-                    systemImage: "arrow.clockwise")
+                    edith: .refresh)
             }
             .buttonStyle(.edith(.secondary))
             .disabled(model.isRunning)
@@ -202,7 +202,7 @@ struct SEOAuditProjectView: View {
 
     private var selectionCommand: some View {
         commandCell(
-            icon: "checklist", label: "Selected", value: String(model.selectedPageCount),
+            icon: .stepTools, label: "Selected", value: String(model.selectedPageCount),
             detail: "of \(model.discoveredPageURLs.count) pages"
         ) {
             Button("Choose pages") { pageSelectionPresented = true }
@@ -216,7 +216,7 @@ struct SEOAuditProjectView: View {
 
     private var lighthouseCommand: some View {
         commandCell(
-            icon: "gauge.with.needle", label: "Lighthouse",
+            icon: .gauge, label: "Lighthouse",
             value: model.lighthouseEnabled ? "On" : "Off",
             detail: model.lighthouseEnabled
                 ? "scores for speed, accessibility, SEO" : "titles, descriptions and links only"
@@ -234,13 +234,13 @@ struct SEOAuditProjectView: View {
 
     private var auditCommand: some View {
         commandCell(
-            icon: "play.circle", label: "Run", value: "\(model.selectedPageCount)",
+            icon: .play, label: "Run", value: "\(model.selectedPageCount)",
             detail: model.lighthouseEnabled
                 ? "pages, with Lighthouse scores" : "pages, metadata only",
             highlighted: true
         ) {
             Button(action: model.auditSelectedPages) {
-                Label("Run audit", systemImage: "play.fill")
+                Label("Run audit", edith: .play)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.edith(.primary))
@@ -254,12 +254,12 @@ struct SEOAuditProjectView: View {
     }
 
     private func commandCell<Actions: View>(
-        icon: String, label: String, value: String, detail: String, highlighted: Bool = false,
+        icon: EdithIcon, label: String, value: String, detail: String, highlighted: Bool = false,
         @ViewBuilder actions: () -> Actions
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: icon)
+                EdithIconView(icon)
                     .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.accent(dark))
                     .accessibilityHidden(true)
@@ -281,7 +281,7 @@ struct SEOAuditProjectView: View {
     private var runPicker: some View {
         HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             PageCapsLabel("Run history")
-            PageIconChip(systemImage: "chevron.left", label: "Older run") {
+            PageIconChip(icon: .chevronLeft, label: "Older run") {
                 selectRun(at: selectedRunIndex + 1)
             }
             .disabled(selectedRunIndex >= project.runs.count - 1)
@@ -291,14 +291,14 @@ struct SEOAuditProjectView: View {
                         model.selectRun(run.id)
                     } label: {
                         if run.id == model.selectedRun?.id {
-                            Label(runMenuLabel(run, index: index), systemImage: "checkmark")
+                            Label(runMenuLabel(run, index: index), edith: .check)
                         } else {
                             Text(runMenuLabel(run, index: index))
                         }
                     }
                 }
             }
-            PageIconChip(systemImage: "chevron.right", label: "Newer run") {
+            PageIconChip(icon: .chevronRight, label: "Newer run") {
                 selectRun(at: selectedRunIndex - 1)
             }
             .disabled(selectedRunIndex <= 0)
@@ -341,7 +341,7 @@ struct SEOAuditProjectView: View {
                 .frame(maxWidth: .infinity)
             PageMenuChip(
                 model.severity?.rawValue.capitalized ?? "All issues",
-                systemImage: "line.3.horizontal.decrease", active: model.severity != nil
+                icon: .filter, active: model.severity != nil
             ) {
                 Button("All issues") { model.severity = nil }
                 Divider()
@@ -353,13 +353,13 @@ struct SEOAuditProjectView: View {
                 compact
                     ? model.socialPreviewPlatform.title
                     : "Preview: \(model.socialPreviewPlatform.title)",
-                systemImage: model.socialPreviewPlatform.icon
+                icon: model.socialPreviewPlatform.icon
             ) {
                 ForEach(SEOAuditSocialPlatform.allCases) { platform in
                     Button {
                         model.socialPreviewPlatform = platform
                     } label: {
-                        Label(platform.title, systemImage: platform.icon)
+                        Label(platform.title, edith: platform.icon)
                     }
                 }
             }
@@ -375,18 +375,18 @@ struct SEOAuditProjectView: View {
         } else if model.selectedRun == nil {
             if model.discoveredPageURLs.isEmpty {
                 PageEmptyState(
-                    symbolName: "point.3.connected.trianglepath.dotted",
+                    icon: .nodes,
                     title: "Find the pages to audit",
                     message:
                         "Edith reads the sitemap of \(project.baseURL.isEmpty ? "your site" : project.baseURL) to list its pages. Then you choose which ones to check. Nothing is changed on your site.",
                     primary: PageAction(
-                        "Find pages", symbolName: "magnifyingglass", identifier: "seo.discover",
+                        "Find pages", icon: .search, identifier: "seo.discover",
                         perform: model.discoverPages)
                 )
                 .pageFillViewport()
             } else {
                 PageEmptyState(
-                    symbolName: "play.circle",
+                    icon: .play,
                     title: "\(model.discoveredPageURLs.count) pages ready to audit",
                     message:
                         "\(model.selectedPageCount) are selected. Run the audit above to check each page's titles, descriptions, headings and share cards.",
@@ -398,7 +398,7 @@ struct SEOAuditProjectView: View {
             SEOAuditPageRowsSkeleton(dark: dark, rows: pendingSkeletonRows)
         } else if model.visiblePages.isEmpty {
             PageEmptyState(
-                symbolName: "line.3.horizontal.decrease.circle", title: "No pages match",
+                icon: .filter, title: "No pages match",
                 message: "Nothing in this run fits the current filter.",
                 primary: PageAction("Clear filters") {
                     model.query = ""
@@ -551,7 +551,7 @@ struct SEOAuditPageSelectionSheet: View {
     @ViewBuilder private var pages: some View {
         if model.visibleDiscoveredPageURLs.isEmpty {
             PageEmptyState(
-                symbolName: "line.3.horizontal.decrease.circle", title: "No pages match",
+                icon: .filter, title: "No pages match",
                 message: "Nothing found in your sitemap fits this filter.",
                 secondary: PageAction("Clear filter") { model.pageSelectionQuery = "" },
                 style: .compact

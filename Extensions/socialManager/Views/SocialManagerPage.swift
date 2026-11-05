@@ -48,7 +48,7 @@ struct SocialManagerPage: View {
                             }
                         }
                     } label: {
-                        Label("Add", systemImage: "plus")
+                        Label("Add", edith: .plus)
                     }
                     .fixedSize()
                     .disabled(!model.load.hasContent || model.busy)
@@ -66,7 +66,7 @@ struct SocialManagerPage: View {
                     Button {
                         model.message = nil
                     } label: {
-                        Image(systemName: "xmark")
+                        EdithIconView(.close)
                     }
                     .accessibilityLabel("Dismiss message")
                 }
@@ -197,7 +197,7 @@ struct SocialManagerPage: View {
 
     private var tabs: some View {
         HStack(spacing: UIScale.pt(8)) {
-            PageIconChip(systemImage: "sidebar.left", label: "Show accounts") {
+            PageIconChip(icon: .sidebarLeft, label: "Show accounts") {
                 if compact { compactRailPresented.toggle() } else { railOpen.toggle() }
             }
             .help("Show or hide the account list")
@@ -223,7 +223,7 @@ struct SocialManagerPage: View {
                             model.browse(model.libraryView)
                         }
                     ) {
-                        Label(model.libraryView.rawValue, systemImage: "person.2").font(
+                        Label(model.libraryView.rawValue, edith: .people).font(
                             .edithText(.subheadline))
                     }.id("accounts")
                         .contextMenu {
@@ -259,7 +259,7 @@ struct SocialManagerPage: View {
                                 Button {
                                     model.closeTab(tab.id)
                                 } label: {
-                                    Image(systemName: "xmark")
+                                    EdithIconView(.close)
                                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                                         .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
@@ -310,7 +310,7 @@ struct SocialManagerPage: View {
                         if model.libraryView != .profiles {
                             allAccounts
                         } else if let profile = model.selectedProfile {
-                            Button("All profiles", systemImage: "chevron.left") {
+                            Button("All profiles", edith: .chevronLeft) {
                                 model.profileID = nil
                             }
                             accounts(for: profile)
@@ -324,7 +324,7 @@ struct SocialManagerPage: View {
                         }
                         Label(
                             "Sign in on each website once. Cookies and website storage stay in that account's own persistent browser session on this Mac.",
-                            systemImage: "lock.shield"
+                            edith: .shield
                         )
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -336,23 +336,23 @@ struct SocialManagerPage: View {
 
     private var firstProfileState: some View {
         PageEmptyState(
-            symbolName: "person.crop.rectangle.stack",
+            icon: .people,
             title: "Keep every social account in one place",
             message:
                 "Group the accounts for each person, brand or client into a profile, then open them side by side with each one staying signed in.",
             steps: [
                 PageGuideStep(
-                    symbolName: "person.crop.circle.badge.plus", title: "Create a profile",
+                    icon: .personAdd, title: "Create a profile",
                     detail: "Name it after a person, brand or client."),
                 PageGuideStep(
-                    symbolName: "plus.app", title: "Add accounts",
+                    icon: .plus, title: "Add accounts",
                     detail: "Pick Instagram, YouTube, X, LinkedIn or any website."),
                 PageGuideStep(
-                    symbolName: "rectangle.split.2x1", title: "Sign in once, work side by side",
+                    icon: .layoutLeft, title: "Sign in once, work side by side",
                     detail: "Each account keeps its own login on this Mac."),
             ],
             primary: PageAction(
-                "Create your first profile", symbolName: "plus", identifier: "social.first-profile"
+                "Create your first profile", icon: .plus, identifier: "social.first-profile"
             ) {
                 addingProfile = true
             },
@@ -366,18 +366,18 @@ struct SocialManagerPage: View {
     private var firstAccountState: some View {
         let profile = model.catalog.profiles.first
         return PageEmptyState(
-            symbolName: "plus.app",
+            icon: .plus,
             title: "Add your first account",
             message:
                 "Choose a website such as Instagram, YouTube, X or LinkedIn, then sign in once. It stays signed in the next time you open it.",
             primary: PageAction(
-                "Add account", symbolName: "plus", identifier: "social.first-account"
+                "Add account", icon: .plus, identifier: "social.first-account"
             ) {
                 accountProfile = profile
                 addingAccount = true
             },
             secondary: PageAction(
-                "Add another profile", symbolName: "person.crop.circle.badge.plus"
+                "Add another profile", icon: .personAdd
             ) {
                 addingProfile = true
             },
@@ -487,11 +487,11 @@ struct SocialManagerPage: View {
                 Button("Reset filters") { model.resetAccountFilters() }
             } else if accounts.isEmpty {
                 PageEmptyState(
-                    symbolName: "plus.app", title: "Add accounts to \(profile.name)",
+                    icon: .plus, title: "Add accounts to \(profile.name)",
                     message:
                         "Choose Instagram, YouTube, X, LinkedIn or another website, then sign in once. Only the accounts you add appear in this profile.",
                     primary: PageAction(
-                        "Add account", symbolName: "plus", identifier: "social.profile-add-account"
+                        "Add account", icon: .plus, identifier: "social.profile-add-account"
                     ) {
                         accountProfile = profile
                         addingAccount = true
@@ -535,12 +535,12 @@ struct SocialManagerPage: View {
     private func profileActionBar(_ profile: SocialProfile) -> some View {
         HStack(spacing: UIScale.pt(8)) {
             SocialEmailMenu(model: model, profile: profile)
-            PageMenuChip("Manage profile", systemImage: "ellipsis") {
+            PageMenuChip("Manage profile", icon: .more) {
                 profileActions(profile)
                 Button("Add custom website") { addingPlatform = true }
             }
             if !model.accounts(in: profile).isEmpty {
-                Button("Add account", systemImage: "plus") { addingAccount = true }
+                Button("Add account", edith: .plus) { addingAccount = true }
                     .buttonStyle(.edith(.secondary))
             }
         }
@@ -565,22 +565,22 @@ struct SocialManagerPage: View {
                 Menu {
                     SocialAccountActions(model: model, account: account)
                 } label: {
-                    Image(systemName: "ellipsis")
+                    EdithIconView(.more).foregroundStyle(.secondary)
                 }
-                .menuStyle(.borderlessButton).fixedSize()
+                .menuStyle(.button).buttonStyle(.edith(.borderless)).fixedSize()
                 .accessibilityLabel("Manage \(account.name)")
             }
             HStack {
                 Button {
                     model.open(account)
                 } label: {
-                    Label("Open account", systemImage: "arrow.up.right")
+                    Label("Open account", edith: .arrowUpRight)
                 }
                 if model.currentTab != nil {
                     Button {
                         model.open(account, beside: true)
                     } label: {
-                        Image(systemName: "rectangle.split.2x1")
+                        EdithIconView(.layoutLeft)
                     }
                     .accessibilityLabel("Open \(account.name) side by side")
                     .help("Open beside the focused account, including accounts on another platform")

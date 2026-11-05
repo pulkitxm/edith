@@ -416,7 +416,7 @@ struct LimitsRefreshButton: View {
                         SkeletonBlock(width: 16, height: 16, corner: 8)
                     }
                 } else {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }

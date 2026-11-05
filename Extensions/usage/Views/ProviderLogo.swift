@@ -96,7 +96,7 @@ public struct ProviderSwitchButton: View {
                             Text(provider.label)
                             Spacer(minLength: 12)
                             if selection == provider {
-                                Image(systemName: "checkmark")
+                                EdithIconView(.check)
                                     .font(.edithText(.caption).weight(.semibold))
                             }
                         }

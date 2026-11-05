@@ -83,7 +83,7 @@ private struct SEOAuditProjectsView: View {
                 trailing: {
                     if !(model.projectsLoaded && model.projects.isEmpty) {
                         Button(action: model.presentNewProject) {
-                            Label("New project", systemImage: "plus")
+                            Label("New project", edith: .plus)
                         }
                         .buttonStyle(.edith(.primary))
                         .disabled(model.isRunning)
@@ -145,24 +145,24 @@ private struct SEOAuditProjectsView: View {
     private var projectContent: some View {
         if model.projects.isEmpty {
             PageEmptyState(
-                symbolName: "doc.text.magnifyingglass",
+                icon: .seoAudit,
                 title: "Check your website for SEO problems",
                 message:
                     "Enter your site's address and Edith finds its pages, then checks titles, descriptions, share cards and more, one page at a time.",
                 steps: [
                     PageGuideStep(
-                        symbolName: "link", title: "Add your site",
+                        icon: .link, title: "Add your site",
                         detail: "Type a URL such as example.com or localhost:3000."),
                     PageGuideStep(
-                        symbolName: "point.3.connected.trianglepath.dotted",
+                        icon: .nodes,
                         title: "Find its pages",
                         detail: "Edith reads your sitemap, then you choose which pages to check."),
                     PageGuideStep(
-                        symbolName: "list.clipboard", title: "Read the report",
+                        icon: .clipboard, title: "Read the report",
                         detail: "See issues per page, how it looks when shared, and past runs."),
                 ],
                 primary: PageAction(
-                    "Add your site", symbolName: "plus", identifier: "seo.new-project",
+                    "Add your site", icon: .plus, identifier: "seo.new-project",
                     perform: model.presentNewProject),
                 footnote:
                     "Audits only read your public pages. Results are saved on this Mac and never uploaded."
@@ -213,7 +213,7 @@ struct SEOAuditNewProjectSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.top)) {
             HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
+                EdithIconView(.nodes)
                     .font(.system(size: UIScale.pt(21), weight: .medium))
                     .foregroundStyle(DashSkin.accent(dark))
                     .frame(width: UIScale.pt(38), height: UIScale.pt(38))
@@ -234,12 +234,12 @@ struct SEOAuditNewProjectSheet: View {
                 fieldLabel("Site URL")
                 EdithTextField(
                     placeholder: "localhost:3000 or example.com", text: $model.input,
-                    icon: "link", clearable: true,
+                    icon: .link, clearable: true,
                     onSubmit: { Task { await model.beginNewProject() } })
                 fieldLabel("Project name").padding(.top, UIScale.pt(4))
                 EdithTextField(
                     placeholder: "Optional, defaults to the site address", text: $model.projectName,
-                    icon: "folder")
+                    icon: .folder)
             }
             if model.lighthouseResolved {
                 lighthouseNote
@@ -258,7 +258,7 @@ struct SEOAuditNewProjectSheet: View {
                         .lineLimit(1)
                 }
                 Button(action: { Task { await model.beginNewProject() } }) {
-                    Label("Create and find pages", systemImage: "arrow.right")
+                    Label("Create and find pages", edith: .arrowRight)
                 }
                 .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
@@ -287,7 +287,7 @@ struct SEOAuditNewProjectSheet: View {
             )
             .fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: available ? "checkmark.circle.fill" : "info.circle.fill")
+            EdithIconView(available ? .success : .info)
                 .foregroundStyle(available ? DashSkin.ok : Color.secondary)
                 .accessibilityHidden(true)
         }
@@ -374,8 +374,7 @@ private struct SEOAuditProjectRow: View {
             Menu {
                 projectActions
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.edithText(.callout).weight(.semibold))
+                EdithIcon.more.image()
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(width: UIScale.pt(Self.menuSize), height: UIScale.pt(Self.menuSize))
                     .contentShape(Rectangle())
@@ -394,16 +393,16 @@ private struct SEOAuditProjectRow: View {
     @ViewBuilder
     private var projectActions: some View {
         Button(action: viewDetails) {
-            Label("View details", systemImage: "doc.text.magnifyingglass")
+            Label("View details", edith: .seoAudit)
         }
         .disabled(!canViewDetails)
         Button(action: rename) {
-            Label("Rename", systemImage: "pencil")
+            Label("Rename", edith: .edit)
         }
         .disabled(!actionsEnabled)
         Divider()
         Button(role: .destructive, action: delete) {
-            Label("Delete", systemImage: "trash")
+            Label("Delete", edith: .trash)
         }
         .disabled(!actionsEnabled)
     }
@@ -523,7 +522,7 @@ private struct SEOAuditProjectRow: View {
     }
 
     private var projectMark: some View {
-        Image(systemName: "globe.desk")
+        EdithIconView(.globe)
             .font(.system(size: UIScale.pt(20), weight: .light))
             .foregroundStyle(DashSkin.accent(dark))
     }
@@ -559,7 +558,7 @@ private struct SEOAuditRenameProjectSheet: View {
                     .foregroundStyle(.secondary)
             }
             EdithTextField(
-                placeholder: "Project name", text: $name, icon: "folder", clearable: true,
+                placeholder: "Project name", text: $name, icon: .folder, clearable: true,
                 onSubmit: submit)
             HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button("Cancel") { dismiss() }

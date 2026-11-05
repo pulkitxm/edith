@@ -40,7 +40,7 @@ struct WindowSweatersRows: View {
                 SettingsNoticeRow(
                     "Starts when this extension is enabled",
                     message: "Your choice is saved and takes effect as soon as it runs.",
-                    symbol: "clock.fill")
+                    icon: .clock)
             }
             Picker(selection: $pattern.notifyingSettingsChange()) {
                 Text("By App").tag("by-app")

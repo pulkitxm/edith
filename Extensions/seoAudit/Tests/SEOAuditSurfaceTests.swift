@@ -34,7 +34,7 @@ import Testing
         defer { fixture.remove() }
         let all = try await fixture.snapshot()
         #expect(all.metrics.map(\.title) == ["Projects", "Audited pages", "Issues"])
-        #expect(all.rows.allSatisfy { $0.icon == "globe" && $0.actions.isEmpty })
+        #expect(all.rows.allSatisfy { $0.icon == .globe && $0.actions.isEmpty })
         #expect(all.actions.isEmpty)
         #expect(all.rows.allSatisfy { $0.value.hasSuffix("%") || $0.value == "Not run" })
         fixture.tile.sourceIDs = [fixture.project.id.uuidString.uppercased()]

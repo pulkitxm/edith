@@ -55,13 +55,13 @@ struct DashboardView: View {
 
     private static let firstRunSteps = [
         PageGuideStep(
-            symbolName: "folder.badge.gearshape", title: "Collect",
+            icon: .folder, title: "Collect",
             detail: "Edith reads your agents' local history. This runs on your Mac."),
         PageGuideStep(
-            symbolName: "chart.bar", title: "Explore",
+            icon: .chartBar, title: "Explore",
             detail: "See cost and tokens by day, model, project and machine."),
         PageGuideStep(
-            symbolName: "gauge.with.dots.needle.67percent", title: "Watch your limits",
+            icon: .gauge, title: "Watch your limits",
             detail: "Track how much of each plan's allowance you have used."),
     ]
 
@@ -101,11 +101,11 @@ struct DashboardView: View {
             switch emptyState {
             case .collecting:
                 PageEmptyState(
-                    symbolName: "chart.bar.doc.horizontal",
+                    icon: .chartBar,
                     title: "Collecting your usage",
                     message:
                         "Edith is reading the history your coding agents keep on this Mac. The first collection can take a few minutes, and the dashboard fills in as soon as it finishes.",
-                    secondary: PageAction("Watch the log", symbolName: "terminal") {
+                    secondary: PageAction("Watch the log", icon: .terminal) {
                         withAnimation(.easeOut(duration: 0.15)) { showLog = true }
                     },
                     footnote:
@@ -114,15 +114,15 @@ struct DashboardView: View {
                 .fillingPage(emptyStateFillsPage)
             case .firstRun:
                 PageEmptyState(
-                    symbolName: "chart.bar.fill",
+                    icon: .usage,
                     title: "See what your coding agents cost",
                     message:
                         "Agent Usage adds up the tokens, cost and rate limits from agents like Claude Code and Codex, all from files already on this Mac.",
                     steps: Self.firstRunSteps,
-                    primary: PageAction("Collect usage now", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Collect usage now", icon: .refresh) {
                         refresh.requestRefresh()
                     },
-                    secondary: PageAction("Show the log", symbolName: "terminal") {
+                    secondary: PageAction("Show the log", icon: .terminal) {
                         withAnimation(.easeOut(duration: 0.15)) { showLog = true }
                     },
                     footnote:
@@ -131,14 +131,14 @@ struct DashboardView: View {
                 .fillingPage(emptyStateFillsPage)
             case .failed(let message):
                 PageEmptyState(
-                    symbolName: "exclamationmark.triangle",
+                    icon: .warning,
                     title: "Usage could not be read",
                     message:
                         "\(message) Your usage files were not changed. Collecting again usually fixes this.",
-                    primary: PageAction("Collect again", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Collect again", icon: .refresh) {
                         refresh.requestRefresh()
                     },
-                    secondary: PageAction("Show the log", symbolName: "terminal") {
+                    secondary: PageAction("Show the log", icon: .terminal) {
                         withAnimation(.easeOut(duration: 0.15)) { showLog = true }
                     }
                 )
@@ -227,13 +227,13 @@ struct DashboardView: View {
         HStack(spacing: UIScale.pt(6)) {
             PageToolbarButton(
                 action: refresh.requestRefresh,
-                systemImage: "arrow.clockwise",
+                icon: .refresh,
                 helperText: "Collect new usage now",
                 isLoading: refresh.updating
             )
             PageToolbarButton(
                 action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
-                systemImage: "terminal",
+                icon: .terminal,
                 helperText: showLog ? "Hide the collector log" : "Show the collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
@@ -286,7 +286,7 @@ struct DashboardView: View {
                             showMoreMetrics
                                 ? "Show fewer metrics"
                                 : "Show \(model.kpis.count - 4) more metrics")
-                        Image(systemName: "chevron.down")
+                        EdithIconView(.chevronDown)
                             .font(.system(size: UIScale.pt(9), weight: .semibold))
                             .rotationEffect(.degrees(showMoreMetrics ? 180 : 0))
                             .accessibilityHidden(true)
@@ -390,7 +390,7 @@ struct DashboardView: View {
         Button {
             folderPickerOpen = true
         } label: {
-            PageChipLabel(folderScopeLabel, systemImage: "folder", menu: true)
+            PageChipLabel(folderScopeLabel, icon: .folder, menu: true)
         }
         .buttonStyle(.pageChip(active: !model.selectedPaths.isEmpty)).fixedSize()
         .popover(isPresented: $folderPickerOpen, arrowEdge: .bottom) {
@@ -412,7 +412,7 @@ struct DashboardView: View {
         Button {
             sourcePickerOpen = true
         } label: {
-            PageChipLabel(sourceSummary, systemImage: "square.stack.3d.up", menu: true)
+            PageChipLabel(sourceSummary, icon: .layers, menu: true)
         }
         .buttonStyle(.pageChip(active: model.selectedSources.count != model.allSources.count))
         .fixedSize()
@@ -440,7 +440,7 @@ struct DashboardView: View {
             } label: {
                 PageChipLabel(
                     machineSummary(now: timeline.date),
-                    systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill",
+                    icon: stale.isEmpty ? .server : .warning,
                     menu: true)
             }
             .buttonStyle(
@@ -490,7 +490,7 @@ struct DashboardView: View {
         Button {
             modelPickerOpen = true
         } label: {
-            PageChipLabel(modelSummary, systemImage: "cpu", menu: true)
+            PageChipLabel(modelSummary, icon: .cpu, menu: true)
         }
         .buttonStyle(.pageChip(active: model.selectedModels.count != model.allModels.count))
         .fixedSize()
@@ -733,7 +733,7 @@ struct DashboardView: View {
             HStack(spacing: UIScale.pt(2)) {
                 Text(title)
                 if model.sortColumn == col {
-                    Image(systemName: model.sortAscending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.sortAscending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(8), weight: .semibold))
                 }
             }

@@ -88,7 +88,7 @@ struct UsageMachineSettingsRows: View {
                 Button {
                     forget(machine)
                 } label: {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Drop what \(machine.name) gave and stop counting it")

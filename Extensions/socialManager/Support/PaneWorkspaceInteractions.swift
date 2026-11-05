@@ -6,7 +6,7 @@ import SwiftUI
 struct WorkspacePaneIdentity {
     let title: String
     let category: String
-    let symbol: String
+    let icon: EdithIcon
     var image: NSImage?
 }
 
@@ -40,7 +40,7 @@ struct WorkspacePaneMark: View {
             if let image = pane.image {
                 Image(nsImage: image).resizable().scaledToFill().clipShape(Circle())
             } else {
-                Image(systemName: pane.symbol).font(.system(size: size))
+                EdithIconView(pane.icon, size: size)
             }
         }.frame(width: size, height: size)
     }

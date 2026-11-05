@@ -112,7 +112,7 @@ struct SocialWorkspaceLayout: View {
                                     dark: scheme == .dark)
                                 Text(model.title(other)).font(.edithText(.subheadline)).lineLimit(1)
                                 Spacer(minLength: 0)
-                                Image(systemName: "plus.rectangle.on.rectangle").font(
+                                EdithIconView(.plus).font(
                                     .edithText(.caption))
                             }
                             .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(6))

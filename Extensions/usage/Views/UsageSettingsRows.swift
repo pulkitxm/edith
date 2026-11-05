@@ -285,7 +285,7 @@ struct UsageSettingsRows: View {
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
             if !hasProvider {
-                Label("Agent Usage is paused", systemImage: "pause.circle.fill")
+                Label("Agent Usage is paused", edith: .pause)
                     .foregroundStyle(.secondary)
                 Text(
                     "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."

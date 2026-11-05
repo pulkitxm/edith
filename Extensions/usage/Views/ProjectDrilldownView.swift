@@ -88,7 +88,7 @@ struct ProjectDrilldownView: View {
             }
             if let message = actions.failureMessage {
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    EdithIconView(.warning)
                     Text(message).lineLimit(2)
                     Spacer(minLength: 0)
                     Button("Dismiss") { actions.dismissFailure() }
@@ -171,7 +171,7 @@ struct ProjectDrilldownView: View {
             model.projListOpen.toggle()
         } label: {
             HStack(spacing: UIScale.pt(4)) {
-                Image(systemName: model.projListOpen ? "chevron.down" : "chevron.right")
+                EdithIconView(model.projListOpen ? .chevronDown : .chevronRight)
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
                 Text(
                     "\(model.projListOpen ? "Hide" : "Show") repositories (\(model.projectTree.count))"
@@ -207,7 +207,7 @@ struct ProjectDrilldownView: View {
             HStack(spacing: UIScale.pt(3)) {
                 Text(title).font(.edithText(.subheadline).weight(.medium))
                 if model.projSortKey == key {
-                    Image(systemName: model.projSortAscending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.projSortAscending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 Spacer(minLength: 0)
@@ -391,7 +391,7 @@ private struct ProjectRow: View {
     private var nameColumn: some View {
         HStack(spacing: UIScale.pt(5)) {
             if hasChildren {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                EdithIconView(expanded ? .chevronDown : .chevronRight)
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(10))
@@ -447,7 +447,7 @@ private struct ProjectRow: View {
 
     @ViewBuilder private var iconView: some View {
         let img = ZStack(alignment: .topTrailing) {
-            Image(systemName: icon).font(.edithText(.caption))
+            EdithIconView(icon).font(.edithText(.caption))
             if node.badge > 0 {
                 Text(node.badge > 99 ? "99+" : "\(node.badge)")
                     .font(.edithText(.caption).weight(.semibold))
@@ -483,12 +483,12 @@ private struct ProjectRow: View {
         }
     }
 
-    private var icon: String {
+    private var icon: EdithIcon {
         switch node.kind {
-        case .repository: return "shippingbox"
-        case .folder: return "folder"
-        case .worktree: return "arrow.triangle.branch"
-        case .chat, .more: return "message"
+        case .repository: return .box
+        case .folder: return .folder
+        case .worktree: return .quinjet
+        case .chat, .more: return .message
         }
     }
 }

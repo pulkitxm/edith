@@ -124,7 +124,7 @@ struct SocialOpenAccountsMenu: View {
     let accounts: [SocialAccount]
 
     var body: some View {
-        PageMenuChip("Open all (\(accounts.count))", systemImage: "rectangle.stack") {
+        PageMenuChip("Open all (\(accounts.count))", icon: .layers) {
             Button("Open all in tabs") { model.openAccounts(accounts) }
             if accounts.count > 1 {
                 Menu("Open all side by side") {
@@ -173,13 +173,14 @@ struct SocialAccountListRow: View {
             .buttonStyle(.edith(.borderless))
             .accessibilityLabel("Open \(model.accountTitle(account))")
             if model.paneIsOpen(account.id.uuidString) {
-                Image(systemName: "circle.fill").font(.system(size: UIScale.pt(6)))
+                EdithIconView(.dot, size: UIScale.pt(16))
+                    .frame(width: UIScale.pt(6), height: UIScale.pt(6))
                     .foregroundStyle(DashSkin.accent(scheme == .dark)).accessibilityLabel("Open")
             }
             Menu {
                 SocialAccountActions(model: model, account: account)
             } label: {
-                Image(systemName: "ellipsis").accessibilityHidden(true)
+                EdithIconView(.more).accessibilityHidden(true)
             }
             .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
             .menuIndicator(.hidden).fixedSize()

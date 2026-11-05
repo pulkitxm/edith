@@ -194,11 +194,11 @@ struct HerdrDragOverlay: View {
             }
         } else {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "square.grid.2x2")
+                EdithIconView(.grid)
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                 Text("Layouts")
                     .font(.edithText(.subheadline).weight(.semibold))
-                Image(systemName: "chevron.up")
+                EdithIconView(.chevronUp)
                     .font(.system(size: UIScale.pt(8), weight: .bold))
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
@@ -233,7 +233,7 @@ struct HerdrDragOverlay: View {
             }
             HStack(spacing: UIScale.pt(2)) {
                 if thumbnail.template.isSaved {
-                    Image(systemName: "bookmark.fill")
+                    EdithIconView(.bookmark)
                         .font(.system(size: UIScale.pt(7)))
                         .foregroundStyle(accent)
                 }
@@ -266,7 +266,7 @@ struct HerdrDragOverlay: View {
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             if drag.target == nil {
-                Image(systemName: "nosign")
+                EdithIconView(.blocked)
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }

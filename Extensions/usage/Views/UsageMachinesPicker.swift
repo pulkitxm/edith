@@ -54,7 +54,7 @@ struct UsageMachinesPicker: View {
     private func shownRow(_ group: MachineGroup, now: Date) -> some View {
         let shown = model.machineIsShown(group)
         let partial = model.machineIsPartlyShown(group)
-        let mark = shown ? "checkmark.circle.fill" : (partial ? "circle.lefthalf.filled" : "circle")
+        let mark: EdithIcon = shown ? .success : (partial ? .contrast : .ring)
         let freshness = freshness(group, now: now)
         return Button {
             if NSEvent.modifierFlags.contains(.option) {
@@ -64,7 +64,7 @@ struct UsageMachinesPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: mark)
+                EdithIconView(mark)
                     .font(.edithText(.caption))
                     .foregroundStyle(
                         shown || partial ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
@@ -83,7 +83,7 @@ struct UsageMachinesPicker: View {
                     if let freshness {
                         HStack(spacing: UIScale.pt(4)) {
                             if freshness.needsAttention {
-                                Image(systemName: "exclamationmark.triangle.fill")
+                                EdithIconView(.warning)
                                     .font(.system(size: UIScale.pt(8)))
                             }
                             Text(freshness.statusLabel)
