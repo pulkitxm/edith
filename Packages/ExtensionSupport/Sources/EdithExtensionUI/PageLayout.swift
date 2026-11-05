@@ -7,6 +7,7 @@ public enum PageMetrics {
     public static let compactGutter = 18.0
     public static let top = 18.0
     public static let headerBottom = 16.0
+    public static let pinnedContentTop = 20.0
     public static let bottom = 28.0
     public static let titleSize = 28.0
     public static let compactTitleSize = 24.0
@@ -84,6 +85,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
                     ) {
                         content()
                     }
+                    .padding(.top, pinnedHeader ? UIScale.pt(PageMetrics.pinnedContentTop) : 0)
                     .pageContent(compact, width: width)
                 }
                 .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
