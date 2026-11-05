@@ -65,12 +65,13 @@ The Virtual Camera package contains a small carrier app,
 Edith and notarized, so no other software is needed.
 
 Open **Output** on the Virtual Camera page and choose **Install Edith Camera**,
-or run `ed camera extension install --yes`. Edith asks for an administrator
-password once to place the carrier in `/Applications/Edith Extensions`, because
-macOS installs camera extensions only from apps in the Applications folder. It
-then asks macOS to activate the extension. Approve it in System Settings under
-General, Login Items & Extensions, Camera Extensions; **Open System Settings**
-on the Output tab goes there.
+or run `ed camera extension install --yes`. Edith's privileged background
+service places the carrier in `/Applications/Edith Extensions`, because macOS
+installs camera extensions only from apps in the Applications folder. If that
+service is not approved yet, macOS opens Login Items in System Settings so you
+can allow it. Edith then asks macOS to activate the extension. Approve it in
+System Settings under General, Login Items & Extensions, Camera Extensions;
+**Open System Settings** on the Output tab goes there.
 
 `ed camera status` reports `extension: installed` once apps can see it. Pick
 **Edith Camera** in Zoom, Meet, FaceTime or any other app. **Remove** on the
