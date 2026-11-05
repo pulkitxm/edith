@@ -51,18 +51,21 @@ export function validateCameraCarrierDefinition(value) {
   return value;
 }
 
-async function plist(file, object) {
+async function plist(file, object, format = "FMT_BINARY") {
   await mkdir(dirname(file), { recursive: true });
   const json = `${file}.json`;
   await writeFile(json, JSON.stringify(object));
   execFileSync("python3", [
     "-c",
-    "import json,plistlib,sys; plistlib.dump(json.load(open(sys.argv[1])),open(sys.argv[2],'wb'),fmt=plistlib.FMT_BINARY)",
+    `import json,plistlib,sys; plistlib.dump(json.load(open(sys.argv[1])),open(sys.argv[2],'wb'),fmt=plistlib.${format})`,
     json,
     file,
   ]);
   await rm(json);
 }
+
+export const writeEntitlements = (file, object) =>
+  plist(file, object, "FMT_XML");
 
 function sign(path, identity, development, entitlements) {
   const options = development ? [] : ["--options", "runtime", "--timestamp"];
@@ -221,7 +224,7 @@ export async function buildCameraCarrier({
     if (!development) {
       await copyFile(profile, join(contents, "embedded.provisionprofile"));
       const group = `${team}.${metadata.extensionIdentifier}`;
-      await plist(
+      await writeEntitlements(
         entitlements,
         role === "cameraProvider"
           ? {
