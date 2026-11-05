@@ -326,6 +326,8 @@ final class HerdrStore {
     private let remoteAccountAgentStarter:
         @Sendable (ClaudeAccount, String, [String], String, String, Machine) async throws -> Void
     private let newAgentPaneCreator: HerdrNewAgentPaneCreator
+    private let agentRestartSteps: HerdrAgentRestartSteps
+    private var restartingAgents: Set<String> = []
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
     @ObservationIgnored private var unconfirmedAgentKinds: [String: String] = [:]
@@ -389,6 +391,7 @@ final class HerdrStore {
                     environment: environment, pane: pane,
                     on: machine)
             },
+        agentRestartSteps: HerdrAgentRestartSteps = .live,
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
                 try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
@@ -435,6 +438,7 @@ final class HerdrStore {
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.newAgentPaneCreator = newAgentPaneCreator
+        self.agentRestartSteps = agentRestartSteps
         self.agentStarter = agentStarter
         self.accountAgentStarter = accountAgentStarter
         self.remoteAccountAgentStarter = remoteAccountAgentStarter
@@ -2388,6 +2392,147 @@ final class HerdrStore {
         }
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
+        let launch = try await prepareAgentLaunch(
+            kind: kind, accountID: accountID, machine: machine)
+        let created = try await newAgentPaneCreator(
+            kind, machine, existingSpace, newSpaceLabel, launch.account?.launchEnvironment ?? [:])
+        try Task.checkCancellation()
+        let placeholder = HerdrAgent.make(
+            machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
+            sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
+            status: .unknown, title: kind,
+            workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
+        trackLaunching(placeholder, account: launch.account)
+        if openBeside {
+            open(placeholder, beside: .right)
+        } else {
+            open(placeholder)
+        }
+        beginAgentStartup(launch, agent: placeholder, machine: machine)
+    }
+
+    func restartAgent(
+        _ agent: HerdrAgent, kind target: String? = nil, accountID: String? = nil
+    ) async throws {
+        if uiClient != nil {
+            var object: [String: Any] = ["agentID": agent.id]
+            object["kind"] = target
+            object["accountID"] = accountID
+            try await performUI("herdr.ui.restart", object: object)
+            return
+        }
+        guard restartingAgents.insert(agent.id).inserted else { return }
+        defer { restartingAgents.remove(agent.id) }
+        let source = HerdrKind.displayName(for: agent.kind)
+        let kind = target ?? source
+        guard !agent.isTerminal, AgentResume.profile(for: source) != nil,
+            kind == source || AgentResume.handoffTargets(from: source).contains(kind)
+        else { throw HerdrAgentRestartError.unsupported(kind) }
+        guard let host = hosts.first(where: { $0.id == agent.machineID }), host.reachable else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        let machine = machine(for: host)
+        guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
+        let selection =
+            kind == source && kind == "Claude Code"
+            ? accountID ?? accountSessions[agent.id] ?? "cli" : accountID
+        let plan = try await prepareAgentLaunch(
+            kind: kind, accountID: selection, machine: machine)
+        if plan.account != nil, agent.session != HerdrTerminalSpace.defaultSession {
+            throw HerdrAgentRestartError.accountNeedsDefaultSession
+        }
+        let exitOutput = try await agentRestartSteps.quit(agent)
+        try Task.checkCancellation()
+        guard
+            let sessionID = AgentResume.sessionID(
+                kind: source, native: agent.nativeSession, exitOutput: exitOutput)
+        else { throw HerdrAgentRestartError.sessionUnknown(source) }
+        let leading = try await restartArguments(
+            source: source, sessionID: sessionID, target: kind, account: plan.account,
+            machine: machine)
+        let launch = try await prepareAgentLaunch(
+            kind: kind, accountID: selection, machine: machine, leadingArguments: leading)
+        let created = try await agentRestartSteps.createPane(
+            agent, machine, launch.account?.launchEnvironment ?? [:])
+        try Task.checkCancellation()
+        let replacement = HerdrAgent.make(
+            machineID: agent.machineID, machineName: agent.machineName,
+            machineIsLocal: agent.machineIsLocal, sshTarget: agent.sshTarget,
+            session: agent.session, pane: created.paneID, kind: kind, status: .unknown,
+            title: kind, workspace: agent.workspace, cwd: agent.cwd)
+        trackLaunching(replacement, account: launch.account)
+        replaceOpenAgent(agent.id, with: replacement)
+        accountSessions.removeValue(forKey: agent.id)
+        accountSessionIdentities.removeValue(forKey: agent.id)
+        persistAccountSessions()
+        beginAgentStartup(launch, agent: replacement, machine: machine)
+        try? await agentRestartSteps.closePane(agent, machine)
+    }
+
+    private func restartArguments(
+        source: String, sessionID: String, target: String, account: ClaudeAccount?,
+        machine: Machine?
+    ) async throws -> [String] {
+        guard source == "Claude Code" else {
+            return source == target
+                ? AgentResume.resumeArguments(kind: source, sessionID: sessionID)
+                : AgentResume.handoffArguments(
+                    from: source, sessionID: sessionID, to: target)
+        }
+        let isSameAgent = target == source
+        let script = ClaudeTranscriptCommand.script(
+            sessionID: sessionID, roots: try await claudeConfigurationRoots(on: machine),
+            destination: isSameAgent
+                ? try claudeConfigurationRoot(for: account, on: machine) : nil)
+        let transcript = try await agentRestartSteps.locateClaudeTranscript(script, machine)
+        guard isSameAgent else {
+            return AgentResume.handoffArguments(
+                from: source, sessionID: sessionID, to: target, transcriptPath: transcript)
+        }
+        guard transcript != nil else {
+            throw HerdrAgentRestartError.transcriptMissing(sessionID)
+        }
+        return AgentResume.resumeArguments(kind: source, sessionID: sessionID)
+    }
+
+    private func claudeConfigurationRoots(on machine: Machine?) async throws -> [String] {
+        guard claudeAccounts.hasConfiguredStore else { return [Self.defaultClaudeRoot] }
+        try await claudeAccounts.load()
+        return try [Self.defaultClaudeRoot]
+            + claudeAccounts.state.accounts.filter { $0.authentication == .browserLogin }.map {
+                try claudeConfigurationRoot(for: $0, on: machine)
+            }
+    }
+
+    private func claudeConfigurationRoot(
+        for account: ClaudeAccount?, on machine: Machine?
+    ) throws -> String {
+        guard let account, account.authentication == .browserLogin else {
+            return Self.defaultClaudeRoot
+        }
+        if machine != nil {
+            return try ClaudeAccountImport.remoteProfileExpression(accountID: account.id)
+        }
+        return ShellQuote.quote(
+            try claudeAccounts.directory.appendingPathComponent(account.id.uuidString).path)
+    }
+
+    private static let defaultClaudeRoot = "\"$HOME\"/.claude"
+
+    private struct PreparedAgentLaunch: Sendable {
+        var kind: String
+        var account: ClaudeAccount?
+        var accountDirectory: URL?
+        var command: String
+        var arguments: [String]
+        var leadingArguments: [String]
+        var environment: String
+        var localAccountCommand: String?
+    }
+
+    private func prepareAgentLaunch(
+        kind: String, accountID: String?, machine: Machine?, leadingArguments: [String] = []
+    ) async throws -> PreparedAgentLaunch {
         var account: ClaudeAccount?
         if kind == "Claude Code", accountID != "cli",
             accountID != nil || claudeAccounts.hasConfiguredStore
@@ -2425,8 +2570,11 @@ final class HerdrStore {
             throw ClaudeAccountError.invalidRequest
         }
         let accountCommand = HerdrLaunchSettings.command(for: kind, in: defaults)
-        let accountArguments = HerdrLaunchSettings.launchArguments(
-            kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults), in: defaults)
+        let accountArguments =
+            leadingArguments
+            + HerdrLaunchSettings.launchArguments(
+                kind: kind, options: HerdrLaunchSettings.options(for: kind, in: defaults),
+                in: defaults)
         let accountEnvironment = HerdrLaunchSettings.sharedEnvironment(in: defaults)
         let accountDirectory: URL?
         let localAccountCommand: String?
@@ -2455,43 +2603,67 @@ final class HerdrStore {
             accountDirectory = nil
             localAccountCommand = nil
         }
-        let created = try await newAgentPaneCreator(
-            kind, machine, existingSpace, newSpaceLabel, account?.launchEnvironment ?? [:])
-        try Task.checkCancellation()
-        let placeholder = HerdrAgent.make(
-            machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
-            sshTarget: host.sshTarget, session: "default", pane: created.paneID, kind: kind,
-            status: .unknown, title: kind,
-            workspace: existingSpace?.label ?? newSpaceLabel ?? "", cwd: "")
-        launchingAgents[placeholder.id] = placeholder
-        accountSessions[placeholder.id] = account?.id.uuidString
-        accountSessionIdentities.removeValue(forKey: placeholder.id)
+        return PreparedAgentLaunch(
+            kind: kind, account: account, accountDirectory: accountDirectory,
+            command: accountCommand, arguments: accountArguments,
+            leadingArguments: leadingArguments, environment: accountEnvironment,
+            localAccountCommand: localAccountCommand)
+    }
+
+    private func trackLaunching(_ agent: HerdrAgent, account: ClaudeAccount?) {
+        launchingAgents[agent.id] = agent
+        accountSessions[agent.id] = account?.id.uuidString
+        accountSessionIdentities.removeValue(forKey: agent.id)
         persistAccountSessions()
-        if openBeside {
-            open(placeholder, beside: .right)
-        } else {
-            open(placeholder)
+    }
+
+    private func replaceOpenAgent(_ old: String, with replacement: HerdrAgent) {
+        guard let holder = session(old)?.holder, let tab = tab(containing: old) else {
+            open(replacement)
+            return
         }
+        usage.record(replacement)
+        adoptSession(for: replacement, showing: nil)
+        updateTab(tab.id) { tab in
+            tab.layout = tab.layout.replacing(old, with: replacement.id)
+            if tab.focused == old { tab.focused = replacement.id }
+            if tab.zoomed == old { tab.zoomed = replacement.id }
+        }
+        holder.stop()
+        removeClosedSession(old, holder: holder)
+    }
+
+    private func beginAgentStartup(
+        _ launch: PreparedAgentLaunch, agent: HerdrAgent, machine: Machine?
+    ) {
         let start = agentStarter
+        let startRestarted = agentRestartSteps.start
         let startAccount = accountAgentStarter
         let startRemoteAccount = remoteAccountAgentStarter
-        let id = placeholder.id
+        let id = agent.id
+        let account = launch.account
+        let kind = launch.kind
         agentStartupTasks[id] = work.start { [weak self] in
             do {
-                if let account, let accountDirectory, let localAccountCommand {
+                if let account, let accountDirectory = launch.accountDirectory,
+                    let localAccountCommand = launch.localAccountCommand
+                {
                     if account.authentication == .browserLogin {
                         let storage = ClaudeAccountStorage(directory: accountDirectory)
                         try await storage.seedLogin(account: account)
                     }
                     try Task.checkCancellation()
-                    try await startAccount(localAccountCommand, created.paneID)
+                    try await startAccount(localAccountCommand, agent.pane)
                 } else if let account, let machine {
                     try await startRemoteAccount(
-                        account, accountCommand, accountArguments, accountEnvironment,
-                        created.paneID, machine)
+                        account, launch.command, launch.arguments, launch.environment,
+                        agent.pane, machine)
                     try Task.checkCancellation()
+                } else if launch.leadingArguments.isEmpty {
+                    try await start(kind, agent.pane, machine)
                 } else {
-                    try await start(kind, created.paneID, machine)
+                    try await startRestarted(
+                        kind, launch.leadingArguments, agent.pane, agent.session, machine)
                 }
                 try Task.checkCancellation()
                 if let account, account.isLoggedOut, account.authentication == .browserLogin,

@@ -421,6 +421,21 @@ final class HerdrUIDefaults: UserDefaults {
                 let agent = worker.currentAgent(id)
             else { throw ExtensionPeerError.invalidRequest }
             try await store.closeAgent(agent)
+        case "herdr.ui.restart":
+            guard Set(object.keys).isSubset(of: ["agentID", "kind", "accountID"]),
+                let id = object["agentID"] as? String, let agent = worker.currentAgent(id)
+            else { throw ExtensionPeerError.invalidRequest }
+            if let kind = object["kind"], !(kind is String) {
+                throw ExtensionPeerError.invalidRequest
+            }
+            if let value = object["accountID"] {
+                guard let selection = value as? String,
+                    selection == "cli" || UUID(uuidString: selection) != nil
+                else { throw ExtensionPeerError.invalidRequest }
+            }
+            try await store.restartAgent(
+                agent, kind: object["kind"] as? String,
+                accountID: object["accountID"] as? String)
         case "herdr.ui.focusAgent":
             guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
                 let agent = worker.currentAgent(id)
