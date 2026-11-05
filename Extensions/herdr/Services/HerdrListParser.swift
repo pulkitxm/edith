@@ -112,6 +112,17 @@ public enum HerdrListParser {
         return HerdrCreatedPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
     }
 
+    public static func splitPane(from text: String) -> HerdrCreatedPane? {
+        guard let json = firstJSON(in: text) as? [String: Any],
+            let payload = unwrap(json) as? [String: Any],
+            let pane = payload["pane"] as? [String: Any],
+            let paneID = string(in: pane, keys: ["pane_id", "id"]),
+            let tabID = string(in: pane, keys: ["tab_id"]),
+            let workspaceID = string(in: pane, keys: ["workspace_id"])
+        else { return nil }
+        return HerdrCreatedPane(workspaceID: workspaceID, tabID: tabID, paneID: paneID)
+    }
+
     public static func spacePanes(
         in board: HerdrSnapshotBoard, session: String, space: String = HerdrTerminalSpace.label
     ) -> [HerdrSpacePane] {
