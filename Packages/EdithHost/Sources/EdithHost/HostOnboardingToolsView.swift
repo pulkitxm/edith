@@ -78,12 +78,14 @@ struct HostOnboardingToolsView: View {
                 ForEach(0..<3, id: \.self) { index in
                     VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         HStack(spacing: UIScale.pt(12)) {
+                            Color.clear.frame(width: UIScale.pt(20), height: 1)
                             SkeletonBlock(width: 28, height: 28, corner: 8)
                             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                                 SkeletonBlock(width: 120, height: 12)
                                 SkeletonBlock(width: 64, height: 10)
                             }
                             Spacer(minLength: 0)
+                            SkeletonBlock(width: 64, height: 12)
                         }
                         if index == 0 {
                             ForEach(0..<3, id: \.self) { _ in
@@ -95,11 +97,12 @@ struct HostOnboardingToolsView: View {
                                         SkeletonBlock(width: 280, height: 9)
                                     }
                                     Spacer(minLength: 0)
+                                    SkeletonBlock(width: 40, height: 10)
                                 }
                             }
                         }
                     }
-                    .padding(UIScale.pt(16))
+                    .padding(UIScale.pt(12))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .hostOnboardingTile()
                 }
@@ -138,7 +141,7 @@ struct HostOnboardingToolsView: View {
                             .font(.system(size: UIScale.pt(10), weight: .semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isOpen ? 90 : 0))
-                            .frame(width: UIScale.pt(12))
+                            .frame(width: UIScale.pt(20))
                         HostOnboardingIcon(
                             symbolName: suite?.symbol ?? "square.grid.2x2", size: 28)
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -170,16 +173,10 @@ struct HostOnboardingToolsView: View {
             .padding(UIScale.pt(12))
             if isOpen {
                 Divider().padding(.horizontal, UIScale.pt(12))
-                LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(340)), spacing: UIScale.pt(8),
-                            alignment: .top)
-                    ], alignment: .leading, spacing: UIScale.pt(4)
-                ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     ForEach(entries) { entry in row(entry) }
                 }
-                .padding(UIScale.pt(8))
+                .padding(UIScale.pt(4))
             }
         }
         .hostOnboardingTile()
@@ -202,6 +199,7 @@ struct HostOnboardingToolsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 packageNote(entry.id)
+                    .frame(minWidth: UIScale.pt(56), alignment: .trailing)
             }
         }
         .toggleStyle(HostOnboardingCheckRowStyle())

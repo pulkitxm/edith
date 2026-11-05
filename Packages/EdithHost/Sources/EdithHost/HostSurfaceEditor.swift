@@ -83,8 +83,13 @@ struct HostSurfaceEditor: View {
             } else {
                 HStack(alignment: .top, spacing: 0) {
                     if libraryVisible {
-                        ScrollView { library.padding(UIScale.pt(12)) }
-                            .frame(width: UIScale.pt(220))
+                        ScrollView {
+                            library
+                                .padding(.vertical, UIScale.pt(12))
+                                .padding(.leading, PageMetrics.gutter(compact))
+                                .padding(.trailing, UIScale.pt(12))
+                        }
+                        .frame(width: UIScale.pt(208) + PageMetrics.gutter(compact))
                         Divider()
                     }
                     ScrollView(
@@ -110,8 +115,13 @@ struct HostSurfaceEditor: View {
                     }
                     if inspectorVisible {
                         Divider()
-                        ScrollView { inspector.padding(UIScale.pt(12)) }
-                            .frame(width: UIScale.pt(260))
+                        ScrollView {
+                            inspector
+                                .padding(.vertical, UIScale.pt(12))
+                                .padding(.leading, UIScale.pt(12))
+                                .padding(.trailing, PageMetrics.gutter(compact))
+                        }
+                        .frame(width: UIScale.pt(248) + PageMetrics.gutter(compact))
                     }
                 }
             }
@@ -726,6 +736,7 @@ struct HostSurfaceEditor: View {
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Sample preview").font(.edithText(.caption2)).foregroundStyle(.secondary)
+                    .padding(.leading, UIScale.pt(10))
                 SurfaceWidgetPreview(tile: tile, notch: target == .notch)
             }
         }

@@ -171,11 +171,10 @@ struct HostOnboardingWorkflowsView: View {
                 "What do you mostly do on your Mac?",
                 subtitle: "Pick the closest fit. You can add or remove tools on the next step.")
             LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: UIScale.pt(compact ? 220 : 260)),
-                        spacing: UIScale.pt(12), alignment: .top)
-                ], alignment: .leading, spacing: UIScale.pt(12)
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: UIScale.pt(12), alignment: .top),
+                    count: compact ? 2 : 3),
+                alignment: .leading, spacing: UIScale.pt(12)
             ) {
                 ForEach(HostWorkflow.allCases) { workflow in tile(workflow) }
             }
@@ -221,7 +220,7 @@ struct HostOnboardingWorkflowsView: View {
                 }
             }
             .padding(UIScale.pt(16))
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .hostOnboardingTile(highlighted: selected)
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
         }
@@ -328,14 +327,13 @@ private struct HostOnboardingTileButton: View {
 }
 
 extension View {
-    func hostOnboardingTile(highlighted: Bool = false, warning: Bool = false) -> some View {
-        modifier(HostOnboardingTile(highlighted: highlighted, warning: warning))
+    func hostOnboardingTile(highlighted: Bool = false) -> some View {
+        modifier(HostOnboardingTile(highlighted: highlighted))
     }
 }
 
 private struct HostOnboardingTile: ViewModifier {
     let highlighted: Bool
-    let warning: Bool
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
@@ -348,9 +346,7 @@ private struct HostOnboardingTile: ViewModifier {
             }
             .overlay {
                 shape.strokeBorder(
-                    highlighted
-                        ? DashSkin.accent(dark).opacity(0.7)
-                        : warning ? DashSkin.warn.opacity(0.5) : DashSkin.line(dark),
+                    highlighted ? DashSkin.accent(dark).opacity(0.7) : DashSkin.line(dark),
                     lineWidth: highlighted ? 1.5 : 1)
             }
     }

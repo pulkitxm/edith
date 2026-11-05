@@ -193,7 +193,8 @@ struct HostBackgroundContent<Extra: View>: View {
     var body: some View {
         Form {
             HostBackgroundOverviewSection(
-                status: status, overview: HostBackgroundOverview(
+                status: status,
+                overview: HostBackgroundOverview(
                     jobs: model.jobs, activeTasks: status.activeTasks),
                 now: now(), actions: actions)
             HostBackgroundJobsSection(

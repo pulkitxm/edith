@@ -521,6 +521,7 @@ public final class HostMarketplace {
                         HostContract.compatibility, forKey: Self.lastCatalogCompatibilityKey)
                 }
             } catch {
+                offline = ExtensionCatalogClient.isOffline(error)
                 if self.error == nil {
                     self.error =
                         (error as? MarketplaceError) == .rateLimited
@@ -657,7 +658,8 @@ public final class HostMarketplace {
                 Task { @MainActor in
                     self?.updateOperation(id) { operation in
                         operation.fraction = max(operation.fraction, value)
-                        if installing, operation.phase == .downloading || operation.phase == .installing
+                        if installing,
+                            operation.phase == .downloading || operation.phase == .installing
                         {
                             operation.phase = .installing
                         }
@@ -698,7 +700,7 @@ public final class HostMarketplace {
             try reloadInstalled()
             if let activationFailure { return fail(id, activationFailure, announce: announce) }
             return failures[id]
-        } catch where Task.isCancelled {
+        } catch  where Task.isCancelled {
             try? reloadInstalled()
             return Self.downloadCancelled
         } catch MarketplaceError.packageCleanupPending {

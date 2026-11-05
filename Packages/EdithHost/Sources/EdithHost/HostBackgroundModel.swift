@@ -142,7 +142,9 @@ struct HostBackgroundEnvironment {
     let identity: @MainActor () -> String?
     let read: @MainActor () async throws -> HostBackgroundProjection
     let control: @MainActor (String, Bool) async throws -> Void
-    var settle: @MainActor () async throws -> Void = { try await Task.sleep(for: .milliseconds(600)) }
+    var settle: @MainActor () async throws -> Void = {
+        try await Task.sleep(for: .milliseconds(600))
+    }
     var settleAttempts = 0
 }
 

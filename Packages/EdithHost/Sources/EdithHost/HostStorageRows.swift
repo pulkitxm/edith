@@ -32,6 +32,13 @@ enum HostStorageFormat {
     static let visibleRows = 6
 }
 
+enum HostStorageRowMetrics {
+    static let spacing = 10.0
+    static let rowInset = 9.0
+    static let actionWidth = 28.0
+    static var valueTrailing: Double { rowInset + spacing + actionWidth }
+}
+
 struct HostStorageRow<Details: View>: View {
     let usage: HostStorageUsage
     let total: Int64
@@ -44,7 +51,7 @@ struct HostStorageRow<Details: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(HostStorageRowMetrics.spacing)) {
                 Button {
                     withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
                         toggle()
@@ -77,6 +84,7 @@ struct HostStorageRow<Details: View>: View {
                     Image(systemName: "folder")
                 }
                 .buttonStyle(.edith(.iconOnly))
+                .frame(width: UIScale.pt(HostStorageRowMetrics.actionWidth))
                 .help("Show in Finder")
                 .accessibilityLabel("Show \(usage.item.title) in Finder")
             }
@@ -176,6 +184,7 @@ struct HostStoragePackageDetails: View {
             Spacer(minLength: UIScale.pt(8))
             Text(HostStorageFormat.size(bytes))
                 .font(.edithText(.callout)).monospacedDigit().foregroundStyle(.secondary)
+                .padding(.trailing, UIScale.pt(HostStorageRowMetrics.valueTrailing))
         }
         .accessibilityElement(children: .combine)
     }
@@ -195,7 +204,7 @@ struct HostStorageRowDetails: View {
                     Text("Largest inside")
                         .font(.edithText(.caption).weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(contents) { entry in
-                        HStack(spacing: UIScale.pt(8)) {
+                        HStack(spacing: UIScale.pt(HostStorageRowMetrics.spacing)) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
                                 .resizable().interpolation(.high)
                                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
@@ -212,12 +221,14 @@ struct HostStorageRowDetails: View {
                             Text(HostStorageFormat.size(entry.bytes))
                                 .font(.edithText(.callout)).monospacedDigit()
                                 .frame(minWidth: UIScale.pt(76), alignment: .trailing)
+                                .padding(.trailing, UIScale.pt(HostStorageRowMetrics.rowInset))
                             Button {
                                 HostStorageReveal.show([entry.url])
                             } label: {
                                 Image(systemName: "magnifyingglass")
                             }
                             .buttonStyle(.edith(.iconOnly))
+                            .frame(width: UIScale.pt(HostStorageRowMetrics.actionWidth))
                             .help("Show in Finder")
                             .accessibilityLabel("Show \(entry.url.lastPathComponent) in Finder")
                         }

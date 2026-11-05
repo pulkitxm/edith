@@ -24,11 +24,14 @@ struct MarketplacePage: View {
     init(
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
         openExtension: ((String) -> Void)? = nil,
-        requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil)
+        requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil),
+        scope: HostMarketplaceScope = .all, search: String = ""
     ) {
         self.marketplace = marketplace; self.presenter = presenter;
         self.openExtension = openExtension
         _requestedSettings = requestedSettings
+        _scope = State(initialValue: scope)
+        _search = State(initialValue: search)
         _suites = State(
             initialValue: HostSuiteSelection(
                 marketplace: marketplace,
@@ -64,42 +67,38 @@ struct MarketplacePage: View {
         !marketplace.offline && marketplace.batch == nil && !migrating.isEmpty
     }
 
+    private var filtersScroll: Bool { HostMarketplaceLayout.filtersScroll(zoom: UIScale.current) }
+    private var emptyStyle: PageEmptyStateStyle { filtersScroll ? .compact : .regular }
+    private var emptyHeight: CGFloat {
+        filtersScroll ? 0 : UIScale.pt(HostMarketplaceLayout.emptyHeight)
+    }
+
     private var catalogUnavailable: Bool {
-        catalogEntries.isEmpty && !loadingCatalog && (marketplace.error != nil || marketplace.offline)
+        catalogEntries.isEmpty && !loadingCatalog
+            && (marketplace.error != nil || marketplace.offline)
     }
 
     var body: some View {
         PageWorkspace {
             PageHeader(
                 "Extensions",
-                subtitle: "Add tools to Edith. Each one installs in seconds and can be turned off any time.",
+                subtitle:
+                    "Add tools to Edith. Each one installs in seconds and can be turned off any time.",
                 divider: true
             ) {
                 headerControls
             } accessory: {
-                filters
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.filterRowSpacing)) {
+                    searchField
+                    if !filtersScroll { filters }
+                }
             }
         } content: {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(HostMarketplaceLayout.groupSpacing)) {
-                        if catalogUnavailable {
-                            unavailable
-                        } else {
-                            notices
-                            if loadingCatalog {
-                                skeletons
-                            } else if filtered.isEmpty {
-                                empty
-                            } else {
-                                if showsFeatured { featuredSection }
-                                ForEach(HostMarketplaceCatalog.groups(filtered), id: \.suite.id) {
-                                    group in
-                                    section(group.suite, entries: group.entries)
-                                }
-                            }
-                            automaticUpdates
-                        }
+                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.filterRowSpacing)) {
+                        if filtersScroll { filters }
+                        groups
                     }
                     .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     .pageContent(compact)
@@ -130,27 +129,50 @@ struct MarketplacePage: View {
         .edithSheet(item: $selected) { entry in detail(entry) }
     }
 
-    private var filters: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.filterRowSpacing)) {
-            SearchField(placeholder: "Search extensions", text: $search, typeAhead: true)
-                .accessibilityLabel("Find extensions")
-            PageFilterBar {
-                PageFilterRow("Show") {
-                    ForEach(HostMarketplaceScope.allCases, id: \.self) { option in
-                        PageChip(scopeTitle(option), active: scope == option) { scope = option }
+    private var searchField: some View {
+        SearchField(placeholder: "Search extensions", text: $search, typeAhead: true)
+            .accessibilityLabel("Find extensions")
+    }
+
+    private var groups: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(HostMarketplaceLayout.groupSpacing)) {
+            if catalogUnavailable {
+                unavailable
+            } else {
+                notices
+                if loadingCatalog {
+                    skeletons
+                } else if filtered.isEmpty {
+                    empty
+                } else {
+                    if showsFeatured { featuredSection }
+                    ForEach(HostMarketplaceCatalog.groups(filtered), id: \.suite.id) {
+                        group in
+                        section(group.suite, entries: group.entries)
                     }
                 }
-                PageFilterRow("Category") {
-                    if compact {
-                        PageMenuChip(categoryTitle(category), active: category != "all") {
-                            ForEach(categories, id: \.self) { id in
-                                Button(categoryTitle(id)) { category = id }
-                            }
-                        }
-                    } else {
+                automaticUpdates
+            }
+        }
+    }
+
+    private var filters: some View {
+        PageFilterBar {
+            PageFilterRow("Show") {
+                ForEach(HostMarketplaceScope.allCases, id: \.self) { option in
+                    PageChip(scopeTitle(option), active: scope == option) { scope = option }
+                }
+            }
+            PageFilterRow("Category") {
+                if compact {
+                    PageMenuChip(categoryTitle(category), active: category != "all") {
                         ForEach(categories, id: \.self) { id in
-                            PageChip(categoryTitle(id), active: category == id) { category = id }
+                            Button(categoryTitle(id)) { category = id }
                         }
+                    }
+                } else {
+                    ForEach(categories, id: \.self) { id in
+                        PageChip(categoryTitle(id), active: category == id) { category = id }
                     }
                 }
             }
@@ -163,28 +185,30 @@ struct MarketplacePage: View {
         HostMarketplaceCatalog.suites.first { $0.id == id }?.title ?? "All"
     }
 
-    @ViewBuilder private var headerControls: some View {
-        if let batch = marketplace.batch {
-            HostMarketplaceBatchStatus(
-                batch: batch, progress: marketplace.batchProgress,
-                bytesPerSecond: marketplace.batchBytesPerSecond)
-        } else if !marketplace.updatableIDs.isEmpty, !showsMigrationBanner {
-            Button("Update All (\(marketplace.updatableIDs.count))") {
-                Task { await marketplace.updateAll() }
+    private var headerControls: some View {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            if let batch = marketplace.batch {
+                HostMarketplaceBatchStatus(
+                    batch: batch, progress: marketplace.batchProgress,
+                    bytesPerSecond: marketplace.batchBytesPerSecond)
+            } else if !marketplace.updatableIDs.isEmpty, !showsMigrationBanner {
+                Button("Update All (\(marketplace.updatableIDs.count))") {
+                    Task { await marketplace.updateAll() }
+                }
+                .buttonStyle(.edith(.primary)).disabled(suites.working)
             }
-            .buttonStyle(.edith(.primary)).disabled(suites.working)
+            Button {
+                Task { await marketplace.checkForUpdates() }
+            } label: {
+                Text(marketplace.refreshingCatalog ? "Checking…" : "Check for Updates")
+            }
+            .buttonStyle(.edith(.secondary))
+            .disabled(suites.working || marketplace.refreshingCatalog)
         }
-        Button {
-            Task { await marketplace.checkForUpdates() }
-        } label: {
-            Text(marketplace.refreshingCatalog ? "Checking…" : "Check for Updates")
-        }
-        .buttonStyle(.edith(.secondary))
-        .disabled(suites.working || marketplace.refreshingCatalog)
     }
 
     @ViewBuilder private var notices: some View {
-        if let error = marketplace.error {
+        if let error = marketplace.error, !marketplace.offline {
             PageNotice(error, tone: .error)
         }
         if marketplace.offline {
@@ -222,27 +246,16 @@ struct MarketplacePage: View {
                     + " Your installed extensions keep working.",
             primary: PageAction("Try Again", identifier: "extensions.retry") {
                 Task { await marketplace.checkForUpdates() }
-            }
+            },
+            style: emptyStyle
         )
-        .frame(minHeight: UIScale.pt(HostMarketplaceLayout.emptyHeight))
+        .frame(minHeight: emptyHeight)
         .disabled(marketplace.refreshingCatalog)
     }
 
     private func scopeTitle(_ value: HostMarketplaceScope) -> String {
         value == .updates && !marketplace.updatableIDs.isEmpty
             ? "Updates (\(marketplace.updatableIDs.count))" : value.title
-    }
-
-    private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(
-                    minimum: UIScale.pt(
-                        compact
-                            ? HostExtensionCardMetrics.compactMinimumColumn
-                            : HostExtensionCardMetrics.minimumColumn)),
-                spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top)
-        ]
     }
 
     private var skeletons: some View {
@@ -253,9 +266,7 @@ struct MarketplacePage: View {
                     SkeletonBlock(width: 260, height: 12)
                 }
             }
-            LazyVGrid(columns: columns, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                ForEach(0..<9, id: \.self) { _ in HostExtensionCardSkeleton() }
-            }
+            HostExtensionListSkeleton(rows: 9)
         }
     }
 
@@ -263,34 +274,48 @@ struct MarketplacePage: View {
         if !query.isEmpty {
             PageEmptyState(
                 symbolName: "magnifyingglass", title: "No extensions found",
-                message: "Nothing matches \"\(query)\". Try a different word, or browse by category.",
+                message:
+                    "Nothing matches \"\(query)\". Try a different word, or browse by category.",
                 primary: PageAction("Clear Search", identifier: "extensions.clear-search") {
                     search = ""
-                })
-                .frame(minHeight: UIScale.pt(HostMarketplaceLayout.emptyHeight))
+                }, style: emptyStyle
+            )
+            .frame(minHeight: emptyHeight)
         } else if scope == .installed {
             PageEmptyState(
                 symbolName: "puzzlepiece.extension", title: "Nothing installed yet",
-                message: "Extensions add tools to Edith. Pick one from Browse and it is ready in seconds.",
+                message:
+                    "Extensions add tools to Edith. Pick one from Browse and it is ready in seconds.",
                 primary: PageAction("Browse Extensions", identifier: "extensions.browse") {
                     scope = .all
-                })
-                .frame(minHeight: UIScale.pt(HostMarketplaceLayout.emptyHeight))
+                }, style: emptyStyle
+            )
+            .frame(minHeight: emptyHeight)
         } else if scope == .updates {
             PageEmptyState(
-                symbolName: "checkmark.circle", title: "Everything is up to date",
-                message: "Updates appear here when a newer version of an installed extension is available.",
-                primary: PageAction("Check for Updates", identifier: "extensions.check") {
+                symbolName: marketplace.offline ? "wifi.slash" : "checkmark.circle",
+                title: marketplace.offline
+                    ? "Updates need a connection" : "Everything is up to date",
+                message: marketplace.offline
+                    ? "Connect to the internet to look for newer versions of your extensions."
+                    : "Updates appear here when a newer version of an installed extension is available.",
+                primary: PageAction(
+                    marketplace.offline ? "Try Again" : "Check for Updates",
+                    identifier: "extensions.check"
+                ) {
                     Task { await marketplace.checkForUpdates() }
-                })
-                .frame(minHeight: UIScale.pt(HostMarketplaceLayout.emptyHeight))
+                }, style: emptyStyle
+            )
+            .frame(minHeight: emptyHeight)
         } else {
             PageEmptyState(
                 symbolName: "puzzlepiece.extension", title: "Nothing in this category yet",
-                message: "New extensions arrive with Edith updates. Browse all extensions in the meantime.",
-                primary: PageAction("Show All", identifier: "extensions.all") { category = "all" }
+                message:
+                    "New extensions arrive with Edith updates. Browse all extensions in the meantime.",
+                primary: PageAction("Show All", identifier: "extensions.all") { category = "all" },
+                style: emptyStyle
             )
-            .frame(minHeight: UIScale.pt(HostMarketplaceLayout.emptyHeight))
+            .frame(minHeight: emptyHeight)
         }
     }
 
@@ -302,31 +327,7 @@ struct MarketplacePage: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     PageSectionHeader(
                         "Recommended", subtitle: "A good place to start if you are new to Edith.")
-                    ViewThatFits(in: .horizontal) {
-                        featuredRows(featured, perRow: featured.count)
-                        featuredRows(featured, perRow: 2)
-                        featuredRows(featured, perRow: 1)
-                    }
-                }
-            }
-        }
-    }
-
-    private func featuredRows(_ featured: [HostExtension], perRow: Int) -> some View {
-        let rows = stride(from: 0, to: featured.count, by: perRow).map {
-            Array(featured[$0..<min($0 + perRow, featured.count)])
-        }
-        let ideal = UIScale.pt(
-            perRow == 1 ? HostExtensionCardMetrics.compactMinimumColumn : HostMarketplaceLayout.featuredColumn)
-        return Grid(
-            horizontalSpacing: UIScale.pt(PageMetrics.cardSpacing),
-            verticalSpacing: UIScale.pt(PageMetrics.cardSpacing)
-        ) {
-            ForEach(rows, id: \.first?.id) { row in
-                GridRow(alignment: .top) {
-                    ForEach(row) { entry in
-                        card(entry).frame(minWidth: ideal, idealWidth: ideal, maxWidth: .infinity)
-                    }
+                    HostExtensionList(entries: featured, row: row)
                 }
             }
         }
@@ -341,9 +342,11 @@ struct MarketplacePage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: UIScale.pt(12))
-            Toggle("Update extensions automatically", isOn: $marketplace.automaticallyUpdatesExtensions)
-                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                .tint(DashSkin.accent(dark))
+            Toggle(
+                "Update extensions automatically", isOn: $marketplace.automaticallyUpdatesExtensions
+            )
+            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+            .tint(DashSkin.accent(dark))
         }
         .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
         .padding(.vertical, UIScale.pt(12))
@@ -366,22 +369,22 @@ struct MarketplacePage: View {
                             "\(suite.title) suite enabled",
                             isOn: Binding(
                                 get: { suites.enabled(suite) },
-                                set: { value in Task { await suites.setEnabled(value, suite: suite) } })
+                                set: { value in
+                                    Task { await suites.setEnabled(value, suite: suite) }
+                                })
                         )
                         .labelsHidden().toggleStyle(.switch).controlSize(.small)
                         .tint(DashSkin.accent(dark)).disabled(suites.working)
                     }
                 }
             }
-            LazyVGrid(columns: columns, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                ForEach(entries) { entry in card(entry).id(entry.id) }
-            }
+            HostExtensionList(entries: entries, row: row)
         }
     }
 
-    private func card(_ entry: HostExtension) -> some View {
+    private func row(_ entry: HostExtension) -> HostExtensionRow {
         let state = HostExtensionRowState(entry, marketplace: marketplace)
-        return HostExtensionCard(
+        return HostExtensionRow(
             entry: entry, state: state, tagline: HostMarketplaceCatalog.tagline(entry),
             note: note(entry, state: state),
             canCancel: marketplace.canCancelDownload(entry.id),
@@ -450,8 +453,10 @@ struct MarketplacePage: View {
 
 enum HostMarketplaceLayout {
     static let groupSpacing = 32.0
-    static let featuredColumn = 280.0
     static let emptyHeight = 360.0
+    static let pinnedFiltersZoomLimit = 1.6
+
+    static func filtersScroll(zoom: Double) -> Bool { zoom >= pinnedFiltersZoomLimit }
 }
 
 struct HostMarketplaceBatchStatus: View {

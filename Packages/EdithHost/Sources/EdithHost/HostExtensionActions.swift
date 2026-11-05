@@ -74,7 +74,8 @@ enum HostExtensionActions {
 
     static func pageTitles() -> [String: String] {
         Dictionary(
-            HostNavigationCatalog.pages.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+            HostNavigationCatalog.pages.map { ($0.id, $0.title) },
+            uniquingKeysWith: { first, _ in first })
     }
 
     static func sectionTitles() -> [String: String] {
@@ -85,7 +86,8 @@ enum HostExtensionActions {
 
     static func placements(for entry: HostExtension) -> [HostExtensionPlacement] {
         HostExtensionPlacements.placements(
-            for: entry, hasSettings: HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable,
+            for: entry,
+            hasSettings: HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable,
             route: HostNavigationCatalog.route(extensionID: entry.id), pageTitles: pageTitles(),
             sectionTitles: sectionTitles())
     }

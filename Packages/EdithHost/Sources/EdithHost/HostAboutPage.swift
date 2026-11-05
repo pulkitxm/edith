@@ -27,14 +27,13 @@ struct HostAboutPage: View {
 
     var body: some View {
         GeometryReader { geometry in
-            PageScaffold(pinnedHeader: true, header: {}) {
+            ScrollView {
                 content
                     .padding(.vertical, UIScale.pt(44))
-                    .padding(.top, UIScale.pt(PageMetrics.bottom))
-                    .frame(
-                        minHeight: max(0, geometry.size.height - UIScale.pt(PageMetrics.bottom)))
+                    .frame(minHeight: geometry.size.height)
             }
         }
+        .pageSurface()
         .navigationTitle("About")
     }
 
@@ -73,8 +72,8 @@ struct HostAboutPage: View {
                 .foregroundStyle(theme)
                 .padding(.horizontal, UIScale.pt(16))
                 .padding(.vertical, UIScale.pt(8))
-                .background(theme.opacity(0.16), in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.opacity(0.38), lineWidth: 1))
+                .background(theme.opacity(0.16), in: Capsule(style: .circular))
+                .overlay(Capsule(style: .circular).strokeBorder(theme.opacity(0.38), lineWidth: 1))
             }
             .buttonStyle(.edith(.borderless))
             .help("Open the repository on GitHub")

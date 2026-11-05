@@ -31,7 +31,7 @@ import Testing
     private static let variants = [
         Variant("regular-light", 1100, 760), Variant("regular-dark", 1100, 760, 1, .dark),
         Variant("compact-light", 640, 700), Variant("compact-dark", 640, 700, 1, .dark),
-        Variant("zoomed", 1100, 760, 1.6, .dark),
+        Variant("zoomed", 1100, 760, 1.6, .dark), Variant("wide", 1600, 960),
     ]
 
     private func job(
@@ -46,7 +46,9 @@ import Testing
                 "power": power, "abilityID": ability.map { $0 as Any } ?? NSNull(),
             ],
             "phase": phase, "subscribers": subscribers,
-            "lastRun": lastRun.map { Self.now.addingTimeInterval(-$0).timeIntervalSinceReferenceDate as Any }
+            "lastRun": lastRun.map {
+                Self.now.addingTimeInterval(-$0).timeIntervalSinceReferenceDate as Any
+            }
                 ?? NSNull(),
             "lastDuration": 1, "lastError": error.map { $0 as Any } ?? NSNull(), "runCount": 3,
         ]
@@ -136,7 +138,8 @@ import Testing
             environment: .init(
                 owner: {
                     scenario == .error || scenario == .loading
-                        ? nil : HostBackgroundPolicyOwner(identity: "core:4242", processIdentifier: 4242)
+                        ? nil
+                        : HostBackgroundPolicyOwner(identity: "core:4242", processIdentifier: 4242)
                 },
                 read: { result }, set: { _ in result }))
         if scenario != .loading { await model.refresh() }
@@ -155,7 +158,8 @@ import Testing
         host.cacheDisplay(in: host.bounds, to: bitmap)
         if let path = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
             let directory = URL(fileURLWithPath: path, isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
             let data = try #require(bitmap.representation(using: .png, properties: [:]))
             try data.write(to: directory.appendingPathComponent(name + ".png"), options: .atomic)
         }
@@ -188,8 +192,9 @@ import Testing
             case .populated:
                 #expect(model.jobs.count == 5)
                 #expect(
-                    model.groups(titles: { $0 == "usage" ? "Usage" : $0 == "herdr" ? "Herdr" : nil })
-                        .map(\.title) == ["Herdr", "Usage", "Built into Edith"])
+                    model.groups(titles: { $0 == "usage" ? "Usage" : $0 == "herdr" ? "Herdr" : nil }
+                    )
+                    .map(\.title) == ["Herdr", "Usage", "Built into Edith"])
                 #expect(policy.value == true)
             case .empty:
                 #expect(model.jobs.isEmpty && model.failure == nil && !model.load.isRunning)
@@ -225,7 +230,8 @@ import Testing
                 window.orderBack(nil)
                 await settle(window, host: host)
                 #expect(abs(host.bounds.width - variant.width) < 1)
-                let bitmap = try capture(host, name: "background-\(scenario.rawValue)-\(variant.name)")
+                let bitmap = try capture(
+                    host, name: "background-\(scenario.rawValue)-\(variant.name)")
                 #expect(bitmap.pixelsWide >= Int(variant.width))
                 #expect(distinctColors(bitmap) > 4)
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
@@ -241,8 +247,11 @@ import Testing
         let single = HostQuitWaitModel(blockers: ["Screen Recorder"])
         #expect(single.message.hasPrefix("Screen Recorder is still working."))
         #expect(single.status == "Waiting for Screen Recorder")
-        let several = HostQuitWaitModel(blockers: ["Screen Recorder", "Downloads", "Studio", "Music"])
-        #expect(several.message.hasPrefix("Screen Recorder, Downloads and 2 more are still working."))
+        let several = HostQuitWaitModel(blockers: [
+            "Screen Recorder", "Downloads", "Studio", "Music",
+        ])
+        #expect(
+            several.message.hasPrefix("Screen Recorder, Downloads and 2 more are still working."))
         #expect(several.status == "Waiting for 4 tools")
         #expect(HostQuitWaitModel(blockers: []).message.hasPrefix("Some background work is"))
         for (name, model, zoom, scheme) in [

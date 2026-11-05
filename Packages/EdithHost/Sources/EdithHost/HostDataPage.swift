@@ -58,8 +58,8 @@ struct HostDataPage: View {
                 }
                 Button("Reload") { revision += 1 }.disabled(services.inspecting)
             }
-            Section("Restore preview") {
-                if let snapshot = services.snapshot?.storage {
+            if let snapshot = services.snapshot?.storage {
+                Section("Restore preview") {
                     if snapshot.restoreEntries.isEmpty {
                         Text("No backup files found.").settingsCaption()
                     }

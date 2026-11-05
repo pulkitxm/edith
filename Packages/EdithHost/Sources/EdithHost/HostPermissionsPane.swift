@@ -52,26 +52,27 @@ struct HostPermissionsList: View {
     }
     private var attentionCount: Int { usages.filter(\.blocksEnabledExtension).count }
 
-    private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 360, spacing: 12, alignment: .top)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             summary
             if !permissions.awaitingRelaunch.isEmpty { relaunchBanner }
             filterRow
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                    section("Not allowed", usages: ungranted)
-                    section("Allowed", usages: granted)
-                    if visible.isEmpty { emptyState }
+            if visible.isEmpty {
+                emptyState
+            } else {
+                ScrollView {
+                    LazyVStack(
+                        alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)
+                    ) {
+                        section("Not allowed", usages: ungranted)
+                        section("Allowed", usages: granted)
+                    }
+                    .padding(.top, UIScale.pt(4))
+                    .pageContent(compact)
+                    .animation(
+                        Motion.animation(Motion.snap, reduceMotion: reduceMotion),
+                        value: granted.map(\.id))
                 }
-                .padding(.top, UIScale.pt(4))
-                .pageContent(compact)
-                .animation(
-                    Motion.animation(Motion.snap, reduceMotion: reduceMotion),
-                    value: granted.map(\.id))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -89,15 +90,20 @@ struct HostPermissionsList: View {
                         .font(PageMetrics.capsFont).monospacedDigit()
                         .foregroundStyle(.tertiary)
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
-                    ForEach(sectionUsages) { usage in
-                        HostPermissionCard(
+                VStack(spacing: 0) {
+                    ForEach(Array(sectionUsages.enumerated()), id: \.element.id) { index, usage in
+                        if index > 0 {
+                            Divider().padding(
+                                .leading, UIScale.pt(HostPermissionRowMetrics.dividerInset))
+                        }
+                        HostPermissionRow(
                             usage: usage,
                             awaitingRelaunch: permissions.awaitingRelaunch.contains(
                                 usage.permission),
                             grant: grant)
                     }
                 }
+                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
             }
         }
     }
@@ -215,7 +221,7 @@ struct HostPermissionsList: View {
                     .buttonStyle(.edith(.secondary))
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.vertical, UIScale.pt(40))
     }
 
@@ -224,7 +230,14 @@ struct HostPermissionsList: View {
     }
 }
 
-private struct HostPermissionCard: View {
+private enum HostPermissionRowMetrics {
+    static let icon = 36.0
+    static let contentSpacing = 12.0
+    static let actionWidth = 64.0
+    static var dividerInset: Double { PageMetrics.cardPadding + icon + contentSpacing }
+}
+
+private struct HostPermissionRow: View {
     let usage: HostPermissionUsage
     var awaitingRelaunch = false
     let grant: (HostPermissionUsage) -> Void
@@ -234,27 +247,30 @@ private struct HostPermissionCard: View {
 
     var body: some View {
         let dark = scheme == .dark
-        HStack(alignment: .top, spacing: UIScale.pt(12)) {
+        HStack(alignment: .center, spacing: UIScale.pt(HostPermissionRowMetrics.contentSpacing)) {
             HostOnboardingIcon(
-                symbolName: permission.symbolName, size: 36,
-                tint: usage.isGranted ? DashSkin.ok : nil)
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                symbolName: permission.symbolName, size: HostPermissionRowMetrics.icon,
+                tint: usage.isGranted
+                    ? DashSkin.ok : usage.blocksEnabledExtension ? DashSkin.warn : nil)
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(alignment: .center, spacing: UIScale.pt(8)) {
                     Text(permission.displayName).font(.edithText(.headline)).lineLimit(1)
                     statusBadge
-                    Spacer(minLength: 0)
-                    action
                 }
-                .frame(minHeight: UIScale.pt(28))
                 Text(permission.firstUseExplanation ?? permission.plainWords)
                     .font(.edithText(.callout)).foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 if !usage.users.isEmpty { usedByRow }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack(alignment: .trailing) {
+                Color.clear.frame(
+                    width: UIScale.pt(HostPermissionRowMetrics.actionWidth), height: 1)
+                action
+            }
         }
-        .padding(UIScale.pt(16))
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .hostOnboardingTile(warning: usage.blocksEnabledExtension)
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+        .padding(.vertical, UIScale.pt(12))
     }
 
     @ViewBuilder private var statusBadge: some View {

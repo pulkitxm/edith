@@ -81,20 +81,15 @@ struct HostSuiteLandingPage: View {
 
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            PageHeader(
-                destination.title,
-                accessory: {
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        PageSubtitle(suite?.subtitle ?? "")
-                        Text(
-                            HostSuiteLandingSummary.summary(
-                                groups.flatMap(\.entries),
-                                downloaded: Set(marketplace.installed.keys))
-                        )
-                        .font(.edithText(.caption)).monospacedDigit()
-                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-                    }
-                })
+            PageHeader(destination.title, subtitle: suite?.subtitle) {
+                Text(
+                    HostSuiteLandingSummary.summary(
+                        groups.flatMap(\.entries),
+                        downloaded: Set(marketplace.installed.keys))
+                )
+                .font(.edithText(.caption)).monospacedDigit()
+                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+            }
         } content: {
             if let error = marketplace.error {
                 PageNotice(error, title: "Something went wrong", tone: .error)
@@ -155,7 +150,8 @@ struct HostSuiteAbilityRow: View {
                 .foregroundStyle(active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(32), height: UIScale.pt(32))
                 .background(
-                    (active ? DashSkin.accent(dark).opacity(dark ? 0.18 : 0.12)
+                    (active
+                        ? DashSkin.accent(dark).opacity(dark ? 0.18 : 0.12)
                         : Color.primary.opacity(0.05)),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 )
@@ -181,6 +177,10 @@ struct HostSuiteAbilityRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 if installed {
+                    if active, HostNavigationCatalog.route(extensionID: entry.id) != nil {
+                        Button("Open", action: open).buttonStyle(.edith(.secondary))
+                            .accessibilityLabel("Open " + entry.title)
+                    }
                     if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
                         Button(action: review) {
                             Image(systemName: "gearshape")
@@ -189,10 +189,6 @@ struct HostSuiteAbilityRow: View {
                         .buttonStyle(.edith(.iconOnly))
                         .help(entry.title + " settings")
                         .accessibilityLabel(entry.title + " settings")
-                    }
-                    if active, HostNavigationCatalog.route(extensionID: entry.id) != nil {
-                        Button("Open", action: open).buttonStyle(.edith(.secondary))
-                            .accessibilityLabel("Open " + entry.title)
                     }
                     Toggle(
                         "",

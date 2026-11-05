@@ -339,7 +339,8 @@ public enum HostCLIHelp {
         .init(
             "mcp install", "Register Edith's MCP server with an agent client.",
             flags: ["json", "dry-run"], options: ["client", "command"]),
-        .init("mcp status", "Show which agent clients have Edith's MCP server registered.",
+        .init(
+            "mcp status", "Show which agent clients have Edith's MCP server registered.",
             options: ["command"]),
     ]
 }

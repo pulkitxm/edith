@@ -87,7 +87,7 @@ struct HostOnboardingPermissionsView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(12)))
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            HStack(alignment: .center, spacing: UIScale.pt(12)) {
                 HostOnboardingIcon(symbolName: item.permission.symbolName, size: 36)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     HStack(spacing: UIScale.pt(8)) {

@@ -41,6 +41,8 @@ public actor ExtensionCatalogClient {
         public var offline: Bool { fallback == .offline }
     }
 
+    public static func isOffline(_ error: Error) -> Bool { Fallback(error) == .offline }
+
     private struct TransportFailure: Error { let underlying: Error }
 
     private let source: URL?

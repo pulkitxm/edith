@@ -5,14 +5,12 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HostExtensionPreview: View {
-    static let previewIDs: Set<String> = [
+    static let previewIDs: Set<String> = HostExtensionPreviewScene.ids.union([
         "usage", "herdr", "quinjet", "system", "appMaintenance", "machines", "systemStats",
         "micMute", "lidAwake", "calendar", "notchShelf", "clipboard", "keystrokeHighlight",
         "music", "focusDim", "windowSweaters", "presenter", "colorPicker", "homebrew",
         "cleaner", "blitztree", "downloads", "audioMixer",
-    ]
-
-    static func hasPreview(_ id: String) -> Bool { previewIDs.contains(id) }
+    ])
 
     let entry: HostExtension
     let dark: Bool
@@ -28,7 +26,8 @@ struct HostExtensionPreview: View {
             hovering: hovering && visible && automaticActions, reduceMotion: reduceMotion)
         preview(
             phase: HostExtensionPreviewMotionPolicy.phase(
-                hovering: hovering && visible && automaticActions, reduceMotion: reduceMotion),
+                for: entry.id, hovering: hovering && visible && automaticActions,
+                reduceMotion: reduceMotion),
             animating: animates
         )
         .clipped()
@@ -63,7 +62,9 @@ struct HostExtensionPreview: View {
         case "blitztree": blitzTreePreview
         case "downloads": downloadsPreview(phase: phase)
         case "audioMixer": audioMixerPreview(phase: phase)
-        default: EmptyView()
+        default:
+            HostExtensionPreviewScene(
+                id: entry.id, symbolName: entry.symbolName, dark: dark, phase: phase)
         }
     }
 
@@ -82,10 +83,21 @@ struct HostExtensionPreview: View {
     }
 
     private func usagePreview(phase: Double) -> some View {
-        let fill = CGFloat(0.48 + sin(phase * 1.7) * 0.2)
-        return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+        let session = 0.48 + sin(phase * 1.7) * 0.2
+        let week = 0.41
+        return VStack(spacing: UIScale.pt(12)) {
+            usageMeter("SESSION", fill: session)
+            usageMeter("THIS WEEK", fill: week)
+        }
+        .foregroundStyle(DashSkin.inkSoft(dark))
+        .padding(.horizontal, UIScale.pt(15))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func usageMeter(_ title: String, fill: Double) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             HStack {
-                Text("SESSION")
+                Text(title)
                     .font(DashSkin.mono(7, weight: .semibold))
                 Spacer()
                 Text("\(Int(fill * 100))%")
@@ -96,39 +108,58 @@ struct HostExtensionPreview: View {
                     Capsule().fill(DashSkin.lineStrong(dark))
                     Capsule()
                         .fill(DashSkin.accent(dark))
-                        .frame(width: max(10, proxy.size.width * fill))
+                        .frame(width: proxy.size.width * fill)
                 }
             }
             .frame(height: UIScale.pt(7))
         }
-        .foregroundStyle(DashSkin.inkSoft(dark))
-        .padding(.horizontal, UIScale.pt(15))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func herdrPreview(phase: Double) -> some View {
-        let pulse = CGFloat(0.45 + (sin(phase * 2.1) + 1) * 0.25)
+        let pulse = (sin(phase * 2.1) + 1) / 2
+        let columns: [(title: String, cards: Int, tint: Color)] = [
+            ("RUNNING", 2, DashSkin.accent(dark)), ("NEEDS YOU", 1, DashSkin.warn),
+            ("DONE", 2, DashSkin.sage),
+        ]
         return HStack(alignment: .top, spacing: UIScale.pt(6)) {
-            ForEach(0..<3) { column in
-                VStack(spacing: UIScale.pt(4)) {
-                    Capsule()
-                        .fill(column == 1 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(18), height: UIScale.pt(3))
-                    RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
-                        .fill(DashSkin.paper2(dark))
-                        .frame(
-                            width: UIScale.pt(28),
-                            height: UIScale.pt(
-                                column == 1 ? 18 + pulse * 8 : 14 + CGFloat(column) * 3)
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
-                                .strokeBorder(DashSkin.lineStrong(dark))
-                        }
+            ForEach(columns, id: \.title) { column in
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(column.title)
+                        .font(DashSkin.mono(6, weight: .semibold))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    ForEach(0..<column.cards, id: \.self) { index in
+                        herdrCard(
+                            tint: column.tint,
+                            emphasis: column.cards == 1 ? 0.45 + pulse * 0.45 : 0,
+                            width: index == 0 ? 36 : 28)
+                    }
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(10))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func herdrCard(tint: Color, emphasis: Double, width: Double) -> some View {
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
+        return VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            HStack(spacing: UIScale.pt(3)) {
+                Circle().fill(tint).frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                Capsule().fill(DashSkin.inkSoft(dark).opacity(0.6))
+                    .frame(width: UIScale.pt(width), height: UIScale.pt(3))
+            }
+            Capsule().fill(DashSkin.inkFaint(dark).opacity(0.4))
+                .frame(width: UIScale.pt(width - 8), height: UIScale.pt(3))
+        }
+        .padding(.horizontal, UIScale.pt(5))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(23), alignment: .leading)
+        .background(DashSkin.paper(dark), in: shape)
+        .overlay {
+            shape.strokeBorder(emphasis > 0 ? tint.opacity(emphasis) : DashSkin.lineStrong(dark))
+        }
     }
 
     private func quinjetPreview(phase: Double) -> some View {
@@ -304,31 +335,51 @@ struct HostExtensionPreview: View {
         let percentages = [38, 47, 62, 54]
         let percentageIndex = min(Int(progress * Double(percentages.count)), percentages.count - 1)
         let percentage = percentages[percentageIndex]
-        return HStack(spacing: UIScale.pt(10)) {
-            Text("CPU")
+        return VStack(spacing: UIScale.pt(10)) {
+            HStack(spacing: UIScale.pt(10)) {
+                statLabel("CPU", value: "\(percentage)%")
+                Spacer(minLength: 0)
+                HStack(alignment: .bottom, spacing: UIScale.pt(3)) {
+                    ForEach(0..<12) { index in
+                        let wave = sin(phase * Double.pi * 2 / 3.2 + Double(index) * 1.13)
+                        Capsule()
+                            .fill(
+                                index > 7
+                                    ? DashSkin.accent(dark).opacity(0.72) : DashSkin.accent(dark)
+                            )
+                            .frame(width: UIScale.pt(4), height: UIScale.pt(7 + (wave + 1) * 7.5))
+                    }
+                }
+                .frame(height: UIScale.pt(23), alignment: .bottom)
+            }
+            HStack(spacing: UIScale.pt(10)) {
+                statLabel("MEM", value: "62%")
+                Spacer(minLength: 0)
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(DashSkin.lineStrong(dark))
+                        Capsule().fill(DashSkin.accent(dark).opacity(0.72))
+                            .frame(width: proxy.size.width * 0.62)
+                    }
+                }
+                .frame(width: UIScale.pt(81), height: UIScale.pt(7))
+            }
+        }
+        .padding(.horizontal, UIScale.pt(16))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func statLabel(_ title: String, value: String) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Text(title)
                 .font(DashSkin.mono(7, weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            Text("\(percentage)%")
+            Text(value)
                 .font(DashSkin.mono(10, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .contentTransition(.numericText())
-                .animation(.easeOut(duration: 0.28), value: percentage)
-            HStack(alignment: .bottom, spacing: UIScale.pt(3)) {
-                ForEach(0..<6) { index in
-                    let wave = sin(
-                        phase * Double.pi * 2 / 3.2 + Double(index) * 1.13)
-                    Capsule()
-                        .fill(
-                            index > 3 ? DashSkin.accent(dark).opacity(0.72) : DashSkin.accent(dark)
-                        )
-                        .frame(
-                            width: UIScale.pt(4), height: UIScale.pt(7) + CGFloat((wave + 1) * 7.5))
-                }
-            }
-            .frame(height: UIScale.pt(23), alignment: .bottom)
+                .animation(.easeOut(duration: 0.28), value: value)
         }
-        .padding(.horizontal, UIScale.pt(13))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func micMutePreview(phase: Double) -> some View {
@@ -337,7 +388,26 @@ struct HostExtensionPreview: View {
         let slashExit = smoothed(clamped((progress - 0.68) / 0.14))
         let slashVisibility = slashEntry * (1 - slashExit)
         let barStrength = 1 - slashEntry + slashExit
-        return ZStack {
+        let muted = slashVisibility > 0.5
+        return HStack(spacing: UIScale.pt(16)) {
+            micMuteArt(phase: phase, entry: slashEntry, exit: slashExit, strength: barStrength)
+            Text(muted ? "Muted" : "Live")
+                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .foregroundStyle(muted ? Color.white : DashSkin.ink(dark))
+                .padding(.horizontal, UIScale.pt(9))
+                .frame(height: UIScale.pt(20))
+                .background(
+                    muted ? DashSkin.accent(dark) : DashSkin.paper(dark),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func micMuteArt(
+        phase: Double, entry slashEntry: Double, exit slashExit: Double,
+        strength barStrength: Double
+    ) -> some View {
+        ZStack {
             HStack(spacing: UIScale.pt(13)) {
                 Image(systemName: "mic.fill")
                     .font(.system(size: UIScale.pt(24), weight: .medium))
@@ -360,10 +430,9 @@ struct HostExtensionPreview: View {
                 .frame(width: UIScale.pt(70), height: UIScale.pt(3))
                 .scaleEffect(x: CGFloat(slashEntry), anchor: .leading)
                 .rotationEffect(.degrees(-32))
-                .offset(y: CGFloat(-slashExit * 13))
-                .opacity(slashVisibility)
+                .offset(y: UIScale.pt(-slashExit * 13))
+                .opacity(slashEntry * (1 - slashExit))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func lidAwakePreview(phase: Double) -> some View {
@@ -372,65 +441,76 @@ struct HostExtensionPreview: View {
         let open = smoothed(clamped((progress - 0.74) / 0.2))
         let shut = close - open
         let pulse = (sin(phase * 3.1) + 1) / 2
-        return VStack(spacing: UIScale.pt(0)) {
-            RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
-                .fill(DashSkin.paper2(dark))
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
-                        .strokeBorder(DashSkin.lineStrong(dark))
-                }
-                .frame(width: UIScale.pt(58), height: UIScale.pt(36))
-                .rotation3DEffect(
-                    .degrees(-88 * shut), axis: (x: 1, y: 0, z: 0), anchor: .bottom,
-                    perspective: 0.4)
-            Capsule()
-                .fill(DashSkin.lineStrong(dark))
-                .frame(width: UIScale.pt(68), height: UIScale.pt(5))
-        }
-        .overlay(alignment: .bottom) {
-            Circle()
-                .fill(DashSkin.accent(dark).opacity(0.45 + pulse * 0.45))
-                .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                .offset(y: UIScale.pt(13))
+        let lidHeight = UIScale.pt(46) * CGFloat(1 - shut * 0.9)
+        return HStack(spacing: UIScale.pt(18)) {
+            VStack(spacing: 0) {
+                HostPreviewTrapezoid(inset: UIScale.pt(10) * CGFloat(shut))
+                    .fill(DashSkin.paper2(dark))
+                    .overlay {
+                        HostPreviewTrapezoid(inset: UIScale.pt(10) * CGFloat(shut))
+                            .stroke(DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
+                    }
+                    .frame(width: UIScale.pt(70), height: lidHeight)
+                Capsule()
+                    .fill(DashSkin.inkFaint(dark))
+                    .frame(width: UIScale.pt(84), height: UIScale.pt(5))
+            }
+            .frame(height: UIScale.pt(51), alignment: .bottom)
+            HStack(spacing: UIScale.pt(5)) {
+                Circle()
+                    .fill(DashSkin.sage.opacity(0.55 + pulse * 0.45))
+                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                Text("Still running")
+                    .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func calendarPreview(phase: Double) -> some View {
-        let progress = loopProgress(phase, duration: 3.2)
         let palette = [
             Color(red: 0.82, green: 0.45, blue: 0.38),
-            Color(red: 0.82, green: 0.65, blue: 0.31),
             Color(red: 0.42, green: 0.62, blue: 0.48),
             Color(red: 0.43, green: 0.55, blue: 0.76),
         ]
-        let resetOpacity = 1 - smoothed(clamped((progress - 0.84) / 0.12))
-        return HStack(alignment: .bottom, spacing: UIScale.pt(7)) {
-            ForEach(0..<4) { index in
-                let start = 0.08 + Double(index) * 0.11
-                let rise = smoothed(clamped((progress - start) / 0.28))
-                RoundedRectangle(cornerRadius: UIScale.pt(4), style: .continuous)
-                    .fill(palette[index].opacity(dark ? 0.78 : 0.68))
-                    .frame(width: UIScale.pt(16), height: CGFloat(25 + index * 5))
-                    .offset(y: CGFloat((1 - rise) * 25))
-                    .opacity(rise * resetOpacity)
+        let meetings = [("9:30", "Standup"), ("11:00", "Design review"), ("14:15", "1:1 with Sam")]
+        return VStack(spacing: UIScale.pt(5)) {
+            ForEach(Array(meetings.enumerated()), id: \.offset) { index, meeting in
+                HStack(spacing: UIScale.pt(7)) {
+                    Text(meeting.0)
+                        .font(DashSkin.mono(7.5, weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(28), alignment: .trailing)
+                    Capsule().fill(palette[index])
+                        .frame(width: UIScale.pt(3), height: UIScale.pt(16))
+                    Text(meeting.1)
+                        .font(.system(size: UIScale.pt(9), weight: .medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                    Spacer(minLength: 0)
+                    if index == 0 {
+                        Text("Join")
+                            .font(.system(size: UIScale.pt(8), weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, UIScale.pt(8))
+                            .frame(height: UIScale.pt(16))
+                            .background(
+                                DashSkin.accent(dark),
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(5)))
+                    }
+                }
             }
         }
-        .padding(.bottom, UIScale.pt(7))
-        .overlay(alignment: .bottom) {
-            Capsule()
-                .fill(DashSkin.lineStrong(dark))
-                .frame(width: UIScale.pt(94), height: UIScale.pt(2))
-        }
+        .padding(.horizontal, UIScale.pt(16))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func notchPreview(phase: Double) -> some View {
-        let pulse = CGFloat((sin(phase * 1.8) + 1) / 2)
+        let pulse = (sin(phase * 1.8) + 1) / 2
         return VStack(spacing: UIScale.pt(0)) {
             BottomRoundedRectangle(radius: UIScale.pt(12))
                 .fill(Color.black)
-                .frame(width: UIScale.pt(80) + pulse * 44, height: UIScale.pt(20) + pulse * 13)
+                .frame(width: UIScale.pt(80 + pulse * 44), height: UIScale.pt(20 + pulse * 13))
             Spacer(minLength: 0)
             HStack(spacing: UIScale.pt(5)) {
                 Circle().fill(DashSkin.accent(dark)).frame(
@@ -445,38 +525,83 @@ struct HostExtensionPreview: View {
     }
 
     private func clipboardPreview(phase: Double) -> some View {
-        VStack(spacing: UIScale.pt(4)) {
+        VStack(spacing: UIScale.pt(6)) {
             ForEach(0..<3) { index in
                 let progress = (sin(phase * 1.8 - Double(index) * 0.8) + 1) / 2
-                HStack(spacing: UIScale.pt(7)) {
-                    RoundedRectangle(cornerRadius: UIScale.pt(2))
+                HStack(spacing: UIScale.pt(8)) {
+                    RoundedRectangle(cornerRadius: UIScale.pt(3))
                         .fill(DashSkin.accent(dark).opacity(0.55 + Double(index) * 0.12))
-                        .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                        .frame(width: UIScale.pt(12), height: UIScale.pt(12))
                     Capsule()
                         .fill(DashSkin.inkFaint(dark).opacity(0.48))
-                        .frame(width: CGFloat(44 + index * 14), height: UIScale.pt(4))
+                        .frame(width: UIScale.pt(Double(88 - index * 16)), height: UIScale.pt(5))
                     Spacer(minLength: 0)
+                    Text("⌘\(index + 1)")
+                        .font(DashSkin.mono(8, weight: .medium))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
-                .offset(x: -8 + progress * 8)
                 .opacity(0.5 + progress * 0.5)
             }
         }
-        .padding(.horizontal, UIScale.pt(25))
+        .padding(.horizontal, UIScale.pt(20))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func musicPreview(animating: Bool) -> some View {
-        HStack(spacing: UIScale.pt(13)) {
-            HostPreviewWave(
-                playing: animating, color: DashSkin.accent(dark), barCount: 7,
-                maxHeight: UIScale.pt(28))
+        let accent = DashSkin.accent(dark)
+        return HStack(spacing: UIScale.pt(12)) {
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [accent, DashSkin.accentDeep(dark)], startPoint: .topLeading,
+                        endPoint: .bottomTrailing)
+                )
+                .frame(width: UIScale.pt(60), height: UIScale.pt(60))
+                .overlay {
+                    Image(systemName: "music.note")
+                        .font(.system(size: UIScale.pt(24), weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Capsule().fill(DashSkin.inkSoft(dark).opacity(0.65)).frame(
-                    width: UIScale.pt(62), height: UIScale.pt(5))
-                Capsule().fill(DashSkin.inkFaint(dark).opacity(0.42)).frame(
-                    width: UIScale.pt(43), height: UIScale.pt(4))
+                HStack(alignment: .center, spacing: UIScale.pt(6)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        Capsule().fill(DashSkin.inkSoft(dark).opacity(0.65)).frame(
+                            width: UIScale.pt(66), height: UIScale.pt(5))
+                        Capsule().fill(DashSkin.inkFaint(dark).opacity(0.42)).frame(
+                            width: UIScale.pt(44), height: UIScale.pt(4))
+                    }
+                    Spacer(minLength: 0)
+                    if animating {
+                        HostPreviewWave(
+                            playing: true, color: accent, barCount: 5, maxHeight: UIScale.pt(16))
+                    } else {
+                        HStack(alignment: .bottom, spacing: UIScale.pt(2)) {
+                            ForEach([7.0, 12, 16, 9, 13], id: \.self) { height in
+                                Capsule().fill(accent).frame(
+                                    width: UIScale.pt(3), height: UIScale.pt(height))
+                            }
+                        }
+                        .frame(height: UIScale.pt(16), alignment: .bottom)
+                    }
+                }
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(DashSkin.lineStrong(dark))
+                        Capsule().fill(accent).frame(width: proxy.size.width * 0.42)
+                    }
+                }
+                .frame(height: UIScale.pt(4))
+                HStack(spacing: UIScale.pt(14)) {
+                    ForEach(["backward.fill", "pause.fill", "forward.fill"], id: \.self) { symbol in
+                        Image(systemName: symbol)
+                            .font(.system(size: UIScale.pt(symbol == "pause.fill" ? 13 : 9)))
+                            .foregroundStyle(DashSkin.ink(dark))
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
         }
+        .padding(.horizontal, UIScale.pt(16))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -491,7 +616,7 @@ struct HostExtensionPreview: View {
             RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .fill(DashSkin.paper2(dark))
                 .frame(width: UIScale.pt(70), height: UIScale.pt(36))
-                .offset(x: -14, y: -8)
+                .offset(x: UIScale.pt(-14), y: UIScale.pt(-8))
                 .opacity(0.55)
             ZStack {
                 Image(nsImage: swatches[index])
@@ -502,7 +627,7 @@ struct HostExtensionPreview: View {
                     .opacity(blend)
             }
             .frame(width: UIScale.pt(84), height: UIScale.pt(50))
-            .offset(x: 12, y: 8)
+            .offset(x: UIScale.pt(12), y: UIScale.pt(8))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -518,7 +643,7 @@ struct HostExtensionPreview: View {
                         .strokeBorder(DashSkin.lineStrong(dark))
                 }
                 .frame(width: UIScale.pt(76), height: UIScale.pt(39))
-                .offset(x: -15, y: -7)
+                .offset(x: UIScale.pt(-15), y: UIScale.pt(-7))
                 .opacity(backOpacity)
             RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
                 .fill(DashSkin.paper(dark))
@@ -537,7 +662,7 @@ struct HostExtensionPreview: View {
                     }
                     .padding(UIScale.pt(8))
                 }
-                .offset(x: 15, y: 7)
+                .offset(x: UIScale.pt(15), y: UIScale.pt(7))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -565,7 +690,7 @@ struct HostExtensionPreview: View {
                 .fill(DashSkin.paper(dark).opacity(0.92))
                 .frame(width: UIScale.pt(30), height: UIScale.pt(11))
                 .blur(radius: UIScale.pt(3.5))
-                .offset(x: CGFloat(-48 + travel * 96))
+                .offset(x: UIScale.pt(-48 + travel * 96))
                 .opacity(bandOpacity)
         }
         .frame(width: UIScale.pt(108), height: UIScale.pt(48))
@@ -598,7 +723,7 @@ struct HostExtensionPreview: View {
                     Circle().strokeBorder(DashSkin.paper(dark), lineWidth: UIScale.pt(3))
                 }
                 .shadow(color: .black.opacity(dark ? 0.32 : 0.16), radius: UIScale.pt(3), y: 1)
-                .offset(x: CGFloat(-49 + travel * 98), y: -7)
+                .offset(x: UIScale.pt(-49 + travel * 98), y: UIScale.pt(-7))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -739,30 +864,31 @@ struct HostExtensionPreview: View {
     }
 
     private func audioMixerPreview(phase: Double) -> some View {
-        let levels = (0..<4).map { index in
-            CGFloat(0.3 + (sin(phase * 2.2 + Double(index) * 0.9) + 1) * 0.32)
-        }
-        return HStack(alignment: .bottom, spacing: UIScale.pt(10)) {
-            ForEach(0..<4) { index in
-                VStack(spacing: UIScale.pt(4)) {
+        let track = 48.0
+        let channels = ["music.note", "video.fill", "message.fill", "globe"]
+        return HStack(alignment: .bottom, spacing: UIScale.pt(26)) {
+            ForEach(Array(channels.enumerated()), id: \.offset) { index, symbol in
+                let level = 0.3 + (sin(phase * 2.2 + Double(index) * 0.9) + 1) * 0.32
+                VStack(spacing: UIScale.pt(6)) {
                     ZStack(alignment: .bottom) {
                         Capsule()
                             .fill(DashSkin.lineStrong(dark))
-                            .frame(width: UIScale.pt(4))
+                            .frame(width: UIScale.pt(6))
                         Capsule()
                             .fill(
                                 index == 1
                                     ? DashSkin.accent(dark)
                                     : DashSkin.accent(dark).opacity(0.5)
                             )
-                            .frame(width: UIScale.pt(4), height: UIScale.pt(26) * levels[index])
+                            .frame(width: UIScale.pt(6), height: UIScale.pt(track * level))
                     }
-                    .frame(height: UIScale.pt(26))
-                    Circle()
-                        .fill(
+                    .frame(height: UIScale.pt(track))
+                    Image(systemName: symbol)
+                        .font(.system(size: UIScale.pt(9), weight: .medium))
+                        .foregroundStyle(
                             index == 1 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                         )
-                        .frame(width: UIScale.pt(5), height: UIScale.pt(5))
+                        .frame(width: UIScale.pt(14), height: UIScale.pt(12))
                 }
             }
         }
@@ -773,14 +899,22 @@ struct HostExtensionPreview: View {
 enum HostExtensionPreviewMotionPolicy {
     static let restingPhase = 1.1
     static let hoverPhase = 2.2
+    static let mutedPhase = 1.6
+    static let unmutedPhase = 0.2
+    static let lidClosingPhase = 1.0
+    static let lidClosedPhase = 2.0
 
     static func animates(hovering: Bool, reduceMotion: Bool) -> Bool {
         hovering && !reduceMotion
     }
 
-    static func phase(hovering: Bool, reduceMotion: Bool) -> Double {
-        animates(hovering: hovering, reduceMotion: reduceMotion)
-            ? hoverPhase : restingPhase
+    static func phase(for id: String, hovering: Bool, reduceMotion: Bool) -> Double {
+        let active = animates(hovering: hovering, reduceMotion: reduceMotion)
+        switch id {
+        case "micMute": return active ? unmutedPhase : mutedPhase
+        case "lidAwake": return active ? lidClosedPhase : lidClosingPhase
+        default: return active ? hoverPhase : restingPhase
+        }
     }
 }
 

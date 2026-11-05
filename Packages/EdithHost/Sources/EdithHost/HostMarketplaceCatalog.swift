@@ -113,7 +113,9 @@ enum HostMarketplaceCatalog {
                 .prefix(featuredLimit))
     }
 
-    static func groups(_ entries: [HostExtension]) -> [(suite: HostMarketplaceSuite, entries: [HostExtension])] {
+    static func groups(_ entries: [HostExtension]) -> [(
+        suite: HostMarketplaceSuite, entries: [HostExtension]
+    )] {
         suites.compactMap { suite in
             let members = entries.filter { $0.category == suite.id }
             return members.isEmpty ? nil : (suite, members)

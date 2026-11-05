@@ -36,6 +36,7 @@ import Testing
             Variant(name: "compact-light", width: 640, height: 700, zoom: 1, scheme: .light),
             Variant(name: "compact-dark", width: 640, height: 700, zoom: 1, scheme: .dark),
             Variant(name: "zoom-light", width: 1100, height: 760, zoom: 1.6, scheme: .light),
+            Variant(name: "wide-light", width: 1600, height: 960, zoom: 1, scheme: .light),
         ]
     }
 
@@ -58,12 +59,42 @@ import Testing
                     try expectInside(host, labels: ["Continue setup", "Browse extensions", "Hide"])
                     #expect(find(host, label: "Add widgets") == nil)
                 } else {
-                    try expectInside(host, labels: variant.zoom == 1 ? ["Copy setup command", "Hide"] : ["Hide"])
+                    try expectInside(
+                        host, labels: variant.zoom == 1 ? ["Copy setup command", "Hide"] : ["Hide"])
                     #expect(find(host, label: "Browse extensions") == nil)
                     #expect(find(host, label: "Continue setup") == nil)
                 }
             }
         }
+    }
+
+    @Test func firstRunSetupIsTheOnlyThingOnHome() async throws {
+        defer { windows.close() }
+        let fixture = try Fixture(installed: ["calendar"], active: ["calendar"])
+        defer { fixture.clean() }
+        await fixture.marketplace.enable(id: "calendar")
+        let permissions = fixture.permissions()
+        await permissions.refresh()
+        for variant in Variant.all {
+            let setup = try await render(variant, name: "home-setup-focus") {
+                detail(
+                    fixture, permissions: permissions, page: "home", scheme: variant.scheme,
+                    setup: true)
+            }
+            try expectInside(setup, labels: ["Synthetic setup"])
+            for label in ["Hide", "Continue setup", "Edit layout", "Widget editor"] {
+                #expect(find(setup, label: label) == nil, "\(label)")
+            }
+            let home = try await render(variant, name: "home-after-setup") {
+                detail(fixture, permissions: permissions, page: "home", scheme: variant.scheme)
+            }
+            #expect(find(home, label: "Synthetic setup") == nil)
+            try expectInside(home, labels: ["Edit layout"])
+        }
+    }
+
+    @Test func connectingAnAgentCopiesTheCommandForEveryClient() {
+        #expect(HostGetStarted.agentCommand == "ed mcp install --client all")
     }
 
     @Test func dismissedGetStartedLeavesAnOrientedEmptyHome() async throws {
@@ -140,7 +171,11 @@ import Testing
                     marketplace: fixture.marketplace, permissions: permissions,
                     defaults: fixture.defaults, showWelcome: {}, activation: { _ in })
             }
-            try expectInside(host, labels: ["Introduce extensions the first time you open them", "Reset introductions"])
+            try expectInside(
+                host,
+                labels: [
+                    "Introduce extensions the first time you open them", "Reset introductions",
+                ])
         }
     }
 
@@ -176,7 +211,7 @@ import Testing
 
     private func detail(
         _ fixture: Fixture, permissions: HostPermissions, page: String,
-        scheme: ColorScheme
+        scheme: ColorScheme, setup: Bool = false
     ) -> some View {
         VStack(spacing: 0) {
             Rectangle().fill(DashSkin.paper(scheme == .dark))
@@ -185,7 +220,13 @@ import Testing
                 marketplace: fixture.marketplace, updater: HostUpdater(startingUpdater: false),
                 permissions: permissions, destination: HostNavigationCatalog.page(page),
                 settings: .constant("general"), maintenanceSection: .constant("Updates"),
-                showWelcome: {}, defaults: fixture.defaults, select: { _ in })
+                showWelcome: {},
+                additionalSettings: { id in
+                    guard setup, id == "home-setup" else { return nil }
+                    return AnyView(
+                        Button("Synthetic setup") {}.accessibilityLabel("Synthetic setup"))
+                },
+                defaults: fixture.defaults, select: { _ in })
         }
     }
 
@@ -251,7 +292,8 @@ import Testing
         #expect(!TestWindowHost.isExposedOnDesktop(window))
         if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
             let directory = URL(fileURLWithPath: capture, isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
             try png.write(
                 to: directory.appendingPathComponent("\(name)-\(variant.name).png"),
                 options: .atomic)

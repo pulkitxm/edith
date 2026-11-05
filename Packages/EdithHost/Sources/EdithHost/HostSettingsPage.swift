@@ -76,20 +76,10 @@ struct HostSettingsPage: View {
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
-                    WrapHStack(spacing: UIScale.pt(10)) {
-                        Toggle(
-                            "Use accent",
-                            isOn: Binding(
-                                get: { themeName == "accent" },
-                                set: {
-                                    $themeName
-                                        .wrappedValue = $0 ? "accent" : lastPaletteTheme
-                                })
-                        )
-                        .toggleStyle(.switch)
-                        ForEach(themePalette, id: \.name) { entry in
-                            swatch(entry.name, color: entry.color)
-                        }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: UIScale.pt(10)) { themeControls }
+                            .fixedSize()
+                        WrapHStack(spacing: UIScale.pt(10)) { themeControls }
                     }
                 }
             } header: {
@@ -104,17 +94,15 @@ struct HostSettingsPage: View {
                     .onChange(of: showDockIcon) { _, on in
                         activation(on)
                     }
-                LabeledContent {
+                HStack(alignment: .center, spacing: UIScale.pt(6)) {
+                    Text("Panel shortcut")
+                    InfoDot(
+                        "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
+                    )
+                    Spacer(minLength: UIScale.pt(12))
                     HostHotKeyRecorder(
                         keyPrefix: "hotKey", defaultLabel: "⌥⌘E", defaults: defaults,
                         commit: panelShortcutChanged)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Panel shortcut")
-                        InfoDot(
-                            "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
-                        )
-                    }
                 }
             } header: {
                 Text("Window")
@@ -175,6 +163,19 @@ struct HostSettingsPage: View {
         .edithForm()
         .navigationTitle("General")
         .pageTask { await permissions.refresh() }
+    }
+
+    @ViewBuilder private var themeControls: some View {
+        Toggle(
+            "Use accent",
+            isOn: Binding(
+                get: { themeName == "accent" },
+                set: { $themeName.wrappedValue = $0 ? "accent" : lastPaletteTheme })
+        )
+        .toggleStyle(.switch)
+        ForEach(themePalette, id: \.name) { entry in
+            swatch(entry.name, color: entry.color)
+        }
     }
 
     private var enabledExtensionPermissions: Set<HostPermission> {

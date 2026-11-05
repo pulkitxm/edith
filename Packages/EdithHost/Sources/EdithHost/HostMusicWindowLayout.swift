@@ -3,6 +3,13 @@ import SwiftUI
 enum HostMusicRegion: String {
     case footer = "music.footer"
     case sidebar = "music.sidebar"
+
+    var initialHeight: Double {
+        switch self {
+        case .footer: 64
+        case .sidebar: 40
+        }
+    }
 }
 
 struct HostMusicWindowLayout<Main: View, Footer: View>: View {

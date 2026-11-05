@@ -221,6 +221,7 @@ struct HostStoragePageTests {
         for (name, width, zoom, scheme) in [
             ("regular-light", 1100.0, 1.0, ColorScheme.light),
             ("regular-dark", 1100.0, 1.0, ColorScheme.dark),
+            ("wide-light", 1600.0, 1.0, ColorScheme.light),
             ("compact-light", 520.0, 1.0, ColorScheme.light),
             ("compact-dark", 520.0, 1.0, ColorScheme.dark),
             ("zoom-light", 700.0, 1.5, ColorScheme.light),

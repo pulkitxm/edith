@@ -75,6 +75,15 @@ struct HostExtensionContent: View {
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
+    private var inSettings: Bool { location == "settings" }
+    private func loading(_ title: String) -> some View {
+        PageLoading(state: .loading, title: title, layout: inSettings ? .form : .list) {
+            EmptyView()
+        }
+        .padding(.horizontal, inSettings ? PageMetrics.gutter(compact) : 0)
+        .padding(.vertical, inSettings ? UIScale.pt(PageMetrics.pinnedContentTop) : 0)
+    }
+
     var body: some View {
         Group {
             if let controller {
@@ -87,7 +96,7 @@ struct HostExtensionContent: View {
                     )
                     .id(ObjectIdentifier(controller))
             } else if transitioning {
-                PageLoading(state: .loading, title: "Preparing " + title) { EmptyView() }
+                loading("Preparing " + title)
             } else if !eligible {
                 ContentUnavailableView {
                     Label(title, systemImage: "puzzlepiece.extension")
@@ -107,10 +116,12 @@ struct HostExtensionContent: View {
                     }
                     Button("Extensions", action: openMarketplace).buttonStyle(.edith(.secondary))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if presenter == nil {
                 ContentUnavailableView(
                     title, systemImage: "puzzlepiece.extension",
                     description: Text("The extension view is not connected."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error {
                 ContentUnavailableView {
                     Label(title, systemImage: "exclamationmark.triangle")
@@ -119,8 +130,9 @@ struct HostExtensionContent: View {
                 } actions: {
                     Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                PageLoading(state: .loading, title: "Opening " + title) { EmptyView() }
+                loading("Opening " + title)
             }
         }
         .frame(height: (contentHeight ?? initialHeight).map { CGFloat($0) })

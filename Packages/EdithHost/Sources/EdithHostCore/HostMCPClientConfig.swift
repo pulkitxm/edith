@@ -112,7 +112,8 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
 
     static func shellLine(_ words: [String]) -> String {
         let safe = CharacterSet(
-            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@+%,")
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@+%,"
+        )
         return words.map { word in
             if !word.isEmpty, word.unicodeScalars.allSatisfy(safe.contains) { return word }
             return "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
@@ -295,7 +296,8 @@ public struct HostMCPInstaller: Sendable {
                     let result = tools.run(executable, step)
                     guard result.status != 0 else { return nil }
                     let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return "\(HostMCPClient.shellLine([tool] + step)) exited with status \(result.status)"
+                    return
+                        "\(HostMCPClient.shellLine([tool] + step)) exited with status \(result.status)"
                         + (detail.isEmpty ? "." : ": " + String(detail.prefix(400)))
                 }.first
                 guard let failure else { return outcome(action, applied: true, run: register) }

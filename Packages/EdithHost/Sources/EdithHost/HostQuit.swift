@@ -25,7 +25,13 @@ import SwiftUI
 }
 
 @MainActor @Observable final class HostQuitWaitModel {
-    var blockers: [String]
+    var blockers: [String] {
+        didSet {
+            finished.append(contentsOf: oldValue.filter { !blockers.contains($0) })
+            finished.removeAll { blockers.contains($0) }
+        }
+    }
+    private(set) var finished: [String] = []
     @ObservationIgnored var quitNow: @MainActor () -> Void = {}
     @ObservationIgnored var keepOpen: @MainActor () -> Void = {}
 
@@ -42,11 +48,17 @@ import SwiftUI
 
     var message: String {
         let verb = blockers.count > 1 ? "are" : "is"
-        return "\(subject) \(verb) still working. Edith quits on its own as soon as it is done."
+        let finish = blockers.count > 1 ? "they finish" : "it finishes"
+        return "\(subject) \(verb) still working. Edith quits on its own as soon as \(finish)."
     }
 
     var status: String {
         blockers.count == 1 ? "Waiting for \(blockers[0])" : "Waiting for \(blockers.count) tools"
+    }
+
+    var progress: String? {
+        let total = finished.count + blockers.count
+        return total > 1 ? "\(finished.count) of \(total) done" : nil
     }
 }
 
@@ -69,15 +81,24 @@ struct HostQuitWaitView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack(spacing: UIScale.pt(8)) {
-                ProgressView().controlSize(.small)
-                Text(model.status)
-                    .font(.edithText(.caption))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    Text(model.status)
+                        .font(.edithText(.caption)).fontWeight(.medium)
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let progress = model.progress {
+                        Text(progress)
+                            .font(.edithText(.caption)).monospacedDigit()
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                }
+                HostQuitFinishingBar()
+                if model.progress != nil { rows(dark: dark) }
             }
-            .padding(.horizontal, UIScale.pt(12))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(32), alignment: .leading)
+            .padding(UIScale.pt(12))
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
             .accessibilityElement(children: .combine)
             Text("Quitting now stops this work, and anything it has not saved may be lost.")
@@ -96,6 +117,60 @@ struct HostQuitWaitView: View {
         .padding(UIScale.pt(20))
         .frame(width: UIScale.pt(400), alignment: .leading)
         .background(DashSkin.paper2(dark))
+    }
+
+    private func rows(dark: Bool) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            ForEach(model.finished, id: \.self) { row($0, done: true, dark: dark) }
+            ForEach(model.blockers, id: \.self) { row($0, done: false, dark: dark) }
+        }
+    }
+
+    private func row(_ title: String, done: Bool, dark: Bool) -> some View {
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle.dotted")
+                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .foregroundStyle(done ? DashSkin.sage : DashSkin.accent(dark))
+                .accessibilityHidden(true)
+            Text(title).font(.edithText(.caption))
+                .foregroundStyle(done ? DashSkin.inkFaint(dark) : DashSkin.inkSoft(dark))
+                .lineLimit(1)
+        }
+    }
+}
+
+struct HostQuitFinishingBar: View {
+    static let period = 1.6
+    static let sweep = 0.35
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static func offset(at time: TimeInterval, width: CGFloat) -> CGFloat {
+        let progress = time.truncatingRemainder(dividingBy: period) / period
+        return CGFloat(progress) * (width * (1 + sweep)) - width * sweep
+    }
+
+    var body: some View {
+        let dark = scheme == .dark
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                Capsule().fill(DashSkin.line(dark))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(DashSkin.accent(dark))
+                            .frame(width: reduceMotion ? width : width * Self.sweep)
+                            .offset(
+                                x: reduceMotion
+                                    ? 0
+                                    : Self.offset(
+                                        at: context.date.timeIntervalSinceReferenceDate,
+                                        width: width))
+                    }
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(height: UIScale.pt(6))
+        .accessibilityHidden(true)
     }
 }
 

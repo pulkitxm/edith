@@ -81,7 +81,8 @@ import HostWorkerFixtureSupport
             ])
         #expect(entries.allSatisfy { !HostMarketplaceCatalog.tagline($0).isEmpty })
         #expect(
-            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").first?
+            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media")
+                .first?
                 .id == "clipboard")
         #expect(
             HostMarketplaceCatalog.filter(entries, query: "clipboard", category: "all").map(\.id)
@@ -923,6 +924,7 @@ import HostWorkerFixtureSupport
             for variant in [
                 Variant("regular-light", 1200, 1, .light), Variant("regular-dark", 1200, 1, .dark),
                 Variant("compact", 620, 1, .light), Variant("zoomed", 1200, 1.5, .dark),
+                Variant("wide", 1600, 1, .light),
             ] {
                 UIScale.apply(variant.zoom)
                 let host = NSHostingView(
@@ -1135,7 +1137,8 @@ import HostWorkerFixtureSupport
             await settle(window, host: host)
             #expect(abs(host.bounds.width - variant.width) < 1)
             #expect(
-                find(host, label: "1 extension needs an update to work with this version of Edith.") != nil)
+                find(host, label: "1 extension needs an update to work with this version of Edith.")
+                    != nil)
             let visible = window.convertToScreen(host.convert(host.bounds, to: nil))
             for label in [
                 "Update Now", "Update required for this version of Edith", "Update Calendar",

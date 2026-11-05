@@ -17,7 +17,9 @@ struct HostMarketplaceStorefrontTests {
     @Test func searchMatchesTitleTaglineAndSummary() {
         let entries = [
             entry("clipboard", title: "Clipboard", tagline: "History with instant paste"),
-            entry("emoji", title: "Emoji", tagline: "Type any emoji", summary: "Works from the keyboard"),
+            entry(
+                "emoji", title: "Emoji", tagline: "Type any emoji",
+                summary: "Works from the keyboard"),
             entry("hinge", title: "Hinge", tagline: "Fold the desktop away"),
         ]
         func ids(_ query: String) -> [String] {
@@ -38,11 +40,15 @@ struct HostMarketplaceStorefrontTests {
 
     @Test func labsStayHiddenUntilSearchedOrScoped() {
         let entries = [entry("a"), entry("toy", category: "labs", tagline: "Toy")]
-        #expect(HostMarketplaceCatalog.filter(entries, query: "", category: "all").map(\.id) == ["a"])
         #expect(
-            HostMarketplaceCatalog.filter(entries, query: "toy", category: "all").map(\.id) == ["toy"])
+            HostMarketplaceCatalog.filter(entries, query: "", category: "all").map(\.id) == ["a"])
         #expect(
-            HostMarketplaceCatalog.filter(entries, query: "", category: "labs").map(\.id) == ["toy"])
+            HostMarketplaceCatalog.filter(entries, query: "toy", category: "all").map(\.id) == [
+                "toy"
+            ])
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "", category: "labs").map(\.id) == ["toy"]
+        )
         #expect(
             HostMarketplaceCatalog.filter(
                 entries, query: "", category: "all", scope: .installed, installed: ["toy"]
@@ -50,9 +56,15 @@ struct HostMarketplaceStorefrontTests {
     }
 
     @Test func searchingLooksAcrossEveryCategory() {
-        let entries = [entry("a", category: "media", tagline: "Alpha"), entry("b", tagline: "Beta")]
-        #expect(HostMarketplaceCatalog.filter(entries, query: "beta", category: "media").map(\.id) == ["b"])
-        #expect(HostMarketplaceCatalog.filter(entries, query: "", category: "media").map(\.id) == ["a"])
+        let entries = [
+            entry("a", category: "media", tagline: "Alpha"), entry("b", tagline: "Beta"),
+        ]
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "beta", category: "media").map(\.id) == [
+                "b"
+            ])
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "", category: "media").map(\.id) == ["a"])
     }
 
     @Test func scopesNarrowToInstalledAndUpdatable() {
@@ -85,20 +97,28 @@ struct HostMarketplaceStorefrontTests {
         #expect(groups.map(\.suite.id) == ["agents", "media"])
     }
 
-    @Test(arguments: [
-        (false, false, nil, false, false, true, false, false, false, false, HostExtensionRowState.Stage.notInstalled),
-        (false, false, nil, false, false, true, false, true, false, false, .failed),
-        (false, false, nil, false, false, false, false, false, false, false, .unavailable),
-        (false, false, nil, false, true, true, false, false, false, false, .updateAvailable),
-        (false, false, nil, false, true, false, false, false, false, false, .unavailable),
-        (false, false, nil, false, false, true, true, false, false, false, .installed),
-        (false, false, nil, false, false, true, true, false, true, false, .installed),
-        (false, false, nil, false, false, true, true, false, true, true, .ready),
-        (false, false, nil, false, false, true, true, true, true, true, .updateAvailable),
-        (false, false, nil, true, false, true, true, false, true, true, .starting),
-        (true, false, nil, false, false, true, true, false, true, true, .pending),
-        (false, true, nil, false, false, true, true, false, true, true, .pending),
-    ] as [(Bool, Bool, HostExtensionOperation?, Bool, Bool, Bool, Bool, Bool, Bool, Bool, HostExtensionRowState.Stage)])
+    @Test(
+        arguments: [
+            (
+                false, false, nil, false, false, true, false, false, false, false,
+                HostExtensionRowState.Stage.notInstalled
+            ),
+            (false, false, nil, false, false, true, false, true, false, false, .failed),
+            (false, false, nil, false, false, false, false, false, false, false, .unavailable),
+            (false, false, nil, false, true, true, false, false, false, false, .updateAvailable),
+            (false, false, nil, false, true, false, false, false, false, false, .unavailable),
+            (false, false, nil, false, false, true, true, false, false, false, .installed),
+            (false, false, nil, false, false, true, true, false, true, false, .installed),
+            (false, false, nil, false, false, true, true, false, true, true, .ready),
+            (false, false, nil, false, false, true, true, true, true, true, .updateAvailable),
+            (false, false, nil, true, false, true, true, false, true, true, .starting),
+            (true, false, nil, false, false, true, true, false, true, true, .pending),
+            (false, true, nil, false, false, true, true, false, true, true, .pending),
+        ]
+            as [(
+                Bool, Bool, HostExtensionOperation?, Bool, Bool, Bool, Bool, Bool, Bool, Bool,
+                HostExtensionRowState.Stage
+            )])
     func stageMapsMarketplaceFacts(
         removing: Bool, pendingDisable: Bool, operation: HostExtensionOperation?, starting: Bool,
         downloaded: Bool, available: Bool, installed: Bool, update: Bool, on: Bool, ready: Bool,
@@ -157,7 +177,8 @@ struct HostMarketplaceStorefrontTests {
         #expect(found[1].detail.contains("2 cards"))
         #expect(found[3].detail.contains("⇧⌘M Mute"))
         let maintenance = HostExtensionPlacements.placements(
-            for: tool, route: ("appMaintenance", "Packages"), sectionTitles: ["Packages": "Packages"])
+            for: tool, route: ("appMaintenance", "Packages"),
+            sectionTitles: ["Packages": "Packages"])
         #expect(maintenance[0].title == "Maintenance")
         #expect(maintenance[0].detail.contains("Packages"))
         let quiet = HostExtension(id: "quiet", title: "Quiet", symbolName: "star", category: "desk")

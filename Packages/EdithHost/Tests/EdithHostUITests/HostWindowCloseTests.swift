@@ -47,10 +47,14 @@ import Testing
         var asked = 0
         _ = HostWindowClose.target(
             isMain: true, sheet: true, popover: false, closable: true,
-            terminalTab: { asked += 1; return true })
+            terminalTab: {
+                asked += 1; return true
+            })
         _ = HostWindowClose.target(
             isMain: true, sheet: false, popover: true, closable: true,
-            terminalTab: { asked += 1; return true })
+            terminalTab: {
+                asked += 1; return true
+            })
         #expect(asked == 0)
     }
 

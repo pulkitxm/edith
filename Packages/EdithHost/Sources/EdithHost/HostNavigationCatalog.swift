@@ -49,7 +49,8 @@ enum HostNavigationCatalog {
             summary: "Privacy access used by enabled extensions"),
         .init(
             id: "agent", title: "Background agent", symbol: "bolt.horizontal.circle",
-            extensionID: nil, summary: "The headless process that collects in the background"),
+            extensionID: nil,
+            summary: "Keeps your tools up to date while the Edith window is closed"),
         .init(
             id: "jev", title: "Jev", symbol: "brain", extensionID: "jev",
             summary: "Fast typed decisions from TypeSafe's Jev model"),

@@ -28,7 +28,9 @@ struct HostExtensionReview: View {
         _reviewed = State(initialValue: marketplace.available[entry.id])
         let hasSettings =
             Self.settingsRequest(id: entry.id, marketplace: marketplace) != nil
-        _tab = State(initialValue: hasSettings && marketplace.installed[entry.id] != nil ? .settings : .about)
+        _tab = State(
+            initialValue: hasSettings && marketplace.installed[entry.id] != nil ? .settings : .about
+        )
     }
 
     private var dark: Bool { scheme == .dark }
@@ -55,18 +57,22 @@ struct HostExtensionReview: View {
             presentationID: presentationID)
     }
 
+    static let aboutHeight = 680.0
+
     static func idealHeight(for id: String) -> Double {
         switch id {
-        case "micMute", "systemStats", "audioMixer": 300
-        case "attention": 440
-        case "machines": 420
-        case "lidAwake": 400
-        case "music": 460
-        case "focusDim", "hinge", "colorPicker", "keystrokeHighlight": 430
-        case "system": 500
-        case "presenter": 580
-        default: 620
+        case "systemStats": 340
+        case "calendar": 360
+        case "audioMixer": 380
+        case "micMute": 420
+        case "keepAwake": 620
+        case "lidAwake": 640
+        default: aboutHeight
         }
+    }
+
+    static func sheetHeight(for id: String, showingSettings: Bool) -> Double {
+        showingSettings ? idealHeight(for: id) : aboutHeight
     }
 
     private enum Tab: Hashable { case settings, about }
@@ -96,7 +102,9 @@ struct HostExtensionReview: View {
         }
         .frame(
             width: PresentationMetrics.width(640),
-            height: PresentationMetrics.height(max(Self.idealHeight(for: entry.id), 680))
+            height: PresentationMetrics.height(
+                Self.sheetHeight(
+                    for: entry.id, showingSettings: settingsRequest != nil && tab == .settings))
         )
         .pageSurface()
         .tracksWindowVisibility()
@@ -126,8 +134,9 @@ struct HostExtensionReview: View {
                 HostInstallControl(
                     title: entry.title, state: state,
                     canCancel: marketplace.canCancelDownload(entry.id),
-                    perform: handle, cancel: { marketplace.cancelDownload(id: entry.id) })
-                    .disabled(owning && state.progress == nil)
+                    perform: handle, cancel: { marketplace.cancelDownload(id: entry.id) }
+                )
+                .disabled(owning && state.progress == nil)
             }
             EdithSegmentedPicker(
                 "View", selection: $tab, options: [Tab.settings, .about],
@@ -160,7 +169,9 @@ struct HostExtensionReview: View {
 
     private var overview: some View {
         let guide = entry.guide
-        return VStack(alignment: .leading, spacing: UIScale.pt(HostExtensionDetailLayout.sectionSpacing)) {
+        return VStack(
+            alignment: .leading, spacing: UIScale.pt(HostExtensionDetailLayout.sectionSpacing)
+        ) {
             HostExtensionHero(
                 entry: entry, tagline: HostMarketplaceCatalog.tagline(entry),
                 categoryTitle: categoryTitle
@@ -181,9 +192,7 @@ struct HostExtensionReview: View {
             if let guidance {
                 PageNotice(guidance, tone: .information)
             }
-            if HostExtensionPreview.hasPreview(entry.id) {
-                HostExtensionArtwork(entry: entry)
-            }
+            HostExtensionArtwork(entry: entry)
             if let summary = guide?.summary, !summary.isEmpty {
                 Text(summary).font(.edithText(.body)).foregroundStyle(DashSkin.inkSoft(dark))
                     .lineSpacing(UIScale.pt(2))
@@ -222,8 +231,9 @@ struct HostExtensionReview: View {
             HostInstallControl(
                 title: entry.title, state: state, large: true,
                 canCancel: marketplace.canCancelDownload(entry.id),
-                perform: handle, cancel: { marketplace.cancelDownload(id: entry.id) })
-                .disabled(owning && state.progress == nil)
+                perform: handle, cancel: { marketplace.cancelDownload(id: entry.id) }
+            )
+            .disabled(owning && state.progress == nil)
         }
     }
 

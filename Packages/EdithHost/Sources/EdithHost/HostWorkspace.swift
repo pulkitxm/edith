@@ -247,7 +247,7 @@ struct HostWorkspace: View {
             marketplace: marketplace, extensionID: "music", location: region.rawValue,
             section: "music",
             presenter: presenter, openMarketplace: { selection = "extensions" },
-            initialHeight: UIScale.pt(region == .footer ? 64 : 46)
+            initialHeight: UIScale.pt(region.initialHeight)
         )
         .environment(\.compactLayout, region == .sidebar)
         .frame(maxWidth: .infinity)

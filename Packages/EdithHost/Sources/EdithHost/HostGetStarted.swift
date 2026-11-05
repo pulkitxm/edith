@@ -50,7 +50,7 @@ struct HostGetStarted: Equatable {
         steps.first { $0.kind == kind }
     }
 
-    static let agentCommand = "claude mcp add edith -- ed mcp"
+    static let agentCommand = "ed mcp install --client all"
 }
 
 struct HostGetStartedCard: View {
@@ -199,6 +199,7 @@ struct HostGetStartedCard: View {
                     .font(.edithText(.caption))
                     .help("Hide this list. Reset it from Settings, General.")
                     .accessibilityIdentifier("getStarted.dismiss")
+                    .padding(.trailing, -UIScale.pt(6))
             }
             LoadingProgress(
                 value: Double(state.completed), total: Double(state.steps.count),
@@ -214,15 +215,20 @@ struct HostGetStartedCard: View {
         let next = state.next == step.kind
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                Image(systemName: step.done ? "checkmark.circle.fill" : (next ? "circle.circle" : "circle"))
-                    .font(.system(size: UIScale.pt(15), weight: .medium))
-                    .foregroundStyle(
-                        step.done || next ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(18))
-                    .accessibilityHidden(true)
+                Image(
+                    systemName: step.done
+                        ? "checkmark.circle.fill" : (next ? "circle.circle" : "circle")
+                )
+                .font(.system(size: UIScale.pt(15), weight: .medium))
+                .foregroundStyle(
+                    step.done || next ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                )
+                .frame(width: UIScale.pt(18))
+                .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(copy.title).font(.edithText(.callout)).fontWeight(.medium)
-                        .foregroundStyle(step.done ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                        .foregroundStyle(
+                            step.done ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                     Text(copy.detail).font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -281,8 +287,8 @@ struct HostGetStartedCard: View {
             Copy(
                 title: "Connect an AI agent",
                 detail: copied
-                    ? "Copied. Paste it in a terminal to let Claude Code use Edith."
-                    : "Let Claude Code or Codex use every Edith extension through ed mcp.",
+                    ? "Copied. Paste it in a terminal to connect every agent on this Mac."
+                    : "Let Claude Code, Codex, Cursor or VS Code use your Edith extensions.",
                 action: PageAction(copied ? "Copy again" : "Copy setup command") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(HostGetStarted.agentCommand, forType: .string)

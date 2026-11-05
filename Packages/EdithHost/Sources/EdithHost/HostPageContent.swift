@@ -34,8 +34,10 @@ struct HostPageContent: View {
     var body: some View {
         page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
-            if showsIntroductionButton, let reopen = $0 { HostIntroductionReopenButton(reopen: reopen) }
-        }
+                if showsIntroductionButton, let reopen = $0 {
+                    HostIntroductionReopenButton(reopen: reopen)
+                }
+            }
     }
 
     @ViewBuilder private var page: some View {
@@ -85,22 +87,16 @@ struct HostPageContent: View {
     }
     private func maintenanceHeader(current: HostNavigationSection, tight: Bool) -> some View {
         let sections = maintenanceSections
-        return PageHeader(
-            current.title,
-            trailing: {
-                Picker("Section", selection: $maintenanceSection) {
-                    ForEach(sections) { section in
-                        Label(section.title, systemImage: section.symbol).tag(section.id)
-                    }
+        return PageHeader(current.title, subtitle: current.summary) {
+            Picker("Section", selection: $maintenanceSection) {
+                ForEach(sections) { section in
+                    Label(section.title, systemImage: section.symbol).tag(section.id)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .accessibilityLabel("App Maintenance section")
-            },
-            accessory: {
-                PageSubtitle(current.summary)
             }
-        )
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .accessibilityLabel("App Maintenance section")
+        }
         .padding(.bottom, tight ? -UIScale.pt(6) : 0)
     }
     @ViewBuilder private var settingsContent: some View {

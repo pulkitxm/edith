@@ -7,8 +7,12 @@ struct HostIntroductions {
     let defaults: UserDefaults
 
     var enabled: Bool {
-        get { defaults.object(forKey: HostSettingsCatalog.introductionsEnabledKey) as? Bool ?? true }
-        nonmutating set { defaults.set(newValue, forKey: HostSettingsCatalog.introductionsEnabledKey) }
+        get {
+            defaults.object(forKey: HostSettingsCatalog.introductionsEnabledKey) as? Bool ?? true
+        }
+        nonmutating set {
+            defaults.set(newValue, forKey: HostSettingsCatalog.introductionsEnabledKey)
+        }
     }
 
     var seen: Set<String> {
@@ -137,7 +141,9 @@ struct HostIntroductionReopen: Equatable, Sendable {
 struct HostIntroductionReopenKey: PreferenceKey {
     static let defaultValue: HostIntroductionReopen? = nil
 
-    static func reduce(value: inout HostIntroductionReopen?, nextValue: () -> HostIntroductionReopen?) {
+    static func reduce(
+        value: inout HostIntroductionReopen?, nextValue: () -> HostIntroductionReopen?
+    ) {
         value = value ?? nextValue()
     }
 }

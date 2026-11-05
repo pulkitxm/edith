@@ -40,44 +40,25 @@ struct HostShortcutsPane: View {
 
             Section {
                 LabeledContent("Toggle sidebar") {
-                    Text("⌘B")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                    keys("⌘B")
                 }
                 LabeledContent("Toggle agent details") {
-                    Text("⌥⌘B")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                    keys("⌥⌘B")
                 }
                 LabeledContent("Close panel") {
-                    Text("Esc")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .foregroundStyle(.secondary)
+                    keys("Esc")
                 }
                 LabeledContent("Toggle agent terminals") {
-                    Text("⌃` or ⌘J")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .foregroundStyle(.secondary)
+                    keys("⌃` or ⌘J")
                 }
                 LabeledContent("New agent terminal") {
-                    Text("⌃⇧`")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                    keys("⌃⇧`")
                 }
                 LabeledContent("Back") {
-                    Text("⌘[")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                    keys("⌘[")
                 }
                 LabeledContent("Forward") {
-                    Text("⌘]")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
-                        .kerning(2)
-                        .foregroundStyle(.secondary)
+                    keys("⌘]")
                 }
             } header: {
                 Text("Fixed")
@@ -88,6 +69,12 @@ struct HostShortcutsPane: View {
         }
         .edithForm()
         .navigationTitle("Shortcuts")
+    }
+
+    private func keys(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .foregroundStyle(.secondary)
     }
 
     private func shortcutRow(

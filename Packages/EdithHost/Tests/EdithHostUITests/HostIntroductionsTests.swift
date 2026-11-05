@@ -122,8 +122,10 @@ import Testing
                 == "All 3 installed")
         #expect(HostSuiteLandingSummary.tagline(tools[0]) == "t")
         #expect(HostSuiteLandingSummary.badge(installed: true, active: true, pending: false) == nil)
-        #expect(HostSuiteLandingSummary.badge(installed: true, active: false, pending: false) == "Off")
-        #expect(HostSuiteLandingSummary.badge(installed: false, active: false, pending: false) == nil)
+        #expect(
+            HostSuiteLandingSummary.badge(installed: true, active: false, pending: false) == "Off")
+        #expect(
+            HostSuiteLandingSummary.badge(installed: false, active: false, pending: false) == nil)
         #expect(
             HostSuiteLandingSummary.badge(installed: true, active: false, pending: true)
                 == "Cleaning up")

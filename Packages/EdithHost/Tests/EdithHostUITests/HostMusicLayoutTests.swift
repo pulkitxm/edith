@@ -12,6 +12,11 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostMusicLayoutTests {
+    @Test func regionsReserveTheHeightOfTheirPlayerBeforeItLoads() {
+        #expect(HostMusicRegion.footer.initialHeight == 64)
+        #expect(HostMusicRegion.sidebar.initialHeight == 40)
+    }
+
     @Test func originalFooterOccupiesWholeWindowBelowMainAndCollapsesAtZeroHeight() async throws {
         for width in [530.0, 1100.0] {
             let state = Height()

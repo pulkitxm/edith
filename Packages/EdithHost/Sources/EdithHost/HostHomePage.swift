@@ -30,64 +30,71 @@ struct HostHomePage: View {
         PageScaffold(pinnedHeader: true) {
             HostHomeHeader(
                 dark: scheme == .dark, editing: $editing, layouts: marketplace.surfaceLayouts,
-                customize: { customize(nil) })
+                showsLayoutControls: workflowSetup == nil, customize: { customize(nil) })
         } content: {
-            if let workflowSetup { workflowSetup }
-            if let getStarted { getStarted }
-            SurfaceCanvas(
-                layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
-                select: { selectedTile = $0 },
-                place: { widget, anchor in
-                    marketplace.surfaceLayouts.update(.home) { layout in
-                        let id = layout.add(widget);
-                        if let anchor { layout.move(id, before: anchor) }; selectedTile = id
-                    }
-                },
-                inspect: { customize($0) },
-                reorder: { id, anchor in
-                    marketplace.surfaceLayouts.update(.home) { $0.move(id, before: anchor) }
-                },
-                configure: { tile in
-                    marketplace.surfaceLayouts.update(.home) { layout in
-                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                        else { return }
-                        if compact { layout.tiles[index] = tile } else { layout.position(tile) }
-                    }
-                },
-                placeAt: { widget, column, row in
-                    marketplace.surfaceLayouts.update(.home) {
-                        selectedTile = $0.add(widget, column: column, row: row)
-                    }
-                }
-            ) { tile in
-                if tile.widget != .clocks
-                    && Set(tile.widget.providerIDs).isDisjoint(
-                        with: marketplace.surfaceAvailability.activeIDs)
-                {
-                    PageCard(title: tile.displayTitle) {
-                        Text("Turn on the extension behind this widget to see it here.")
-                            .font(.edithText(.callout)).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Extensions", action: extensions)
-                            .buttonStyle(.edith(.secondary))
-                    }
-                } else {
-                    HostSurfaceCard(
-                        marketplace: marketplace, target: .home, tile: tile,
-                        openExtension: openExtension, presenter: presenter,
-                        openExtensions: extensions)
-                }
-            }
-            if layout.visible.isEmpty, !editing, workflowSetup == nil {
-                PageEmptyState(
-                    symbolName: "rectangle.3.group",
-                    title: "Make Home yours",
-                    message:
-                        "Home shows live widgets from your extensions, like your next meeting or the song that is playing.",
-                    primary: PageAction("Add widgets", symbolName: "plus") { customize(nil) },
-                    secondary: PageAction("Browse extensions", perform: extensions))
+            if let workflowSetup {
+                workflowSetup
+            } else {
+                dashboard
             }
         }.navigationTitle("Home")
+    }
+
+    @ViewBuilder private var dashboard: some View {
+        if let getStarted { getStarted }
+        SurfaceCanvas(
+            layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
+            select: { selectedTile = $0 },
+            place: { widget, anchor in
+                marketplace.surfaceLayouts.update(.home) { layout in
+                    let id = layout.add(widget);
+                    if let anchor { layout.move(id, before: anchor) }; selectedTile = id
+                }
+            },
+            inspect: { customize($0) },
+            reorder: { id, anchor in
+                marketplace.surfaceLayouts.update(.home) { $0.move(id, before: anchor) }
+            },
+            configure: { tile in
+                marketplace.surfaceLayouts.update(.home) { layout in
+                    guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                    else { return }
+                    if compact { layout.tiles[index] = tile } else { layout.position(tile) }
+                }
+            },
+            placeAt: { widget, column, row in
+                marketplace.surfaceLayouts.update(.home) {
+                    selectedTile = $0.add(widget, column: column, row: row)
+                }
+            }
+        ) { tile in
+            if tile.widget != .clocks
+                && Set(tile.widget.providerIDs).isDisjoint(
+                    with: marketplace.surfaceAvailability.activeIDs)
+            {
+                PageCard(title: tile.displayTitle) {
+                    Text("Turn on the extension behind this widget to see it here.")
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Extensions", action: extensions)
+                        .buttonStyle(.edith(.secondary))
+                }
+            } else {
+                HostSurfaceCard(
+                    marketplace: marketplace, target: .home, tile: tile,
+                    openExtension: openExtension, presenter: presenter,
+                    openExtensions: extensions)
+            }
+        }
+        if layout.visible.isEmpty, !editing {
+            PageEmptyState(
+                symbolName: "rectangle.3.group",
+                title: "Make Home yours",
+                message:
+                    "Home shows live widgets from your extensions, like your next meeting or the song that is playing.",
+                primary: PageAction("Add widgets", symbolName: "plus") { customize(nil) },
+                secondary: PageAction("Browse extensions", perform: extensions))
+        }
     }
 }
 
@@ -95,6 +102,7 @@ private struct HostHomeHeader: View {
     let dark: Bool
     @Binding var editing: Bool
     let layouts: SurfaceLayoutStore
+    let showsLayoutControls: Bool
     let customize: () -> Void
     @Environment(\.surfaceSampleContent) private var sampleContent
 
@@ -121,12 +129,11 @@ private struct HostHomeHeader: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             let now = context.date
-            PageHeader {
+            PageHeader(subtitle: now.formatted(.dateTime.weekday(.wide).month(.wide).day())) {
                 greeting(now)
             } trailing: {
-                layoutControls
+                if showsLayoutControls { layoutControls }
             } accessory: {
-                subtitle(now)
                 if editing {
                     Text("Drag a widget handle to place it. Drag a corner to resize.")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -157,10 +164,6 @@ private struct HostHomeHeader: View {
         (Text("\(salutation(now)), ")
             + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
             + Text("."))
-    }
-
-    private func subtitle(_ now: Date) -> some View {
-        PageSubtitle(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
     }
 }
 

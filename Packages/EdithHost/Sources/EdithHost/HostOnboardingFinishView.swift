@@ -111,6 +111,14 @@ struct HostOnboardingInstallView: View {
     }
 }
 
+private enum HostOnboardingFinishRow {
+    static let icon = 32.0
+    static let inset = 12.0
+    static let placementWidth = 320.0
+    static let actionWidth = 64.0
+    static var dividerInset: Double { inset + icon + inset }
+}
+
 struct HostOnboardingFinishView: View {
     @Bindable var model: HostWorkflowOnboardingModel
     @Environment(\.colorScheme) private var scheme
@@ -154,15 +162,17 @@ struct HostOnboardingFinishView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: UIScale.pt(320)), spacing: UIScale.pt(12),
-                        alignment: .top)
-                ], alignment: .leading, spacing: UIScale.pt(12)
-            ) {
-                ForEach(model.selectedEntries) { entry in card(entry) }
+            VStack(spacing: 0) {
+                ForEach(Array(model.selectedEntries.enumerated()), id: \.element.id) {
+                    index, entry in
+                    if index > 0 {
+                        Divider().padding(
+                            .leading, UIScale.pt(HostOnboardingFinishRow.dividerInset))
+                    }
+                    row(entry)
+                }
             }
+            .hostOnboardingTile()
             Label(
                 "Agents can use these tools too, through the ed command line and MCP.",
                 systemImage: "terminal"
@@ -190,27 +200,28 @@ struct HostOnboardingFinishView: View {
             .accessibilityIdentifier("onboarding.finish")
     }
 
-    private func card(_ entry: HostExtension) -> some View {
+    private func row(_ entry: HostExtension) -> some View {
         let pages = model.destinations(for: entry)
-        return VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                HostOnboardingIcon(symbolName: entry.symbolName, size: 32)
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text(entry.title).font(.edithText(.headline))
-                    Text(model.tagline(for: entry)).font(.edithText(.caption))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2, reservesSpace: !compact)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        return HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            HostOnboardingIcon(symbolName: entry.symbolName, size: HostOnboardingFinishRow.icon)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(entry.title).font(.edithText(.headline))
+                Text(model.tagline(for: entry)).font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if compact { placement(entry, pages: pages) }
             }
-            HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Label(
-                    location(entry, pages: pages), systemImage: locationSymbol(entry, pages: pages)
-                )
-                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !compact {
+                placement(entry, pages: pages)
+                    .frame(
+                        width: UIScale.pt(HostOnboardingFinishRow.placementWidth),
+                        alignment: .leading)
+            }
+            ZStack(alignment: .trailing) {
+                Color.clear.frame(
+                    width: UIScale.pt(HostOnboardingFinishRow.actionWidth), height: 1)
                 if let page = pages.first {
                     Button("Open") { model.open(page: page.id) }
                         .buttonStyle(.edith(.secondary))
@@ -219,11 +230,16 @@ struct HostOnboardingFinishView: View {
                         .accessibilityIdentifier("onboarding.open.\(entry.id)")
                 }
             }
-            .frame(minHeight: pages.isEmpty && compact ? nil : UIScale.pt(32))
         }
-        .padding(UIScale.pt(16))
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .hostOnboardingTile()
+        .padding(.horizontal, UIScale.pt(HostOnboardingFinishRow.inset))
+        .padding(.vertical, UIScale.pt(HostOnboardingFinishRow.inset))
+        .frame(minHeight: UIScale.pt(56))
+    }
+
+    private func placement(_ entry: HostExtension, pages: [HostPage]) -> some View {
+        Label(location(entry, pages: pages), systemImage: locationSymbol(entry, pages: pages))
+            .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
+            .lineLimit(2)
     }
 
     private func location(_ entry: HostExtension, pages: [HostPage]) -> String {

@@ -42,7 +42,8 @@ import Testing
         #expect(
             HostMCPClient.codex.snippet(command: command)
                 == "[mcp_servers.edith]\ncommand = \"\(command)\"\nargs = [\"mcp\"]\n")
-        #expect(HostMCPClient.cursor.snippet(command: command).hasPrefix("{\n  \"mcpServers\": {\n"))
+        #expect(
+            HostMCPClient.cursor.snippet(command: command).hasPrefix("{\n  \"mcpServers\": {\n"))
     }
 
     @Test func unreachableEdithIsAnInternalErrorWithItsMessage() async throws {
@@ -64,7 +65,9 @@ import Testing
             HostMCPClient.claude.registerArguments(command: "/app/ed")
                 == ["mcp", "add", "--scope", "user", "edith", "--", "/app/ed", "mcp"])
         #expect(
-            HostMCPClient.claude.unregisterArguments == ["mcp", "remove", "--scope", "user", "edith"])
+            HostMCPClient.claude.unregisterArguments == [
+                "mcp", "remove", "--scope", "user", "edith",
+            ])
         #expect(
             HostMCPClient.codex.registerArguments(command: "/app/ed")
                 == ["mcp", "add", "edith", "--", "/app/ed", "mcp"])
@@ -101,10 +104,14 @@ import Testing
         #expect(tools.calls.isEmpty)
         let added = installer.install(.claude, dryRun: false)
         #expect(added.action == .created && added.applied)
-        #expect(tools.calls == [["mcp", "add", "--scope", "user", "edith", "--", "/app/ed", "mcp"]])
-        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent(".claude.json").path))
+        #expect(
+            tools.calls == [["mcp", "add", "--scope", "user", "edith", "--", "/app/ed", "mcp"]])
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: home.appendingPathComponent(".claude.json").path))
 
-        let config = "{\"projects\":{},\"mcpServers\":{\"edith\":{\"type\":\"stdio\",\"command\":\"/old/ed\",\"args\":[\"mcp\"],\"env\":{}}}}"
+        let config =
+            "{\"projects\":{},\"mcpServers\":{\"edith\":{\"type\":\"stdio\",\"command\":\"/old/ed\",\"args\":[\"mcp\"],\"env\":{}}}}"
         try Data(config.utf8).write(to: home.appendingPathComponent(".claude.json"))
         tools.reset()
         #expect(installer.inspect(.claude).state == .outdated)
@@ -115,14 +122,17 @@ import Testing
                 ["mcp", "remove", "--scope", "user", "edith"],
                 ["mcp", "add", "--scope", "user", "edith", "--", "/app/ed", "mcp"],
             ])
-        #expect(try String(contentsOf: home.appendingPathComponent(".claude.json"), encoding: .utf8) == config)
+        #expect(
+            try String(contentsOf: home.appendingPathComponent(".claude.json"), encoding: .utf8)
+                == config)
 
         tools.reset()
         let current = HostMCPInstaller(home: home, command: "/old/ed", tools: tools.runner)
         #expect(current.install(.claude, dryRun: false).action == .unchanged)
         #expect(tools.calls.isEmpty)
 
-        let failing = ToolRecorder(available: ["claude"], status: 1, output: "MCP server edith already exists\n")
+        let failing = ToolRecorder(
+            available: ["claude"], status: 1, output: "MCP server edith already exists\n")
         let refused = HostMCPInstaller(home: home, command: "/app/ed", tools: failing.runner)
             .install(.claude, dryRun: false)
         #expect(refused.action == .skipped && !refused.applied)
@@ -136,7 +146,9 @@ import Testing
         let outcome = installer.install(.claude, dryRun: false)
         #expect(outcome.action == .manual && !outcome.applied)
         #expect(outcome.runLine == "claude mcp add --scope user edith -- /app/ed mcp")
-        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent(".claude.json").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: home.appendingPathComponent(".claude.json").path))
         let cli = HostMCPSetupCLI(
             home: home, executable: URL(fileURLWithPath: "/app/ed"), codexHome: nil, tools: .none)
         let explicit = try cli.execute(["install", "--client", "claude"])
@@ -156,7 +168,8 @@ import Testing
             .install(.codex, dryRun: false)
         #expect(viaCLI.applied && viaCLI.runLine == "codex mcp add edith -- /app/ed mcp")
         #expect(tools.calls == [["mcp", "add", "edith", "--", "/app/ed", "mcp"]])
-        let old = ToolRecorder(available: ["codex"], status: 2, output: "unrecognized subcommand 'mcp'")
+        let old = ToolRecorder(
+            available: ["codex"], status: 2, output: "unrecognized subcommand 'mcp'")
         let fallback = HostMCPInstaller(home: home, command: "/app/ed", tools: old.runner)
             .install(.codex, dryRun: false)
         #expect(fallback.applied && fallback.run == nil)
@@ -172,7 +185,8 @@ import Testing
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         let log = home.appendingPathComponent("calls.txt")
         let script = bin.appendingPathComponent("claude")
-        try Data("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '\(log.path)'\necho added\n".utf8).write(to: script)
+        try Data("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '\(log.path)'\necho added\n".utf8).write(
+            to: script)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
         let runner = HostMCPToolRunner.system(home: home, path: [bin.path])
         #expect(runner.locate("claude")?.path == script.path)
@@ -209,8 +223,10 @@ import Testing
         #expect(moved.inspect(.cursor).state == .outdated)
         #expect(moved.install(.cursor, dryRun: false).action == .updated)
         #expect(moved.inspect(.cursor).command == "/moved/ed")
-        try Data("{\"mcpServers\":{\"edith\":{\"command\":\"/moved/ed\",\"args\":[\"serve\"]}}}".utf8)
-            .write(to: file)
+        try Data(
+            "{\"mcpServers\":{\"edith\":{\"command\":\"/moved/ed\",\"args\":[\"serve\"]}}}".utf8
+        )
+        .write(to: file)
         #expect(moved.inspect(.cursor).state == .outdated)
     }
 
@@ -275,13 +291,18 @@ import Testing
         #expect(actions?.map(\.0) == ["claude", "codex", "cursor", "vscode"])
         #expect(actions?.map(\.1) == ["notFound", "notFound", "created", "notFound"])
         #expect(dry.exitCode == 0)
-        #expect(!FileManager.default.fileExists(atPath: HostMCPClient.cursor.configURL(home: home).path))
+        #expect(
+            !FileManager.default.fileExists(atPath: HostMCPClient.cursor.configURL(home: home).path)
+        )
         let applied = try cli.execute(["install", "--client", "all"])
         #expect(applied.exitCode == 0)
         #expect(applied.stdout.contains("Cursor: added Edith to ~/.cursor/mcp.json"))
         #expect(applied.stdout.contains("VS Code: not found on this Mac, skipped"))
-        #expect(applied.stdout.contains("Restart Cursor to load Edith, then ask the agent to call edith_catalog."))
-        #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent("Library").path))
+        #expect(
+            applied.stdout.contains(
+                "Restart Cursor to load Edith, then ask the agent to call edith_catalog."))
+        #expect(
+            !FileManager.default.fileExists(atPath: home.appendingPathComponent("Library").path))
         #expect(!FileManager.default.fileExists(atPath: home.appendingPathComponent(".codex").path))
     }
 
@@ -290,13 +311,16 @@ import Testing
         defer { try? FileManager.default.removeItem(at: home) }
         let cli = HostMCPSetupCLI(
             home: home, executable: URL(fileURLWithPath: "/app/ed"), codexHome: nil, tools: .none)
-        #expect(try cli.execute(["status"]).stdout.contains("No agent client was found on this Mac."))
+        #expect(
+            try cli.execute(["status"]).stdout.contains("No agent client was found on this Mac."))
         try makeDirectory(home, ".cursor")
         try makeDirectory(home, ".codex")
         let pending = try cli.execute(["status"]).stdout
         #expect(pending.contains("cursor  not registered"))
         #expect(pending.contains("vscode  client not found"))
-        #expect(pending.contains("Run ed mcp install --client all to register Edith with every client found."))
+        #expect(
+            pending.contains(
+                "Run ed mcp install --client all to register Edith with every client found."))
         _ = try cli.execute(["install", "--client", "cursor"])
         #expect(
             try cli.execute(["status"]).stdout.contains(
@@ -305,7 +329,9 @@ import Testing
         let done = try cli.execute(["status", "--json"])
         let states = try JSONDecoder().decode(HostCLIJSON.self, from: Data(done.stdout.utf8))
             .object?["clients"]?.array?.compactMap {
-                $0.object.flatMap { ($0["client"]?.string, $0["state"]?.string, $0["clientFound"]?.bool) }
+                $0.object.flatMap {
+                    ($0["client"]?.string, $0["state"]?.string, $0["clientFound"]?.bool)
+                }
             }
         #expect(states?.first { $0.0 == "cursor" }?.1 == "registered")
         #expect(states?.first { $0.0 == "claude" }?.1 == "notRegistered")
@@ -333,7 +359,8 @@ import Testing
         let claudeConfig = home.appendingPathComponent(".claude.json")
         let tools = ToolRecorder(available: ["claude"]) { arguments in
             guard arguments.starts(with: ["mcp", "add"]) else { return }
-            let entry = "{\"mcpServers\":{\"edith\":{\"type\":\"stdio\",\"command\":\"\(command)\",\"args\":[\"mcp\"],\"env\":{}}}}"
+            let entry =
+                "{\"mcpServers\":{\"edith\":{\"type\":\"stdio\",\"command\":\"\(command)\",\"args\":[\"mcp\"],\"env\":{}}}}"
             try? Data(entry.utf8).write(to: claudeConfig)
         }
         let cli = HostMCPSetupCLI(
@@ -341,11 +368,13 @@ import Testing
             codexHome: nil, tools: tools.runner)
         var transcript = ""
         for arguments in [
-            ["status"], ["install", "--client", "all", "--dry-run"], ["install", "--client", "all"],
+            ["status"], ["install", "--client", "all", "--dry-run"],
+            ["install", "--client", "all"],
             ["status"], ["install", "--client", "all"],
         ] {
             let reply = try cli.execute(arguments)
-            transcript += "$ ed mcp \(arguments.joined(separator: " "))\n\(reply.stdout)\(reply.stderr)\n"
+            transcript +=
+                "$ ed mcp \(arguments.joined(separator: " "))\n\(reply.stdout)\(reply.stderr)\n"
         }
         let folder = URL(fileURLWithPath: directory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -364,7 +393,8 @@ import Testing
         #expect(capabilities?["tools"]?.object?["listChanged"] == .bool(true))
         #expect(capabilities?["resources"] != nil)
         let instructions = result?["instructions"]?.string ?? ""
-        let discover = try #require(instructions.range(of: "1. Discover. Call edith_catalog first."))
+        let discover = try #require(
+            instructions.range(of: "1. Discover. Call edith_catalog first."))
         let call = try #require(instructions.range(of: "2. Call. Use the matching edith_* tool."))
         let install = try #require(instructions.range(of: "edith_extensions_install"))
         #expect(discover.lowerBound < call.lowerBound && call.lowerBound < install.lowerBound)
@@ -433,7 +463,8 @@ import Testing
             "tools/call", #"{"name":"edith_catalog","arguments":{"query":"emoji"}}"#)
         let entry = catalog["structuredContent"]?.object?["extensions"]?.array?.first?.object
         #expect(entry?["id"] == .string("emoji") && entry?["status"] == .string("available"))
-        let guide = try await session.request("resources/read", #"{"uri":"edith://extensions/emoji"}"#)
+        let guide = try await session.request(
+            "resources/read", #"{"uri":"edith://extensions/emoji"}"#)
         #expect(
             guide["contents"]?.array?.first?.object?["text"]?.string?.contains(
                 "edith_extensions_install") == true)
@@ -441,7 +472,8 @@ import Testing
             "resources/read", #"{"uri":"edith://extensions/nothing"}"#)
         #expect(missing["code"] == .integer(-32002))
         let preview = try await session.request(
-            "tools/call", #"{"name":"edith_extensions_install","arguments":{"arguments":["emoji"]}}"#)
+            "tools/call",
+            #"{"name":"edith_extensions_install","arguments":{"arguments":["emoji"]}}"#)
         #expect(
             preview["content"]?.array?.first?.object?["text"]?.string?.contains(
                 "\"requiresConfirmation\":true") == true)
@@ -459,7 +491,8 @@ import Testing
                     "edith_music_play",
                 ])
         let picked = try await session.request(
-            "tools/call", #"{"name":"edith_emoji_pick","arguments":{"arguments":["--query","tada"]}}"#)
+            "tools/call",
+            #"{"name":"edith_emoji_pick","arguments":{"arguments":["--query","tada"]}}"#)
         #expect(picked["isError"] == .bool(false))
         #expect(
             await fixture.coreCalls() == [
@@ -808,7 +841,9 @@ private actor StdioSession {
     private func readUntil(_ match: (HostCLIJSON) -> Bool) async throws -> HostCLIJSON {
         if let found = received.first(where: match) { return found }
         while true {
-            guard let data = try await io.receive() else { throw HostCLIError.rejected("Server closed.") }
+            guard let data = try await io.receive() else {
+                throw HostCLIError.rejected("Server closed.")
+            }
             let value = try JSONDecoder().decode(HostCLIJSON.self, from: data)
             let text = String(decoding: data, as: UTF8.self)
             log.append("<- " + (text.count > 600 ? String(text.prefix(600)) + " ..." : text))
@@ -833,7 +868,9 @@ private actor StdioSession {
         return result
     }
 
-    func requestError(_ method: String, _ params: String? = nil) async throws -> [String: HostCLIJSON] {
+    func requestError(_ method: String, _ params: String? = nil) async throws -> [String:
+        HostCLIJSON]
+    {
         guard let error = try await send(method, params).object?["error"]?.object else {
             throw HostCLIError.rejected("\(method) unexpectedly succeeded.")
         }

@@ -3,6 +3,14 @@ import Foundation
 import Testing
 @testable import ExtensionMarketplace
 
+@Test func onlyConnectivityFailuresCountAsOffline() {
+    #expect(ExtensionCatalogClient.isOffline(URLError(.notConnectedToInternet)))
+    #expect(ExtensionCatalogClient.isOffline(URLError(.timedOut)))
+    #expect(!ExtensionCatalogClient.isOffline(URLError(.badServerResponse)))
+    #expect(!ExtensionCatalogClient.isOffline(MarketplaceError.rateLimited))
+    #expect(!ExtensionCatalogClient.isOffline(MarketplaceError.downloadFailed))
+}
+
 @Test func aVerifiedCatalogRemainsAvailableOffline() async throws {
     let fixture = try PackageFixture()
     defer { fixture.clean() }

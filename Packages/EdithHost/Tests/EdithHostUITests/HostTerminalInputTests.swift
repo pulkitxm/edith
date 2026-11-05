@@ -36,7 +36,8 @@ struct HostTerminalInputTests {
 
     @Test func commandWNeverClosesTheMainWindow() {
         #expect(HostTerminalInput.isWindowCloseKey(characters: "w", modifiers: .command))
-        #expect(HostTerminalInput.isWindowCloseKey(characters: "W", modifiers: [.command, .capsLock]))
+        #expect(
+            HostTerminalInput.isWindowCloseKey(characters: "W", modifiers: [.command, .capsLock]))
         for modifiers: NSEvent.ModifierFlags in [
             [.command, .shift], [.command, .option], [.command, .control], .option,
         ] {

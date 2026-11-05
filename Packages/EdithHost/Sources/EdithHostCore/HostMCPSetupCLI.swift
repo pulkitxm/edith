@@ -196,7 +196,8 @@ public struct HostMCPSetupCLI: Sendable {
             }
             let entry = outcome.snippet.trimmingCharacters(in: .newlines)
             if dryRun {
-                return "\(title): would \(added ? "add Edith to" : "update Edith in") \(path):\n\n\(entry)"
+                return
+                    "\(title): would \(added ? "add Edith to" : "update Edith in") \(path):\n\n\(entry)"
             }
             let backup = outcome.backup.map { ", previous file saved as \(display($0))" } ?? ""
             return "\(title): \(added ? "added Edith to" : "updated Edith in") \(path)\(backup)"
@@ -206,7 +207,8 @@ public struct HostMCPSetupCLI: Sendable {
             {
                 return "\(title): not registered. Run it yourself:\n  \(run)"
             }
-            return "\(title): not written. Add this to \(path) yourself:\n\n\(outcome.snippet.trimmingCharacters(in: .newlines))"
+            return
+                "\(title): not written. Add this to \(path) yourself:\n\n\(outcome.snippet.trimmingCharacters(in: .newlines))"
         }
     }
 }

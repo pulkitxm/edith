@@ -70,13 +70,17 @@ struct HostExtensionArtwork: View {
             .background(DashSkin.paper2(dark), in: window)
             .overlay { window.strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(0.75)) }
             .clipShape(window)
-            .shadow(color: .black.opacity(dark ? 0.3 : 0.08), radius: UIScale.pt(12), y: UIScale.pt(4))
+            .shadow(
+                color: .black.opacity(dark ? 0.3 : 0.08), radius: UIScale.pt(12), y: UIScale.pt(4)
+            )
             .frame(maxWidth: .infinity)
             .frame(height: UIScale.pt(HostExtensionDetailLayout.previewHeight))
             .background {
                 banner.fill(
                     LinearGradient(
-                        colors: [accent.opacity(dark ? 0.2 : 0.14), accent.opacity(dark ? 0.06 : 0.04)],
+                        colors: [
+                            accent.opacity(dark ? 0.2 : 0.14), accent.opacity(dark ? 0.06 : 0.04),
+                        ],
                         startPoint: .topLeading, endPoint: .bottomTrailing))
             }
             .overlay { banner.strokeBorder(accent.opacity(0.14), lineWidth: UIScale.pt(0.75)) }
@@ -173,7 +177,9 @@ struct HostExtensionExamples: View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             PageSectionHeader(
                 "From the terminal or an agent",
-                subtitle: "Every action here also works from the ed command and from agents through ed mcp.")
+                subtitle:
+                    "Every action here also works from the ed command and from agents through ed mcp."
+            )
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ForEach(examples, id: \.self) { example in
                     Text(example).font(.edithText(.callout, design: .monospaced))

@@ -220,7 +220,8 @@ struct HostBackgroundMetrics: View {
             (
                 "Memory",
                 status.residentBytes.map {
-                    ByteCountFormatter.string(fromByteCount: Int64(clamping: $0), countStyle: .memory)
+                    ByteCountFormatter.string(
+                        fromByteCount: Int64(clamping: $0), countStyle: .memory)
                 }
             ),
             ("CPU", status.phase == .running ? String(format: "%.1f%%", status.cpuPercent) : nil),
@@ -228,25 +229,15 @@ struct HostBackgroundMetrics: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(values.enumerated()), id: \.offset) { index, metric in
-                if index > 0 {
-                    Divider().frame(height: UIScale.pt(28)).padding(.horizontal, UIScale.pt(12))
+        PageMetricGrid(minimumWidth: 120, maximumColumns: 3) {
+            ForEach(values, id: \.0) { title, value in
+                if let value {
+                    PageMetric(title: title, value: value)
+                } else {
+                    PageMetricSkeleton()
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text(metric.0).font(.edithText(.caption)).foregroundStyle(.secondary)
-                    if let value = metric.1 {
-                        Text(value).font(.edithText(.body)).fontWeight(.medium).monospacedDigit()
-                    } else {
-                        SkeletonGroup { SkeletonBlock(width: 56, height: 12) }
-                            .frame(height: UIScale.pt(17), alignment: .center)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .combine)
             }
         }
-        .padding(.vertical, UIScale.pt(4))
     }
 }
 
@@ -308,7 +299,9 @@ struct HostBackgroundJobsSection: View {
                     }
                 } header: {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(group.ownerID.isEmpty ? "Jobs built into Edith" : "Jobs from \(group.title)")
+                        Text(
+                            group.ownerID.isEmpty
+                                ? "Jobs built into Edith" : "Jobs from \(group.title)")
                         Spacer(minLength: UIScale.pt(8))
                         if !group.ownerID.isEmpty, let page = destination(group.ownerID) {
                             Button {
@@ -408,7 +401,8 @@ struct HostBackgroundTasksSection: View {
             } else if tasks.isEmpty && status.phase != .running {
                 HostBackgroundEmptyRow(
                     symbol: "checklist", title: "No tasks to show",
-                    message: "Tasks and their results show up here once the background agent is running."
+                    message:
+                        "Tasks and their results show up here once the background agent is running."
                 )
             } else if tasks.isEmpty {
                 HostBackgroundEmptyRow(
@@ -459,7 +453,9 @@ struct HostBackgroundTasksSection: View {
                 Text(task.title).font(.edithText(.body)).fontWeight(.medium).lineLimit(1)
                 Text(detail)
                     .font(.edithText(.caption))
-                    .foregroundStyle(task.failure != nil && task.state.attention ? .orange : .secondary)
+                    .foregroundStyle(
+                        task.failure != nil && task.state.attention ? .orange : .secondary
+                    )
                     .lineLimit(2)
             }
             Spacer(minLength: UIScale.pt(8))
