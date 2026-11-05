@@ -23,20 +23,10 @@ struct CameraExtensionCommand: AsyncParsableCommand {
     static let name = "Edith Camera"
 
     static func request(_ request: CameraExtensionRequest) async throws -> CameraExtensionSnapshot {
-        guard let engine = CameraCLIEnvironment.currentEngine else {
+        guard let manager = CameraCLIEnvironment.extensionManager else {
             throw ExtensionPeerError.unavailable
         }
-        guard request == .status else {
-            throw CLIFailure(
-                .unavailable, "Camera video uses OBS Virtual Camera. Keep OBS Studio closed.")
-        }
-        let snapshot = engine.snapshot()
-        return CameraExtensionSnapshot(
-            phase: snapshot.obsAvailable ? "ready" : "unavailable", title: "OBS Virtual Camera",
-            detail: snapshot.obsAvailable
-                ? "OBS Virtual Camera is available. Keep OBS Studio closed."
-                : "Install OBS Studio to provide OBS Virtual Camera, then keep OBS Studio closed.",
-            changed: false)
+        return CameraExtensionBridge.perform(request, on: manager)
     }
 
     static func emit(_ snapshot: CameraExtensionSnapshot, json: Bool) {

@@ -14,7 +14,7 @@ import Testing
         var wrongInstaller = false
         var revision: UInt8 = 1
         let host = "com.pulkit.edith.dev.fixture"
-        init(obs: Bool = false) throws {
+        init() throws {
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "camera-install-" + UUID().uuidString)
             try FileManager.default.createDirectory(
@@ -33,10 +33,6 @@ import Testing
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
             }
-            if obs {
-                try FileManager.default.removeItem(
-                    at: source.appendingPathComponent("Contents/Library/SystemExtensions"))
-            }
             try Data([1, 2, 3]).write(to: source.appendingPathComponent("Contents/MacOS/Edith"))
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755],
@@ -47,7 +43,6 @@ import Testing
                 "EdithContainedRole": "cameraCarrier", "EdithContainedExtensionID": "virtualCamera",
                 "EdithHostIdentifier": host, "EdithHostABI": "edith-host-9",
                 "EdithExecutableProvenance": String(repeating: "a", count: 64),
-                "EdithCameraTransport": obs ? "obs" : "native",
             ])
         }
         deinit { try? FileManager.default.removeItem(at: root) }
@@ -92,7 +87,7 @@ import Testing
     }
 
     @Test func hostABIIsAcceptedAndMalformedConfigurationAndMismatchedCarrierAreRejected() throws {
-        let fixture = try Fixture(obs: true)
+        let fixture = try Fixture()
         _ = try fixture.installer()
         #expect(throws: (any Error).self) { try fixture.installer(hostABI: "host-6") }
         let infoURL = fixture.source.appendingPathComponent("Contents/Info.plist")
@@ -109,20 +104,10 @@ import Testing
                 atPath: fixture.root.appendingPathComponent("Installed").path))
     }
 
-    @Test func obsCarrierInstallsWithoutACameraProvider() throws {
-        let fixture = try Fixture(obs: true)
-        let installer = try fixture.installer()
-        let installed = try installer.installCarrier(source: fixture.source, providerExited: true)
-        #expect(
-            !FileManager.default.fileExists(
-                atPath: installed.appendingPathComponent("Contents/Library/SystemExtensions").path))
-    }
-
-    @Test func obsCarrierRejectsAnEmbeddedCameraProvider() throws {
-        let fixture = try Fixture(obs: true)
-        try FileManager.default.createDirectory(
-            at: fixture.source.appendingPathComponent("Contents/Library/SystemExtensions"),
-            withIntermediateDirectories: true)
+    @Test func carrierWithoutACameraProviderIsRejected() throws {
+        let fixture = try Fixture()
+        try FileManager.default.removeItem(
+            at: fixture.source.appendingPathComponent("Contents/Library/SystemExtensions"))
         let installer = try fixture.installer()
         #expect(throws: (any Error).self) {
             try installer.installCarrier(source: fixture.source, providerExited: true)

@@ -41,17 +41,35 @@ import Testing
         return (model, defaults, name)
     }
 
-    @Test func OBSOutputSetupShowsTheExistingRouteWithoutSigningOrCameraInstallation() throws {
-        let (model, defaults, name) = Self.model()
+    @Test func outputPanelOffersEdithCameraInstallForEachPhase() throws {
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "camera-output-\(UUID().uuidString).app")
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        var visible = false
+        let manager = VirtualCameraExtensionManager(
+            environment: VirtualCameraExtensionEnvironment(
+                bundleURL: bundle, hasInstallEntitlement: { true }, deviceVisible: { visible },
+                canPrepareLocation: true))
+        try FileManager.default.createDirectory(
+            at: manager.extensionBundleURL, withIntermediateDirectories: true)
+        let name = "test.edith.virtual-camera-output.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
+        let model = VirtualCameraPageModel(
+            defaults: defaults,
+            pipeline: VirtualCameraPipeline(
+                state: VirtualCameraState(), outputSize: CGSize(width: 320, height: 180)),
+            extensionManager: manager, accessProvider: { .denied }, sourceProvider: { [] },
+            previewBus: VirtualCameraPreviewBus(
+                file: FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "camera-preview-\(UUID().uuidString).bin"),
+                unlinkOnClose: true))
         let scale = UIScale.current
         defer { UIScale.apply(scale) }
-        for available in [false, true] {
-            model.receive(
-                VirtualCameraSnapshot(
-                    enabled: true, helperRunning: true, extensionInstalled: false,
-                    obsAvailable: available, route: available ? .obs : nil, live: false,
-                    state: model.state))
+        for (installed, expected) in [(false, "Install Edith Camera"), (true, "Remove")] {
+            visible = installed
+            manager.refresh()
+            #expect(model.cameraExtension.phase == (installed ? "installed" : "notInstalled"))
             for width in [340.0, 780.0] {
                 for zoom in [1.0, 1.5] {
                     UIScale.apply(zoom)
@@ -60,12 +78,11 @@ import Testing
                         size: CGSize(width: width, height: 900))
                     let text = try auditText(host).split(whereSeparator: \.isWhitespace).joined(
                         separator: " ")
-                    #expect(text.contains("OBS Virtual Camera"))
+                    #expect(text.contains("Edith Camera: " + model.cameraExtension.title))
                     #expect(
-                        text.contains(available ? "Keep OBS Studio closed" : "Install OBS Studio"),
-                        "available=\(available) width=\(width) zoom=\(zoom): \(text)")
-                    #expect(!text.contains("Install Edith Camera"))
-                    #expect(!text.contains("signed build") && !text.contains("signing profile"))
+                        text.contains(expected) && text.contains("Check again"),
+                        "installed=\(installed) width=\(width) zoom=\(zoom): \(text)")
+                    #expect(!text.contains("OBS"))
                 }
             }
         }
@@ -350,8 +367,8 @@ import Testing
         first.acquire(model)
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false,
-                obsAvailable: true, route: .obs, live: true, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+                state: model.state))
         second.release(model)
         second.acquire(model)
         #expect(!second.acquired)
@@ -376,8 +393,8 @@ import Testing
         #expect(model.previewLoadingTitle == "Connecting to the camera service")
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false,
-                obsAvailable: true, route: .obs, live: true, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+                state: model.state))
         #expect(model.showsHelperPreview)
     }
 
@@ -391,13 +408,13 @@ import Testing
         #expect(!model.showsHelperPreview)
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
-                route: .obs, live: true, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+                state: model.state))
         #expect(model.showsHelperPreview)
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
-                route: .obs, live: false, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: false,
+                state: model.state))
         #expect(!model.showsHelperPreview)
     }
 
@@ -409,8 +426,8 @@ import Testing
         }
         model.appear()
         let live = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: false, obsAvailable: true,
-            route: .obs, live: true, state: model.state)
+            enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+            state: model.state)
         model.receive(live)
         model.showPreviewFrame(try #require(VirtualCameraFixtures.quadrants()))
         #expect(model.previewRunning)
@@ -438,7 +455,7 @@ import Testing
         model.injectForTesting(snapshot: nil, sources: [])
         #expect(model.statusHeadline == "Camera service is not responding")
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            enabled: true, helperRunning: true, extensionInstalled: true,
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
             format: .hd720, state: model.state)
         model.receive(snapshot)
@@ -531,8 +548,8 @@ import Testing
         model.appear()
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false,
-                obsAvailable: true, route: .obs, live: true, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+                state: model.state))
         let frame = try #require(VirtualCameraFixtures.quadrants())
         let image = CIImage(cvPixelBuffer: frame)
         let reference = try #require(CIContext().createCGImage(image, from: image.extent))
@@ -559,8 +576,8 @@ import Testing
         model.appear()
         model.receive(
             VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: false,
-                obsAvailable: true, route: .obs, live: true, state: model.state))
+                enabled: true, helperRunning: true, extensionInstalled: true, live: true,
+                state: model.state))
         time = 7
         model.refreshPreviewHealth()
         #expect(model.previewFailure == nil)
@@ -1044,7 +1061,7 @@ enum VirtualCameraSyntheticStudio {
         await model.waitForLookThumbnails()
         model.injectForTesting(
             snapshot: VirtualCameraSnapshot(
-                enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+                enabled: true, helperRunning: true, extensionInstalled: true,
                 extensionBuild: "288",
                 clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
                 framesPerSecond: 30, source: VirtualCameraPageModelTests.sources[0],

@@ -9,6 +9,7 @@ struct CameraUISnapshot: Codable {
     let snapshot: VirtualCameraSnapshot
     let reference: Data?
     let previewFailure: String?
+    let cameraExtension: CameraExtensionSnapshot
 }
 struct CameraUIFrame: Codable { let sequence: Int; let preview: Data? }
 struct CameraUIAsset: Codable { let path: String; let target: String }
@@ -38,6 +39,7 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
         case "camera.ui.snapshot":
             try empty(payload)
             renewLease()
+            model.extensionManager.refreshDetached()
             var snapshot = engine.snapshot()
             snapshot.sourceWidth = model.previewStatistics.sourceWidth
             snapshot.sourceHeight = model.previewStatistics.sourceHeight
@@ -45,7 +47,16 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
                 CameraUISnapshot(
                     snapshot: snapshot,
                     reference: model.previewReference.flatMap(Self.image),
-                    previewFailure: model.previewFailure))
+                    previewFailure: model.previewFailure,
+                    cameraExtension: CameraExtensionBridge.snapshot(model.extensionManager.phase)))
+        case "camera.ui.extension":
+            let input = try JSONDecoder().decode(
+                [String: CameraExtensionRequest].self, from: payload)
+            guard Set(input.keys) == ["request"], let request = input["request"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try JSONEncoder().encode(
+                CameraExtensionBridge.perform(request, on: model.extensionManager))
         case "camera.ui.frame":
             let input = try JSONDecoder().decode([String: Int].self, from: payload)
             guard Set(input.keys) == ["after"], let after = input["after"] else {
@@ -130,7 +141,7 @@ struct CameraUIThumbnail: Codable { let mode: String; let id: UInt32 }
     }
     private func validated(_ payload: Data) throws -> VirtualCameraState {
         let state = try JSONDecoder().decode(VirtualCameraState.self, from: payload)
-        guard state == state.sanitized(), state.output == .obs, state.scenes.count <= 64,
+        guard state == state.sanitized(), state.scenes.count <= 64,
             state.media.path.map({ $0.hasPrefix("/") && !$0.utf8.contains(0) }) ?? true
         else { throw ExtensionPeerError.invalidRequest }
         let current = VirtualCameraStore.referencedAssets(in: engine.snapshot().state)

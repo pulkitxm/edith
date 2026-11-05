@@ -58,6 +58,7 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var cameraAccess: AVAuthorizationStatus
     @Published private(set) var previewRunning = false
     @Published private(set) var previewFailure: String?
+    @Published private(set) var remoteCameraExtension: CameraExtensionSnapshot?
     @Published var tab: VirtualCameraInspectorTab = .frame {
         didSet {
             defaults.set(tab.rawValue, forKey: "virtualCameraInspectorSection")
@@ -212,6 +213,29 @@ final class VirtualCameraPageModel: ObservableObject {
         return task
     }
 
+    var cameraExtension: CameraExtensionSnapshot {
+        guard engineClient != nil else {
+            return CameraExtensionBridge.snapshot(extensionManager.phase)
+        }
+        return remoteCameraExtension ?? CameraExtensionBridge.snapshot(.checking)
+    }
+
+    func performCameraExtension(_ request: CameraExtensionRequest) {
+        guard let engineClient else {
+            _ = CameraExtensionBridge.perform(request, on: extensionManager)
+            return
+        }
+        runAction { [weak self] in
+            let data = try await engineClient.invoke(
+                "camera.ui.extension", payload: JSONEncoder().encode(["request": request]))
+            let value = try JSONDecoder().decode(CameraExtensionSnapshot.self, from: data)
+            guard let self, !self.stopped else { return }
+            self.remoteCameraExtension = value
+        }
+    }
+
+    func openCameraExtensionSettings() { extensionManager.openSystemSettings() }
+
     func runAction(_ action: @escaping @MainActor () async throws -> Void) {
         guard !stopped else { return }
         let id = UUID()
@@ -290,6 +314,7 @@ final class VirtualCameraPageModel: ObservableObject {
             let value = try JSONDecoder().decode(CameraUISnapshot.self, from: data)
             guard !stopped, !Task.isCancelled else { return }
             snapshot = value.snapshot; helperReachable = true; statusPending = false
+            remoteCameraExtension = value.cameraExtension
             if saveTimer == nil
                 && (awaitingHelperState == nil || awaitingHelperState == value.snapshot.state)
             {

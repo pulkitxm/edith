@@ -15,6 +15,10 @@ name: Extensions
         required: false
         default: false
     secrets:
+      CAMERA_CARRIER_PROVISIONING_PROFILE:
+        required: false
+      CAMERA_EXTENSION_PROVISIONING_PROFILE:
+        required: false
       EXTENSION_CATALOG_PRIVATE_KEY:
         required: false
       MACOS_CERT_P12:
@@ -261,6 +265,25 @@ jobs:
       - name: Sign the containing host for publication
         if: "matrix.camera && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
         run: python3 scripts/package-shipping-host.py local/minimal-host/Edith.app local/extension-release-host/Edith.app --identity "$EXTENSION_SIGN_IDENTITY" --release
+      - name: Write the camera provisioning profiles
+        if: "matrix.camera && !inputs.validation_sha && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+        env:
+          CAMERA_CARRIER_PROVISIONING_PROFILE: "${{ secrets.CAMERA_CARRIER_PROVISIONING_PROFILE }}"
+          CAMERA_EXTENSION_PROVISIONING_PROFILE: "${{ secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE }}"
+        run: |
+          test -n "$CAMERA_CARRIER_PROVISIONING_PROFILE" \
+            || { echo "release blocked: set the CAMERA_CARRIER_PROVISIONING_PROFILE secret" >&2; exit 1; }
+          test -n "$CAMERA_EXTENSION_PROVISIONING_PROFILE" \
+            || { echo "release blocked: set the CAMERA_EXTENSION_PROVISIONING_PROFILE secret" >&2; exit 1; }
+          team="$(printf '%s' "$EXTENSION_SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')"
+          test -n "$team"
+          printf '%s' "$CAMERA_CARRIER_PROVISIONING_PROFILE" | base64 --decode > "$RUNNER_TEMP/camera-carrier.provisionprofile"
+          printf '%s' "$CAMERA_EXTENSION_PROVISIONING_PROFILE" | base64 --decode > "$RUNNER_TEMP/camera-extension.provisionprofile"
+          {
+            echo "CAMERA_SIGN_TEAM=$team"
+            echo "CAMERA_CARRIER_PROFILE=$RUNNER_TEMP/camera-carrier.provisionprofile"
+            echo "CAMERA_EXTENSION_PROFILE=$RUNNER_TEMP/camera-extension.provisionprofile"
+          } >> "$GITHUB_ENV"
       - name: Build only this batch's extensions
         env:
           EXTENSION_BUILDS: "${{ matrix.builds }}"

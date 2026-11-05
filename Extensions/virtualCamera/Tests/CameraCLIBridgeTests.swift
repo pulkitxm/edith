@@ -6,7 +6,7 @@ import Testing
 @testable import VirtualCameraExtension
 
 @Suite(.serialized) @MainActor struct CameraCLIBridgeTests {
-    @Test func originalCameraCommandsUseOwningEngineAndPreserveOBSRestriction() async throws {
+    @Test func originalCameraCommandsUseOwningEngineAndExtensionManager() async throws {
         try await fixture { worker, _ in
             let status = try await CameraCLIExecution.run(
                 .init(arguments: ["status", "--json"]), engine: worker.engine)
@@ -28,11 +28,13 @@ import Testing
             let preview = try await CameraCLIExecution.run(
                 .init(arguments: ["extension", "install", "--json"]), engine: worker.engine)
             #expect(preview.exitCode == 0 && preview.stdout.contains("false"))
-            let rejected = try await CameraCLIExecution.run(
-                .init(arguments: ["extension", "install", "--yes"]), engine: worker.engine)
+            let extensionStatus = try await CameraCLIExecution.run(
+                .init(arguments: ["extension", "status", "--json"]), engine: worker.engine)
             #expect(
-                rejected.exitCode == 4 && rejected.stdout.isEmpty
-                    && rejected.stderr.contains("OBS Virtual Camera"))
+                extensionStatus.exitCode == 0 && extensionStatus.stderr.isEmpty
+                    && extensionStatus.stdout.contains(
+                        CameraExtensionBridge.snapshot(worker.manager.phase).title)
+            )
             let on = try await CameraCLIExecution.run(
                 .init(arguments: ["on"]), engine: worker.engine)
             #expect(on.exitCode == 4 && on.stderr.contains("marketplace lifecycle"))
@@ -53,7 +55,11 @@ import Testing
             let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
             let remote = VirtualCameraPageModel(engineClient: client, defaults: defaults)
             await remote.refreshRemote()
-            #expect(remote.state.output == .obs && remote.state.privacy == .stopped)
+            #expect(remote.state.privacy == .stopped)
+            for _ in 0..<1000 where worker.manager.phase == .checking { await Task.yield() }
+            await remote.refreshRemote()
+            #expect(remote.cameraExtension.phase != "checking")
+            #expect(remote.cameraExtension == CameraExtensionBridge.snapshot(worker.manager.phase))
             remote.setZoom(2); remote.flushSave()
             for _ in 0..<1000 {
                 if worker.engine.snapshot().state.composition.framing.zoom == 2 { break };

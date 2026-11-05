@@ -199,14 +199,6 @@ public final class VirtualCameraSink: @unchecked Sendable {
             hardware: hardware)
     }
 
-    public var isRunningSomewhere: Bool {
-        guard let device = locate()?.device else { return false }
-        return hardware.flag(
-            device,
-            selector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere))
-            == true
-    }
-
     public func locate() -> VirtualCameraEndpoints? {
         VirtualCameraLocator.find(uid: deviceUID, hardware: hardware)
     }

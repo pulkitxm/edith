@@ -142,7 +142,8 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
         if let status = client?.currentStatus { receive(status); return }
         switch phase {
         case .installing, .removing, .restartRequired,
-            .awaitingApproval where !environment.deviceVisible():
+            .awaitingApproval where !environment.deviceVisible(),
+            .failed where !environment.deviceVisible():
             return
         default:
             break
@@ -197,7 +198,7 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
         switch phase {
         case .installing, .removing, .restartRequired:
             return
-        case .awaitingApproval where !deviceVisible:
+        case .awaitingApproval where !deviceVisible, .failed where !deviceVisible:
             return
         default:
             break
@@ -246,6 +247,7 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
 
     private func receive(_ status: CameraCarrierStatus) {
         guard !stopped, status.isValid else { return }
+        if case .failed = phase, ["idle", "stopped"].contains(status.phase) { return }
         phase =
             switch status.phase {
             case "idle", "stopped": .notInstalled

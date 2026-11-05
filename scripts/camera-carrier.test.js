@@ -1,8 +1,18 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateCameraCarrierDefinition } from "./build-camera-carrier.mjs";
+import {
+  validateCameraCarrierDefinition,
+  writeEntitlements,
+} from "./build-camera-carrier.mjs";
 import { requireRegularTree } from "./build-contained-host-runtime.mjs";
 
 const definition = {
@@ -23,28 +33,26 @@ test("camera carrier metadata permits only the matching sealed roles and identit
     { minimumSystemVersion: "13.0.0" },
     { applicationIdentifier: "../arbitrary" },
     { providerEntitlement: "com.apple.developer.cmio.extension" },
+    { providerRole: undefined },
+    { installEntitlement: undefined },
+    { transport: "obs" },
   ])
     expect(() =>
       validateCameraCarrierDefinition({ ...definition, ...change }),
     ).toThrow();
 });
 
-test("OBS microphone carriers require no provider role or installation entitlement", () => {
-  const obs = {
-    role: "cameraCarrier",
-    transport: "obs",
-    applicationIdentifier: "com.pulkit.edith.cameraCarrier",
-    minimumSystemVersion: "14.0.0",
-  };
-  expect(validateCameraCarrierDefinition(obs)).toEqual(obs);
-  for (const change of [
-    { providerRole: "cameraProvider" },
-    { installEntitlement: "com.apple.developer.system-extension.install" },
-    { transport: "unrecognized" },
-  ])
-    expect(() =>
-      validateCameraCarrierDefinition({ ...obs, ...change }),
-    ).toThrow();
+test("carrier entitlements are written as the XML codesign requires", async () => {
+  const root = await mkdtemp(join(tmpdir(), "camera-entitlements-"));
+  try {
+    const file = join(root, "nested/entitlements.plist");
+    await writeEntitlements(file, { "com.apple.security.app-sandbox": true });
+    const text = await readFile(file, "utf8");
+    expect(text.startsWith("<?xml")).toBe(true);
+    expect(text).toContain("com.apple.security.app-sandbox");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("contained camera archive rejects nested links rather than following them", async () => {

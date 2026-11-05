@@ -72,6 +72,6 @@ if __name__ == '__main__':
             print('Prepared synthetic Camera host for development checks')
         else:
             prepare(os.environ)
-            print('Prepared signed production Camera microphone host for OBS output')
+            print('Prepared signed production Camera host')
     except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as error:
         raise SystemExit(str(error)) from None

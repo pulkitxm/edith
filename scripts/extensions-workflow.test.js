@@ -94,22 +94,37 @@ test("CI routes every explicit maintained producer script to the extension check
   expect(inputs.filter((path) => !routes(path))).toEqual([]);
 });
 
-test("only the camera carrier build prepares a containing host without Camera provisioning", () => {
+test("only the camera carrier build prepares a containing host and its provisioning profiles", () => {
   const names = build.steps.map((step) => step.name);
   const signing = names.indexOf("Import the release signing certificate");
   const compile = names.indexOf(
     "Build the host that contains the camera carrier",
   );
   const preparation = names.indexOf("Sign the containing host for publication");
+  const profiles = names.indexOf("Write the camera provisioning profiles");
+  const packagingIndex = names.indexOf("Build only this batch's extensions");
   expect(compile).toBeGreaterThan(signing - 1);
   expect(preparation).toBeGreaterThan(signing);
-  for (const index of [compile, preparation])
+  expect(profiles).toBeGreaterThan(signing);
+  expect(profiles).toBeLessThan(packagingIndex);
+  for (const index of [compile, preparation, profiles])
     expect(build.steps[index].if).toContain("matrix.camera");
+  expect(build.steps[profiles].if).toBe(build.steps[preparation].if);
   expect(build.steps[compile].run).toBe("make host");
   expect(build.steps[preparation].run).toContain("package-shipping-host.py");
   expect(build.steps[preparation].run).toContain("--release");
-  expect(text(build)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
-  expect(text(build)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
+  expect(build.steps[profiles].env).toEqual({
+    CAMERA_CARRIER_PROVISIONING_PROFILE:
+      "${{ secrets.CAMERA_CARRIER_PROVISIONING_PROFILE }}",
+    CAMERA_EXTENSION_PROVISIONING_PROFILE:
+      "${{ secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE }}",
+  });
+  for (const key of [
+    "CAMERA_SIGN_TEAM",
+    "CAMERA_CARRIER_PROFILE",
+    "CAMERA_EXTENSION_PROFILE",
+  ])
+    expect(build.steps[profiles].run).toContain(`${key}=`);
   const packaging = build.steps.find(
     (step) => step.name === "Build only this batch's extensions",
   );

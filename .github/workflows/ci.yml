@@ -378,6 +378,8 @@ jobs:
       publish: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
       force_all: ${{ github.event_name == 'workflow_dispatch' && inputs.release && inputs.force_all }}
     secrets:
+      CAMERA_CARRIER_PROVISIONING_PROFILE: ${{ secrets.CAMERA_CARRIER_PROVISIONING_PROFILE }}
+      CAMERA_EXTENSION_PROVISIONING_PROFILE: ${{ secrets.CAMERA_EXTENSION_PROVISIONING_PROFILE }}
       EXTENSION_CATALOG_PRIVATE_KEY: ${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}

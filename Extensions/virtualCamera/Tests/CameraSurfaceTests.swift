@@ -13,7 +13,7 @@ import Testing
         VirtualCameraEngine(
             state: VirtualCameraState(),
             environment: .init(
-                authorization: { .denied }, obsRunning: { false }, frontmostApplication: { nil },
+                authorization: { .denied },
                 sources: sources),
             previewBus: .init(
                 file: FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -103,7 +103,7 @@ import Testing
         let engine = VirtualCameraEngine(
             state: .init(scenes: scenes),
             environment: .init(
-                authorization: { .denied }, obsRunning: { false }, frontmostApplication: { nil },
+                authorization: { .denied },
                 sources: { sources }))
         defer { engine.shutdown() }
         let surface = CameraSurface(engine: engine, privacyValues: { [:] })

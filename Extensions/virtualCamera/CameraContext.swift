@@ -24,7 +24,7 @@ public enum AppBuildIdentity {
 public enum IPC {
     public enum Name: String {
         case requestVirtualCameraAction, virtualCameraActionResult, virtualCameraStateChanged
-        case virtualCameraStatusChanged, requestCameraExtensionAction, cameraExtensionActionResult
+        case virtualCameraStatusChanged
         var notification: Notification.Name { .init("edith.camera.local." + rawValue) }
     }
 

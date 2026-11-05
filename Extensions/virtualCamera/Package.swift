@@ -14,7 +14,7 @@ let package = Package(
             dependencies: [
                 .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
-            ], path: ".", exclude: ["Tests", "Carrier", "Privileged"],
+            ], path: ".", exclude: ["Tests", "Carrier", "ProviderFactory", "Privileged"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "VirtualCameraExtensionTests",
