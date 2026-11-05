@@ -66,7 +66,11 @@ struct StudioImageCanvas: View {
                     }
                 }
             } else {
-                LoadingIndicator().frame(maxWidth: .infinity, maxHeight: .infinity)
+                SkeletonGroup {
+                    SkeletonBlock(height: 320, corner: 12).padding(UIScale.pt(24))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Loading image")
             }
         }
         .overlay(alignment: .bottom) { selectionControls }

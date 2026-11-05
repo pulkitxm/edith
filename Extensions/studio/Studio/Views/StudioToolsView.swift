@@ -72,10 +72,17 @@ struct StudioToolsView: View {
                     StudioWorkflowSection(model: model)
                 }
                 if groups.isEmpty {
-                    Text("No tools match \"\(model.toolQuery)\".")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, UIScale.pt(40))
+                    PageEmptyState(
+                        symbolName: "magnifyingglass",
+                        title: "No tools match your search",
+                        message:
+                            "Nothing matches \"\(model.toolQuery)\". Try a shorter word such as pdf, compress or convert, or browse every tool.",
+                        primary: PageAction("Show all tools", symbolName: "square.grid.2x2") {
+                            model.toolQuery = ""
+                            model.toolFilter = .all
+                        }
+                    )
+                    .frame(minHeight: UIScale.pt(280))
                 }
                 ForEach(groups, id: \.group) { entry in
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {

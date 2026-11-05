@@ -6,6 +6,15 @@ import Observation
 final class DownloadsTools {
     static let shared = DownloadsTools()
     static let names = ["yt-dlp", "ffmpeg", "deno", "gallery-dl"]
+    static func purpose(of name: String) -> String {
+        switch name {
+        case "yt-dlp": "Required. Downloads videos and audio from most sites."
+        case "ffmpeg": "Converts audio and merges the best video and sound."
+        case "deno": "Helps yt-dlp read sites that need scripts to load."
+        case "gallery-dl": "Saves photos, galleries and carousels from posts."
+        default: ""
+        }
+    }
     private(set) var installed: Set<String> = []
     private(set) var installing: String?
     var error: String?

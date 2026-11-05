@@ -308,7 +308,11 @@ struct StudioCompareView: View {
                     .aspectRatio(contentMode: .fit)
                     .padding(UIScale.pt(12))
             } else {
-                LoadingIndicator().frame(maxHeight: .infinity)
+                SkeletonGroup {
+                    SkeletonBlock(height: 320, corner: 12).padding(UIScale.pt(24))
+                }
+                .frame(maxHeight: .infinity)
+                .accessibilityLabel("Preparing comparison")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

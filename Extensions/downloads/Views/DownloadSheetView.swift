@@ -180,7 +180,12 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.toolbar))
             .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
-            .help("Update yt-dlp")
+            .help(
+                downloader.isRunning
+                    ? "Wait for active downloads to finish before updating the download tool"
+                    : "Update the download tool (yt-dlp) if a site stops working"
+            )
+            .accessibilityLabel("Update download tool")
             if let result = downloader.updateResult {
                 switch result {
                 case .success(let msg):
@@ -213,26 +218,33 @@ struct DownloadSheet: View {
     }
 
     private func unavailableView(_ reason: String) -> some View {
-        VStack(spacing: UIScale.pt(14)) {
-            Spacer()
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: UIScale.pt(30)))
-                .foregroundStyle(.orange)
-            Text(reason)
-                .font(.system(size: UIScale.pt(12.5)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-            Button("Open extension settings") { settingsPresented = true }
-                .edithSheet(isPresented: $settingsPresented) {
-                    DownloadsSettings(downloader: downloader)
-                }
-                .buttonStyle(.edith(.toolbar))
-            Button("Check again") { downloader.checkAvailability() }
-                .buttonStyle(.edith(.toolbar))
-            Spacer()
+        let missingTool = reason.contains("yt-dlp")
+        return PageEmptyState(
+            symbolName: missingTool ? "wrench.and.screwdriver" : "exclamationmark.triangle",
+            title: missingTool
+                ? "One-time setup: add the download tool" : "Downloads can't start yet",
+            message: reason,
+            steps: missingTool
+                ? [
+                    PageGuideStep(
+                        symbolName: "wrench.and.screwdriver", title: "Install yt-dlp",
+                        detail: "It fetches videos and audio. Installing takes under a minute."),
+                    PageGuideStep(
+                        symbolName: "link", title: "Paste a link",
+                        detail: "Come back here and paste any video or post link."),
+                ] : [],
+            primary: PageAction(
+                missingTool ? "Set up download tools" : "Open settings",
+                symbolName: "gearshape", identifier: "downloads.setup"
+            ) { settingsPresented = true },
+            secondary: PageAction("Check again", symbolName: "arrow.clockwise") {
+                downloader.checkAvailability()
+            },
+            footnote: "Nothing is downloaded until you paste a link and press Download."
+        )
+        .edithSheet(isPresented: $settingsPresented) {
+            DownloadsSettings(downloader: downloader)
         }
-        .padding(.horizontal, UIScale.pt(40))
     }
 
     @ViewBuilder
@@ -319,8 +331,7 @@ struct DownloadSheet: View {
                 }
                 .padding(.bottom, UIScale.pt(6))
                 if downloader.items.isEmpty {
-                    emptyState.frame(height: UIScale.pt(100))
-                        .frame(maxWidth: .infinity)
+                    emptyState.frame(maxWidth: .infinity)
                 }
             }
             .padding(.bottom, UIScale.pt(downloader.items.isEmpty ? PageMetrics.bottom : 6))
@@ -513,6 +524,7 @@ struct DownloadSheet: View {
             estimateLoad.reset()
             return
         }
+        do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty, downloader.unavailableReason == nil else {
             estimate = nil
@@ -562,7 +574,9 @@ struct DownloadSheet: View {
     private var startRow: some View {
         HStack {
             Text(
-                "Downloads continue when you close this window."
+                canStart
+                    ? "Downloads continue when you close this window."
+                    : "Paste a complete http:// or https:// link above to enable Download."
             )
             .font(.system(size: UIScale.pt(10.5)))
             .foregroundStyle(.secondary)
@@ -644,17 +658,28 @@ struct DownloadSheet: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: UIScale.pt(6)) {
-            Spacer()
-            Image(systemName: "tray")
-                .font(.system(size: UIScale.pt(24)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text("No downloads yet")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-            Spacer()
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            Text("Nothing downloaded yet. Paste a link above to save your first file.")
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
+            PageGuideSteps(steps: Self.firstUseSteps, columns: compact ? 1 : 3)
+            Text(
+                "Downloads keep running if you close this window, and you can retry any that fail."
+            )
+            .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
+
+    private static let firstUseSteps = [
+        PageGuideStep(
+            symbolName: "link", title: "Paste a link",
+            detail: "Videos, photos or posts from YouTube, Instagram, TikTok, X and more."),
+        PageGuideStep(
+            symbolName: "square.stack", title: "Pick what to save",
+            detail: "Everything in a post, just images, audio only, or video."),
+        PageGuideStep(
+            symbolName: "arrow.down.circle", title: "Press Download",
+            detail: "Files are saved to the folder shown under Save to."),
+    ]
 
     private func queueCard(_ item: YoutubeDownloader.DownloadItem) -> some View {
         let isActive: Bool
@@ -1003,6 +1028,10 @@ struct DownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: UIScale.pt(11)))
                 .disabled(downloader.isRunning)
+                .help(
+                    downloader.isRunning
+                        ? "Cancel active downloads first to clear the list"
+                        : "Remove every entry from this list. Downloaded files stay on your Mac.")
             }
             if downloader.isRunning {
                 Button {

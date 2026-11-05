@@ -25,5 +25,32 @@
     "media",
     "extension:downloads"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Save videos, audio, photos and posts from links to your Mac.",
+    "summary": "Paste a link from YouTube, Instagram, TikTok, X or Reddit and Edith saves the file for you. Downloads run in the background, so you can close the window and keep working.",
+    "steps": [
+      {
+        "symbolName": "link",
+        "title": "Paste a link",
+        "detail": "Add one or several links, one per line."
+      },
+      {
+        "symbolName": "square.stack",
+        "title": "Choose what to save",
+        "detail": "Pick post, images, audio or video, and the folder to save into."
+      },
+      {
+        "symbolName": "arrow.down.circle",
+        "title": "Press Download",
+        "detail": "Watch progress in the list, then open or reveal the finished file."
+      }
+    ],
+    "examples": [
+      "ed download add <url>",
+      "ed download ls",
+      "ed download status",
+      "ed download retry --all"
+    ]
+  }
 }

@@ -101,7 +101,8 @@ struct VideoEditorPage: View {
                 LoadingContainer(state: .loading) {
                     EmptyView()
                 } placeholder: {
-                    LoadingIndicator("Opening video project")
+                    PageSkeleton(layout: .editor)
+                        .accessibilityLabel("Opening video project")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.project == nil {
@@ -322,20 +323,30 @@ struct VideoEditorPage: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: UIScale.pt(16)) {
-                    Image(systemName: "film")
-                        .font(.system(size: UIScale.pt(52), weight: .ultraLight))
-                        .foregroundStyle(.secondary)
-                    Text("Make a video your own")
-                        .font(.edithText(.title2).weight(.semibold))
-                    Text("Import a video, highlight moments with zoom, add text, and export.")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    HStack {
-                        Button("Import video", action: model.importMedia)
-                            .buttonStyle(.edith(.primary))
-                        Button("Open project", action: model.openProject)
-                            .buttonStyle(.edith(.secondary))
-                    }
+                    PageEmptyState(
+                        symbolName: "film", title: "Make a video your own",
+                        message:
+                            "Import a clip, then trim it, zoom into key moments, add text and captions, and export. Your original video is never changed.",
+                        steps: [
+                            PageGuideStep(
+                                symbolName: "square.and.arrow.down", title: "Import a video",
+                                detail: "Choose a recording or any video file."),
+                            PageGuideStep(
+                                symbolName: "scissors", title: "Edit on the timeline",
+                                detail: "Cut, zoom, add text, music and transitions."),
+                            PageGuideStep(
+                                symbolName: "square.and.arrow.up", title: "Export",
+                                detail: "Save a finished video file."),
+                        ],
+                        primary: PageAction(
+                            "Import video", symbolName: "square.and.arrow.down",
+                            identifier: "studio.video.import"
+                        ) { model.importMedia() },
+                        secondary: PageAction(
+                            "Open project", symbolName: "folder", identifier: "studio.video.open"
+                        ) { model.openProject() },
+                        footnote: "Projects save automatically and appear in Studio under Projects."
+                    )
                     if !model.recentProjects.isEmpty {
                         Text("PROJECTS")
                             .font(.edithText(.caption).weight(.semibold))

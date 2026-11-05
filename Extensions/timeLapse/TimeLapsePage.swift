@@ -20,6 +20,33 @@ struct TimeLapseSettingsPage: View {
     }
 }
 
+enum TimeLapseGuidance {
+    static func pollInterval(recording: Bool) -> Duration {
+        recording ? .milliseconds(250) : .seconds(2)
+    }
+
+    static func startHint(
+        canStart: Bool, busy: Bool, sourceMode: String, selectedCount: Int, loadingSources: Bool
+    ) -> String? {
+        if canStart || busy { return nil }
+        if loadingSources { return "Looking for displays and windows…" }
+        if selectedCount == 0 {
+            return sourceMode == "displays"
+                ? "Choose at least one display to enable Record."
+                : "Choose at least one window to enable Record."
+        }
+        return "Recording is unavailable right now."
+    }
+
+    static func modeSummary(_ mode: ScreenRecordingMode) -> String {
+        switch mode {
+        case .standard: "Records at normal speed with sound, like any screen recording."
+        case .timeLapse:
+            "Captures one frame every few seconds and plays them back fast. Ideal for long work sessions."
+        }
+    }
+}
+
 @available(macOS 15.0, *)
 struct TimeLapseControls: View {
     @State private var recorder: TimeLapseRecorder
@@ -70,18 +97,32 @@ struct TimeLapseControls: View {
                 } else if extensionEnabled, loadsSources, recorder.screenRecordingDenied,
                     !recorder.sourceLoad.hasContent
                 {
-                    PageNotice(
-                        TimeLapseError.screenRecordingDenied.errorDescription ?? "",
-                        title: "Allow Screen Recording", tone: .warning,
-                        actions: {
-                            HStack(spacing: UIScale.pt(8)) {
-                                Button("Open System Settings") {
-                                    TimeLapseScreenRecordingAccess.request()
-                                }
-                                .buttonStyle(.edith(.primary))
-                                Button("Try Again") { sourcesRefresh += 1 }
-                            }
-                        })
+                    PageEmptyState(
+                        symbolName: "lock.display",
+                        title: "Allow Screen Recording to get started",
+                        message:
+                            "macOS asks you to approve screen capture once. Without it Edith cannot see your displays or windows, so there is nothing to record yet.",
+                        steps: [
+                            PageGuideStep(
+                                symbolName: "gearshape", title: "Open System Settings",
+                                detail: "Go to Privacy & Security, then Screen Recording."),
+                            PageGuideStep(
+                                symbolName: "switch.2", title: "Turn Edith on",
+                                detail: "You may need to reopen Edith after changing it."),
+                            PageGuideStep(
+                                symbolName: "arrow.clockwise", title: "Come back and try again",
+                                detail: "Your displays and windows will appear here."),
+                        ],
+                        primary: PageAction(
+                            "Open System Settings", symbolName: "gearshape",
+                            identifier: "timelapse.open-settings"
+                        ) { TimeLapseScreenRecordingAccess.request() },
+                        secondary: PageAction("Try Again", symbolName: "arrow.clockwise") {
+                            sourcesRefresh += 1
+                        },
+                        footnote: "Recordings stay on this Mac. Edith never uploads them."
+                    )
+                    .frame(minHeight: UIScale.pt(420))
                 } else {
                     PageLoading(
                         state: !extensionEnabled || !loadsSources
@@ -106,8 +147,9 @@ struct TimeLapseControls: View {
                     capturePreview(height: previewHeight(in: geometry.size))
                 }
                 if !extensionEnabled {
-                    Text("Enable Screen Recorder in Extensions to record.")
-                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                    PageNotice(
+                        "Turn on Screen Recorder in the Extensions list to start recording. Your saved recordings stay available.",
+                        title: "Screen Recorder is turned off", tone: .warning)
                 }
                 if let error = recorder.error {
                     Label(error, systemImage: "exclamationmark.circle")
@@ -124,7 +166,7 @@ struct TimeLapseControls: View {
             while !Task.isCancelled {
                 await recorder.refreshRemote()
                 guard !Task.isCancelled else { return }
-                let delay: Duration = recorder.recording ? .milliseconds(100) : .seconds(1)
+                let delay = TimeLapseGuidance.pollInterval(recording: recorder.recording)
                 do { try await Task.sleep(for: delay) } catch { return }
             }
         }
@@ -229,6 +271,8 @@ struct TimeLapseControls: View {
             EdithSegmentedPicker(
                 "Recording mode", selection: $recorder.settings.mode,
                 options: ScreenRecordingMode.allCases, label: { $0.rawValue })
+            Text(TimeLapseGuidance.modeSummary(recorder.settings.mode))
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             captureLayout {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text("Source").font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -244,6 +288,9 @@ struct TimeLapseControls: View {
                             Image(systemName: "chevron.down").font(.edithText(.caption))
                         }.frame(maxWidth: .infinity)
                     }
+                    .help(
+                        "Choose which \(recorder.sourceMode == "displays" ? "displays" : "windows") to record"
+                    )
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 captureSettingsLayout {
                     if recorder.settings.mode == .timeLapse {
@@ -286,6 +333,11 @@ struct TimeLapseControls: View {
                         .frame(maxWidth: narrow ? .infinity : nil)
                 }.buttonStyle(.edith(.primary)).tint(.red)
                     .disabled(!recorder.canStart)
+                    .help(startHint ?? "Start recording")
+            }
+            if let startHint {
+                Label(startHint, systemImage: "info.circle")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             DisclosureGroup(isExpanded: $optionsExpanded) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -327,6 +379,14 @@ struct TimeLapseControls: View {
         }
         .padding(UIScale.pt(20))
         .edithSurface(cornerRadius: 12)
+    }
+
+    private var startHint: String? {
+        TimeLapseGuidance.startHint(
+            canStart: recorder.canStart, busy: recorder.busy, sourceMode: recorder.sourceMode,
+            selectedCount: recorder.sourceMode == "displays"
+                ? recorder.selectedDisplays.count : recorder.selectedWindows.count,
+            loadingSources: recorder.sourceLoad.isRunning)
     }
 
     private var captureLayout: AnyLayout {
@@ -418,7 +478,24 @@ struct TimeLapseControls: View {
             ) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     if recordings.isEmpty {
-                        Text("Your recordings will appear here.").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            Text(
+                                "No recordings yet. Press Record above, then stop when you are done. The recording shows up here, ready to export."
+                            )
+                            .font(.edithText(.callout)).foregroundStyle(.secondary)
+                            PageGuideSteps(
+                                steps: [
+                                    PageGuideStep(
+                                        symbolName: "display", title: "Pick a source",
+                                        detail: "A whole display, or only the windows you choose."),
+                                    PageGuideStep(
+                                        symbolName: "record.circle", title: "Record",
+                                        detail: "Recording keeps going if you leave this page."),
+                                    PageGuideStep(
+                                        symbolName: "square.and.arrow.up", title: "Export",
+                                        detail: "Choose a quality and save a video file."),
+                                ], columns: compact ? 1 : 3)
+                        }
                     } else {
                         LazyVStack(spacing: UIScale.pt(8)) {
                             ForEach(recordings) { recording in
@@ -441,6 +518,10 @@ struct TimeLapseControls: View {
                                 }
                                 .buttonStyle(.edith(.primary))
                                 .disabled(exporting || recording.session.frames == 0)
+                                .help(
+                                    recording.session.frames == 0
+                                        ? "This recording has no frames to export"
+                                        : "Save the selected recording as a video file")
                             }
                             if let failure = recording.session.failure {
                                 Text(failure).font(.edithText(.callout)).foregroundStyle(.orange)

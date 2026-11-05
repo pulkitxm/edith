@@ -21,18 +21,28 @@ struct DownloadsSettings: View {
             Form {
                 Section("Download tools") {
                     Text(
-                        "Add the tools required for the media you want to save."
+                        "Edith uses these free command line tools to save media. Only yt-dlp is required; the rest unlock more sites and formats."
                     ).font(.edithText(.caption)).foregroundStyle(.secondary)
                     ForEach(DownloadsTools.names, id: \.self) { name in
-                        LabeledContent(name) {
+                        LabeledContent {
                             if tools.installed.contains(name) {
                                 Label("Installed", systemImage: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
                             } else if tools.installing == name {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Button("Install") { tools.install(name) }.disabled(
-                                    tools.installing != nil)
+                                Button("Install") { tools.install(name) }
+                                    .disabled(tools.installing != nil)
+                                    .help(
+                                        tools.installing != nil
+                                            ? "Wait for the current install to finish"
+                                            : "Install \(name)")
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                Text(name)
+                                Text(DownloadsTools.purpose(of: name)).font(.edithText(.caption))
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }

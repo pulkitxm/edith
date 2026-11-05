@@ -26,7 +26,9 @@ struct StudioProjectsView: View {
                     if model.videoProjects.isEmpty {
                         StudioEmptyNote(
                             symbol: "film.stack",
-                            text: "Edit a video from Files, or start a new project to see it here.")
+                            text:
+                                "No video projects yet. Choose New video project to import a clip and edit it on a timeline. Projects save automatically."
+                        )
                     } else {
                         LazyVGrid(
                             columns: PageMetrics.cardColumns(compact, minimum: 220, spacing: 12),
@@ -85,6 +87,9 @@ struct StudioProjectsView: View {
                                     }
                                     .buttonStyle(.edith(.toolbar))
                                     .padding(.trailing, UIScale.pt(8))
+                                    .help(
+                                        "Moves \(project.title) to the Trash. You can restore it from there."
+                                    )
                                 }
                             }
                         }
@@ -95,7 +100,9 @@ struct StudioProjectsView: View {
                     if model.recent.isEmpty {
                         StudioEmptyNote(
                             symbol: "clock.arrow.circlepath",
-                            text: "Run a tool or save from an editor and the results appear here.")
+                            text:
+                                "Nothing yet. Open a tool from the Tools tab and run it, and the files it makes will be listed here with Show in Finder."
+                        )
                     } else {
                         VStack(spacing: 0) {
                             ForEach(Array(model.recent.enumerated()), id: \.element.id) {

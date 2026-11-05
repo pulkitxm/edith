@@ -69,6 +69,18 @@ struct StudioDropHero: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private static let steps = [
+        PageGuideStep(
+            symbolName: "plus.circle", title: "Add files",
+            detail: "Drop them here, choose them, paste, or scan with your iPhone."),
+        PageGuideStep(
+            symbolName: "wand.and.stars", title: "Pick a tool",
+            detail: "Select files and choose a tool, or start from a popular one below."),
+        PageGuideStep(
+            symbolName: "checkmark.circle", title: "Get the result",
+            detail: "Results are listed under Projects, ready to open or show in Finder."),
+    ]
+
     private let popular = [
         "pdf.merge", "pdf.compress", "pdf.edit", "pdf.sign", "image.compress",
         "image.remove-background", "image.convert", "video.compress", "video.to-gif",
@@ -78,19 +90,19 @@ struct StudioDropHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(22)) {
             VStack(spacing: UIScale.pt(14)) {
-                Image(systemName: "square.and.arrow.down.on.square")
-                    .font(.system(size: UIScale.pt(40), weight: .ultraLight))
-                    .foregroundStyle(DashSkin.accent(scheme == .dark))
-                Text("Drop files here to start")
-                    .font(.system(size: UIScale.pt(20), weight: .semibold))
+                PageGuideBadge(symbolName: "square.and.arrow.down.on.square")
+                Text("Drop a file here to get started")
+                    .font(.edithText(.title2)).fontWeight(.semibold)
                     .multilineTextAlignment(.center)
                 Text(
-                    "Images, PDFs, videos, audio and documents. Edit, compress, convert, merge, split and more, all on this Mac."
+                    "Studio edits, compresses, converts, merges and splits images, PDFs, videos, audio and documents. Everything runs on this Mac, nothing is uploaded."
                 )
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(440))
+                .frame(maxWidth: UIScale.pt(460))
+                PageGuideSteps(steps: Self.steps, columns: compact ? 1 : 3)
+                    .frame(maxWidth: UIScale.pt(compact ? 460 : 700))
                 let actions =
                     compact
                     ? AnyLayout(VStackLayout(spacing: UIScale.pt(8)))
@@ -122,9 +134,9 @@ struct StudioDropHero: View {
                         DashSkin.lineStrong(scheme == .dark),
                         style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])))
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                Text("POPULAR TOOLS")
-                    .font(DashSkin.mono(10, weight: .semibold))
-                    .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                PageSectionHeader(
+                    "Popular tools",
+                    subtitle: "Pick one to start, then add the files it should work on.")
                 LazyVGrid(
                     columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 10),
                     spacing: UIScale.pt(10)

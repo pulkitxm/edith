@@ -23,5 +23,36 @@
     "media",
     "extension:studio"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Edit, compress and convert PDFs, images, video and audio on your Mac.",
+    "summary": "Studio bundles dozens of tools in one place: merge or sign PDFs, remove image backgrounds, compress video, convert audio and edit video on a timeline. Everything runs on this Mac and nothing is uploaded.",
+    "steps": [
+      {
+        "symbolName": "plus.circle",
+        "title": "Add your files",
+        "detail": "Drop them in, choose them, paste, or scan with an iPhone."
+      },
+      {
+        "symbolName": "wand.and.stars",
+        "title": "Pick a tool",
+        "detail": "Browse Tools or search, then open the one you need."
+      },
+      {
+        "symbolName": "slider.horizontal.3",
+        "title": "Adjust and run",
+        "detail": "Set options on the right and run it."
+      },
+      {
+        "symbolName": "folder",
+        "title": "Find the result",
+        "detail": "Results are listed under Projects with Show in Finder."
+      }
+    ],
+    "examples": [
+      "ed studio tools",
+      "ed studio info pdf.merge",
+      "ed studio run pdf.merge a.pdf b.pdf"
+    ]
+  }
 }
