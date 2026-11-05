@@ -1,7 +1,7 @@
 {
   "id": "plugins",
   "title": "Plugins",
-  "symbolName": "square.stack.3d.up",
+  "icon": "layers",
   "category": "agents",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "plugins",
       "title": "Plugins",
-      "symbolName": "square.stack.3d.up",
+      "icon": "layers",
       "order": 5
     }
   ],
@@ -27,17 +27,17 @@
     "summary": "Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose.",
     "steps": [
       {
-        "symbolName": "doc.text.magnifyingglass",
+        "icon": "seoAudit",
         "title": "Read a skill",
         "detail": "Click Preview to see exactly what the skill tells your agent, and copy the Markdown if you prefer."
       },
       {
-        "symbolName": "person.crop.circle.badge.checkmark",
+        "icon": "person",
         "title": "Choose your agents",
         "detail": "Edith finds the coding agents installed on this Mac and remembers which ones you pick."
       },
       {
-        "symbolName": "square.and.arrow.down",
+        "icon": "saveTo",
         "title": "Install",
         "detail": "The skill is added to each agent for all your projects. Nothing else on your Mac is touched."
       }

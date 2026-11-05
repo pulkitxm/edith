@@ -15,7 +15,7 @@ struct SkillInstallSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                PageGuideBadge(symbolName: skill.symbol, size: 40)
+                PageGuideBadge(icon: skill.icon, size: 40)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(model.installationSucceeded ? "Skill installed" : "Install skill")
                         .font(.edithText(.title3)).fontWeight(.semibold)
@@ -28,7 +28,7 @@ struct SkillInstallSheet: View {
                     if model.installationSucceeded {
                         Label(
                             "Available to \(targetCount) on this Mac.",
-                            systemImage: "checkmark"
+                            edith: .check
                         )
                         .font(.edithText(.callout))
                     } else {
@@ -36,13 +36,13 @@ struct SkillInstallSheet: View {
                         if !model.isDiscovering, !model.installerAvailable {
                             Label(
                                 "Install Node.js 22.20 or later, then reopen this sheet to enable installation.",
-                                systemImage: "exclamationmark.circle"
+                                edith: .alert
                             )
                             .font(.edithText(.callout)).foregroundStyle(.secondary)
                         }
                     }
                     if let error = model.installationError {
-                        Label(error, systemImage: "exclamationmark.triangle")
+                        Label(error, edith: .warning)
                             .font(.edithText(.callout)).foregroundStyle(.red)
                     }
                     if !model.installationLog.isEmpty {

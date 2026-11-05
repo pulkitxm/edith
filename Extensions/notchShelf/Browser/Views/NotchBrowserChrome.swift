@@ -48,7 +48,7 @@ struct NotchBrowserTabStrip<Leading: View>: View {
         Button {
             store.newTab()
         } label: {
-            Image(systemName: "plus")
+            EdithIconView(.plus)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(width: Self.newTabWidth, height: 24)
@@ -114,7 +114,7 @@ struct NotchBrowserTabItem: View {
                 Button {
                     store.close(tab)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: 8.5, weight: .bold))
                         .foregroundStyle(.white.opacity(0.7))
                         .frame(width: 16, height: 16)
@@ -172,7 +172,7 @@ struct NotchBrowserFavicon: View {
                     Circle().fill(.white.opacity(0.5))
                 }
             } else {
-                Image(systemName: "globe")
+                EdithIconView(.globe)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.55))
             }
@@ -192,14 +192,14 @@ struct NotchBrowserToolbar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            control("chevron.left", help: "Back", enabled: tab?.canGoBack ?? false) {
+            control(.chevronLeft, help: "Back", enabled: tab?.canGoBack ?? false) {
                 tab?.webView.goBack()
             }
-            control("chevron.right", help: "Forward", enabled: tab?.canGoForward ?? false) {
+            control(.chevronRight, help: "Forward", enabled: tab?.canGoForward ?? false) {
                 tab?.webView.goForward()
             }
             control(
-                tab?.isLoading == true ? "xmark" : "arrow.clockwise",
+                tab?.isLoading == true ? .close : .refresh,
                 help: tab?.isLoading == true ? "Stop" : "Reload", enabled: tab != nil
             ) {
                 guard let webView = tab?.webView else { return }
@@ -207,7 +207,7 @@ struct NotchBrowserToolbar: View {
             }
             address
                 .padding(.horizontal, 6)
-            control("arrow.up.forward.app", help: "Open in Chrome", enabled: tab?.url != nil) {
+            control(.external, help: "Open in Chrome", enabled: tab?.url != nil) {
                 store.openInChrome(nil)
             }
             profileMenu
@@ -235,7 +235,7 @@ struct NotchBrowserToolbar: View {
 
     private var address: some View {
         HStack(spacing: 7) {
-            Image(systemName: tab?.url?.scheme == "https" ? "lock.fill" : "globe")
+            EdithIconView(tab?.url?.scheme == "https" ? .lock : .globe)
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.45))
             TextField("Search or enter address", text: $draft)
@@ -297,10 +297,12 @@ struct NotchBrowserToolbar: View {
                 Image(nsImage: ChromeProfileAvatar.badge(for: profile, diameter: 20))
                     .presenterCover(NotchPresenterState.shared.hides(.browser))
             } else {
-                Image(systemName: "person.crop.circle")
+                EdithIconView(.person, size: 16)
+                    .foregroundStyle(.tint)
             }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.edith(.borderless))
         .menuIndicator(.hidden)
         .fixedSize()
         .frame(width: 28, height: 26)
@@ -311,10 +313,10 @@ struct NotchBrowserToolbar: View {
     }
 
     private func control(
-        _ icon: String, help: String, enabled: Bool, action: @escaping () -> Void
+        _ icon: EdithIcon, help: String, enabled: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
+            EdithIconView(icon)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white.opacity(enabled ? 0.8 : 0.28))
                 .frame(width: 26, height: 26)

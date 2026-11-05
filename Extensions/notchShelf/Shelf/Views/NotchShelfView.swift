@@ -219,7 +219,7 @@ struct NotchShelfContentView: View {
                 Button {
                     controller.selectTab(tab)
                 } label: {
-                    Image(systemName: tab.icon)
+                    EdithIconView(tab.icon)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(
                             active ? DashSkin.onAccent(true) : Color.white.opacity(0.6)
@@ -264,29 +264,32 @@ struct NotchShelfContentView: View {
                                 $0 = preset.layout(for: .notch)
                             }
                         } label: {
-                            Label(preset.title, systemImage: preset.icon)
+                            Label(preset.title, edith: preset.icon)
                         }
                     }
                 } label: {
-                    Image(systemName: "rectangle.3.group").frame(width: 28, height: 24)
+                    EdithIconView(.window, size: 16)
+                        .foregroundStyle(.tint)
+                        .frame(width: 28, height: 24)
                 }
-                .menuStyle(.borderlessButton).fixedSize().help("Notch presets")
+                .menuStyle(.button).buttonStyle(.edith(.borderless))
+                .fixedSize().help("Notch presets")
                 if controller.layoutEditing {
                     Button {
                         controller.chromeLayouts.undo(.notch)
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }.disabled(!controller.chromeLayouts.canUndo(.notch)).help("Undo layout change")
                     Button {
                         controller.chromeLayouts.redo(.notch)
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }.disabled(!controller.chromeLayouts.canRedo(.notch)).help("Redo layout change")
                 }
                 Button {
                     controller.layoutEditing.toggle()
                 } label: {
-                    Image(systemName: controller.layoutEditing ? "checkmark" : "pencil")
+                    EdithIconView(controller.layoutEditing ? .check : .edit)
                         .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
                         .frame(width: 28, height: 22)
                         .background(Color.white.opacity(0.07), in: Capsule())
@@ -298,7 +301,7 @@ struct NotchShelfContentView: View {
                 controller.collapseNow()
                 controller.openCustomization()
             } label: {
-                Image(systemName: "gearshape")
+                EdithIconView(.gear)
                     .font(.system(size: 11.5))
                     .foregroundStyle(.white.opacity(0.7))
                     .frame(width: 32, height: 22)
@@ -320,7 +323,7 @@ struct NotchShelfContentView: View {
             controller.selectTab(tab)
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: tab.icon)
+                EdithIconView(tab.icon)
                     .font(.system(size: 11.5, weight: .medium))
                 Text(tab.title)
                     .font(.system(size: 11, weight: .semibold)).fixedSize()
@@ -410,7 +413,7 @@ struct NotchShelfContentView: View {
             ZStack(alignment: .topLeading) {
                 if controller.items.isEmpty {
                     VStack(spacing: 6) {
-                        Image(systemName: "tray.and.arrow.down")
+                        EdithIconView(.tray)
                             .font(.system(size: 20, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
                             .padding(.bottom, 4)
@@ -439,7 +442,7 @@ struct NotchShelfContentView: View {
                 }
                 if let error = controller.shelfOperationError {
                     HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                        EdithIconView(.warning)
                         Text(error)
                             .font(.system(size: 10.5, weight: .medium))
                             .lineLimit(2)
@@ -447,7 +450,7 @@ struct NotchShelfContentView: View {
                         Button {
                             controller.dismissShelfFailure()
                         } label: {
-                            Image(systemName: "xmark")
+                            EdithIconView(.close)
                                 .font(.system(size: 9, weight: .bold))
                         }
                         .buttonStyle(.edith(.borderless))
@@ -495,8 +498,7 @@ private struct NotchAlertDropView: View {
             controller.alertTapped(alert)
         } label: {
             HStack(spacing: 11) {
-                Image(systemName: alert.icon)
-                    .font(.system(size: 14, weight: .medium))
+                EdithIconView(alert.icon, size: 16, tone: alert.muted ? .muted : .duotone)
                     .foregroundStyle(tint)
                     .frame(width: 30, height: 30)
                     .background(tint.opacity(0.2), in: RoundedRectangle(cornerRadius: 9))
@@ -513,7 +515,7 @@ private struct NotchAlertDropView: View {
                 }
                 Spacer(minLength: 0)
                 if alert.settingsTab != nil {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.4))
                 }
@@ -622,7 +624,8 @@ private struct NotchGlanceLabel: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: glance.icon).font(.edithText(.caption2))
+                EdithIconView(glance.icon, tone: glance.muted ? .muted : .duotone)
+                    .font(.edithText(.caption2))
                 value
             }.fixedSize(horizontal: true, vertical: false)
             value

@@ -125,7 +125,7 @@ struct NotchRemoteCameraTab: View {
                             Button {
                                 model.cycle()
                             } label: {
-                                Image(systemName: "arrow.triangle.2.circlepath.camera").font(
+                                EdithIconView(.sync).font(
                                     .system(size: 13, weight: .medium)
                                 )
                                 .foregroundStyle(.white).frame(width: 32, height: 32)
@@ -137,7 +137,7 @@ struct NotchRemoteCameraTab: View {
                 }
             } else if model.state?.authorization == AVAuthorizationStatus.notDetermined.rawValue {
                 NotchTabMessage(
-                    symbol: "camera.fill", title: "Mirror check, right in the notch",
+                    icon: .camera, title: "Mirror check, right in the notch",
                     detail:
                         "macOS asks for camera access once. Nothing is recorded or sent anywhere."
                 ) {
@@ -146,7 +146,7 @@ struct NotchRemoteCameraTab: View {
                 }
             } else if model.state != nil {
                 NotchTabMessage(
-                    symbol: "camera.metering.none", title: "Camera access is off",
+                    icon: .scan, title: "Camera access is off",
                     detail: "Allow Edith under Camera in Privacy settings to see yourself here."
                 ) {
                     Button("Open Privacy Settings") { model.perform(.privacy) }

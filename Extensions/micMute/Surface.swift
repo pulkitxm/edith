@@ -6,7 +6,7 @@ enum MicMuteSurface {
         .init(
             providerID: "micMute",
             metrics: [.init("status", "Microphone", muted ? "Muted" : "On")],
-            actions: [.init("toggle", "Toggle mute", "mic.slash")],
+            actions: [.init("toggle", "Toggle mute", .micMute)],
             updatedAt: Date())
     }
 }

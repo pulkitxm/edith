@@ -58,7 +58,7 @@ struct EmbeddedMusicProviderContent: View {
                         Button {
                             accounts.spotify.connect()
                         } label: {
-                            Label("Connect Spotify", systemImage: "arrow.right")
+                            Label("Connect Spotify", edith: .arrowRight)
                         }
                         .buttonStyle(.edith(.primary)).disabled(accounts.spotify.disconnecting)
                         if accounts.spotify.hasSavedAccount {
@@ -69,16 +69,16 @@ struct EmbeddedMusicProviderContent: View {
                                 accounts.spotify.disconnecting)
                         }
                     }
-                    Label("Spotify Premium required for playback", systemImage: "info.circle")
+                    Label("Spotify Premium required for playback", edith: .info)
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
             PageColumns {
                 featureRow(
-                    "books.vertical", title: "Your whole library",
+                    .books, title: "Your whole library",
                     detail: "Playlists, Liked Songs, albums, artists, and podcasts.")
                 featureRow(
-                    "magnifyingglass", title: "Find your next song",
+                    .search, title: "Find your next song",
                     detail: "Search the catalog and build your listening queue.")
             }
         }
@@ -93,7 +93,7 @@ struct EmbeddedMusicProviderContent: View {
             ) {
                 HStack(spacing: UIScale.pt(10)) {
                     Button(action: chooseProfile) {
-                        Label("Connect YouTube Music", systemImage: "arrow.right")
+                        Label("Connect YouTube Music", edith: .arrowRight)
                     }
                     .buttonStyle(.edith(.primary))
                     .disabled(accounts.youtubeConnecting)
@@ -138,14 +138,14 @@ struct EmbeddedMusicProviderContent: View {
                         action: {
                             accounts.reloadYoutube()
                         },
-                        systemImage: "arrow.clockwise", helperText: "Reload YouTube Music")
+                        icon: .refresh, helperText: "Reload YouTube Music")
                     Menu {
                         Button("Reconnect", action: chooseProfile)
                         Button("Disconnect YouTube Music") {
                             Task { await accounts.disconnectYoutube() }
                         }
                     } label: {
-                        Label("Connected", systemImage: "checkmark.circle.fill")
+                        Label("Connected", edith: .success)
                             .font(.edithText(.caption))
                     }
                     .menuStyle(.borderlessButton)
@@ -190,9 +190,9 @@ struct EmbeddedMusicProviderContent: View {
         }
     }
 
-    private func featureRow(_ symbol: String, title: String, detail: String) -> some View {
+    private func featureRow(_ icon: EdithIcon, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.edithText(.title3))
                 .foregroundStyle(DashSkin.accent(scheme == .dark))
                 .frame(width: UIScale.pt(30), height: UIScale.pt(30))
@@ -232,7 +232,7 @@ struct EmbeddedMusicProviderContent: View {
 
     private var profilePicker: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            Label("Connect YouTube Music", systemImage: "play.circle")
+            Label("Connect YouTube Music", edith: .play)
                 .font(.edithText(.title3)).fontWeight(.semibold)
             Text("Choose the Chrome profile where you signed in to YouTube Music.")
                 .foregroundStyle(.secondary)
@@ -277,7 +277,7 @@ private struct EmbeddedMusicSourceEmblem: View {
             Circle().fill(accent.opacity(0.08))
             Circle().strokeBorder(accent.opacity(0.12), lineWidth: UIScale.pt(1))
                 .padding(UIScale.pt(size * 0.1))
-            Image(systemName: provider.symbol)
+            EdithIconView(provider.icon)
                 .font(.system(size: UIScale.pt(size * 0.38), weight: .light))
                 .foregroundStyle(accent)
         }
@@ -306,7 +306,7 @@ struct EmbeddedMusicStreamingArtwork: View {
                     .padding(UIScale.pt(size * 0.14))
                 Circle().fill(.primary.opacity(0.08))
                     .frame(width: UIScale.pt(size * 0.33), height: UIScale.pt(size * 0.33))
-                Image(systemName: "music.note").font(.system(size: UIScale.pt(size * 0.25)))
+                EdithIconView(.music).font(.system(size: UIScale.pt(size * 0.25)))
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
             }
         }

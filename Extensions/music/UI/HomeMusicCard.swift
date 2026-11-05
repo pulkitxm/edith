@@ -101,7 +101,7 @@ struct EmbeddedHomeMusicCard: View {
                     Button {
                         accounts.spotify.send(["action": "toggle"])
                     } label: {
-                        Image(systemName: accounts.spotify.playing ? "pause.fill" : "play.fill")
+                        EdithIconView(accounts.spotify.playing ? .pause : .play)
                             .font(.system(size: UIScale.pt(15))).foregroundStyle(theme)
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -109,7 +109,7 @@ struct EmbeddedHomeMusicCard: View {
                     Button {
                         accounts.spotify.send(["action": "next"])
                     } label: {
-                        Image(systemName: "forward.fill")
+                        EdithIconView(.fastForward)
                             .font(.system(size: UIScale.pt(12))).foregroundStyle(theme)
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -118,7 +118,7 @@ struct EmbeddedHomeMusicCard: View {
             }
         } else {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: accounts.selected.symbol)
+                EdithIconView(accounts.selected.icon)
                     .font(.edithText(.title2)).foregroundStyle(theme)
                     .frame(width: UIScale.pt(40), height: UIScale.pt(40))
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -172,7 +172,7 @@ struct EmbeddedHomeMusicCard: View {
                 Button {
                     remote.playPause()
                 } label: {
-                    Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
+                    EdithIconView(remote.isPlaying ? .pause : .play)
                         .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(theme)
                 }
@@ -181,7 +181,7 @@ struct EmbeddedHomeMusicCard: View {
                 Button {
                     remote.next()
                 } label: {
-                    Image(systemName: "forward.fill")
+                    EdithIconView(.fastForward)
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(theme)
                 }
@@ -206,7 +206,7 @@ struct EmbeddedHomeMusicCard: View {
                     .presenterBlur(blur)
                 Spacer(minLength: 6)
                 if presentation?.tile.showActions != false {
-                    Image(systemName: "play.fill").font(.system(size: UIScale.pt(9)))
+                    EdithIconView(.play).font(.system(size: UIScale.pt(9)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -236,7 +236,7 @@ private struct EmbeddedHomeArtworkThumb: View {
                             Color(hue: track.hue, saturation: 0.6, brightness: 0.22),
                         ],
                         startPoint: .top, endPoint: .bottom)
-                    Image(systemName: "music.note")
+                    EdithIconView(.music)
                         .font(.system(size: size * 0.36))
                         .foregroundStyle(.white.opacity(0.8))
                 }
@@ -278,7 +278,7 @@ private struct EmbeddedHomeMusicJumpLink: View {
             Button(action: open) {
                 HStack(spacing: UIScale.pt(4)) {
                     Text("Open Music")
-                    Image(systemName: "arrow.right")
+                    EdithIconView(.arrowRight)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                 }
                 .font(.system(size: UIScale.pt(11.5), weight: .medium))

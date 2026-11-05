@@ -297,7 +297,7 @@ struct EmbeddedMusicNotchScene: View {
     }
     private var emptyCard: some View {
         VStack(spacing: 5) {
-            Image(systemName: "music.note").font(.system(size: 15)).foregroundStyle(
+            EdithIconView(.music).font(.system(size: 15)).foregroundStyle(
                 .white.opacity(0.28))
             if let error = model.nowPlayingControlError {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -331,7 +331,7 @@ private struct EmbeddedNotchNowPlayingCard: View {
         VStack(alignment: .leading, spacing: 8) {
             if tile.showTitle {
                 HStack {
-                    Label(tile.displayTitle, systemImage: "music.note")
+                    Label(tile.displayTitle, edith: .music)
                         .font(.edithText(.caption).weight(.semibold))
                     Spacer()
                     if let icon = controller.nowPlayingAppIcon {
@@ -368,25 +368,25 @@ private struct EmbeddedNotchNowPlayingCard: View {
                 HStack(spacing: 8) {
                     if tile.shows("shuffle"), let enabled = controller.nowPlayingShuffle {
                         control(
-                            "shuffle", 14, label: enabled ? "Turn shuffle off" : "Turn shuffle on",
+                            .shuffle, 14, label: enabled ? "Turn shuffle off" : "Turn shuffle on",
                             selected: enabled
                         ) {
                             controller.setNowPlayingShuffle(!enabled)
                         }
                     }
-                    control("backward.fill", 15, label: "Previous track") {
+                    control(.rewind, 15, label: "Previous track") {
                         controller.nowPlayingPrevious()
                     }
                     control(
-                        track.isPlaying ? "pause.fill" : "play.fill", 20,
+                        track.isPlaying ? .pause : .play, 20,
                         label: track.isPlaying ? "Pause" : "Play"
                     ) {
                         controller.nowPlayingPlayPause()
                     }
-                    control("forward.fill", 15, label: "Next track") { controller.nowPlayingNext() }
+                    control(.fastForward, 15, label: "Next track") { controller.nowPlayingNext() }
                     if tile.shows("repeat"), let enabled = controller.nowPlayingRepeat {
                         control(
-                            "repeat", 14, label: enabled ? "Turn repeat off" : "Turn repeat on",
+                            .repeatAll, 14, label: enabled ? "Turn repeat off" : "Turn repeat on",
                             selected: enabled
                         ) {
                             controller.setNowPlayingRepeat(!enabled)
@@ -442,7 +442,7 @@ private struct EmbeddedNotchNowPlayingCard: View {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
                         .presenterCover(controller.hidden)
                 } else {
-                    Image(systemName: "music.note")
+                    EdithIconView(.music)
                         .font(.system(size: 18)).foregroundStyle(.white.opacity(0.5))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(.white.opacity(0.08))
@@ -457,13 +457,13 @@ private struct EmbeddedNotchNowPlayingCard: View {
     }
 
     private func control(
-        _ name: String, _ size: CGFloat, label: String,
+        _ icon: EdithIcon, _ size: CGFloat, label: String,
         selected: Bool = false, _ action: @escaping () -> Void
     )
         -> some View
     {
         Button(action: action) {
-            Image(systemName: name)
+            EdithIconView(icon)
                 .font(.system(size: size, weight: .medium))
                 .foregroundStyle(selected ? tile.highlightColor : .white)
                 .frame(maxWidth: .infinity).frame(height: 32)
@@ -507,14 +507,14 @@ private struct NotchSeekBar: View {
                         Button {
                             controller.skipNowPlaying(-15)
                         } label: {
-                            Image(systemName: "gobackward.15").font(.system(size: 13)).frame(
+                            EdithIconView(.seekBack).font(.system(size: 13)).frame(
                                 width: 26, height: 20)
                         }
                         .help("Back 15 seconds").accessibilityLabel("Back 15 seconds")
                         Button {
                             controller.skipNowPlaying(15)
                         } label: {
-                            Image(systemName: "goforward.15").font(.system(size: 13)).frame(
+                            EdithIconView(.seekForward).font(.system(size: 13)).frame(
                                 width: 26, height: 20)
                         }
                         .help("Forward 15 seconds").accessibilityLabel("Forward 15 seconds")
@@ -547,7 +547,7 @@ private struct NotchVolumeControl: View {
                 if value > 0 { savedVolume = value }
                 controller.setNowPlayingVolume(value == 0 ? savedVolume : 0)
             } label: {
-                Image(systemName: value == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                EdithIconView(value == 0 ? .speakerOff : .speaker)
                     .frame(width: 22, height: 24)
             }.buttonStyle(.edith(.borderless)).help(value == 0 ? "Unmute" : "Mute")
                 .accessibilityLabel(value == 0 ? "Unmute" : "Mute")

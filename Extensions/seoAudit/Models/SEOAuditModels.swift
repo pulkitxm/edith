@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 enum SEOAuditSeverity: String, Codable, CaseIterable, Sendable {
@@ -134,13 +135,13 @@ enum SEOAuditSocialPlatform: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .facebook: "person.2.fill"
-        case .x: "bubble.left.and.bubble.right.fill"
-        case .linkedIn: "briefcase.fill"
-        case .slack: "number"
-        case .discord: "person.3.fill"
+        case .facebook: .people
+        case .x: .messages
+        case .linkedIn: .briefcase
+        case .slack: .hash
+        case .discord: .people
         }
     }
 

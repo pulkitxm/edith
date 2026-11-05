@@ -51,7 +51,7 @@ struct NotchSettingsPage: View {
                     if !model.available {
                         PageNotice(
                             "Notch Shelf is switched off, so these settings are locked. Turn it on in Extensions to use the shelf, browser and alerts.",
-                            title: "Notch Shelf is not running", symbol: "power"
+                            title: "Notch Shelf is not running", icon: .power
                         )
                         .padding(.horizontal, -Self.formHeaderInset)
                     }

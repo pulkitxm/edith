@@ -74,7 +74,7 @@ final class NotchAlertDetectors {
             self.post(
                 NotchAlert(
                     id: "bluetooth.\(connected ? "connected" : "disconnected")",
-                    icon: connected ? "wave.3.right.circle.fill" : "wave.3.right.circle",
+                    icon: .headphones, muted: !connected,
                     tint: connected ? NotchAlert.themeTint : "#8e8e93",
                     title: name, subtitle: connected ? "Connected" : "Disconnected",
                     priority: .low, autoHide: 2.5))
@@ -115,7 +115,7 @@ final class NotchAlertDetectors {
         guard !warmingUp, enabled(AppStorageKeys.Notch.alertAudio) else { return }
         post(
             NotchAlert(
-                id: "audio.output", icon: "hifispeaker.fill", tint: NotchAlert.themeTint,
+                id: "audio.output", icon: .speaker, tint: NotchAlert.themeTint,
                 title: Self.deviceName(device), subtitle: "Audio output", priority: .low,
                 autoHide: 2.5))
     }

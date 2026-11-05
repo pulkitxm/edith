@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionSupport
 import Foundation
 
@@ -14,11 +15,11 @@ public enum EmbeddedMusicProvider: String, CaseIterable, Identifiable, Sendable 
         }
     }
 
-    public var symbol: String {
+    public var icon: EdithIcon {
         switch self {
-        case .local: "folder"
-        case .spotify: "waveform.circle"
-        case .youtubeMusic: "play.circle"
+        case .local: .folder
+        case .spotify: .waveform
+        case .youtubeMusic: .play
         }
     }
 

@@ -6,7 +6,7 @@ import SwiftUI
 struct EmbeddedSpotifyCollectionArtwork: View {
     let item: EmbeddedSpotifyCatalogItem
     var size: CGFloat = 150
-    var fallbackSymbol = "music.note"
+    var fallbackIcon = EdithIcon.music
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -19,7 +19,7 @@ struct EmbeddedSpotifyCollectionArtwork: View {
                         DashSkin.accent(scheme == .dark).opacity(0.28),
                         DashSkin.paper2(scheme == .dark),
                     ], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Image(systemName: fallbackSymbol)
+                EdithIconView(fallbackIcon)
                     .font(.system(size: UIScale.pt(size * 0.3), weight: .light))
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
             }
@@ -73,7 +73,7 @@ private struct EmbeddedSpotifyCollectionCard: View {
                     Button {
                         onPlay(item)
                     } label: {
-                        Image(systemName: "play.fill")
+                        EdithIconView(.play)
                             .font(.edithText(.body)).foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                             .background(DashSkin.accent(scheme == .dark), in: Circle())
@@ -128,7 +128,7 @@ struct EmbeddedSpotifySongList: View {
                 if albumVisible && !compact {
                     Text("Album").frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Image(systemName: "clock").frame(width: UIScale.pt(44))
+                EdithIconView(.clock).frame(width: UIScale.pt(44))
                 Color.clear.frame(width: UIScale.pt(24), height: UIScale.pt(1))
             }
             .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -181,9 +181,9 @@ private struct EmbeddedSpotifySongRow: View {
             Button(action: onPlay) {
                 Group {
                     if hovering {
-                        Image(systemName: "play.fill")
+                        EdithIconView(.play)
                     } else if current {
-                        Image(systemName: "waveform")
+                        EdithIconView(.waveform)
                     } else {
                         Text("\(index)").monospacedDigit()
                     }
@@ -222,7 +222,7 @@ private struct EmbeddedSpotifySongRow: View {
             Text(duration).font(.edithText(.caption)).monospacedDigit()
                 .foregroundStyle(.secondary).frame(width: UIScale.pt(44), alignment: .trailing)
             Button(action: onSave) {
-                Image(systemName: saved ? "heart.fill" : "heart").foregroundStyle(
+                EdithIconView(.heart, tone: saved ? .duotone : .muted).foregroundStyle(
                     saved ? accent : .secondary)
             }
             .buttonStyle(.edith(.borderless)).opacity(hovering || saved ? 1 : 0)
@@ -230,7 +230,7 @@ private struct EmbeddedSpotifySongRow: View {
             Menu {
                 actions
             } label: {
-                Image(systemName: "ellipsis").font(.edithText(.body))
+                EdithIcon.more.image()
                     .frame(width: UIScale.pt(24), height: UIScale.pt(32))
             }
             .menuStyle(.borderlessButton).fixedSize()
@@ -251,11 +251,13 @@ private struct EmbeddedSpotifySongRow: View {
     }
 
     @ViewBuilder private var actions: some View {
-        Button("Play", systemImage: "play.fill", action: onPlay).disabled(!item.playable)
-        Button("Add to queue", systemImage: "text.badge.plus", action: onQueue)
+        Button("Play", edith: .play, action: onPlay).disabled(!item.playable)
+        Button("Add to queue", edith: .textAdd, action: onQueue)
             .disabled(!item.playable)
-        Button(
-            saved ? "Remove from library" : "Save to library",
-            systemImage: saved ? "heart.fill" : "heart", action: onSave)
+        Button(action: onSave) {
+            Label(
+                saved ? "Remove from library" : "Save to library", edith: .heart,
+                tone: saved ? .duotone : .muted)
+        }
     }
 }

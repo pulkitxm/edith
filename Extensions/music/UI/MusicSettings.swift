@@ -87,7 +87,7 @@ struct EmbeddedMusicSettings: View {
                     if let openError {
                         SettingsNoticeRow(
                             "The folder could not be opened", message: openError,
-                            symbol: "exclamationmark.triangle.fill", tint: .orange)
+                            icon: .warning, tint: .orange)
                     }
                     Toggle("Fade between tracks", isOn: model.boolean(.crossfade, \.crossfade))
                     if model.boolean(.crossfade, \.crossfade).wrappedValue {
@@ -125,7 +125,7 @@ struct EmbeddedMusicSettings: View {
     @ViewBuilder
     private func toolStatus(_ name: String) -> some View {
         if tools.installed.contains(name) {
-            Label("Installed", systemImage: "checkmark.circle.fill")
+            Label("Installed", edith: .success)
                 .foregroundStyle(.green)
         } else if tools.installing == name {
             SkeletonBlock(width: 64, height: 12, corner: 4)

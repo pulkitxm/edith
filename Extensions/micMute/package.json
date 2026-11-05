@@ -1,7 +1,7 @@
 {
   "id": "micMute",
   "title": "Mic Mute",
-  "symbolName": "mic.slash.fill",
+  "icon": "micMute",
   "category": "utilities",
   "background": true,
   "commands": [],
@@ -28,17 +28,17 @@
     "summary": "Mic Mute turns all microphones off or on system-wide with a keyboard shortcut or the menu bar icon, in any app and on any call. Nothing is recorded or sent anywhere.",
     "steps": [
       {
-        "symbolName": "keyboard",
+        "icon": "keyboard",
         "title": "Press the shortcut",
         "detail": "Press Shift Command M in any app to mute or unmute."
       },
       {
-        "symbolName": "menubar.rectangle",
+        "icon": "menuBar",
         "title": "Check the menu bar",
         "detail": "The menu bar icon shows whether your microphones are muted. Click it to toggle."
       },
       {
-        "symbolName": "gearshape",
+        "icon": "gear",
         "title": "Change the shortcut",
         "detail": "Record a different shortcut in Mic Mute settings."
       }

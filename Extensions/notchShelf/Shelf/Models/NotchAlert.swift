@@ -12,7 +12,8 @@ struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
     static let themeTint = "theme"
 
     let id: String
-    let icon: String
+    let icon: EdithIcon
+    let muted: Bool
     let tint: String
     let title: String
     let subtitle: String?
@@ -21,12 +22,13 @@ struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
     let settingsTab: String?
 
     init(
-        id: String, icon: String, tint: String = "#e0a83f", title: String, subtitle: String? = nil,
-        priority: NotchAlertPriority = .medium, autoHide: TimeInterval = 3,
-        settingsTab: String? = nil
+        id: String, icon: EdithIcon, muted: Bool = false, tint: String = "#e0a83f", title: String,
+        subtitle: String? = nil, priority: NotchAlertPriority = .medium,
+        autoHide: TimeInterval = 3, settingsTab: String? = nil
     ) {
         self.id = id
         self.icon = icon
+        self.muted = muted
         self.tint = tint
         self.title = title
         self.subtitle = subtitle
@@ -39,13 +41,13 @@ struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
 extension NotchAlert {
     static func updateReady(version: String) -> NotchAlert {
         NotchAlert(
-            id: "update.ready", icon: "arrow.down.circle.fill", tint: "#7bb08a",
+            id: "update.ready", icon: .arrowDown, tint: "#7bb08a",
             title: "Edith \(version) is ready", subtitle: "Quit and reopen to finish",
             priority: .high, autoHide: 8, settingsTab: "updates")
     }
 
     static let permissionHint = NotchAlert(
-        id: "permissions.hint", icon: "hand.raised.fill",
+        id: "permissions.hint", icon: .hand,
         title: "Grant access in one place",
         subtitle: "Settings > Permissions lists every one", priority: .high,
         autoHide: 6, settingsTab: "permissions")
@@ -112,20 +114,20 @@ enum NotchAlertLogic {
             if onAC {
                 out.append(
                     NotchAlert(
-                        id: "power.charging", icon: "bolt.fill", tint: "#4cc47e",
+                        id: "power.charging", icon: .bolt, tint: "#4cc47e",
                         title: now.charging == true ? "Charging" : "Plugged in",
                         subtitle: subtitle, priority: .low, autoHide: 2.5))
             } else {
                 out.append(
                     NotchAlert(
-                        id: "power.charging", icon: "bolt.slash.fill", tint: "#e0a83f",
+                        id: "power.charging", icon: .bolt, muted: true, tint: "#e0a83f",
                         title: "On battery", subtitle: subtitle, priority: .low, autoHide: 2.5))
             }
         }
         if let capacity = now.capacity, let last = lastCapacity, capacity <= 20, last > 20 {
             out.append(
                 NotchAlert(
-                    id: "battery.low", icon: "battery.25", tint: "#e0664f", title: "Battery low",
+                    id: "battery.low", icon: .batteryLow, tint: "#e0664f", title: "Battery low",
                     subtitle: "\(capacity)%", priority: .high, autoHide: 4))
         }
         return out

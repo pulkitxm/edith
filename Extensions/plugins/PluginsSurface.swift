@@ -48,10 +48,10 @@ import Foundation
                 .init("skills", "Available skills", "\(model.skills.count)"),
             ],
             rows: model.agents.prefix(tile.itemLimit).map { agent in
-                .init(agent.id, title: agent.name, icon: "terminal")
+                .init(agent.id, title: agent.name, icon: .terminal)
             },
             actions: tile.showActions
-                ? [.init("refreshAgents", "Refresh agents", "arrow.clockwise")] : [],
+                ? [.init("refreshAgents", "Refresh agents", .refresh)] : [],
             updatedAt: Date())
     }
 }

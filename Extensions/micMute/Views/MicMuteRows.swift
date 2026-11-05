@@ -14,7 +14,7 @@ struct MicMuteRows: View {
                 SettingsRow("Microphones") {
                     Label(
                         presentation.state.muted ? "Muted" : "Live",
-                        systemImage: presentation.state.muted ? "mic.slash.fill" : "mic.fill"
+                        edith: presentation.state.muted ? .micMute : .mic
                     )
                     .foregroundStyle(presentation.state.muted ? Color.red : Color.secondary)
                 }

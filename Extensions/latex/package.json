@@ -1,7 +1,7 @@
 {
   "id": "latex",
   "title": "LaTeX",
-  "symbolName": "doc.richtext",
+  "icon": "docText",
   "category": "developer",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "latex",
       "title": "LaTeX",
-      "symbolName": "doc.richtext",
+      "icon": "docText",
       "order": 4
     }
   ],
@@ -27,22 +27,22 @@
     "summary": "Edit .tex files in a built-in editor with a live PDF preview. Keep documents on your Mac, or work on a file in a GitHub repository and let GitHub build the PDF. Your files are never moved, and nothing is uploaded until you choose GitHub.",
     "steps": [
       {
-        "symbolName": "doc.badge.plus",
+        "icon": "docAdd",
         "title": "Add a document",
         "detail": "Choose a .tex file on this Mac, or a source path in a GitHub repository."
       },
       {
-        "symbolName": "pencil",
+        "icon": "edit",
         "title": "Edit the source",
         "detail": "Write in the editor with find, undo and insert helpers."
       },
       {
-        "symbolName": "hammer",
+        "icon": "hammer",
         "title": "Compile",
         "detail": "Press Command-S to save and build the PDF."
       },
       {
-        "symbolName": "eye",
+        "icon": "eye",
         "title": "Preview the PDF",
         "detail": "The result appears beside your source, with the build log if something fails."
       }

@@ -54,7 +54,7 @@ struct PluginsPage: View {
                     PageNotice(
                         "Edith could not find a coding agent such as Claude Code, Cursor or Codex on this Mac. You can still preview any skill and copy its Markdown into your agent by hand.",
                         title: "No agents found", tone: .warning,
-                        symbol: "person.crop.circle.badge.questionmark"
+                        icon: .person
                     ) {
                         EmptyView()
                     } actions: {
@@ -135,7 +135,7 @@ private struct SkillCatalogRow: View {
 
     private var description: some View {
         HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            PageGuideBadge(symbolName: skill.symbol, size: 40)
+            PageGuideBadge(icon: skill.icon, size: 40)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(skill.name)
                     .font(.edithText(.headline))
@@ -171,7 +171,7 @@ private struct SkillCatalogRow: View {
                 install(nil)
             } label: {
                 if installed {
-                    Label("Installed", systemImage: "checkmark")
+                    Label("Installed", edith: .check)
                 } else {
                     Text("Install")
                 }
@@ -195,14 +195,13 @@ private struct SkillCatalogRow: View {
                                 Image(nsImage: image)
                                     .renderingMode(image.isTemplate ? .template : .original)
                             } else {
-                                Image(systemName: "terminal")
+                                EdithIcon.terminal.image()
                             }
                         }
                     }
                 }
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: UIScale.pt(9), weight: .semibold))
+                EdithIcon.chevronDown.image(size: 12)
             }
             .menuStyle(.button)
             .buttonStyle(.edith(.secondary))

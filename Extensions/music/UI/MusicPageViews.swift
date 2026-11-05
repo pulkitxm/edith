@@ -305,7 +305,7 @@ struct EmbeddedMusicPage: View {
             Button {
                 gridView.toggle()
             } label: {
-                Image(systemName: gridView ? "list.bullet" : "square.grid.2x2")
+                EdithIconView(gridView ? .list : .grid)
             }
             .buttonStyle(.edith(.toolbar))
             .help(gridView ? "Show as list" : "Show as grid")
@@ -317,7 +317,7 @@ struct EmbeddedMusicPage: View {
                     remote.openFavourites()
                 }
             } label: {
-                Image(systemName: remote.showingFavourites ? "heart.fill" : "heart")
+                EdithIconView(.heart, tone: remote.showingFavourites ? .duotone : .muted)
                     .foregroundStyle(
                         remote.showingFavourites
                             ? AnyShapeStyle(theme) : AnyShapeStyle(.primary))
@@ -330,7 +330,7 @@ struct EmbeddedMusicPage: View {
                 newFolderName = ""
                 showNewFolder = true
             } label: {
-                Image(systemName: "folder.badge.plus")
+                EdithIconView(.folderAdd)
             }
             .buttonStyle(.edith(.toolbar))
             .help("New folder")
@@ -338,7 +338,7 @@ struct EmbeddedMusicPage: View {
             Button {
                 EmbeddedMusicRemote.shared.openLibrary()
             } label: {
-                Image(systemName: "folder")
+                EdithIconView(.folder)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open music folder in Finder")
@@ -346,7 +346,7 @@ struct EmbeddedMusicPage: View {
             Button {
                 remote.rescan()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Rescan music folder")
@@ -354,7 +354,7 @@ struct EmbeddedMusicPage: View {
             Button {
                 showDownloader = true
             } label: {
-                Image(systemName: "arrow.down.circle")
+                EdithIconView(.arrowDown)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Download YouTube audio")
@@ -378,17 +378,17 @@ struct EmbeddedMusicPage: View {
     private var breadcrumbBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             if remote.showingFavourites {
-                Label("Favourites", systemImage: "heart.fill")
+                Label("Favourites", edith: .heart)
                     .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(theme)
                     .padding(.vertical, UIScale.pt(6))
             } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: UIScale.pt(4)) {
-                        crumb("Home", path: "", systemImage: "house.fill")
+                        crumb("Home", path: "", icon: .home)
                         chevronMenu(parentPath: "")
                         ForEach(crumbSegments, id: \.path) { segment in
-                            crumb(segment.name, path: segment.path, systemImage: nil)
+                            crumb(segment.name, path: segment.path, icon: nil)
                             chevronMenu(parentPath: segment.path)
                         }
                     }
@@ -408,7 +408,7 @@ struct EmbeddedMusicPage: View {
             } label: {
                 Label(
                     remote.showingFavourites ? "Play favourites" : "Play all",
-                    systemImage: "play.fill")
+                    edith: .play)
             }
             .buttonStyle(.edith(.primary))
             .disabled(!remote.canPlayView)
@@ -420,9 +420,9 @@ struct EmbeddedMusicPage: View {
         }
     }
 
-    private func crumb(_ name: String, path: String, systemImage: String?) -> some View {
+    private func crumb(_ name: String, path: String, icon: EdithIcon?) -> some View {
         EmbeddedCrumbButton(
-            name: name, path: path, systemImage: systemImage, theme: theme,
+            name: name, path: path, icon: icon, theme: theme,
             isCurrent: path == remote.folderPath,
             onTap: { remote.navigate(to: path) },
             onDrop: { remote.move(relativePaths: $0, toFolderPath: path) }
@@ -433,7 +433,7 @@ struct EmbeddedMusicPage: View {
     private func chevronMenu(parentPath: String) -> some View {
         if let folders = remote.subfolders(of: parentPath) {
             if folders.isEmpty {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
                     .font(.system(size: UIScale.pt(9)))
                     .foregroundStyle(.tertiary)
             } else {
@@ -444,8 +444,7 @@ struct EmbeddedMusicPage: View {
                         ) { remote.navigate(to: folder.relativePath) }
                     }
                 } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    EdithIcon.chevronRight.image(size: 12)
                         .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                         .contentShape(Rectangle())
@@ -641,7 +640,7 @@ struct EmbeddedSeekBar: View {
 private struct EmbeddedCrumbButton: View {
     let name: String
     let path: String
-    let systemImage: String?
+    let icon: EdithIcon?
     let theme: Color
     let isCurrent: Bool
     let onTap: () -> Void
@@ -651,8 +650,8 @@ private struct EmbeddedCrumbButton: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: UIScale.pt(3)) {
-                if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
+                if let icon {
+                    EdithIconView(icon).font(.system(size: UIScale.pt(10)))
                 }
                 Text(name).lineLimit(1).presenterBlur(
                     EmbeddedMusicPrivacyState.shared.hides(.music))
@@ -699,7 +698,7 @@ private struct EmbeddedMusicFolderRow: View {
                         RoundedRectangle(cornerRadius: UIScale.pt(7))
                             .fill(theme.opacity(0.16))
                             .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                        Image(systemName: "folder.fill")
+                        EdithIconView(.folder)
                             .font(.system(size: UIScale.pt(14)))
                             .foregroundStyle(theme)
                     }
@@ -728,7 +727,7 @@ private struct EmbeddedMusicFolderRow: View {
             .buttonStyle(.edith(.borderless))
 
             Button(action: onPlay) {
-                Image(systemName: "play.circle.fill")
+                EdithIconView(.play)
                     .font(.system(size: UIScale.pt(22)))
                     .foregroundStyle(theme)
             }
@@ -737,7 +736,7 @@ private struct EmbeddedMusicFolderRow: View {
             .opacity(hovering || trackCount == 0 ? 1 : 0.55)
             .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
 
-            Image(systemName: "chevron.right")
+            EdithIconView(.chevronRight)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(.tertiary)
                 .frame(width: EmbeddedMusicRowColumn.trailing)
@@ -826,7 +825,7 @@ private struct EmbeddedMusicPageRow: View {
                     }
                     Spacer()
                     if isCurrent {
-                        Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
+                        EdithIconView(isPlaying ? .speaker : .pause)
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(theme)
                     }
@@ -843,7 +842,7 @@ private struct EmbeddedMusicPageRow: View {
             .buttonStyle(.edith(.borderless))
 
             Button(action: onToggleFavourite) {
-                Image(systemName: isFavourite ? "heart.fill" : "heart")
+                EdithIconView(.heart, tone: isFavourite ? .duotone : .muted)
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
                     .frame(width: EmbeddedMusicRowColumn.trailing)
@@ -1035,7 +1034,7 @@ private struct EmbeddedMusicFolderTile: View {
                     ZStack {
                         RoundedRectangle(cornerRadius: UIScale.pt(12))
                             .fill(theme.opacity(0.16))
-                        Image(systemName: "folder.fill")
+                        EdithIconView(.folder)
                             .font(.system(size: UIScale.pt(34)))
                             .foregroundStyle(theme)
                     }
@@ -1046,10 +1045,10 @@ private struct EmbeddedMusicFolderTile: View {
                     EmbeddedMusicPrivacyState.shared.hides(.music)
                         ? "Open folder" : "Open \(folder.name)")
                 Button(action: onPlay) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: UIScale.pt(24)))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, theme)
+                    EdithIconView(.play, size: UIScale.pt(12))
+                        .foregroundStyle(.white)
+                        .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                        .background(theme, in: Circle())
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Play this folder")
@@ -1130,20 +1129,19 @@ private struct EmbeddedMusicTrackTile: View {
                 Button(action: onToggle) {
                     EmbeddedPageArtworkThumb(track: track, size: art)
                         .overlay(alignment: .bottomTrailing) {
-                            Image(
-                                systemName: isCurrent && isPlaying
-                                    ? "pause.circle.fill" : "play.circle.fill"
+                            EdithIconView(
+                                isCurrent && isPlaying ? .pause : .play, size: UIScale.pt(12)
                             )
-                            .font(.system(size: UIScale.pt(24)))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, theme)
+                            .foregroundStyle(.white)
+                            .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                            .background(theme, in: Circle())
                             .opacity(hovering || isCurrent ? 1 : 0)
                             .padding(UIScale.pt(7))
                         }
                 }
                 .buttonStyle(.edith(.borderless))
                 Button(action: onToggleFavourite) {
-                    Image(systemName: isFavourite ? "heart.fill" : "heart")
+                    EdithIconView(.heart, tone: isFavourite ? .duotone : .muted)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                         .foregroundStyle(isFavourite ? theme : .white)
                         .shadow(color: .black.opacity(0.5), radius: UIScale.pt(2))
@@ -1359,18 +1357,18 @@ struct EmbeddedMusicDetailSheet: View {
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
             Spacer()
-            headerButton("trash", tint: .red, help: "Move to Trash", action: onDelete)
-            headerButton("xmark", tint: .secondary, help: "Close", action: onClose)
+            headerButton(.trash, tint: .red, help: "Move to Trash", action: onDelete)
+            headerButton(.close, tint: .secondary, help: "Close", action: onClose)
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.top, UIScale.pt(14))
     }
 
     private func headerButton(
-        _ symbol: String, tint: some ShapeStyle, help: String, action: @escaping () -> Void
+        _ icon: EdithIcon, tint: some ShapeStyle, help: String, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: UIScale.pt(26), height: UIScale.pt(26))
@@ -1421,12 +1419,12 @@ struct EmbeddedMusicDetailSheet: View {
             onClose()
         } label: {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: "folder")
+                EdithIconView(.folder)
                 Text(parent.isEmpty ? "Music" : parent.replacingOccurrences(of: "/", with: " / "))
                     .lineLimit(1)
                     .truncationMode(.head)
                     .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                Image(systemName: "arrow.right")
+                EdithIconView(.arrowRight)
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
             }
             .font(.system(size: UIScale.pt(11), weight: .medium))
@@ -1447,7 +1445,7 @@ struct EmbeddedMusicDetailSheet: View {
                 Button {
                     remote.toggle(track)
                 } label: {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    EdithIconView(isPlaying ? .pause : .play)
                         .font(.system(size: UIScale.pt(19), weight: .bold))
                         .foregroundStyle(Color.themeOnAccent)
                         .frame(width: UIScale.pt(52), height: UIScale.pt(52))
@@ -1497,7 +1495,7 @@ struct EmbeddedMusicDetailSheet: View {
                                     max(remote.duration - remote.elapsed, 0)))
                     }
                 }
-                Label(isPlaying ? "Now Playing" : "Paused", systemImage: "waveform")
+                Label(isPlaying ? "Now Playing" : "Paused", edith: .waveform)
                     .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(theme)
             }
@@ -1520,11 +1518,11 @@ struct EmbeddedMusicDetailSheet: View {
     private func youtubeLink(_ url: URL) -> some View {
         Link(destination: url) {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "play.rectangle.fill")
+                EdithIconView(.play)
                 Text("Open original on YouTube")
                     .lineLimit(1)
                 Spacer()
-                Image(systemName: "arrow.up.right")
+                EdithIconView(.arrowUpRight)
                     .font(.system(size: UIScale.pt(9)))
             }
             .font(.system(size: UIScale.pt(11.5), weight: .medium))
@@ -1538,7 +1536,7 @@ struct EmbeddedMusicDetailSheet: View {
 
     private var renameReveal: some View {
         Button(action: commitRename) {
-            Label("Rename", systemImage: "checkmark")
+            Label("Rename", edith: .check)
                 .frame(maxWidth: .infinity)
                 .frame(height: UIScale.pt(Self.renameButtonHeight))
                 .foregroundStyle(Color.themeOnAccent)
@@ -1675,7 +1673,7 @@ struct EmbeddedMusicFooter: View {
                         .padding(.leading, UIScale.pt(20))
                 } else if accounts.selected == .youtubeMusic {
                     HStack(spacing: UIScale.pt(12)) {
-                        Label("YouTube Music", systemImage: "play.circle")
+                        Label("YouTube Music", edith: .play)
                             .font(.edithText(.body))
                         Spacer(minLength: UIScale.pt(8))
                         Button("Open player") {
@@ -1724,7 +1722,7 @@ struct EmbeddedMusicFooter: View {
             collapsed = true
             EmbeddedMusicRemote.shared.send(.barCollapsed, value: 1)
         } label: {
-            Image(systemName: "chevron.down")
+            EdithIconView(.chevronDown)
                 .font(.system(size: UIScale.pt(10), weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
@@ -1751,7 +1749,7 @@ struct EmbeddedMusicFooter: View {
                 Button {
                     playerOptionsPresented = true
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
+                    EdithIconView(.adjust)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .accessibilityLabel("Playback options")
@@ -1808,18 +1806,18 @@ struct EmbeddedMusicFooter: View {
 
     private var transport: some View {
         HStack(spacing: UIScale.pt(8)) {
-            glassButton("backward.fill", diameter: 34, iconSize: 12, tint: nil) {
+            glassButton(.rewind, diameter: 34, iconSize: 12, tint: nil) {
                 remote.previous()
             }
             .help("Previous track")
             glassButton(
-                remote.isPlaying ? "pause.fill" : "play.fill",
+                remote.isPlaying ? .pause : .play,
                 diameter: 42, iconSize: 15, iconColor: .themeOnAccent, tint: theme
             ) {
                 remote.playPause()
             }
             .help("Play or pause")
-            glassButton("forward.fill", diameter: 34, iconSize: 12, tint: nil) {
+            glassButton(.fastForward, diameter: 34, iconSize: 12, tint: nil) {
                 remote.next()
             }
             .help("Next track")
@@ -1827,11 +1825,12 @@ struct EmbeddedMusicFooter: View {
     }
 
     private func glassButton(
-        _ symbol: String, diameter: CGFloat, iconSize: CGFloat, iconColor: Color? = nil,
+        _ icon: EdithIcon, tone: EdithIconTone = .duotone, diameter: CGFloat, iconSize: CGFloat,
+        iconColor: Color? = nil,
         tint: Color?, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            EdithIconView(icon, tone: tone)
                 .font(.system(size: UIScale.pt(iconSize), weight: .semibold))
                 .foregroundStyle(iconColor ?? theme)
                 .frame(width: UIScale.pt(diameter), height: UIScale.pt(diameter))
@@ -1874,7 +1873,7 @@ struct EmbeddedMusicFooter: View {
             if let track = remote.current {
                 let liked = remote.favouritePaths.contains(track.relativePath)
                 glassButton(
-                    liked ? "heart.fill" : "heart", diameter: 34, iconSize: 12,
+                    .heart, tone: liked ? .duotone : .muted, diameter: 34, iconSize: 12,
                     iconColor: liked ? .themeOnAccent : .secondary,
                     tint: liked ? theme : nil
                 ) {
@@ -1883,7 +1882,7 @@ struct EmbeddedMusicFooter: View {
                 .help(liked ? "Remove from favourites" : "Add to favourites")
             }
             glassButton(
-                "shuffle", diameter: 34, iconSize: 12,
+                .shuffle, diameter: 34, iconSize: 12,
                 iconColor: remote.shuffling ? .themeOnAccent : .secondary,
                 tint: remote.shuffling ? theme : nil
             ) {
@@ -1891,7 +1890,7 @@ struct EmbeddedMusicFooter: View {
             }
             .help(remote.shuffling ? "Shuffling this folder and everything in it" : "Play in order")
             glassButton(
-                "repeat", diameter: 34, iconSize: 12,
+                .repeatAll, diameter: 34, iconSize: 12,
                 iconColor: remote.looping ? .themeOnAccent : .secondary,
                 tint: remote.looping ? theme : nil
             ) {
@@ -1899,7 +1898,7 @@ struct EmbeddedMusicFooter: View {
             }
             .help(remote.looping ? "Repeating this track" : "Play through the queue")
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "speaker.wave.1")
+                EdithIconView(.speakerLow)
                     .settingsCaption()
                 Slider(
                     value: Binding(get: { remote.volume }, set: { remote.setVolume($0) }),
@@ -1917,7 +1916,7 @@ struct EmbeddedMusicFooter: View {
 
     private var idle: some View {
         HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "music.note")
+            EdithIconView(.music)
                 .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(.secondary)
             Text("Nothing playing")
@@ -1962,7 +1961,7 @@ private struct EmbeddedPageArtworkThumb: View {
                             Color(hue: track.hue, saturation: 0.6, brightness: 0.22),
                         ],
                         startPoint: .top, endPoint: .bottom)
-                    Image(systemName: "music.note")
+                    EdithIconView(.music)
                         .font(.system(size: UIScale.pt(size * 0.36)))
                         .foregroundStyle(.white.opacity(0.8))
                 }
@@ -2011,7 +2010,7 @@ struct EmbeddedMusicSidebarPill: View {
         Button(action: expand) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: accounts.playerTitle == nil ? "music.note" : "chevron.up")
+                    EdithIconView(accounts.playerTitle == nil ? .music : .chevronUp)
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(
                             accounts.playerTitle == nil

@@ -78,12 +78,12 @@ import Foundation
                         : state.restoreOnQuit
                             ? "Sleep is restored when Edith quits"
                             : "Sleep restoration on quit is off",
-                    icon: "laptopcomputer", field: field)
+                    icon: .laptop, field: field)
             ],
             actions: [
                 .init(
                     action, state.active ? "Restore sleep" : "Keep awake",
-                    "laptopcomputer", field: field,
+                    .laptop, field: field,
                     confirmation: state.active
                         ? nil
                         : .init(

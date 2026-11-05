@@ -85,15 +85,13 @@ struct NotchBrowserSetupView: View {
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 10) {
-            Image(
-                systemName: ok
-                    ? "checkmark.circle.fill"
-                    : warning ? "exclamationmark.triangle.fill" : "xmark.octagon.fill"
-            )
-            .font(.system(size: 14))
-            .foregroundStyle(
-                ok ? Color.green : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3)
-            )
+            EdithIconView(ok ? .success : warning ? .warning : .error)
+                .font(.system(size: 14))
+                .foregroundStyle(
+                    ok
+                        ? Color.green
+                        : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3)
+                )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
@@ -184,7 +182,7 @@ struct NotchBrowserSetupView: View {
             status(message)
         case .failed(let message):
             HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .foregroundStyle(.orange)
                 Text(message)
                     .font(.system(size: 11.5))
@@ -198,7 +196,7 @@ struct NotchBrowserSetupView: View {
             }
         case .idle:
             HStack(spacing: 8) {
-                Image(systemName: "lock.shield")
+                EdithIconView(.shield)
                     .foregroundStyle(.white.opacity(0.45))
                 Text(
                     "Cookies and site storage are copied from Chrome on this Mac. Nothing leaves it."
@@ -217,7 +215,7 @@ struct NotchBrowserSetupView: View {
     private func status(_ message: String) -> some View {
         HStack(spacing: 8) {
             SkeletonReplica(message) {
-                Image(systemName: "key.horizontal.fill")
+                EdithIconView(.key)
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.8))
             }

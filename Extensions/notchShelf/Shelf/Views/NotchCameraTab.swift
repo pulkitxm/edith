@@ -51,7 +51,7 @@ struct NotchCameraTab: View {
 
     private var switchButton: some View {
         Button(action: cycleCamera) {
-            Image(systemName: "arrow.triangle.2.circlepath.camera")
+            EdithIconView(.sync)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
@@ -80,7 +80,7 @@ struct NotchCameraTab: View {
 
     private func prompt(action: @escaping () -> Void) -> some View {
         message(
-            symbol: "camera.fill", title: "Mirror check, right in the notch",
+            icon: .camera, title: "Mirror check, right in the notch",
             detail: "macOS asks for camera access once. Nothing is recorded or sent anywhere."
         ) {
             Button("Allow Camera", action: action)
@@ -91,7 +91,7 @@ struct NotchCameraTab: View {
 
     private var denied: some View {
         message(
-            symbol: "camera.metering.none", title: "Camera access is off",
+            icon: .scan, title: "Camera access is off",
             detail: "Allow Edith under Camera in Privacy settings to see yourself here."
         ) {
             Button("Open Privacy Settings") { NotchWorkerPresentation.openPrivacySettings() }
@@ -101,22 +101,22 @@ struct NotchCameraTab: View {
     }
 
     private func message<Action: View>(
-        symbol: String, title: String, detail: String,
+        icon: EdithIcon, title: String, detail: String,
         @ViewBuilder action: @escaping () -> Action
     ) -> some View {
-        NotchTabMessage(symbol: symbol, title: title, detail: detail, action: action)
+        NotchTabMessage(icon: icon, title: title, detail: detail, action: action)
     }
 }
 
 struct NotchTabMessage<Action: View>: View {
-    let symbol: String
+    let icon: EdithIcon
     let title: String
     let detail: String
     @ViewBuilder let action: () -> Action
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(.white.opacity(0.5))
                 .padding(.bottom, 4)
