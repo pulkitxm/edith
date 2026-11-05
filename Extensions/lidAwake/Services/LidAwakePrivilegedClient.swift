@@ -107,13 +107,11 @@ struct LidAwakeApplicationQuitContext: Sendable {
     var hasOwnedLease: Bool { ownsLease }
     func requestApproval() throws { try approve() }
     func registerIfNeeded() {
-        if state == .notRegistered { try? approve() }
+        if [.notRegistered, .notFound].contains(state) { try? approve() }
     }
     func setSleepDisabled(_ disable: Bool) async throws {
-        if let error = Self.requestError(for: state) {
-            if state != .notFound { try? approve() }
-            throw error
-        }
+        if state != .enabled { try? approve() }
+        if let error = Self.requestError(for: state) { throw error }
         ownsLease = true
         _ = try await invoke("setSleepDisabled", JSONEncoder().encode(disable))
     }

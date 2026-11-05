@@ -44,6 +44,28 @@ import Testing
         #expect(client.status == .notFound && queries == 0)
     }
 
+    @Test(arguments: [SMAppService.Status.notFound, .notRegistered])
+    func managedApprovalRegistersAnUnknownCarrierAndOpensApproval(initial: SMAppService.Status)
+        throws
+    {
+        var status = initial
+        var registrations = 0
+        var approvals = 0
+        let client = ExtensionPrivilegedClient(
+            owner: "sample", source: URL(fileURLWithPath: "/synthetic/payload.bundle"),
+            version: "1.0.0", status: { status },
+            register: {
+                registrations += 1; status = .requiresApproval
+            },
+            openApproval: { approvals += 1 },
+            connect: { PrivilegedTransportFixture(invalidated: $0) })
+        try client.requestApproval()
+        #expect(registrations == 1 && approvals == 1)
+        status = .enabled
+        try client.requestApproval()
+        #expect(registrations == 1 && approvals == 1)
+    }
+
     @Test(arguments: ["", "com..host", "com.host\"", "com.host/other", "com.host\n"])
     func invalidContainingHostIdentifiersNeverConnect(identifier: String) async {
         var connections = 0
