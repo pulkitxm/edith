@@ -299,7 +299,7 @@ import Testing
     }
 }
 
-private struct OnboardingCapturePage: View {
+struct OnboardingCapturePage: View {
     let model: HostWorkflowOnboardingModel
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme

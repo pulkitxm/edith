@@ -461,7 +461,7 @@ struct CodeStatsNewRepositoriesCard: View {
                         x: .value("Month", month.date, unit: .month),
                         y: .value("Repositories", month.count)
                     )
-                    .foregroundStyle(DashPalette.slate(dark).opacity(0.75))
+                    .foregroundStyle(DashSkin.accent(dark).opacity(0.75))
                     .cornerRadius(2)
                 }
                 if let selected {

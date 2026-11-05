@@ -24,7 +24,7 @@ enum DatabaseTableMetrics {
 }
 
 final class DatabaseNativeRowView: NSTableRowView {
-    var accentColor = NSColor.controlAccentColor
+    var accentColor = NSColor.labelColor
     var baseColor = NSColor.controlBackgroundColor
     var alternatingColor = NSColor.labelColor.withAlphaComponent(0.025)
     var rowIndex = 0

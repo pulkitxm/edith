@@ -91,7 +91,7 @@ enum AgentActivityStyle {
         case .working: .green
         case .permission, .blocked, .waiting: .orange
         case .error, .stuck: .red
-        case .finished: .blue
+        case .finished: Color.themeAccent
         case .idle, .quiet, .ended: .secondary
         }
     }

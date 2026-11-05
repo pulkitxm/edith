@@ -366,7 +366,7 @@ struct DatabaseConnectionGallery: View {
                             if connection.isFavorite {
                                 Image(systemName: "star.fill")
                                     .font(.edithText(.caption))
-                                    .foregroundStyle(DashSkin.gold)
+                                    .foregroundStyle(palette.accent)
                                     .accessibilityHidden(true)
                             }
                         }
@@ -802,7 +802,7 @@ struct DatabaseFocusedConnectionHeader: View {
                     if connection.isFavorite {
                         Image(systemName: "star.fill")
                             .font(.system(size: UIScale.pt(8.5)))
-                            .foregroundStyle(DashSkin.gold)
+                            .foregroundStyle(palette.accent)
                             .accessibilityLabel("Favorite connection")
                     }
                 }

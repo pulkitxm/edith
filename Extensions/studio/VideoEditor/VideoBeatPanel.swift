@@ -255,7 +255,6 @@ struct VideoBeatPanel: View {
                 Text("Source 0.000s")
                 Spacer()
                 Text("\(result.transients.count) detected transients")
-                    .foregroundStyle(.orange)
                 Spacer()
                 Text("\(result.duration.formatted(.number.precision(.fractionLength(3))))s")
             }
@@ -452,15 +451,17 @@ private struct VideoBeatMarkerRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: marker.kind == .transient ? "waveform" : "bookmark")
-                .foregroundStyle(marker.kind == .transient ? .orange : .secondary)
+                .foregroundStyle(marker.kind == .transient ? .primary : .secondary)
             TextField("Label", text: $label).textFieldStyle(.roundedBorder)
             TextField("Output frame", value: $frame, format: .number.grouping(.never))
                 .frame(width: UIScale.pt(80)).textFieldStyle(.roundedBorder)
                 .help("Output frame at the marker's saved frame rate")
-            Button(marker.timecode, action: seek)
-                .font(.edithText(.caption).monospacedDigit()).buttonStyle(.link)
-                .disabled(marker.seconds > duration)
-                .help("Seek to marker output time")
+            Button(action: seek) {
+                Text(marker.timecode).foregroundStyle(Color.themeAccent)
+            }
+            .font(.edithText(.caption).monospacedDigit()).buttonStyle(.edith(.borderless))
+            .disabled(marker.seconds > duration)
+            .help("Seek to marker output time")
             Button("Save") { save(frame, label) }
                 .disabled(frame == marker.frame && label == marker.label)
             Button(action: remove) { Image(systemName: "trash") }
@@ -481,8 +482,13 @@ private struct VideoMeasuredWaveform: View {
     let mapping: VideoBeatMapping
     let playhead: Double
     let seek: (Double) -> Void
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let dark = scheme == .dark
+        let accent = DashSkin.accent(dark)
+        let playheadColor = DashSkin.accentDeep(dark)
+        let transientColor = DashSkin.ink(dark).opacity(0.55)
         GeometryReader { geometry in
             Canvas { context, size in
                 guard result.duration > 0 else { return }
@@ -497,7 +503,7 @@ private struct VideoMeasuredWaveform: View {
                             CGRect(
                                 x: start * scale, y: 0, width: (end - start) * scale,
                                 height: size.height)),
-                        with: .color(Color.themeAccent.opacity(0.08)))
+                        with: .color(accent.opacity(0.08)))
                 }
                 for bin in result.waveform {
                     let x = Double(bin.startSample) / result.sampleRate * scale
@@ -507,13 +513,13 @@ private struct VideoMeasuredWaveform: View {
                         Path(
                             CGRect(
                                 x: x, y: (size.height - height) / 2, width: width, height: height)),
-                        with: .color(Color.themeAccent.opacity(0.7)))
+                        with: .color(accent.opacity(0.7)))
                 }
                 for transient in result.transients {
                     let x = Double(transient.sample) / result.sampleRate * scale
                     context.fill(
                         Path(CGRect(x: x, y: 0, width: 1, height: size.height)),
-                        with: .color(.orange.opacity(0.8)))
+                        with: .color(transientColor))
                 }
                 let sourcePlayhead =
                     mapping.sourceStart + (playhead - mapping.outputStart) * mapping.rate
@@ -521,7 +527,7 @@ private struct VideoMeasuredWaveform: View {
                     context.fill(
                         Path(
                             CGRect(x: sourcePlayhead * scale, y: 0, width: 2, height: size.height)),
-                        with: .color(.red))
+                        with: .color(playheadColor))
                 }
             }
             .contentShape(Rectangle())

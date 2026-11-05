@@ -784,9 +784,7 @@ struct DownloadSheet: View {
         case let .downloading(progress, videoIndex, videoCount):
             HStack(spacing: UIScale.pt(8)) {
                 if let fraction = DownloadRowMetrics.fraction(from: progress) {
-                    ProgressView(value: fraction)
-                        .progressViewStyle(.linear)
-                        .tint(theme)
+                    LoadingProgress(value: fraction, tint: theme)
                         .frame(width: UIScale.pt(compact ? 72 : 120))
                     Text("\(Int((fraction * 100).rounded()))%")
                         .font(.edithText(.caption).weight(.medium))

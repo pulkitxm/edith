@@ -3,6 +3,7 @@ import EdithExtensionUI
 import EdithExtensionSupport
 struct EmbeddedMusicStreamingControls: View {
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
     @State private var optionsPresented = false
     @State private var accounts = EmbeddedMusicAccounts.shared
     init(accounts: EmbeddedMusicAccounts? = nil) {
@@ -76,7 +77,8 @@ struct EmbeddedMusicStreamingControls: View {
                 accounts.spotify.library.setShuffle(!accounts.spotify.library.shuffle)
             } label: {
                 Image(systemName: "shuffle").foregroundStyle(
-                    accounts.spotify.library.shuffle ? Color.accentColor : .secondary)
+                    accounts.spotify.library.shuffle ? DashSkin.accent(scheme == .dark) : .secondary
+                )
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel("Shuffle")
             Button {
                 let modes = ["off", "context", "track"]
@@ -88,7 +90,8 @@ struct EmbeddedMusicStreamingControls: View {
                         ? "repeat.1" : "repeat"
                 )
                 .foregroundStyle(
-                    accounts.spotify.library.repeatMode == "off" ? Color.secondary : .accentColor)
+                    accounts.spotify.library.repeatMode == "off"
+                        ? Color.secondary : DashSkin.accent(scheme == .dark))
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel(
                 "Repeat: \(accounts.spotify.library.repeatMode)")
         }

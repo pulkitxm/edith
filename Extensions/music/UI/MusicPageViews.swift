@@ -263,8 +263,10 @@ struct EmbeddedMusicPage: View {
                     if musicFolderStale {
                         HStack(spacing: UIScale.pt(5)) {
                             Text("A previous external music folder was skipped.")
-                            Button("Choose it again", action: chooseMusicFolder)
-                                .buttonStyle(.link)
+                            Button(action: chooseMusicFolder) {
+                                Text("Choose it again").foregroundStyle(theme)
+                            }
+                            .buttonStyle(.edith(.borderless))
                         }
                         .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)

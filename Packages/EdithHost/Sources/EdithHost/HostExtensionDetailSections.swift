@@ -5,7 +5,7 @@ import SwiftUI
 enum HostExtensionDetailLayout {
     static let padding = 24.0
     static let sectionSpacing = 24.0
-    static let heroIcon = 64.0
+    static let heroIcon = 60.0
     static let previewHeight = 176.0
     static let previewSize = CGSize(width: 200, height: 88)
     static let previewScale = 1.5
@@ -28,9 +28,11 @@ struct HostExtensionHero<Action: View>: View {
     private var identity: some View {
         let dark = scheme == .dark
         return HStack(alignment: .center, spacing: UIScale.pt(16)) {
-            HostExtensionIcon(
-                symbolName: entry.symbolName, size: HostExtensionDetailLayout.heroIcon,
-                prominent: true)
+            PageGuideBadge(
+                extensionID: entry.id, symbolName: entry.symbolName,
+                size: HostExtensionDetailLayout.heroIcon, tone: .monochrome
+            )
+            .flushLeading()
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(entry.title).font(.edithText(.title2)).fontWeight(.bold)
                     .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)

@@ -44,6 +44,12 @@ const definitions = [
   },
 ];
 
+async function writeIconPackage(root) {
+  await mkdir(join(root, "Packages/EdithIcons/Sources"), { recursive: true });
+  await writeFile(join(root, "Packages/EdithIcons/Package.swift"), "package");
+  await writeFile(join(root, "Packages/EdithIcons/Sources/Icon.swift"), "icon");
+}
+
 async function resolverLockFixture(run, repository = false) {
   const directory = await mkdtemp(join(tmpdir(), "extension-resolver-inputs-"));
   let root = directory;
@@ -461,6 +467,7 @@ describe("independent extension releases", () => {
       dependencies: [],
     }));
     try {
+      await writeIconPackage(root);
       await mkdir(join(root, "scripts"), { recursive: true });
       await writeFile(
         join(root, "scripts/build-extension-support.mjs"),
@@ -872,6 +879,7 @@ test("role overrides fingerprint the complete selected SDK without changing unre
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, "Source.swift"), product);
     }
+    await writeIconPackage(root);
     await mkdir(join(root, "Packages/ExtensionSupport/Licenses"), {
       recursive: true,
     });
@@ -967,6 +975,7 @@ test("native private SDK consumers invalidate on every selected support source",
       await mkdir(directory, { recursive: true });
       await writeFile(join(directory, "Source.swift"), product);
     }
+    await writeIconPackage(root);
     await mkdir(join(root, "Packages/ExtensionSupport/Licenses"), {
       recursive: true,
     });

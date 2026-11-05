@@ -48,6 +48,7 @@ struct BifrostPanelView: View {
         }
         .clipShape(shape)
         .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 1))
+        .tint(DashSkin.accent(true))
         .environment(\.colorScheme, .dark)
         .onAppear {
             searchFocused = true
@@ -501,7 +502,7 @@ struct BifrostResultRow: View {
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.white.opacity(isSelected ? 0.14 : 0))
+                .fill(isSelected ? BifrostPanelMetrics.selection : Color.clear)
         )
         .padding(.horizontal, BifrostPanelMetrics.rowInset)
     }
@@ -533,11 +534,13 @@ struct BifrostAnswerCard: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.white.opacity(isSelected ? 0.10 : 0.05))
+                .fill(isSelected ? BifrostPanelMetrics.selection : Color.white.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.white.opacity(isSelected ? 0.16 : 0.07), lineWidth: 1)
+                .strokeBorder(
+                    isSelected ? DashSkin.accent(true).opacity(0.6) : Color.white.opacity(0.07),
+                    lineWidth: 1)
         )
         .padding(.horizontal, BifrostPanelMetrics.rowInset)
         .padding(.vertical, 6)

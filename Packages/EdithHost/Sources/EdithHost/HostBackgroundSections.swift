@@ -161,15 +161,7 @@ struct HostBackgroundOverviewSection: View {
     var body: some View {
         Section {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Image(systemName: "bolt.horizontal.circle.fill")
-                    .font(.system(size: UIScale.pt(18), weight: .medium))
-                    .foregroundStyle(tint)
-                    .frame(width: UIScale.pt(36), height: UIScale.pt(36))
-                    .background(
-                        tint.opacity(0.14),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
-                    )
-                    .accessibilityHidden(true)
+                PageGuideBadge(symbolName: "bolt.horizontal.circle.fill", size: 32, tint: tint)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(headline).font(.edithText(.headline))
                         .accessibilityAddTraits(.isHeader)

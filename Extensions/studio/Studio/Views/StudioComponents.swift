@@ -5,7 +5,7 @@ import EdithStudio
 import SwiftUI
 
 enum StudioPalette {
-    static func tint(for kind: StudioKind) -> Color {
+    static func formatBadge(for kind: StudioKind) -> Color {
         switch kind {
         case .pdf: Color(red: 0.86, green: 0.27, blue: 0.24)
         case .image: Color(red: 0.23, green: 0.52, blue: 0.93)
@@ -17,11 +17,6 @@ enum StudioPalette {
         case .archive: Color(red: 0.55, green: 0.5, blue: 0.42)
         case .other: Color.gray
         }
-    }
-
-    static func tint(for tool: StudioTool) -> Color {
-        tool.group == .intelligence
-            ? Color(red: 0.62, green: 0.34, blue: 0.86) : tint(for: tool.family)
     }
 }
 
@@ -45,7 +40,7 @@ struct StudioThumbnail: View {
             } else {
                 Image(systemName: url.studioKind.symbolName)
                     .font(.system(size: UIScale.pt(side * 0.22), weight: .light))
-                    .foregroundStyle(StudioPalette.tint(for: url.studioKind).opacity(0.7))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark).opacity(0.7))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
@@ -69,16 +64,18 @@ struct StudioKindBadge: View {
             .padding(.horizontal, UIScale.pt(5))
             .padding(.vertical, UIScale.pt(2))
             .background(
-                StudioPalette.tint(for: kind), in: RoundedRectangle(cornerRadius: UIScale.pt(4)))
+                StudioPalette.formatBadge(for: kind),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(4)))
     }
 }
 
 struct StudioToolIcon: View {
     let tool: StudioTool
     var size: CGFloat = 34
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let tint = StudioPalette.tint(for: tool)
+        let tint = DashSkin.accent(scheme == .dark)
         Image(systemName: tool.symbolName)
             .font(.system(size: UIScale.pt(size * 0.46), weight: .semibold))
             .foregroundStyle(tint)

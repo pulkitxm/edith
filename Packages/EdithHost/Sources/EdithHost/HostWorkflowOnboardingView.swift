@@ -101,20 +101,20 @@ struct HostOnboardingWelcomeView: View {
 
     static let steps = [
         PageGuideStep(
-            symbolName: "square.grid.2x2", title: "Pick a workflow",
+            icon: .stepWorkflow, title: "Pick a workflow",
             detail: "Tell Edith what you do and it suggests the tools that fit."),
         PageGuideStep(
-            symbolName: "checklist", title: "Choose your tools",
+            icon: .stepTools, title: "Choose your tools",
             detail: "Each tool is a small download. Add or remove any of them later."),
         PageGuideStep(
-            symbolName: "lock.shield", title: "Allow what they need",
+            icon: .stepAccess, title: "Allow what they need",
             detail: "Approve macOS permissions once, in one place, before you start."),
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(24)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "sparkles", size: compact ? 48 : 56)
+                PageGuideBadge(.brand, size: compact ? 40 : 60).flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Welcome to Edith").font(.edithText(.title2)).fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)
@@ -193,7 +193,7 @@ struct HostOnboardingWorkflowsView: View {
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 HStack(alignment: .center) {
-                    HostOnboardingIcon(symbolName: workflow.symbol, size: 32)
+                    PageGuideBadge(workflow.icon, size: 32).flushLeading()
                     Spacer(minLength: 0)
                     if selected {
                         Image(systemName: "checkmark.circle.fill")
@@ -251,26 +251,6 @@ struct HostOnboardingStepHeader: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct HostOnboardingIcon: View {
-    let symbolName: String
-    var size: Double = 32
-    var tint: Color?
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let color = tint ?? DashSkin.accent(scheme == .dark)
-        Image(systemName: symbolName)
-            .font(.system(size: UIScale.pt(size * 0.47), weight: .medium))
-            .foregroundStyle(color)
-            .frame(width: UIScale.pt(size), height: UIScale.pt(size))
-            .background(
-                color.opacity(scheme == .dark ? 0.16 : 0.12),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(size * 0.28), style: .continuous)
-            )
-            .accessibilityHidden(true)
     }
 }
 

@@ -747,7 +747,9 @@ export async function buildExtensionPackage({
         })
           .split("\n")
           .filter((line) =>
-            / T _\$s(18EdithExtensionCore|16EdithExtensionUI)/.test(line),
+            / T _\$s(18EdithExtensionCore|16EdithExtensionUI|10EdithIcons)/.test(
+              line,
+            ),
           )
           .join("\n");
         const embedded = candidates

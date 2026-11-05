@@ -17,9 +17,9 @@ struct BlitzTreePage: View {
         PageScaffold(pinnedHeader: true) {
             VStack(spacing: 0) {
                 PageHeader(
+                    subtitle: Self.subtitle,
                     title: { Text(Self.title) },
-                    trailing: { headerActions },
-                    accessory: { PageSubtitle(Self.subtitle) })
+                    trailing: { headerActions })
                 Divider()
             }
         } content: {

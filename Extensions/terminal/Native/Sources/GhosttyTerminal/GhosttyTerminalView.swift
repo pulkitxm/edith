@@ -144,6 +144,7 @@ public final class GhosttyTerminalView: NSView {
         addSubview(searchBar)
         addSubview(progressStrip)
         addSubview(copyConfirmation)
+        applyAccent()
         NSLayoutConstraint.activate([
             searchBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             searchBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -282,10 +283,18 @@ public final class GhosttyTerminalView: NSView {
         onReady?()
     }
 
+    var themeAccent: NSColor { theme?.cursorColor ?? .labelColor }
+
     public func apply(theme newTheme: GhosttyTheme) {
         guard theme != newTheme else { return }
         theme = newTheme
+        applyAccent()
         applyTheme()
+    }
+
+    private func applyAccent() {
+        progressStrip.accent = themeAccent
+        copyConfirmation.accent = themeAccent
     }
 
     private func applyTheme() {

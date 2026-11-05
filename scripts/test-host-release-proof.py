@@ -247,7 +247,7 @@ class HostReleaseProofTests(unittest.TestCase):
         with patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(self.info), self.index.read_bytes(), self.index.read_bytes()]):
             self.assertFalse(pinned_sources(self.source, '1.2.3', '123', clean)[2])
         self.assertEqual(calls[:2], [['git', 'rev-parse', 'HEAD'], ['git', 'ls-files', '--others', '--exclude-standard', '-z']])
-        self.assertEqual(calls[2], ['git', 'ls-files', '--others', '-z', '--', 'Packages/EdithHost/Sources', 'Packages/ExtensionMarketplace/Sources', 'Packages/ExtensionSupport/Sources', 'Extensions/fixtureSupport', ':(glob,exclude)**/.build/**', ':(glob,exclude)**/.swiftpm/**', ':(glob,exclude)**/.DS_Store'])
+        self.assertEqual(calls[2], ['git', 'ls-files', '--others', '-z', '--', 'Packages/EdithHost/Sources', 'Packages/EdithIcons/Sources', 'Packages/ExtensionMarketplace/Sources', 'Packages/ExtensionSupport/Sources', 'Extensions/fixtureSupport', ':(glob,exclude)**/.build/**', ':(glob,exclude)**/.swiftpm/**', ':(glob,exclude)**/.DS_Store'])
         self.assertEqual(calls[3], ['git', 'diff', '--name-only', 'HEAD'])
         def changed(arguments):
             return self.source + '\n' if arguments[1] == 'rev-parse' else '' if arguments[1] == 'ls-files' else 'Packages/EdithHost/Sources/EdithHost/HostEntry.swift\n'
@@ -256,7 +256,7 @@ class HostReleaseProofTests(unittest.TestCase):
         read.assert_not_called()
 
     def test_ignored_compiled_sources_reject_before_the_stamp_exception(self):
-        for path in ['Packages/EdithHost/Sources/EdithHost/Hidden.swift', 'Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Hidden.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionCore/Hidden.swift', 'Extensions/fixtureSupport/Hidden.swift']:
+        for path in ['Packages/EdithHost/Sources/EdithHost/Hidden.swift', 'Packages/EdithIcons/Sources/EdithIcons/Hidden.swift', 'Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/Hidden.swift', 'Packages/ExtensionSupport/Sources/EdithExtensionCore/Hidden.swift', 'Extensions/fixtureSupport/Hidden.swift']:
             def run(arguments):
                 if arguments[1] == 'rev-parse':
                     return self.source + '\n'

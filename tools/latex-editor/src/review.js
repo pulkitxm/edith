@@ -82,6 +82,9 @@ window.edithReview = {
     }
     current = options;
     document.body.classList.toggle("dark", options.dark);
+    for (const [name, value] of Object.entries(options.colors)) {
+      document.body.style.setProperty(`--${name}`, value);
+    }
     document.documentElement.style.fontSize = `${options.fontSize}px`;
     document.getElementById("summary").textContent = `Changed files · ${files.length}`;
     drawFiles();

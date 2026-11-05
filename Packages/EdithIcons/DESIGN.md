@@ -238,6 +238,12 @@ if let icon = EdithIcon(rawValue: entry.id) {
 EdithIconShape(.brand, cut: .regular).fill(.white)
 ```
 
+`EdithExtensionUI` re-exports this package, and the shared extension kit carries
+it. Inside the app and extensions, prefer `PageIcon` or `PageGuideBadge`: they
+follow `UIScale`, keep the frame on whole points so a zoomed icon stays centered
+and pick the cut from the size that lands on screen. `PageGuideBadge.flushLeading()`
+lines the ink up with the left edge of a text column.
+
 The view has no resources and no bundle lookups, so it works in any process,
 including remote extension processes. It sizes itself to `size` points, inherits
 `foregroundStyle`, and is hidden from accessibility because labels belong to the

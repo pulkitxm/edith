@@ -54,6 +54,7 @@ struct ClipboardPanelView: View {
             }
         }
         .frame(width: ClipboardPanelLayout.width)
+        .tint(themeColor(themeName))
         .onAppear { resetForShow() }
         .onReceive(NotificationCenter.default.publisher(for: ClipboardPanel.willShow)) { _ in
             resetForShow()

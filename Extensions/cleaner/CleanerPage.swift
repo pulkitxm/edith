@@ -21,9 +21,9 @@ struct CleanerPage: View {
         PageWorkspace {
             VStack(spacing: 0) {
                 PageHeader(
+                    subtitle: Self.subtitle,
                     title: { Text("Cleaner") },
-                    trailing: { headerActions },
-                    accessory: { PageSubtitle(Self.subtitle) })
+                    trailing: { headerActions })
                 Divider()
             }
         } content: {

@@ -33,6 +33,7 @@ struct NotchShelfContentView: View {
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .tint(DashSkin.accent(true))
             .animation(glide, value: shapeSize)
             .animation(glide, value: isExpanded)
             .animation(glide, value: controller.currentAlert)
@@ -223,7 +224,7 @@ struct NotchShelfContentView: View {
                         .foregroundStyle(active ? Color.black : Color.white.opacity(0.6))
                         .frame(width: 26, height: 22)
                         .background(
-                            active ? Color.white.opacity(0.9) : Color.clear, in: Capsule()
+                            active ? DashSkin.accent(true) : Color.clear, in: Capsule()
                         )
                         .contentShape(Capsule())
                 }
@@ -334,7 +335,7 @@ struct NotchShelfContentView: View {
             .background {
                 if active {
                     Capsule()
-                        .fill(Color.white.opacity(0.93))
+                        .fill(DashSkin.accent(true))
                         .matchedGeometryEffect(id: "activeTab", in: tabPill)
                 } else {
                     Capsule().fill(Color.white.opacity(0.07))
@@ -486,7 +487,8 @@ private struct NotchAlertDropView: View {
     @State private var appeared = false
 
     var body: some View {
-        let tint = Color(hex: alert.tint)
+        let tint =
+            alert.tint == NotchAlert.themeTint ? DashSkin.accent(true) : Color(hex: alert.tint)
         return Button {
             controller.alertTapped(alert)
         } label: {

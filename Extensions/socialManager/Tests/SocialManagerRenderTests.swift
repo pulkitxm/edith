@@ -180,7 +180,8 @@ struct SocialManagerRenderTests {
                 .environment(\.automaticViewActionsEnabled, false)
                 .environment(\.loadingAnimationsEnabled, false)
                 .environment(\.controlActiveState, .key)
-                .environment(\.colorScheme, scheme))
+                .environment(\.colorScheme, scheme)
+                .themedControls())
         host.sizingOptions = []
         host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         let window = TestWindowHost.window(contentRect: host.frame)

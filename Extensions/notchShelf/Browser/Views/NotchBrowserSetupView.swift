@@ -112,7 +112,7 @@ struct NotchBrowserSetupView: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 12)
                     .frame(height: 26)
-                    .background(Color.white.opacity(0.92), in: Capsule())
+                    .background(DashSkin.accent(true), in: Capsule())
             }
         }
         .padding(.horizontal, 12)
@@ -257,7 +257,7 @@ struct ChromeProfileAvatar: View {
     private var tint: Color { Self.tint(for: profile) }
 
     static func tint(for profile: ChromeProfile) -> Color {
-        guard let argb = profile.colorARGB else { return Color(red: 0.26, green: 0.52, blue: 0.96) }
+        guard let argb = profile.colorARGB else { return DashSkin.accent(true) }
         return Color(
             red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
             blue: Double(argb & 0xFF) / 255)
@@ -273,7 +273,8 @@ struct ChromeProfileAvatar: View {
     @MainActor private static var badges: [String: NSImage] = [:]
 
     @MainActor static func badge(for profile: ChromeProfile, diameter: CGFloat) -> NSImage {
-        let key = "\(profile.id)|\(profile.pictureURL?.path ?? "")|\(diameter)"
+        let key =
+            "\(profile.id)|\(profile.pictureURL?.path ?? "")|\(diameter)|\(ThemeStore.current)"
         if let cached = badges[key] { return cached }
         let picture = image(for: profile)
         let fill = NSColor(tint(for: profile))

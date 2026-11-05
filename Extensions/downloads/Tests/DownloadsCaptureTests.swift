@@ -76,6 +76,7 @@ enum DownloadsCapture {
                     .environment(\.windowVisible, false)
                     .environment(\.controlActiveState, .key)
                     .controlSize(UIScale.controlSize)
+                    .themedControls()
                     .transaction { $0.animation = nil }
                     .frame(width: variant.size.width, height: variant.size.height)
                     .background(DashSkin.paper(variant.dark))))
@@ -208,7 +209,7 @@ extension DownloadsExtensionTests {
                     try await DownloadsCapture.render(
                         name, variant: variant,
                         expecting: name == "working"
-                            ? ["Finding media", "Cancel all"] : ["Retry", "Clear history"],
+                            ? ["Finding", "Cancel all"] : ["Retry", "Clear history"],
                         view: DownloadSheet(isPage: true, downloader: model))
                     await model.shutdown()
                 }

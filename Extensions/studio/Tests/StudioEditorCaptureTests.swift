@@ -161,7 +161,15 @@ struct StudioEditorCaptureTests {
             VideoEditPlan(operations: [
                 .addMedia(path: movie.path, name: "intro"),
                 .addMedia(path: movie.path, name: "demo"),
+                .text(content: "Synthetic title", start: 0.2, end: 0.9),
             ]), to: source, overwrite: true)
+        var project = try VideoProject.open(source)
+        project.addAudio(movie, duration: 1, at: 0)
+        var legacy = project.root["legacyEditor"] as? [String: Any] ?? [:]
+        legacy["speedRegions"] = [["id": "speed", "startMs": 100, "endMs": 800, "speed": 2]]
+        legacy["cameraFullscreenRegions"] = [["id": "camera", "startMs": 300, "endMs": 900]]
+        project.root["legacyEditor"] = legacy
+        try project.save(to: source)
         let resources = StudioUIResources()
         let work = StudioUILongOperations()
         let sessions = StudioUIVideoSessions()
@@ -182,6 +190,8 @@ struct StudioEditorCaptureTests {
                 editor.previewReady && editor.pipeline != nil || editor.errorMessage != nil
             })
         #expect(editor.errorMessage == nil)
+        #expect(editor.project?.audioTracks.count == 1)
+        #expect(editor.project?.cameraFullscreenRegions.count == 1)
         editor.seek(to: 0.5)
         editor.addZoom()
         #expect(
@@ -193,6 +203,11 @@ struct StudioEditorCaptureTests {
                 "video-timeline", variant: variant, expecting: ["Synthetic launch cut"],
                 view: VideoEditorPage(model: editor, retained: true)
                     .environment(\.studioFacade, facade))
+        }
+        for variant in Self.variants {
+            try await StudioCapture.render(
+                "video-lanes", variant: variant, expecting: ["Timeline"],
+                view: VideoTimeline(model: editor).environment(\.studioFacade, facade))
         }
         editor.close()
         await work.stopAndWait()

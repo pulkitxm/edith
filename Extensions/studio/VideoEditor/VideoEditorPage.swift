@@ -791,7 +791,7 @@ struct ZoomTimelineRegion: View {
             height: UIScale.pt(32)
         )
         .background(
-            selected ? Color.themeAccent : Color.blue.opacity(0.75),
+            selected ? Color.themeAccent : Color.themeAccent.opacity(0.55),
             in: RoundedRectangle(cornerRadius: 7)
         )
         .overlay {
@@ -933,10 +933,10 @@ private struct ZoomFocusRegion: View {
     var body: some View {
         let frame = frame
         RoundedRectangle(cornerRadius: UIScale.pt(6))
-            .fill(Color.green.opacity(0.2))
+            .fill(Color.themeAccent.opacity(0.2))
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .strokeBorder(Color.green, lineWidth: UIScale.pt(2))
+                    .strokeBorder(Color.themeAccent, lineWidth: UIScale.pt(2))
             }
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY)

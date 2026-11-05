@@ -571,7 +571,7 @@ import Testing
     func endPresentation(id: UUID) {}
 }
 
-@MainActor private struct StorefrontFixture {
+@MainActor struct StorefrontFixture {
     enum Catalog { case cached, stalled, unreachable, offline, cachedThenOffline }
 
     let directory: URL

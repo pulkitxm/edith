@@ -181,7 +181,7 @@ struct DesignSystemGallery {
             )
         } content: {
             PageEmptyState(
-                symbolName: "sparkles", title: "Free up space on this Mac",
+                symbolName: "externaldrive", title: "Free up space on this Mac",
                 message:
                     "Cleaner scans a folder for caches, build output and other files that apps recreate on their own.",
                 steps: steps,

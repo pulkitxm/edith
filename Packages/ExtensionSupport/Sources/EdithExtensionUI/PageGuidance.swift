@@ -2,12 +2,21 @@ import SwiftUI
 
 public struct PageGuideStep: Identifiable, Hashable, Sendable {
     public let symbolName: String
+    public let icon: EdithIcon?
     public let title: String
     public let detail: String
     public var id: String { title }
 
     public init(symbolName: String, title: String, detail: String) {
         self.symbolName = symbolName
+        self.icon = nil
+        self.title = title
+        self.detail = detail
+    }
+
+    public init(icon: EdithIcon, title: String, detail: String) {
+        self.symbolName = ""
+        self.icon = icon
         self.title = title
         self.detail = detail
     }
@@ -142,28 +151,37 @@ public struct PageEmptyState: View {
 }
 
 public struct PageGuideBadge: View {
-    let symbolName: String
-    let size: CGFloat
+    let icon: PageIcon
     var tint: Color?
     @Environment(\.colorScheme) private var scheme
 
     public init(symbolName: String, size: CGFloat = 64, tint: Color? = nil) {
-        self.symbolName = symbolName
-        self.size = size
+        self.icon = PageIcon(symbolName: symbolName, size: size)
+        self.tint = tint
+    }
+
+    public init(
+        _ icon: EdithIcon, size: CGFloat = 60, tint: Color? = nil, tone: EdithIconTone = .duotone
+    ) {
+        self.icon = PageIcon(icon, size: size, tone: tone)
+        self.tint = tint
+    }
+
+    public init(
+        extensionID: String?, symbolName: String, size: CGFloat = 60, tint: Color? = nil,
+        tone: EdithIconTone = .duotone
+    ) {
+        self.icon = PageIcon(
+            extensionID: extensionID, symbolName: symbolName, size: size, tone: tone)
         self.tint = tint
     }
 
     public var body: some View {
-        let dark = scheme == .dark
-        let color = tint ?? DashSkin.accent(dark)
-        let shape = RoundedRectangle(cornerRadius: UIScale.pt(size * 0.28), style: .continuous)
-        Image(systemName: symbolName)
-            .font(.system(size: UIScale.pt(size * 0.42), weight: .medium))
-            .foregroundStyle(color)
-            .frame(width: UIScale.pt(size), height: UIScale.pt(size))
-            .background(color.opacity(dark ? 0.16 : 0.12), in: shape)
-            .overlay(shape.strokeBorder(color.opacity(0.25)))
-            .accessibilityHidden(true)
+        icon.foregroundStyle(tint ?? DashSkin.accent(scheme == .dark))
+    }
+
+    public func flushLeading() -> some View {
+        padding(.leading, -icon.leadingInset)
     }
 }
 
@@ -178,7 +196,6 @@ public struct PageGuideSteps: View {
     }
 
     public var body: some View {
-        let dark = scheme == .dark
         LazyVGrid(
             columns: Array(
                 repeating: GridItem(.flexible(), spacing: UIScale.pt(12), alignment: .top),
@@ -187,14 +204,11 @@ public struct PageGuideSteps: View {
         ) {
             ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    ZStack {
-                        Circle().fill(DashSkin.accent(dark).opacity(0.14))
-                        Image(systemName: step.symbolName)
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                            .foregroundStyle(DashSkin.accent(dark))
+                    if let icon = step.icon {
+                        PageGuideBadge(icon, size: 24)
+                    } else {
+                        PageGuideBadge(symbolName: step.symbolName, size: 24)
                     }
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                    .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(step.title).font(.edithText(.callout)).fontWeight(.semibold)
                             .fixedSize(horizontal: false, vertical: true)
@@ -215,6 +229,7 @@ public struct PageGuideSteps: View {
 }
 
 public struct PageIntro: View {
+    let extensionID: String?
     let symbolName: String
     let title: String
     let tagline: String
@@ -233,6 +248,18 @@ public struct PageIntro: View {
         steps: [PageGuideStep], examples: [String] = [], start: PageAction,
         skip: PageAction? = nil, skipAll: PageAction? = nil, embedded: Bool = false
     ) {
+        self.init(
+            extensionID: nil, symbolName: symbolName, title: title, tagline: tagline,
+            summary: summary, steps: steps, examples: examples, start: start, skip: skip,
+            skipAll: skipAll, embedded: embedded)
+    }
+
+    public init(
+        extensionID: String?, symbolName: String, title: String, tagline: String, summary: String,
+        steps: [PageGuideStep], examples: [String] = [], start: PageAction,
+        skip: PageAction? = nil, skipAll: PageAction? = nil, embedded: Bool = false
+    ) {
+        self.extensionID = extensionID
         self.symbolName = symbolName
         self.title = title
         self.tagline = tagline
@@ -262,7 +289,10 @@ public struct PageIntro: View {
         let dark = scheme == .dark
         return VStack(alignment: .leading, spacing: UIScale.pt(24)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: symbolName, size: compact ? 52 : 64)
+                PageGuideBadge(
+                    extensionID: extensionID, symbolName: symbolName, size: compact ? 40 : 60
+                )
+                .flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Welcome to \(title)").font(.edithText(.title)).fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)

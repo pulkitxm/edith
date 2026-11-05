@@ -253,7 +253,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                             .background(
                                 LinearGradient(
-                                    colors: [.purple, .indigo], startPoint: .topLeading,
+                                    colors: [accent, accent.opacity(0.72)], startPoint: .topLeading,
                                     endPoint: .bottomTrailing))
                         Text("Liked Songs").font(.edithText(.subheadline)).fontWeight(.semibold)
                         Spacer(minLength: 0)

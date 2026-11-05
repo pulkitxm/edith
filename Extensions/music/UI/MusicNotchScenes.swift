@@ -359,6 +359,7 @@ private struct EmbeddedNotchNowPlayingCard: View {
             }
             if tile.showDetails, tile.shows("progress"), controller.nowPlayingSeekable {
                 NotchSeekBar(
+                    tile: tile,
                     controller: controller,
                     showsSkip: tile.showActions && tile.shows("seekControls")
                 ).allowsHitTesting(tile.showActions)
@@ -393,7 +394,7 @@ private struct EmbeddedNotchNowPlayingCard: View {
                     }
                 }
                 if tile.shows("volume"), controller.nowPlayingVolume != nil {
-                    NotchVolumeControl(controller: controller)
+                    NotchVolumeControl(tile: tile, controller: controller)
                 }
                 if let error = controller.nowPlayingControlError {
                     Text(error).font(.edithText(.caption2)).foregroundStyle(.secondary).lineLimit(3)
@@ -476,6 +477,7 @@ private struct EmbeddedNotchNowPlayingCard: View {
 }
 
 private struct NotchSeekBar: View {
+    let tile: SurfaceTile
     var controller: EmbeddedMusicNotchModel
     var showsSkip: Bool
     @State private var dragFraction: Double?
@@ -493,7 +495,8 @@ private struct NotchSeekBar: View {
                         }
                     }
                 )
-                .controlSize(.small).tint(.white).accessibilityLabel("Playback position")
+                .controlSize(.small).tint(tile.highlightColor).accessibilityLabel(
+                    "Playback position")
                 HStack {
                     Text(
                         clock(
@@ -532,6 +535,7 @@ private struct NotchSeekBar: View {
 }
 
 private struct NotchVolumeControl: View {
+    let tile: SurfaceTile
     var controller: EmbeddedMusicNotchModel
     @State private var requested: Double?
     @State private var savedVolume = 0.7
@@ -554,7 +558,7 @@ private struct NotchVolumeControl: View {
                         controller.setNowPlayingVolume(volume); requested = nil
                     }
                 }
-            ).controlSize(.small).tint(.white).accessibilityLabel("Player volume")
+            ).controlSize(.small).tint(tile.highlightColor).accessibilityLabel("Player volume")
             Text("\(Int(value * 100))%")
                 .font(.edithText(.caption2)).monospacedDigit().foregroundStyle(.secondary)
                 .frame(width: 32, alignment: .trailing)

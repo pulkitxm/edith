@@ -144,7 +144,9 @@ struct LidAwakeRows: View {
                 .foregroundStyle(.secondary)
                 Link(
                     "View Awayke on GitHub",
-                    destination: URL(string: "https://github.com/daemonphantom/Awayke")!)
+                    destination: URL(string: "https://github.com/daemonphantom/Awayke")!
+                )
+                .foregroundStyle(Color.themeAccent)
             } header: {
                 Text("Acknowledgement")
             }

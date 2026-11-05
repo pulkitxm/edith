@@ -316,7 +316,7 @@ struct MachineToolsTab: View {
                 }
                 if !snippetOutput.isEmpty {
                     TerminalLogView(
-                        log: snippetOutput, theme: DashSkin.sage, height: UIScale.pt(160))
+                        log: snippetOutput, theme: DashSkin.accent(dark), height: UIScale.pt(160))
                 }
             }
         }

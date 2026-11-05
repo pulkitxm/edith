@@ -91,7 +91,7 @@ struct MachinePowerControls: View {
                 confirmPower = .shutdown
             }
             PowerIconButton(
-                symbol: "bolt", tint: DashSkin.gold,
+                symbol: "bolt", tint: DashSkin.accent(dark),
                 help: wakeAddress.map { "Wake this machine (\($0))" }
                     ?? "No wake address known yet",
                 enabled: wakeAddress != nil, dark: dark

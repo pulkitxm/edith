@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 
 enum HostPermission: String, CaseIterable, Hashable, Sendable {
@@ -60,18 +61,18 @@ enum HostPermission: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    var symbolName: String {
+    var icon: EdithIcon {
         switch self {
-        case .calendar: "calendar"
-        case .notifications: "bell.badge"
-        case .accessibility: "figure.wave"
-        case .inputMonitoring: "keyboard"
-        case .fullDisk: "externaldrive"
-        case .screenRecording: "rectangle.inset.filled.badge.record"
-        case .applicationAudio: "speaker.wave.2"
-        case .camera: "camera"
-        case .bluetooth: "wave.3.right"
-        case .automation: "gearshape.2"
+        case .calendar: .calendar
+        case .notifications: .permissionNotifications
+        case .accessibility: .permissionAccessibility
+        case .inputMonitoring: .permissionInputMonitoring
+        case .fullDisk: .permissionFullDisk
+        case .screenRecording: .permissionScreenRecording
+        case .applicationAudio: .permissionApplicationAudio
+        case .camera: .permissionCamera
+        case .bluetooth: .permissionBluetooth
+        case .automation: .permissionAutomation
         }
     }
 

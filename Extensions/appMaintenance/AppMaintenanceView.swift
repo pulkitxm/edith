@@ -613,6 +613,7 @@ struct AppMaintenanceView: View {
                         .frame(maxHeight: UIScale.pt(180))
                         if let releaseURL = item.releaseURL {
                             Link("Open release information", destination: releaseURL)
+                                .foregroundStyle(theme)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -703,7 +704,7 @@ struct AppMaintenanceView: View {
                             systemImage: "arrow.down.circle.fill"
                         )
                         .font(.edithText(.caption))
-                        .foregroundStyle(.green)
+                        .foregroundStyle(theme)
                     }
                 }
                 Spacer()
@@ -874,7 +875,7 @@ private struct AppMaintenanceApplicationRow: View {
                 Spacer(minLength: 0)
                 if entry.application.update != nil {
                     Image(systemName: "arrow.down.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(tint)
                 }
             }
             .padding(.vertical, UIScale.pt(3))

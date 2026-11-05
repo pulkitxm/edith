@@ -3,36 +3,13 @@ import EdithHostCore
 import SwiftUI
 
 struct HostExtensionIcon: View {
-    let symbolName: String
+    let entry: HostExtension
     var size: CGFloat = 40
-    var prominent = false
-    @Environment(\.colorScheme) private var scheme
+    var tint: Color?
 
     var body: some View {
-        let dark = scheme == .dark
-        let accent = DashSkin.accent(dark)
-        let shape = RoundedRectangle(cornerRadius: UIScale.pt(size * 0.25), style: .continuous)
-        Image(systemName: symbolName)
-            .font(.system(size: UIScale.pt(size * 0.42), weight: .semibold))
-            .foregroundStyle(prominent ? Color.white : accent)
-            .frame(width: UIScale.pt(size), height: UIScale.pt(size))
-            .background {
-                if prominent {
-                    shape.fill(accent)
-                    shape.fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.22), .black.opacity(0.12)], startPoint: .top,
-                            endPoint: .bottom))
-                } else {
-                    shape.fill(accent.opacity(dark ? 0.18 : 0.12))
-                }
-            }
-            .overlay {
-                shape.strokeBorder(
-                    prominent ? Color.white.opacity(0.18) : accent.opacity(0.22),
-                    lineWidth: UIScale.pt(0.75))
-            }
-            .accessibilityHidden(true)
+        PageGuideBadge(
+            extensionID: entry.id, symbolName: entry.symbolName, size: size, tint: tint)
     }
 }
 
@@ -93,7 +70,7 @@ struct HostInstallControl: View {
 }
 
 enum HostExtensionRowMetrics {
-    static let icon = 28.0
+    static let icon = 32.0
     static let horizontalPadding = PageMetrics.cardPadding
     static let verticalPadding = 10.0
     static let contentSpacing = 12.0
@@ -123,7 +100,8 @@ struct HostExtensionRow: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
-            HostExtensionIcon(symbolName: entry.symbolName, size: HostExtensionRowMetrics.icon)
+            HostExtensionIcon(
+                entry: entry, size: HostExtensionRowMetrics.icon, tint: DashSkin.inkSoft(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(entry.title).font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)

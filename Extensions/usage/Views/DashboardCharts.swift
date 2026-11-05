@@ -301,7 +301,7 @@ struct StackedChart: View {
                     x: .value("Day", index),
                     y: .value("Cost", p.cost * scale)
                 )
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.gold)
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }

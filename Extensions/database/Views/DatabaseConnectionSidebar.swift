@@ -186,7 +186,7 @@ struct DatabaseConnectionSidebar: View {
                 if connection.isFavorite {
                     Image(systemName: "star.fill")
                         .font(.system(size: UIScale.pt(8.5)))
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(theme)
                         .accessibilityHidden(true)
                 }
                 connectionSessionSlot(session, label: sessionLabel)

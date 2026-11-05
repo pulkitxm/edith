@@ -65,7 +65,7 @@ struct HostOnboardingPermissionsView: View {
 
     private var allSet: some View {
         HStack(spacing: UIScale.pt(12)) {
-            HostOnboardingIcon(symbolName: "checkmark.shield", size: 36, tint: DashSkin.ok)
+            PageGuideBadge(.stepAccess, size: 32, tint: DashSkin.ok)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Nothing left to allow").font(.edithText(.headline))
                 Text("Your tools have everything they need. Install them to finish setup.")
@@ -88,7 +88,7 @@ struct HostOnboardingPermissionsView: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                HostOnboardingIcon(symbolName: item.permission.symbolName, size: 36)
+                PageGuideBadge(item.permission.icon, size: 32)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     HStack(spacing: UIScale.pt(8)) {
                         Text(item.permission.displayName).font(.edithText(.headline))
@@ -105,7 +105,7 @@ struct HostOnboardingPermissionsView: View {
             actions(
                 item, current: current && !batchPending, deferred: deferred, awaiting: awaiting
             )
-            .padding(.leading, compact ? UIScale.pt(48) : 0)
+            .padding(.leading, compact ? UIScale.pt(44) : 0)
         }
         .padding(UIScale.pt(16))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -205,7 +205,7 @@ struct HostOnboardingPermissionsView: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                HostOnboardingIcon(symbolName: "arrow.clockwise", size: 36)
+                PageGuideBadge(symbolName: "arrow.clockwise", size: 32)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(
                         "Relaunch once to finish \(batch.map(\.displayName).joined(separator: " and "))"

@@ -169,6 +169,25 @@ test("host tests select runtime checks without feature compilation fanout", () =
   }
 });
 
+test("icon artwork runs its drift lane and icon sources also reach every kit consumer", () => {
+  expect(
+    planSwiftTests(["Packages/EdithIcons/svg/brand.16.svg"]).include,
+  ).toEqual([{ lane: "feature-models", targets: "ci-edith-icons" }]);
+  const sources = planSwiftTests([
+    "Packages/EdithIcons/Sources/EdithIcons/EdithIconView.swift",
+  ]).include;
+  expect(sources.slice(0, 2)).toEqual([
+    { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
+    {
+      lane: "feature-models",
+      targets: "ci-extension-support ci-edith-icons",
+    },
+  ]);
+  expect(sources.slice(2).map((lane) => lane.extension)).toEqual(
+    standaloneOwners,
+  );
+});
+
 test("shared support changes select consumers while commands stay outside the empty host", () => {
   const ui = planSwiftTests([
     "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
@@ -246,7 +265,7 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
       lane: "feature-models",
-      targets: "ci-extension-support",
+      targets: "ci-extension-support ci-edith-icons",
     },
     { lane: "native-music", targets: "ci-music-native" },
   ];
@@ -267,7 +286,7 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
     expected[0],
     {
       lane: "feature-models",
-      targets: "ci-extension-support ci-extension-docs",
+      targets: "ci-extension-support ci-edith-icons ci-extension-docs",
     },
     expected[2],
   ]);
@@ -276,7 +295,10 @@ test("shared workflow and build inputs exercise all lanes without duplicate targ
     "Extensions/docs/Runtime.swift",
     "Extensions/docs/Views/DocsPage.swift",
   ]).include;
-  expect(lanes.slice(0, 2)).toEqual(expected.slice(0, 2));
+  expect(lanes.slice(0, 2)).toEqual([
+    expected[0],
+    { lane: "feature-models", targets: "ci-extension-support" },
+  ]);
   expect(lanes.slice(2).map((lane) => lane.extension)).toEqual(
     standaloneOwners,
   );
@@ -288,6 +310,7 @@ test("full verification preserves every declared check exactly once", () => {
       "ci-host",
       "ci-marketplace-runtime",
       "ci-extension-support",
+      "ci-edith-icons",
       "ci-extension-docs",
       "ci-music-native",
       ...definitions.flatMap((definition) => definition.testTargets ?? []),

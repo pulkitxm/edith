@@ -359,7 +359,7 @@ struct MarketplacePage: View {
         let onCount = entries.filter { HostExtensionRowState($0, marketplace: marketplace).on }
             .count
         return VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            PageSectionHeader(suite.title, subtitle: suite.subtitle) {
+            PageSectionHeader(suite.title, icon: suite.icon, subtitle: suite.subtitle) {
                 if installedCount > 0 {
                     HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                         Text(enabled ? "\(onCount) of \(entries.count) on" : "Suite off")

@@ -594,6 +594,18 @@ import Testing
     }
 }
 
+@Suite struct VirtualCameraNameTagThemeTests {
+    @MainActor @Test func untouchedDefaultAccentFollowsTheThemeAndChosenColorsStay() throws {
+        let themed = VirtualCameraPageModel.nameTagAccent(.accent, theme: .teal)
+        let expected = try #require(
+            NSColor(AppTheme.teal.accent(dark: true)).usingColorSpace(.sRGB))
+        #expect(themed != .accent)
+        #expect(abs(themed.green - Double(expected.greenComponent)) < 0.01)
+        let chosen = try #require(VirtualCameraColor(hex: "#112233"))
+        #expect(VirtualCameraPageModel.nameTagAccent(chosen, theme: .teal) == chosen)
+    }
+}
+
 @MainActor
 @Suite struct VirtualCameraExtensionManagerTests {
     @Test func phasesExplainWhatBlocksTheInstall() {
@@ -1170,6 +1182,7 @@ enum VirtualCameraSyntheticStudio {
                     .environment(\.windowVisible, false)
                     .environment(\.controlActiveState, .key)
                     .environment(\.colorScheme, dark ? .dark : .light)
+                    .themedControls()
                     .transaction { $0.animation = nil }))
         host.frame = CGRect(origin: .zero, size: size)
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -1211,8 +1224,10 @@ enum VirtualCameraSyntheticStudio {
             .environment(\.compactLayout, true)
             .environment(\.automaticViewActionsEnabled, false)
             .environment(\.windowVisible, false)
+            .environment(\.controlActiveState, .key)
             .environment(\.colorScheme, dark ? .dark : .light)
             .background(DashSkin.paper(dark))
+            .themedControls()
             .transaction { $0.animation = nil })
         host.sizingOptions = []
         host.frame = CGRect(x: 0, y: 0, width: 440 * zoom, height: 580 * zoom)
@@ -1245,7 +1260,9 @@ enum VirtualCameraSyntheticStudio {
                 .environment(\.compactLayout, compact)
                 .environment(\.automaticViewActionsEnabled, false)
                 .environment(\.windowVisible, false)
+                .environment(\.controlActiveState, .key)
                 .environment(\.colorScheme, dark ? .dark : .light)
+                .themedControls()
                 .transaction { $0.animation = nil })
         host.frame = CGRect(origin: .zero, size: size)
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

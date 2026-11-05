@@ -1,8 +1,27 @@
+import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithStudio
 import Foundation
 import Observation
+
+extension StudioTool {
+    static let brandColorDefault = "#D97757"
+
+    func themedDefaultSettings(theme: AppTheme = ThemeStore.current) -> StudioSettings {
+        var settings = defaultSettings
+        guard theme != .accent,
+            let accent = NSColor(theme.accent(dark: true)).usingColorSpace(.sRGB)
+        else { return settings }
+        let hex = StudioColor(
+            red: accent.redComponent, green: accent.greenComponent, blue: accent.blueComponent
+        ).hex
+        for option in options where option.defaultValue == .text(Self.brandColorDefault) {
+            settings[option.key] = .text(hex)
+        }
+        return settings
+    }
+}
 
 @MainActor
 @Observable
@@ -38,7 +57,7 @@ final class StudioJob: Identifiable {
         preview.facade = facade
         self.tool = tool
         self.inputs = StudioJobInputs.accepted(inputs, by: tool)
-        self.settings = settings ?? tool.defaultSettings
+        self.settings = settings ?? tool.themedDefaultSettings()
     }
 
     var isRunning: Bool { phase == .running }
@@ -53,7 +72,7 @@ final class StudioJob: Identifiable {
     }
 
     func binding(_ key: String) -> StudioValue {
-        settings[key] ?? tool.defaultSettings[key] ?? .text("")
+        settings[key] ?? tool.themedDefaultSettings()[key] ?? .text("")
     }
 
     func set(_ key: String, _ value: StudioValue) {

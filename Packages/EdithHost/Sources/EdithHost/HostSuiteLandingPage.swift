@@ -81,7 +81,12 @@ struct HostSuiteLandingPage: View {
 
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            PageHeader(destination.title, subtitle: suite?.subtitle) {
+            PageHeader(subtitle: suite?.subtitle) {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                    if let suite { PageGuideBadge(suite.icon, size: 24).flushLeading() }
+                    Text(destination.title)
+                }
+            } trailing: {
                 Text(
                     HostSuiteLandingSummary.summary(
                         groups.flatMap(\.entries),
@@ -145,17 +150,9 @@ struct HostSuiteAbilityRow: View {
     var body: some View {
         let dark = scheme == .dark
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            Image(systemName: entry.symbolName)
-                .font(.system(size: UIScale.pt(15), weight: .medium))
-                .foregroundStyle(active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(32), height: UIScale.pt(32))
-                .background(
-                    (active
-                        ? DashSkin.accent(dark).opacity(dark ? 0.18 : 0.12)
-                        : Color.primary.opacity(0.05)),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
-                )
-                .accessibilityHidden(true)
+            HostExtensionIcon(
+                entry: entry, size: 32,
+                tint: active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 HStack(spacing: UIScale.pt(8)) {
                     Text(entry.title).font(.edithText(.callout)).fontWeight(.medium)

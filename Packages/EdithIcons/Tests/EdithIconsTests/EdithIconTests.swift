@@ -11,7 +11,8 @@ private let svgDirectory = URL(fileURLWithPath: #filePath)
 private func svgLayer(_ source: String, id: String) -> String {
     guard let idRange = source.range(of: "<path id=\"\(id)\"") else { return "" }
     let tail = source[idRange.upperBound...]
-    guard let data = tail.range(of: " d=\""), let end = tail[data.upperBound...].firstIndex(of: "\"")
+    guard let data = tail.range(of: " d=\""),
+        let end = tail[data.upperBound...].firstIndex(of: "\"")
     else { return "" }
     return String(tail[data.upperBound..<end])
 }

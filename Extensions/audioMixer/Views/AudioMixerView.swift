@@ -179,7 +179,7 @@ struct AudioMixerView: View {
             }
             .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 12)
         }
-        .tint(Color.accentColor)
+        .tint(DashSkin.accent(true))
         .environment(\.colorScheme, .dark)
     }
 
@@ -289,6 +289,6 @@ struct AudioMixerSettingsPage: View {
                 }
             }
         }
-        .edithForm()
+        .settingsForm()
     }
 }

@@ -78,6 +78,7 @@ enum StudioCapture {
                     .environment(\.windowVisible, false)
                     .environment(\.controlActiveState, .key)
                     .controlSize(UIScale.controlSize)
+                    .themedControls()
                     .transaction { $0.animation = nil }
                     .frame(width: variant.size.width, height: variant.size.height)
                     .background(DashSkin.paper(variant.dark))))

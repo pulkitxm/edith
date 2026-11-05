@@ -33,7 +33,8 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2")
+        .package(path: "../EdithIcons"),
+        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
     ],
     targets: [
         .target(name: "EdithExtensionAccounts", swiftSettings: shared),
@@ -61,7 +62,10 @@ let package = Package(
             name: "EdithExtensionCommandsTests", dependencies: ["EdithExtensionCommands"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
-            name: "EdithExtensionUI", dependencies: ["EdithExtensionCore"],
+            name: "EdithExtensionUI",
+            dependencies: [
+                "EdithExtensionCore", .product(name: "EdithIcons", package: "EdithIcons"),
+            ],
             swiftSettings: shared),
         .target(
             name: "EdithExtensionDocuments",

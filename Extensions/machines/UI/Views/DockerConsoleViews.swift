@@ -352,8 +352,8 @@ struct DockerSimpleList: View {
                                 .font(.edithText(.caption).weight(.medium))
                                 .padding(.horizontal, UIScale.pt(6))
                                 .padding(.vertical, UIScale.pt(2))
-                                .background(DashSkin.sage.opacity(0.18), in: Capsule())
-                                .foregroundStyle(DashSkin.sage)
+                                .background(Color.themeAccent.opacity(0.18), in: Capsule())
+                                .foregroundStyle(Color.themeAccent)
                         }
                         Text(row.trailing)
                             .font(DashSkin.mono(11))

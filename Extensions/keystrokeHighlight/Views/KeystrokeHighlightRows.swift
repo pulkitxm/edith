@@ -125,7 +125,7 @@ private struct KeystrokeCapPreview: View {
                     )
                     .overlay {
                         RoundedRectangle(cornerRadius: UIScale.pt(6))
-                            .strokeBorder(.white.opacity(0.24))
+                            .strokeBorder(DashSkin.accent(true).opacity(0.75))
                     }
             }
         }

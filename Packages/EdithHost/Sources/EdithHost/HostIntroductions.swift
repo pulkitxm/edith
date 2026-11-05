@@ -106,8 +106,8 @@ struct HostIntroducedPage<Content: View>: View {
 
     private func intro(_ entry: HostExtension, _ guide: HostExtensionGuide) -> some View {
         PageIntro(
-            symbolName: entry.symbolName, title: entry.title, tagline: guide.tagline,
-            summary: guide.summary,
+            extensionID: entry.id, symbolName: entry.symbolName, title: entry.title,
+            tagline: guide.tagline, summary: guide.summary,
             steps: guide.steps.map {
                 PageGuideStep(symbolName: $0.symbolName, title: $0.title, detail: $0.detail)
             },

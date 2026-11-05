@@ -1,3 +1,4 @@
+import EdithExtensionUI
 import EdithHostCore
 import Foundation
 
@@ -5,7 +6,7 @@ struct HostMarketplaceSuite: Identifiable, Equatable {
     let id: String
     let title: String
     let subtitle: String
-    let symbol: String
+    let icon: EdithIcon
     var defaultsKey: String { "suite" + id.capitalized + "Enabled" }
 }
 
@@ -14,27 +15,27 @@ enum HostMarketplaceCatalog {
         .init(
             id: "agents", title: "Agents & Terminal",
             subtitle: "Run and review coding agents, track their limits, and reach your machines.",
-            symbol: "sparkles"),
+            icon: .suiteAgents),
         .init(
             id: "utilities", title: "Mac Utilities",
             subtitle: "Updates, disk cleanup, sleep control, menu bar stats and your calendar.",
-            symbol: "switch.2"),
+            icon: .suiteUtilities),
         .init(
             id: "desk", title: "Desk",
             subtitle: "Hotkey tools: the launcher, clipboard, pickers, the notch and focus.",
-            symbol: "hand.tap"),
+            icon: .suiteDesk),
         .init(
             id: "media", title: "Media",
             subtitle: "Edit files, record your screen, style your camera, play and save media.",
-            symbol: "play.rectangle.on.rectangle"),
+            icon: .suiteMedia),
         .init(
             id: "developer", title: "Developer & Data",
             subtitle: "Databases, code growth, site audits, LaTeX and where your time goes.",
-            symbol: "cylinder.split.1x2"),
+            icon: .suiteDeveloper),
         .init(
             id: "labs", title: "Labs",
             subtitle: "Experiments and visual toys. Hidden from the main list.",
-            symbol: "flask"),
+            icon: .suiteLabs),
     ]
     static let hiddenByDefault: Set<String> = ["labs"]
     static let featuredIDs = [

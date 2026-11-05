@@ -146,6 +146,28 @@ extension VirtualCameraPageModel {
             set: { value in self.updateComposition { $0[keyPath: keyPath] = value } })
     }
 
+    var nameTagEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { self.composition.overlays.nameTag.enabled },
+            set: { enabled in
+                self.updateComposition {
+                    $0.overlays.nameTag.enabled = enabled
+                    guard enabled else { return }
+                    $0.overlays.nameTag.accent = Self.nameTagAccent(
+                        $0.overlays.nameTag.accent, theme: ThemeStore.current)
+                }
+            })
+    }
+
+    static func nameTagAccent(_ current: VirtualCameraColor, theme: AppTheme) -> VirtualCameraColor
+    {
+        guard current == .accent,
+            let accent = NSColor(theme.accent(dark: true)).usingColorSpace(.sRGB)
+        else { return current }
+        return VirtualCameraColor(
+            red: accent.redComponent, green: accent.greenComponent, blue: accent.blueComponent)
+    }
+
     func pictureBinding(_ keyPath: WritableKeyPath<VirtualCameraFraming, Double>) -> Binding<Double>
     {
         Binding(
@@ -479,8 +501,7 @@ struct VirtualCameraOverlayPanel: View {
         VStack(spacing: UIScale.pt(12)) {
             VirtualCameraPanelSection(title: "Name tag", dark: dark) {
                 VirtualCameraToggleRow(
-                    title: "Show a name tag", isOn: model.binding(\.overlays.nameTag.enabled),
-                    dark: dark)
+                    title: "Show a name tag", isOn: model.nameTagEnabledBinding, dark: dark)
                 if model.composition.overlays.nameTag.enabled {
                     EdithTextField(
                         placeholder: "Name", text: model.binding(\.overlays.nameTag.title))

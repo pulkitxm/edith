@@ -242,7 +242,7 @@ private struct CalendarEventRow: View {
             if let url = MeetingLink.url(for: event) {
                 PageChip(
                     "Join", systemImage: "video.fill", active: true,
-                    tint: CalendarText.providerColor(for: url, fallback: accentColor)
+                    tint: accentColor
                 ) {
                     onOpenMeeting(event)
                 }
@@ -455,15 +455,6 @@ enum CalendarText {
             return nil
         }
         return location
-    }
-
-    static func providerColor(for url: URL, fallback: Color) -> Color {
-        let host = url.host?.lowercased() ?? ""
-        if host.contains("zoom.us") { return Color(red: 0.18, green: 0.55, blue: 1.0) }
-        if host.contains("meet.google.com") { return Color(red: 0.0, green: 0.67, blue: 0.28) }
-        if host.contains("teams.") { return Color(red: 0.38, green: 0.39, blue: 0.65) }
-        if host.contains("webex.com") { return Color(red: 0.0, green: 0.74, blue: 0.92) }
-        return fallback
     }
 
     static func accessibilityLabel(for event: CalendarEventPayload) -> String {

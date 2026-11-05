@@ -48,13 +48,32 @@ public enum CodeStatsExportRenderer {
 }
 
 private enum ShareColors {
-    static let espresso = Color(red: 0.105, green: 0.082, blue: 0.068)
-    static let cocoa = Color(red: 0.19, green: 0.14, blue: 0.115)
-    static let rust = Color(red: 0.85, green: 0.36, blue: 0.245)
-    static let apricot = Color(red: 0.94, green: 0.56, blue: 0.42)
-    static let cream = Color(red: 0.975, green: 0.94, blue: 0.875)
-    static let sage = Color(red: 0.49, green: 0.62, blue: 0.53)
-    static let sky = Color(red: 0.49, green: 0.65, blue: 0.74)
+    private static func themed(_ house: Color, _ derived: (AppTheme) -> Color) -> Color {
+        let theme = ThemeStore.current
+        return theme == .accent ? house : derived(theme)
+    }
+
+    static var espresso: Color {
+        themed(Color(red: 0.105, green: 0.082, blue: 0.068)) { DashSkin.paper(true, theme: $0) }
+    }
+    static var cocoa: Color {
+        themed(Color(red: 0.19, green: 0.14, blue: 0.115)) { DashSkin.paper2(true, theme: $0) }
+    }
+    static var rust: Color {
+        themed(Color(red: 0.85, green: 0.36, blue: 0.245)) { $0.accent(dark: false) }
+    }
+    static var apricot: Color {
+        themed(Color(red: 0.94, green: 0.56, blue: 0.42)) { $0.accent(dark: true) }
+    }
+    static var cream: Color {
+        themed(Color(red: 0.975, green: 0.94, blue: 0.875)) { DashSkin.ink(true, theme: $0) }
+    }
+    static var sage: Color {
+        themed(Color(red: 0.49, green: 0.62, blue: 0.53)) { $0.accent(dark: true) }
+    }
+    static var sky: Color {
+        themed(Color(red: 0.49, green: 0.65, blue: 0.74)) { $0.accent(dark: true) }
+    }
 }
 
 public struct CodeStatsExportCardView: View {

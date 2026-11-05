@@ -679,7 +679,8 @@ struct DockerContainerDetail: View {
                     text: NSColor(DashSkin.inkSoft(dark)),
                     stderr: NSColor(DashSkin.warn),
                     timestamp: NSColor(DashSkin.inkFaint(dark)),
-                    background: NSColor(DashSkin.paper(dark))),
+                    background: NSColor(DashSkin.paper(dark)),
+                    selection: NSColor(DashSkin.accent(dark).opacity(0.28))),
                 follow: model.follow,
                 onScrolledAwayFromBottom: { away in
                     if away, model.follow { model.follow = false }

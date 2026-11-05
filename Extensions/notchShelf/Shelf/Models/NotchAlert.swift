@@ -9,6 +9,8 @@ enum NotchAlertPriority: Int, Comparable, Sendable, Codable {
 }
 
 struct NotchAlert: Equatable, Identifiable, Sendable, Codable {
+    static let themeTint = "theme"
+
     let id: String
     let icon: String
     let tint: String

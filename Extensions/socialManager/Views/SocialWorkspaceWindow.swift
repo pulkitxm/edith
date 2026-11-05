@@ -35,7 +35,9 @@ final class SocialWorkspaceWindow: NSObject, NSWindowDelegate {
         window.title = model.accountTitle(account)
         window.minSize = NSSize(width: 420, height: 360)
         window.contentView = NSHostingView(
-            rootView: DetachedSocialBrowser(model: model, account: account, session: session))
+            rootView: ExtensionPageHost {
+                DetachedSocialBrowser(model: model, account: account, session: session)
+            })
         let controller = SocialWorkspaceWindow(window: window, model: model, key: key)
         windows.append(controller)
         window.center()

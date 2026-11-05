@@ -31,6 +31,7 @@ export function watchedPaths(root, definition) {
   const paths = new Set([
     resolve(root, "Extensions", definition.id),
     resolve(root, "Packages/ExtensionSupport/Sources"),
+    resolve(root, "Packages/EdithIcons/Sources"),
   ]);
   for (const sources of Object.values(definition.roles))
     for (const source of sources) {

@@ -112,12 +112,8 @@ struct HostStorageItemIcon: View {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: bundle.path))
                     .resizable().interpolation(.high)
             } else {
-                Image(systemName: item.symbolName)
-                    .font(.edithText(.callout).weight(.medium))
+                PageIcon(extensionID: item.extensionID, symbolName: item.symbolName, size: 24)
                     .foregroundStyle(color)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(
-                        color.opacity(0.16), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
             }
         }
         .frame(width: UIScale.pt(26), height: UIScale.pt(26))

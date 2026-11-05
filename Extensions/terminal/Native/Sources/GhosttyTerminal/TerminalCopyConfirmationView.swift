@@ -2,6 +2,12 @@ import AppKit
 
 final class TerminalCopyConfirmationView: NSVisualEffectView {
     private let label = NSTextField(labelWithString: "● copied to clipboard")
+    var accent = NSColor.labelColor {
+        didSet {
+            label.textColor = accent
+            layer?.borderColor = accent.withAlphaComponent(0.6).cgColor
+        }
+    }
 
     override var acceptsFirstResponder: Bool { false }
 
@@ -16,11 +22,9 @@ final class TerminalCopyConfirmationView: NSVisualEffectView {
         wantsLayer = true
         layer?.cornerRadius = 5
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.systemYellow.withAlphaComponent(0.6).cgColor
         layer?.masksToBounds = true
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
-        label.textColor = .systemYellow
         label.lineBreakMode = .byTruncatingTail
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addSubview(label)

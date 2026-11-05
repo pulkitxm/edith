@@ -153,6 +153,7 @@ struct DatabaseObjectNavigatorView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .background(DatabaseListSelectionHighlightRemoval())
         .overlay {
             if explorer.filteredGroups.isEmpty {
                 Text("No matching objects")
@@ -180,6 +181,7 @@ struct DatabaseObjectNavigatorView: View {
             }
             .tag(object.identifier)
             .help(objectHelp(object))
+            .listRowBackground(selectionFill(for: object.identifier))
         }
         if group.state == .loading {
             ForEach(0..<3, id: \.self) { index in
@@ -218,6 +220,15 @@ struct DatabaseObjectNavigatorView: View {
             .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(10.5), weight: .medium))
             .foregroundStyle(theme)
+        }
+    }
+
+    @ViewBuilder
+    private func selectionFill(for object: DatabaseObjectIdentifier) -> some View {
+        if explorer.selectedObject == object {
+            RoundedRectangle(cornerRadius: UIScale.pt(6))
+                .fill(theme.opacity(dark ? 0.26 : 0.18))
+                .padding(.horizontal, UIScale.pt(8))
         }
     }
 

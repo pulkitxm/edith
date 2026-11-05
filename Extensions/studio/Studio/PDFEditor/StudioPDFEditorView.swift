@@ -44,7 +44,8 @@ struct StudioPDFEditorView: View {
                         StudioPDFOrganizeGrid(editor: editor)
                     } else {
                         StudioPDFCanvas(
-                            editor: editor, showsThumbnails: showsThumbnails && !compact)
+                            editor: editor, showsThumbnails: showsThumbnails && !compact,
+                            theme: ThemeStore.current)
                     }
                     if !compact {
                         Divider()

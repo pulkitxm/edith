@@ -367,7 +367,7 @@ struct HomebrewMaintenanceView: View {
     private var packageCard: some View {
         let packages = visiblePackages
         return HomebrewPackageTable(
-            packages: packages, selection: $model.selectedPackageID,
+            packages: packages,
             disabled: model.isBusy, accent: theme,
             perform: { action, package in
                 if action == .uninstall {
@@ -451,7 +451,6 @@ struct HomebrewPackageTable: View {
     static let versionWidth = 190.0
     static let actionsWidth = 170.0
     let packages: [HomebrewPackage]
-    @Binding var selection: String?
     @State private var columns = TableColumnCustomization<HomebrewPackage>()
     let disabled: Bool
     let accent: Color
@@ -460,7 +459,7 @@ struct HomebrewPackageTable: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Table(packages, selection: $selection, columnCustomization: $columns) {
+        Table(packages, columnCustomization: $columns) {
             SwiftUI.TableColumn("Package") { package in
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(package.displayName).font(.edithText(.body)).lineLimit(1)

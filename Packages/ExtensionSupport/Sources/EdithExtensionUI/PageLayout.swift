@@ -117,10 +117,10 @@ public struct PageScaffold<Header: View, Content: View>: View {
                     if !pinnedHeader {
                         header().environment(\.pageColumnWidth, width.maximum(compact: compact))
                             .onGeometryChange(for: CGFloat.self) {
-                            $0.size.height
-                        } action: {
-                            scrollingHeaderHeight = $0
-                        }
+                                $0.size.height
+                            } action: {
+                                scrollingHeaderHeight = $0
+                            }
                     }
                     LazyVStack(
                         alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)
@@ -358,7 +358,9 @@ extension View {
 public struct PageSectionHeader<Trailing: View>: View {
     let title: String
     let subtitle: String?
+    let icon: EdithIcon?
     @ViewBuilder let trailing: () -> Trailing
+    @Environment(\.colorScheme) private var scheme
 
     public init(
         _ title: String, subtitle: String? = nil,
@@ -366,6 +368,17 @@ public struct PageSectionHeader<Trailing: View>: View {
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.icon = nil
+        self.trailing = trailing
+    }
+
+    public init(
+        _ title: String, icon: EdithIcon, subtitle: String? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.icon = icon
         self.trailing = trailing
     }
 
@@ -390,15 +403,21 @@ public struct PageSectionHeader<Trailing: View>: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(title)
-                .font(.edithText(.headline))
-                .accessibilityAddTraits(.isHeader)
-            if let subtitle {
-                Text(subtitle)
-                    .font(.edithText(.callout))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            if let icon {
+                PageGuideBadge(icon, size: 24, tint: DashSkin.inkSoft(scheme == .dark))
+                    .flushLeading()
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title)
+                    .font(.edithText(.headline))
+                    .accessibilityAddTraits(.isHeader)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.edithText(.callout))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

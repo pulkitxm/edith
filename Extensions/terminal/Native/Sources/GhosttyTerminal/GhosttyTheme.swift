@@ -53,6 +53,17 @@ public struct GhosttyTheme: Equatable, Sendable {
         return String(format: "#%02x%02x%02x", red, green, blue)
     }
 
+    var cursorColor: NSColor? {
+        var digits = cursor
+        if digits.hasPrefix("#") { digits.removeFirst() }
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xff) / 255,
+            green: CGFloat((value >> 8) & 0xff) / 255,
+            blue: CGFloat(value & 0xff) / 255,
+            alpha: 1)
+    }
+
     var configuration: String {
         var lines = [
             "background = \(background)",

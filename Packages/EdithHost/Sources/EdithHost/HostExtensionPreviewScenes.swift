@@ -259,9 +259,7 @@ struct HostExtensionPreviewScene: View {
                 .background(DashSkin.paper(dark), in: corners(7))
                 .overlay { corners(7).strokeBorder(line) }
             symbol("arrow.right", size: 8, tint: faint)
-            symbol("sparkles", size: 13, tint: .white)
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                .background(accent, in: Circle())
+            EdithIconView(.jev, size: UIScale.pt(20)).foregroundStyle(accent)
             symbol("arrow.right", size: 8, tint: faint)
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 label("yes", size: 9, tint: accent)

@@ -62,7 +62,8 @@ ${dataCases(icons, grid, key)}
         }
     }
 `;
-  return `import Foundation
+  return `// swift-format-ignore-file
+import Foundation
 
 public enum EdithIcon: String, CaseIterable, Sendable {
 ${cases}

@@ -225,13 +225,14 @@ struct HerdrArrangementThumbnail: View {
     var highlightedSlot: Int? = 0
 
     var body: some View {
+        let accent = DashSkin.accent(dark)
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4)
             let frames = template.slotFrames(count: count, in: rect, gap: 2)
             for (index, frame) in frames.enumerated() {
                 let tint =
                     index == highlightedSlot
-                    ? DashSkin.accent(dark).opacity(selected ? 0.85 : 0.55)
+                    ? accent.opacity(selected ? 0.85 : 0.55)
                     : DashSkin.ink(dark).opacity(selected ? 0.28 : 0.16)
                 context.fill(Path(roundedRect: frame, cornerRadius: 2), with: .color(tint))
             }
@@ -240,7 +241,7 @@ struct HerdrArrangementThumbnail: View {
         .widgetBar(
             cornerRadius: 7,
             fill: DashSkin.paper2(dark),
-            stroke: selected ? DashSkin.accent(dark).opacity(0.7) : DashSkin.line(dark),
+            stroke: selected ? accent.opacity(0.7) : DashSkin.line(dark),
             strokeWidth: selected ? 1.4 : 1)
     }
 }

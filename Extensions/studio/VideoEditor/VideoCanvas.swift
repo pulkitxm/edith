@@ -154,7 +154,8 @@ struct VideoCanvasHandle: View {
             Rectangle().fill(.clear)
                 .overlay {
                     Rectangle().strokeBorder(
-                        selected ? .cyan : .white.opacity(0.25), lineWidth: selected ? 2 : 1)
+                        selected ? Color.themeAccent : Color.white.opacity(0.25),
+                        lineWidth: selected ? 2 : 1)
                 }
                 .contentShape(Rectangle())
         }
@@ -168,7 +169,7 @@ struct VideoCanvasHandle: View {
                             in: CGRect(origin: .zero, size: geometry.size))
                         RoundedRectangle(cornerRadius: 2).fill(.white)
                             .frame(width: UIScale.pt(10), height: UIScale.pt(10))
-                            .overlay { RoundedRectangle(cornerRadius: 2).stroke(.cyan) }
+                            .overlay { RoundedRectangle(cornerRadius: 2).stroke(Color.themeAccent) }
                             .position(anchor)
                     }
                 }

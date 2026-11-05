@@ -66,7 +66,7 @@ struct HostOnboardingInstallView: View {
     private func row(_ entry: HostExtension) -> some View {
         let state = model.states[entry.id] ?? .waiting
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            HostOnboardingIcon(symbolName: entry.symbolName, size: 32)
+            HostExtensionIcon(entry: entry, size: 32)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(entry.title).font(.edithText(.callout)).fontWeight(.medium)
                 switch state {
@@ -131,7 +131,7 @@ struct HostOnboardingFinishView: View {
 
     private var empty: some View {
         VStack(spacing: UIScale.pt(20)) {
-            PageGuideBadge(symbolName: "checkmark", size: compact ? 48 : 56)
+            PageGuideBadge(.brand, size: compact ? 40 : 60)
             VStack(spacing: UIScale.pt(8)) {
                 Text("Edith is ready").font(.edithText(.title2)).fontWeight(.bold)
                     .accessibilityAddTraits(.isHeader)
@@ -151,7 +151,7 @@ struct HostOnboardingFinishView: View {
     private var installed: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "checkmark", size: compact ? 48 : 56)
+                PageGuideBadge(.brand, size: compact ? 40 : 60).flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("You are all set").font(.edithText(.title2)).fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)
@@ -203,7 +203,7 @@ struct HostOnboardingFinishView: View {
     private func row(_ entry: HostExtension) -> some View {
         let pages = model.destinations(for: entry)
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            HostOnboardingIcon(symbolName: entry.symbolName, size: HostOnboardingFinishRow.icon)
+            HostExtensionIcon(entry: entry, size: HostOnboardingFinishRow.icon)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(entry.title).font(.edithText(.headline))
                 Text(model.tagline(for: entry)).font(.edithText(.caption))

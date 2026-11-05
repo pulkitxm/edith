@@ -248,7 +248,9 @@ public struct EdithCheckboxStyle: ToggleStyle {
 
 extension ToggleStyle where Self == EdithCheckboxStyle {
     public static var edithCheckbox: EdithCheckboxStyle { EdithCheckboxStyle() }
-    public static var edithCheckboxMark: EdithCheckboxStyle { EdithCheckboxStyle(showsLabel: false) }
+    public static var edithCheckboxMark: EdithCheckboxStyle {
+        EdithCheckboxStyle(showsLabel: false)
+    }
 }
 
 private struct EdithCheckboxBody: View {

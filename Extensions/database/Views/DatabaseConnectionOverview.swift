@@ -41,7 +41,7 @@ struct DatabaseConnectionOverview: View {
                     .lineLimit(2)
                 if connection.isFavorite {
                     Image(systemName: "star.fill")
-                        .foregroundStyle(DashSkin.gold)
+                        .foregroundStyle(palette.accent)
                         .accessibilityLabel("Favorite connection")
                 }
                 Spacer(minLength: 0)

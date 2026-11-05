@@ -1,3 +1,4 @@
+// swift-format-ignore-file
 import Foundation
 
 public enum EdithIcon: String, CaseIterable, Sendable {

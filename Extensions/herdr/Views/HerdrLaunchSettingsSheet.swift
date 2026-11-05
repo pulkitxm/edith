@@ -338,6 +338,7 @@ struct ShellInputEditor: NSViewRepresentable {
     @Environment(\.isEnabled) private var isEnabled
     @Binding var text: String
     let label: String
+    var theme = ThemeStore.current
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
@@ -368,6 +369,9 @@ struct ShellInputEditor: NSViewRepresentable {
         editor.isEditable = isEnabled
         editor.font = .monospacedSystemFont(ofSize: UIScale.pt(11), weight: .regular)
         editor.textColor = .labelColor
+        let accent = NSColor(theme.accent)
+        editor.insertionPointColor = accent
+        editor.selectedTextAttributes = [.backgroundColor: accent.withAlphaComponent(0.28)]
         editor.setAccessibilityLabel(label)
         if editor.string != text { editor.string = text }
     }

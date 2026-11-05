@@ -1,3 +1,4 @@
+import EdithExtensionUI
 import Foundation
 import SwiftUI
 
@@ -23,7 +24,8 @@ enum DashPalette {
 
     static func categorical(_ index: Int, dark: Bool) -> Color {
         let c = dark ? darkColors : lightColors
-        return c[((index % c.count) + c.count) % c.count]
+        let slot = ((index % c.count) + c.count) % c.count
+        return slot == 0 ? DashSkin.accent(dark) : c[slot]
     }
 
     static func modelColor(_ index: Int?, dark: Bool) -> Color {

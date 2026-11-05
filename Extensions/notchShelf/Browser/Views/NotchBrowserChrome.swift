@@ -132,7 +132,7 @@ struct NotchBrowserTabItem: View {
     }
 
     private var background: Color {
-        if selected { return .white.opacity(0.17) }
+        if selected { return DashSkin.accent(true).opacity(0.3) }
         return hovering ? .white.opacity(0.08) : .clear
     }
 
@@ -259,7 +259,7 @@ struct NotchBrowserToolbar: View {
         .background(.white.opacity(editing ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(.white.opacity(editing ? 0.25 : 0), lineWidth: 1)
+                .strokeBorder(DashSkin.accent(true).opacity(editing ? 0.8 : 0), lineWidth: 1)
         )
     }
 
@@ -267,7 +267,6 @@ struct NotchBrowserToolbar: View {
         if let tab, tab.isLoading {
             LoadingProgress(value: max(0.08, tab.progress))
                 .progressViewStyle(.linear)
-                .tint(.white.opacity(0.75))
                 .frame(height: 2)
                 .scaleEffect(x: 1, y: 0.5, anchor: .bottom)
                 .padding(.horizontal, NotchBrowserGeometry.chromePadding)

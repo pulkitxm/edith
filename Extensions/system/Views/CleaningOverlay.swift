@@ -31,6 +31,7 @@ struct CleaningOverlayView: View {
             Color.black.opacity(0.6).ignoresSafeArea()
             VStack(spacing: 18) {
                 Image(systemName: "keyboard.fill").font(.system(size: 52))
+                    .foregroundStyle(themeColor(themeName))
                 if store.phase == .cleaning {
                     Text("Keyboard locked. Wipe it clean.").font(.edithText(.title))
                     Text(

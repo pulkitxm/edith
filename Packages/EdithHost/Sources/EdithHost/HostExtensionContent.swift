@@ -120,7 +120,8 @@ struct HostExtensionContent: View {
             } else if presenter == nil {
                 ContentUnavailableView(
                     title, systemImage: "puzzlepiece.extension",
-                    description: Text("The extension view is not connected."))
+                    description: Text("The extension view is not connected.")
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error {
                 ContentUnavailableView {

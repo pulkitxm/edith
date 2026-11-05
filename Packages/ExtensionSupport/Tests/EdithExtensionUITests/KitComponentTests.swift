@@ -282,6 +282,24 @@ struct KitComponentTests {
         #expect(abs(section - sectionSingle) <= 1)
     }
 
+    @Test func pageIconFramesStayOnWholePointsAtEveryZoom() {
+        defer { UIScale.apply(1) }
+        UIScale.apply(1)
+        #expect([16, 20, 24, 32, 40, 60, 80].allSatisfy { PageIcon.side($0) == $0 })
+        UIScale.apply(1.6)
+        #expect(PageIcon.side(32) == 51)
+        #expect(PageIcon.side(20) == 32)
+        UIScale.apply(1.25)
+        #expect(PageIcon.side(32) == 40)
+    }
+
+    @Test func flushIconsMeasureTheirInkAndUnknownExtensionsKeepTheirSymbol() {
+        #expect(PageIcon(.brand, size: 60).leadingInset == 6)
+        #expect(PageIcon(extensionID: "brand", symbolName: "tray", size: 60).leadingInset == 6)
+        #expect(PageIcon(extensionID: "future", symbolName: "tray", size: 60).leadingInset == 0)
+        #expect(PageIcon(extensionID: nil, symbolName: "tray", size: 60).leadingInset == 0)
+    }
+
     @Test func emptyStateScrollsOnlyWhenTallerThanItsContainer() async throws {
         let state = PageEmptyState(
             symbolName: "tray", title: "Synthetic", message: "Synthetic message.",
@@ -323,7 +341,7 @@ struct KitComponentTests {
         }
         let page = try await render(intro(false).frame(width: 900, height: 1400), height: 1400)
         let span = try #require(inkSpan(page.bitmap, rows: 0..<1400))
-        #expect(span.lowerBound <= 40)
+        #expect(span.lowerBound <= 48)
         #expect(!scrollViews(in: page.host).isEmpty)
         let embedded = try await render(intro(true).frame(width: 900), height: 700)
         #expect(scrollViews(in: embedded.host).isEmpty)

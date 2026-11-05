@@ -135,10 +135,10 @@ struct StudioProjectRow: View {
                 HStack(spacing: UIScale.pt(10)) {
                     Image(systemName: "film.stack")
                         .font(.system(size: UIScale.pt(16)))
-                        .foregroundStyle(StudioPalette.tint(for: .video))
+                        .foregroundStyle(DashSkin.accent(scheme == .dark))
                         .frame(width: UIScale.pt(40), height: UIScale.pt(40))
                         .background(
-                            StudioPalette.tint(for: .video).opacity(0.12),
+                            DashSkin.accent(scheme == .dark).opacity(0.12),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(project.title)

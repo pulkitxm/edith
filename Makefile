@@ -183,7 +183,7 @@ ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
 ci-swift-lint:
-	rg --files Packages/EdithHost Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
+	rg --files Packages/EdithHost Packages/EdithIcons Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
 
 ci-swift-build:
 	EDITH_RELEASE_ALLOW_DEV_SIGNING=1 ./build.sh --no-open --release
@@ -192,7 +192,7 @@ ci-swift-build:
 ci-swift-test:
 	$(MAKE) ci-marketplace-host ci-music-native
 
-.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs
+.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-edith-icons
 
 .PHONY: ci-host-invocation
 ci-host-invocation:
@@ -313,6 +313,11 @@ ci-extension-usage-accounts:
 	@test "$$GITHUB_ACTIONS" = true && test "$$RUNNER_ENVIRONMENT" = github-hosted && test "$$RUNNER_OS" = macOS
 	$(call PREPARE_ARGUMENT_PARSER,Extensions/usage)
 	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/Data/usage" "$$fixture/ExtensionState"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/Data/usage" EDITH_EXTENSION_STATE_ROOT="$$fixture/ExtensionState" EDITH_EXTENSION_ID=usage EDITH_APPLICATION_IDENTIFIER=com.pulkit.edith.dev.accounts-contracts EDITH_SHARED_DEFAULTS_SUITE="edith.accounts.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Extensions/usage --filter 'UsageAccount|ClaudeAccountLimits|ClaudeLimitsReaderTests|LimitsProviderCollectionTests|UsageLimitsOwnershipTests|UsageWorkerControllerTests|UsageBackupTests|UsageSurfaceTests|LimitsStatusItemTests|ClaudeLimitsLoginTests|AccountQuotaCacheTests|UsageSelectionProjectionTests' --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-edith-icons:
+	swift format lint --strict --parallel --recursive Packages/EdithIcons/Sources Packages/EdithIcons/Tests Packages/EdithIcons/Package.swift
+	cd Packages/EdithIcons && bun scripts/generate.ts --check
+	swift test --package-path Packages/EdithIcons --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 ci-extension-support:
 	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/socialManager Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/docs Extensions/latex Extensions/usage Extensions/companion Extensions/bifrost Extensions/lidAwake Extensions/downloads Extensions/seoAudit Extensions/fixtureSupport Extensions/Package.swift Packages/EdithDocsWorker/Sources Packages/EdithDocsWorker/Tests Packages/EdithDocsWorker/Package.swift Extensions/hinge

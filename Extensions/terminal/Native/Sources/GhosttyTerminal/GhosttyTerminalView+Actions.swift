@@ -117,6 +117,7 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
         layer?.cornerRadius = 8
         layer?.masksToBounds = true
         field.placeholderString = "Find in terminal"
+        field.focusRingType = .none
         field.delegate = self
         field.onClose = { [weak self] in self?.onClose?() }
         field.onNext = { [weak self] previous in self?.onNavigate?(previous) }
@@ -209,33 +210,74 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     }
 }
 
-final class TerminalProgressStrip: NSProgressIndicator {
+final class TerminalProgressStrip: NSView {
+    private static let sweepKey = "sweep"
+    private let fill = CALayer()
+    private var fraction: CGFloat = 0
+    private var isIndeterminate = false
+
+    var accent = NSColor.labelColor {
+        didSet { fill.backgroundColor = accent.cgColor }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        style = .bar
-        minValue = 0
-        maxValue = 100
+        wantsLayer = true
         isHidden = true
+        layer?.addSublayer(fill)
+        fill.backgroundColor = accent.cgColor
+        setAccessibilityElement(true)
+        setAccessibilityRole(.progressIndicator)
     }
 
     required init?(coder: NSCoder) { nil }
 
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        arrangeFill()
+    }
+
     func update(_ state: ghostty_action_progress_report_state_e, progress: Int) {
         switch state {
         case GHOSTTY_PROGRESS_STATE_REMOVE:
-            stopAnimation(nil)
             isHidden = true
+            show(indeterminate: false, fraction: 0)
         case GHOSTTY_PROGRESS_STATE_INDETERMINATE:
             isHidden = false
-            isIndeterminate = true
-            startAnimation(nil)
+            show(indeterminate: true, fraction: 0)
         default:
-            stopAnimation(nil)
             isHidden = false
-            isIndeterminate = progress < 0
-            doubleValue = Double(max(0, progress))
-            if isIndeterminate { startAnimation(nil) }
+            show(indeterminate: progress < 0, fraction: CGFloat(max(0, min(progress, 100))) / 100)
         }
+    }
+
+    private func show(indeterminate: Bool, fraction: CGFloat) {
+        isIndeterminate = indeterminate
+        self.fraction = fraction
+        setAccessibilityValue(indeterminate ? nil : Int((fraction * 100).rounded()))
+        arrangeFill()
+    }
+
+    private func arrangeFill() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        fill.removeAnimation(forKey: Self.sweepKey)
+        let width = bounds.width
+        guard isIndeterminate else {
+            fill.frame = CGRect(x: 0, y: 0, width: width * fraction, height: bounds.height)
+            return
+        }
+        let segment = width * 0.28
+        fill.frame = CGRect(x: 0, y: 0, width: segment, height: bounds.height)
+        let sweep = CABasicAnimation(keyPath: "position.x")
+        sweep.fromValue = -segment / 2
+        sweep.toValue = width + segment / 2
+        sweep.duration = 1.2
+        sweep.repeatCount = .infinity
+        fill.add(sweep, forKey: Self.sweepKey)
     }
 }
 

@@ -119,7 +119,7 @@ struct HostExtensionReview: View {
 
     private var settingsHeader: some View {
         HStack(spacing: UIScale.pt(12)) {
-            HostExtensionIcon(symbolName: entry.symbolName, size: 36)
+            HostExtensionIcon(entry: entry, size: 40)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(entry.title).font(.edithText(.headline)).lineLimit(1)
                     .accessibilityAddTraits(.isHeader)

@@ -40,6 +40,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
     let controls: LaTeXEditorControls
     let dark: Bool
     let editable: Bool
+    var theme = ThemeStore.current
     var documentID = ""
     var onSave: () -> Void = {}
 
@@ -113,6 +114,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
             guard ready, let view else { return }
             var options: [String: Any] = [
                 "dark": parent.dark, "editable": parent.editable,
+                "colors": QuinjetDiffColors.options(dark: parent.dark, theme: parent.theme),
                 "fontSize": UIScale.pt(parent.controls.fontSize),
                 "wrapsLines": parent.controls.wrapsLines, "documentID": parent.documentID,
             ]

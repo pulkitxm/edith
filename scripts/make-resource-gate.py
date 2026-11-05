@@ -39,6 +39,7 @@ EXACT = {
     "ci-marketplace-runtime": "swift-test",
     "extension-dev": "swift-test",
     "ci-extension-support": "swift-test",
+    "ci-edith-icons": "swift-test",
     "ci-extension-database-mutation": "swift-test",
     "ci-extension-database-executor": "swift-test",
     "ci-extension-keep-awake-compile": "swift-test",

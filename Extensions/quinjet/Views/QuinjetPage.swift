@@ -408,9 +408,7 @@ private struct QuinjetTerminalWorkspace: View {
     }
 
     private var externalWorkspace: some View {
-        let palette = TerminalPalette.quinjet(
-            theme: tab.launchConfiguration.theme,
-            appearance: tab.launchConfiguration.appearance)
+        let palette = TerminalPalette.quinjet(configuration: tab.launchConfiguration)
         return ZStack {
             Color(nsColor: palette.background)
             VStack(spacing: UIScale.pt(20)) {

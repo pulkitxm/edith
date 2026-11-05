@@ -34,7 +34,7 @@ final class StudioWorkflowDraft: Identifiable {
             jobs.append(
                 StudioJob(
                     tool: tool, inputs: [],
-                    settings: step.settings.merged(over: tool.defaultSettings)))
+                    settings: step.settings.merged(over: tool.themedDefaultSettings())))
         }
         return jobs
     }

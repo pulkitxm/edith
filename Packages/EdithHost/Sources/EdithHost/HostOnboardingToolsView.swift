@@ -142,8 +142,8 @@ struct HostOnboardingToolsView: View {
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isOpen ? 90 : 0))
                             .frame(width: UIScale.pt(20))
-                        HostOnboardingIcon(
-                            symbolName: suite?.symbol ?? "square.grid.2x2", size: 28)
+                        PageGuideBadge(
+                            suite?.icon ?? .workflowCustom, size: 32, tint: DashSkin.inkSoft(dark))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(title).font(.edithText(.headline))
                             Text(
@@ -189,7 +189,7 @@ struct HostOnboardingToolsView: View {
                 set: { _ in model.toggle(entry.id) })
         ) {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                HostOnboardingIcon(symbolName: entry.symbolName, size: 28)
+                HostExtensionIcon(entry: entry, size: 32, tint: DashSkin.inkSoft(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(entry.title).font(.edithText(.callout)).fontWeight(.medium)
                         .lineLimit(1)

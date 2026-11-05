@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import CoreGraphics
 import Foundation
 import SwiftUI
@@ -78,6 +79,7 @@ public enum BifrostPanelMetrics {
     public static let scrimOpacity: Double = 0.84
 
     public static var scrim: Color { Color.black.opacity(scrimOpacity) }
+    public static var selection: Color { DashSkin.accent(true).opacity(0.3) }
 
     public static var nominalHeight: CGFloat {
         headerHeight + listPadding + footerHeight + sectionHeaderHeight + 5 * rowHeight

@@ -118,9 +118,9 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         StatusItemMenu.handleClick(on: item) {
             let readings = SystemMenuReadings(cpu: snapshot.cpu, memory: snapshot.memory)
             panel.show(
-                from: item, title: "System",
+                from: item, title: "Menu Bar Stats",
                 actions: [
-                    .init(title: "Open System…") { ExtensionPresentation.showWindow() }
+                    .init(title: "Open Edith") { ExtensionPresentation.showWindow() }
                 ]
             ) {
                 readings

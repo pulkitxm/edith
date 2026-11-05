@@ -145,7 +145,7 @@ struct StudioToolCard: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(12))
                     .strokeBorder(
                         hovering
-                            ? StudioPalette.tint(for: tool).opacity(0.6)
+                            ? DashSkin.accent(scheme == .dark).opacity(0.6)
                             : DashSkin.line(scheme == .dark))
             )
             .offset(y: hovering && !reduceMotion ? -1 : 0)

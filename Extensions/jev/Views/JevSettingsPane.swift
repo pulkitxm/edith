@@ -14,7 +14,7 @@ struct JevSettingsPane: View {
             featuresSection
             activitySection
         }
-        .edithForm()
+        .settingsForm()
         .pageTask {
             if automaticActionsEnabled { model.load(probe: false) }
         }
@@ -121,6 +121,7 @@ struct JevSettingsPane: View {
             HStack(spacing: UIScale.pt(4)) {
                 Text("Edith calls Jev only while a key is saved. The key stays in your Keychain.")
                 Link("Get a key", destination: URL(string: "https://console.typesafe.ai")!)
+                    .foregroundStyle(Color.themeAccent)
             }
             .font(.edithText(.caption))
             .foregroundStyle(.secondary)

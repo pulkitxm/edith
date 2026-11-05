@@ -76,7 +76,7 @@ struct CalendarNotchScene: View {
                 }
                 .buttonStyle(.edith(.borderless))
                 .font(.edithText(.caption).weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.accent(true))
             }
         }
         .padding(presentation.padding)
@@ -131,7 +131,7 @@ struct CalendarNotchScene: View {
                 } label: {
                     Image(systemName: "video.fill")
                 }
-                .buttonStyle(.edith(.iconOnly))
+                .buttonStyle(.edith(.iconOnly, tint: DashSkin.accent(true)))
                 .help("Join meeting").accessibilityLabel("Join meeting")
             }
         }

@@ -141,7 +141,7 @@ import Testing
                 ) {
                     EmbeddedMusicDetailSheet(
                         track: track, availableSize: CGSize(width: width, height: height),
-                        theme: .accentColor, beginRename: false, onRename: { _ in },
+                        theme: .themeAccent, beginRename: false, onRename: { _ in },
                         onDelete: {}, onOpenFolder: { _ in }, onClose: {})
                 }
                 _ = try await session.render(

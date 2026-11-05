@@ -7,6 +7,9 @@ struct VideoTimeline: View {
     @State private var scale = 80.0
     @State private var snapping = true
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
 
     private struct Item: Identifiable {
         let id: String
@@ -45,22 +48,26 @@ struct VideoTimeline: View {
                 ZStack(alignment: .topLeading) {
                     VStack(alignment: .leading, spacing: 6) {
                         ruler(width: width)
-                        lane("VIDEO", color: .blue, items: clips, width: width, snaps: snaps)
+                        lane(
+                            "VIDEO", color: DashSkin.accent(dark), items: clips, width: width,
+                            snaps: snaps)
                         zoomLane(width: width)
                         ForEach(packed(annotations), id: \.first?.id) { items in
                             lane(
-                                "OVERLAYS", color: .orange, items: items, width: width, snaps: snaps
-                            )
+                                "OVERLAYS", color: DashSkin.heat(3, dark), items: items,
+                                width: width, snaps: snaps)
                         }
                         ForEach(audioLanes, id: \.first?.id) { items in
-                            lane("AUDIO", color: .green, items: items, width: width, snaps: snaps)
+                            lane(
+                                "AUDIO", color: DashSkin.heat(1, dark), items: items,
+                                width: width, snaps: snaps)
                         }
                         lane(
-                            "SPEED", color: .purple, items: regions("speedRegions"), width: width,
-                            snaps: snaps)
-                        lane(
-                            "CAMERA", color: .pink, items: regions("cameraFullscreenRegions"),
+                            "SPEED", color: DashSkin.heat(2, dark), items: regions("speedRegions"),
                             width: width, snaps: snaps)
+                        lane(
+                            "CAMERA", color: DashSkin.heat(3, dark),
+                            items: regions("cameraFullscreenRegions"), width: width, snaps: snaps)
                     }
                     VideoTimelinePlayhead(model: model, scale: scale)
                 }
@@ -136,7 +143,7 @@ struct VideoTimeline: View {
             )
             .frame(width: UIScale.pt(90))
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 5).fill(Color.blue.opacity(0.06))
+                RoundedRectangle(cornerRadius: 5).fill(Color.themeAccent.opacity(0.06))
                 ForEach(model.project?.zooms ?? []) { zoom in
                     let start = model.outputTime(forRulerTime: zoom.startMs / 1000)
                     let end = model.outputTime(forRulerTime: zoom.endMs / 1000)
@@ -274,9 +281,10 @@ struct VideoTimeline: View {
 private struct VideoTimelinePlayhead: View {
     let model: VideoEditorModel
     let scale: Double
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Rectangle().fill(.red).frame(width: UIScale.pt(1.5))
+        Rectangle().fill(DashSkin.accentDeep(scheme == .dark)).frame(width: UIScale.pt(1.5))
             .offset(x: UIScale.pt(90) + model.playhead * scale).allowsHitTesting(false)
     }
 }

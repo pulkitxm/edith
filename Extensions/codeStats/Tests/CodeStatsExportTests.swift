@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
@@ -90,6 +91,42 @@ import Testing
         #expect(!text.contains("@"))
         #expect(!text.contains("email"))
         #expect(!text.contains("subject"))
+    }
+
+    @MainActor private func warmPixels(theme: AppTheme) async throws -> Int {
+        let defaults = ExtensionScope.process.defaults()
+        defaults.set(theme.rawValue, forKey: AppStorageKeys.General.theme)
+        try await Task.sleep(for: .milliseconds(120))
+        var count = 0
+        for card in CodeStatsExportCard.allCases {
+            let data = try CodeStatsExportRenderer.pngData(
+                snapshot: snapshot(), card: card, scale: 1)
+            if let path = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
+                try data.write(
+                    to: URL(fileURLWithPath: path).appendingPathComponent(
+                        "code-stats-share-\(theme.rawValue)-\(card.rawValue).png"))
+            }
+            let bitmap = try #require(NSBitmapImageRep(data: data))
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 3) {
+                for y in stride(from: 0, to: bitmap.pixelsHigh, by: 3) {
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
+                        continue
+                    }
+                    if color.redComponent - color.blueComponent > 0.03 { count += 1 }
+                }
+            }
+        }
+        return count
+    }
+
+    @Test @MainActor func exportCardsFollowTheSelectedThemeInsteadOfTheHouseEspresso() async throws {
+        let defaults = ExtensionScope.process.defaults()
+        let prior = defaults.string(forKey: AppStorageKeys.General.theme)
+        defer { defaults.set(prior, forKey: AppStorageKeys.General.theme) }
+        let house = try await warmPixels(theme: .accent)
+        let themed = try await warmPixels(theme: .teal)
+        #expect(house > 10_000)
+        #expect(themed * 8 < house)
     }
 
     @Test(arguments: CodeStatsExportCard.allCases)

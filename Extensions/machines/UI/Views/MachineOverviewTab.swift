@@ -205,14 +205,14 @@ struct NetworkSparkline: View {
             )
             .fill(
                 LinearGradient(
-                    colors: [DashSkin.networkDownload.opacity(0.18), .clear],
+                    colors: [Color.themeAccent.opacity(0.18), .clear],
                     startPoint: .top, endPoint: .bottom))
             SparkShape(
                 samples: SparkSamples(values: downloadValues), maximum: maximum,
                 capacity: MachineSession.historyLength, filled: false
             )
             .stroke(
-                DashSkin.networkDownload,
+                Color.themeAccent,
                 style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
             SparkShape(
                 samples: SparkSamples(values: uploadValues), maximum: maximum,
@@ -300,7 +300,7 @@ struct NetworkMetricCard: View {
                 HStack(spacing: UIScale.pt(12)) {
                     speed(
                         "Download", value: measurement?.downloadBitsPerSecond,
-                        systemImage: "arrow.down", color: DashSkin.networkDownload)
+                        systemImage: "arrow.down", color: Color.themeAccent)
                     speed(
                         "Upload", value: measurement?.uploadBitsPerSecond,
                         systemImage: "arrow.up", color: DashSkin.networkUpload)
