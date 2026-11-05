@@ -7,6 +7,7 @@ import Foundation
     @TaskLocal static var streamEngine: VirtualCameraEngine?
     static var currentEngine: VirtualCameraEngine? { streamEngine ?? engine }
     static var lifecycle: ((Bool) async throws -> [String])?
+    static var extensionManager: VirtualCameraExtensionManager?
 }
 @MainActor enum CameraCLIExecution {
     private static var executing = false

@@ -5,8 +5,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Carbon.HIToolbox
 import Foundation
-import CoreMedia
-import CoreMediaIO
+import Security
 import SwiftUI
 
 @MainActor
@@ -56,7 +55,6 @@ final class CameraService: ExtensionService {
         if command.hasPrefix("camera.ui.") {
             return try await worker.ui.execute(command, payload: payload)
         }
-        if command == "camera.fixture" { return try worker.fixtureRequest(payload) }
         if command == "camera.snapshot" {
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
             return try JSONEncoder().encode(worker.engine.snapshot())
@@ -272,9 +270,8 @@ enum CameraCarrierLaunchEnvironment {
     private let source: URL
     private let installed: URL
     private let fixture: Bool
-    private let fixtureHardware: CameraOBSFixtureHardware?
     private let actions = VirtualCameraActionBridge()
-    private let manager: VirtualCameraExtensionManager
+    let manager: VirtualCameraExtensionManager
     private var drainTask: Task<Void, Never>?
     private var microphoneRemoval: Task<Void, Never>?
     private(set) var draining = false
@@ -294,8 +291,6 @@ enum CameraCarrierLaunchEnvironment {
             host.hasPrefix("com.pulkit.edith.tests.")
             && ExtensionEnvironment.values["EDITH_EXTENSION_FIXTURE_HOME"] != nil
         let source = self.source, fixture = self.fixture
-        fixtureHardware = fixture ? CameraOBSFixtureHardware() : nil
-        let hardware = fixtureHardware
         let version =
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         client = CameraCarrierClient(
@@ -337,32 +332,22 @@ enum CameraCarrierLaunchEnvironment {
         let client = self.client
         var environment = VirtualCameraEngineEnvironment.live
         if fixture {
-            environment.applicationNotifications = { nil }
-            environment.authorization = { .denied };
-            environment.obsRunning = { hardware?.obsRunning == true }
-            environment.frontmostApplication = {
-                VirtualCameraRunningApplication(pid: 303303, bundleIdentifier: "synthetic.meeting")
-            }; environment.sources = { [] }
+            environment.authorization = { .denied }
+            environment.sources = { [] }
         }
         let bus = VirtualCameraPreviewBus()
-        var state = VirtualCameraStore.load(defaults)
-        state.output = .obs
-        VirtualCameraStore.save(state, to: defaults)
-        if let hardware {
-            engine = VirtualCameraEngine(
-                edithSink: VirtualCameraSink(
-                    deviceUID: "synthetic-no-custom-provider", hardware: hardware),
-                obsSink: VirtualCameraSink(
-                    deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware),
-                state: state, environment: environment, previewBus: bus)
-        } else {
-            engine = VirtualCameraEngine(state: state, environment: environment, previewBus: bus)
-        }
+        engine = VirtualCameraEngine(
+            edithSink: VirtualCameraSink(extensionIdentifier: host + ".camera"),
+            state: VirtualCameraStore.load(defaults), environment: environment, previewBus: bus)
         surface = CameraSurface(engine: engine)
         manager = VirtualCameraExtensionManager(
             environment: .init(
-                bundleURL: bundle.bundleURL.deletingLastPathComponent(),
-                hasInstallEntitlement: { false }, deviceVisible: { false }))
+                bundleURL: source,
+                hasInstallEntitlement: { fixture || Self.entitledCarrier(source) },
+                deviceVisible: {
+                    !fixture && VirtualCameraSink(extensionIdentifier: host + ".camera").isInstalled
+                },
+                canPrepareLocation: true), client: client)
         model = VirtualCameraPageModel(
             defaults: defaults, extensionManager: manager,
             accessProvider: environment.authorization, sourceProvider: environment.sources,
@@ -374,6 +359,7 @@ enum CameraCarrierLaunchEnvironment {
             || ExtensionEnvironment.values["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
         if !draining {
             engine.start(); actions.install(engine: engine)
+            CameraCLIEnvironment.extensionManager = manager
             installHotKey()
             if !fixture {
                 let privilege = ExtensionPrivilegedClient(
@@ -405,13 +391,15 @@ enum CameraCarrierLaunchEnvironment {
         draining = true
         microphoneRemoval?.cancel()
         HotKeyRegistrar.shutdown()
+        if CameraCLIEnvironment.extensionManager === manager {
+            CameraCLIEnvironment.extensionManager = nil
+        }
         ui.beginSuspension()
         model.beginSuspension()
         manager.beginSuspension()
         engine.beginSuspension()
         if drainTask == nil {
             drainTask = Task { [self] in
-                CameraExtensionBridge.shutdown()
                 await actions.shutdown()
                 await ui.shutdown()
                 await model.shutdown()
@@ -436,18 +424,18 @@ enum CameraCarrierLaunchEnvironment {
         defaults.removeObject(forKey: Self.pendingKey)
     }
 
-    func fixtureRequest(_ payload: Data) throws -> Data {
-        guard fixture, let hardware = fixtureHardware, payload.count <= 1024,
-            let values = try JSONSerialization.jsonObject(with: payload) as? [String: Bool],
-            Set(values.keys).isSubset(of: ["watching", "obsRunning", "applicationQuit"])
-        else { throw ExtensionPeerError.invalidRequest }
-        if let watching = values["watching"] { hardware.watching = watching }
-        if let running = values["obsRunning"] { hardware.obsRunning = running }
-        engine.refreshExtension()
-        if values["applicationQuit"] == true { engine.applicationQuit(303303) }
-        return try JSONEncoder().encode(engine.snapshot())
+    private static func entitledCarrier(_ source: URL) -> Bool {
+        var code: SecStaticCode?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(source as CFURL, [], &code) == errSecSuccess, let code,
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess,
+            let values = information as? [String: Any],
+            let entitlements = values[kSecCodeInfoEntitlementsDict as String] as? [String: Any]
+        else { return false }
+        return entitlements[VirtualCameraExtensionManager.installEntitlement] as? Bool == true
     }
-
 }
 
 @MainActor
@@ -465,40 +453,4 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(makeCameraRuntime()).toOpaque())
         })
-}
-
-private final class CameraOBSFixtureHardware: VirtualCameraHardware, @unchecked Sendable {
-    var watching = false
-    var obsRunning = false
-    private var queues: [CMIOStreamID: CMSimpleQueue] = [:]
-    func deviceIDs() -> [CMIOObjectID] { [40] }
-    func string(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> String? {
-        object == 40 && selector == CMIOObjectPropertySelector(kCMIODevicePropertyDeviceUID)
-            ? VirtualCameraOBS.deviceUID : nil
-    }
-    func streamIDs(_ device: CMIOObjectID) -> [CMIOStreamID] { device == 40 ? [41, 42] : [] }
-    func direction(_ stream: CMIOStreamID) -> UInt32? {
-        stream == 41 ? 1 : (stream == 42 ? 0 : nil)
-    }
-    func flag(_ object: CMIOObjectID, selector: CMIOObjectPropertySelector) -> Bool? {
-        object == 40
-            && selector == CMIOObjectPropertySelector(kCMIODevicePropertyDeviceIsRunningSomewhere)
-            ? watching : nil
-    }
-    func startSink(device: CMIOObjectID, stream: CMIOStreamID) -> CMSimpleQueue? {
-        var queue: CMSimpleQueue?
-        CMSimpleQueueCreate(allocator: kCFAllocatorDefault, capacity: 4, queueOut: &queue)
-        queues[stream] = queue
-        return queue
-    }
-    func stopSink(device: CMIOObjectID, stream: CMIOStreamID) {
-        guard let queue = queues.removeValue(forKey: stream) else { return }
-        while let sample = CMSimpleQueueDequeue(queue) {
-            Unmanaged<CMSampleBuffer>.fromOpaque(sample).release()
-        }
-    }
-    func listen(
-        _ object: CMIOObjectID, selector: CMIOObjectPropertySelector, queue: DispatchQueue,
-        handler: @escaping @Sendable () -> Void
-    ) -> VirtualCameraListener? { VirtualCameraListener(remove: {}) }
 }

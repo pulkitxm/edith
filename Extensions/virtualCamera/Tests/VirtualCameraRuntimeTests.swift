@@ -221,7 +221,7 @@ import Testing
     @Test func snapshotsRoundTripAndDescribeThemselves() throws {
         var state = VirtualCameraState()
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            enabled: true, helperRunning: true, extensionInstalled: true,
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
             state: state)
         let decoded = try #require(VirtualCameraSnapshot.decode(snapshot.encoded))
@@ -234,14 +234,7 @@ import Testing
         snapshot.live = false
         #expect(snapshot.headline == "Ready, no app is using it")
         snapshot.extensionInstalled = false
-        snapshot.route = nil
-        #expect(snapshot.headline == "Camera extension not installed")
-        snapshot.route = .obs
-        #expect(snapshot.headline == "Ready as OBS Virtual Camera")
-        snapshot.live = true
-        #expect(snapshot.headline == "Paused: Blank")
-        snapshot.state.privacy = .live
-        #expect(snapshot.headline == "Live as OBS Virtual Camera")
+        #expect(snapshot.headline == "Edith Camera is not installed")
         snapshot.helperRunning = false
         #expect(snapshot.headline == "Waiting for Edith")
         snapshot.enabled = false
@@ -266,8 +259,7 @@ import Testing
 
     @Test func jsonCarriesTheDocumentedFields() {
         var snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
-            extensionBuild: "7",
+            enabled: true, helperRunning: true, extensionInstalled: true, extensionBuild: "7",
             source: VirtualCameraSource(id: "a", name: "Cam", kind: .builtIn), sourceWidth: 1920,
             sourceHeight: 1080, systemBackgroundActive: true, state: VirtualCameraState())
         snapshot.message = "Done."
@@ -277,8 +269,7 @@ import Testing
         }
         #expect(
             Set(object.keys) == [
-                "enabled", "helperRunning", "extensionInstalled", "obsAvailable", "route",
-                "extensionBuild", "live",
+                "enabled", "helperRunning", "extensionInstalled", "extensionBuild", "live",
                 "headline", "apps", "framesPerSecond", "camera", "cameraResolution", "output",
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
                 "look", "background", "systemBackgroundActive", "message",
@@ -322,79 +313,6 @@ import Testing
         #expect(clients.map(\.name) == ["Google Chrome", "zoom.us"])
         #expect(VirtualCameraClients.accessDescription(.authorized) == "granted")
         #expect(VirtualCameraClients.accessDescription(.notDetermined) == "notRequested")
-    }
-}
-
-@Suite struct VirtualCameraRouteTests {
-    @Test func automaticPrefersEdithCameraThenOBS() {
-        #expect(
-            VirtualCameraRoute.resolve(.automatic, edithInstalled: true, obsInstalled: true)
-                == .edithCamera)
-        #expect(
-            VirtualCameraRoute.resolve(.automatic, edithInstalled: false, obsInstalled: true)
-                == .obs)
-        #expect(
-            VirtualCameraRoute.resolve(.automatic, edithInstalled: false, obsInstalled: false)
-                == nil)
-        #expect(
-            VirtualCameraRoute.resolve(.obs, edithInstalled: true, obsInstalled: true) == .obs)
-        #expect(
-            VirtualCameraRoute.resolve(.obs, edithInstalled: true, obsInstalled: false) == nil)
-        #expect(
-            VirtualCameraRoute.resolve(.edithCamera, edithInstalled: false, obsInstalled: true)
-                == nil)
-        #expect(VirtualCameraRoute.obs.cameraName == "OBS Virtual Camera")
-    }
-
-    @Test func obsDemandStartsOnViewersAndStopsOnQuitOrOBS() {
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: true, streaming: false, obsRunning: false,
-                triggerQuit: false) == .start)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: true, streaming: false, obsRunning: true,
-                triggerQuit: false) == .idle)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: false, streaming: false, obsRunning: false,
-                triggerQuit: false) == .idle)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: false, streaming: true, obsRunning: false,
-                triggerQuit: false) == .keep)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: false, streaming: true, obsRunning: false,
-                triggerQuit: true) == .stop)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: true, inUse: false, streaming: true, obsRunning: true,
-                triggerQuit: false) == .stop)
-        #expect(
-            VirtualCameraOBSDemand.next(
-                installed: false, inUse: false, streaming: true, obsRunning: false,
-                triggerQuit: false) == .stop)
-    }
-
-    @Test func outputDefaultsToOBSWithoutCameraProviderSetup() throws {
-        let decoded = try JSONDecoder().decode(
-            VirtualCameraState.self, from: Data("{\"output\":\"obs\"}".utf8))
-        #expect(decoded.output == .obs)
-        let legacy = try JSONDecoder().decode(VirtualCameraState.self, from: Data("{}".utf8))
-        #expect(legacy.output == .obs)
-        #expect(VirtualCameraState().output == .obs)
-    }
-
-    @Test func sinksReportWhetherAnyAppRunsTheirDevice() {
-        let hardware = FakeCameraHardware()
-        hardware.devices = [40: VirtualCameraOBS.deviceUID]
-        let sink = VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware)
-        #expect(sink.isInstalled)
-        #expect(!sink.isRunningSomewhere)
-        hardware.running = [40]
-        #expect(sink.isRunningSomewhere)
-        #expect(!VirtualCameraSink(deviceUID: "missing", hardware: hardware).isRunningSomewhere)
     }
 }
 

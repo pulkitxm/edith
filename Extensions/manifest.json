@@ -2551,6 +2551,7 @@
     "supportProducts": {
       "app": "EdithExtensionCommands",
       "cameraCarrier": "EdithExtensionSupport",
+      "cameraProvider": "EdithExtensionSupport",
       "privileged": "EdithExtensionSupport"
     },
     "roles": {
@@ -2575,7 +2576,6 @@
         "Extensions/virtualCamera/Core/Models/VirtualCameraMedia.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraOperations.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraRequest.swift",
-        "Extensions/virtualCamera/Core/Models/VirtualCameraRoute.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraSceneLibrary.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraState.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraStore.swift",
@@ -2628,6 +2628,19 @@
         "Extensions/virtualCamera/CameraSystemExtensionController.swift",
         "Extensions/virtualCamera/Carrier/Factory.swift"
       ],
+      "cameraProvider": [
+        "Extensions/virtualCamera/Provider/CameraProviderService.swift",
+        "Extensions/virtualCamera/Provider/CameraProviderSource.swift",
+        "Extensions/virtualCamera/Provider/CameraDeviceSource.swift",
+        "Extensions/virtualCamera/Provider/CameraStreamSource.swift",
+        "Extensions/virtualCamera/ProviderFactory/Factory.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraExtensionStatus.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraFormat.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraIdentity.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraPlaceholder.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraRelay.swift",
+        "Extensions/virtualCamera/Support/VirtualCameraSampleBuffer.swift"
+      ],
       "privileged": [
         "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraMicrophoneRetirement.swift",
         "Extensions/virtualCamera/Privileged/Sources/CameraDeployment/CameraPrivilegedRuntime.swift",
@@ -2661,9 +2674,10 @@
     ],
     "systemExtensionCarrier": {
       "role": "cameraCarrier",
-      "transport": "obs",
+      "providerRole": "cameraProvider",
       "applicationIdentifier": "com.pulkit.edith.cameraCarrier",
-      "minimumSystemVersion": "14.0.0"
+      "minimumSystemVersion": "14.0.0",
+      "installEntitlement": "com.apple.developer.system-extension.install"
     },
     "usesHostRuntime": true
   },

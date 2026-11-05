@@ -38,7 +38,7 @@ Storage shows actual file measurements separately from signed catalog download e
 
 Logical bytes describe file contents; allocated bytes describe filesystem blocks. Hard links count once. APFS clones, compression and shared extents can make exclusive physical usage differ. The scan displays its time, issues and known-root exclusions. It does not promise to measure arbitrary external models, provider storage or every operating-system cache.
 
-Camera uses the separately installed OBS Virtual Camera provider. Disabling Edith stops capture and frame delivery; it does not remove the OBS provider. A separately loaded audio driver can require a macOS restart for retirement, which remains visible instead of being reported as completed cleanup.
+Camera ships its own Edith Camera system extension inside a sealed carrier app. Disabling Camera stops capture and frame delivery, deactivates the extension and waits for its provider to exit before reporting cleanup as complete. A separately loaded audio driver can require a macOS restart for retirement, which remains visible instead of being reported as completed cleanup.
 
 ## Separate, selective releases
 

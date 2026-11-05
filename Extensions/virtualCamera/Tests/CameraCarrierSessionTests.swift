@@ -18,26 +18,6 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
 }
 
 @Suite(.serialized) @MainActor struct CameraCarrierSessionTests {
-    @Test func obsSessionRejectsCameraActivationAndOwnsHALCleanup() async throws {
-        let broker = CarrierBrokerProbe()
-        var replies: [CameraCarrierReply] = []
-        var retired = false
-        let controller = CameraSystemExtensionController(
-            identifier: "synthetic.camera", broker: broker, providerExited: { true })
-        let session = CameraCarrierSession(
-            controller: controller, send: { replies.append(try decode($0)) }, obsTransport: true,
-            prepareDisableResources: { retired = true }, releaseResources: {}, exited: {})
-        session.receive(try request(.activate))
-        session.receive(try request(.deactivate))
-        #expect(replies.filter { $0.error != nil }.count == 2)
-        #expect(broker.requests.isEmpty && !controller.ownsProvider)
-        session.receive(try request(.prepareDisable))
-        try await wait { retired }
-        #expect(broker.requests.isEmpty)
-        session.disconnect()
-        try await wait { session.released }
-    }
-
     @Test func framesHandleFragmentationAndRejectOversizedOrEmptyMessages() throws {
         let request = CameraCarrierRequest(token: UUID(), operation: .status)
         let encoded = try CameraCarrierFrames.encode(request)

@@ -1,64 +1,28 @@
-import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
 
 @MainActor
 enum CameraExtensionBridge {
-    private static var observer: NSObjectProtocol?
-    private static var manager = VirtualCameraExtensionManager()
-
-    static func install(manager: VirtualCameraExtensionManager) {
-        self.manager = manager
-        guard observer == nil else { return }
-        observer = IPC.observe(IPC.Name.requestCameraExtensionAction) { info in
-            MainActor.assumeIsolated { receive(info) }
-        }
-    }
-
-    static func shutdown() {
-        if let observer { IPC.stopObserving(observer) }
-        observer = nil
-    }
-
-    static func reply(to info: [AnyHashable: Any], now: Date = Date()) -> [String: Any]? {
-        let requestID = info[CameraExtensionIPC.requestIDKey] as? String
-        guard let runtime = CameraExtensionRuntimeRequest(payload: info) else {
-            guard let requestID else { return nil }
-            return [
-                CameraExtensionIPC.okKey: false, CameraExtensionIPC.requestIDKey: requestID,
-                CameraExtensionIPC.errorKey: "The camera extension request is invalid.",
-            ]
-        }
-        guard runtime.isLive(at: now) else {
-            return snapshot(manager.phase, changed: false).resultPayload(
-                requestID: runtime.requestID,
-                error: "The camera extension request expired before it ran.")
-        }
-        let changed = perform(runtime.request)
-        return snapshot(manager.phase, changed: changed).resultPayload(requestID: runtime.requestID)
-    }
-
-    private static func receive(_ info: [AnyHashable: Any]) {
-        guard let payload = reply(to: info) else { return }
-        IPC.post(IPC.Name.cameraExtensionActionResult, userInfo: payload)
-    }
-
-    private static func perform(_ request: CameraExtensionRequest) -> Bool {
+    static func perform(
+        _ request: CameraExtensionRequest, on manager: VirtualCameraExtensionManager
+    ) -> CameraExtensionSnapshot {
         manager.refresh()
+        let changed: Bool
         switch request {
         case .status:
-            return false
+            changed = false
         case .install:
             manager.install()
-            return manager.phase == .installing
+            changed = manager.phase == .installing
         case .remove:
             manager.uninstall()
-            return manager.phase == .removing
+            changed = manager.phase == .removing
         }
+        return snapshot(manager.phase, changed: changed)
     }
 
-    private static func snapshot(
-        _ phase: VirtualCameraExtensionPhase, changed: Bool
+    static func snapshot(
+        _ phase: VirtualCameraExtensionPhase, changed: Bool = false
     ) -> CameraExtensionSnapshot {
         CameraExtensionSnapshot(
             phase: token(phase), title: phase.title, detail: phase.detail, changed: changed)

@@ -361,11 +361,11 @@ struct VirtualCameraBackgroundPanel: View {
             return
                 "macOS Background is active and passes through to your video app. Turn it off in the macOS Video Effects menu to use Edith's backgrounds."
         }
-        if let route = model.snapshot?.route {
-            return "Select \(route.cameraName) in your video app to see this background."
+        if model.snapshot?.extensionInstalled == true {
+            return "Select Edith Camera in your video app to see this background."
         }
         return
-            "Set up a virtual camera in Output, then select it in your video app to see this background."
+            "Install Edith Camera in Output, then select it in your video app to see this background."
     }
 
     var body: some View {
@@ -577,31 +577,31 @@ struct VirtualCameraOutputPanel: View {
         return nil
     }
 
-    private var routeTitle: String {
-        guard let route = model.snapshot?.route else { return "Sends to: nothing yet" }
-        return "Sends to: \(route.cameraName)"
-    }
-
-    private var routeDetail: String {
-        model.snapshot?.obsAvailable == true
-            ? "Pick OBS Virtual Camera in your meeting app. Keep OBS Studio closed. Edith starts output when an app opens the camera and stops when that app quits."
-            : "Install OBS Studio and its Virtual Camera, then close OBS. Choose OBS Virtual Camera in your meeting app."
-    }
-
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            VirtualCameraPanelSection(title: "OBS Virtual Camera", detail: routeDetail, dark: dark)
-            {
+            let cameraExtension = model.cameraExtension
+            VirtualCameraPanelSection(
+                title: "Edith Camera: \(cameraExtension.title)", detail: cameraExtension.detail,
+                dark: dark
+            ) {
                 HStack {
-                    if model.snapshot?.obsAvailable != true {
-                        Link(
-                            "Get OBS Studio",
-                            destination: URL(string: "https://obsproject.com/download")!
-                        )
-                        .buttonStyle(.edith(.primary))
+                    switch cameraExtension.phase {
+                    case "notInstalled", "failed":
+                        Button("Install Edith Camera") { model.performCameraExtension(.install) }
+                            .buttonStyle(.edith(.primary))
+                    case "awaitingApproval":
+                        Button("Open System Settings") { model.openCameraExtensionSettings() }
+                            .buttonStyle(.edith(.primary))
+                    case "installed":
+                        Button("Remove", role: .destructive) {
+                            model.performCameraExtension(.remove)
+                        }
+                        .buttonStyle(.edith(.secondary))
+                    default:
+                        EmptyView()
                     }
                     Spacer()
-                    Button("Check again") { model.retryPreview() }
+                    Button("Check again") { model.performCameraExtension(.status) }
                         .buttonStyle(.edith(.borderless))
                 }
             }
@@ -609,7 +609,7 @@ struct VirtualCameraOutputPanel: View {
                 let clients = model.snapshot?.clients ?? []
                 if clients.isEmpty {
                     Text(
-                        "No app is using OBS Virtual Camera. Edith keeps your camera off until one does."
+                        "No app is using Edith Camera. Edith keeps your camera off until one does."
                     )
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))

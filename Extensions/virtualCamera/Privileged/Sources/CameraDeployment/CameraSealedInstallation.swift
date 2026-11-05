@@ -160,16 +160,12 @@ public final class CameraSealedInstallation {
         guard try verify(embedded) == ownIdentity else {
             throw failure("The carrier does not contain its approved installer.")
         }
-        if bundle.object(forInfoDictionaryKey: "EdithCameraTransport") as? String == "obs" {
-            let providers = url.appendingPathComponent("Contents/Library/SystemExtensions")
-            guard !files.fileExists(atPath: providers.path) else {
-                throw failure("An OBS carrier cannot contain a camera provider.")
-            }
-            return identity
-        }
         let provider = url.appendingPathComponent(
             "Contents/Library/SystemExtensions/" + configuration.hostIdentifier
                 + ".camera.systemextension")
+        guard files.fileExists(atPath: provider.path) else {
+            throw failure("The carrier does not contain the camera provider.")
+        }
         let providerIdentity = try verify(provider)
         guard providerIdentity.identifier == configuration.hostIdentifier + ".camera",
             providerIdentity.team == ownIdentity.team

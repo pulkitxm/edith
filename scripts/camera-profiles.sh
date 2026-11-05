@@ -25,7 +25,7 @@ if ! xcodebuild -project "$work/EdithProfiles.xcodeproj" -alltargets -configurat
   SYMROOT="$work/build" -allowProvisioningUpdates -allowProvisioningDeviceRegistration build >"$work/xcodebuild.log" 2>&1; then
   grep -E 'error:' "$work/xcodebuild.log" | sed 's/^.*error: /error: /' | sort -u >&2
   if grep -q 'Personal development teams' "$work/xcodebuild.log"; then
-    echo "Team $team is a free Personal Team. Apple gives the System Extension capability only to paid Apple Developer Program members. Edith can send through OBS Virtual Camera instead." >&2
+    echo "Team $team is a free Personal Team. Apple gives the System Extension capability only to paid Apple Developer Program members." >&2
   fi
   if grep -q 'No Accounts' "$work/xcodebuild.log"; then
     echo "Sign in to Xcode, Settings, Accounts with the Apple ID of team $team, then run make camera-profiles again." >&2
@@ -46,4 +46,4 @@ for pair in "$application|com.apple.developer.system-extension.install" "$provid
   fi
 done
 [ "$missing" = 0 ] || exit 1
-echo "profiles ready; pass them to scripts/build-camera-carrier.mjs as CAMERA_CARRIER_PROFILE and CAMERA_EXTENSION_PROFILE for a native transport build"
+echo "profiles ready; pass them to scripts/build-camera-carrier.mjs as CAMERA_CARRIER_PROFILE and CAMERA_EXTENSION_PROFILE"

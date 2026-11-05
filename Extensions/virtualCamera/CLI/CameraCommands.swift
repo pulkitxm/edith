@@ -9,7 +9,7 @@ struct CameraCommand: AsyncParsableCommand {
         abstract: "Frame, style and control Edith's virtual camera.",
         discussion: """
             Frames, styles and controls Edith Camera, the virtual camera that Zoom,
-            Meet, FaceTime, OBS, Chrome and every other video app can pick.
+            Meet, FaceTime, Chrome and every other video app can pick.
 
             Reads nothing until a subcommand runs. Does not change anything by itself.
 

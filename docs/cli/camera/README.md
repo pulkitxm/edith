@@ -1,7 +1,7 @@
 # `ed camera`
 
 Frames, styles and controls Edith Camera, the virtual camera that Zoom, Meet,
-FaceTime, OBS, Chrome and every other video app can pick. You arrange the shot
+FaceTime, Chrome and every other video app can pick. You arrange the shot
 once in Edith and the app you call from sees the result.
 
 ```text
@@ -42,7 +42,8 @@ Turn on **Virtual Camera** in Edith's Extensions screen under **Media**, or run
 `ed camera on`. The **Virtual Camera** page then appears in the Media section of
 the sidebar.
 
-Edith Camera is a CoreMediaIO camera extension inside Edith. Video apps read it
+Edith Camera is a CoreMediaIO camera extension that ships inside the Virtual
+Camera package. Video apps read it
 like any other camera. Edith's menu bar app captures your real camera, applies
 the framing, look, background and overlays, and sends each frame to the
 extension. The real camera only turns on while an app is actually showing Edith
@@ -58,72 +59,26 @@ reaches the apps that are using Edith Camera straight away.
 
 ## Installing Edith Camera
 
-macOS installs camera extensions only from an app that meets three conditions:
-
-1. The app is in the Applications folder.
-2. The app is signed with the System Extension entitlement, which needs a
-   provisioning profile from a paid Apple Developer Program team.
-3. You approve the extension once, in System Settings under General, Login Items
-   & Extensions, Camera Extensions.
-
-The quickest way to get the profiles is to let Xcode make them. Sign in to Xcode,
-Settings, Accounts with the Apple ID of the team that signs Edith, then run:
-
-```sh
-make camera-profiles
-make install
-```
-
-`make camera-profiles` builds a throwaway project with automatic signing, so Xcode
-registers this Mac, creates the `com.pulkit.edith` identifier with the System
-Extension capability and `com.pulkit.edith.camera` with its app group, and
-downloads a development profile for each. `make install` finds them in Xcode's
-profile folder on its own. You can also point the build at profiles you made on
-the Apple Developer site:
-
-```sh
-EDITH_APP_PROVISIONING_PROFILE=~/Profiles/Edith.provisionprofile \
-EDITH_CAMERA_PROVISIONING_PROFILE=~/Profiles/EdithCamera.provisionprofile \
-./build.sh --release --install
-```
-
-`build.sh` embeds a profile only when it matches its identifier and team, grants
-the entitlement, has not expired, includes this Mac and includes the certificate
-Edith is signed with, because macOS refuses to open an app whose profile does
-not. Only then does it sign the app with the install entitlement. It looks for
-profiles on its own only for `--install` builds, so a release build never ships
-a development profile. Without the profiles the build still works: the preview,
-framing and scenes all run, and the Output tab explains what is missing.
+The Virtual Camera package contains a small carrier app,
+`com.pulkit.edith.cameraCarrier`, that holds the Edith Camera system extension,
+`com.pulkit.edith.camera`. Both are signed by the same Developer ID team as
+Edith and notarized, so no other software is needed.
 
 Open **Output** on the Virtual Camera page and choose **Install Edith Camera**,
-then approve it in System Settings. `ed camera status` reports
-`extension: installed` once apps can see it. Development builds carry their own
-extension identity, `com.pulkit.edith.dev.<slot>.camera`, and appear in apps as
+or run `ed camera extension install --yes`. Edith's privileged background
+service places the carrier in `/Applications/Edith Extensions`, because macOS
+installs camera extensions only from apps in the Applications folder. If that
+service is not approved yet, macOS opens Login Items in System Settings so you
+can allow it. Edith then asks macOS to activate the extension. Approve it in
+System Settings under General, Login Items & Extensions, Camera Extensions;
+**Open System Settings** on the Output tab goes there.
+
+`ed camera status` reports `extension: installed` once apps can see it. Pick
+**Edith Camera** in Zoom, Meet, FaceTime or any other app. **Remove** on the
+Output tab, or `ed camera extension remove --yes`, deactivates it again.
+Development builds carry their own extension identity,
+`com.pulkit.edith.dev.<slot>.camera`, and appear in apps as
 `Edith Camera (<slot>)`.
-
-## Without a developer account: OBS Virtual Camera
-
-Free Apple IDs (Personal Teams) cannot get the System Extension capability, so
-they cannot install Edith Camera. If OBS Studio is installed and its virtual
-camera has been approved once, Edith can send its picture through the OBS
-Virtual Camera instead. OBS's camera extension accepts frames from any app,
-which is how OBS itself feeds it.
-
-With the output set to **Automatic** (the default) Edith uses Edith Camera when
-it is installed and the OBS Virtual Camera otherwise. Choose it on the Output
-tab to force one or the other. Then:
-
-1. Keep the OBS app closed. Edith steps aside whenever OBS is running so OBS can
-   drive its own camera.
-2. Pick **OBS Virtual Camera** in Zoom, Meet, FaceTime or any other app.
-3. Edith turns your camera on as soon as an app opens the OBS camera, and stops
-   when that app quits. It cannot tell when a call ends while the app stays
-   open, because the OBS camera reports itself as in use for as long as Edith
-   is feeding it. Pause with ⌃⌥⌘V, or quit the call app, to turn your camera
-   off.
-
-`ed camera status` reports `sending to: OBS Virtual Camera` and `route: obs` in
-JSON.
 
 ## Framing
 
@@ -177,9 +132,8 @@ actions. Delete previews first and applies with `--yes`.
 
 `extension status` is Check again. `extension install` and `extension remove`
 are the Install Edith Camera and Remove buttons. They preview first. `--yes`
-asks the open Edith app to submit the system extension request. macOS may still
-ask you to approve it. A development build that is not in `/Applications`
-reports that it needs to be moved there instead of installing.
+asks the running Virtual Camera extension to submit the system extension request
+through its carrier. macOS may still ask you to approve it.
 
 ## Pausing
 
