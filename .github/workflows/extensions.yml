@@ -15,6 +15,10 @@ name: Extensions
         required: false
         default: false
     secrets:
+      CAMERA_CARRIER_PROVISIONING_PROFILE:
+        required: false
+      CAMERA_EXTENSION_PROVISIONING_PROFILE:
+        required: false
       EXTENSION_CATALOG_PRIVATE_KEY:
         required: false
       MACOS_CERT_P12:
