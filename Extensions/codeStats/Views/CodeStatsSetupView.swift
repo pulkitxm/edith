@@ -5,23 +5,58 @@ import SwiftUI
 
 struct CodeStatsSetupView: View {
     let model: CodeStatsModel
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        PageCard(
-            title: "Set up Code Stats", note: "Mirror your GitHub and count your commits"
-        ) {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                CodeStatsSettingsSteps(model: model)
-                HStack {
-                    Spacer()
-                    Button {
-                        Task { await model.start() }
-                    } label: {
-                        Label("Start first sync", systemImage: "play.fill")
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            VStack(spacing: UIScale.pt(16)) {
+                PageGuideBadge(symbolName: "chart.line.uptrend.xyaxis")
+                Text("See how much code you write")
+                    .font(.edithText(.title2)).fontWeight(.semibold)
+                Text(
+                    "Code Stats keeps a read-only copy of your GitHub repositories in a folder you choose, then counts your commits and lines. Nothing is changed on GitHub, and you can delete the folder at any time."
+                )
+                .font(.edithText(.body)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: UIScale.pt(520))
+                PageGuideSteps(
+                    steps: [
+                        PageGuideStep(
+                            symbolName: "folder", title: "Pick a folder",
+                            detail: "Copies of your repositories are stored here."),
+                        PageGuideStep(
+                            symbolName: "person.crop.circle.badge.checkmark",
+                            title: "Confirm it is you",
+                            detail: "Choose which emails count as your commits."),
+                        PageGuideStep(
+                            symbolName: "arrow.triangle.2.circlepath", title: "Start the sync",
+                            detail: "The first run is slowest and continues in the background."),
+                    ], columns: 3)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, UIScale.pt(12))
+            PageCard(
+                title: "Set up Code Stats",
+                note: "Complete the checklist, then start your first sync"
+            ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    CodeStatsSettingsSteps(model: model)
+                    HStack(spacing: UIScale.pt(10)) {
+                        Spacer()
+                        if let blocker = model.startBlocker {
+                            Text(blocker)
+                                .font(.edithText(.caption))
+                                .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
+                        }
+                        Button {
+                            Task { await model.start() }
+                        } label: {
+                            Label("Start first sync", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.edith(.primary))
+                        .controlSize(.large)
+                        .disabled(!model.canStart)
                     }
-                    .buttonStyle(.edith(.primary))
-                    .controlSize(.large)
-                    .disabled(!model.canStart)
                 }
             }
         }

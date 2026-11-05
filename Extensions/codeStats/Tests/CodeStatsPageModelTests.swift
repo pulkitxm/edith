@@ -23,6 +23,22 @@ import Testing
         #expect(model.loadingState == .content)
     }
 
+    @Test func startBlockerExplainsWhyTheFirstSyncCannotStart() async {
+        let missingFolder = model(
+            CodeStatsFakeAgent(status: CodeStatsPageFixture.status(storage: .notConfigured)))
+        #expect(missingFolder.startBlocker == "Checking your setup...")
+        await missingFolder.loadStatus()
+        #expect(missingFolder.startBlocker == "Choose a mirror folder first.")
+        let missingGit = model(
+            CodeStatsFakeAgent(status: CodeStatsPageFixture.status(gitAvailable: false)))
+        await missingGit.loadStatus()
+        #expect(missingGit.startBlocker?.contains("git") == true)
+        let ready = model(CodeStatsFakeAgent(status: CodeStatsPageFixture.status()))
+        await ready.loadStatus()
+        #expect(ready.startBlocker == nil)
+        #expect(!ready.reportIsEmpty)
+    }
+
     @Test func failedStatusUsesRecoverableLoadingStateInsteadOfPermanentSkeleton() async {
         let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
         var service = agent.service

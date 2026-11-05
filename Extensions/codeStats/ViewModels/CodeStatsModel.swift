@@ -192,6 +192,20 @@ final class CodeStatsModel {
         return status.storage.isReady && status.gitAvailable && !status.isRunning && !isStarting
     }
 
+    var startBlocker: String? {
+        guard let status else { return "Checking your setup..." }
+        if status.isRunning { return "A refresh is already running." }
+        if !status.gitAvailable { return "Install git first: ed tools install git" }
+        if !status.storage.isReady { return "Choose a mirror folder first." }
+        if isStarting { return "Starting..." }
+        return nil
+    }
+
+    var reportIsEmpty: Bool {
+        guard let report else { return false }
+        return report.totals.commits == 0 && report.totals.added == 0
+    }
+
     var seededIdentity: CodeStatsIdentity? {
         let settings = settings
         guard identity.isEmpty, let lookup = profileLookup else { return nil }

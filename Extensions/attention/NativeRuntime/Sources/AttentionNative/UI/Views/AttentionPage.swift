@@ -409,14 +409,29 @@ private struct AttentionSetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 9) {
-                Text("See where your attention actually goes")
-                    .font(DashSkin.heading(28))
+            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                HStack(spacing: UIScale.pt(14)) {
+                    PageGuideBadge(symbolName: "hourglass", size: 56)
+                    Text("See where your attention actually goes")
+                        .font(DashSkin.heading(28))
+                }
                 Text(
-                    "Edith records real foreground activity on this Mac. Start with applications, add browser detail if you want it, and change every rule later. Nothing leaves this Mac unless you enable iCloud backup."
+                    "Attention measures how long each app and website is in front of you, so you can see where your day really goes. It runs quietly in the background and everything stays on this Mac unless you turn on iCloud backup."
                 )
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                PageGuideSteps(
+                    steps: [
+                        PageGuideStep(
+                            symbolName: "checklist", title: "Pick sources",
+                            detail: "Apps, and optionally your browser."),
+                        PageGuideStep(
+                            symbolName: "lock.shield", title: "Set privacy",
+                            detail: "Choose how much detail is stored."),
+                        PageGuideStep(
+                            symbolName: "play.circle", title: "Begin tracking",
+                            detail: "Charts appear after a few minutes of use."),
+                    ], columns: 3)
             }
             .padding(.bottom, 4)
 
@@ -474,11 +489,17 @@ private struct AttentionSetupView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("The event store starts empty")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    Text("You will see a collecting state until genuine activity arrives.")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(.secondary)
+                    Text(
+                        AttentionPageModel.setupBlocker(
+                            applicationTracking: applicationTracking,
+                            browserTracking: browserTracking) ?? "Nothing is recorded yet"
+                    )
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    Text(
+                        "Tracking starts when you press Begin. You can pause or erase it any time in Settings."
+                    )
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Begin tracking") {
@@ -530,75 +551,63 @@ private struct AttentionNoMatchView: View {
     let model: AttentionPageModel
 
     var body: some View {
-        PageCard {
-            VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: UIScale.pt(30), weight: .light))
-                    .foregroundStyle(.secondary)
-                Text("Nothing matches these filters").font(DashSkin.heading(20))
-                Text(
-                    "No activity in \(model.period.title()) matches the current filters. "
-                        + AttentionFormat.duration(model.summary.unmatchedDuration)
-                        + " of other activity is hidden."
-                )
-                .font(.system(size: UIScale.pt(12.5)))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                Button("Clear filters") { model.clearFilters() }
-                    .buttonStyle(.edith(.primary))
+        PageEmptyState(
+            symbolName: "line.3.horizontal.decrease.circle",
+            title: "Nothing matches these filters",
+            message:
+                "No activity in \(model.period.title()) matches the current filters. "
+                + AttentionFormat.duration(model.summary.unmatchedDuration)
+                + " of other activity is hidden.",
+            primary: PageAction("Clear filters", symbolName: "xmark.circle") {
+                model.clearFilters()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(24))
-        }
+        )
+        .frame(minHeight: UIScale.pt(300))
     }
 }
 
 private struct AttentionCollectingView: View {
     @Bindable var model: AttentionPageModel
 
+    private var enabled: Bool { model.settings.isEnabled }
+
     var body: some View {
-        PageCard {
-            VStack(spacing: 18) {
-                ZStack {
-                    Circle().fill(Color.themeAccent.opacity(0.12)).frame(
-                        width: UIScale.pt(76), height: UIScale.pt(76))
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: UIScale.pt(30), weight: .medium))
-                        .foregroundStyle(Color.themeAccent)
-                }
-                Text(
-                    model.settings.isEnabled
-                        ? "Collecting your first real activity" : "Attention is disabled"
-                )
-                .font(DashSkin.heading(24))
-                Text(
-                    model.settings.isEnabled
-                        ? "Use your Mac normally. The overview appears after the first genuine foreground heartbeat arrives."
-                        : "Attention is completely disabled. Existing history and settings remain on this Mac."
-                )
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(520))
-                HStack(spacing: 12) {
-                    AttentionStatusPill(
-                        title: "Applications",
-                        state: model.settings.isEnabled && model.settings.trackingEnabled
-                            ? "Listening" : "Off",
-                        good: model.settings.isEnabled && model.settings.trackingEnabled)
-                    AttentionStatusPill(
-                        title: "Browser",
-                        state: model.browserConnected
-                            ? "Connected"
-                            : model.settings.isEnabled && model.settings.browserTrackingEnabled
-                                ? "Waiting" : "Off",
-                        good: model.browserConnected)
-                }
-                Button("Review setup") { model.section = .settings }
-                    .buttonStyle(.edith(.secondary))
+        VStack(spacing: UIScale.pt(16)) {
+            PageEmptyState(
+                symbolName: enabled ? "waveform.path.ecg" : "pause.circle",
+                title: enabled ? "Tracking is on, waiting for activity" : "Tracking is paused",
+                message: enabled
+                    ? "Use your Mac normally. Charts appear within a minute or two of the first app or site you use. This page updates by itself."
+                    : "Attention is not recording. Your existing history and settings stay on this Mac.",
+                primary: enabled
+                    ? PageAction("Review sources", symbolName: "slider.horizontal.3") {
+                        model.section = .settings
+                    }
+                    : PageAction("Turn tracking on", symbolName: "play.fill") {
+                        model.setAttentionEnabled(true)
+                    },
+                secondary: enabled
+                    ? nil
+                    : PageAction("Open settings", symbolName: "gearshape") {
+                        model.section = .settings
+                    }
+            )
+            .frame(minHeight: UIScale.pt(240))
+            HStack(spacing: 12) {
+                AttentionStatusPill(
+                    title: "Applications",
+                    state: enabled && model.settings.trackingEnabled ? "Listening" : "Off",
+                    good: enabled && model.settings.trackingEnabled)
+                AttentionStatusPill(
+                    title: "Browser",
+                    state: model.browserConnected
+                        ? "Connected"
+                        : enabled && model.settings.browserTrackingEnabled
+                            ? "Waiting for the extension" : "Off",
+                    good: model.browserConnected)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 42)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 

@@ -23,5 +23,37 @@
     "focus",
     "extension:attention"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See which apps and sites really get your time, and protect your focus.",
+    "summary": "Attention quietly records which app or website is in front of you, then shows where your day went, your focus time and how much your AI agents worked. Everything stays on this Mac unless you turn on iCloud backup.",
+    "steps": [
+      {
+        "symbolName": "checklist",
+        "title": "Pick what to track",
+        "detail": "Choose apps, and optionally browser sites, on the setup screen."
+      },
+      {
+        "symbolName": "lock.shield",
+        "title": "Set your privacy level",
+        "detail": "Store only app names, domains, or more detail; you can change it later."
+      },
+      {
+        "symbolName": "hourglass",
+        "title": "Use your Mac as usual",
+        "detail": "Charts appear within a few minutes; no need to keep this page open."
+      },
+      {
+        "symbolName": "timer",
+        "title": "Start a focus session",
+        "detail": "Name a task and a duration to see how much of it was undistracted."
+      }
+    ],
+    "examples": [
+      "ed attention status",
+      "ed attention summary",
+      "ed attention focus status",
+      "ed attention doctor"
+    ]
+  }
 }

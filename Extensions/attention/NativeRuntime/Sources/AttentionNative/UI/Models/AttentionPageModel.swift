@@ -137,7 +137,12 @@ final class AttentionPageModel {
         !summary.categories.isEmpty || summary.idleDuration > 0 || !summary.agents.isEmpty
     }
 
+    static func setupBlocker(applicationTracking: Bool, browserTracking: Bool) -> String? {
+        applicationTracking || browserTracking ? nil : "Turn on at least one source to begin."
+    }
+
     var refreshInterval: Duration {
+        if needsSetup && loaded { return .seconds(60) }
         guard period.isCurrent() else { return .seconds(900) }
         if period.preset == .allTime { return .seconds(120) }
         return period.isSingleDay ? .seconds(30) : .seconds(120)

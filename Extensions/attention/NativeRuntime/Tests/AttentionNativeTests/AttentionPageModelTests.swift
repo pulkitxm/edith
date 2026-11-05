@@ -4,6 +4,29 @@ import Testing
 @testable import AttentionNative
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func setupExplainsWhyTrackingCannotBeginWithoutASource() {
+        #expect(
+            AttentionPageModel.setupBlocker(applicationTracking: false, browserTracking: false)
+                != nil)
+        #expect(
+            AttentionPageModel.setupBlocker(applicationTracking: true, browserTracking: false)
+                == nil)
+        #expect(
+            AttentionPageModel.setupBlocker(applicationTracking: false, browserTracking: true)
+                == nil)
+    }
+
+    @Test func idleSetupPollsLessOftenThanLiveTracking() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        if model.needsSetup {
+            #expect(model.refreshInterval == .seconds(60))
+        }
+    }
+
     @Test func openingBreakdownDirectlyRetainsEntityIconSourcesAcrossTabs() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }

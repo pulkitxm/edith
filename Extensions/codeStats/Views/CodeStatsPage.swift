@@ -70,19 +70,53 @@ struct CodeStatsPage: View {
 
     @ViewBuilder private var content: some View {
         switch model.phase {
-        case .loading, .firstRun:
+        case .loading:
             EmptyView()
+        case .firstRun:
+            PageEmptyState(
+                symbolName: "arrow.triangle.2.circlepath", title: "Your first sync is running",
+                message:
+                    "Edith is copying and reading your repositories in the background. You can leave this page or close the window; your stats appear here when it finishes.",
+                footnote: "The first run is the slowest. Later refreshes only fetch new commits."
+            )
+            .frame(minHeight: UIScale.pt(240))
         case .setup:
             CodeStatsSetupView(model: model)
         case .unavailable:
-            EmptyView()
+            PageEmptyState(
+                symbolName: "chart.bar.xaxis", title: "Your results could not be opened",
+                message:
+                    "The sync finished, but Code Stats could not read its saved results. Try again, or refresh to rebuild them.",
+                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    Task { await model.loadReport() }
+                },
+                secondary: PageAction("Refresh from GitHub", symbolName: "icloud.and.arrow.down") {
+                    Task { await model.start() }
+                }
+            )
+            .frame(minHeight: UIScale.pt(240))
         case .content:
             if model.table == nil {
                 CodeStatsRangePicker(range: model.range) { range in
                     Task { await model.select(range) }
                 }
             }
-            if let report = model.report {
+            if model.reportIsEmpty {
+                PageEmptyState(
+                    symbolName: "text.magnifyingglass", title: "No commits in this range",
+                    message: model.hasActiveFilter
+                        ? "Nothing matches your current filters. Clear them or pick a longer range."
+                        : "No commits by you were found here. Try a longer range, or check that your name or email is listed under Settings.",
+                    primary: model.hasActiveFilter
+                        ? PageAction("Clear filters", symbolName: "line.3.horizontal.decrease") {
+                            Task { await model.updateFilter { $0 = .default } }
+                        }
+                        : PageAction("Show all time", symbolName: "calendar") {
+                            Task { await model.select(.all) }
+                        }
+                )
+                .frame(minHeight: UIScale.pt(220))
+            } else if let report = model.report {
                 sections(report)
                     .environment(\.codeStatsActions, actions)
             }

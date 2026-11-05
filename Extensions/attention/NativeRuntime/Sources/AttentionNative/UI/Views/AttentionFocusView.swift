@@ -71,7 +71,9 @@ struct AttentionFocusView: View {
             ) {
                 if blocks.isEmpty {
                     AttentionEmpty(
-                        text: "No deep work block in this period yet", symbol: "brain.head.profile")
+                        text:
+                            "No deep work block yet. A block counts after a long, mostly uninterrupted stretch in productive apps.",
+                        symbol: "brain.head.profile")
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in

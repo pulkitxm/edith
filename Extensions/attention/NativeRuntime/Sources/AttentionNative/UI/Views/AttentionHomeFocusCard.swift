@@ -73,7 +73,7 @@ import SwiftUI
             if load.hasContent || error == nil, !loading {
                 content
             } else if loading {
-                LoadingIndicator()
+                SkeletonBlock(height: 22, corner: 6)
             }
         }
         .padding(UIScale.pt(presentation?.padding ?? (tile.dense ? 10 : 14))).frame(
