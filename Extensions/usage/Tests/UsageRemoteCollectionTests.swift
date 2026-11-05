@@ -205,26 +205,7 @@ import Testing
         let context = UsageRemoteCollectionContext(machineID: UUID(), timeZone: "UTC")
         for name in ["snapshot-one", "snapshot-two"] {
             let home = fixture.appendingPathComponent(name + "/home")
-            try UsageNativeFileIO.privateDirectory(home)
-            let directory = home.appendingPathComponent(".local/share/opencode")
-            try UsageNativeFileIO.privateDirectory(directory)
-            let database = try UsageNativeDatabase(
-                url: directory.appendingPathComponent("opencode.db"))
-            try database.execute(
-                "CREATE TABLE session(id TEXT PRIMARY KEY,directory TEXT,title TEXT); CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT,data TEXT)"
-            )
-            try database.run(
-                "INSERT INTO session VALUES(?,?,?)", ["sample", "/remote/sample", "Sample"])
-            let row: [String: Any] = [
-                "id": "sample", "sessionID": "sample", "role": "assistant", "modelID": "gpt-5",
-                "path": ["cwd": "/remote/sample"], "time": ["created": 1_791_504_000_000],
-                "cost": 1,
-                "tokens": ["input": 10, "output": 2, "cache": ["read": 0, "write": 0]],
-            ]
-            try database.run(
-                "INSERT INTO message VALUES(?,?,?)",
-                ["sample", "sample", String(decoding: UsageNativeJSON.encode(row), as: UTF8.self)])
-            database.close()
+            try openCodeDatabase(home: home)
             let data = try await collect(home, archive: archive, context: context)
             #expect(try tokens(data) == 12)
             try FileManager.default.removeItem(at: home)
@@ -234,6 +215,64 @@ import Testing
             try stored.database.rows("SELECT COUNT(DISTINCT path) AS count FROM records").first?[
                 "count"] == "1")
         #expect(try stored.events().count == 1)
+    }
+
+    @Test func walDatabaseSnapshotWithoutSidecarFilesStillCounts() async throws {
+        let fixture = temporary()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let home = fixture.appendingPathComponent("home")
+        let context = UsageRemoteCollectionContext(machineID: UUID(), timeZone: "UTC")
+        let file = try openCodeDatabase(home: home)
+        for suffix in ["-wal", "-shm"] {
+            try? FileManager.default.removeItem(atPath: file.path + suffix)
+        }
+        let header = try FileHandle(forReadingFrom: file)
+        try header.seek(toOffset: 18)
+        #expect(try header.read(upToCount: 2) == Data([2, 2]))
+        try header.close()
+        let data = try await collect(
+            home, archive: fixture.appendingPathComponent("archive"), context: context)
+        #expect(try tokens(data) == 12)
+        #expect(!FileManager.default.fileExists(atPath: file.path + "-wal"))
+    }
+
+    @Test func unreadableAgentDatabaseDoesNotAbortTheRefresh() async throws {
+        let fixture = temporary()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let home = fixture.appendingPathComponent("home")
+        let context = UsageRemoteCollectionContext(machineID: UUID(), timeZone: "UTC")
+        try journal(home: home, cwd: "/remote/sample")
+        let directory = home.appendingPathComponent(".local/share/opencode")
+        try UsageNativeFileIO.privateDirectory(directory)
+        try Data(repeating: 7, count: 4096).write(
+            to: directory.appendingPathComponent("opencode.db"))
+        let data = try await collect(
+            home, archive: fixture.appendingPathComponent("archive"), context: context)
+        #expect(try tokens(data) == 12)
+    }
+
+    @discardableResult private func openCodeDatabase(home: URL) throws -> URL {
+        try UsageNativeFileIO.privateDirectory(home)
+        let directory = home.appendingPathComponent(".local/share/opencode")
+        try UsageNativeFileIO.privateDirectory(directory)
+        let file = directory.appendingPathComponent("opencode.db")
+        let database = try UsageNativeDatabase(url: file)
+        try database.execute(
+            "CREATE TABLE session(id TEXT PRIMARY KEY,directory TEXT,title TEXT); CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT,data TEXT)"
+        )
+        try database.run(
+            "INSERT INTO session VALUES(?,?,?)", ["sample", "/remote/sample", "Sample"])
+        let row: [String: Any] = [
+            "id": "sample", "sessionID": "sample", "role": "assistant", "modelID": "gpt-5",
+            "path": ["cwd": "/remote/sample"], "time": ["created": 1_791_504_000_000],
+            "cost": 1,
+            "tokens": ["input": 10, "output": 2, "cache": ["read": 0, "write": 0]],
+        ]
+        try database.run(
+            "INSERT INTO message VALUES(?,?,?)",
+            ["sample", "sample", String(decoding: UsageNativeJSON.encode(row), as: UTF8.self)])
+        database.close()
+        return file
     }
 
     private func temporary() -> URL {

@@ -6,6 +6,7 @@ public enum UsageNativeFailure: Error, LocalizedError {
     case capacity
     case unsafePath
     case archive(String)
+    case sourceDatabase(String)
     case network(Int)
 
     public var errorDescription: String? {
@@ -14,6 +15,7 @@ public enum UsageNativeFailure: Error, LocalizedError {
         case .capacity: "A usage input exceeded its safety size limit"
         case .unsafePath: "Usage storage must be a private regular file or directory"
         case .archive(let operation): "Usage archive could not " + operation
+        case .sourceDatabase(let operation): "Agent database could not " + operation
         case .network(let status): "Usage request failed with HTTP " + String(status)
         }
     }
