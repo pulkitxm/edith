@@ -4,12 +4,14 @@ import SQLite3
 
 final class UsageNativeDatabase {
     private var connection: OpaquePointer?
+    private let readOnly: Bool
     private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private static let progress: @convention(c) (UnsafeMutableRawPointer?) -> Int32 = { _ in
         Task.isCancelled ? 1 : 0
     }
 
     init(url: URL, readOnly: Bool = false) throws {
+        self.readOnly = readOnly
         let descriptor = open(
             url.path, (readOnly ? O_RDONLY : O_CREAT | O_RDWR) | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { throw UsageNativeFailure.unsafePath }
@@ -28,15 +30,33 @@ final class UsageNativeDatabase {
         }
         let databasePath = String(cString: resolved) + "/" + url.lastPathComponent
         free(resolved)
-        guard
-            sqlite3_open_v2(databasePath, &connection, flags | SQLITE_OPEN_NOFOLLOW, nil)
-                == SQLITE_OK
+        try connect(databasePath, flags: flags)
+        if readOnly,
+            sqlite3_exec(connection, "SELECT 1 FROM sqlite_master", nil, nil, nil)
+                == SQLITE_CANTOPEN
+        {
+            close()
+            var components = URLComponents()
+            components.scheme = "file"
+            components.path = databasePath
+            components.queryItems = [URLQueryItem(name: "immutable", value: "1")]
+            guard let immutable = components.string else { throw failure("open") }
+            try connect(immutable, flags: flags | SQLITE_OPEN_URI)
+        }
+        if !readOnly { try execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;") }
+    }
+
+    private func connect(_ path: String, flags: Int32) throws {
+        guard sqlite3_open_v2(path, &connection, flags | SQLITE_OPEN_NOFOLLOW, nil) == SQLITE_OK
         else {
-            close(); throw UsageNativeFailure.archive("open")
+            close(); throw failure("open")
         }
         sqlite3_busy_timeout(connection, 1000)
         sqlite3_progress_handler(connection, 1000, Self.progress, nil)
-        if !readOnly { try execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;") }
+    }
+
+    private func failure(_ operation: String) -> UsageNativeFailure {
+        readOnly ? .sourceDatabase(operation) : .archive(operation)
     }
 
     deinit { close() }
@@ -47,7 +67,7 @@ final class UsageNativeDatabase {
     func execute(_ sql: String) throws {
         try Task.checkCancellation()
         guard sqlite3_exec(connection, sql, nil, nil, nil) == SQLITE_OK else {
-            try Task.checkCancellation(); throw UsageNativeFailure.archive("execute transaction")
+            try Task.checkCancellation(); throw failure("execute transaction")
         }
     }
 
@@ -67,7 +87,7 @@ final class UsageNativeDatabase {
         let statement = try prepare(sql, values)
         defer { sqlite3_finalize(statement) }
         guard sqlite3_step(statement) == SQLITE_DONE else {
-            try Task.checkCancellation(); throw UsageNativeFailure.archive("write record")
+            try Task.checkCancellation(); throw failure("write record")
         }
         return Int(sqlite3_changes(connection))
     }
@@ -82,7 +102,7 @@ final class UsageNativeDatabase {
             try Task.checkCancellation()
             let step = sqlite3_step(statement)
             if step == SQLITE_DONE { return rows }
-            guard step == SQLITE_ROW else { throw UsageNativeFailure.archive("read records") }
+            guard step == SQLITE_ROW else { throw failure("read records") }
             var row: [String: String] = [:]
             for index in 0..<sqlite3_column_count(statement) {
                 let key = String(cString: sqlite3_column_name(statement, index))
@@ -104,7 +124,7 @@ final class UsageNativeDatabase {
             try Task.checkCancellation()
             let step = sqlite3_step(statement)
             if step == SQLITE_DONE { return }
-            guard step == SQLITE_ROW else { throw UsageNativeFailure.archive("read records") }
+            guard step == SQLITE_ROW else { throw failure("read records") }
             try body(statement)
         }
     }
@@ -122,7 +142,7 @@ final class UsageNativeDatabase {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK, let statement
         else {
-            throw UsageNativeFailure.archive("prepare statement")
+            throw failure("prepare statement")
         }
         do {
             for (offset, value) in values.enumerated() {
@@ -142,7 +162,7 @@ final class UsageNativeDatabase {
                     throw UsageNativeFailure.invalidInput("archive parameter")
                 }
                 guard result == SQLITE_OK else {
-                    throw UsageNativeFailure.archive("bind parameter")
+                    throw failure("bind parameter")
                 }
             }
             return statement
