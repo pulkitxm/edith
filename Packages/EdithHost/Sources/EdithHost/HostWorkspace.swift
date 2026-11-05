@@ -560,12 +560,13 @@ struct HostWorkspace: View {
                 {
                     return true
                 }
-                if main,
-                    modifiers.intersection([.command, .option, .control, .shift]) == .command,
-                    characters?.lowercased() == "w"
-                {
-                    return (presenter as? HostRemoteContentPresenter)?.consumeTerminalTabKey(
-                        characters: "w", modifiers: [.command, .shift], window: keyWindow) == true
+                if HostTerminalInput.isWindowCloseKey(characters: characters, modifiers: modifiers) {
+                    let closedTab =
+                        (presenter as? HostRemoteContentPresenter)?.consumeTerminalTabKey(
+                            characters: "w", modifiers: [.command, .shift], window: keyWindow)
+                        == true
+                    return HostTerminalInput.swallowsWindowCloseKey(
+                        mainWindow: main, closedTab: closedTab)
                 }
                 guard
                     let command = WindowKeyCommand.resolve(

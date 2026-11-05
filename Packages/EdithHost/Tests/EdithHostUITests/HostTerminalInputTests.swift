@@ -34,6 +34,20 @@ struct HostTerminalInputTests {
         #expect(HostTerminalInput.tabAction(characters: "w", modifiers: .command) == nil)
     }
 
+    @Test func commandWNeverClosesTheMainWindow() {
+        #expect(HostTerminalInput.isWindowCloseKey(characters: "w", modifiers: .command))
+        #expect(HostTerminalInput.isWindowCloseKey(characters: "W", modifiers: [.command, .capsLock]))
+        for modifiers: NSEvent.ModifierFlags in [
+            [.command, .shift], [.command, .option], [.command, .control], .option,
+        ] {
+            #expect(!HostTerminalInput.isWindowCloseKey(characters: "w", modifiers: modifiers))
+        }
+        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: true, closedTab: false))
+        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: true, closedTab: true))
+        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: false, closedTab: true))
+        #expect(!HostTerminalInput.swallowsWindowCloseKey(mainWindow: false, closedTab: false))
+    }
+
     @Test func neverVisibleWindowStateAndNativeCloseArePinnedToExactPresentation() async throws {
         let fixture = TerminalInputFixture()
         let input = fixture.input()
