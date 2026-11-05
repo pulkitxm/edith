@@ -109,7 +109,7 @@ import HostWorkerFixtureSupport
         defer { window.orderOut(nil) }
         await settle(window, host: host)
         #expect(find(host, label: "Extensions") != nil)
-        #expect(find(host, label: "Agents & Terminal suite enabled") != nil)
+        #expect(find(host, label: "Agents & Terminal suite enabled") == nil)
         #expect(
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
@@ -1072,7 +1072,7 @@ import HostWorkerFixtureSupport
         #expect(!fixture.marketplace.downloadedIDs.contains("calendar"))
         #expect(!fixture.marketplace.pendingRemovalIDs.contains("calendar"))
         #expect(fixture.marketplace.installedBytes < bytes)
-        #expect(find(host, label: "Not installed") != nil)
+        #expect(find(host, label: "128 bytes") != nil)
         #expect(find(host, label: "Get Calendar") != nil)
         #expect(find(review, label: "Get Calendar") != nil)
         #expect(find(review, label: "Remove") == nil)
@@ -1135,10 +1135,10 @@ import HostWorkerFixtureSupport
             await settle(window, host: host)
             #expect(abs(host.bounds.width - variant.width) < 1)
             #expect(
-                find(host, label: "1 extension needs an update for this version of Edith.") != nil)
+                find(host, label: "1 extension needs an update to work with this version of Edith.") != nil)
             let visible = window.convertToScreen(host.convert(host.bounds, to: nil))
             for label in [
-                "Update now", "Update required for this version of Edith", "Update Calendar",
+                "Update Now", "Update required for this version of Edith", "Update Calendar",
             ] {
                 let control = try #require(find(host, label: label))
                 let frame = try #require((control as AnyObject).accessibilityFrame?())
