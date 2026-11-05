@@ -216,12 +216,12 @@ The calendar permission uses `calendar`.
 | `permissionBluetooth` | Bluetooth | `wave.3.right` | Headphones, the device the permission exists for |
 | `permissionAutomation` | Automation | `gearshape.2` | A gear |
 
-## Utility glyphs stay SF Symbols
+## Every icon lives here
 
-Chevrons, close, plus, trash, refresh, check and similar control glyphs stay SF
-Symbols. They sit next to system controls, they match the text weight around
-them, and users read them as part of macOS. Do not redraw them here. SF Symbols
-stay limited to Apple platform UI, so a proprietary mark must never use one.
+Every icon in the app comes from this package, including control glyphs such as
+chevrons, close, plus, trash, refresh and check. Nothing uses SF Symbols, so draw
+a missing icon here instead of reaching for a system symbol. See
+`skills/edith-icons/SKILL.md` for the rule, its exceptions and the review process.
 
 ## Using the package
 
