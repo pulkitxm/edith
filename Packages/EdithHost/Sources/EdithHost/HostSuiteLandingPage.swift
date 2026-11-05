@@ -26,8 +26,10 @@ enum HostSuiteLandingSummary {
         HostMarketplaceCatalog.tagline(entry)
     }
 
-    static func status(installed: Bool, pending: Bool) -> String {
-        pending ? "cleanup pending" : (installed ? "installed" : "available")
+    static func badge(installed: Bool, active: Bool, pending: Bool) -> String? {
+        if pending { return "Cleaning up" }
+        if installed, !active { return "Off" }
+        return nil
     }
 }
 
@@ -82,49 +84,41 @@ struct HostSuiteLandingPage: View {
             PageHeader(
                 destination.title,
                 accessory: {
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(suite?.subtitle ?? "").font(.edithText(.callout))
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        PageSubtitle(suite?.subtitle ?? "")
                         Text(
                             HostSuiteLandingSummary.summary(
                                 groups.flatMap(\.entries),
                                 downloaded: Set(marketplace.installed.keys))
                         )
-                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                        .font(.edithText(.caption)).monospacedDigit()
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                     }
                 })
         } content: {
+            if let error = marketplace.error {
+                PageNotice(error, title: "Something went wrong", tone: .error)
+            }
             ForEach(groups) { group in
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    if groups.count > 1 {
-                        Text(group.title.uppercased()).font(DashSkin.mono(10, weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-                    }
+                    if groups.count > 1 { PageCapsLabel(group.title) }
                     VStack(spacing: 0) {
                         ForEach(Array(group.entries.enumerated()), id: \.element.id) {
                             index, entry in
-                            if index > 0 { Divider().opacity(0.5) }
+                            if index > 0 { Divider().padding(.leading, UIScale.pt(60)) }
                             HostSuiteAbilityRow(
                                 marketplace: marketplace, suites: suites, entry: entry,
                                 open: { openExtension(entry.id) }, review: { selected = entry })
                         }
                     }
-                    .background(
-                        DashSkin.paper2(scheme == .dark),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                            DashSkin.line(scheme == .dark)))
+                    .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
                 }
             }
-            if let error = marketplace.error {
-                Text(error).font(.edithText(.caption)).foregroundStyle(.red)
-            }
             Text(
-                "Disabled extensions keep their downloads. Manage packages and disk use in Storage."
+                "Turning an extension off keeps its download. Manage packages and disk space in Settings, Storage."
             )
-            .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+            .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .navigationTitle(destination.title)
         .edithSheet(item: $selected) { entry in
@@ -155,49 +149,71 @@ struct HostSuiteAbilityRow: View {
 
     var body: some View {
         let dark = scheme == .dark
-        HStack(alignment: .center, spacing: UIScale.pt(11)) {
-            Image(systemName: entry.symbolName).font(.system(size: UIScale.pt(15), weight: .medium))
-                .foregroundStyle(active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(20))
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            Image(systemName: entry.symbolName)
+                .font(.system(size: UIScale.pt(15), weight: .medium))
+                .foregroundStyle(active ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(32), height: UIScale.pt(32))
+                .background(
+                    (active ? DashSkin.accent(dark).opacity(dark ? 0.18 : 0.12)
+                        : Color.primary.opacity(0.05)),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                )
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text(entry.title).font(.system(size: UIScale.pt(13), weight: .medium))
-                        .foregroundStyle(DashSkin.ink(dark))
-                    Text(HostSuiteLandingSummary.status(installed: installed, pending: pending))
-                        .font(DashSkin.mono(9.5)).foregroundStyle(DashSkin.inkFaint(dark))
-                        .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
-                        .background(DashSkin.inkFaint(dark).opacity(0.1), in: Capsule())
+                HStack(spacing: UIScale.pt(8)) {
+                    Text(entry.title).font(.edithText(.callout)).fontWeight(.medium)
+                        .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)
+                    if let status = HostSuiteLandingSummary.badge(
+                        installed: installed, active: active, pending: pending)
+                    {
+                        Text(status).font(.edithText(.caption2)).fontWeight(.medium)
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(2))
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                            .fixedSize()
+                    }
                 }
                 Text(HostSuiteLandingSummary.tagline(entry))
-                    .font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.inkSoft(dark))
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: UIScale.pt(12))
-            if active, HostNavigationCatalog.route(extensionID: entry.id) != nil {
-                Button("Open", action: open).buttonStyle(.edith(.toolbar))
-                    .accessibilityLabel("Open " + entry.title)
-            }
-            if installed {
-                if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
-                    Button("Settings", action: review).buttonStyle(.edith(.toolbar))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                if installed {
+                    if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
+                        Button(action: review) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: UIScale.pt(13), weight: .medium))
+                        }
+                        .buttonStyle(.edith(.iconOnly))
+                        .help(entry.title + " settings")
                         .accessibilityLabel(entry.title + " settings")
+                    }
+                    if active, HostNavigationCatalog.route(extensionID: entry.id) != nil {
+                        Button("Open", action: open).buttonStyle(.edith(.secondary))
+                            .accessibilityLabel("Open " + entry.title)
+                    }
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { active },
+                            set: { value in Task { await suites.select(entry, enabled: value) } })
+                    ).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(
+                        DashSkin.accent(dark)
+                    )
+                    .disabled(pending).accessibilityLabel(entry.title + " enabled")
+                    .help(active ? "Turn off " + entry.title : "Turn on " + entry.title)
+                } else {
+                    Button("Get", action: review).buttonStyle(.edith(.secondary))
+                        .disabled(marketplace.pendingRemovalIDs.contains(entry.id))
+                        .accessibilityLabel("Get " + entry.title)
                 }
-                Toggle(
-                    "",
-                    isOn: Binding(
-                        get: { active },
-                        set: { value in Task { await suites.select(entry, enabled: value) } })
-                ).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(
-                    DashSkin.accent(dark)
-                )
-                .disabled(pending).accessibilityLabel(entry.title + " enabled")
-            } else {
-                Button("Get", action: review).buttonStyle(.edith(.secondary))
-                    .disabled(marketplace.pendingRemovalIDs.contains(entry.id))
-                    .accessibilityLabel("Get " + entry.title)
             }
+            .fixedSize()
         }
-        .padding(.horizontal, UIScale.pt(14)).padding(.vertical, UIScale.pt(11))
+        .padding(.horizontal, UIScale.pt(16)).padding(.vertical, UIScale.pt(12))
+        .frame(minHeight: UIScale.pt(60))
         .disabled(marketplace.isBusy(entry.id) || suites.working)
     }
 }

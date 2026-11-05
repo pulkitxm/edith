@@ -83,30 +83,21 @@ struct HostIntroducedPage<Content: View>: View {
         Group {
             if presenting, let entry, let guide = entry.guide {
                 intro(entry, guide)
+                    .defaultScrollAnchor(.top)
             } else {
                 content().onAppear {
                     defaults.set(true, forKey: HostSettingsCatalog.getStartedTriedKey)
                 }
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if showsReopen, !presenting, let entry, entry.guide != nil {
-                Button {
-                    reopened = true
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: UIScale.pt(14), weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                }
-                .buttonStyle(.edith(.toolbar))
-                .help("About " + entry.title)
-                .accessibilityLabel("About " + entry.title)
-                .accessibilityIdentifier("introduction.reopen")
-                .padding(.trailing, UIScale.pt(14))
-                .offset(y: -UIScale.pt(35))
-            }
-        }
+        .preference(
+            key: HostIntroductionReopenKey.self,
+            value: showsReopen && !presenting && entry?.guide != nil
+                ? entry.map { entry in
+                    HostIntroductionReopen(id: entry.id, title: entry.title) {
+                        [reopened = $reopened] in reopened.wrappedValue = true
+                    }
+                } : nil)
     }
 
     private func intro(_ entry: HostExtension, _ guide: HostExtensionGuide) -> some View {
@@ -118,7 +109,6 @@ struct HostIntroducedPage<Content: View>: View {
             },
             examples: guide.examples,
             start: PageAction("Get started", symbolName: "arrow.right") { finish(entry) },
-            skip: PageAction("Skip") { finish(entry) },
             skipAll: PageAction("Skip all introductions") {
                 HostIntroductions(defaults: defaults).skipAll(current: entry.id)
                 reopened = false
@@ -128,5 +118,48 @@ struct HostIntroducedPage<Content: View>: View {
     private func finish(_ entry: HostExtension) {
         HostIntroductions(defaults: defaults).markSeen(entry.id)
         reopened = false
+    }
+}
+
+enum HostTitlebarMetrics {
+    static let stripHeight = 41.0
+    static let rowHeight = 31.0
+}
+
+struct HostIntroductionReopen: Equatable, Sendable {
+    let id: String
+    let title: String
+    let perform: @MainActor @Sendable () -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id && lhs.title == rhs.title }
+}
+
+struct HostIntroductionReopenKey: PreferenceKey {
+    static let defaultValue: HostIntroductionReopen? = nil
+
+    static func reduce(value: inout HostIntroductionReopen?, nextValue: () -> HostIntroductionReopen?) {
+        value = value ?? nextValue()
+    }
+}
+
+struct HostIntroductionReopenButton: View {
+    let reopen: HostIntroductionReopen
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: reopen.perform) {
+            Image(systemName: "info.circle")
+                .font(.system(size: UIScale.pt(15), weight: .medium))
+                .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.edith(.toolbar))
+        .help("About " + reopen.title)
+        .accessibilityLabel("About " + reopen.title)
+        .accessibilityIdentifier("introduction.reopen")
+        .frame(height: UIScale.pt(HostTitlebarMetrics.rowHeight))
+        .padding(.trailing, PageMetrics.gutter(compact) - UIScale.pt(10))
+        .offset(y: -UIScale.pt(HostTitlebarMetrics.stripHeight))
     }
 }

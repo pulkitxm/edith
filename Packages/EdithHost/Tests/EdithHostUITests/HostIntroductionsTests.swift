@@ -93,6 +93,16 @@ import Testing
         #expect(progressed.visible)
     }
 
+    @Test func getStartedOrdersInstallBeforePermissionsAndPointsAtTheNextStep() {
+        let fresh = input(missing: 0)
+        #expect(fresh.steps.map(\.kind) == [.setup, .install, .permissions, .tryTool, .agent])
+        #expect(fresh.next == .setup)
+        #expect(fresh.progress == "1 of 5 done")
+        #expect(input(done: true).next == .install)
+        #expect(input(done: true, missing: 1, downloads: true).next == .permissions)
+        #expect(input(done: true, downloads: true, tried: true, agent: true).next == nil)
+    }
+
     @Test func getStartedHidesWhenDoneDismissedOrUnknown() {
         let complete = input(done: true, downloads: true, tried: true, agent: true)
         #expect(complete.finished && !complete.visible)
@@ -111,7 +121,11 @@ import Testing
             HostSuiteLandingSummary.summary(tools, downloaded: ["a", "b", "c"])
                 == "All 3 installed")
         #expect(HostSuiteLandingSummary.tagline(tools[0]) == "t")
-        #expect(HostSuiteLandingSummary.status(installed: true, pending: false) == "installed")
-        #expect(HostSuiteLandingSummary.status(installed: false, pending: false) == "available")
+        #expect(HostSuiteLandingSummary.badge(installed: true, active: true, pending: false) == nil)
+        #expect(HostSuiteLandingSummary.badge(installed: true, active: false, pending: false) == "Off")
+        #expect(HostSuiteLandingSummary.badge(installed: false, active: false, pending: false) == nil)
+        #expect(
+            HostSuiteLandingSummary.badge(installed: true, active: false, pending: true)
+                == "Cleaning up")
     }
 }

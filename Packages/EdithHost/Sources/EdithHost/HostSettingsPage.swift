@@ -119,8 +119,8 @@ struct HostSettingsPage: View {
             } header: {
                 Text("Window")
             } footer: {
-                Text("Features are turned on and off from the Extensions page.")
-                    .font(.system(size: UIScale.pt(10)))
+                Text("Turn features on and off from the Extensions page.")
+                    .font(.edithText(.caption))
             }
 
             Section {
@@ -133,7 +133,7 @@ struct HostSettingsPage: View {
                             Text(permissionSummary)
                                 .foregroundStyle(.secondary)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: UIScale.pt(10)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -144,11 +144,11 @@ struct HostSettingsPage: View {
                 Text("Access")
             } footer: {
                 Text("Every permission Edith can ask for, in one place.")
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
             }
 
             Section {
-                Toggle("Show introductions for new tools", isOn: $introductions)
+                Toggle("Introduce extensions the first time you open them", isOn: $introductions)
                     .accessibilityIdentifier("settings.introductions")
                 Button("Reset introductions") {
                     HostIntroductions(defaults: defaults).reset()
@@ -158,9 +158,9 @@ struct HostSettingsPage: View {
                 Text("Introductions")
             } footer: {
                 Text(
-                    "The first time you open a tool, Edith explains what it is for. Reset shows every introduction and the Get started list on Home again."
+                    "Reset to see every introduction and the Get started list on Home again."
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
             }
 
             Section {

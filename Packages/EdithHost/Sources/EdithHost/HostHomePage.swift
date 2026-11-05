@@ -65,9 +65,11 @@ struct HostHomePage: View {
                         with: marketplace.surfaceAvailability.activeIDs)
                 {
                     PageCard(title: tile.displayTitle) {
-                        Text("Enable this integration in Extensions.").font(.edithText(.callout))
-                            .foregroundStyle(.secondary)
+                        Text("Turn on the extension behind this widget to see it here.")
+                            .font(.edithText(.callout)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                         Button("Open Extensions", action: extensions)
+                            .buttonStyle(.edith(.secondary))
                     }
                 } else {
                     HostSurfaceCard(
@@ -77,9 +79,13 @@ struct HostHomePage: View {
                 }
             }
             if layout.visible.isEmpty, !editing, workflowSetup == nil {
-                ContentUnavailableView(
-                    "Make yourself at home", systemImage: "rectangle.3.group",
-                    description: Text("Add widgets in the Home & Notch editor."))
+                PageEmptyState(
+                    symbolName: "rectangle.3.group",
+                    title: "Make Home yours",
+                    message:
+                        "Home shows live widgets from your extensions, like your next meeting or the song that is playing.",
+                    primary: PageAction("Add widgets", symbolName: "plus") { customize(nil) },
+                    secondary: PageAction("Browse extensions", perform: extensions))
             }
         }.navigationTitle("Home")
     }
@@ -205,7 +211,7 @@ struct HostSurfaceCard: View {
     private var genericCard: some View {
         PageCard(
             title: tile.showTitle ? title : nil,
-            note: tile.widget == .clocks ? "hover a clock to remove" : nil,
+            note: tile.widget == .clocks ? "Hover a clock to remove it" : nil,
             fill: fillHeight
         ) {
             if tile.widget == .clocks {
@@ -292,12 +298,26 @@ private struct HostSurfaceProviderCard: View {
                     tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
                 )
                 .disabled(actionTask != nil)
-            } else if load.isRunning {
-                LoadingIndicator()
+            } else if load.errorMessage == nil {
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 140, height: 14)
+                        SkeletonBlock(height: 10)
+                        SkeletonBlock(width: 180, height: 10)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading " + provider.title)
             }
             if let error = actionError ?? load.errorMessage {
-                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)
-                Button("Retry") { retry += 1 }.buttonStyle(.edith(.secondary))
+                Label {
+                    Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                }
+                .font(.edithText(.caption))
+                Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
             }
         }
         .background(HostSurfaceNavigationAnchor(origin: navigationOrigin))

@@ -31,7 +31,14 @@ struct HostPageContent: View {
         Binding(get: { settingsDestination }, set: { settings = $0 })
     }
 
-    @ViewBuilder var body: some View {
+    var body: some View {
+        page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
+            if showsIntroductionButton, let reopen = $0 { HostIntroductionReopenButton(reopen: reopen) }
+        }
+    }
+
+    @ViewBuilder private var page: some View {
         switch destination.id {
         case "home":
             HostHomePage(
@@ -91,10 +98,7 @@ struct HostPageContent: View {
                 .accessibilityLabel("App Maintenance section")
             },
             accessory: {
-                Text(current.summary)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                PageSubtitle(current.summary)
             }
         )
         .padding(.bottom, tight ? -UIScale.pt(6) : 0)
