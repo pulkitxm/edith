@@ -97,7 +97,7 @@ struct KitComponentTests {
         let bare = fitting(
             PageMetric(title: "Commits", value: "12", detail: "Synthetic").frame(width: 200))
         let icon = fitting(
-            PageMetric(title: "Commits", value: "12", detail: "Synthetic", symbol: "star")
+            PageMetric(title: "Commits", value: "12", detail: "Synthetic", icon: .heart)
                 .frame(width: 200))
         let trend = fitting(
             PageMetric(title: "Commits", value: "12", detail: "Synthetic", trend: "9%")
@@ -111,7 +111,7 @@ struct KitComponentTests {
     @Test func siblingMetricValuesAlignToThePixel() async throws {
         let rendered = try await render(
             PageMetricGrid(maximumColumns: 4) {
-                PageMetric(title: "Commits", value: "888", detail: "Synthetic", symbol: "star")
+                PageMetric(title: "Commits", value: "888", detail: "Synthetic", icon: .heart)
                 PageMetric(title: "Commits", value: "888")
                 PageMetric(title: "Commits", value: "888", trend: "4%")
                 PageMetric(
@@ -211,8 +211,10 @@ struct KitComponentTests {
     @Test func singleClosureHeaderBindsToTrailingActions() {
         let plain = PageHeader("Synthetic", subtitle: "Line") { Button("Action") {} }
         #expect(type(of: plain) == PageHeader<Text, Button<Text>, EmptyView>.self)
-        let custom = PageHeader(title: { Image(systemName: "star") }) { Button("Action") {} }
-        #expect(type(of: custom) == PageHeader<Image, Button<Text>, EmptyView>.self)
+        let custom = PageHeader(title: { EdithIconView(.heart, tone: .muted) }) {
+            Button("Action") {}
+        }
+        #expect(type(of: custom) == PageHeader<EdithIconView, Button<Text>, EmptyView>.self)
         let accessory = PageHeader("Synthetic", accessory: { Text("Filters") })
         #expect(type(of: accessory) == PageHeader<Text, EmptyView, Text>.self)
         let both = PageHeader("Synthetic") {
@@ -293,16 +295,18 @@ struct KitComponentTests {
         #expect(PageIcon.side(32) == 40)
     }
 
-    @Test func flushIconsMeasureTheirInkAndUnknownExtensionsKeepTheirSymbol() {
-        #expect(PageIcon(.brand, size: 60).leadingInset == 6)
-        #expect(PageIcon(extensionID: "brand", symbolName: "tray", size: 60).leadingInset == 6)
-        #expect(PageIcon(extensionID: "future", symbolName: "tray", size: 60).leadingInset == 0)
-        #expect(PageIcon(extensionID: nil, symbolName: "tray", size: 60).leadingInset == 0)
+    @Test func flushIconsMeasureTheirInkAndUnknownExtensionsKeepTheirIcon() {
+        let dot = PageIcon(icon: .dot, size: 60).leadingInset
+        #expect(PageIcon(icon: .brand, size: 60).leadingInset == 6)
+        #expect(dot != 6)
+        #expect(PageIcon(extensionID: "brand", icon: .dot, size: 60).leadingInset == 6)
+        #expect(PageIcon(extensionID: "future", icon: .dot, size: 60).leadingInset == dot)
+        #expect(PageIcon(extensionID: nil, icon: .dot, size: 60).leadingInset == dot)
     }
 
     @Test func emptyStateScrollsOnlyWhenTallerThanItsContainer() async throws {
         let state = PageEmptyState(
-            symbolName: "tray", title: "Synthetic", message: "Synthetic message.",
+            icon: .tray, title: "Synthetic", message: "Synthetic message.",
             steps: DesignSystemGallery.steps, footnote: "Synthetic footnote.")
         let short = try await render(state.frame(width: 600, height: 200), width: 600, height: 200)
         #expect(!scrollViews(in: short.host).isEmpty)
@@ -318,7 +322,7 @@ struct KitComponentTests {
 
     @Test func emptyStateCentersInWorkspacesAndBothScaffolds() async throws {
         let state = PageEmptyState(
-            symbolName: "tray", title: "Synthetic", message: "Synthetic message.")
+            icon: .tray, title: "Synthetic", message: "Synthetic message.")
         let header = { PageHeader("Header") }
         let workspace = try await render(
             PageWorkspace(header: header) { state }, height: 700)
@@ -335,7 +339,7 @@ struct KitComponentTests {
     @Test func introAlignsToTheTopAndEmbedsWithoutScrolling() async throws {
         let intro = { (embedded: Bool) in
             PageIntro(
-                symbolName: "star", title: "Synthetic", tagline: "Line", summary: "Summary",
+                icon: .heart, title: "Synthetic", tagline: "Line", summary: "Summary",
                 steps: Array(DesignSystemGallery.steps.prefix(1)),
                 start: PageAction("Start") {}, embedded: embedded)
         }
@@ -355,7 +359,7 @@ struct KitComponentTests {
                 result =
                     fitting(
                         PageEmptyState(
-                            symbolName: "tray", title: "A", message: "B",
+                            icon: .tray, title: "A", message: "B",
                             primary: PageAction(label) {}, style: .compact
                         )
                         .font(.system(size: 13))
@@ -370,7 +374,7 @@ struct KitComponentTests {
                 result =
                     fitting(
                         PageIntro(
-                            symbolName: "star", title: "A", tagline: "B", summary: "C", steps: [],
+                            icon: .heart, title: "A", tagline: "B", summary: "C", steps: [],
                             start: PageAction(label) {}, embedded: true
                         )
                         .font(.system(size: 13))
@@ -514,7 +518,7 @@ struct KitComponentTests {
     @Test func iconChipIsSquareAtEveryZoom() {
         for zoom in [1.0, 1.6] {
             withZoom(zoom) {
-                let size = fitting(PageIconChip(systemImage: "star", label: "Star") {})
+                let size = fitting(PageIconChip(icon: .heart, label: "Star") {})
                 let expected = UIScale.pt(PageMetrics.chipHeight)
                 #expect(abs(size.width - expected) < 1)
                 #expect(abs(size.height - expected) < 1)

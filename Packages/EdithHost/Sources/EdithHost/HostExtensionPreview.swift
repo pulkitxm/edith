@@ -64,7 +64,7 @@ struct HostExtensionPreview: View {
         case "audioMixer": audioMixerPreview(phase: phase)
         default:
             HostExtensionPreviewScene(
-                id: entry.id, symbolName: entry.symbolName, dark: dark, phase: phase)
+                id: entry.id, icon: entry.icon, dark: dark, phase: phase)
         }
     }
 
@@ -165,7 +165,7 @@ struct HostExtensionPreview: View {
     private func quinjetPreview(phase: Double) -> some View {
         let highlighted = sin(phase * 1.4) > 0.1
         return HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "folder.fill")
+            EdithIconView(.folder)
                 .font(.system(size: UIScale.pt(15)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -252,7 +252,7 @@ struct HostExtensionPreview: View {
         return VStack(spacing: UIScale.pt(5)) {
             ForEach(0..<3) { index in
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: index == 1 ? "app.fill" : "terminal.fill")
+                    EdithIconView(index == 1 ? .appTile : .terminal)
                         .font(.system(size: UIScale.pt(8)))
                         .foregroundStyle(
                             index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
@@ -284,7 +284,7 @@ struct HostExtensionPreview: View {
         }
         return HStack(spacing: UIScale.pt(12)) {
             VStack(spacing: UIScale.pt(3)) {
-                Image(systemName: "laptopcomputer")
+                EdithIconView(.laptop)
                     .font(.system(size: UIScale.pt(15)))
                 Text("MAC")
                     .font(DashSkin.mono(6, weight: .semibold))
@@ -409,7 +409,7 @@ struct HostExtensionPreview: View {
     ) -> some View {
         ZStack {
             HStack(spacing: UIScale.pt(13)) {
-                Image(systemName: "mic.fill")
+                EdithIconView(.mic)
                     .font(.system(size: UIScale.pt(24), weight: .medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 HStack(alignment: .center, spacing: UIScale.pt(4)) {
@@ -558,7 +558,7 @@ struct HostExtensionPreview: View {
                 )
                 .frame(width: UIScale.pt(60), height: UIScale.pt(60))
                 .overlay {
-                    Image(systemName: "music.note")
+                    EdithIconView(.music)
                         .font(.system(size: UIScale.pt(24), weight: .semibold))
                         .foregroundStyle(DashSkin.onAccent(dark))
                 }
@@ -592,9 +592,9 @@ struct HostExtensionPreview: View {
                 }
                 .frame(height: UIScale.pt(4))
                 HStack(spacing: UIScale.pt(14)) {
-                    ForEach(["backward.fill", "pause.fill", "forward.fill"], id: \.self) { symbol in
-                        Image(systemName: symbol)
-                            .font(.system(size: UIScale.pt(symbol == "pause.fill" ? 13 : 9)))
+                    ForEach([EdithIcon.rewind, .pause, .fastForward], id: \.self) { icon in
+                        EdithIconView(icon)
+                            .font(.system(size: UIScale.pt(icon == .pause ? 13 : 9)))
                             .foregroundStyle(DashSkin.ink(dark))
                     }
                 }
@@ -759,7 +759,7 @@ struct HostExtensionPreview: View {
         return VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             ForEach(0..<3) { index in
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: index == 2 ? "spigot" : "shippingbox.fill")
+                    EdithIconView(index == 2 ? .homebrew : .box)
                         .font(.system(size: UIScale.pt(8)))
                         .foregroundStyle(
                             index == active ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
@@ -836,13 +836,10 @@ struct HostExtensionPreview: View {
         return VStack(spacing: UIScale.pt(5)) {
             ForEach(0..<3) { index in
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(
-                        systemName: index == 2
-                            ? "clock" : (index == 0 ? "checkmark.circle.fill" : "arrow.down")
-                    )
-                    .font(.system(size: UIScale.pt(8)))
-                    .foregroundStyle(index == 0 ? DashSkin.sage : DashSkin.accent(dark))
-                    .frame(width: UIScale.pt(12))
+                    EdithIconView(index == 2 ? .clock : (index == 0 ? .success : .arrowDown))
+                        .font(.system(size: UIScale.pt(8)))
+                        .foregroundStyle(index == 0 ? DashSkin.sage : DashSkin.accent(dark))
+                        .frame(width: UIScale.pt(12))
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
                             Capsule().fill(DashSkin.lineStrong(dark))
@@ -865,9 +862,9 @@ struct HostExtensionPreview: View {
 
     private func audioMixerPreview(phase: Double) -> some View {
         let track = 48.0
-        let channels = ["music.note", "video.fill", "message.fill", "globe"]
+        let channels: [EdithIcon] = [.music, .video, .message, .globe]
         return HStack(alignment: .bottom, spacing: UIScale.pt(26)) {
-            ForEach(Array(channels.enumerated()), id: \.offset) { index, symbol in
+            ForEach(Array(channels.enumerated()), id: \.offset) { index, icon in
                 let level = 0.3 + (sin(phase * 2.2 + Double(index) * 0.9) + 1) * 0.32
                 VStack(spacing: UIScale.pt(6)) {
                     ZStack(alignment: .bottom) {
@@ -883,7 +880,7 @@ struct HostExtensionPreview: View {
                             .frame(width: UIScale.pt(6), height: UIScale.pt(track * level))
                     }
                     .frame(height: UIScale.pt(track))
-                    Image(systemName: symbol)
+                    EdithIconView(icon)
                         .font(.system(size: UIScale.pt(9), weight: .medium))
                         .foregroundStyle(
                             index == 1 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)

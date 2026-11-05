@@ -180,7 +180,7 @@ struct FinderBody: View {
                 Button {
                     model.showSidebar.toggle()
                 } label: {
-                    Image(systemName: "sidebar.left")
+                    EdithIconView(.sidebarLeft)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Hide or show the sidebar (⌃⌘S)")
@@ -191,7 +191,7 @@ struct FinderBody: View {
                     model.goBack()
                     model.requestKeyFocus()
                 } label: {
-                    Image(systemName: "chevron.left")
+                    EdithIconView(.chevronLeft)
                 }
                 .disabled(!model.canGoBack)
                 .help("Back (⌘[)")
@@ -199,7 +199,7 @@ struct FinderBody: View {
                     model.goForward()
                     model.requestKeyFocus()
                 } label: {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                 }
                 .disabled(!model.canGoForward)
                 .help("Forward (⌘])")
@@ -207,7 +207,7 @@ struct FinderBody: View {
                     model.goUp()
                     model.requestKeyFocus()
                 } label: {
-                    Image(systemName: "chevron.up")
+                    EdithIconView(.chevronUp)
                 }
                 .disabled(!model.canGoUp)
                 .help("Enclosing folder (⌘↑)")
@@ -215,7 +215,7 @@ struct FinderBody: View {
                     model.goHome()
                     model.requestKeyFocus()
                 } label: {
-                    Image(systemName: "house")
+                    EdithIconView(.home)
                 }
                 .help("Home folder")
             }
@@ -233,7 +233,7 @@ struct FinderBody: View {
                 Menu {
                     sortItems
                 } label: {
-                    Image(systemName: "arrow.up.arrow.down")
+                    EdithIcon.arrowSort.image()
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
@@ -283,7 +283,7 @@ struct FinderBody: View {
                 Divider()
                 Button("Refresh") { model.refresh() }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                EdithIcon.more.image()
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -306,10 +306,11 @@ struct FinderBody: View {
                     model.sortAscending = true
                 }
             } label: {
-                Label(
-                    key.title,
-                    systemImage: model.sortKey == key
-                        ? (model.sortAscending ? "chevron.up" : "chevron.down") : "")
+                if model.sortKey == key {
+                    Label(key.title, edith: model.sortAscending ? .chevronUp : .chevronDown)
+                } else {
+                    Text(key.title)
+                }
             }
         }
         Divider()
@@ -359,10 +360,8 @@ struct FinderBody: View {
                         model.requestKeyFocus()
                     } label: {
                         HStack(spacing: UIScale.pt(4)) {
-                            Image(
-                                systemName: crumb.path == "/" ? "externaldrive" : "folder"
-                            )
-                            .font(.system(size: UIScale.pt(9.5)))
+                            EdithIconView(crumb.path == "/" ? .drive : .folder)
+                                .font(.system(size: UIScale.pt(9.5)))
                             Text(crumb.name)
                                 .font(.system(size: UIScale.pt(11)))
                         }
@@ -372,7 +371,7 @@ struct FinderBody: View {
                     }
                     .buttonStyle(.edith(.borderless))
                     if crumb.path != model.path {
-                        Image(systemName: "chevron.compact.right")
+                        EdithIconView(.chevronRight)
                             .font(.system(size: UIScale.pt(9)))
                             .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.5))
                     }
@@ -397,7 +396,7 @@ struct FinderBody: View {
                     Button {
                         model.cancelTransfer()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        EdithIconView(.closeFilled)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Cancel transfer")

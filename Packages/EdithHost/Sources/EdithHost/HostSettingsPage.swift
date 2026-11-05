@@ -120,7 +120,7 @@ struct HostSettingsPage: View {
                         HStack(spacing: UIScale.pt(6)) {
                             Text(permissionSummary)
                                 .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
+                            EdithIconView(.chevronRight)
                                 .font(.edithText(.caption))
                                 .foregroundStyle(.tertiary)
                         }
@@ -200,7 +200,7 @@ struct HostSettingsPage: View {
             ZStack {
                 Circle().fill(color).frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 if themeName == name {
-                    Image(systemName: "checkmark")
+                    EdithIconView(.check)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(AppTheme(storedName: name).onAccent)
                 }

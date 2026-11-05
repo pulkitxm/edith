@@ -70,7 +70,7 @@ struct HostQuitWaitView: View {
         let dark = scheme == .dark
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
             HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                PageGuideBadge(symbolName: "hourglass", size: 40)
+                PageGuideBadge(icon: .hourglass, size: 40)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Finishing up before quitting")
                         .font(.edithText(.headline))
@@ -128,7 +128,7 @@ struct HostQuitWaitView: View {
 
     private func row(_ title: String, done: Bool, dark: Bool) -> some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle.dotted")
+            EdithIconView(done ? .success : .scan)
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .foregroundStyle(done ? DashSkin.sage : DashSkin.accent(dark))
                 .accessibilityHidden(true)

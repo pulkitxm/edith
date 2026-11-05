@@ -348,7 +348,7 @@ final class HostRemoteViewController: NSViewController {
         if let statusView { statusView.removeFromSuperview() }
         let notice = NSHostingView(
             rootView: ContentUnavailableView {
-                Label("Extension unavailable", systemImage: "exclamationmark.triangle")
+                Label("Extension unavailable", edith: .warning)
             } description: {
                 Text(failure!)
             } actions: {

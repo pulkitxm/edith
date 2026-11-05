@@ -1,3 +1,4 @@
+import EdithIcons
 import CoreGraphics
 import EdithExtensionCore
 import SwiftUI
@@ -12,7 +13,7 @@ struct SurfaceThumbnailImage: View {
             if let image {
                 Image(decorative: image, scale: 1).resizable().scaledToFit()
             } else {
-                Image(systemName: "photo").foregroundStyle(.secondary)
+                EdithIconView(.photo).foregroundStyle(.secondary)
             }
         }
         .frame(width: UIScale.pt(dense ? 36 : 52), height: UIScale.pt(dense ? 36 : 52))

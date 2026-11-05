@@ -163,7 +163,7 @@ struct HostGetStartedCard: View {
 
     private var suggestionText: some View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            PageGuideBadge(symbolName: "puzzlepiece.extension", size: 40)
+            PageGuideBadge(icon: .puzzle, size: 40)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Add live widgets to Home").font(.edithText(.headline))
                 Text("Install an extension, like Calendar or Music, and its widget appears here.")
@@ -215,16 +215,13 @@ struct HostGetStartedCard: View {
         let next = state.next == step.kind
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                Image(
-                    systemName: step.done
-                        ? "checkmark.circle.fill" : (next ? "circle.circle" : "circle")
-                )
-                .font(.system(size: UIScale.pt(15), weight: .medium))
-                .foregroundStyle(
-                    step.done || next ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
-                )
-                .frame(width: UIScale.pt(18))
-                .accessibilityHidden(true)
+                EdithIconView(step.done ? .success : (next ? .radioOn : .ring))
+                    .font(.system(size: UIScale.pt(15), weight: .medium))
+                    .foregroundStyle(
+                        step.done || next ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                    )
+                    .frame(width: UIScale.pt(18))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(copy.title).font(.edithText(.callout)).fontWeight(.medium)
                         .foregroundStyle(

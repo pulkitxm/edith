@@ -83,13 +83,13 @@ struct HostBackgroundRowsSkeleton: View {
 
 struct HostBackgroundNotice: View {
     let text: String
-    var symbol = "exclamationmark.triangle.fill"
+    var icon = EdithIcon.warning
 
     var body: some View {
         Label {
             Text(text).fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: symbol).foregroundStyle(.orange)
+            EdithIconView(icon).foregroundStyle(.orange)
         }
         .font(.edithText(.caption))
         .foregroundStyle(.primary)
@@ -97,13 +97,13 @@ struct HostBackgroundNotice: View {
 }
 
 struct HostBackgroundEmptyRow: View {
-    let symbol: String
+    let icon: EdithIcon
     let title: String
     let message: String
 
     var body: some View {
         HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            PageGuideBadge(symbolName: symbol, size: 32)
+            PageGuideBadge(icon: icon, size: 32)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title).font(.edithText(.body)).fontWeight(.medium)
                 Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -161,7 +161,7 @@ struct HostBackgroundOverviewSection: View {
     var body: some View {
         Section {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                PageGuideBadge(symbolName: "bolt.horizontal.circle.fill", size: 32, tint: tint)
+                PageGuideBadge(icon: .bolt, size: 32, tint: tint)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(headline).font(.edithText(.headline))
                         .accessibilityAddTraits(.isHeader)
@@ -251,7 +251,7 @@ struct HostBackgroundJobsSection: View {
                     HostBackgroundRowsSkeleton(count: 3)
                 } else if phase != .running {
                     HostBackgroundEmptyRow(
-                        symbol: "pause.circle", title: "Jobs are paused",
+                        icon: .pause, title: "Jobs are paused",
                         message:
                             "Scheduled jobs run again as soon as the background agent is back. Use Restart above to bring it back now."
                     )
@@ -261,11 +261,11 @@ struct HostBackgroundJobsSection: View {
                         .buttonStyle(.edith(.secondary))
                 } else if let unavailable = model.unavailable {
                     HostBackgroundEmptyRow(
-                        symbol: "calendar.badge.exclamationmark", title: "Jobs are not available",
+                        icon: .calendar, title: "Jobs are not available",
                         message: unavailable)
                 } else {
                     HostBackgroundEmptyRow(
-                        symbol: "calendar.badge.clock", title: "No scheduled jobs yet",
+                        icon: .clock, title: "No scheduled jobs yet",
                         message:
                             "Tools like Usage refresh their data on a schedule. When you add one, its jobs show up here with when they last ran."
                     )
@@ -276,7 +276,7 @@ struct HostBackgroundJobsSection: View {
                 Section {
                     if let failure = model.failure { HostBackgroundNotice(text: failure) }
                     if let unavailable = model.unavailable {
-                        HostBackgroundNotice(text: unavailable, symbol: "info.circle.fill")
+                        HostBackgroundNotice(text: unavailable, icon: .info)
                     }
                 }
             }
@@ -299,7 +299,7 @@ struct HostBackgroundJobsSection: View {
                             Button {
                                 open(page.id)
                             } label: {
-                                Label("Open \(page.title)", systemImage: "arrow.up.forward")
+                                Label("Open \(page.title)", edith: .arrowUpRight)
                                     .labelStyle(.titleAndIcon)
                             }
                             .buttonStyle(.edith(.borderless))
@@ -374,13 +374,13 @@ struct HostBackgroundTasksSection: View {
     @State private var failure: String?
     @Environment(\.colorScheme) private var scheme
 
-    private func symbol(_ state: HostBackgroundTask.State) -> (String, Color) {
+    private func stateIcon(_ state: HostBackgroundTask.State) -> (EdithIcon, Color) {
         switch state {
-        case .queued: ("clock", .secondary)
-        case .running, .stopping: ("arrow.triangle.2.circlepath", DashSkin.accent(scheme == .dark))
-        case .finished: ("checkmark.circle.fill", .green)
-        case .failed, .interrupted: ("exclamationmark.circle.fill", .orange)
-        case .cancelled: ("stop.circle", .secondary)
+        case .queued: (.clock, .secondary)
+        case .running, .stopping: (.sync, DashSkin.accent(scheme == .dark))
+        case .finished: (.success, .green)
+        case .failed, .interrupted: (.alert, .orange)
+        case .cancelled: (.stop, .secondary)
         }
     }
 
@@ -392,13 +392,13 @@ struct HostBackgroundTasksSection: View {
                 HostBackgroundRowsSkeleton(count: 2)
             } else if tasks.isEmpty && status.phase != .running {
                 HostBackgroundEmptyRow(
-                    symbol: "checklist", title: "No tasks to show",
+                    icon: .stepTools, title: "No tasks to show",
                     message:
                         "Tasks and their results show up here once the background agent is running."
                 )
             } else if tasks.isEmpty {
                 HostBackgroundEmptyRow(
-                    symbol: "checklist", title: "No tasks yet",
+                    icon: .stepTools, title: "No tasks yet",
                     message:
                         "Long actions you or an agent start, like downloads or commands run with ed, show their progress and result here."
                 )
@@ -433,14 +433,12 @@ struct HostBackgroundTasksSection: View {
     }
 
     private func row(_ task: HostBackgroundTask) -> some View {
-        let (name, color) = symbol(task.state)
+        let (icon, color) = stateIcon(task.state)
         let detail = task.failure ?? task.activity ?? task.timing(now: now)
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            Image(systemName: name)
-                .font(.system(size: UIScale.pt(14), weight: .medium))
+            EdithIconView(icon, size: UIScale.pt(16))
                 .foregroundStyle(color)
                 .frame(width: UIScale.pt(20), height: UIScale.pt(20))
-                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(task.title).font(.edithText(.body)).fontWeight(.medium).lineLimit(1)
                 Text(detail)
@@ -498,9 +496,9 @@ struct HostBackgroundDiagnosticsSection: View {
                 showingEvents = true
             } label: {
                 HStack(spacing: UIScale.pt(12)) {
-                    Label("Event timeline", systemImage: "waveform.path.ecg")
+                    Label("Event timeline", edith: .pulse)
                     Spacer()
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.secondary)
                 }

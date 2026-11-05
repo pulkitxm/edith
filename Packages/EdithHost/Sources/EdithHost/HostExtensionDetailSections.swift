@@ -29,7 +29,7 @@ struct HostExtensionHero<Action: View>: View {
         let dark = scheme == .dark
         return HStack(alignment: .center, spacing: UIScale.pt(16)) {
             PageGuideBadge(
-                extensionID: entry.id, symbolName: entry.symbolName,
+                extensionID: entry.id, icon: entry.icon,
                 size: HostExtensionDetailLayout.heroIcon, tone: .monochrome
             )
             .flushLeading()
@@ -102,7 +102,7 @@ struct HostExtensionPlacementList: View {
                 ForEach(Array(placements.enumerated()), id: \.element.id) { index, placement in
                     if index > 0 { Divider() }
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                        Image(systemName: placement.symbolName)
+                        EdithIconView(placement.icon)
                             .font(.system(size: UIScale.pt(14), weight: .medium))
                             .foregroundStyle(DashSkin.accent(dark))
                             .frame(width: UIScale.pt(24))
@@ -138,7 +138,7 @@ struct HostExtensionPermissionList: View {
                 subtitle: required.isEmpty && optional.isEmpty
                     ? nil : "macOS asks the first time. You can change them any time in Settings.")
             if required.isEmpty && optional.isEmpty {
-                Label("No special permissions needed.", systemImage: "checkmark.shield")
+                Label("No special permissions needed.", edith: .shield)
                     .font(.edithText(.callout)).foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 0) {
@@ -200,6 +200,6 @@ struct HostExtensionExamples: View {
 
 extension HostExtensionGuide {
     var pageSteps: [PageGuideStep] {
-        steps.map { PageGuideStep(symbolName: $0.symbolName, title: $0.title, detail: $0.detail) }
+        steps.map { PageGuideStep(icon: $0.icon, title: $0.title, detail: $0.detail) }
     }
 }

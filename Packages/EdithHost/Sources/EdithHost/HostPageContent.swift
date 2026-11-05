@@ -90,7 +90,7 @@ struct HostPageContent: View {
         return PageHeader(current.title, subtitle: current.summary) {
             Picker("Section", selection: $maintenanceSection) {
                 ForEach(sections) { section in
-                    Label(section.title, systemImage: section.symbol).tag(section.id)
+                    Label(section.title, edith: section.icon).tag(section.id)
                 }
             }
             .pickerStyle(.menu)
@@ -127,9 +127,11 @@ struct HostPageContent: View {
             } else if let view = additionalSettings?(settingsDestination) {
                 view
             } else {
-                ContentUnavailableView(
-                    settingsSections.first(where: { $0.id == settingsDestination })?.title
-                        ?? "General", systemImage: "gearshape")
+                ContentUnavailableView {
+                    Label(
+                        settingsSections.first(where: { $0.id == settingsDestination })?.title
+                            ?? "General", edith: .gear)
+                }
             }
         }
     }

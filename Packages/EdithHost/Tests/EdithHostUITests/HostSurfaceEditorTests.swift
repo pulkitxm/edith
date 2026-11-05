@@ -818,14 +818,14 @@ import HostWorkerFixtureSupport
     @Test func sharedCardRendererShowsRealContractDataAndDispatchesOnlyItsActionID() async throws {
         let restore = try enableAccessibility()
         defer { restore() }
-        let action = SurfaceAction("join:synthetic-meeting", "Join", "video.fill", field: "join")
+        let action = SurfaceAction("join:synthetic-meeting", "Join", .video, field: "join")
         let snapshot = SurfaceSnapshot(
             providerID: "calendar",
             rows: [
                 .init(
                     "synthetic-meeting", sourceID: "synthetic-calendar",
                     title: "Synthetic design review", detail: "Synthetic calendar", value: "10:00",
-                    icon: "calendar", actions: [action])
+                    icon: .calendar, actions: [action])
             ])
         var performed: [String] = []
         let host = NSHostingView(
@@ -1225,9 +1225,9 @@ import HostWorkerFixtureSupport
         ]
         for (utility, start, stop) in controls {
             let idle = SurfaceSnapshot(
-                providerID: utility.id, actions: [.init(start, "Start", "play")])
+                providerID: utility.id, actions: [.init(start, "Start", .play)])
             let active = SurfaceSnapshot(
-                providerID: utility.id, actions: [.init(stop, "Stop", "stop")])
+                providerID: utility.id, actions: [.init(stop, "Stop", .stop)])
             #expect(utility.action(in: idle)?.id == start)
             #expect(!utility.isOn(idle))
             #expect(utility.isOn(active))
@@ -1237,7 +1237,7 @@ import HostWorkerFixtureSupport
             #expect(
                 utility.action(
                     in: SurfaceSnapshot(
-                        providerID: utility.id, actions: [.init("open:/tmp", "Open", "folder")]))
+                        providerID: utility.id, actions: [.init("open:/tmp", "Open", .folder)]))
                     == nil)
         }
     }
@@ -1276,11 +1276,11 @@ import HostWorkerFixtureSupport
                         }
                     }
                     HostSidebarNotice(
-                        symbol: "arrow.down.circle.fill", title: "Update ready", detail: "v9.9.9",
+                        icon: .arrowDown, title: "Update ready", detail: "v9.9.9",
                         tint: DashSkin.sage
                     ) { actions.append("update") }
                     HostSidebarNotice(
-                        symbol: "exclamationmark.triangle.fill",
+                        icon: .warning,
                         title: "Permissions needed", tint: DashSkin.warn
                     ) { actions.append("permissions") }
                     HostAgentStatusBar(online: true, summary: "2 active") {
@@ -1656,6 +1656,6 @@ private enum SurfaceMicSnapshot {
         SurfaceSnapshot(
             providerID: "micMute",
             metrics: [.init("status", "Microphone", muted ? "Muted" : "On")],
-            actions: [.init("toggle", "Toggle mute", "mic.slash")])
+            actions: [.init("toggle", "Toggle mute", .micMute)])
     }
 }

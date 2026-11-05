@@ -99,7 +99,7 @@ struct HostExtensionContent: View {
                 loading("Preparing " + title)
             } else if !eligible {
                 ContentUnavailableView {
-                    Label(title, systemImage: "puzzlepiece.extension")
+                    Label(title, edith: .puzzle)
                 } description: {
                     Text(
                         failure
@@ -118,14 +118,15 @@ struct HostExtensionContent: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if presenter == nil {
-                ContentUnavailableView(
-                    title, systemImage: "puzzlepiece.extension",
-                    description: Text("The extension view is not connected.")
-                )
+                ContentUnavailableView {
+                    Label(title, edith: .puzzle)
+                } description: {
+                    Text("The extension view is not connected.")
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error {
                 ContentUnavailableView {
-                    Label(title, systemImage: "exclamationmark.triangle")
+                    Label(title, edith: .warning)
                 } description: {
                     Text(error)
                 } actions: {

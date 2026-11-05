@@ -45,7 +45,7 @@ public struct SurfaceSnapshotContent: View {
                             {
                                 SurfaceThumbnailImage(thumbnail: thumbnail, dense: tile.dense)
                             } else {
-                                Image(systemName: row.icon)
+                                EdithIconView(row.icon)
                             }
                             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                                 Text(row.title).lineLimit(tile.dense ? 1 : 2).accessibilityLabel(
@@ -113,7 +113,7 @@ public struct SurfaceSnapshotContent: View {
             Button {
                 perform(action)
             } label: {
-                Label(action.title, systemImage: action.icon)
+                Label(action.title, edith: action.icon)
             }
             .buttonStyle(.edith(.secondary)).font(.edithText(.caption))
         }

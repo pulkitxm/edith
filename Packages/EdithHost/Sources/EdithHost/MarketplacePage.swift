@@ -216,13 +216,13 @@ struct MarketplacePage: View {
                 marketplace.installed.isEmpty && !marketplace.downloadedIDs.isEmpty
                     ? "Connect to the internet to download extensions that work with this version of Edith."
                     : "Installed extensions keep working. Connect to the internet to get new ones.",
-                title: "You are offline", symbol: "wifi.slash")
+                title: "You are offline", icon: .wifiOff)
         } else if showsMigrationBanner {
             PageNotice(
                 migrating.count == 1
                     ? "1 extension needs an update to work with this version of Edith."
                     : "\(migrating.count) extensions need an update to work with this version of Edith.",
-                title: "Updates needed", symbol: "arrow.down.circle"
+                title: "Updates needed", icon: .arrowDown
             ) {
                 EmptyView()
             } actions: {
@@ -238,7 +238,7 @@ struct MarketplacePage: View {
 
     private var unavailable: some View {
         PageEmptyState(
-            symbolName: marketplace.offline ? "wifi.slash" : "wifi.exclamationmark",
+            icon: marketplace.offline ? .wifiOff : .wifi,
             title: marketplace.offline ? "You are offline" : "Extensions could not load",
             message: marketplace.offline
                 ? "Connect to the internet to browse and download extensions."
@@ -273,7 +273,7 @@ struct MarketplacePage: View {
     @ViewBuilder private var empty: some View {
         if !query.isEmpty {
             PageEmptyState(
-                symbolName: "magnifyingglass", title: "No extensions found",
+                icon: .search, title: "No extensions found",
                 message:
                     "Nothing matches \"\(query)\". Try a different word, or browse by category.",
                 primary: PageAction("Clear Search", identifier: "extensions.clear-search") {
@@ -283,7 +283,7 @@ struct MarketplacePage: View {
             .frame(minHeight: emptyHeight)
         } else if scope == .installed {
             PageEmptyState(
-                symbolName: "puzzlepiece.extension", title: "Nothing installed yet",
+                icon: .puzzle, title: "Nothing installed yet",
                 message:
                     "Extensions add tools to Edith. Pick one from Browse and it is ready in seconds.",
                 primary: PageAction("Browse Extensions", identifier: "extensions.browse") {
@@ -293,7 +293,7 @@ struct MarketplacePage: View {
             .frame(minHeight: emptyHeight)
         } else if scope == .updates {
             PageEmptyState(
-                symbolName: marketplace.offline ? "wifi.slash" : "checkmark.circle",
+                icon: marketplace.offline ? .wifiOff : .success,
                 title: marketplace.offline
                     ? "Updates need a connection" : "Everything is up to date",
                 message: marketplace.offline
@@ -309,7 +309,7 @@ struct MarketplacePage: View {
             .frame(minHeight: emptyHeight)
         } else {
             PageEmptyState(
-                symbolName: "puzzlepiece.extension", title: "Nothing in this category yet",
+                icon: .puzzle, title: "Nothing in this category yet",
                 message:
                     "New extensions arrive with Edith updates. Browse all extensions in the meantime.",
                 primary: PageAction("Show All", identifier: "extensions.all") { category = "all" },

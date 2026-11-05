@@ -328,20 +328,20 @@ struct OnboardingCapturePage: View {
         let bundled = (try? HostIndex.bundled()) ?? []
         if !bundled.isEmpty { return bundled }
         return [
-            HostExtension(id: "hinge", title: "Hinge", symbolName: "macwindow", category: "desk"),
+            HostExtension(id: "hinge", title: "Hinge", icon: .window, category: "desk"),
             HostExtension(
-                id: "keystrokeHighlight", title: "Keystrokes", symbolName: "keyboard",
+                id: "keystrokeHighlight", title: "Keystrokes", icon: .keyboard,
                 category: "desk"),
             HostExtension(
-                id: "clipboard", title: "Clipboard", symbolName: "doc.on.clipboard",
+                id: "clipboard", title: "Clipboard", icon: .clipboard,
                 category: "desk"),
             HostExtension(
-                id: "emoji", title: "Emoji", symbolName: "face.smiling", category: "desk"),
+                id: "emoji", title: "Emoji", icon: .emoji, category: "desk"),
             HostExtension(
-                id: "calendar", title: "Calendar", symbolName: "calendar", category: "utilities"),
+                id: "calendar", title: "Calendar", icon: .calendar, category: "utilities"),
             HostExtension(
                 id: "notchShelf", title: "Notch Shelf",
-                symbolName: "rectangle.topthird.inset.filled", category: "notch"),
+                icon: .layoutTop, category: "notch"),
         ]
     }()
 

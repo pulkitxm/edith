@@ -9,7 +9,7 @@ struct HostExtensionIcon: View {
 
     var body: some View {
         PageGuideBadge(
-            extensionID: entry.id, symbolName: entry.symbolName, size: size, tint: tint)
+            extensionID: entry.id, icon: entry.icon, size: size, tint: tint)
     }
 }
 

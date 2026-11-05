@@ -1,8 +1,9 @@
+import EdithIcons
 import EdithHostCore
 import Foundation
 
 struct HostExtensionPlacement: Equatable, Identifiable {
-    let symbolName: String
+    let icon: EdithIcon
     let title: String
     let detail: String
     var id: String { title }
@@ -22,25 +23,25 @@ enum HostExtensionPlacements {
                 let section = route.section.flatMap { sectionTitles[$0] } ?? entry.title
                 result.append(
                     .init(
-                        symbolName: "wrench.and.screwdriver", title: "Maintenance",
+                        icon: .wrench, title: "Maintenance",
                         detail: "Open Maintenance in the sidebar and choose \(section)."))
             } else {
                 let page = pageTitles[route.page] ?? entry.title
                 result.append(
                     .init(
-                        symbolName: "sidebar.left", title: "Sidebar",
+                        icon: .sidebarLeft, title: "Sidebar",
                         detail: "Adds \(page) to the sidebar. Open it any time."))
             }
         } else if let page = entry.pages.min(by: { $0.order < $1.order }) {
             result.append(
                 .init(
-                    symbolName: "sidebar.left", title: "Sidebar",
+                    icon: .sidebarLeft, title: "Sidebar",
                     detail: "Adds \(page.title) to the sidebar."))
         }
         if !entry.homeCards.isEmpty {
             result.append(
                 .init(
-                    symbolName: "house", title: "Home",
+                    icon: .home, title: "Home",
                     detail: entry.homeCards.count == 1
                         ? "Adds a card to Home that you can move or hide."
                         : "Adds \(entry.homeCards.count) cards to Home that you can move or hide."))
@@ -48,7 +49,7 @@ enum HostExtensionPlacements {
         if !entry.notchCards.isEmpty || !entry.notchTabs.isEmpty {
             result.append(
                 .init(
-                    symbolName: "rectangle.topthird.inset.filled", title: "Notch",
+                    icon: .layoutTop, title: "Notch",
                     detail: entry.notchTabs.isEmpty
                         ? "Adds a card to the notch panel."
                         : "Adds a tab to the notch panel."))
@@ -57,13 +58,13 @@ enum HostExtensionPlacements {
             let keys = entry.hotkeys.prefix(hotkeyLimit).map { "\($0.label) \($0.title)" }
             result.append(
                 .init(
-                    symbolName: "keyboard", title: "Hotkeys",
+                    icon: .keyboard, title: "Hotkeys",
                     detail: keys.joined(separator: ", ") + ". Change them in Settings."))
         }
         if result.isEmpty {
             result.append(
                 .init(
-                    symbolName: "menubar.rectangle", title: "Background",
+                    icon: .menuBar, title: "Background",
                     detail: hasSettings
                         ? "Runs quietly without a page of its own. Open this page any time to change its settings."
                         : "Runs quietly in the background without a page of its own."))

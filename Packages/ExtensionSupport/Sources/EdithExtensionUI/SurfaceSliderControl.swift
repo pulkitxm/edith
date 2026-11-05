@@ -42,7 +42,7 @@ struct SurfaceSliderControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack {
-                Label(slider.title, systemImage: slider.icon)
+                Label(slider.title, edith: slider.icon)
                 Spacer(minLength: 0)
                 Text(draft.value, format: .percent.precision(.fractionLength(0))).monospacedDigit()
             }.font(.edithText(.caption))

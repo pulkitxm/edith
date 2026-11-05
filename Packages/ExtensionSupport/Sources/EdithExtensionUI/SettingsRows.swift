@@ -35,15 +35,15 @@ public struct SettingsRow<Trailing: View>: View {
 public struct SettingsNoticeRow: View {
     let title: String
     let message: String
-    var symbol = "info.circle.fill"
+    var icon = EdithIcon.info
     var tint: Color?
 
     public init(
-        _ title: String, message: String, symbol: String = "info.circle.fill", tint: Color? = nil
+        _ title: String, message: String, icon: EdithIcon = .info, tint: Color? = nil
     ) {
         self.title = title
         self.message = message
-        self.symbol = symbol
+        self.icon = icon
         self.tint = tint
     }
 
@@ -51,7 +51,7 @@ public struct SettingsNoticeRow: View {
         LabeledContent {
             EmptyView()
         } label: {
-            Text("\(Text(Image(systemName: symbol)).foregroundColor(tint ?? .secondary)) \(title)")
+            Text("\(Text(edith: icon).foregroundColor(tint ?? .secondary)) \(title)")
             Text(message)
         }
     }
@@ -78,7 +78,7 @@ public struct SettingsErrorRow: View {
             Button(retryTitle, action: retry).buttonStyle(.edith(.secondary))
         } label: {
             Text(
-                "\(Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(.orange)) \(title)"
+                "\(Text(edith: .warning).foregroundColor(.orange)) \(title)"
             )
             Text(message)
         }

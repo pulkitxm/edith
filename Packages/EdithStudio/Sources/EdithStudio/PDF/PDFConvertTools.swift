@@ -11,7 +11,7 @@ enum PDFConvertTools {
     static let toWord = StudioTool(
         id: "pdf.to-word", title: "PDF to Word",
         summary: "Turn a PDF into an editable DOCX with headings, paragraphs and images.",
-        symbol: "doc.text", group: .convert, inputs: [.pdf], produces: .kind(.document),
+        icon: .docText, group: .convert, inputs: [.pdf], produces: .kind(.document),
         options: [
             .choice(
                 "mode", "Result",
@@ -103,7 +103,7 @@ enum PDFConvertTools {
     static let toPowerPoint = StudioTool(
         id: "pdf.to-powerpoint", title: "PDF to PowerPoint",
         summary: "Turn each PDF page into a PowerPoint slide that looks exactly the same.",
-        symbol: "rectangle.on.rectangle.angled", group: .convert, inputs: [.pdf],
+        icon: .windows, group: .convert, inputs: [.pdf],
         produces: .kind(.presentation),
         options: [
             .choice(
@@ -166,7 +166,7 @@ enum PDFConvertTools {
     static let toExcel = StudioTool(
         id: "pdf.to-excel", title: "PDF to Excel",
         summary: "Pull tables and aligned text out of a PDF into an XLSX spreadsheet.",
-        symbol: "tablecells", group: .convert, inputs: [.pdf], produces: .kind(.spreadsheet),
+        icon: .table, group: .convert, inputs: [.pdf], produces: .kind(.spreadsheet),
         options: [
             .choice(
                 "sheets", "Sheets",
@@ -209,7 +209,7 @@ enum PDFConvertTools {
     static let toText = StudioTool(
         id: "pdf.to-text", title: "PDF to text",
         summary: "Save all the text in a PDF as a plain text file.",
-        symbol: "text.alignleft", group: .convert, inputs: [.pdf], produces: .kind(.document),
+        icon: .textLines, group: .convert, inputs: [.pdf], produces: .kind(.document),
         options: [
             .toggle("pageMarkers", "Mark where each page starts", default: false),
             PDFOrganizeTools.passwordOption,
@@ -236,7 +236,7 @@ enum PDFConvertTools {
     static let toMarkdown = StudioTool(
         id: "pdf.to-markdown", title: "PDF to Markdown",
         summary: "Turn PDFs into clean Markdown with headings and lists, ready for notes or LLMs.",
-        symbol: "number.square", group: .convert, inputs: [.pdf], produces: .kind(.document),
+        icon: .hash, group: .convert, inputs: [.pdf], produces: .kind(.document),
         options: [PDFOrganizeTools.passwordOption],
         keywords: ["md", "markdown", "llm", "notes", "headings"], actionTitle: "Convert to Markdown"
     ) { run in
@@ -251,7 +251,7 @@ enum PDFConvertTools {
         id: "pdf.to-pdfa", title: "PDF to PDF/A",
         summary:
             "Make an archival copy with an embedded color profile and PDF/A-2b identification.",
-        symbol: "archivebox", group: .convert, inputs: [.pdf], produces: .kind(.pdf),
+        icon: .archive, group: .convert, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .choice(
                 "mode", "Pages",

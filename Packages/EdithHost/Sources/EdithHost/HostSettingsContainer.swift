@@ -14,7 +14,7 @@ struct HostSettingsContainer<Content: View>: View {
             PageHeader(section.title, subtitle: HostSettingsSummary.text(section.id)) {
                 Picker("Category", selection: $category) {
                     ForEach(sections) { item in
-                        Label(item.title, systemImage: item.symbol).tag(item.id)
+                        Label(item.title, edith: item.icon).tag(item.id)
                     }
                 }.pickerStyle(.menu).labelsHidden().accessibilityLabel("Settings category")
             }

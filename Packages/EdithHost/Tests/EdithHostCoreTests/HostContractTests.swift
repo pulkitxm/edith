@@ -36,14 +36,23 @@ import Testing
         #expect(entries.contains { $0.id == "keepAwake" })
     }
 
+    @Test func everyBundledIconNameResolves() throws {
+        for entry in try HostIndex.bundled() {
+            let icons =
+                [entry.icon] + entry.pages.map(\.icon) + entry.sections.map(\.icon)
+                + (entry.guide?.steps.map(\.icon) ?? [])
+            #expect(!icons.contains(.placeholder), "\(entry.id)")
+        }
+    }
+
     @Test func indexesRejectInvalidAndDuplicatedSurfaceDeclarations() throws {
         for cards in [["unknown"], ["music", "music"], ["extension:other"], ["clocks"]] {
             for entry in [
                 HostExtension(
-                    id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                    id: "sample", title: "Sample", icon: .checkbox, category: "desk",
                     homeCards: cards),
                 HostExtension(
-                    id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                    id: "sample", title: "Sample", icon: .checkbox, category: "desk",
                     notchCards: cards),
             ] {
                 #expect(throws: (any Error).self) {
@@ -53,7 +62,7 @@ import Testing
         }
         for tabs in [["unknown"], ["audio", "audio"], ["home"]] {
             let entry = HostExtension(
-                id: "sample", title: "Sample", symbolName: "square", category: "desk",
+                id: "sample", title: "Sample", icon: .checkbox, category: "desk",
                 notchTabs: tabs)
             #expect(throws: (any Error).self) {
                 try HostIndex.load(data: JSONEncoder().encode([entry]))
@@ -116,9 +125,9 @@ import Testing
 
     @Test func invalidOrDuplicatedIdentifiersAreRejected() throws {
         let valid = HostExtension(
-            id: "example", title: "Example", symbolName: "square", category: "Tools")
+            id: "example", title: "Example", icon: .checkbox, category: "Tools")
         let invalid = HostExtension(
-            id: "../example", title: "Example", symbolName: "square", category: "Tools")
+            id: "../example", title: "Example", icon: .checkbox, category: "Tools")
         for entries in [[valid, valid], [invalid], []] {
             #expect(throws: (any Error).self) {
                 try HostIndex.load(data: JSONEncoder().encode(entries))

@@ -145,7 +145,7 @@ struct HostPermissionsList: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                PageGuideBadge(symbolName: "arrow.clockwise", size: 32)
+                PageGuideBadge(icon: .refresh, size: 32)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Relaunch once to finish \(names)")
                         .font(.edithText(.headline))
@@ -207,7 +207,7 @@ struct HostPermissionsList: View {
 
     private var emptyState: some View {
         VStack(spacing: UIScale.pt(12)) {
-            PageGuideBadge(.stepAccess, size: 40, tint: DashSkin.ok)
+            PageGuideBadge(icon: .stepAccess, size: 40, tint: DashSkin.ok)
             Text(
                 filter == .attention
                     ? "Everything your tools need is allowed."
@@ -249,7 +249,7 @@ private struct HostPermissionRow: View {
         let dark = scheme == .dark
         HStack(alignment: .center, spacing: UIScale.pt(HostPermissionRowMetrics.contentSpacing)) {
             PageGuideBadge(
-                permission.icon, size: HostPermissionRowMetrics.icon,
+                icon: permission.icon, size: HostPermissionRowMetrics.icon,
                 tint: usage.isGranted
                     ? DashSkin.ok : usage.blocksEnabledExtension ? DashSkin.warn : nil)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -300,7 +300,7 @@ private struct HostPermissionRow: View {
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)
                 HStack(spacing: UIScale.pt(4)) {
-                    PageIcon(extensionID: entry.id, symbolName: entry.symbolName, size: 16)
+                    PageIcon(extensionID: entry.id, icon: entry.icon, size: 16)
                     Text(entry.title)
                     if required { Text("required").foregroundStyle(.tertiary) }
                 }

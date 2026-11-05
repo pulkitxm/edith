@@ -14,11 +14,11 @@ import Testing
 
     private func entry(_ id: String = "clipboard", guide: Bool = true) -> HostExtension {
         HostExtension(
-            id: id, title: id, symbolName: "star", category: "desk",
+            id: id, title: id, icon: .heart, category: "desk",
             guide: guide
                 ? HostExtensionGuide(
                     tagline: "t", summary: "s",
-                    steps: [HostGuideStep(symbolName: "star", title: "a", detail: "b")])
+                    steps: [HostGuideStep(icon: .heart, title: "a", detail: "b")])
                 : nil)
     }
 

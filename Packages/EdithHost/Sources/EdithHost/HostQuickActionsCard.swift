@@ -45,14 +45,14 @@ struct HostControlLayout: Layout {
 
 extension HostSidebarUtility {
     var cardTitle: String { self == .presenter ? "Presenter mode" : title }
-    var cardIcon: String {
+    var cardIcon: EdithIcon {
         switch self {
-        case .system: "keyboard"
-        case .keepAwake: "moon.zzz"
-        case .lidAwake: "laptopcomputer"
-        case .keystrokeHighlight: "keyboard.badge.ellipsis"
-        case .presenter: "person.wave.2"
-        case .micMute: "mic.slash"
+        case .system: .keyboard
+        case .keepAwake: .moon
+        case .lidAwake: .laptop
+        case .keystrokeHighlight: .keystrokeHighlight
+        case .presenter: .person
+        case .micMute: .micMute
         }
     }
     var cardSubtitle: String {
@@ -132,11 +132,9 @@ struct HostQuickActionsCard: View {
         } label: {
             VStack(spacing: UIScale.pt(6)) {
                 if tile.shows("icons") {
-                    Image(
-                        systemName: utility == .keepAwake && on ? "moon.zzz.fill" : utility.cardIcon
-                    )
-                    .font(.system(size: UIScale.pt(21)))
-                    .frame(height: UIScale.pt(26))
+                    EdithIconView(utility.cardIcon)
+                        .font(.system(size: UIScale.pt(21)))
+                        .frame(height: UIScale.pt(26))
                 }
                 Text(utility.cardTitle)
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))

@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 
@@ -36,7 +37,7 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
                 HStack(spacing: UIScale.pt(12)) {
                     configuration.label
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))

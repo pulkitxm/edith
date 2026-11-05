@@ -1,3 +1,4 @@
+import EdithIcons
 import SwiftUI
 
 public struct InfoDot: View {
@@ -12,7 +13,7 @@ public struct InfoDot: View {
         Button {
             showing.toggle()
         } label: {
-            Image(systemName: "info.circle")
+            EdithIconView(.info)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(.secondary)
         }

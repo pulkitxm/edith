@@ -106,13 +106,13 @@ struct HostIntroducedPage<Content: View>: View {
 
     private func intro(_ entry: HostExtension, _ guide: HostExtensionGuide) -> some View {
         PageIntro(
-            extensionID: entry.id, symbolName: entry.symbolName, title: entry.title,
+            extensionID: entry.id, icon: entry.icon, title: entry.title,
             tagline: guide.tagline, summary: guide.summary,
             steps: guide.steps.map {
-                PageGuideStep(symbolName: $0.symbolName, title: $0.title, detail: $0.detail)
+                PageGuideStep(icon: $0.icon, title: $0.title, detail: $0.detail)
             },
             examples: guide.examples,
-            start: PageAction("Get started", symbolName: "arrow.right") { finish(entry) },
+            start: PageAction("Get started", icon: .arrowRight) { finish(entry) },
             skipAll: PageAction("Skip all introductions") {
                 HostIntroductions(defaults: defaults).skipAll(current: entry.id)
                 reopened = false
@@ -155,7 +155,7 @@ struct HostIntroductionReopenButton: View {
 
     var body: some View {
         Button(action: reopen.perform) {
-            Image(systemName: "info.circle")
+            EdithIconView(.info)
                 .font(.system(size: UIScale.pt(15), weight: .medium))
                 .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))

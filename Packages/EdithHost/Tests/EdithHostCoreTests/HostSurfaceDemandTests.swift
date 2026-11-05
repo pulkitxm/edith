@@ -63,7 +63,7 @@ import Testing
         _ id: String, home: [String] = [], notch: [String] = [], tabs: [String] = []
     ) -> HostExtension {
         HostExtension(
-            id: id, title: id, symbolName: "square", category: "desk", background: false,
+            id: id, title: id, icon: .checkbox, category: "desk", background: false,
             homeCards: home, notchCards: notch, notchTabs: tabs)
     }
 }

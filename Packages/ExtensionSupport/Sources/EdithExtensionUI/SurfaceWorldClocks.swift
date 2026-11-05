@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 
@@ -86,7 +87,7 @@ public struct SurfaceWorldClocks: View {
                         width: UIScale.pt(compact ? 64 : 96), height: UIScale.pt(compact ? 64 : 96)
                     )
                     .overlay {
-                        Image(systemName: "plus")
+                        EdithIconView(.plus)
                             .font(.system(size: UIScale.pt(24), weight: .light))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -162,7 +163,7 @@ private struct ClockTile: View {
                     .overlay(alignment: .topTrailing) {
                         if hovering, let onRemove {
                             Button(action: onRemove) {
-                                Image(systemName: "xmark.circle.fill")
+                                EdithIconView(.closeFilled)
                                     .font(.system(size: UIScale.pt(16)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                     .background(Circle().fill(DashSkin.paper2(dark)))

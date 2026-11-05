@@ -5,7 +5,9 @@ public enum EdithIconText {
     private static let largestSnappedLine: CGFloat = 50
     static let lineHeightToPointSize: CGFloat = 1.23
 
-    public static func iconSize(forLineHeight line: CGFloat, scale: Image.Scale = .medium) -> CGFloat {
+    public static func iconSize(forLineHeight line: CGFloat, scale: Image.Scale = .medium)
+        -> CGFloat
+    {
         let target = line * factor(for: scale)
         guard target < largestSnappedLine else { return target.rounded() }
         return pixelExactSizes.min { abs($0 - target) < abs($1 - target) } ?? target.rounded()

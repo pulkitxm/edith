@@ -62,7 +62,7 @@ public struct PageDateFilter: View {
     }
 
     private var moreMenu: some View {
-        PageMenuChip(moreTitle, systemImage: "calendar", active: !activeIsQuick) {
+        PageMenuChip(moreTitle, icon: .calendar, active: !activeIsQuick) {
             ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                 Section {
                     ForEach(group) { preset in
@@ -107,7 +107,7 @@ public struct PageDateFilter: View {
     ) -> some View {
         Button(action: action) {
             if active {
-                Label(title, systemImage: "checkmark")
+                Label(title, edith: .check)
             } else {
                 Text(title)
             }
@@ -122,7 +122,7 @@ public struct PageDateFilter: View {
     private var stepper: some View {
         let period = selection.periodLabel(now: now, calendar: calendar)
         return HStack(spacing: UIScale.pt(4)) {
-            PageIconChip(systemImage: "chevron.left", label: "Previous period") { step(-1) }
+            PageIconChip(icon: .chevronLeft, label: "Previous period") { step(-1) }
                 .disabled(
                     !selection.canStepBackward(earliest: earliest, now: now, calendar: calendar))
             if period != moreTitle {
@@ -134,7 +134,7 @@ public struct PageDateFilter: View {
                     .padding(.horizontal, UIScale.pt(4))
                     .accessibilityLabel("Period, \(period)")
             }
-            PageIconChip(systemImage: "chevron.right", label: "Next period") { step(1) }
+            PageIconChip(icon: .chevronRight, label: "Next period") { step(1) }
                 .disabled(!selection.canStepForward(now: now, calendar: calendar))
         }
         .fixedSize()

@@ -48,6 +48,18 @@ extension EdithIcon {
         Image(nsImage: nsImage(size: size, tone: tone)).renderingMode(.template)
     }
 
+    public func image(size: CGFloat = 16, tone: EdithIconTone = .duotone, tint: Color) -> Image {
+        let mask = nsImage(size: size, tone: tone)
+        let color = NSColor(tint)
+        let tinted = NSImage(size: mask.size, flipped: false) { rect in
+            mask.draw(in: rect)
+            color.setFill()
+            rect.fill(using: .sourceIn)
+            return true
+        }
+        return Image(nsImage: tinted)
+    }
+
     private func renderBitmap(size: CGFloat, scale: CGFloat, tone: EdithIconTone)
         -> NSBitmapImageRep?
     {
@@ -104,12 +116,23 @@ public struct EdithLabelIcon: View {
 }
 
 extension Label where Title == Text, Icon == EdithLabelIcon {
-    public init(_ title: LocalizedStringKey, edith icon: EdithIcon, tone: EdithIconTone = .duotone) {
-        self.init { Text(title) } icon: { EdithLabelIcon(icon, tone: tone) }
+    public init(_ title: LocalizedStringKey, edith icon: EdithIcon, tone: EdithIconTone = .duotone)
+    {
+        self.init {
+            Text(title)
+        } icon: {
+            EdithLabelIcon(icon, tone: tone)
+        }
     }
 
-    public init<S: StringProtocol>(_ title: S, edith icon: EdithIcon, tone: EdithIconTone = .duotone) {
-        self.init { Text(title) } icon: { EdithLabelIcon(icon, tone: tone) }
+    public init<S: StringProtocol>(
+        _ title: S, edith icon: EdithIcon, tone: EdithIconTone = .duotone
+    ) {
+        self.init {
+            Text(title)
+        } icon: {
+            EdithLabelIcon(icon, tone: tone)
+        }
     }
 }
 

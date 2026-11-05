@@ -265,7 +265,7 @@ struct FilePreviewPane: View {
     private var content: some View {
         switch model.content {
         case .empty:
-            placeholder("Select a file to preview it.", symbol: "doc.text.magnifyingglass")
+            placeholder("Select a file to preview it.", icon: .seoAudit)
         case .loading:
             FilePreviewLoadingSkeleton(entry: entry, dark: dark)
         case let .text(text, language, truncated):
@@ -287,7 +287,7 @@ struct FilePreviewPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .downloadRequired(entry, available):
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: available ? "arrow.down.circle" : "externaldrive")
+                EdithIconView(available ? .arrowDown : .drive)
                     .font(.system(size: UIScale.pt(28)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Text(
@@ -308,7 +308,7 @@ struct FilePreviewPane: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .unsupported(url, reason):
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "play.slash")
+                EdithIconView(.play, tone: .muted)
                     .font(.system(size: UIScale.pt(28)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Text(reason)
@@ -324,13 +324,13 @@ struct FilePreviewPane: View {
             .padding(UIScale.pt(20))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .failed(message):
-            placeholder(message, symbol: "exclamationmark.triangle")
+            placeholder(message, icon: .warning)
         }
     }
 
-    private func placeholder(_ text: String, symbol: String) -> some View {
+    private func placeholder(_ text: String, icon: EdithIcon) -> some View {
         VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(26)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(text)

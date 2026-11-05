@@ -242,9 +242,9 @@ private struct HostToolingActionButton: View {
                 SkeletonBlock(width: 12, height: 12, corner: 6)
             }
         case .done:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            EdithIconView(.success).foregroundStyle(.green)
         case .failed:
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            EdithIconView(.warning).foregroundStyle(.orange)
         case .idle:
             EmptyView()
         }
@@ -268,11 +268,8 @@ private struct HostToolingSectionFooter: View {
             Text(help)
             if let outcome {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(5)) {
-                    Image(
-                        systemName: outcome.succeeded
-                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                    )
-                    .foregroundStyle(outcome.succeeded ? Color.green : Color.orange)
+                    EdithIconView(outcome.succeeded ? .success : .warning)
+                        .foregroundStyle(outcome.succeeded ? Color.green : Color.orange)
                     Text(outcome.message)
                         .foregroundStyle(.primary)
                         .textSelection(.enabled)

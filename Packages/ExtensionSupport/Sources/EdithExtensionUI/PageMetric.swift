@@ -15,7 +15,7 @@ public struct PageMetric: View {
     let title: String
     let value: String
     var detail: String?
-    var symbol: String?
+    var icon: EdithIcon?
     var tint: Color?
     var trend: String?
     var trendPositive = true
@@ -26,11 +26,11 @@ public struct PageMetric: View {
     @Environment(\.colorScheme) private var scheme
 
     public init(
-        title: String, value: String, detail: String? = nil, symbol: String? = nil,
+        title: String, value: String, detail: String? = nil, icon: EdithIcon? = nil,
         tint: Color? = nil, trend: String? = nil, trendPositive: Bool = true,
         valueBlurred: Bool = false, detailBlurred: Bool = false
     ) {
-        self.title = title; self.value = value; self.detail = detail; self.symbol = symbol
+        self.title = title; self.value = value; self.detail = detail; self.icon = icon
         self.tint = tint; self.trend = trend; self.trendPositive = trendPositive
         self.valueBlurred = valueBlurred; self.detailBlurred = detailBlurred
     }
@@ -58,9 +58,8 @@ public struct PageMetric: View {
 
     private var titleRow: some View {
         HStack(spacing: UIScale.pt(6)) {
-            if let symbol {
-                Image(systemName: symbol).foregroundStyle(tint ?? .secondary)
-                    .accessibilityHidden(true)
+            if let icon {
+                EdithIconView(icon).foregroundStyle(tint ?? .secondary)
             }
             Text(title).foregroundStyle(.secondary).lineLimit(1)
         }
@@ -78,7 +77,7 @@ public struct PageMetric: View {
                 )
                 .presenterBlur(valueBlurred)
             if let trend {
-                Label(trend, systemImage: trendPositive ? "arrow.up.right" : "arrow.down.right")
+                Label(trend, edith: trendPositive ? .arrowUpRight : .arrowDownRight)
                     .labelStyle(PageMetricTrendLabelStyle())
                     .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(trendPositive ? .green : .red)

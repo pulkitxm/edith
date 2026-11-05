@@ -114,7 +114,7 @@ struct HostOnboardingWelcomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(24)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(.brand, size: compact ? 40 : 60).flushLeading()
+                PageGuideBadge(icon: .brand, size: compact ? 40 : 60).flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("Welcome to Edith").font(.edithText(.title2)).fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)
@@ -128,7 +128,7 @@ struct HostOnboardingWelcomeView: View {
                 PageGuideSteps(steps: Self.steps, columns: compact ? 1 : 3)
                 Label(
                     "Your coding agents can use every tool too, through the ed command line and MCP.",
-                    systemImage: "terminal"
+                    edith: .terminal
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -138,7 +138,7 @@ struct HostOnboardingWelcomeView: View {
                     model.skip()
                 },
                 primary: PageAction(
-                    "Get started", symbolName: "arrow.right", identifier: "onboarding.start"
+                    "Get started", icon: .arrowRight, identifier: "onboarding.start"
                 ) { model.start() },
                 busy: model.busy
             ) {
@@ -147,7 +147,7 @@ struct HostOnboardingWelcomeView: View {
                 } label: {
                     Label(
                         model.restoring ? "Restoring from iCloud" : "Restore from iCloud",
-                        systemImage: "icloud.and.arrow.down")
+                        edith: .cloudDownload)
                 }
                 .buttonStyle(.edith(.borderless))
                 .foregroundStyle(DashSkin.accentDeep(dark))
@@ -193,10 +193,10 @@ struct HostOnboardingWorkflowsView: View {
         } label: {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 HStack(alignment: .center) {
-                    PageGuideBadge(workflow.icon, size: 32).flushLeading()
+                    PageGuideBadge(icon: workflow.icon, size: 32).flushLeading()
                     Spacer(minLength: 0)
                     if selected {
-                        Image(systemName: "checkmark.circle.fill")
+                        EdithIconView(.success)
                             .font(.system(size: UIScale.pt(16)))
                             .foregroundStyle(DashSkin.accent(dark))
                     } else if workflow != .custom, count > 0 {
@@ -384,7 +384,7 @@ struct HostOnboardingFooter<Leading: View>: View {
     @ViewBuilder private var backButton: some View {
         if let back {
             Button(action: back) {
-                Label("Back", systemImage: "chevron.left")
+                Label("Back", edith: .chevronLeft)
             }
             .buttonStyle(.edith(.secondary))
             .accessibilityIdentifier("onboarding.back").disabled(busy)
@@ -400,8 +400,8 @@ struct HostOnboardingFooter<Leading: View>: View {
             }
             if let primary {
                 Button(action: primary.perform) {
-                    if let symbol = primary.symbolName {
-                        Label(primary.title, systemImage: symbol)
+                    if let icon = primary.icon {
+                        Label(primary.title, edith: icon)
                             .labelStyle(HostOnboardingTrailingIconLabelStyle())
                     } else {
                         Text(primary.title)

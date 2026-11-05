@@ -155,7 +155,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 
     private var unavailable: some View {
         ContentStatusView(
-            unavailableTitle, message: message, symbol: unavailableSymbol,
+            unavailableTitle, message: message, icon: unavailableIcon,
             actionTitle: "Retry", action: state.permitsRetry ? retry : nil,
             secondaryTitle: "Cancel", secondaryAction: cancel)
     }
@@ -169,12 +169,12 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         }
     }
 
-    private var unavailableSymbol: String {
+    private var unavailableIcon: EdithIcon {
         switch state {
-        case .offline: "wifi.slash"
-        case .error: "exclamationmark.triangle"
-        case .cancelled: "xmark.circle"
-        default: "tray"
+        case .offline: .wifiOff
+        case .error: .warning
+        case .cancelled: .closeFilled
+        default: .tray
         }
     }
 }
@@ -203,20 +203,20 @@ extension LoadingContainer where Placeholder == PageSkeleton {
 public struct ContentStatusView: View {
     public let title: String
     public let message: String
-    public let symbol: String
+    public let icon: EdithIcon
     public let actionTitle: String
     public let action: (() -> Void)?
     public let secondaryTitle: String
     public let secondaryAction: (() -> Void)?
 
     public init(
-        _ title: String, message: String, symbol: String = "tray",
+        _ title: String, message: String, icon: EdithIcon = .tray,
         actionTitle: String = "Retry", action: (() -> Void)? = nil,
         secondaryTitle: String = "Cancel", secondaryAction: (() -> Void)? = nil
     ) {
         self.title = title
         self.message = message
-        self.symbol = symbol
+        self.icon = icon
         self.actionTitle = actionTitle
         self.action = action
         self.secondaryTitle = secondaryTitle
@@ -225,19 +225,19 @@ public struct ContentStatusView: View {
 
     public var body: some View {
         PageEmptyState(
-            symbolName: symbol, title: title, message: message, tint: tint,
+            icon: icon, title: title, message: message, tint: tint,
             leading: secondaryAction.map { PageAction(secondaryTitle, perform: $0) },
             trailing: action.map {
-                PageAction(actionTitle, symbolName: "arrow.clockwise", perform: $0)
+                PageAction(actionTitle, icon: .refresh, perform: $0)
             }
         )
         .frame(minHeight: UIScale.pt(260))
     }
 
     private var tint: Color? {
-        switch symbol {
-        case "exclamationmark.triangle", "exclamationmark.octagon": .orange
-        case "wifi.slash", "xmark.circle", "tray": .secondary
+        switch icon {
+        case .warning, .error: .orange
+        case .wifiOff, .closeFilled, .tray: .secondary
         default: nil
         }
     }

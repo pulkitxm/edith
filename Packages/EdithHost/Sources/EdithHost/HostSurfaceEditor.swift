@@ -289,7 +289,7 @@ struct HostSurfaceEditor: View {
                     editorPanel = nil
                 } label: {
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: preset.icon).font(.edithText(.title3))
+                        EdithIconView(preset.icon).font(.edithText(.title3))
                             .frame(width: UIScale.pt(28))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(preset.title).font(.edithText(.headline))
@@ -297,7 +297,7 @@ struct HostSurfaceEditor: View {
                                 .secondary)
                         }
                         Spacer()
-                        Image(systemName: "arrow.up.right")
+                        EdithIconView(.arrowUpRight)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(10))
                 }.buttonStyle(.edith(.secondary))
             }
@@ -359,7 +359,7 @@ struct HostSurfaceEditor: View {
                                             }
                                             Button("Delete") { store.removeProfile(profile.id) }
                                         } label: {
-                                            Image(systemName: "ellipsis")
+                                            EdithIconView(.more)
                                         }
                                         .help("Manage " + profile.name)
                                     }
@@ -478,14 +478,14 @@ struct HostSurfaceEditor: View {
             Button {
                 store.undo(target)
             } label: {
-                Label("Undo", systemImage: "arrow.uturn.backward")
+                Label("Undo", edith: .undo)
             }
             .disabled(!store.canUndo(target))
             .keyboardShortcut("z", modifiers: .command)
             Button {
                 store.redo(target)
             } label: {
-                Label("Redo", systemImage: "arrow.uturn.forward")
+                Label("Redo", edith: .redo)
             }
             .disabled(!store.canRedo(target))
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -514,18 +514,18 @@ struct HostSurfaceEditor: View {
                     layoutError = nil
                 }
             } label: {
-                Image(systemName: "sidebar.left")
+                EdithIconView(.sidebarLeft)
             }
             .help("Workspace panels and layout sharing")
             Button {
                 editorPanel = .geometry
             } label: {
-                Label("Grid", systemImage: "square.grid.3x3")
+                Label("Grid", edith: .gridDense)
             }
             Button {
                 editorPanel = .layouts
             } label: {
-                Label("Layouts", systemImage: "rectangle.stack")
+                Label("Layouts", edith: .layers)
             }
             Menu("Presets") {
                 ForEach(SurfacePreset.allCases) { preset in
@@ -533,7 +533,7 @@ struct HostSurfaceEditor: View {
                         store.update(target) { $0 = preset.layout(for: target) }
                         selected = nil
                     } label: {
-                        Label(preset.title, systemImage: preset.icon)
+                        Label(preset.title, edith: preset.icon)
                     }
                 }
                 Divider()
@@ -577,7 +577,7 @@ struct HostSurfaceEditor: View {
             }
             ForEach(libraryWidgets) { widget in
                 HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                    Image(systemName: widget.icon).foregroundStyle(Color.themeAccent).frame(
+                    EdithIconView(widget.icon).foregroundStyle(Color.themeAccent).frame(
                         width: UIScale.pt(20), height: UIScale.pt(28)
                     )
                     .contentShape(Rectangle())
@@ -601,7 +601,7 @@ struct HostSurfaceEditor: View {
                         store.update(target) { selected = $0.add(widget) }
                         inspectorVisible = true
                     } label: {
-                        Image(systemName: "plus")
+                        EdithIconView(.plus)
                     }
                     .buttonStyle(.edith(.borderless))
                     .help("Add \(widget.title)")
@@ -862,7 +862,7 @@ struct HostSurfaceEditor: View {
     private var previewTitle: some View {
         Label(
             "\(target.title) canvas",
-            systemImage: target == .home ? "house" : "rectangle.topthird.inset.filled"
+            edith: target == .home ? .home : .layoutTop
         )
         .font(.edithText(.headline))
     }
@@ -895,8 +895,8 @@ struct HostSurfaceEditor: View {
             ForEach(layout.tabOrder, id: \.self) { raw in
                 if let tab = SurfaceNotchTab(rawValue: raw) {
                     HStack {
-                        Image(systemName: "line.3.horizontal")
-                        Label(tab.title, systemImage: tab.icon)
+                        EdithIconView(.menu)
+                        Label(tab.title, edith: tab.icon)
                         Spacer()
                         Toggle(
                             "Visible",
@@ -943,13 +943,13 @@ struct HostSurfaceEditor: View {
                 Button {
                     selected = nil
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .buttonStyle(.edith(.borderless)).help("Close inspector").accessibilityLabel(
                     "Close inspector")
             }
             if selection == nil {
-                Label("Select a widget", systemImage: "cursorarrow.click")
+                Label("Select a widget", edith: .cursor)
                     .font(.edithText(.callout)).foregroundStyle(.secondary)
                 Text(
                     "Click a widget or drag its handle. Its position, size, data, and appearance controls appear here."
@@ -1364,15 +1364,15 @@ struct HostSurfaceEditor: View {
 
     private func nudgeControls(_ tile: SurfaceTile) -> some View {
         HStack {
-            nudgeButton("Move left", icon: "arrow.left", key: .leftArrow, column: -1, row: 0)
-            nudgeButton("Move up", icon: "arrow.up", key: .upArrow, column: 0, row: -1)
-            nudgeButton("Move down", icon: "arrow.down", key: .downArrow, column: 0, row: 1)
-            nudgeButton("Move right", icon: "arrow.right", key: .rightArrow, column: 1, row: 0)
+            nudgeButton("Move left", icon: .arrowLeft, key: .leftArrow, column: -1, row: 0)
+            nudgeButton("Move up", icon: .arrowUp, key: .upArrow, column: 0, row: -1)
+            nudgeButton("Move down", icon: .arrowDown, key: .downArrow, column: 0, row: 1)
+            nudgeButton("Move right", icon: .arrowRight, key: .rightArrow, column: 1, row: 0)
         }.buttonStyle(.edith(.secondary))
     }
 
     private func nudgeButton(
-        _ title: String, icon: String, key: KeyEquivalent, column: Int, row: Int
+        _ title: String, icon: EdithIcon, key: KeyEquivalent, column: Int, row: Int
     ) -> some View {
         Button {
             guard var tile = selection, !tile.locked else { return }
@@ -1386,7 +1386,7 @@ struct HostSurfaceEditor: View {
             tile.row = max(0, (tile.row ?? Int((origin.minY / layout.rowHeight).rounded())) + row)
             store.update(target) { $0.position(tile) }
         } label: {
-            Image(systemName: icon)
+            EdithIconView(icon)
         }
         .help(title + " (Option + arrow)")
         .accessibilityLabel(title)
@@ -1445,7 +1445,7 @@ private struct SurfaceWidgetPreview: View {
     private var corePreview: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             if tile.showTitle {
-                Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
+                Label(tile.displayTitle, edith: tile.widget.icon).font(.edithText(.headline))
             }
             if tile.showDetails, !tile.dense {
                 Text(tile.widget.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -1463,7 +1463,7 @@ private struct SurfaceWidgetPreview: View {
         switch tile.widget {
         case .music:
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "waveform").font(.edithText(.title2))
+                EdithIconView(.waveform).font(.edithText(.title2))
                     .frame(width: UIScale.pt(42), height: UIScale.pt(42))
                     .background(
                         Color.themeAccent.opacity(0.16),
@@ -1473,8 +1473,8 @@ private struct SurfaceWidgetPreview: View {
                     Text("Sample artist").font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "pause.fill")
-                Image(systemName: "forward.fill")
+                EdithIconView(.pause)
+                EdithIconView(.fastForward)
             }
         case .limits:
             HStack(spacing: UIScale.pt(24)) {
@@ -1519,12 +1519,12 @@ private struct SurfaceWidgetPreview: View {
             VStack(spacing: UIScale.pt(6)) {
                 ForEach(
                     [
-                        ("Music", "sample.music", "65%", "speaker.wave.2"),
-                        ("Browser", "sample.browser", "Muted", "speaker.slash"),
+                        ("Music", "sample.music", "65%", EdithIcon.speaker),
+                        ("Browser", "sample.browser", "Muted", EdithIcon.speakerOff),
                     ], id: \.0
                 ) { row in
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: row.3).frame(width: UIScale.pt(20))
+                        EdithIconView(row.3).frame(width: UIScale.pt(20))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(row.0).font(.edithText(.callout))
                             if tile.showDetails {
@@ -1548,12 +1548,12 @@ private struct SurfaceWidgetPreview: View {
                     ]),
                 perform: { _ in })
         case .ability:
-            Label(tile.widget.summary, systemImage: tile.widget.icon)
+            Label(tile.widget.summary, edith: tile.widget.icon)
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
         case .databases, .machines:
             Label(
                 tile.widget == .databases ? "Open database workspace" : "3 registered machines",
-                systemImage: "arrow.up.right"
+                edith: .arrowUpRight
             )
             .font(.edithText(.callout))
         @unknown default:

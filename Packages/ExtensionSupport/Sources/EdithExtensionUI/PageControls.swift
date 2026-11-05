@@ -1,17 +1,18 @@
+import EdithIcons
 import SwiftUI
 
 public struct PageToolbarButton: View {
     let action: () -> Void
-    let systemImage: String
+    let icon: EdithIcon
     let helperText: String
     var isLoading = false
     var tint: Color?
 
     public init(
-        action: @escaping () -> Void, systemImage: String, helperText: String,
+        action: @escaping () -> Void, icon: EdithIcon, helperText: String,
         isLoading: Bool = false, tint: Color? = nil
     ) {
-        self.action = action; self.systemImage = systemImage; self.helperText = helperText
+        self.action = action; self.icon = icon; self.helperText = helperText
         self.isLoading = isLoading; self.tint = tint
     }
 
@@ -21,7 +22,7 @@ public struct PageToolbarButton: View {
                 if isLoading {
                     LoadingIndicator()
                 } else {
-                    Image(systemName: systemImage).foregroundStyle(tint ?? .primary)
+                    EdithIconView(icon).foregroundStyle(tint ?? .primary)
                 }
             }
             .frame(width: UIScale.pt(20), height: UIScale.pt(24))
@@ -79,7 +80,7 @@ public struct PageTabPicker<Option: Hashable>: View {
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
                     Text(label(selection)).lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
+                    EdithIconView(.chevronUpDown)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)

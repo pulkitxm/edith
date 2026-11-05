@@ -545,9 +545,9 @@ import HostAccessibilityFixtureSupport
             HostWorkflowOnboardingModel(
                 entries: entries ?? [
                     HostExtension(
-                        id: "usage", title: "Usage", symbolName: "chart.bar", category: "agents"),
+                        id: "usage", title: "Usage", icon: .chartBar, category: "agents"),
                     HostExtension(
-                        id: "herdr", title: "Sessions", symbolName: "terminal", category: "agents"),
+                        id: "herdr", title: "Sessions", icon: .terminal, category: "agents"),
                 ], defaults: defaults,
                 environment: HostWorkflowEnvironment(
                     available: { self.available }, installed: { self.installed },

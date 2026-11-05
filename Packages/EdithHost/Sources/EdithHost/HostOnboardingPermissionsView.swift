@@ -33,12 +33,12 @@ struct HostOnboardingPermissionsView: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     if !granted.isEmpty {
                         summaryRow(
-                            "Already allowed", items: granted, symbol: "checkmark.circle.fill",
+                            "Already allowed", items: granted, icon: .success,
                             tint: DashSkin.ok, note: nil)
                     }
                     if !firstUse.isEmpty {
                         summaryRow(
-                            "Asked when first used", items: firstUse, symbol: "clock",
+                            "Asked when first used", items: firstUse, icon: .clock,
                             tint: .secondary,
                             note: "macOS shows its own prompt the first time a tool needs these.")
                     }
@@ -48,7 +48,7 @@ struct HostOnboardingPermissionsView: View {
                 back: { model.back() },
                 primary: PageAction(
                     "Install \(model.selected.count) \(model.selected.count == 1 ? "tool" : "tools")",
-                    symbolName: "arrow.down.circle", identifier: "onboarding.install"
+                    icon: .arrowDown, identifier: "onboarding.install"
                 ) { model.installSelection() },
                 primaryRole: batch.isEmpty && model.currentPermission == nil
                     ? .primary : .secondary,
@@ -65,7 +65,7 @@ struct HostOnboardingPermissionsView: View {
 
     private var allSet: some View {
         HStack(spacing: UIScale.pt(12)) {
-            PageGuideBadge(.stepAccess, size: 32, tint: DashSkin.ok)
+            PageGuideBadge(icon: .stepAccess, size: 32, tint: DashSkin.ok)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Nothing left to allow").font(.edithText(.headline))
                 Text("Your tools have everything they need. Install them to finish setup.")
@@ -88,7 +88,7 @@ struct HostOnboardingPermissionsView: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                PageGuideBadge(item.permission.icon, size: 32)
+                PageGuideBadge(icon: item.permission.icon, size: 32)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     HStack(spacing: UIScale.pt(8)) {
                         Text(item.permission.displayName).font(.edithText(.headline))
@@ -170,7 +170,7 @@ struct HostOnboardingPermissionsView: View {
     }
 
     private func summaryRow(
-        _ title: String, items: [HostOnboardingPermission], symbol: String, tint: Color,
+        _ title: String, items: [HostOnboardingPermission], icon: EdithIcon, tint: Color,
         note: String?
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -178,8 +178,7 @@ struct HostOnboardingPermissionsView: View {
             WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
                 ForEach(items) { item in
                     HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: symbol).foregroundStyle(tint)
-                            .accessibilityHidden(true)
+                        EdithIconView(icon).foregroundStyle(tint)
                         Text(item.permission.displayName)
                     }
                     .font(.edithText(.caption)).fontWeight(.medium)
@@ -205,7 +204,7 @@ struct HostOnboardingPermissionsView: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                PageGuideBadge(symbolName: "arrow.clockwise", size: 32)
+                PageGuideBadge(icon: .refresh, size: 32)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(
                         "Relaunch once to finish \(batch.map(\.displayName).joined(separator: " and "))"

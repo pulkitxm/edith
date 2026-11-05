@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 public enum SurfaceArrangement {
@@ -52,12 +53,12 @@ public enum SurfacePreset: String, CaseIterable, Identifiable, Sendable {
         case .focus: "Deep work"
         }
     }
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
-        case .everyday: "rectangle.3.group"
-        case .agents: "terminal"
-        case .media: "play.rectangle"
-        case .focus: "timer"
+        case .everyday: .window
+        case .agents: .terminal
+        case .media: .play
+        case .focus: .timer
         }
     }
     public var detail: String {

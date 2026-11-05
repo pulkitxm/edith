@@ -119,7 +119,7 @@ import Testing
                 identity: identity,
                 entries: [
                     .init(
-                        id: "docs", title: "Docs", symbolName: "book", category: "agents",
+                        id: "docs", title: "Docs", icon: .book, category: "agents",
                         background: launchWhen.isEmpty, launchWhen: launchWhen)
                 ],
                 store: store,

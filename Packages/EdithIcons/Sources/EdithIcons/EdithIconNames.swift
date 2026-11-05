@@ -19,3 +19,14 @@ extension EdithIcon {
 
     public static func isValid(name: String) -> Bool { byName[name] != nil }
 }
+
+extension EdithIcon: Codable {
+    public init(from decoder: any Decoder) throws {
+        self.init(name: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}

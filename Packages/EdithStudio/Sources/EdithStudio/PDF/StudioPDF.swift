@@ -770,7 +770,7 @@ extension StudioTool {
         guard let perform else { return self }
         let options = self.options
         return StudioTool(
-            id: id, title: title, summary: summary, symbol: symbolName, group: group,
+            id: id, title: title, summary: summary, icon: icon, group: group,
             inputs: inputs, extraExtensions: extraExtensions,
             excludedExtensions: excludedExtensions, arity: arity, produces: produces,
             options: options, requirements: requirements, style: style, keywords: keywords,

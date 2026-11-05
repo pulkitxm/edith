@@ -701,20 +701,20 @@ private struct AgentFixture: Sendable {
 
     static let index = [
         HostExtension(
-            id: "music", title: "Music", symbolName: "music.note", category: "media",
+            id: "music", title: "Music", icon: .music, category: "media",
             commands: ["music"],
             guide: HostExtensionGuide(
                 tagline: "Control playback", summary: "A music player for the menu bar.",
                 steps: [], examples: ["ed music play"])),
         HostExtension(
-            id: "emoji", title: "Emoji Picker", symbolName: "face.smiling",
+            id: "emoji", title: "Emoji Picker", icon: .emoji,
             category: "productivity",
             commands: ["emoji"],
             guide: HostExtensionGuide(
                 tagline: "Find any emoji fast", summary: "Pick emoji anywhere.",
                 steps: [
                     HostGuideStep(
-                        symbolName: "keyboard", title: "Open the picker",
+                        icon: .keyboard, title: "Open the picker",
                         detail: "Press the hotkey.")
                 ], examples: ["ed emoji pick"])),
     ]

@@ -1,3 +1,4 @@
+import EdithIcons
 import SwiftUI
 
 public enum PageNoticeTone {
@@ -23,12 +24,12 @@ public enum PageNoticeTone {
         self == .information ? Color.primary.opacity(0.12) : color.opacity(0.3)
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch self {
-        case .information: "info.circle"
-        case .success: "checkmark.circle"
-        case .warning: "exclamationmark.triangle"
-        case .error: "exclamationmark.octagon"
+        case .information: .info
+        case .success: .success
+        case .warning: .warning
+        case .error: .error
         }
     }
 }
@@ -37,27 +38,27 @@ public struct PageNotice<Detail: View, Actions: View>: View {
     let message: String
     var title: String?
     var tone: PageNoticeTone = .information
-    var symbol: String?
+    var icon: EdithIcon?
     @ViewBuilder let detail: () -> Detail
     @ViewBuilder let actions: () -> Actions
 
     public init(
         _ message: String, title: String? = nil, tone: PageNoticeTone = .information,
-        symbol: String? = nil,
+        icon: EdithIcon? = nil,
         @ViewBuilder detail: @escaping () -> Detail = { EmptyView() },
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.message = message
         self.title = title
         self.tone = tone
-        self.symbol = symbol
+        self.icon = icon
         self.detail = detail
         self.actions = actions
     }
 
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
-            Image(systemName: symbol ?? tone.symbol)
+            EdithIconView(icon ?? tone.icon)
                 .font(.edithText(title == nil ? .body : .headline))
                 .foregroundStyle(tone.color)
                 .frame(width: UIScale.pt(16))

@@ -51,7 +51,7 @@ struct HostOnboardingInstallView: View {
             } else {
                 HostOnboardingFooter(
                     primary: PageAction(
-                        "Retry setup", symbolName: "arrow.clockwise", identifier: "onboarding.retry"
+                        "Retry setup", icon: .refresh, identifier: "onboarding.retry"
                     ) { model.installSelection() },
                     primaryEnabled: model.canInstall
                 ) {
@@ -95,14 +95,14 @@ struct HostOnboardingInstallView: View {
         Group {
             switch state {
             case .waiting:
-                Label("Waiting", systemImage: "clock").foregroundStyle(.secondary)
+                Label("Waiting", edith: .clock).foregroundStyle(.secondary)
             case .installing:
                 Text("\(Int((min(1, max(0, progress(id)))) * 100))%")
                     .foregroundStyle(.secondary).monospacedDigit()
             case .ready:
-                Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(DashSkin.ok)
+                Label("Ready", edith: .success).foregroundStyle(DashSkin.ok)
             case .failed:
-                Label("Needs retry", systemImage: "exclamationmark.circle.fill")
+                Label("Needs retry", edith: .alert)
                     .foregroundStyle(DashSkin.warn)
             }
         }
@@ -131,7 +131,7 @@ struct HostOnboardingFinishView: View {
 
     private var empty: some View {
         VStack(spacing: UIScale.pt(20)) {
-            PageGuideBadge(.brand, size: compact ? 40 : 60)
+            PageGuideBadge(icon: .brand, size: compact ? 40 : 60)
             VStack(spacing: UIScale.pt(8)) {
                 Text("Edith is ready").font(.edithText(.title2)).fontWeight(.bold)
                     .accessibilityAddTraits(.isHeader)
@@ -151,7 +151,7 @@ struct HostOnboardingFinishView: View {
     private var installed: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(.brand, size: compact ? 40 : 60).flushLeading()
+                PageGuideBadge(icon: .brand, size: compact ? 40 : 60).flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text("You are all set").font(.edithText(.title2)).fontWeight(.bold)
                         .accessibilityAddTraits(.isHeader)
@@ -175,7 +175,7 @@ struct HostOnboardingFinishView: View {
             .hostOnboardingTile()
             Label(
                 "Agents can use these tools too, through the ed command line and MCP.",
-                systemImage: "terminal"
+                edith: .terminal
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -237,7 +237,7 @@ struct HostOnboardingFinishView: View {
     }
 
     private func placement(_ entry: HostExtension, pages: [HostPage]) -> some View {
-        Label(location(entry, pages: pages), systemImage: locationSymbol(entry, pages: pages))
+        Label(location(entry, pages: pages), edith: locationIcon(entry, pages: pages))
             .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
             .lineLimit(2)
     }
@@ -250,9 +250,9 @@ struct HostOnboardingFinishView: View {
         return "Runs in the background, from the menu bar or the notch."
     }
 
-    private func locationSymbol(_ entry: HostExtension, pages: [HostPage]) -> String {
-        if !pages.isEmpty { return "sidebar.left" }
-        if !entry.hotkeys.isEmpty { return "command" }
-        return "menubar.rectangle"
+    private func locationIcon(_ entry: HostExtension, pages: [HostPage]) -> EdithIcon {
+        if !pages.isEmpty { return .sidebarLeft }
+        if !entry.hotkeys.isEmpty { return .keyboard }
+        return .menuBar
     }
 }

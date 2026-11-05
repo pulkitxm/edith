@@ -1,21 +1,13 @@
+import EdithIcons
 import SwiftUI
 
 public struct PageGuideStep: Identifiable, Hashable, Sendable {
-    public let symbolName: String
-    public let icon: EdithIcon?
+    public let icon: EdithIcon
     public let title: String
     public let detail: String
     public var id: String { title }
 
-    public init(symbolName: String, title: String, detail: String) {
-        self.symbolName = symbolName
-        self.icon = nil
-        self.title = title
-        self.detail = detail
-    }
-
     public init(icon: EdithIcon, title: String, detail: String) {
-        self.symbolName = ""
         self.icon = icon
         self.title = title
         self.detail = detail
@@ -24,16 +16,16 @@ public struct PageGuideStep: Identifiable, Hashable, Sendable {
 
 public struct PageAction {
     public let title: String
-    public let symbolName: String?
+    public let icon: EdithIcon?
     public let identifier: String?
     public let perform: () -> Void
 
     public init(
-        _ title: String, symbolName: String? = nil, identifier: String? = nil,
+        _ title: String, icon: EdithIcon? = nil, identifier: String? = nil,
         perform: @escaping () -> Void
     ) {
         self.title = title
-        self.symbolName = symbolName
+        self.icon = icon
         self.identifier = identifier
         self.perform = perform
     }
@@ -45,7 +37,7 @@ public enum PageEmptyStateStyle: Sendable, Hashable {
 }
 
 public struct PageEmptyState: View {
-    let symbolName: String
+    let icon: EdithIcon
     let title: String
     let message: String
     let steps: [PageGuideStep]
@@ -59,11 +51,11 @@ public struct PageEmptyState: View {
     @Environment(\.compactLayout) private var compactLayout
 
     public init(
-        symbolName: String, title: String, message: String, steps: [PageGuideStep] = [],
+        icon: EdithIcon, title: String, message: String, steps: [PageGuideStep] = [],
         primary: PageAction? = nil, secondary: PageAction? = nil, footnote: String? = nil,
         style: PageEmptyStateStyle = .regular, tint: Color? = nil
     ) {
-        self.symbolName = symbolName
+        self.icon = icon
         self.title = title
         self.message = message
         self.steps = steps
@@ -75,11 +67,11 @@ public struct PageEmptyState: View {
     }
 
     init(
-        symbolName: String, title: String, message: String, tint: Color?,
+        icon: EdithIcon, title: String, message: String, tint: Color?,
         leading: PageAction?, trailing: PageAction?
     ) {
         self.init(
-            symbolName: symbolName, title: title, message: message, primary: trailing,
+            icon: icon, title: title, message: message, primary: trailing,
             secondary: leading, tint: tint)
         self.secondaryOnly = true
     }
@@ -99,7 +91,7 @@ public struct PageEmptyState: View {
         let dark = scheme == .dark
         return VStack(spacing: UIScale.pt(small ? 12 : 20)) {
             PageGuideBadge(
-                symbolName: symbolName, size: small ? 40 : compactLayout ? 56 : 64, tint: tint)
+                icon: icon, size: small ? 40 : compactLayout ? 56 : 64, tint: tint)
             VStack(spacing: UIScale.pt(small ? 4 : 8)) {
                 Text(title).font(.edithText(small ? .headline : .title2)).fontWeight(.semibold)
                     .multilineTextAlignment(.center)
@@ -136,8 +128,8 @@ public struct PageEmptyState: View {
 
     private func actionButton(_ action: PageAction, role: EdithButtonRole) -> some View {
         Button(action: action.perform) {
-            if let symbol = action.symbolName {
-                Label(action.title, systemImage: symbol)
+            if let icon = action.icon {
+                Label(action.title, edith: icon)
             } else {
                 Text(action.title)
             }
@@ -155,24 +147,19 @@ public struct PageGuideBadge: View {
     var tint: Color?
     @Environment(\.colorScheme) private var scheme
 
-    public init(symbolName: String, size: CGFloat = 64, tint: Color? = nil) {
-        self.icon = PageIcon(symbolName: symbolName, size: size)
-        self.tint = tint
-    }
-
     public init(
-        _ icon: EdithIcon, size: CGFloat = 60, tint: Color? = nil, tone: EdithIconTone = .duotone
+        icon: EdithIcon, size: CGFloat = 64, tint: Color? = nil, tone: EdithIconTone = .duotone
     ) {
-        self.icon = PageIcon(icon, size: size, tone: tone)
+        self.icon = PageIcon(icon: icon, size: size, tone: tone)
         self.tint = tint
     }
 
     public init(
-        extensionID: String?, symbolName: String, size: CGFloat = 60, tint: Color? = nil,
+        extensionID: String?, icon: EdithIcon, size: CGFloat = 60, tint: Color? = nil,
         tone: EdithIconTone = .duotone
     ) {
         self.icon = PageIcon(
-            extensionID: extensionID, symbolName: symbolName, size: size, tone: tone)
+            extensionID: extensionID, icon: icon, size: size, tone: tone)
         self.tint = tint
     }
 
@@ -204,11 +191,7 @@ public struct PageGuideSteps: View {
         ) {
             ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    if let icon = step.icon {
-                        PageGuideBadge(icon, size: 24)
-                    } else {
-                        PageGuideBadge(symbolName: step.symbolName, size: 24)
-                    }
+                    PageGuideBadge(icon: step.icon, size: 24)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(step.title).font(.edithText(.callout)).fontWeight(.semibold)
                             .fixedSize(horizontal: false, vertical: true)
@@ -230,7 +213,7 @@ public struct PageGuideSteps: View {
 
 public struct PageIntro: View {
     let extensionID: String?
-    let symbolName: String
+    let icon: EdithIcon
     let title: String
     let tagline: String
     let summary: String
@@ -244,23 +227,23 @@ public struct PageIntro: View {
     @Environment(\.compactLayout) private var compact
 
     public init(
-        symbolName: String, title: String, tagline: String, summary: String,
+        icon: EdithIcon, title: String, tagline: String, summary: String,
         steps: [PageGuideStep], examples: [String] = [], start: PageAction,
         skip: PageAction? = nil, skipAll: PageAction? = nil, embedded: Bool = false
     ) {
         self.init(
-            extensionID: nil, symbolName: symbolName, title: title, tagline: tagline,
+            extensionID: nil, icon: icon, title: title, tagline: tagline,
             summary: summary, steps: steps, examples: examples, start: start, skip: skip,
             skipAll: skipAll, embedded: embedded)
     }
 
     public init(
-        extensionID: String?, symbolName: String, title: String, tagline: String, summary: String,
+        extensionID: String?, icon: EdithIcon, title: String, tagline: String, summary: String,
         steps: [PageGuideStep], examples: [String] = [], start: PageAction,
         skip: PageAction? = nil, skipAll: PageAction? = nil, embedded: Bool = false
     ) {
         self.extensionID = extensionID
-        self.symbolName = symbolName
+        self.icon = icon
         self.title = title
         self.tagline = tagline
         self.summary = summary
@@ -290,7 +273,7 @@ public struct PageIntro: View {
         return VStack(alignment: .leading, spacing: UIScale.pt(24)) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
                 PageGuideBadge(
-                    extensionID: extensionID, symbolName: symbolName, size: compact ? 40 : 60
+                    extensionID: extensionID, icon: icon, size: compact ? 40 : 60
                 )
                 .flushLeading()
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -346,7 +329,7 @@ public struct PageIntro: View {
                         .accessibilityIdentifier(skip.identifier ?? "intro.skip")
                 }
                 Button(action: start.perform) {
-                    Label(start.title, systemImage: start.symbolName ?? "arrow.right")
+                    Label(start.title, edith: start.icon ?? .arrowRight)
                 }
                 .buttonStyle(.edith(.primary))
                 .font(.edithText(.body))

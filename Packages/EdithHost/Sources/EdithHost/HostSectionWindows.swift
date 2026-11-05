@@ -115,7 +115,7 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         id: UUID, target: HostMachinesWindowTarget, controller: NSViewController,
         didClose: @escaping () -> Void
     ) -> NSWindow {
-        let symbol: String
+        let icon: EdithIcon
         let fallback: String
         let size: NSSize
         let minimum: NSSize
@@ -123,31 +123,31 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
         let machine = target.machineID.uuidString
         switch target.kind {
         case .machine:
-            symbol = "server.rack"; fallback = "Machine"
+            icon = .server; fallback = "Machine"
             size = NSSize(width: 900, height: 620); minimum = NSSize(width: 600, height: 440)
             chrome.tabbingIdentifier = "EdithMachine"
             chrome.autosaveName = "EdithMachine." + machine
         case .files:
-            symbol = "folder"; fallback = "Files"
+            icon = .folder; fallback = "Files"
             size = NSSize(width: 940, height: 620); minimum = NSSize(width: 620, height: 400)
             chrome.tabbingIdentifier = "EdithFinder"
             chrome.autosaveName = "EdithFinderWindow"
             chrome.subtitle = target.subtitle
             chrome.fullSizeContent = true
         case .docker:
-            symbol = "shippingbox"; fallback = "Docker"
+            icon = .box; fallback = "Docker"
             size = NSSize(width: 1020, height: 660); minimum = NSSize(width: 720, height: 460)
             chrome.tabbingIdentifier = "EdithDocker"
             chrome.autosaveName = "EdithDockerWindow"
         case .terminal:
-            symbol = "terminal"; fallback = "Terminal"
+            icon = .terminal; fallback = "Terminal"
             size = NSSize(width: 900, height: 560); minimum = NSSize(width: 520, height: 320)
             chrome.tabbingIdentifier = "EdithTerminal"
             chrome.autosaveName = "EdithTerminalWindow"
         }
         let page = HostNavigationPage(
             id: "machines.window." + id.uuidString, title: target.title ?? fallback,
-            symbol: symbol, extensionID: "machines")
+            icon: icon, extensionID: "machines")
         return create(
             page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
             contentSize: size, minimumSize: minimum, chrome: chrome)
@@ -163,7 +163,7 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     ) -> NSWindow {
         let page = HostNavigationPage(
             id: "herdr.window." + id.uuidString,
-            title: target.title, symbol: target.location == "herdr.files" ? "folder" : "terminal",
+            title: target.title, icon: target.location == "herdr.files" ? .folder : .terminal,
             extensionID: "herdr")
         return create(
             page: page, controller: controller, mode: .alwaysNew, didClose: didClose,
@@ -186,7 +186,7 @@ final class HostSectionWindows: NSObject, NSWindowDelegate, NSMenuItemValidation
     ) -> NSWindow {
         create(
             page: HostNavigationPage(
-                id: "terminal.window." + id.uuidString, title: "Terminal", symbol: "terminal",
+                id: "terminal.window." + id.uuidString, title: "Terminal", icon: .terminal,
                 extensionID: "terminal"),
             controller: controller, mode: .alwaysNew, didClose: didClose)
     }

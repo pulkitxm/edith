@@ -52,7 +52,7 @@ struct HostPermissionInfoButton: View {
             if let label {
                 HStack(spacing: UIScale.pt(4)) {
                     Text(label)
-                    Image(systemName: "info.circle")
+                    EdithIconView(.info)
                 }
                 .font(.system(size: UIScale.pt(10), weight: .medium))
                 .lineLimit(1)
@@ -60,7 +60,7 @@ struct HostPermissionInfoButton: View {
                 .padding(.vertical, UIScale.pt(3))
                 .background(color.opacity(0.12), in: Capsule())
             } else {
-                Image(systemName: "info.circle")
+                EdithIconView(.info)
                     .font(.system(size: UIScale.pt(10)))
             }
         }

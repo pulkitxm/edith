@@ -226,6 +226,29 @@ private func svgLayer(_ source: String, id: String) -> String {
         #expect(menu.items.allSatisfy { $0.image != nil })
     }
 
+    @Test func codableCarriesTheNameAndAnUnknownNameBecomesThePlaceholder() throws {
+        let encoded = try JSONEncoder().encode([EdithIcon.terminal])
+        #expect(String(decoding: encoded, as: UTF8.self) == #"["terminal"]"#)
+        let decoded = try JSONDecoder().decode(
+            [EdithIcon].self, from: Data(#"["terminal","gear","gearshape.fill"]"#.utf8))
+        #expect(decoded == [.terminal, .gear, .placeholder])
+    }
+
+    @MainActor @Test func tintedImageCarriesItsColorWithoutTemplateRendering() throws {
+        let renderer = ImageRenderer(
+            content: EdithIcon.plus.image(size: 16, tint: Color(red: 1, green: 0, blue: 0)))
+        renderer.scale = 2
+        let image = try #require(renderer.nsImage)
+        let bitmap = try #require(
+            image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let center = try #require(
+            bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?
+                .usingColorSpace(.sRGB))
+        #expect(center.redComponent > 0.8)
+        #expect(center.greenComponent < 0.3)
+        #expect(center.alphaComponent > 0.9)
+    }
+
     @MainActor @Test func callSitesCompileAcrossEverySymbolShape() {
         let title = "Dynamic"
         _ = Label("Literal", edith: .plus)

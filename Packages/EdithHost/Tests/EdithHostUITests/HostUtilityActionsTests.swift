@@ -6,7 +6,7 @@ import Testing
 @MainActor
 @Suite struct HostUtilityActionsTests {
     private func snapshot(_ id: String, offering action: String) -> SurfaceSnapshot {
-        SurfaceSnapshot(providerID: id, actions: [.init(action, action, "moon.zzz")])
+        SurfaceSnapshot(providerID: id, actions: [.init(action, action, .moon)])
     }
 
     @Test func keepAwakeStateFollowsTheOwnersSnapshot() {

@@ -5,6 +5,17 @@ import Testing
 
 @MainActor
 @Suite struct LocalFileListingTests {
+    @Test func aPlaceFromAnOlderMachineStillGetsAnIcon() throws {
+        let place = try JSONDecoder().decode(
+            FilePlace.self,
+            from: Data(#"{"name":"Home","path":"/synthetic","symbol":"house"}"#.utf8))
+        #expect(place.icon == .folder)
+        let current = FilePlace(name: "Home", path: "/synthetic", icon: .home)
+        #expect(
+            try JSONDecoder().decode(FilePlace.self, from: JSONEncoder().encode(current))
+                == current)
+    }
+
     @Test func listingRunsOffTheMainThreadSoAStalledDirectoryCannotFreezeTheApp() async {
         let entry = RemoteFileEntry(name: "a", path: "/tmp/a", kind: .file, sizeBytes: 1)
         let onMain = LockedFlag()

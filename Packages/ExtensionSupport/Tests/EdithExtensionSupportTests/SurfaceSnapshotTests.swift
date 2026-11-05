@@ -15,14 +15,25 @@ import Testing
         #expect(decoded.tile.sourceIDs == ["synthetic-provider"])
     }
 
+    @Test func iconsCrossTheWireByNameAndAnUnknownNameStillDecodes() throws {
+        let row = SurfaceDataRow("row", title: "Synthetic", icon: .calendar)
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(row))
+        #expect((object as? [String: Any])?["icon"] as? String == "calendar")
+        let stale = try JSONDecoder().decode(
+            SurfaceAction.self,
+            from: Data(#"{"id":"open","title":"Open","icon":"retired"}"#.utf8))
+        #expect(stale.icon == .placeholder)
+        #expect(SurfaceDataRow("row", title: "Synthetic").icon == .ring)
+    }
+
     @Test func dataAndOpaqueActionsRoundTripWithoutFeatureTypes() throws {
         let snapshot = SurfaceSnapshot(
             providerID: "calendar", metrics: [.init("meetings", "Upcoming", "2")],
             rows: [
                 .init(
                     "meeting", sourceID: "calendar-id", title: "Synthetic meeting",
-                    detail: "In 20 minutes", icon: "calendar",
-                    actions: [.init("join:meeting", "Join", "video")])
+                    detail: "In 20 minutes", icon: .calendar,
+                    actions: [.init("join:meeting", "Join", .video)])
             ],
             sources: [.init("calendar-id", "Synthetic calendar")],
             updatedAt: Date(timeIntervalSince1970: 123))
@@ -67,7 +78,7 @@ import Testing
         case "metrics": snapshot.metrics = (0..<33).map { .init(String($0), "Metric", "0") }
         case "rows": snapshot.rows = (0..<101).map { .init(String($0), title: "Row") }
         case "sources": snapshot.sources = (0..<101).map { .init(String($0), "Source") }
-        case "actions": snapshot.actions = (0..<9).map { .init(String($0), "Action", "square") }
+        case "actions": snapshot.actions = (0..<9).map { .init(String($0), "Action", .checkbox) }
         case "text": snapshot.message = String(repeating: "x", count: 4097)
         case "fraction": snapshot.metrics = [.init("progress", "Progress", "0", fraction: 2)]
         case "duplicate":

@@ -356,7 +356,7 @@ import Testing
         defer { fixture.remove() }
         let model = fixture.model()
         let guided = HostExtension(
-            id: "guided", title: "Guided", symbolName: "star", category: "desk",
+            id: "guided", title: "Guided", icon: .heart, category: "desk",
             guide: HostExtensionGuide(tagline: "Does a thing.", summary: "", steps: []))
         #expect(model.tagline(for: guided) == "Does a thing.")
     }
@@ -416,19 +416,19 @@ import Testing
 
     @MainActor final class Fixture {
         static let entries: [HostExtension] = [
-            HostExtension(id: "hinge", title: "Hinge", symbolName: "a.circle", category: "desk"),
+            HostExtension(id: "hinge", title: "Hinge", icon: .ring, category: "desk"),
             HostExtension(
-                id: "keystrokeHighlight", title: "Keystrokes", symbolName: "b.circle",
+                id: "keystrokeHighlight", title: "Keystrokes", icon: .ring,
                 category: "desk"),
-            HostExtension(id: "system", title: "System", symbolName: "c.circle", category: "desk"),
+            HostExtension(id: "system", title: "System", icon: .ring, category: "desk"),
             HostExtension(
-                id: "calendar", title: "Calendar", symbolName: "calendar", category: "utilities"),
-            HostExtension(id: "usage", title: "Usage", symbolName: "chart.bar", category: "agents"),
+                id: "calendar", title: "Calendar", icon: .calendar, category: "utilities"),
+            HostExtension(id: "usage", title: "Usage", icon: .chartBar, category: "agents"),
             HostExtension(
-                id: "notchShelf", title: "Notch", symbolName: "d.circle", category: "labs"),
+                id: "notchShelf", title: "Notch", icon: .ring, category: "labs"),
             HostExtension(
-                id: "plain", title: "Plain", symbolName: "e.circle", category: "media",
-                pages: [HostPage(id: "plainPage", title: "Plain", symbolName: "e.circle", order: 0)]
+                id: "plain", title: "Plain", icon: .ring, category: "media",
+                pages: [HostPage(id: "plainPage", title: "Plain", icon: .ring, order: 0)]
             ),
         ]
         let name = "com.pulkit.edith.tests.journey.\(UUID().uuidString)"

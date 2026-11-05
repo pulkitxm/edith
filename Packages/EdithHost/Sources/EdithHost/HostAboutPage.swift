@@ -103,7 +103,7 @@ struct HostAboutPage: View {
                 .scaledToFit()
                 .frame(width: UIScale.pt(12), height: UIScale.pt(12))
         } else {
-            Image(systemName: "link")
+            EdithIconView(.link)
                 .font(.edithText(.caption).weight(.semibold))
         }
     }

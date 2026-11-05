@@ -48,7 +48,10 @@ let package = Package(
         .testTarget(
             name: "EdithExtensionArchiveTests", dependencies: ["EdithExtensionArchive"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "EdithExtensionCore", swiftSettings: shared),
+        .target(
+            name: "EdithExtensionCore",
+            dependencies: [.product(name: "EdithIcons", package: "EdithIcons")],
+            swiftSettings: shared),
         .target(
             name: "EdithExtensionSupport", dependencies: ["EdithExtensionCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
@@ -63,9 +66,7 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "EdithExtensionUI",
-            dependencies: [
-                "EdithExtensionCore", .product(name: "EdithIcons", package: "EdithIcons"),
-            ],
+            dependencies: ["EdithExtensionCore"],
             swiftSettings: shared),
         .target(
             name: "EdithExtensionDocuments",

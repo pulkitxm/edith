@@ -5,7 +5,7 @@ import Foundation
 struct HostNavigationSection: Identifiable, Equatable {
     let id: String
     let title: String
-    let symbol: String
+    let icon: EdithIcon
     let extensionID: String?
     var summary = ""
 }
@@ -13,7 +13,7 @@ struct HostNavigationSection: Identifiable, Equatable {
 struct HostNavigationPage: Identifiable, Equatable {
     let id: String
     let title: String
-    let symbol: String
+    let icon: EdithIcon
     var suite: String? = nil
     var parentID: String? = nil
     var extensionID: String? = nil
@@ -35,42 +35,42 @@ enum HostNavigationCatalog {
     }
     static let settings: [HostNavigationSection] = [
         .init(
-            id: "general", title: "General", symbol: "gearshape", extensionID: nil,
+            id: "general", title: "General", icon: .gear, extensionID: nil,
             summary: "Appearance, window, and welcome tour"),
         .init(
-            id: "surfaces", title: "Home & Notch", symbol: "rectangle.3.group", extensionID: nil,
+            id: "surfaces", title: "Home & Notch", icon: .window, extensionID: nil,
             summary: "Arrange widgets and build your own Home and Notch"),
         .init(
-            id: "agentActivity", title: "Agent connections", symbol: "terminal",
+            id: "agentActivity", title: "Agent connections", icon: .terminal,
             extensionID: "herdr",
             summary: "Live provider activity and explicit permission approvals"),
         .init(
-            id: "permissions", title: "Permissions", symbol: "hand.raised", extensionID: nil,
+            id: "permissions", title: "Permissions", icon: .hand, extensionID: nil,
             summary: "Privacy access used by enabled extensions"),
         .init(
-            id: "agent", title: "Background agent", symbol: "bolt.horizontal.circle",
+            id: "agent", title: "Background agent", icon: .bolt,
             extensionID: nil,
             summary: "Keeps your tools up to date while the Edith window is closed"),
         .init(
-            id: "jev", title: "Jev", symbol: "brain", extensionID: "jev",
+            id: "jev", title: "Jev", icon: .jev, extensionID: "jev",
             summary: "Fast typed decisions from TypeSafe's Jev model"),
         .init(
-            id: "data", title: "Data & backup", symbol: "externaldrive.badge.icloud",
+            id: "data", title: "Data & backup", icon: .drive,
             extensionID: nil, summary: "Where Edith keeps things, and what leaves this Mac"),
         .init(
-            id: "storage", title: "Storage", symbol: "internaldrive", extensionID: nil,
+            id: "storage", title: "Storage", icon: .drive, extensionID: nil,
             summary: "Disk space used by Edith and its extensions"),
         .init(
-            id: "shortcuts", title: "Shortcuts", symbol: "keyboard", extensionID: nil,
+            id: "shortcuts", title: "Shortcuts", icon: .keyboard, extensionID: nil,
             summary: "Global and application keyboard shortcuts"),
         .init(
-            id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: nil,
+            id: "terminal", title: "Terminal", icon: .terminal, extensionID: nil,
             summary: "Command line and terminal integration"),
         .init(
-            id: "icloud", title: "iCloud", symbol: "icloud", extensionID: nil,
+            id: "icloud", title: "iCloud", icon: .cloud, extensionID: nil,
             summary: "Backup and synchronization"),
         .init(
-            id: "updates", title: "Updates", symbol: "arrow.triangle.2.circlepath",
+            id: "updates", title: "Updates", icon: .sync,
             extensionID: nil, summary: "Version and automatic update behavior"),
     ]
     static let entries = (try? HostIndex.bundled()) ?? []
@@ -84,7 +84,7 @@ enum HostNavigationCatalog {
         .sorted { $0.1.order < $1.1.order }
         .map { owner, section in
             HostNavigationSection(
-                id: section.id, title: section.title, symbol: section.symbolName,
+                id: section.id, title: section.title, icon: section.icon,
                 extensionID: owner, summary: section.summary)
         }
     }
@@ -96,39 +96,39 @@ enum HostNavigationCatalog {
                 .sorted { $0.1.order < $1.1.order }
                 .map { owner, page in
                     HostNavigationPage(
-                        id: page.id, title: page.title, symbol: page.symbolName, suite: suite,
+                        id: page.id, title: page.title, icon: page.icon, suite: suite,
                         parentID: parent, extensionID: owner, detachable: page.detachable,
                         logoName: page.logoName)
                 }
         }
         return [
-            .init(id: "home", title: "Home", symbol: "house.fill"),
+            .init(id: "home", title: "Home", icon: .home),
             .init(
-                id: "agents", title: "Agents & Terminal", symbol: "sparkles", suite: "agents",
+                id: "agents", title: "Agents & Terminal", icon: .suiteAgents, suite: "agents",
                 landing: true),
         ] + children("agents", parent: "agents") + [
             .init(
-                id: "system", title: "Mac Utilities", symbol: "switch.2", suite: "utilities",
+                id: "system", title: "Mac Utilities", icon: .toolbox, suite: "utilities",
                 landing: true)
         ] + children("utilities", parent: "system") + [
             .init(
                 id: "appMaintenance", title: "Maintenance",
-                symbol: "shippingbox.and.arrow.backward", suite: "utilities",
+                icon: .appMaintenance, suite: "utilities",
                 sections: sections(entries, page: "appMaintenance"), landing: true),
-            .init(id: "desk", title: "Desk", symbol: "hand.tap", suite: "desk", landing: true),
+            .init(id: "desk", title: "Desk", icon: .cursor, suite: "desk", landing: true),
             .init(
-                id: "media", title: "Media", symbol: "play.rectangle.on.rectangle",
+                id: "media", title: "Media", icon: .suiteMedia,
                 suite: "media", landing: true),
         ] + children("media", parent: "media") + [
             .init(
-                id: "data", title: "Developer & Data", symbol: "cylinder.split.1x2",
+                id: "data", title: "Developer & Data", icon: .database,
                 suite: "developer", landing: true)
         ] + children("developer", parent: "data") + [
-            .init(id: "extensions", title: "Extensions", symbol: "puzzlepiece.extension"),
+            .init(id: "extensions", title: "Extensions", icon: .puzzle),
             .init(
-                id: "settings", title: "Settings", symbol: "gearshape", sections: settings,
+                id: "settings", title: "Settings", icon: .gear, sections: settings,
                 detachable: false),
-            .init(id: "about", title: "About", symbol: "info.circle", detachable: false),
+            .init(id: "about", title: "About", icon: .info, detachable: false),
         ]
     }
     static let suiteProviders = HostMarketplaceCatalog.providers(entries)

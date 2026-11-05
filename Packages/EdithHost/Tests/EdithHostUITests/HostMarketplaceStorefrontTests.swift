@@ -10,7 +10,7 @@ struct HostMarketplaceStorefrontTests {
         summary: String = ""
     ) -> HostExtension {
         HostExtension(
-            id: id, title: title ?? id.capitalized, symbolName: "star", category: category,
+            id: id, title: title ?? id.capitalized, icon: .heart, category: category,
             guide: tagline.map { HostExtensionGuide(tagline: $0, summary: summary, steps: []) })
     }
 
@@ -168,7 +168,7 @@ struct HostMarketplaceStorefrontTests {
             id: "mute", prefix: "mic", title: "Mute", subtitle: "", code: 46, modifiers: 0,
             label: "⇧⌘M")
         let tool = HostExtension(
-            id: "tool", title: "Tool", symbolName: "star", category: "desk", hotkeys: [hotkey],
+            id: "tool", title: "Tool", icon: .heart, category: "desk", hotkeys: [hotkey],
             homeCards: ["a", "b"], notchCards: ["n"])
         let found = HostExtensionPlacements.placements(
             for: tool, route: ("dashboard", nil), pageTitles: ["dashboard": "Usage"])
@@ -181,7 +181,7 @@ struct HostMarketplaceStorefrontTests {
             sectionTitles: ["Packages": "Packages"])
         #expect(maintenance[0].title == "Maintenance")
         #expect(maintenance[0].detail.contains("Packages"))
-        let quiet = HostExtension(id: "quiet", title: "Quiet", symbolName: "star", category: "desk")
+        let quiet = HostExtension(id: "quiet", title: "Quiet", icon: .heart, category: "desk")
         #expect(HostExtensionPlacements.placements(for: quiet).map(\.title) == ["Background"])
     }
 
@@ -189,7 +189,7 @@ struct HostMarketplaceStorefrontTests {
         let hotkey = HostHotKey(
             id: "k", prefix: "p", title: "Go", subtitle: "", code: 1, modifiers: 0, label: "⌥Space")
         let keyed = HostExtension(
-            id: "k", title: "K", symbolName: "star", category: "desk", hotkeys: [hotkey])
+            id: "k", title: "K", icon: .heart, category: "desk", hotkeys: [hotkey])
         #expect(HostExtensionPlacements.hint(for: keyed, route: nil) == "Press ⌥Space to use it.")
         #expect(
             HostExtensionPlacements.hint(

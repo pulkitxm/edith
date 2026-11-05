@@ -13,36 +13,36 @@ struct SurfaceSliderTests {
         #expect(try SurfaceSnapshot.decode(oldData, providerID: "music").sliders == nil)
         let controls = SurfaceSnapshot(
             providerID: "music",
-            sliders: [.init("volume", "Volume", "speaker.wave.2", value: 0.7, field: "volume")])
+            sliders: [.init("volume", "Volume", .speaker, value: 0.7, field: "volume")])
         #expect(try SurfaceSnapshot.decode(controls.encoded(), providerID: "music") == controls)
     }
 
     @Test(arguments: [-0.1, 1.1, Double.infinity, Double.nan])
     func invalidValuesNeverEncode(_ value: Double) {
         let snapshot = SurfaceSnapshot(
-            providerID: "music", sliders: [.init("volume", "Volume", "speaker", value: value)])
+            providerID: "music", sliders: [.init("volume", "Volume", .speaker, value: value)])
         #expect(throws: ExtensionPeerError.self) { _ = try snapshot.encoded() }
     }
 
     @Test func duplicateControlsAndButtonCollisionsAreRejectedAcrossRows() {
         let collision = SurfaceSnapshot(
-            providerID: "music", actions: [.init("volume", "Play", "play")],
-            sliders: [.init("volume", "Volume", "speaker", value: 0.4)])
+            providerID: "music", actions: [.init("volume", "Play", .play)],
+            sliders: [.init("volume", "Volume", .speaker, value: 0.4)])
         #expect(throws: ExtensionPeerError.self) { _ = try collision.encoded() }
         let rows = SurfaceSnapshot(
             providerID: "audioMixer",
             rows: [
                 .init(
                     "one", title: "First",
-                    sliders: [.init("volume", "Volume", "speaker", value: 0.4)]),
+                    sliders: [.init("volume", "Volume", .speaker, value: 0.4)]),
                 .init(
                     "two", title: "Second",
-                    sliders: [.init("volume", "Volume", "speaker", value: 0.8)]),
+                    sliders: [.init("volume", "Volume", .speaker, value: 0.8)]),
             ])
         #expect(throws: ExtensionPeerError.self) { _ = try rows.encoded() }
         let tooMany = SurfaceSnapshot(
             providerID: "music",
-            sliders: (0..<33).map { .init($0.description, "Volume", "speaker", value: 0.5) })
+            sliders: (0..<33).map { .init($0.description, "Volume", .speaker, value: 0.5) })
         #expect(throws: ExtensionPeerError.self) { _ = try tooMany.encoded() }
     }
 
@@ -55,11 +55,11 @@ struct SurfaceSliderTests {
             rows: [
                 .init(
                     "one", sourceID: "first", title: "First",
-                    sliders: [.init("volume:one", "Volume", "speaker", value: 0.4, field: "volume")]
+                    sliders: [.init("volume:one", "Volume", .speaker, value: 0.4, field: "volume")]
                 ),
                 .init(
                     "two", sourceID: "second", title: "Second",
-                    sliders: [.init("volume:two", "Volume", "speaker", value: 0.8, field: "volume")]
+                    sliders: [.init("volume:two", "Volume", .speaker, value: 0.8, field: "volume")]
                 ),
             ])
         var adjusted: [(String, Double)] = []
@@ -98,7 +98,7 @@ struct SurfaceSliderTests {
         let sent = SurfaceControlRequests()
         let snapshot = SurfaceSnapshot(
             providerID: "music",
-            sliders: [.init("volume", "Volume", "speaker", value: 0.7, field: "volume")])
+            sliders: [.init("volume", "Volume", .speaker, value: 0.7, field: "volume")])
         let client = SurfaceSnapshotClient(
             activeVersions: { ["music": "1"] },
             execute: { _, _, data in
@@ -124,7 +124,7 @@ struct SurfaceSliderTests {
 
     @Test func privacyNeverPublishesControlsOrAcceptsTheirValues() async throws {
         let snapshot = SurfaceSnapshot(
-            providerID: "music", sliders: [.init("volume", "Volume", "speaker", value: 0.7)])
+            providerID: "music", sliders: [.init("volume", "Volume", .speaker, value: 0.7)])
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.music))
         let data = try await SurfaceCommandService.execute(
             providerID: "music", command: "surface.snapshot",

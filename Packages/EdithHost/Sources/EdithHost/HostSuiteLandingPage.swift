@@ -83,7 +83,7 @@ struct HostSuiteLandingPage: View {
         PageScaffold(pinnedHeader: true) {
             PageHeader(subtitle: suite?.subtitle) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    if let suite { PageGuideBadge(suite.icon, size: 24).flushLeading() }
+                    if let suite { PageGuideBadge(icon: suite.icon, size: 24).flushLeading() }
                     Text(destination.title)
                 }
             } trailing: {
@@ -180,7 +180,7 @@ struct HostSuiteAbilityRow: View {
                     }
                     if HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable {
                         Button(action: review) {
-                            Image(systemName: "gearshape")
+                            EdithIconView(.gear)
                                 .font(.system(size: UIScale.pt(13), weight: .medium))
                         }
                         .buttonStyle(.edith(.iconOnly))

@@ -88,11 +88,11 @@ struct HostHomePage: View {
         }
         if layout.visible.isEmpty, !editing {
             PageEmptyState(
-                symbolName: "rectangle.3.group",
+                icon: .window,
                 title: "Make Home yours",
                 message:
                     "Home shows live widgets from your extensions, like your next meeting or the song that is playing.",
-                primary: PageAction("Add widgets", symbolName: "plus") { customize(nil) },
+                primary: PageAction("Add widgets", icon: .plus) { customize(nil) },
                 secondary: PageAction("Browse extensions", perform: extensions))
         }
     }
@@ -269,7 +269,7 @@ private struct HostSurfaceProviderCard: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
                 if showProvider {
-                    Label(provider.title, systemImage: provider.symbolName).font(
+                    Label(provider.title, edith: provider.icon).font(
                         .edithText(.callout))
                 }
                 Spacer(minLength: 0)
@@ -277,7 +277,7 @@ private struct HostSurfaceProviderCard: View {
                     Button {
                         retry += 1
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
                     .accessibilityLabel("Refresh " + provider.title)
                     if let openExtension {
@@ -293,7 +293,7 @@ private struct HostSurfaceProviderCard: View {
                 }
             }.buttonStyle(.edith(.borderless))
             if hidden {
-                Label("Hidden while presenting", systemImage: "eye.slash").font(
+                Label("Hidden while presenting", edith: .eyeOff).font(
                     .edithText(.caption)
                 ).foregroundStyle(.secondary)
             } else if let snapshot {
@@ -317,7 +317,7 @@ private struct HostSurfaceProviderCard: View {
                     Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
                         .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    EdithIconView(.warning).foregroundStyle(.orange)
                 }
                 .font(.edithText(.caption))
                 Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))

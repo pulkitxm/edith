@@ -69,7 +69,7 @@ test("optional document code and resources are excluded from core and UI product
   expect(supportSourceInputs("EdithExtensionUI")).toContain(
     "Packages/EdithIcons/Sources",
   );
-  expect(supportSourceInputs("EdithExtensionCore")).not.toContain(
+  expect(supportSourceInputs("EdithExtensionCore")).toContain(
     "Packages/EdithIcons/Sources",
   );
   expect(supportSourceInputs("EdithExtensionUI")).not.toContain(

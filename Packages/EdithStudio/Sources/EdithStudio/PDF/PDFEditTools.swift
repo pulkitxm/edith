@@ -15,20 +15,20 @@ enum PDFEditTools {
     static let edit = StudioTool(
         id: "pdf.edit", title: "Edit PDF",
         summary: "Add text, images, shapes, highlights and freehand drawings to a PDF.",
-        symbol: "pencil.and.outline", group: .edit, inputs: [.pdf], produces: .kind(.pdf),
+        icon: .edit, group: .edit, inputs: [.pdf], produces: .kind(.pdf),
         style: .editor(.pdf, pdfMode: .annotate),
         keywords: ["annotate", "text", "draw", "shapes", "comment", "highlight", "markup"])
 
     static let sign = StudioTool(
         id: "pdf.sign", title: "Sign PDF",
         summary: "Draw, type or import your signature and place it on any page.",
-        symbol: "signature", group: .security, inputs: [.pdf], produces: .kind(.pdf),
+        icon: .signature, group: .security, inputs: [.pdf], produces: .kind(.pdf),
         style: .editor(.pdf, pdfMode: .sign), keywords: ["signature", "esign", "initials"])
 
     static let forms = StudioTool(
         id: "pdf.forms", title: "PDF forms",
         summary: "Fill in forms, or add text fields, checkboxes and choice lists to make one.",
-        symbol: "list.bullet.rectangle.portrait", group: .edit, inputs: [.pdf],
+        icon: .list, group: .edit, inputs: [.pdf],
         produces: .kind(.pdf), style: .editor(.pdf, pdfMode: .forms),
         keywords: ["fill", "fillable", "fields", "checkbox", "form"])
 
@@ -36,7 +36,7 @@ enum PDFEditTools {
         id: "pdf.watermark", title: "Watermark PDF",
         summary:
             "Stamp text or an image over your PDF with the font, opacity and position you choose.",
-        symbol: "drop.halffull", group: .edit, inputs: [.pdf],
+        icon: .drop, group: .edit, inputs: [.pdf],
         options: StudioStamp.options(textDefault: "CONFIDENTIAL") + [
             .choice(
                 "layer", "Layer",
@@ -65,7 +65,7 @@ enum PDFEditTools {
     static let pageNumbers = StudioTool(
         id: "pdf.page-numbers", title: "Page numbers",
         summary: "Add page numbers, headers or footers with your own position, text and size.",
-        symbol: "number", group: .edit, inputs: [.pdf],
+        icon: .hash, group: .edit, inputs: [.pdf],
         options: [
             .choice(
                 "position", "Position",
@@ -134,7 +134,7 @@ enum PDFEditTools {
     static let metadata = StudioTool(
         id: "pdf.metadata", title: "Edit metadata",
         summary: "Change or remove the title, author, subject and keywords stored in a PDF.",
-        symbol: "info.circle", group: .edit, inputs: [.pdf],
+        icon: .info, group: .edit, inputs: [.pdf],
         options: [
             .toggle("clear", "Remove all metadata", default: false),
             .text("title", "Title", when: .init("clear", ["off"])),
@@ -179,7 +179,7 @@ enum PDFEditTools {
     static let protect = StudioTool(
         id: "pdf.protect", title: "Protect PDF",
         summary: "Encrypt a PDF with a password and choose what others may do with it.",
-        symbol: "lock.doc", group: .security, inputs: [.pdf],
+        icon: .doc, group: .security, inputs: [.pdf],
         options: [
             .password("userPassword", "Password to open", required: true),
             .password(
@@ -227,7 +227,7 @@ enum PDFEditTools {
     static let unlock = StudioTool(
         id: "pdf.unlock", title: "Unlock PDF",
         summary: "Remove the password and restrictions from a PDF you have the password for.",
-        symbol: "lock.open", group: .security, inputs: [.pdf],
+        icon: .unlock, group: .security, inputs: [.pdf],
         options: [
             .password(
                 "password", "Password",
@@ -252,7 +252,7 @@ enum PDFEditTools {
     static let redact = StudioTool(
         id: "pdf.redact", title: "Redact PDF",
         summary: "Find and permanently black out names, emails, numbers or any words you choose.",
-        symbol: "rectangle.fill.badge.xmark", group: .security, inputs: [.pdf],
+        icon: .layoutFull, group: .security, inputs: [.pdf],
         options: [
             .longText(
                 "terms", "Words to redact", placeholder: "One per line or comma separated",
@@ -305,7 +305,7 @@ enum PDFEditTools {
         id: "pdf.redact-areas", title: "Redact areas",
         summary:
             "Draw boxes over anything, including images and signatures, then remove it for good.",
-        symbol: "rectangle.dashed.badge.record", group: .security, inputs: [.pdf],
+        icon: .timeLapse, group: .security, inputs: [.pdf],
         produces: .kind(.pdf), style: .editor(.pdf, pdfMode: .redact),
         keywords: ["black out", "censor", "hide", "manual"])
 }

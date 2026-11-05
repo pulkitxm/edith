@@ -257,7 +257,7 @@ struct HostWorkspace: View {
             Button {
                 sidebarOpen.toggle()
             } label: {
-                Image(systemName: "sidebar.left").font(
+                EdithIconView(.sidebarLeft).font(
                     .system(size: UIScale.pt(15), weight: .medium)
                 )
                 .foregroundStyle(.secondary).frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -354,7 +354,7 @@ struct HostWorkspace: View {
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) { creditHidden = true }
                     } label: {
-                        Image(systemName: "xmark").font(
+                        EdithIconView(.close).font(
                             .system(size: UIScale.pt(8), weight: .semibold)
                         ).foregroundStyle(.tertiary).frame(
                             width: UIScale.pt(16), height: UIScale.pt(16))
@@ -420,7 +420,7 @@ struct HostWorkspace: View {
                 Button {
                     toggle(page)
                 } label: {
-                    Image(systemName: "chevron.right").font(
+                    EdithIconView(.chevronRight).font(
                         .system(size: UIScale.pt(10), weight: .semibold)
                     ).foregroundStyle(.tertiary).rotationEffect(.degrees(expanded(page) ? 90 : 0))
                         .animation(
@@ -456,7 +456,7 @@ struct HostWorkspace: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: section.symbol).frame(width: UIScale.pt(18));
+                EdithIconView(section.icon).frame(width: UIScale.pt(18));
                 Text(section.title).lineLimit(1); Spacer(minLength: 0)
                 if let badge = status.badge(sectionID: section.id, of: parent.id) {
                     HostSidebarBadgeLabel(badge: badge, theme: theme)

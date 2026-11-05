@@ -10,7 +10,7 @@ enum ImageCreativeTools {
         id: "image.watermark", title: "Watermark image",
         summary:
             "Stamp text or a logo over your images with the font, opacity and position you choose.",
-        symbol: "drop.halffull", group: .edit, inputs: [.image],
+        icon: .drop, group: .edit, inputs: [.image],
         options: StudioStamp.options(textDefault: "© Your name"),
         keywords: ["stamp", "logo", "copyright", "brand", "protect"], actionTitle: "Add watermark"
     ) { run in
@@ -35,7 +35,7 @@ enum ImageCreativeTools {
         id: "image.remove-background", title: "Remove background",
         summary:
             "Cut out people, pets and objects on device, then keep them on transparency or a new background.",
-        symbol: "person.and.background.dotted", group: .edit, inputs: [.image],
+        icon: .person, group: .edit, inputs: [.image],
         options: [
             .choice(
                 "background", "Background",
@@ -82,7 +82,7 @@ enum ImageCreativeTools {
         id: "image.blur-faces", title: "Blur faces",
         summary:
             "Hide faces automatically, and optionally text and license plates, before you share.",
-        symbol: "eye.slash", group: .security, inputs: [.image],
+        icon: .eyeOff, group: .security, inputs: [.image],
         options: [
             .choice(
                 "style", "Style",
@@ -150,7 +150,7 @@ enum ImageCreativeTools {
         id: "image.upscale", title: "Upscale image",
         summary:
             "Enlarge images 2x, 3x or 4x with high-quality resampling, noise reduction and sharpening.",
-        symbol: "arrow.up.backward.and.arrow.down.forward", group: .optimize, inputs: [.image],
+        icon: .expand, group: .optimize, inputs: [.image],
         options: [
             .choice(
                 "scale", "Enlarge",
@@ -194,7 +194,7 @@ enum ImageCreativeTools {
     static let adjust = StudioTool(
         id: "image.adjust", title: "Filters and adjustments",
         summary: "Apply the same filter and color adjustments to a whole batch of photos.",
-        symbol: "camera.filters", group: .edit, inputs: [.image],
+        icon: .filters, group: .edit, inputs: [.image],
         options: [
             .choice("filter", "Filter", ImageFilterPreset.choices, default: "none"),
             .percent(
@@ -232,7 +232,7 @@ enum ImageCreativeTools {
     static let meme = StudioTool(
         id: "image.meme", title: "Meme generator",
         summary: "Add bold top and bottom captions in the classic meme style.",
-        symbol: "face.smiling", group: .create, inputs: [.image],
+        icon: .emoji, group: .create, inputs: [.image],
         options: [
             .text("top", "Top text", placeholder: "When the build passes", default: ""),
             .text("bottom", "Bottom text", placeholder: "On the first try", default: ""),
@@ -273,7 +273,7 @@ enum ImageCreativeTools {
     static let border = StudioTool(
         id: "image.border", title: "Add border",
         summary: "Frame images with a solid, rounded, polaroid or drop shadow border.",
-        symbol: "square.dashed", group: .edit, inputs: [.image],
+        icon: .selection, group: .edit, inputs: [.image],
         options: [
             .choice(
                 "style", "Style",
@@ -307,7 +307,7 @@ enum ImageCreativeTools {
     static let collage = StudioTool(
         id: "image.collage", title: "Photo collage",
         summary: "Combine several images into one grid, row or column with even spacing.",
-        symbol: "square.grid.2x2", group: .create, inputs: [.image],
+        icon: .grid, group: .create, inputs: [.image],
         arity: .combine(minimum: 2, maximum: nil),
         options: [
             .choice(
@@ -350,7 +350,7 @@ enum ImageCreativeTools {
     static let makeGIF = StudioTool(
         id: "image.make-gif", title: "Make a GIF",
         summary: "Turn a series of images into an animated GIF with your own timing.",
-        symbol: "photo.stack", group: .create, inputs: [.image],
+        icon: .photoStack, group: .create, inputs: [.image],
         arity: .combine(minimum: 2, maximum: nil), produces: .kind(.image),
         options: [
             .number("delay", "Time per frame", 0.02...5, step: 0.05, default: 0.5, unit: "s"),

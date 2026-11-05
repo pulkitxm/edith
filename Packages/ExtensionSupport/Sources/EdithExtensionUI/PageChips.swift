@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 
@@ -36,14 +37,13 @@ extension View {
 
 public struct PageChipLabel: View {
     let title: String
-    var systemImage: String?
+    var icon: EdithIcon?
     var dot: Color?
     var menu = false
 
-    public init(_ title: String, systemImage: String? = nil, dot: Color? = nil, menu: Bool = false)
-    {
+    public init(_ title: String, icon: EdithIcon? = nil, dot: Color? = nil, menu: Bool = false) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon
         self.dot = dot
         self.menu = menu
     }
@@ -54,14 +54,14 @@ public struct PageChipLabel: View {
                 Circle().fill(dot)
                     .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                     .accessibilityHidden(true)
-            } else if let systemImage {
-                Image(systemName: systemImage)
+            } else if let icon {
+                EdithIconView(icon)
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                     .accessibilityHidden(true)
             }
             Text(title).lineLimit(1)
             if menu {
-                Image(systemName: "chevron.down")
+                EdithIconView(.chevronDown)
                     .font(.system(size: UIScale.pt(8), weight: .bold))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -149,18 +149,18 @@ extension ButtonStyle where Self == PageChipStyle {
 
 public struct PageChip: View {
     let title: String
-    var systemImage: String?
+    var icon: EdithIcon?
     var dot: Color?
     var active = false
     var tint: Color?
     let action: () -> Void
 
     public init(
-        _ title: String, systemImage: String? = nil, dot: Color? = nil, active: Bool = false,
+        _ title: String, icon: EdithIcon? = nil, dot: Color? = nil, active: Bool = false,
         tint: Color? = nil, action: @escaping () -> Void
     ) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon
         self.dot = dot
         self.active = active
         self.tint = tint
@@ -169,7 +169,7 @@ public struct PageChip: View {
 
     public var body: some View {
         Button(action: action) {
-            PageChipLabel(title, systemImage: systemImage, dot: dot)
+            PageChipLabel(title, icon: icon, dot: dot)
         }
         .buttonStyle(.pageChip(active: active, tint: tint))
         .fixedSize()
@@ -179,17 +179,17 @@ public struct PageChip: View {
 }
 
 public struct PageIconChip: View {
-    let systemImage: String
+    let icon: EdithIcon
     let label: String
     var active = false
     var tint: Color?
     let action: () -> Void
 
     public init(
-        systemImage: String, label: String, active: Bool = false, tint: Color? = nil,
+        icon: EdithIcon, label: String, active: Bool = false, tint: Color? = nil,
         action: @escaping () -> Void
     ) {
-        self.systemImage = systemImage
+        self.icon = icon
         self.label = label
         self.active = active
         self.tint = tint
@@ -198,7 +198,7 @@ public struct PageIconChip: View {
 
     public var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .accessibilityHidden(true)
         }
@@ -211,18 +211,18 @@ public struct PageIconChip: View {
 
 public struct PageMenuChip<Content: View>: View {
     let title: String
-    var systemImage: String?
+    var icon: EdithIcon?
     var dot: Color?
     var active = false
     var tint: Color?
     @ViewBuilder let content: () -> Content
 
     public init(
-        _ title: String, systemImage: String? = nil, dot: Color? = nil, active: Bool = false,
+        _ title: String, icon: EdithIcon? = nil, dot: Color? = nil, active: Bool = false,
         tint: Color? = nil, @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon
         self.dot = dot
         self.active = active
         self.tint = tint
@@ -233,7 +233,7 @@ public struct PageMenuChip<Content: View>: View {
         Menu {
             content()
         } label: {
-            PageChipLabel(title, systemImage: systemImage, dot: dot, menu: true)
+            PageChipLabel(title, icon: icon, dot: dot, menu: true)
         }
         .menuStyle(.button)
         .buttonStyle(.pageChip(active: active, tint: tint))

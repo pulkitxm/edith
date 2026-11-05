@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 public enum SurfaceNotchTab: String, CaseIterable, Equatable, Sendable {
@@ -52,15 +53,15 @@ public enum SurfaceNotchTab: String, CaseIterable, Equatable, Sendable {
         }
     }
 
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
-        case .home: "house.fill"
-        case .agents: "terminal.fill"
-        case .browser: "globe"
-        case .files: "folder.fill"
-        case .clipboard: "doc.on.clipboard"
-        case .audio: "slider.horizontal.3"
-        case .camera: "camera.fill"
+        case .home: .home
+        case .agents: .terminal
+        case .browser: .globe
+        case .files: .folder
+        case .clipboard: .clipboard
+        case .audio: .adjust
+        case .camera: .camera
         }
     }
 }

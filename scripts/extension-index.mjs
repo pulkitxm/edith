@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import iconNames from "../Packages/EdithIcons/names.json" with { type: "json" };
 
 export const indexPath =
   "Packages/EdithHost/Sources/EdithHostCore/Resources/index.json";
@@ -131,7 +132,20 @@ function checked(declaration, directory, field, required, optional = {}) {
   return declaration;
 }
 
+const knownIcons = new Set([
+  ...iconNames.icons,
+  ...Object.keys(iconNames.aliases ?? {}),
+]);
+
+function requireIcon(name, directory) {
+  if (!knownIcons.has(name))
+    throw new Error(
+      `${directory}: unknown icon ${name}, draw it in Packages/EdithIcons`,
+    );
+}
+
 function page(declaration, directory) {
+  requireIcon(declaration.icon, directory);
   const { detachable = true, ...rest } = checked(
     declaration,
     directory,
@@ -139,7 +153,7 @@ function page(declaration, directory) {
     {
       id: "string",
       title: "string",
-      symbolName: "string",
+      icon: "string",
       order: "number",
     },
     { detachable: "boolean", logoName: "string" },
@@ -148,11 +162,12 @@ function page(declaration, directory) {
 }
 
 function section(declaration, directory) {
+  requireIcon(declaration.icon, directory);
   checked(declaration, directory, "sections", {
     page: "string",
     id: "string",
     title: "string",
-    symbolName: "string",
+    icon: "string",
     summary: "string",
     order: "number",
   });
@@ -179,7 +194,7 @@ function guide(declaration, directory) {
   const steps = declaration.steps;
   if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4)
     fail("needs two to four steps");
-  const stepKeys = ["symbolName", "title", "detail"];
+  const stepKeys = ["icon", "title", "detail"];
   for (const step of steps)
     if (
       typeof step !== "object" ||
@@ -187,6 +202,7 @@ function guide(declaration, directory) {
       stepKeys.some((key) => typeof step[key] !== "string" || !step[key].trim())
     )
       fail(`steps need ${stepKeys.join(", ")}`);
+  for (const step of steps) requireIcon(step.icon, directory);
   const examples = declaration.examples ?? [];
   if (
     !Array.isArray(examples) ||
@@ -214,7 +230,7 @@ export function validateDeclaration(declaration, directory) {
   const keys = [
     "id",
     "title",
-    "symbolName",
+    "icon",
     "category",
     "background",
     "commands",
@@ -232,9 +248,10 @@ export function validateDeclaration(declaration, directory) {
     throw new Error(`${directory}: unknown keys ${unknown.join(", ")}`);
   if (declaration.id !== directory)
     throw new Error(`${directory}: id must match its directory`);
-  for (const key of ["title", "symbolName"])
+  for (const key of ["title", "icon"])
     if (typeof declaration[key] !== "string" || !declaration[key])
       throw new Error(`${directory}: ${key} is required`);
+  requireIcon(declaration.icon, directory);
   if (!categories.includes(declaration.category))
     throw new Error(`${directory}: unknown category ${declaration.category}`);
   if (typeof declaration.background !== "boolean")

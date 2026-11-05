@@ -35,13 +35,13 @@ struct DesignSystemGallery {
 
     static let steps = [
         PageGuideStep(
-            symbolName: "folder.badge.plus", title: "Pick a folder",
+            icon: .folderAdd, title: "Pick a folder",
             detail: "Choose where your projects live. Nothing leaves this Mac."),
         PageGuideStep(
-            symbolName: "magnifyingglass", title: "Scan it",
+            icon: .search, title: "Scan it",
             detail: "Edith looks for caches and build output you can safely remove."),
         PageGuideStep(
-            symbolName: "trash", title: "Review and clean",
+            icon: .trash, title: "Review and clean",
             detail: "Nothing is deleted until you confirm each item."),
     ]
 
@@ -52,15 +52,15 @@ struct DesignSystemGallery {
             divider: true
         ) {
             HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-                PageToolbarButton(action: {}, systemImage: "terminal", helperText: "Show log")
+                PageToolbarButton(action: {}, icon: .terminal, helperText: "Show log")
                 Button {
                 } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                    Label("Share", edith: .share)
                 }
                 if trailingPrimary {
                     Button {
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label("Refresh", edith: .refresh)
                     }
                     .buttonStyle(.edith(.primary))
                 }
@@ -73,10 +73,10 @@ struct DesignSystemGallery {
                         PageChip("This week", active: true) {}
                         PageChip("This month") {}
                         PageChip("All time") {}
-                        PageMenuChip("Browse months", systemImage: "calendar") {
+                        PageMenuChip("Browse months", icon: .calendar) {
                             Button("October") {}
                         }
-                        PageChip("Custom range", systemImage: "calendar.badge.clock") {}
+                        PageChip("Custom range", icon: .clock) {}
                     }
                     PageFilterRow("Scope") {
                         PageMenuChip("All repositories", dot: .blue) { Button("sample/app") {} }
@@ -105,12 +105,12 @@ struct DesignSystemGallery {
             PageMetricGrid {
                 PageMetric(
                     title: "Commits", value: "1,284", detail: "Across 12 repositories",
-                    symbol: "arrow.triangle.branch", trend: "12%")
+                    icon: .quinjet, trend: "12%")
                 PageMetric(
                     title: "Pull requests", value: "86", detail: "71 merged",
-                    symbol: "arrow.triangle.pull", trend: "4%", trendPositive: false)
-                PageMetric(title: "Reviews", value: "142", symbol: "eye")
-                PageMetric(title: "Lines changed", value: "48.2K", symbol: "plusminus")
+                    icon: .quinjet, trend: "4%", trendPositive: false)
+                PageMetric(title: "Reviews", value: "142", icon: .eye)
+                PageMetric(title: "Lines changed", value: "48.2K", icon: .plus)
             }
             PageCard(title: "Recent activity", note: "Last 7 days") {
                 ForEach(0..<4, id: \.self) { index in
@@ -123,7 +123,7 @@ struct DesignSystemGallery {
                 }
             }
             PageSectionHeader("Controls", subtitle: "Every shared button role and chip state.") {
-                PageChip("Filter", systemImage: "line.3.horizontal.decrease") {}
+                PageChip("Filter", icon: .filter) {}
             }
             PageCard {
                 WrapHStack(spacing: 8, lineSpacing: 8) {
@@ -133,12 +133,12 @@ struct DesignSystemGallery {
                     Button("Disabled") {}.buttonStyle(.edith(.secondary)).disabled(true)
                     Button("Borderless") {}.buttonStyle(.edith(.borderless))
                     PageToolbarButton(
-                        action: {}, systemImage: "arrow.clockwise", helperText: "Refresh")
+                        action: {}, icon: .refresh, helperText: "Refresh")
                     PageChip("Chip") {}
                     PageChip("Active chip", active: true) {}
                     PageChip("Disabled chip") {}.disabled(true)
-                    PageIconChip(systemImage: "line.3.horizontal.decrease", label: "Filter") {}
-                    PageIconChip(systemImage: "star", label: "Favorite", active: true) {}
+                    PageIconChip(icon: .filter, label: "Filter") {}
+                    PageIconChip(icon: .heart, label: "Favorite", active: true) {}
                 }
             }
             PageNotice("Usage is collected every 5 minutes while Edith is open.")
@@ -152,7 +152,7 @@ struct DesignSystemGallery {
             PageColumns {
                 PageCard(title: "Split pane", note: "Compact empty state") {
                     PageEmptyState(
-                        symbolName: "tray", title: "No session selected",
+                        icon: .tray, title: "No session selected",
                         message: "Pick a session on the left to see its details.",
                         primary: PageAction("New session") {}, style: .compact)
                 }
@@ -175,17 +175,17 @@ struct DesignSystemGallery {
                 trailing: {
                     Button {
                     } label: {
-                        Label("Choose folder", systemImage: "folder")
+                        Label("Choose folder", edith: .folder)
                     }
                 }
             )
         } content: {
             PageEmptyState(
-                symbolName: "externaldrive", title: "Free up space on this Mac",
+                icon: .drive, title: "Free up space on this Mac",
                 message:
                     "Cleaner scans a folder for caches, build output and other files that apps recreate on their own.",
                 steps: steps,
-                primary: PageAction("Scan home folder", symbolName: "magnifyingglass") {},
+                primary: PageAction("Scan home folder", icon: .search) {},
                 footnote:
                     "Scans run on this Mac only. Nothing is deleted without your confirmation."
             )
@@ -209,13 +209,13 @@ struct DesignSystemGallery {
 
     static var intro: some View {
         PageIntro(
-            symbolName: "chart.bar.xaxis", title: "Synthetic Stats",
+            icon: .chartBar, title: "Synthetic Stats",
             tagline: "See how your code moves across every repository.",
             summary:
                 "Synthetic Stats reads commit history from the folders you choose and builds a private report on this Mac.",
             steps: Array(steps.prefix(2)) + [
                 PageGuideStep(
-                    symbolName: "square.and.arrow.up", title: "Share a card",
+                    icon: .share, title: "Share a card",
                     detail: "Export a summary image when you want to show progress.")
             ],
             examples: ["ed stats refresh", "ed stats report --range week"],
@@ -232,16 +232,16 @@ struct DesignSystemGallery {
             PageMetricGrid {
                 PageMetric(
                     title: "Commits", value: "1,284", detail: "Across 12 repositories",
-                    symbol: "arrow.triangle.branch", tint: .blue, trend: "12%")
+                    icon: .quinjet, tint: .blue, trend: "12%")
                 PageMetric(title: "Pull requests", value: "86", detail: "71 merged")
                 PageMetric(
-                    title: "Reviews", value: "142", symbol: "eye", trend: "4%",
+                    title: "Reviews", value: "142", icon: .eye, trend: "4%",
                     trendPositive: false)
                 PageMetric(
                     title: "Active days", value: "23",
                     detail: "A long synthetic detail that has to wrap on to a second line",
-                    symbol: "calendar")
-                PageMetric(title: "Lines changed", value: "48.2K", symbol: "plusminus")
+                    icon: .calendar)
+                PageMetric(title: "Lines changed", value: "48.2K", icon: .plus)
             }
             PageMetricGrid {
                 ForEach(0..<4, id: \.self) { _ in PageMetricSkeleton() }
@@ -305,7 +305,7 @@ struct DesignSystemGallery {
                     }
                     SettingsNoticeRow(
                         "Engine is off", message: "Turn the extension on to change this.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                     SettingsErrorRow(
                         "Could not read the shortcut", message: "Synthetic failure.", retry: {})
                     SettingsShortcutRow(
@@ -321,8 +321,8 @@ struct DesignSystemGallery {
                 Section("Fields") {
                     EdithTextField(placeholder: "Placeholder text", text: $empty)
                     EdithTextField(placeholder: "Placeholder text", text: $filled)
-                    EdithSecureField(placeholder: "Access token", text: $empty, icon: "key")
-                    EdithSecureField(placeholder: "Access token", text: $secret, icon: "key")
+                    EdithSecureField(placeholder: "Access token", text: $empty, icon: .key)
+                    EdithSecureField(placeholder: "Access token", text: $secret, icon: .key)
                     EdithCheckbox("Include archived repositories", isOn: $checked)
                     EdithCheckbox("Include forks", isOn: $unchecked)
                     PageTabPicker(
@@ -366,21 +366,21 @@ struct DesignSystemGallery {
                 trailing: {
                     Button {
                     } label: {
-                        Label("New session", systemImage: "plus")
+                        Label("New session", edith: .plus)
                     }
                     .buttonStyle(.edith(.primary))
                 })
         } content: {
             HStack(spacing: 0) {
                 PageEmptyState(
-                    symbolName: "list.bullet.rectangle", title: "No sessions yet",
+                    icon: .list, title: "No sessions yet",
                     message: "Sessions you start appear here.",
                     primary: PageAction("New session") {}, style: .compact
                 )
                 .frame(width: UIScale.pt(260))
                 Rectangle().fill(DashSkin.hairline).frame(width: 1)
                 PageEmptyState(
-                    symbolName: "rectangle.dashed", title: "Nothing selected",
+                    icon: .selection, title: "Nothing selected",
                     message: "Choose a session to see its output and history.", style: .compact)
             }
         }
@@ -435,7 +435,7 @@ struct DesignSystemGalleryTests {
             UIScale.apply(zoom)
             let expected = UIScale.pt(PageMetrics.chipHeight)
             let plain = fitting(PageChip("Today") {})
-            let symbol = fitting(PageChip("Custom range", systemImage: "calendar") {})
+            let symbol = fitting(PageChip("Custom range", icon: .calendar) {})
             let dot = fitting(PageChip("All owners", dot: .purple, active: true) {})
             let menu = fitting(PageMenuChip("All models") { Button("Model A") {} })
             for size in [plain, symbol, dot, menu] {
@@ -451,17 +451,17 @@ struct DesignSystemGalleryTests {
         UIScale.apply(1)
         let regular = fitting(
             PageEmptyState(
-                symbolName: "tray", title: "Nothing here", message: "Synthetic message.",
+                icon: .tray, title: "Nothing here", message: "Synthetic message.",
                 steps: DesignSystemGallery.steps, footnote: "Synthetic footnote."
             ).frame(width: 640))
         let compact = fitting(
             PageEmptyState(
-                symbolName: "tray", title: "Nothing here", message: "Synthetic message.",
+                icon: .tray, title: "Nothing here", message: "Synthetic message.",
                 steps: DesignSystemGallery.steps, footnote: "Synthetic footnote.", style: .compact
             ).frame(width: 640))
         let compactWithoutSteps = fitting(
             PageEmptyState(
-                symbolName: "tray", title: "Nothing here", message: "Synthetic message.",
+                icon: .tray, title: "Nothing here", message: "Synthetic message.",
                 style: .compact
             ).frame(width: 640))
         #expect(compact.height < regular.height / 2)

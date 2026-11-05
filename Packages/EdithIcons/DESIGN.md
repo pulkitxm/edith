@@ -439,6 +439,9 @@ These live in `tools/icons-controls.mjs`.
 | `bandage` | A bandage on the diagonal: fix |
 | `puzzle` | A piece with two tabs: an add-on |
 | `coffee` | A cup on a faint saucer |
+| `leaf` | A leaf on a slanted stem, midrib knocked out: nature |
+| `ball` | A ball with two curved seams knocked out: sport and play |
+| `cutlery` | A fork beside a knife: food and meals |
 | `filters` | Three overlapping discs |
 | `contrast` | A disc split into lit and faint halves |
 
@@ -472,7 +475,7 @@ icon, for the migration codemod. It holds four lists:
 - `overrides`: per file exceptions, where a symbol had a local meaning.
 - `notSymbols`: strings that match a symbol name but are data, not icons.
 
-A manifest's top level `symbolName` uses the extension id instead of this map.
+A manifest's top level `icon` uses the extension id instead of this map.
 
 ## Using the package
 
@@ -501,7 +504,7 @@ Text("\(Text(edith: .warning).foregroundColor(.orange)) \(title)")
 
 statusItem.button?.image = EdithIcon.brand.nsImage(size: 16, tone: .monochrome)
 
-EdithIconView(EdithIcon(name: step.symbolName))
+EdithIconView(EdithIcon(name: step.icon))
 ```
 
 ### Sizing from text
@@ -521,7 +524,8 @@ The limits:
   about 15% off its ideal size between steps.
 - Font weight is not followed. Stems stay 2 units in a semibold line.
 - The view is not an `Image`, so a native menu drops it. Use `Label(_, edith:)`
-  or `.image()` there.
+  or `.image()` there. The label of a `Menu` with `.menuStyle(.borderlessButton)`
+  is native too and ignores template tinting, so it needs `.image(tint:)`.
 - `.symbolEffect` does nothing, because these are not symbols.
 
 `Label(_, edith:)` and `Button(_, edith:)` work everywhere, because their icon is
@@ -541,6 +545,10 @@ status item, the system tints and dims it. These are fixed size, 16pt by default
 crashing. `EdithIcon.named(_:)` returns nil instead, `EdithIcon.isValid(name:)`
 checks a name, and `EdithIcon.names` lists them all. Scripts read `names.json`,
 which holds the same data, and is regenerated and checked with the Swift file.
+
+`EdithIcon` is `Codable`. It encodes its name and decodes through `EdithIcon(name:)`,
+so a value from a manifest, the wire or saved data never fails a whole document:
+an unknown name becomes `.placeholder`.
 
 Aliases are also constants, so `.gear` and `.permissionAutomation` are the same
 icon. Add an alias when an icon has a second plain meaning. Do not redraw it.

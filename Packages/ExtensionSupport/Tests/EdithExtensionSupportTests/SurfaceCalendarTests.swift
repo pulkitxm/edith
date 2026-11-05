@@ -25,7 +25,7 @@ import Testing
     @Test func selectedSourcesFieldsAndActionsProjectCalendarContent() throws {
         let day = SurfaceCalendarDay(
             "day", date: "2026-01-01", level: 2, value: "$3",
-            action: .init("show-day", "Open day", "calendar", field: "open"))
+            action: .init("show-day", "Open day", .calendar, field: "open"))
         let snapshot = SurfaceSnapshot(
             providerID: "usage",
             calendars: [.init("activity", "Activity", days: [day], sourceID: "local")])

@@ -332,7 +332,7 @@ import Testing
     @Test func artworkFallsBackToTheExtensionSymbolForUnknownExtensions() async throws {
         let bitmap = try await artwork(
             HostExtension(
-                id: "sideloaded", title: "Sideloaded", symbolName: "star", category: "labs"),
+                id: "sideloaded", title: "Sideloaded", icon: .heart, category: "labs"),
             dark: false, size: HostExtensionDetailLayout.previewSize)
         #expect(inkBounds(bitmap) != nil)
     }

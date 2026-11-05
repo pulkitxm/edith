@@ -66,7 +66,7 @@ struct HostOnboardingToolsView: View {
                     model.selected.isEmpty
                         ? "Choose a tool to continue"
                         : "Continue with \(model.selected.count) \(model.selected.count == 1 ? "tool" : "tools")",
-                    symbolName: "arrow.right", identifier: "workflow.install-selection"
+                    icon: .arrowRight, identifier: "workflow.install-selection"
                 ) { model.continueFromTools() },
                 primaryEnabled: model.canInstall, busy: model.busy)
         }
@@ -137,13 +137,14 @@ struct HostOnboardingToolsView: View {
                     expanded = next
                 } label: {
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: "chevron.right")
+                        EdithIconView(.chevronRight)
                             .font(.system(size: UIScale.pt(10), weight: .semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isOpen ? 90 : 0))
                             .frame(width: UIScale.pt(20))
                         PageGuideBadge(
-                            suite?.icon ?? .workflowCustom, size: 32, tint: DashSkin.inkSoft(dark))
+                            icon: suite?.icon ?? .workflowCustom, size: 32,
+                            tint: DashSkin.inkSoft(dark))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(title).font(.edithText(.headline))
                             Text(
@@ -226,7 +227,7 @@ struct HostOnboardingToolsView: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(16)))
         return layout {
             HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "arrow.down.circle")
+                EdithIconView(.arrowDown)
                     .font(.system(size: UIScale.pt(16)))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -299,7 +300,7 @@ private struct HostOnboardingCheckRow: View {
             configuration.isOn.toggle()
         } label: {
             HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                EdithIconView(configuration.isOn ? .checkboxOn : .checkbox)
                     .font(.system(size: UIScale.pt(16)))
                     .foregroundStyle(
                         configuration.isOn ? DashSkin.accent(dark) : DashSkin.lineStrong(dark)
@@ -343,7 +344,7 @@ private struct HostOnboardingCheckbox: View {
             configuration.isOn.toggle()
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                EdithIconView(configuration.isOn ? .checkboxOn : .checkbox)
                     .font(.system(size: UIScale.pt(16)))
                     .foregroundStyle(
                         configuration.isOn ? DashSkin.accent(dark) : DashSkin.lineStrong(dark)

@@ -1474,7 +1474,7 @@ import HostWorkerFixtureSupport
             hotkeys: [HostHotKey] = [], launchWhen: [HostLaunchCondition] = []
         ) -> HostExtension {
             HostExtension(
-                id: "sample", title: "sample", symbolName: "square", category: "Tools",
+                id: "sample", title: "sample", icon: .checkbox, category: "Tools",
                 background: false, hotkeys: hotkeys, launchWhen: launchWhen)
         }
 
@@ -1535,7 +1535,7 @@ import HostWorkerFixtureSupport
                 identity: identity,
                 entries: entries
                     ?? ids.map {
-                        HostExtension(id: $0, title: $0, symbolName: "square", category: "Tools")
+                        HostExtension(id: $0, title: $0, icon: .checkbox, category: "Tools")
                     }, store: store, catalogClient: client, installer: installer,
                 sessions: sessions,
                 verificationReceipts: verificationReceipts,

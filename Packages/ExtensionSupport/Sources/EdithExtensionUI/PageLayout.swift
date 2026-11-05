@@ -405,7 +405,7 @@ public struct PageSectionHeader<Trailing: View>: View {
     private var heading: some View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
             if let icon {
-                PageGuideBadge(icon, size: 24, tint: DashSkin.inkSoft(scheme == .dark))
+                PageGuideBadge(icon: icon, size: 24, tint: DashSkin.inkSoft(scheme == .dark))
                     .flushLeading()
             }
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {

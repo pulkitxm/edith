@@ -1,3 +1,4 @@
+@_exported import EdithIcons
 import Foundation
 
 public struct SurfaceSnapshotRequest: Codable, Equatable, Sendable {
@@ -58,12 +59,12 @@ public struct SurfaceConfirmation: Codable, Equatable, Sendable {
 public struct SurfaceAction: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
-    public let icon: String
+    public let icon: EdithIcon
     public let field: String?
     public let confirmation: SurfaceConfirmation?
 
     public init(
-        _ id: String, _ title: String, _ icon: String, field: String? = nil,
+        _ id: String, _ title: String, _ icon: EdithIcon, field: String? = nil,
         confirmation: SurfaceConfirmation? = nil
     ) {
         self.id = id; self.title = title; self.icon = icon; self.field = field
@@ -77,7 +78,7 @@ public struct SurfaceDataRow: Codable, Equatable, Identifiable, Sendable {
     public let title: String
     public let detail: String
     public let value: String
-    public let icon: String
+    public let icon: EdithIcon
     public let progress: Double?
     public let field: String?
     public let actions: [SurfaceAction]
@@ -86,7 +87,7 @@ public struct SurfaceDataRow: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         _ id: String, sourceID: String? = nil, title: String, detail: String = "",
-        value: String = "", icon: String = "circle", progress: Double? = nil,
+        value: String = "", icon: EdithIcon = .ring, progress: Double? = nil,
         field: String? = nil, actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = [],
         charts: [SurfaceChart] = [],
         thumbnail: SurfaceThumbnail? = nil
@@ -188,7 +189,6 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
                     && Self.validText($0.title, maximum: 1024)
                     && Self.validText($0.detail, maximum: 4096, empty: true)
                     && Self.validText($0.value, maximum: 256, empty: true)
-                    && Self.validText($0.icon, maximum: 128)
                     && Self.validFraction($0.progress)
                     && ($0.field.map { Self.validText($0, maximum: 80) } ?? true)
                     && Self.validActions($0.actions)
@@ -205,7 +205,6 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
         values.count <= 8 && unique(values.map(\.id))
             && values.allSatisfy {
                 validText($0.id, maximum: 512) && validText($0.title, maximum: 256)
-                    && validText($0.icon, maximum: 128)
                     && ($0.field.map { validText($0, maximum: 80) } ?? true)
                     && ($0.confirmation.map {
                         validText($0.title, maximum: 256)

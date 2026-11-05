@@ -27,7 +27,7 @@ import Testing
             entries: {
                 [
                     .init(
-                        id: "calendar", title: "Calendar", symbolName: "calendar", category: "Tools"
+                        id: "calendar", title: "Calendar", icon: .calendar, category: "Tools"
                     )
                 ]
             }, activeIDs: { ["calendar"] }, defaults: defaults)

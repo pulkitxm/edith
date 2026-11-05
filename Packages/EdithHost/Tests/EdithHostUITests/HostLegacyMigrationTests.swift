@@ -122,7 +122,7 @@ import Testing
         func model(ids: Set<String>) -> HostWorkflowOnboardingModel {
             HostWorkflowOnboardingModel(
                 entries: ids.sorted().map {
-                    HostExtension(id: $0, title: $0, symbolName: "square", category: "agents")
+                    HostExtension(id: $0, title: $0, icon: .checkbox, category: "agents")
                 }, defaults: defaults,
                 environment: HostWorkflowEnvironment(
                     available: { [:] }, installed: { [] }, active: { [] }, refresh: {},

@@ -1,3 +1,4 @@
+import EdithIcons
 import AppKit
 import EdithExtensionCore
 import SwiftUI
@@ -47,7 +48,7 @@ public struct EdithTextField: View {
 
     let placeholder: String
     @Binding var text: String
-    var icon: String?
+    var icon: EdithIcon?
     var font: Font?
     var alignment: TextAlignment = .leading
     var compact = false
@@ -59,7 +60,7 @@ public struct EdithTextField: View {
     var onSubmit: (() -> Void)?
 
     public init(
-        placeholder: String, text: Binding<String>, icon: String? = nil,
+        placeholder: String, text: Binding<String>, icon: EdithIcon? = nil,
         font: Font? = nil, alignment: TextAlignment = .leading, compact: Bool = false,
         clearable: Bool = false, typeAhead: Bool = false, searchable: Bool = false,
         invalid: Bool = false,
@@ -78,7 +79,7 @@ public struct EdithTextField: View {
     public var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if let icon {
-                Image(systemName: icon)
+                EdithIconView(icon)
                     .font(.system(size: UIScale.pt(fontSize - 1)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -88,7 +89,7 @@ public struct EdithTextField: View {
                     text = ""
                     (focus ?? $localFocus).wrappedValue = true
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .font(.system(size: UIScale.pt(fontSize)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(20), height: UIScale.pt(20))
@@ -151,7 +152,7 @@ public struct SearchField: View {
 
     public var body: some View {
         EdithTextField(
-            placeholder: placeholder, text: $text, icon: "magnifyingglass", compact: compact,
+            placeholder: placeholder, text: $text, icon: .search, compact: compact,
             clearable: true, typeAhead: typeAhead, searchable: true, focus: focus)
     }
 }
@@ -162,14 +163,14 @@ public struct EdithSecureField: View {
 
     let placeholder: String
     @Binding var text: String
-    var icon: String?
+    var icon: EdithIcon?
     var compact = false
     var invalid = false
     var focus: FocusState<Bool>.Binding?
     var onSubmit: (() -> Void)?
 
     public init(
-        placeholder: String, text: Binding<String>, icon: String? = nil, compact: Bool = false,
+        placeholder: String, text: Binding<String>, icon: EdithIcon? = nil, compact: Bool = false,
         invalid: Bool = false, focus: FocusState<Bool>.Binding? = nil,
         onSubmit: (() -> Void)? = nil
     ) {
@@ -183,7 +184,7 @@ public struct EdithSecureField: View {
     public var body: some View {
         HStack(spacing: UIScale.pt(6)) {
             if let icon {
-                Image(systemName: icon)
+                EdithIconView(icon)
                     .font(.system(size: UIScale.pt(fontSize - 1)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
@@ -278,7 +279,7 @@ private struct EdithCheckboxBody: View {
                         focused ? accent : marked ? accent : DashSkin.lineStrong(dark),
                         lineWidth: focused ? 2 : UIScale.pt(1))
                     if marked {
-                        Image(systemName: configuration.isMixed ? "minus" : "checkmark")
+                        EdithIconView(configuration.isMixed ? .minus : .check)
                             .font(.system(size: UIScale.pt(9), weight: .bold))
                             .foregroundStyle(themeOnAccentColor(themeName))
                     }

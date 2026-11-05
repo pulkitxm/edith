@@ -9,7 +9,7 @@ struct HostExtensionPreviewScene: View {
     ]
 
     let id: String
-    let symbolName: String
+    let icon: EdithIcon
     let dark: Bool
     let phase: Double
 
@@ -69,7 +69,7 @@ struct HostExtensionPreviewScene: View {
     private var launcher: some View {
         VStack(spacing: UIScale.pt(5)) {
             HStack(spacing: UIScale.pt(7)) {
-                symbol("magnifyingglass", size: 9, tint: faint)
+                glyph(.search, size: 9, tint: faint)
                 Text("12 × 8").font(.system(size: UIScale.pt(10), weight: .medium))
                     .foregroundStyle(ink)
                 Spacer(minLength: 0)
@@ -79,7 +79,7 @@ struct HostExtensionPreviewScene: View {
             .background(DashSkin.paper(dark), in: corners(7))
             .overlay { corners(7).strokeBorder(line) }
             HStack(spacing: UIScale.pt(7)) {
-                symbol("equal.circle.fill", size: 10, tint: accent)
+                glyph(.calculator, size: 10, tint: accent)
                 Text("96").font(.system(size: UIScale.pt(10), weight: .semibold))
                     .foregroundStyle(ink)
                 Spacer(minLength: 0)
@@ -89,7 +89,7 @@ struct HostExtensionPreviewScene: View {
             .frame(height: UIScale.pt(20))
             .background(accent.opacity(0.14), in: corners(6))
             HStack(spacing: UIScale.pt(7)) {
-                symbol("app.fill", size: 10, tint: faint)
+                glyph(.appTile, size: 10, tint: faint)
                 bar(72, tint: line)
                 Spacer(minLength: 0)
             }
@@ -138,7 +138,7 @@ struct HostExtensionPreviewScene: View {
                     .background(accent, in: corners(9))
             }
             HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                symbol("brain.head.profile", size: 15, tint: accent)
+                glyph(.companion, size: 15, tint: accent)
                     .frame(width: UIScale.pt(18), height: UIScale.pt(18))
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     bar(116, tint: soft.opacity(0.55))
@@ -187,7 +187,7 @@ struct HostExtensionPreviewScene: View {
     private var docs: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(7)) {
-                symbol("magnifyingglass", size: 9, tint: faint)
+                glyph(.search, size: 9, tint: faint)
                 Text("trim a video").font(.system(size: UIScale.pt(10), weight: .medium))
                     .foregroundStyle(ink)
                 Spacer(minLength: 0)
@@ -197,7 +197,7 @@ struct HostExtensionPreviewScene: View {
             .background(DashSkin.paper(dark), in: corners(7))
             .overlay { corners(7).strokeBorder(line) }
             HStack(spacing: UIScale.pt(7)) {
-                symbol("return.right", size: 8, tint: accent)
+                glyph(.enter, size: 8, tint: accent)
                 Text("ed studio edit clip.mov").font(DashSkin.mono(8.5, weight: .medium))
                     .foregroundStyle(accent)
                 Spacer(minLength: 0)
@@ -258,9 +258,9 @@ struct HostExtensionPreviewScene: View {
                 .frame(height: UIScale.pt(26))
                 .background(DashSkin.paper(dark), in: corners(7))
                 .overlay { corners(7).strokeBorder(line) }
-            symbol("arrow.right", size: 8, tint: faint)
+            glyph(.arrowRight, size: 8, tint: faint)
             EdithIconView(.jev, size: UIScale.pt(20)).foregroundStyle(accent)
-            symbol("arrow.right", size: 8, tint: faint)
+            glyph(.arrowRight, size: 8, tint: faint)
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 label("yes", size: 9, tint: accent)
                 label("12 ms", size: 6.5, tint: faint)
@@ -278,7 +278,7 @@ struct HostExtensionPreviewScene: View {
                 Circle().trim(from: 0, to: 0.68)
                     .stroke(accent, style: .init(lineWidth: UIScale.pt(5), lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                symbol("sun.max.fill", size: 17, tint: accent)
+                glyph(.sun, size: 17, tint: accent)
             }
             .frame(width: UIScale.pt(52), height: UIScale.pt(52))
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -318,21 +318,21 @@ struct HostExtensionPreviewScene: View {
     }
 
     private var plugins: some View {
-        let rows: [(name: String, symbol: String, added: Bool)] = [
-            ("Studio", "wand.and.stars", true), ("Music", "music.note", true),
-            ("Calendar", "calendar", false),
+        let rows: [(name: String, icon: EdithIcon, added: Bool)] = [
+            ("Studio", .studio, true), ("Music", .music, true),
+            ("Calendar", .calendar, false),
         ]
         return VStack(spacing: UIScale.pt(4)) {
             ForEach(rows, id: \.name) { row in
                 HStack(spacing: UIScale.pt(8)) {
-                    symbol(row.symbol, size: 9, tint: accent)
+                    glyph(row.icon, size: 9, tint: accent)
                         .frame(width: UIScale.pt(18), height: UIScale.pt(18))
                         .background(accent.opacity(0.12), in: corners(5))
                     Text(row.name).font(.system(size: UIScale.pt(9), weight: .medium))
                         .foregroundStyle(ink)
                     Spacer(minLength: 0)
                     if row.added {
-                        symbol("checkmark.circle.fill", size: 10, tint: DashSkin.sage)
+                        glyph(.success, size: 10, tint: DashSkin.sage)
                     } else {
                         Text("Add").font(.system(size: UIScale.pt(8), weight: .semibold))
                             .foregroundStyle(DashSkin.onAccent(dark))
@@ -363,9 +363,9 @@ struct HostExtensionPreviewScene: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 ForEach(checks, id: \.name) { check in
                     HStack(spacing: UIScale.pt(6)) {
-                        symbol(
+                        glyph(
                             check.passed
-                                ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                                ? .success : .warning,
                             size: 9, tint: check.passed ? DashSkin.sage : DashSkin.warn)
                         Text(check.name).font(.system(size: UIScale.pt(8.5), weight: .medium))
                             .foregroundStyle(soft)
@@ -376,13 +376,13 @@ struct HostExtensionPreviewScene: View {
     }
 
     private var socialManager: some View {
-        let accounts: [(tint: Color, symbol: String)] = [
-            (accent, "person.fill"), (DashSkin.sage, "person.fill"), (DashSkin.warn, "person.fill"),
+        let accounts: [(tint: Color, icon: EdithIcon)] = [
+            (accent, .person), (DashSkin.sage, .person), (DashSkin.warn, .person),
         ]
         return HStack(spacing: UIScale.pt(8)) {
             ForEach(Array(accounts.enumerated()), id: \.offset) { index, account in
                 VStack(spacing: UIScale.pt(5)) {
-                    symbol(account.symbol, size: 11, tint: .white)
+                    glyph(account.icon, size: 11, tint: .white)
                         .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                         .background(account.tint, in: Circle())
                     bar(34, tint: soft.opacity(0.55))
@@ -512,7 +512,7 @@ struct HostExtensionPreviewScene: View {
                         .frame(height: UIScale.pt(13))
                         .background(.red, in: corners(3))
                     Spacer(minLength: 0)
-                    symbol("web.camera.fill", size: 10, tint: .white)
+                    glyph(.virtualCamera, size: 10, tint: .white)
                 }
                 Spacer(minLength: 0)
             }
@@ -525,7 +525,7 @@ struct HostExtensionPreviewScene: View {
 
     private var fallback: some View {
         HStack(spacing: UIScale.pt(14)) {
-            symbol(symbolName, size: 24, tint: accent)
+            glyph(icon, size: 24, tint: accent)
                 .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                 .background(accent.opacity(0.12), in: corners(12))
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -545,8 +545,8 @@ struct HostExtensionPreviewScene: View {
             .lineLimit(1).fixedSize()
     }
 
-    private func symbol(_ name: String, size: Double, tint: Color) -> some View {
-        Image(systemName: name).font(.system(size: UIScale.pt(size), weight: .medium))
+    private func glyph(_ icon: EdithIcon, size: Double, tint: Color) -> some View {
+        EdithIconView(icon).font(.system(size: UIScale.pt(size), weight: .medium))
             .foregroundStyle(tint)
     }
 

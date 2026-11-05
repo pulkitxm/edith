@@ -157,7 +157,7 @@ public enum PDFComparison {
     static let tool = StudioTool(
         id: "pdf.compare", title: "Compare PDF",
         summary: "See two versions side by side with every added and removed line highlighted.",
-        symbol: "rectangle.split.2x1", group: .organize, inputs: [.pdf],
+        icon: .layoutLeft, group: .organize, inputs: [.pdf],
         arity: .combine(minimum: 2, maximum: 2), produces: .report,
         options: [PDFOrganizeTools.passwordOption], style: .compare,
         keywords: ["diff", "difference", "changes", "versions", "redline"], actionTitle: "Compare"

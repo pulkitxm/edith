@@ -58,7 +58,7 @@ struct HostStorageRow<Details: View>: View {
                     }
                 } label: {
                     HStack(spacing: UIScale.pt(10)) {
-                        Image(systemName: "chevron.right")
+                        EdithIconView(.chevronRight)
                             .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -81,7 +81,7 @@ struct HostStorageRow<Details: View>: View {
                 Button {
                     HostStorageReveal.show(usage.item.roots)
                 } label: {
-                    Image(systemName: "folder")
+                    EdithIconView(.folder)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .frame(width: UIScale.pt(HostStorageRowMetrics.actionWidth))
@@ -112,7 +112,7 @@ struct HostStorageItemIcon: View {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: bundle.path))
                     .resizable().interpolation(.high)
             } else {
-                PageIcon(extensionID: item.extensionID, symbolName: item.symbolName, size: 24)
+                PageIcon(extensionID: item.extensionID, icon: item.icon, size: 24)
                     .foregroundStyle(color)
             }
         }
@@ -221,7 +221,7 @@ struct HostStorageRowDetails: View {
                             Button {
                                 HostStorageReveal.show([entry.url])
                             } label: {
-                                Image(systemName: "magnifyingglass")
+                                EdithIconView(.search)
                             }
                             .buttonStyle(.edith(.iconOnly))
                             .frame(width: UIScale.pt(HostStorageRowMetrics.actionWidth))

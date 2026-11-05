@@ -87,7 +87,7 @@ public struct PageDateRangePicker: View {
 
     private var monthHeader: some View {
         HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-            PageIconChip(systemImage: "chevron.left", label: "Previous month") {
+            PageIconChip(icon: .chevronLeft, label: "Previous month") {
                 draft.showMonth(offset: -1)
             }
             .disabled(!draft.canShowPreviousMonth)
@@ -97,7 +97,7 @@ public struct PageDateRangePicker: View {
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity)
                 .accessibilityAddTraits(.isHeader)
-            PageIconChip(systemImage: "chevron.right", label: "Next month") {
+            PageIconChip(icon: .chevronRight, label: "Next month") {
                 draft.showMonth(offset: 1)
             }
             .disabled(!draft.canShowNextMonth)
