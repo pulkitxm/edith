@@ -29,7 +29,8 @@ struct HostWindowChrome: NSViewRepresentable {
             window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none; window.isRestorable = false
             window.tabbingMode = .disallowed
-            window.identifier = NSUserInterfaceItemIdentifier("EdithMainWindow")
+            window.identifier = NSUserInterfaceItemIdentifier(HostWindowClose.mainIdentifier)
+            HostMainWindowHider.install(on: window)
             let visible =
                 window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
                 ?? NSRect(x: 0, y: 0, width: 1440, height: 900)

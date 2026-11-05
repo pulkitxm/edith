@@ -44,6 +44,15 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         window.canBecomeMain && !(window is NSPanel)
     }
 
+    static func isPresenting(_ windows: [NSWindow]) -> Bool {
+        windows.contains { ($0.isVisible || $0.isMiniaturized) && presentsApplication($0) }
+    }
+
+    static func dropToAccessoryIfWindowless() {
+        guard !isPresenting(NSApp.windows) else { return }
+        NSApp.setActivationPolicy(.accessory)
+    }
+
     private func appearInDockWhilePresenting() {
         windowKeyObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
@@ -61,12 +70,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
         ) { _ in
-            DispatchQueue.main.async {
-                let presenting = NSApp.windows.contains {
-                    ($0.isVisible || $0.isMiniaturized) && Self.presentsApplication($0)
-                }
-                if !presenting { NSApp.setActivationPolicy(.accessory) }
-            }
+            DispatchQueue.main.async { Self.dropToAccessoryIfWindowless() }
         }
     }
 

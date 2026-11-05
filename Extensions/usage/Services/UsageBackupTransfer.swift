@@ -8,23 +8,22 @@ func usageBackupTransferLimits(
     do {
         return try usageBackupCoordinateCloud(at: cloudURL, writing: shouldExport) {
             coordinatedCloudURL in
-            var cloudData: Data?
             var publication: Data?
+            let cloudData = try UsageDataFiles.readRegularFile(
+                at: coordinatedCloudURL,
+                maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
+            let cloudText = String(decoding: cloudData ?? Data(), as: UTF8.self)
+            if shouldRestore, let cloudData, !cloudData.isEmpty,
+                !LimitsHistory.isValidDocument(cloudText)
+            {
+                return false
+            }
             let transferred = try UsageDataTransaction.withExclusiveAccess(
                 dataDirectory: localURL.deletingLastPathComponent(),
                 willAcquireDataLock: willAcquireDataLock
             ) {
                 let localData = try UsageDataFiles.readRegularFile(
                     at: localURL, maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
-                cloudData = try UsageDataFiles.readRegularFile(
-                    at: coordinatedCloudURL,
-                    maximumBytes: UsageDataFiles.maximumLimitsHistoryBytes)
-                let cloudText = String(decoding: cloudData ?? Data(), as: UTF8.self)
-                if shouldRestore, let cloudData, !cloudData.isEmpty,
-                    !LimitsHistory.isValidDocument(cloudText)
-                {
-                    return false
-                }
                 let merged = LimitsHistory.merge(
                     String(decoding: localData ?? Data(), as: UTF8.self), cloudText)
                 guard !merged.isEmpty else {
@@ -71,21 +70,17 @@ func usageBackupTransferUsage(
     do {
         return try usageBackupCoordinateCloud(at: cloudURL, writing: shouldExport) {
             coordinatedCloudURL in
-            var cloudData: Data?
             var publication: Data?
+            let cloudData = try UsageDataFiles.readRegularFile(
+                at: coordinatedCloudURL, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
+            if let cloudData, !UsageHistory.isValidDocument(cloudData) { return false }
             let transferred = try UsageDataTransaction.withExclusiveAccess(
                 dataDirectory: localURL.deletingLastPathComponent(),
                 willAcquireDataLock: willAcquireDataLock
             ) {
                 let localData = try UsageDataFiles.readRegularFile(
                     at: localURL, maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
-                cloudData = try UsageDataFiles.readRegularFile(
-                    at: coordinatedCloudURL,
-                    maximumBytes: UsageDataFiles.maximumUsageDocumentBytes)
                 if let localData, !UsageHistory.isValidDocument(localData) {
-                    return false
-                }
-                if let cloudData, !UsageHistory.isValidDocument(cloudData) {
                     return false
                 }
                 guard let merged = UsageHistory.merge(local: localData, cloud: cloudData) else {

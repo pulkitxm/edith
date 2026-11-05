@@ -84,6 +84,27 @@ import Testing
         #expect(try Data(contentsOf: local) == existing)
     }
 
+    @Test func cloudIsReadAndValidatedBeforeTheUsageTransactionIsTaken() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let local = root.appendingPathComponent("usage.json"),
+            cloud = root.appendingPathComponent("cloud.json")
+        try usage("2026-08-20", tokens: 23).write(to: local)
+        try Data("not a usage document".utf8).write(to: cloud)
+        var acquisitions = 0
+        #expect(
+            !usageBackupTransferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                willAcquireDataLock: { acquisitions += 1 }))
+        #expect(acquisitions == 0)
+        try usage("2026-08-21", tokens: 42).write(to: cloud)
+        #expect(
+            usageBackupTransferUsage(
+                localURL: local, cloudURL: cloud, shouldRestore: true, shouldExport: true,
+                willAcquireDataLock: { acquisitions += 1 }))
+        #expect(acquisitions == 1)
+    }
+
     @Test @MainActor func disabledBackupNeverExportsAndEnableOnlyRestoresExistingCloud()
         async throws
     {

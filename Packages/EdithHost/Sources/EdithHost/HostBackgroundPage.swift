@@ -25,8 +25,15 @@ struct HostBackgroundPage: View {
                 ?? HostBackgroundPolicyModel(environment: HostBackgroundSource.policy(services)))
     }
 
+    private var activeTaskCount: Int {
+        let snapshot = services.snapshot
+        return (snapshot?.tasks ?? []).filter { $0.phase == .running }.count
+            + (snapshot?.commandTasks ?? []).filter { !$0.state.isTerminal }.count
+    }
+
     var body: some View {
         Form {
+            HostBackgroundOverviewSection(model: model, activeTasks: activeTaskCount)
             Section("Status") {
                 LabeledContent("Registration", value: HostLoginItem.registration.title)
                 if let runtime = services.snapshot {
@@ -85,7 +92,11 @@ struct HostBackgroundPage: View {
                 HostBackgroundNotificationSection(
                     marketplace: services.marketplace, presenter: presenter)
             }
-            HostBackgroundJobsSection(model: model)
+            HostBackgroundJobsSection(
+                model: model,
+                ownerTitle: { owner in
+                    HostNavigationCatalog.pages.first { $0.extensionID == owner }?.title
+                })
             HostBackgroundTasksSection(services: services)
             Section("Diagnostics") {
                 Button {

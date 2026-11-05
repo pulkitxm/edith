@@ -48,19 +48,7 @@ import Foundation
         progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
         progress.begin(attached || follow ? "following" : "starting")
         defer { progress.end() }
-        var policy = policy
-        if policy == .all, !follow, !attached {
-            let targets = machines().filter { UsageCLIMachines.selected.contains($0.id) }
-            let round = try await UsageCLIMachines.collect(
-                targets, once: true, timeout: 900, verbose: false)
-            if !round.failures.isEmpty {
-                throw CLIFailure.unavailable(
-                    "machine usage collection failed",
-                    hint: round.failures.map { "\($0.machine): \($0.reason)" }.joined(
-                        separator: "; "))
-            }
-            policy = .skip
-        }
+        let started = Date()
         var ownedRun: String?
         if !follow {
             let identifier = try controller.requestRefresh(policy: policy)
@@ -95,6 +83,20 @@ import Foundation
             throw CLIFailure.unavailable(failure)
         }
         for event in events.dropFirst(seen) { printer.show(event) }
+        if policy == .all, !follow {
+            let ledger = UsageMachineRefreshLedger.load()
+            let failures = machines().filter { UsageCLIMachines.selected.contains($0.id) }
+                .compactMap { machine -> String? in
+                    guard let status = ledger[machine.id], status.attemptedAt >= started,
+                        let reason = status.failure
+                    else { return nil }
+                    return "\(machine.name): \(reason)"
+                }
+            if !failures.isEmpty {
+                throw CLIFailure.unavailable(
+                    "machine usage collection failed", hint: failures.joined(separator: "; "))
+            }
+        }
         let summaries = events.compactMap { event -> (String, JSONValue)? in
             if case .summary(let label, let value) = event { return (label, .string(value)) }
             return nil

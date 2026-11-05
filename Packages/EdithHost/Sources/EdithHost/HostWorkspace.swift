@@ -518,7 +518,7 @@ struct HostWorkspace: View {
             requestedSettings: $requestedSettings,
             presenter: presenter, showWelcome: showWelcome,
             panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
-            defaults: defaults, select: select)
+            defaults: defaults, showsIntroductionButton: true, select: select)
     }
     private func chooseSection(_ section: HostNavigationSection, parent: HostNavigationPage) {
         if parent.id == "settings" {
@@ -550,23 +550,26 @@ struct HostWorkspace: View {
             let modifiers = event.modifierFlags
             let handled = MainActor.assumeIsolated {
                 let keyWindow = NSApp.keyWindow
-                let main = keyWindow?.identifier?.rawValue == "EdithMainWindow"
-                guard main || sectionWindows?.contains(keyWindow) == true else {
+                let owner = keyWindow?.sheetParent ?? keyWindow
+                let main = HostWindowClose.isMain(owner)
+                guard main || sectionWindows?.contains(owner) == true else {
                     return false
+                }
+                if HostTerminalInput.isWindowCloseKey(characters: characters, modifiers: modifiers)
+                {
+                    return HostWindowClose.perform(
+                        window: keyWindow,
+                        terminalTab: {
+                            (presenter as? HostRemoteContentPresenter)?.consumeTerminalTabKey(
+                                characters: "w", modifiers: [.command, .shift], window: keyWindow)
+                                == true
+                        })
                 }
                 if let remote = presenter as? HostRemoteContentPresenter,
                     remote.consumeTerminalTabKey(
                         characters: characters, modifiers: modifiers, window: NSApp.keyWindow)
                 {
                     return true
-                }
-                if HostTerminalInput.isWindowCloseKey(characters: characters, modifiers: modifiers) {
-                    let closedTab =
-                        (presenter as? HostRemoteContentPresenter)?.consumeTerminalTabKey(
-                            characters: "w", modifiers: [.command, .shift], window: keyWindow)
-                        == true
-                    return HostTerminalInput.swallowsWindowCloseKey(
-                        mainWindow: main, closedTab: closedTab)
                 }
                 guard
                     let command = WindowKeyCommand.resolve(

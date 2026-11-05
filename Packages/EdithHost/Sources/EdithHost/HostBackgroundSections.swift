@@ -74,37 +74,66 @@ struct HostBackgroundRowsSkeleton: View {
     }
 }
 
-struct HostBackgroundJobsSection: View {
+struct HostBackgroundOverviewSection: View {
     @Bindable var model: HostBackgroundModel
+    var activeTasks = 0
 
     var body: some View {
-        Section("Jobs") {
-            if model.load.state == .loading && model.jobs.isEmpty {
-                HostBackgroundRowsSkeleton(count: 4)
-            }
-            if let unavailable = model.unavailable {
+        Section("What runs in the background") {
+            Text(
+                "Edith keeps a small background service running so tools can refresh data, watch folders and finish long tasks while you do something else. Closing Edith's window or pressing Cmd+W never stops this work."
+            ).settingsCaption()
+            LabeledContent(
+                "Right now",
+                value: HostBackgroundOverview(jobs: model.jobs, activeTasks: activeTasks).sentence)
+            Text(
+                "Choose Quit Edith (Option+Cmd+Q) to stop everything. If work is still running, Edith waits for it to finish first, and opening Edith again cancels the quit."
+            ).settingsCaption()
+        }
+    }
+}
+
+struct HostBackgroundJobsSection: View {
+    @Bindable var model: HostBackgroundModel
+    var ownerTitle: (String) -> String? = { _ in nil }
+
+    var body: some View {
+        let groups = model.groups(titles: ownerTitle)
+        if model.load.state == .loading && model.jobs.isEmpty {
+            Section("Scheduled jobs") { HostBackgroundRowsSkeleton(count: 4) }
+        }
+        if let unavailable = model.unavailable {
+            Section("Scheduled jobs") {
                 Text(unavailable).settingsCaption().foregroundStyle(.secondary)
             }
-            if let failure = model.failure {
+        }
+        if let failure = model.failure {
+            Section("Scheduled jobs") {
                 Text(failure).settingsCaption().foregroundStyle(.orange)
                 Button("Reload") { Task { await model.refresh() } }
             }
-            if model.jobs.isEmpty && model.unavailable == nil && !model.load.isRunning {
-                Text("The agent has not reported any jobs yet.").settingsCaption()
+        }
+        if model.jobs.isEmpty && model.unavailable == nil && !model.load.isRunning {
+            Section("Scheduled jobs") {
+                Text(
+                    "No jobs yet. When you install tools that refresh data on a schedule, such as Usage, their jobs appear here with who owns them and when they last ran."
+                ).settingsCaption()
             }
-            ForEach(model.jobs) { job in
-                HStack {
-                    HostBackgroundJobRow(job: job)
-                    Button(job.phase == "running" ? "Cancel" : "Run now") {
-                        Task { await model.control(job) }
+        }
+        ForEach(groups) { group in
+            Section(group.title) {
+                ForEach(group.jobs) { job in
+                    HStack(alignment: .top) {
+                        HostBackgroundJobRow(job: job, status: model.lastStatus(for: job))
+                        if let title = job.actionTitle {
+                            Button(title) { Task { await model.control(job) } }
+                                .disabled(!model.current || model.action != nil)
+                                .help(
+                                    job.isRunning
+                                        ? "Stop this job before it finishes"
+                                        : "Run this job now instead of waiting for its schedule")
+                        }
                     }
-                    .disabled(
-                        !model.current || model.action != nil
-                            || (job.phase != "running" && !job.canRun)
-                    )
-                    .help(
-                        job.phase == "running"
-                            ? "Cancel this job" : "Run this job in the background")
                 }
             }
         }
@@ -113,12 +142,7 @@ struct HostBackgroundJobsSection: View {
 
 struct HostBackgroundJobRow: View {
     let job: HostBackgroundJob
-
-    private var cadence: String {
-        let ambient = job.descriptor.cadence.ambient.map(HostCompactDuration.text) ?? "on demand"
-        guard let live = job.descriptor.cadence.live else { return ambient }
-        return "\(ambient), live \(HostCompactDuration.text(live))"
-    }
+    var status: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -126,27 +150,26 @@ struct HostBackgroundJobRow: View {
                 Text(job.descriptor.title)
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
                 Spacer(minLength: 0)
-                Text(HostCoreJobPhase(rawValue: job.phase)?.title ?? job.phase.capitalized)
+                Text(job.statusTitle)
                     .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    .foregroundStyle(job.phase == "failed" ? .orange : .secondary)
+                    .foregroundStyle(
+                        job.needsAttention ? .orange : job.isRunning ? .green : .secondary)
             }
             HStack(spacing: UIScale.pt(10)) {
-                Text(
-                    HostCoreJobTrigger(rawValue: job.descriptor.trigger)?.title
-                        ?? job.descriptor.trigger.capitalized)
-                Text(cadence)
-                Text(
-                    HostCoreJobPower(rawValue: job.descriptor.power)?.title ?? job.descriptor.power)
+                Text(job.scheduleSentence)
+                if let reason = job.pauseReason { Text(reason) }
                 if job.subscribers > 0 {
-                    Text("\(job.subscribers) watching")
+                    Text("\(job.subscribers) page\(job.subscribers == 1 ? "" : "s") watching")
                 }
                 if let last = job.lastRun {
-                    Text("last \(HostCompactDuration.text(Date().timeIntervalSince(last))) ago")
+                    Text("Last ran \(HostCompactDuration.text(Date().timeIntervalSince(last))) ago")
+                } else {
+                    Text("Has not run yet")
                 }
             }
             .font(.system(size: UIScale.pt(10.5)))
             .foregroundStyle(.tertiary)
-            if let error = job.lastError {
+            if let error = job.lastError ?? (job.needsAttention ? status : nil) {
                 Text(error)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.orange)
@@ -202,8 +225,9 @@ struct HostBackgroundTasksSection: View {
             if services.snapshot == nil && services.starting {
                 HostBackgroundRowsSkeleton(count: 3)
             } else if ordered.isEmpty {
-                Text("Long-running actions appear here with their progress and result.")
-                    .settingsCaption()
+                Text(
+                    "Nothing has run yet. Long actions you or an agent start, such as downloads and commands run with ed, appear here with their progress and result."
+                ).settingsCaption()
             }
             ForEach(ordered) { task in
                 DisclosureGroup(
@@ -232,14 +256,14 @@ struct HostBackgroundTasksSection: View {
             }
         } header: {
             HStack {
-                Text("Background tasks")
+                Text("Recent tasks")
                 Spacer()
                 Text("\(ordered.filter { !$0.terminal }.count) active")
                     .foregroundStyle(.secondary)
             }
         } footer: {
             Text(
-                "Completed tasks remain available after restarting Edith. "
+                "Finished tasks stay listed after Edith restarts so you can see what happened. "
                     + "Command output may contain information from the tools you run.")
         }
     }

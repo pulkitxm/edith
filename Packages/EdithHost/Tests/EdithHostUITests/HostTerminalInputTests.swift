@@ -42,10 +42,6 @@ struct HostTerminalInputTests {
         ] {
             #expect(!HostTerminalInput.isWindowCloseKey(characters: "w", modifiers: modifiers))
         }
-        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: true, closedTab: false))
-        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: true, closedTab: true))
-        #expect(HostTerminalInput.swallowsWindowCloseKey(mainWindow: false, closedTab: true))
-        #expect(!HostTerminalInput.swallowsWindowCloseKey(mainWindow: false, closedTab: false))
     }
 
     @Test func neverVisibleWindowStateAndNativeCloseArePinnedToExactPresentation() async throws {

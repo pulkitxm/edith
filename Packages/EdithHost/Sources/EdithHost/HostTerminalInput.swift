@@ -77,10 +77,6 @@ final class HostTerminalInput {
             && characters?.lowercased() == "w"
     }
 
-    static func swallowsWindowCloseKey(mainWindow: Bool, closedTab: Bool) -> Bool {
-        mainWindow || closedTab
-    }
-
     func consumeTabKey(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard let action = Self.tabAction(characters: characters, modifiers: modifiers), !stopped,
             !closing, available(),

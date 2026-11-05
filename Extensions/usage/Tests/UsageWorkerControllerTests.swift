@@ -188,6 +188,68 @@ struct UsageWorkerControllerTests {
 }
 
 @MainActor @Suite(.serialized)
+struct UsageRefreshEscalationTests {
+    @Test func allMachinesRequestDuringARunningRefreshRunsAfterItUnderTheSameRunID() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let gate = UsageBlockedCollection()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            if policy == .due { await gate.wait() }
+            return try emptyDocument()
+        }
+        let first = try controller.requestRefresh(policy: .due)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(try controller.requestRefresh(policy: .all) == first)
+        #expect(try controller.requestRefresh(policy: .due) == first)
+        await gate.open()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.due, .all])
+        #expect(!controller.refreshing)
+        #expect(controller.failure == nil)
+        await controller.shutdown()
+    }
+
+    @Test func requestsNotAboveTheRunningPolicyDoNotQueueAnotherRun() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let gate = UsageBlockedCollection()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            await gate.wait()
+            return try emptyDocument()
+        }
+        _ = try controller.requestRefresh(policy: .all)
+        _ = try controller.requestRefresh(policy: .all)
+        _ = try controller.requestRefresh(policy: .skip)
+        await gate.open()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.all])
+        await controller.shutdown()
+    }
+
+    @Test func cancellingARefreshDropsTheQueuedEscalation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            try await Task.sleep(for: .seconds(30))
+            return try emptyDocument()
+        }
+        let first = try controller.requestRefresh(policy: .skip)
+        _ = try controller.requestRefresh(policy: .all)
+        await controller.cancelRefresh(matching: first)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await log.policies == [.skip])
+        #expect(!controller.refreshing)
+        await controller.shutdown()
+    }
+}
+
+@MainActor @Suite(.serialized)
 struct UsageRefreshTransactionTests {
     @Test func refreshWaitsForAnotherTransactionInsteadOfReportingBusy() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
