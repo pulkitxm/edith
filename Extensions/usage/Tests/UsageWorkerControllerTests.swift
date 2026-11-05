@@ -187,6 +187,54 @@ struct UsageWorkerControllerTests {
     }
 }
 
+@MainActor @Suite(.serialized)
+struct UsageRefreshTransactionTests {
+    @Test func refreshWaitsForAnotherTransactionInsteadOfReportingBusy() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let held = try UsageDataLock.acquire(
+            at: root.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        let controller = UsageWorkerController(dataDirectory: root) { _, _ in
+            try emptyDocument()
+        }
+        try controller.requestRefresh()
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(controller.refreshing)
+        held.release()
+        await controller.waitForRefresh()
+        #expect(controller.failure == nil)
+        #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
+    }
+
+    @Test func transactionReportsBusyOnlyAfterItsPatienceRunsOut() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let held = try UsageDataLock.acquire(
+            at: root.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        defer { held.release() }
+        let started = ContinuousClock.now
+        await #expect(throws: UsageDataTransactionError.refreshBusy) {
+            try await UsageWorkerController.waitingForTransaction(patience: .milliseconds(600)) {
+                try UsageDataTransaction.withExclusiveAccess(dataDirectory: root) {}
+            }
+        }
+        #expect(ContinuousClock.now - started >= .milliseconds(300))
+    }
+
+    @Test func lockFailuresOtherThanContentionAreNotReportedAsBusy() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("usage-transaction.lock"),
+            withIntermediateDirectories: true)
+        #expect(throws: UsageDataLockError.self) {
+            try UsageDataTransaction.withExclusiveAccess(dataDirectory: root) {}
+        }
+    }
+}
+
 private func emptyDocument(pricing: [String: Any] = [:]) throws -> Data {
     try JSONSerialization.data(withJSONObject: [
         "schemaVersion": 8, "generatedAt": "2026-10-09T12:00:00Z", "sources": [],

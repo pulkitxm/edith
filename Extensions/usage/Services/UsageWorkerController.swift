@@ -94,6 +94,31 @@ public final class UsageWorkerController {
         dataDirectory.appendingPathComponent("limits-snapshot.json")
     }
 
+    static let transactionPatience: Duration = .seconds(90)
+
+    static func waitingForTransaction(
+        patience: Duration = transactionPatience,
+        _ body: @escaping @Sendable () throws -> Void
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: patience)
+        var delay: Duration = .milliseconds(100)
+        while true {
+            let attempt = Task.detached(priority: .utility, operation: body)
+            do {
+                return try await withTaskCancellationHandler {
+                    try await attempt.value
+                } onCancel: {
+                    attempt.cancel()
+                }
+            } catch UsageDataTransactionError.refreshBusy
+                where ContinuousClock.now.advanced(by: delay) < deadline
+            {
+                try await Task.sleep(for: delay)
+                delay = min(delay * 2, .seconds(2))
+            }
+        }
+    }
+
     @discardableResult
     public func requestRefresh(policy: UsageMachineRefreshPolicy = .due) throws -> String {
         guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -127,7 +152,7 @@ public final class UsageWorkerController {
                 if next != cache { try next.save(dataDir: directory) }
                 let fresh = UsageAttribution.attributed(collected, cache: next)
                 try Task.checkCancellation()
-                let write = Task.detached(priority: .utility) {
+                try await Self.waitingForTransaction {
                     try Task.checkCancellation()
                     guard fresh.count <= 64 * 1_024 * 1_024, UsageHistory.isValidDocument(fresh)
                     else {
@@ -149,11 +174,6 @@ public final class UsageWorkerController {
                         try Task.checkCancellation()
                         try UsageDataFiles.write(merged, to: url)
                     }
-                }
-                try await withTaskCancellationHandler {
-                    try await write.value
-                } onCancel: {
-                    write.cancel()
                 }
                 try Task.checkCancellation()
                 guard let self, !self.stopped, self.usageID == id else { return }
