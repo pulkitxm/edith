@@ -14,17 +14,15 @@ struct CleanerPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
-    static let subtitle =
-        "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm."
-
     var body: some View {
         PageWorkspace {
-            VStack(spacing: 0) {
-                PageHeader(
-                    subtitle: Self.subtitle,
-                    title: { Text("Cleaner") },
-                    trailing: { headerActions })
-                Divider()
+            if hasHeaderActions {
+                HStack {
+                    Spacer(minLength: 0)
+                    headerActions
+                }
+                .pageGutter(compact)
+                .padding(.top, UIScale.pt(PageMetrics.top))
             }
         } content: {
             CleanerCard(
@@ -52,6 +50,14 @@ struct CleanerPage: View {
                         tolerance: scanning ? .milliseconds(50) : .milliseconds(750))
                 } catch { return }
             }
+        }
+    }
+
+    private var hasHeaderActions: Bool {
+        switch model.presentation {
+        case .scanning: true
+        case .results: !model.scanning
+        case .firstRun, .nothingToClean: false
         }
     }
 
