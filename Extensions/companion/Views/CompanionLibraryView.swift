@@ -548,11 +548,11 @@ struct CompanionLibraryScreen: View {
                             }
                             if model.episodes.isEmpty {
                                 PageEmptyState(
-                                    symbolName: "books.vertical", title: "Nothing saved yet",
+                                    icon: .books, title: "Nothing saved yet",
                                     message:
                                         "Add notes, PDFs, photos or recordings. Each one becomes an entry here that Chat can search and cite.",
                                     primary: PageAction(
-                                        "Add to memory", symbolName: "plus",
+                                        "Add to memory", icon: .plus,
                                         perform: pickAndIngest),
                                     footnote:
                                         "Files are copied into your memory. The originals stay where they are."
@@ -657,7 +657,7 @@ struct CompanionLibraryScreen: View {
                     Button {
                         Task { await model.openExternally() }
                     } label: {
-                        Image(systemName: "arrow.up.forward.app")
+                        EdithIconView(.external)
                             .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
@@ -666,7 +666,7 @@ struct CompanionLibraryScreen: View {
                     Button {
                         model.closeDetail()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        EdithIconView(.closeFilled)
                             .font(.edithText(.body))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -818,7 +818,7 @@ struct VoicePlayerBar: View {
             Button {
                 playback.toggle()
             } label: {
-                Image(systemName: playback.playing ? "pause.circle.fill" : "play.circle.fill")
+                EdithIconView(playback.playing ? .pause : .play)
                     .font(.edithText(.title))
                     .foregroundStyle(
                         playback.loaded ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))

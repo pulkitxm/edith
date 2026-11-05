@@ -52,7 +52,7 @@ struct CodeStatsProgressCard: View {
                         .disabled(cancelling)
                 }
                 if let error = progress.recentErrors.last {
-                    Label(error, systemImage: "exclamationmark.triangle")
+                    Label(error, edith: .warning)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.warn)
                         .lineLimit(2)
@@ -85,7 +85,7 @@ private struct CodeStatsPhaseStepper: View {
                         Circle()
                             .fill(index <= step ? DashSkin.accent(dark) : DashSkin.grid(dark))
                         if index < step {
-                            Image(systemName: "checkmark")
+                            EdithIconView(.check)
                                 .font(.edithText(.caption).weight(.bold))
                                 .foregroundStyle(DashSkin.onAccent(dark))
                         } else {

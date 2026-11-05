@@ -555,7 +555,7 @@ struct CompanionCaptureScreen: View {
 
     private var waitingBanner: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "tray.full")
+            EdithIconView(.tray)
                 .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.accent(dark))
             Text(
@@ -654,7 +654,7 @@ struct CompanionCaptureScreen: View {
                             model.phase == .recording
                                 ? DashSkin.accent(dark) : DashSkin.lineStrong(dark))
                     }
-                Image(systemName: model.phase == .recording ? "stop.fill" : "mic.fill")
+                EdithIconView(model.phase == .recording ? .stop : .mic)
                     .font(.edithText(.title))
                     .foregroundStyle(
                         model.phase == .recording ? DashSkin.onAccent(dark) : DashSkin.accent(dark))

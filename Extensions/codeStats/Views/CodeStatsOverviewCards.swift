@@ -23,28 +23,28 @@ struct CodeStatsKPIGrid: View {
         PageMetricGrid {
             tile(
                 "Commits", CodeStatsNumberFormat.compact(report.totals.commits),
-                symbol: "point.3.connected.trianglepath.dotted",
+                icon: .nodes,
                 change: report.momentum?.commitChange, detail: commitsPerDay(report.totals))
             tile(
                 "Lines authored", CodeStatsNumberFormat.compact(report.totals.authored),
-                symbol: "text.line.first.and.arrowtriangle.forward",
+                icon: .textAdd,
                 change: report.momentum?.lineChange,
                 detail:
                     "+\(CodeStatsNumberFormat.grouped(report.totals.added)) / -\(CodeStatsNumberFormat.grouped(report.totals.deleted))"
             )
             tile(
                 "Active days", CodeStatsNumberFormat.grouped(report.totals.activeDays),
-                symbol: "calendar",
+                icon: .calendar,
                 detail:
                     "\(CodeStatsNumberFormat.decimal(report.totals.averagePerActiveDay)) lines per active day"
             )
             tile(
                 "Streak", CodeStatsNumberFormat.grouped(report.totals.currentStreak) + "d",
-                symbol: "flame",
+                icon: .flame,
                 detail: "Longest " + Self.days(report.totals.longestStreak))
             tile(
                 "Repositories", CodeStatsNumberFormat.grouped(report.totals.repositories),
-                symbol: "shippingbox",
+                icon: .box,
                 detail: "Net " + CodeStatsNumberFormat.grouped(report.totals.net) + " lines")
         }
     }
@@ -54,10 +54,10 @@ struct CodeStatsKPIGrid: View {
     }
 
     private func tile(
-        _ title: String, _ value: String, symbol: String, change: Double? = nil, detail: String
+        _ title: String, _ value: String, icon: EdithIcon, change: Double? = nil, detail: String
     ) -> some View {
         PageMetric(
-            title: title, value: value, detail: detail, symbol: symbol,
+            title: title, value: value, detail: detail, icon: icon,
             tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
             trendPositive: (change ?? 0) >= 0)
     }

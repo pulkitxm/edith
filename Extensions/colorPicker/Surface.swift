@@ -15,7 +15,7 @@ enum ColorPickerSurface {
     static let pickMessage =
         "Pick a color from your screen. Enable Clipboard to include recent copied colors."
     static let emptyMessage = "No matching clipboard history"
-    static let pickAction = SurfaceAction("pick", "Pick color", "eyedropper")
+    static let pickAction = SurfaceAction("pick", "Pick color", .eyedropper)
 
     static func isColor(_ text: String) -> Bool {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -56,12 +56,12 @@ enum ColorPickerSurface {
                     entry.sourceApp,
                     entry.lastCopiedAt.formatted(date: .abbreviated, time: .shortened),
                 ].compactMap { $0 }.joined(separator: " · "),
-                value: entry.pinned ? "Pinned" : "", icon: "paintpalette",
+                value: entry.pinned ? "Pinned" : "", icon: .palette,
                 actions: [
-                    .init("copy/" + entry.id, "Copy", "doc.on.doc"),
+                    .init("copy/" + entry.id, "Copy", .copy),
                     .init(
                         "pin/" + entry.id, entry.pinned ? "Unpin" : "Pin",
-                        entry.pinned ? "pin.slash" : "pin"),
+                        .pin),
                 ])
         }
         return .init(

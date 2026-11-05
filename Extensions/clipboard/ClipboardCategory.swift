@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 public enum ClipboardCategory: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -26,15 +27,15 @@ public enum ClipboardCategory: String, CaseIterable, Codable, Identifiable, Send
         }
     }
 
-    public var symbol: String {
+    public var icon: EdithIcon {
         switch self {
-        case .text: "text.alignleft"
-        case .link: "link"
-        case .email: "envelope"
-        case .color: "paintpalette"
-        case .image: "photo"
-        case .media: "play.rectangle"
-        case .file: "doc"
+        case .text: .textLines
+        case .link: .link
+        case .email: .mail
+        case .color: .palette
+        case .image: .photo
+        case .media: .play
+        case .file: .doc
         }
     }
 

@@ -77,7 +77,7 @@ private struct ClipboardHistoryRow: View {
             ClipboardThumbnailView(
                 entry: entry, maxHeight: entry.kind == .text ? 18 : 40, client: model.client
             ) {
-                Image(systemName: icon)
+                EdithIconView(icon)
                     .foregroundStyle(.secondary)
                     .frame(width: UIScale.pt(18))
             }
@@ -104,13 +104,13 @@ private struct ClipboardHistoryRow: View {
             Button {
                 model.copy(entry)
             } label: {
-                Image(systemName: "doc.on.doc")
+                EdithIconView(.copy)
             }
             .buttonStyle(.edith(.borderless))
             Button {
                 model.mutate(.init(entry.pinned ? .unpin : .pin, ids: [entry.id]))
             } label: {
-                Image(systemName: entry.pinned ? "pin.fill" : "pin")
+                EdithIconView(.pin)
                     .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
             .buttonStyle(.edith(.borderless))
@@ -118,7 +118,7 @@ private struct ClipboardHistoryRow: View {
             Button(role: .destructive) {
                 model.mutate(.init(.delete, ids: [entry.id]))
             } label: {
-                Image(systemName: "trash")
+                EdithIconView(.trash)
             }
             .buttonStyle(.edith(.borderless))
         }
@@ -127,15 +127,15 @@ private struct ClipboardHistoryRow: View {
         .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }
 
-    private var icon: String {
+    private var icon: EdithIcon {
         switch entry.kind {
-        case .image: return "photo"
-        case .file: return "doc"
-        case .richText, .html: return "doc.richtext"
-        case .text: return "doc.plaintext"
-        case .document: return "doc.text"
-        case .media: return "play.rectangle"
-        case .data: return "externaldrive"
+        case .image: return .photo
+        case .file: return .doc
+        case .richText, .html: return .docText
+        case .text: return .textLines
+        case .document: return .docText
+        case .media: return .play
+        case .data: return .drive
         }
     }
 }

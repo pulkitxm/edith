@@ -46,7 +46,7 @@ struct CodeStatsAuditCard: View {
 
     private func row(_ entry: CodeStatsAuditEntry) -> some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: entry.counted ? "checkmark.circle.fill" : "minus.circle")
+            EdithIconView(entry.counted ? .success : .removeFilled)
                 .foregroundStyle(entry.counted ? DashSkin.ok : DashSkin.inkFaint(dark))
             Text(entry.reason.title)
                 .font(.edithText(.callout).weight(.medium))
@@ -217,7 +217,7 @@ struct CodeStatsHygieneCard: View {
                     if !audit.suggestions.isEmpty { Divider() }
                     ForEach(audit.duplicateRepositories.prefix(8), id: \.repository) { duplicate in
                         HStack(spacing: UIScale.pt(8)) {
-                            Image(systemName: "square.on.square")
+                            EdithIconView(.copy)
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(duplicate.repository + " repeats " + duplicate.original)
                                 .font(.edithText(.callout))

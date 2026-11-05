@@ -75,32 +75,32 @@ struct CompanionBackendGateView: View {
             EmptyView()
         case .notSetUp:
             PageEmptyState(
-                symbolName: "brain.head.profile", title: "Memory is not set up yet",
+                icon: .companion, title: "Memory is not set up yet",
                 message:
                     "Memory keeps your notes, voice memos and files, and answers questions from them. It runs as a small set of containers on a machine you choose and needs about 12 GB of disk.",
                 steps: [
                     PageGuideStep(
-                        symbolName: "server.rack", title: "Pick a machine",
+                        icon: .server, title: "Pick a machine",
                         detail: "This Mac or any machine you have added."),
                     PageGuideStep(
-                        symbolName: "shippingbox", title: "Install the service",
+                        icon: .box, title: "Install the service",
                         detail: "Edith sets it up and starts it for you."),
                     PageGuideStep(
-                        symbolName: "tray.and.arrow.down", title: "Add your first note",
+                        icon: .tray, title: "Add your first note",
                         detail: "Drop in a file or record a voice memo."),
                 ],
-                primary: PageAction("Set up Memory", symbolName: "wand.and.stars", perform: setUp),
+                primary: PageAction("Set up Memory", icon: .adjust, perform: setUp),
                 secondary: PageAction("Open Backend", perform: openBackend),
                 footnote:
                     "Your memory stays on the machine you choose. You can remove it at any time.")
         case .notRunning:
             PageEmptyState(
-                symbolName: "bolt.horizontal.circle", title: "Memory is not running",
+                icon: .bolt, title: "Memory is not running",
                 message:
                     "Edith cannot reach the memory service. Your saved notes are safe. Open Backend to start it again or see what went wrong.",
                 primary: PageAction(
-                    "Open Backend", symbolName: "server.rack", perform: openBackend),
-                secondary: PageAction("Try again", symbolName: "arrow.clockwise", perform: retry))
+                    "Open Backend", icon: .server, perform: openBackend),
+                secondary: PageAction("Try again", icon: .refresh, perform: retry))
         }
     }
 }

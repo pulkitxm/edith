@@ -47,15 +47,15 @@ enum CompanionTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .chat: return "bubble.left.and.text.bubble.right"
-        case .capture: return "mic"
-        case .desk: return "tray.full"
-        case .library: return "books.vertical"
-        case .mind: return "brain"
-        case .setup: return "server.rack"
-        case .settings: return "gearshape"
+        case .chat: return .messages
+        case .capture: return .mic
+        case .desk: return .tray
+        case .library: return .books
+        case .mind: return .jev
+        case .setup: return .server
+        case .settings: return .gear
         }
     }
 }
@@ -192,7 +192,7 @@ struct CompanionPage: View {
                         refreshTick += 1
                         Task { await home.refresh() }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                             .font(.edithText(.subheadline).weight(.medium))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .contentShape(Rectangle())
@@ -281,7 +281,7 @@ struct CompanionPage: View {
                 .strokeBorder(
                     DashSkin.accent(dark), style: StrokeStyle(lineWidth: 1.5, dash: [7, 5]))
             VStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "tray.and.arrow.down")
+                EdithIconView(.tray)
                     .font(.edithText(.largeTitle))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")

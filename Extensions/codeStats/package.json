@@ -1,7 +1,7 @@
 {
   "id": "codeStats",
   "title": "Code Stats",
-  "symbolName": "chart.line.uptrend.xyaxis",
+  "icon": "chartLine",
   "category": "developer",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "codeStats",
       "title": "Code Stats",
-      "symbolName": "chart.line.uptrend.xyaxis",
+      "icon": "chartLine",
       "order": 2
     }
   ],
@@ -29,22 +29,22 @@
     "summary": "Code Stats keeps a read-only copy of your GitHub repositories on a folder you choose, counts your commits and lines, and turns them into streaks, languages and a daily heatmap. Nothing is changed on GitHub.",
     "steps": [
       {
-        "symbolName": "folder",
+        "icon": "folder",
         "title": "Choose a storage folder",
         "detail": "Pick where repository copies are kept; an external drive works."
       },
       {
-        "symbolName": "person.crop.circle.badge.checkmark",
+        "icon": "person",
         "title": "Confirm it is you",
         "detail": "Sign in with the GitHub CLI and confirm which emails count as your commits."
       },
       {
-        "symbolName": "arrow.triangle.2.circlepath",
+        "icon": "sync",
         "title": "Run the first sync",
         "detail": "Edith copies and reads your repositories in the background; the first run takes the longest."
       },
       {
-        "symbolName": "chart.line.uptrend.xyaxis",
+        "icon": "chartLine",
         "title": "Explore your stats",
         "detail": "Filter by range, repository or language, and share cards as images."
       }

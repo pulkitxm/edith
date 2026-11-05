@@ -400,7 +400,7 @@ struct CompanionChatScreen: View {
             Button {
                 model.newChat()
             } label: {
-                Label("New chat", systemImage: "plus")
+                Label("New chat", edith: .plus)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.edith(.secondary))
@@ -526,7 +526,7 @@ struct CompanionChatScreen: View {
     private func jumpToLatest(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: "arrow.down")
+                EdithIconView(.arrowDown)
                     .font(.edithText(.caption).weight(.semibold))
                 Text("Latest")
                     .font(.edithText(.subheadline).weight(.medium))
@@ -579,22 +579,22 @@ struct CompanionChatScreen: View {
 
     private var emptyMemoryState: some View {
         PageEmptyState(
-            symbolName: "tray.and.arrow.down", title: "Your memory is empty",
+            icon: .tray, title: "Your memory is empty",
             message:
                 "Chat answers only from what you have saved. Add a few notes, PDFs or a voice memo first, then ask a question and it will cite the notes it used.",
             steps: [
                 PageGuideStep(
-                    symbolName: "doc.text", title: "Add notes or files",
+                    icon: .docText, title: "Add notes or files",
                     detail: "Markdown, PDFs, photos and recordings all work."),
                 PageGuideStep(
-                    symbolName: "mic", title: "Or record a memo",
+                    icon: .mic, title: "Or record a memo",
                     detail: "Capture turns speech into searchable text."),
                 PageGuideStep(
-                    symbolName: "bubble.left.and.text.bubble.right", title: "Then ask",
+                    icon: .messages, title: "Then ask",
                     detail: "Answers show which notes they came from."),
             ],
-            primary: PageAction("Add to memory", symbolName: "plus", perform: openLibrary),
-            secondary: PageAction("Record a voice memo", symbolName: "mic", perform: openCapture),
+            primary: PageAction("Add to memory", icon: .plus, perform: openLibrary),
+            secondary: PageAction("Record a voice memo", icon: .mic, perform: openCapture),
             footnote: "You can also drop files anywhere on this page.")
     }
 
@@ -686,7 +686,7 @@ struct CompanionChatScreen: View {
 
     private func failureStrip(_ failure: CompanionChatModel.ChatFailure) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            EdithIconView(.warning)
                 .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.warn)
             Text(failure.message)
@@ -830,7 +830,7 @@ struct CompanionChatScreen: View {
             Button {
                 model.stop()
             } label: {
-                Image(systemName: "stop.circle.fill")
+                EdithIconView(.stop)
                     .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
             }
@@ -841,7 +841,7 @@ struct CompanionChatScreen: View {
             Button {
                 model.send()
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
+                EdithIconView(.arrowUp)
                     .font(.edithText(.title))
                     .foregroundStyle(
                         draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
@@ -1107,7 +1107,7 @@ private struct ConversationRow: View {
             .buttonStyle(.edith(.borderless))
             if hovering {
                 Button(action: delete) {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .contentShape(Rectangle())

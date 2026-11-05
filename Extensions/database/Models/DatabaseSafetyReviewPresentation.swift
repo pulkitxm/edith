@@ -1,4 +1,5 @@
 import DatabaseCore
+import EdithIcons
 import Foundation
 
 struct DatabaseSafetyReviewAcknowledgementAction: Equatable {
@@ -121,11 +122,10 @@ enum DatabaseSafetyRiskLevel: Equatable {
         }
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch self {
-        case .guarded: "lock.shield.fill"
-        case .high: "exclamationmark.shield.fill"
-        case .critical: "exclamationmark.octagon.fill"
+        case .guarded, .high: .shield
+        case .critical: .error
         }
     }
 }
@@ -205,7 +205,7 @@ struct DatabaseSafetyReviewFact: Identifiable, Equatable {
     let id: String
     let label: String
     let value: String
-    let symbol: String
+    let icon: EdithIcon
 }
 
 struct DatabaseSafetyReviewWarning: Identifiable, Equatable {
@@ -221,11 +221,11 @@ struct DatabaseSafetyReviewWarning: Identifiable, Equatable {
         }
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch severity {
-        case .information: "info.circle.fill"
-        case .caution: "exclamationmark.triangle.fill"
-        case .high: "exclamationmark.octagon.fill"
+        case .information: .info
+        case .caution: .warning
+        case .high: .error
         }
     }
 }
@@ -264,28 +264,27 @@ struct DatabaseSafetyReviewPresentation: Equatable {
             DatabaseSafetyReviewFact(
                 id: "connection", label: "Connection",
                 value: Self.identifier(effect.connection.displayName),
-                symbol: "externaldrive.connected.to.line.below"),
+                icon: .drive),
             DatabaseSafetyReviewFact(
                 id: "environment", label: "Environment",
                 value: Self.environmentDescription(environment),
-                symbol: environment.kind == .production
-                    ? "exclamationmark.triangle.fill" : "leaf.fill"),
+                icon: environment.kind == .production ? .warning : .building),
             DatabaseSafetyReviewFact(
                 id: "context", label: effect.context.kind.displayName,
                 value: Self.identifier(effect.context.value),
-                symbol: "cylinder.split.1x2"),
+                icon: .database),
         ]
         if let catalog = effect.context.catalog {
             renderedConnectionFacts.append(
                 DatabaseSafetyReviewFact(
                     id: "catalog", label: "Catalog", value: Self.identifier(catalog),
-                    symbol: "books.vertical.fill"))
+                    icon: .books))
         }
         if let schema = effect.context.schema {
             renderedConnectionFacts.append(
                 DatabaseSafetyReviewFact(
                     id: "schema", label: "Schema", value: Self.identifier(schema),
-                    symbol: "square.3.layers.3d"))
+                    icon: .layers))
         }
         renderedConnectionFacts.append(
             DatabaseSafetyReviewFact(
@@ -295,7 +294,7 @@ struct DatabaseSafetyReviewPresentation: Equatable {
                     : Self.targetDescription(
                         object: effect.target.object,
                         path: objectPath),
-                symbol: "scope"))
+                icon: .scan))
         connectionFacts = renderedConnectionFacts
         let selection = Self.selection(effect)
         selectionTitle = selection.title
@@ -306,17 +305,15 @@ struct DatabaseSafetyReviewPresentation: Equatable {
             DatabaseSafetyReviewFact(
                 id: "transaction", label: "Transaction",
                 value: Self.transactionTitle(effect.transactionBehavior),
-                symbol: "arrow.triangle.2.circlepath"),
+                icon: .sync),
             DatabaseSafetyReviewFact(
                 id: "rollback", label: "Rollback",
                 value: Self.rollbackTitle(effect.rollbackAvailability),
-                symbol: effect.rollbackAvailability == .available
-                    ? "arrow.uturn.backward.circle.fill" : "nosign"),
+                icon: effect.rollbackAvailability == .available ? .undo : .blocked),
             DatabaseSafetyReviewFact(
                 id: "execution", label: "Execution",
                 value: Self.executionTitle(effect.executionMode),
-                symbol: effect.executionMode == .synchronous
-                    ? "bolt.fill" : "clock.arrow.circlepath"),
+                icon: effect.executionMode == .synchronous ? .bolt : .history),
         ]
         requestTitle =
             "\(preview.request.product.displayName) \(Self.payloadKindTitle(preview.request.kind))"

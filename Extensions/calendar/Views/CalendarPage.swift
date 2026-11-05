@@ -58,27 +58,27 @@ struct CalendarPage: View {
 
     private var permissionState: some View {
         PageEmptyState(
-            symbolName: "calendar.badge.exclamationmark",
+            icon: .calendar,
             title: "Allow Edith to read your calendar",
             message:
                 "Edith shows your upcoming meetings here, in the notch and on Home, and can join a call in one click. It only reads events from the macOS Calendar app and never changes them.",
             steps: [
                 PageGuideStep(
-                    symbolName: "hand.raised", title: "Allow access",
+                    icon: .hand, title: "Allow access",
                     detail: "macOS asks once. Choose Allow Full Access."),
                 PageGuideStep(
-                    symbolName: "calendar", title: "See what is next",
+                    icon: .calendar, title: "See what is next",
                     detail: "Events from every calendar in the Calendar app appear here."),
                 PageGuideStep(
-                    symbolName: "video", title: "Join in one click",
+                    icon: .video, title: "Join in one click",
                     detail: "Meetings with a call link get a Join button."),
             ],
             primary: PageAction(
-                "Allow Calendar Access", symbolName: "calendar.badge.checkmark",
+                "Allow Calendar Access", icon: .calendar,
                 identifier: "calendar.grant"
             ) { store.perform(.permission) },
             secondary: PageAction(
-                "Open System Settings", symbolName: "gearshape", identifier: "calendar.settings"
+                "Open System Settings", icon: .gear, identifier: "calendar.settings"
             ) {
                 if let url = CalendarUIEngine.privacySettingsURL { NSWorkspace.shared.open(url) }
             },
@@ -89,12 +89,12 @@ struct CalendarPage: View {
 
     private var emptyState: some View {
         PageEmptyState(
-            symbolName: "calendar.badge.checkmark",
+            icon: .calendar,
             title: "Nothing coming up",
             message:
                 "No events were found in your calendars for the next \(store.days) days. Add an event in the Calendar app and it shows up here within seconds.",
             primary: PageAction(
-                "Open Calendar", symbolName: "arrow.up.forward.app", identifier: "calendar.open"
+                "Open Calendar", icon: .external, identifier: "calendar.open"
             ) { store.perform(.open) },
             footnote: "Edith reads every calendar that is turned on in the Calendar app.")
     }
@@ -108,7 +108,7 @@ struct CalendarPage: View {
                     Button {
                         store.perform(.open)
                     } label: {
-                        Label("Open Calendar", systemImage: "arrow.up.forward.app")
+                        Label("Open Calendar", edith: .external)
                     }
                     .help("Open the macOS Calendar app")
                 }

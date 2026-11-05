@@ -82,7 +82,7 @@ struct DatabaseConnectionCreationSheet: View {
 
     private var header: some View {
         HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            DatabaseSheetBadge(symbol: "plus", tint: palette.accent)
+            DatabaseSheetBadge(icon: .plus, tint: palette.accent)
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text("Add connection")
                     .font(.edithText(.title3).weight(.semibold))
@@ -132,7 +132,7 @@ struct DatabaseConnectionCreationSheet: View {
                     Button {
                         revealsConnectionURL.toggle()
                     } label: {
-                        Image(systemName: revealsConnectionURL ? "eye.slash" : "eye")
+                        EdithIconView(revealsConnectionURL ? .eyeOff : .eye)
                     }
                     .buttonStyle(.edith(.borderless))
                     .help(revealsConnectionURL ? "Hide connection URL" : "Show connection URL")
@@ -185,14 +185,14 @@ struct DatabaseConnectionCreationSheet: View {
             if model.environmentKind == .production {
                 Label(
                     "Production data changes are disabled until you explicitly change the policy.",
-                    systemImage: "lock.shield.fill"
+                    edith: .shield
                 )
                 .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.warn)
             } else {
                 Label(
                     "Every data change opens a review before it runs.",
-                    systemImage: "checkmark.shield.fill"
+                    edith: .shield
                 )
                 .font(.edithText(.subheadline))
                 .foregroundStyle(palette.inkSoft)
@@ -326,11 +326,11 @@ struct DatabaseConnectionCreationSheet: View {
                 .font(.edithText(.subheadline))
                 .foregroundStyle(palette.inkFaint)
         case .applied:
-            Label(safeEndpointSummary, systemImage: "checkmark.circle.fill")
+            Label(safeEndpointSummary, edith: .success)
                 .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.ok)
         case .failed(let detail):
-            Label(detail, systemImage: "exclamationmark.triangle.fill")
+            Label(detail, edith: .warning)
                 .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.danger)
         }
@@ -375,23 +375,23 @@ struct DatabaseConnectionCreationSheet: View {
             EmptyView()
         case .testing:
             SkeletonReplica("Testing connection") {
-                status("Connection ready", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+                status("Connection ready", icon: .success, color: DashSkin.ok)
             }
         case .tested(let detail):
-            status(detail, symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            status(detail, icon: .success, color: DashSkin.ok)
         case .saving:
             SkeletonReplica("Saving connection") {
-                status("Connection saved", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+                status("Connection saved", icon: .success, color: DashSkin.ok)
             }
         case .failed(let detail):
-            status(detail, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
+            status(detail, icon: .warning, color: DashSkin.danger)
         case .saved:
-            status("Connection saved", symbol: "checkmark.circle.fill", color: DashSkin.ok)
+            status("Connection saved", icon: .success, color: DashSkin.ok)
         }
     }
 
-    private func status(_ text: String, symbol: String, color: Color) -> some View {
-        Label(text, systemImage: symbol)
+    private func status(_ text: String, icon: EdithIcon, color: Color) -> some View {
+        Label(text, edith: icon)
             .font(.edithText(.subheadline).weight(.medium))
             .foregroundStyle(color)
             .lineLimit(2)

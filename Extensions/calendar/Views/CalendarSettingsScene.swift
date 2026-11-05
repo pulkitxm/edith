@@ -12,8 +12,7 @@ struct CalendarSettingsScene: View {
                 LabeledContent("Access") {
                     Label(
                         store.authorized ? "Allowed" : "Not allowed yet",
-                        systemImage: store.authorized
-                            ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+                        edith: store.authorized ? .success : .alert
                     )
                     .foregroundStyle(store.authorized ? Color.green : Color.orange)
                 }

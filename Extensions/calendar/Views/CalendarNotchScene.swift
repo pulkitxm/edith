@@ -35,7 +35,7 @@ struct CalendarNotchScene: View {
     var body: some View {
         VStack(alignment: .leading, spacing: tile.dense ? 8 : 12) {
             if tile.showTitle {
-                Label(tile.displayTitle, systemImage: "calendar")
+                Label(tile.displayTitle, edith: .calendar)
                     .font(.edithText(.caption).weight(.semibold))
             }
             LoadingContainer(
@@ -72,7 +72,7 @@ struct CalendarNotchScene: View {
             }
             if tile.showActions, store.authorized {
                 Button(action: open) {
-                    Label("Open Calendar", systemImage: "arrow.up.forward.app")
+                    Label("Open Calendar", edith: .external)
                 }
                 .buttonStyle(.edith(.borderless))
                 .font(.edithText(.caption).weight(.medium))
@@ -92,7 +92,7 @@ struct CalendarNotchScene: View {
     private var accessPrompt: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 10) {
-                PageGuideBadge(symbolName: "calendar.badge.exclamationmark", size: 28)
+                PageGuideBadge(icon: .calendar, size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Calendar access needed").font(.edithText(.caption).weight(.semibold))
                     Text("Allow it to see your next meetings here.")
@@ -129,7 +129,7 @@ struct CalendarNotchScene: View {
                 Button {
                     store.perform(.join, eventID: event.id)
                 } label: {
-                    Image(systemName: "video.fill")
+                    EdithIconView(.video)
                 }
                 .buttonStyle(.edith(.iconOnly, tint: DashSkin.accent(true)))
                 .help("Join meeting").accessibilityLabel("Join meeting")

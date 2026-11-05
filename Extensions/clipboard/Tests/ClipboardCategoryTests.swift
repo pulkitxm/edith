@@ -69,7 +69,7 @@ import Testing
 
     @Test func everyCategoryHasATitleAndSymbol() {
         let titles = ClipboardCategory.allCases.map(\.title)
-        let symbols = ClipboardCategory.allCases.map(\.symbol)
+        let symbols = ClipboardCategory.allCases.map(\.icon)
         #expect(Set(titles).count == ClipboardCategory.allCases.count)
         #expect(Set(symbols).count == ClipboardCategory.allCases.count)
         #expect(titles.allSatisfy { !$0.isEmpty })

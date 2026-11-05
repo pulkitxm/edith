@@ -395,10 +395,10 @@ private struct CodeStatsRepositoryTable: View {
                         Button {
                             actions.toggleRepository(row.repository)
                         } label: {
-                            Image(
-                                systemName: actions.selectedRepositories.contains(row.repository)
-                                    ? "line.3.horizontal.decrease.circle.fill"
-                                    : "line.3.horizontal.decrease.circle")
+                            EdithIconView(
+                                .filter,
+                                tone: actions.selectedRepositories.contains(row.repository)
+                                    ? .duotone : .muted)
                         }
                         .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Toggle filter for " + row.repository)

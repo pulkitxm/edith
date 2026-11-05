@@ -297,7 +297,7 @@ struct CompanionSetupSheet: View {
     private var rail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "brain.head.profile")
+                EdithIconView(.companion)
                     .font(.edithText(.title2))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Memory")
@@ -308,7 +308,7 @@ struct CompanionSetupSheet: View {
                 Button {
                     model.onFinish(false)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut(.cancelAction)
@@ -350,7 +350,7 @@ struct CompanionSetupSheet: View {
                     }
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 if state == "done" {
-                    Image(systemName: "checkmark")
+                    EdithIconView(.check)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(DashSkin.accent(dark))
                 } else {
@@ -492,7 +492,7 @@ struct CompanionSetupSheet: View {
             model.selectedHostID = host.id
         } label: {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
+                EdithIconView(host.isLocal ? .laptop : .server)
                     .font(.edithText(.title3))
                     .foregroundStyle(
                         host.canHostTheStack || host.hostsTheStack
@@ -635,10 +635,10 @@ struct CompanionSetupSheet: View {
                         SkeletonBlock(width: 18, height: 18, corner: 9)
                     }
                 case .done:
-                    Image(systemName: "checkmark.circle.fill")
+                    EdithIconView(.success)
                         .foregroundStyle(DashSkin.ok)
                 case .failed:
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .foregroundStyle(DashSkin.danger)
                 }
             }
@@ -717,7 +717,7 @@ struct CompanionSetupSheet: View {
     private var done: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "checkmark.circle.fill")
+                EdithIconView(.success)
                     .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
                 stepHeading("Memory is ready")

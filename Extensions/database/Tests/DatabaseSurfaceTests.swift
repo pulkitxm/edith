@@ -29,7 +29,7 @@ import Testing
                 "Connections", "Saved queries", "Active operations", "Failed operations",
             ])
         #expect(result.rows.first?.actions.first?.title == "Open Databases")
-        #expect(result.rows.first?.actions.first?.icon == "arrow.up.right")
+        #expect(result.rows.first?.actions.first?.icon == .arrowUpRight)
         let action = try #require(result.rows.first?.actions.first)
         await sender.replace([second])
         await #expect(throws: ExtensionPeerError.self) {

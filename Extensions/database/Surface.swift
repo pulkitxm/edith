@@ -63,7 +63,7 @@ import Foundation
         func selected(_ id: String) -> Bool { tile.sourceIDs?.contains(id) ?? true }
         func included(_ kind: String) -> Bool { tile.contentKinds?.contains(kind) ?? true }
         func openAction(_ rowID: String) -> [SurfaceAction] {
-            [.init("open/" + rowID, "Open Databases", "arrow.up.right")]
+            [.init("open/" + rowID, "Open Databases", .arrowUpRight)]
         }
         let chosenConnections = connections.filter { selected($0.id.rawValue.uuidString) }
         let chosenQueries = queries.filter {
@@ -94,9 +94,9 @@ import Foundation
                         + " · \($0.recordCount) records",
                     value: $0.state.rawValue,
                     icon: failed.contains($0.state)
-                        ? "exclamationmark.circle"
+                        ? .alert
                         : active.contains($0.state)
-                            ? "arrow.triangle.2.circlepath" : "checkmark.circle",
+                            ? .sync : .success,
                     progress: progress, actions: openAction(id))
             }
         }
@@ -108,7 +108,7 @@ import Foundation
                     title: String($0.displayName.prefix(256)),
                     detail: $0.productHint.displayName + " · " + $0.environment.label,
                     value: $0.environment.kind.rawValue.capitalized,
-                    icon: $0.isFavorite ? "star.fill" : "externaldrive",
+                    icon: $0.isFavorite ? .heart : .drive,
                     actions: openAction(id))
             }
         }
@@ -119,7 +119,7 @@ import Foundation
                     id, sourceID: $0.connectionID?.rawValue.uuidString ?? "unassigned",
                     title: String($0.name.prefix(256)), detail: $0.language.rawValue,
                     value: $0.isFavorite ? "Favorite" : "Saved query",
-                    icon: "text.alignleft", actions: openAction(id))
+                    icon: .textLines, actions: openAction(id))
             }
         }
         var sources = connections.map {

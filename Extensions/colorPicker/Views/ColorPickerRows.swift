@@ -26,7 +26,7 @@ struct ColorPickerRows: View {
                     SettingsNoticeRow(
                         "Color Picker is off",
                         message: "Turn it on to pick colors and change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {

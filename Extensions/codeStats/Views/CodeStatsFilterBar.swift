@@ -164,7 +164,7 @@ struct CodeStatsFilterBar: View {
         if model.canReturnToNamedRange {
             PageChip(
                 "Back to " + model.lastNamedSelection.title(calendar: model.dateFilterCalendar),
-                systemImage: "arrow.uturn.backward"
+                icon: .undo
             ) {
                 Task { await model.returnToNamedRange() }
             }
@@ -199,7 +199,7 @@ struct CodeStatsTokenChip: View {
         Button(action: remove) {
             HStack(spacing: UIScale.pt(6)) {
                 Text(title).lineLimit(1).truncationMode(.middle)
-                Image(systemName: "xmark")
+                EdithIconView(.close)
                     .font(.system(size: UIScale.pt(8), weight: .bold))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -285,7 +285,7 @@ private struct CodeStatsFacetPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                EdithIconView(isOn ? .checkboxOn : .checkbox)
                     .foregroundStyle(isOn ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 Text(facet.name)
                     .lineLimit(1)

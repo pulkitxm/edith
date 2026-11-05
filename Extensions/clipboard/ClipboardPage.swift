@@ -25,10 +25,10 @@ struct ClipboardPage: View {
                 let error = presentation.preferencesLoad.errorMessage
             {
                 PageEmptyState(
-                    symbolName: "exclamationmark.triangle",
+                    icon: .warning,
                     title: "Clipboard settings did not load",
                     message: error + " Your history is safe.",
-                    primary: PageAction("Try Again", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Try Again", icon: .refresh) {
                         Task { await presentation.refresh() }
                     })
             } else {

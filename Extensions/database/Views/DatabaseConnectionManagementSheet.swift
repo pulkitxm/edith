@@ -92,7 +92,7 @@ struct DatabaseConnectionManagementSheet: View {
 
     private var header: some View {
         HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            DatabaseSheetBadge(symbol: headerSymbol, tint: headerTint)
+            DatabaseSheetBadge(icon: headerIcon, tint: headerTint)
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text(headerTitle)
                     .font(.edithText(.title3).weight(.semibold))
@@ -124,7 +124,7 @@ struct DatabaseConnectionManagementSheet: View {
                     nameField(label: "Name for the copy", placeholder: "Connection copy")
                     notice(
                         "This copy reuses saved credential references. Secret values are not copied.",
-                        symbol: "key.horizontal",
+                        icon: .key,
                         tint: DashSkin.warn)
                 }
             }
@@ -162,7 +162,7 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private var connectionContext: some View {
-        section("Connection", symbol: connection.product.managementSymbolName) {
+        section("Connection", icon: connection.product.managementIcon) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     contextFact("Product", connection.product.displayName)
@@ -178,7 +178,7 @@ struct DatabaseConnectionManagementSheet: View {
 
     private func editSections(_ draft: DatabaseConnectionEditDraft) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-            section("Identity", symbol: "tag") {
+            section("Identity", icon: .tag) {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     responsivePair {
                         field("Connection name", required: true) {
@@ -204,7 +204,7 @@ struct DatabaseConnectionManagementSheet: View {
                     .font(.edithText(.callout).weight(.medium))
                 }
             }
-            section("Appearance", symbol: "paintpalette") {
+            section("Appearance", icon: .palette) {
                 pickerField(
                     "Card color",
                     selection: draftBinding(\.color, fallback: draft.color)
@@ -227,7 +227,7 @@ struct DatabaseConnectionManagementSheet: View {
                     }
                 }
             }
-            section("Environment", symbol: "building.2") {
+            section("Environment", icon: .building) {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     responsivePair {
                         pickerField(
@@ -261,7 +261,7 @@ struct DatabaseConnectionManagementSheet: View {
                     }
                 }
             }
-            section("Safety", symbol: "checkmark.shield") {
+            section("Safety", icon: .shield) {
                 responsivePair {
                     pickerField(
                         "Data access",
@@ -290,7 +290,7 @@ struct DatabaseConnectionManagementSheet: View {
     private var loadingEdit: some View {
         SkeletonReplica("Loading connection settings") {
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                section("Identity", symbol: "tag") {
+                section("Identity", icon: .tag) {
                     VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                         responsivePair {
                             loadingField("Connection name *", placeholder: "Connection name")
@@ -305,13 +305,13 @@ struct DatabaseConnectionManagementSheet: View {
                                     EdithTextField(placeholder: "production", text: .constant(""))
                                     Button {
                                     } label: {
-                                        Image(systemName: "minus.circle")
+                                        EdithIconView(.removeFilled)
                                     }
                                     .buttonStyle(.edith(.borderless))
                                 }
                                 Button {
                                 } label: {
-                                    Label("Add tag", systemImage: "plus")
+                                    Label("Add tag", edith: .plus)
                                 }
                                 .buttonStyle(.edith(.secondary))
                             }
@@ -321,10 +321,10 @@ struct DatabaseConnectionManagementSheet: View {
                             .font(.edithText(.callout).weight(.medium))
                     }
                 }
-                section("Appearance", symbol: "paintpalette") {
+                section("Appearance", icon: .palette) {
                     loadingPicker("Card color", value: "Automatic")
                 }
-                section("Environment", symbol: "building.2") {
+                section("Environment", icon: .building) {
                     VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                         responsivePair {
                             loadingPicker("Environment", value: "Development")
@@ -334,7 +334,7 @@ struct DatabaseConnectionManagementSheet: View {
                         loadingPicker("Protection", value: "Standard")
                     }
                 }
-                section("Safety", symbol: "checkmark.shield") {
+                section("Safety", icon: .shield) {
                     responsivePair {
                         loadingPicker("Data access", value: "Read only")
                     } right: {
@@ -369,7 +369,7 @@ struct DatabaseConnectionManagementSheet: View {
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 notice(
                     failure,
-                    symbol: "exclamationmark.triangle.fill",
+                    icon: .warning,
                     tint: DashSkin.danger)
                 if presentation == .edit, !isBusy {
                     if draft == nil {
@@ -531,7 +531,7 @@ struct DatabaseConnectionManagementSheet: View {
                     Button {
                         removeTag(at: index)
                     } label: {
-                        Image(systemName: "minus.circle")
+                        EdithIconView(.removeFilled)
                     }
                     .buttonStyle(.edith(.borderless))
                     .help("Remove tag")
@@ -541,7 +541,7 @@ struct DatabaseConnectionManagementSheet: View {
             Button {
                 appendTag()
             } label: {
-                Label("Add tag", systemImage: "plus")
+                Label("Add tag", edith: .plus)
             }
             .buttonStyle(.edith(.secondary))
             .disabled(draft.tags.count >= 64)
@@ -575,11 +575,11 @@ struct DatabaseConnectionManagementSheet: View {
 
     private func section<Content: View>(
         _ title: String,
-        symbol: String,
+        icon: EdithIcon,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            Label(title, systemImage: symbol)
+            Label(title, edith: icon)
                 .pageCapsStyle()
             content()
         }
@@ -657,12 +657,12 @@ struct DatabaseConnectionManagementSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func notice(_ text: String, symbol: String, tint: Color) -> some View {
+    private func notice(_ text: String, icon: EdithIcon, tint: Color) -> some View {
         Label {
             Text(text)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .foregroundStyle(tint)
         }
         .font(.edithText(.subheadline))
@@ -709,11 +709,11 @@ struct DatabaseConnectionManagementSheet: View {
         }
     }
 
-    private var headerSymbol: String {
+    private var headerIcon: EdithIcon {
         switch presentation {
-        case .edit: "slider.horizontal.3"
-        case .rename: "pencil"
-        case .duplicate: "plus.square.on.square"
+        case .edit: .adjust
+        case .rename: .edit
+        case .duplicate: .plus
         }
     }
 
@@ -754,11 +754,11 @@ struct DatabaseConnectionManagementSheet: View {
 }
 
 struct DatabaseSheetBadge: View {
-    let symbol: String
+    let icon: EdithIcon
     let tint: Color
 
     var body: some View {
-        Image(systemName: symbol)
+        EdithIconView(icon)
             .font(.edithText(.title3).weight(.semibold))
             .foregroundStyle(tint)
             .frame(width: UIScale.pt(40), height: UIScale.pt(40))
@@ -780,13 +780,13 @@ private extension DatabaseConnectionColorToken {
 }
 
 private extension DatabaseProduct {
-    var managementSymbolName: String {
+    var managementIcon: EdithIcon {
         switch family {
-        case .relational: "tablecells"
-        case .keyValue: "key.horizontal"
-        case .document: "doc.text"
-        case .search: "magnifyingglass.circle"
-        case .analytical: "chart.xyaxis.line"
+        case .relational: .table
+        case .keyValue: .key
+        case .document: .docText
+        case .search: .search
+        case .analytical: .chartLine
         }
     }
 }

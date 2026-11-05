@@ -11,7 +11,7 @@ struct CodeStatsSetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             VStack(spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "chart.line.uptrend.xyaxis")
+                PageGuideBadge(icon: .chartLine)
                 Text("See how much code you write")
                     .font(.edithText(.title2)).fontWeight(.semibold)
                 Text(
@@ -23,14 +23,14 @@ struct CodeStatsSetupView: View {
                 PageGuideSteps(
                     steps: [
                         PageGuideStep(
-                            symbolName: "folder", title: "Pick a folder",
+                            icon: .folder, title: "Pick a folder",
                             detail: "Copies of your repositories are stored here."),
                         PageGuideStep(
-                            symbolName: "person.crop.circle.badge.checkmark",
+                            icon: .person,
                             title: "Confirm it is you",
                             detail: "Choose which emails count as your commits."),
                         PageGuideStep(
-                            symbolName: "arrow.triangle.2.circlepath", title: "Start the sync",
+                            icon: .sync, title: "Start the sync",
                             detail: "The first run is slowest and continues in the background."),
                     ], columns: compact ? 1 : 3)
             }
@@ -52,7 +52,7 @@ struct CodeStatsSetupView: View {
                         Button {
                             Task { await model.start() }
                         } label: {
-                            Label("Start first sync", systemImage: "play.fill")
+                            Label("Start first sync", edith: .play)
                         }
                         .buttonStyle(.edith(.primary))
                         .controlSize(.large)
@@ -103,7 +103,7 @@ struct CodeStatsSettingsSheet: View {
                     Task { await model.start() }
                     dismiss()
                 } label: {
-                    Label("Refresh now", systemImage: "arrow.clockwise")
+                    Label("Refresh now", edith: .refresh)
                 }
                 .buttonStyle(.edith(.primary))
                 .disabled(!model.canStart)
@@ -181,7 +181,7 @@ struct CodeStatsSettingsSteps: View {
                     if free < Self.largeMirrorWarningBytes {
                         Label(
                             "Low space for large repositories",
-                            systemImage: "exclamationmark.triangle"
+                            edith: .warning
                         )
                         .foregroundStyle(DashSkin.warn)
                     }
@@ -279,7 +279,7 @@ struct CodeStatsSettingsSteps: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Spacer()
                     if author.countedAsYou {
-                        Label("Counted as you", systemImage: "checkmark.circle.fill")
+                        Label("Counted as you", edith: .success)
                             .foregroundStyle(DashSkin.ok)
                     } else {
                         Button("Add") { model.addIdentity(author.email) }
@@ -396,7 +396,7 @@ struct CodeStatsSettingsSteps: View {
         _ title: String, done: Bool, detail: String, @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            Image(systemName: done ? "checkmark.circle.fill" : "circle.dashed")
+            EdithIconView(done ? .success : .scan, tone: done ? .duotone : .muted)
                 .font(.edithText(.title3))
                 .foregroundStyle(done ? DashSkin.ok : DashSkin.inkFaint(dark))
                 .accessibilityLabel(done ? "Done" : "Not done")

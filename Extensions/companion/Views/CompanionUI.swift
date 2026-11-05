@@ -104,7 +104,7 @@ struct CompanionLabeledField: View {
                 placeholder: placeholder, text: $text, invalid: error != nil,
                 onSubmit: onSubmit)
             if let error {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
+                Label(error, edith: .warning)
                     .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.danger)
             } else if let help {
@@ -199,11 +199,11 @@ struct CompanionStatusLine: View {
 
     private var dark: Bool { scheme == .dark }
 
-    private var icon: String {
+    private var icon: EdithIcon {
         switch tone {
-        case .ok: return "checkmark.circle.fill"
-        case .info: return "info.circle"
-        case .error: return "exclamationmark.triangle.fill"
+        case .ok: return .success
+        case .info: return .info
+        case .error: return .warning
         }
     }
 
@@ -217,7 +217,7 @@ struct CompanionStatusLine: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(5)) {
-            Image(systemName: icon)
+            EdithIconView(icon)
                 .font(.edithText(.caption))
                 .foregroundStyle(color)
             Text(text)
@@ -282,7 +282,7 @@ struct CompanionConfirmSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .font(.edithText(.title))
                     .foregroundStyle(DashSkin.danger)
                 Text(title)

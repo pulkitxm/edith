@@ -41,7 +41,7 @@ struct CodeStatsHeader: View {
                     Button {
                         settingsPresented = true
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        Label("Settings", edith: .gear)
                     }
                     .help("Code Stats settings")
                     Button {
@@ -49,7 +49,7 @@ struct CodeStatsHeader: View {
                     } label: {
                         Label(
                             model.isRunning ? "Refreshing" : "Refresh",
-                            systemImage: "arrow.clockwise")
+                            edith: .refresh)
                     }
                     .buttonStyle(.edith(.primary))
                     .disabled(!model.canStart)
@@ -83,8 +83,7 @@ struct CodeStatsProfileBadge: View {
             AsyncImage(url: profile.avatarURL.flatMap(URL.init(string:))) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
+                EdithIconView(.person, size: UIScale.pt(24))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
@@ -112,7 +111,7 @@ struct CodeStatsBannerView: View {
         let dark = scheme == .dark
         PageNotice(
             banner.message, title: banner.title,
-            tone: banner.tone == .danger ? .error : .warning, symbol: banner.symbol
+            tone: banner.tone == .danger ? .error : .warning, icon: banner.icon
         ) {
             if let command = banner.command {
                 CodeStatsCommandHint(command: command, dark: dark)
@@ -142,7 +141,7 @@ struct CodeStatsCommandHint: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(command, forType: .string)
             } label: {
-                Image(systemName: "doc.on.doc")
+                EdithIconView(.copy)
             }
             .buttonStyle(.edith(.borderless))
             .help("Copy")

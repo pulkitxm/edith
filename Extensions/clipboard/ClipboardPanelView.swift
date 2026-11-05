@@ -100,7 +100,7 @@ struct ClipboardPanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
             TextField("Type to search…", text: $filterText)
@@ -114,14 +114,14 @@ struct ClipboardPanelView: View {
                 Button {
                     filterText = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.edith(.borderless))
                 .accessibilityLabel("Clear search")
             }
             if let error = store.captureError ?? store.refreshError {
-                Image(systemName: "exclamationmark.triangle")
+                EdithIconView(.warning)
                     .foregroundStyle(.orange)
                     .help("Clipboard synchronization is retrying. \(error)")
                     .accessibilityLabel("Clipboard synchronization is retrying")
@@ -130,7 +130,7 @@ struct ClipboardPanelView: View {
                 Button {
                     store.setCapturePaused(false)
                 } label: {
-                    Label("Paused", systemImage: "pause.fill")
+                    Label("Paused", edith: .pause)
                         .font(.system(size: 11, weight: .semibold))
                         .padding(.horizontal, 8)
                         .frame(height: 20)
@@ -159,7 +159,7 @@ struct ClipboardPanelView: View {
             Divider()
             Button("Settings…") { openPreferences() }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            EdithIcon.more.image()
                 .foregroundStyle(.secondary)
         }
         .menuStyle(.borderlessButton)
@@ -496,7 +496,7 @@ private struct ClipboardPanelRow: View {
                 }
                 Spacer(minLength: 8)
                 if entry.pinned {
-                    Image(systemName: "pin.fill")
+                    EdithIconView(.pin)
                         .font(.system(size: 10))
                         .foregroundStyle(secondary)
                         .accessibilityLabel("Pinned")
@@ -552,21 +552,21 @@ private struct ClipboardPanelRow: View {
                         )
                         .frame(width: 22, height: 22)
                 } else {
-                    symbol(selected: selected)
+                    categoryIcon(selected: selected)
                 }
             case .image, .file:
                 ClipboardThumbnailView(entry: entry, maxHeight: side, client: client) {
-                    symbol(selected: selected)
+                    categoryIcon(selected: selected)
                 }
             default:
-                symbol(selected: selected)
+                categoryIcon(selected: selected)
             }
         }
         .frame(width: side, height: side)
     }
 
-    private func symbol(selected: Bool) -> some View {
-        Image(systemName: model.category.symbol)
+    private func categoryIcon(selected: Bool) -> some View {
+        EdithIconView(model.category.icon)
             .font(.system(size: 14))
             .foregroundStyle(selected ? Color.themeOnAccent.opacity(0.85) : Color.secondary)
     }

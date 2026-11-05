@@ -1,7 +1,7 @@
 {
   "id": "calendar",
   "title": "Calendar",
-  "symbolName": "calendar",
+  "icon": "calendar",
   "category": "utilities",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "calendar",
       "title": "Calendar",
-      "symbolName": "calendar",
+      "icon": "calendar",
       "order": 3
     }
   ],
@@ -29,17 +29,17 @@
     "summary": "Calendar shows your upcoming events from the macOS Calendar app on its page, on Home and in the notch. It only reads events and never changes them. Allow access once and it keeps itself up to date.",
     "steps": [
       {
-        "symbolName": "hand.raised",
+        "icon": "hand",
         "title": "Allow calendar access",
         "detail": "Click Allow Calendar Access and choose Allow Full Access when macOS asks."
       },
       {
-        "symbolName": "calendar",
+        "icon": "calendar",
         "title": "See what is next",
         "detail": "Events from every calendar in the Calendar app are grouped by day."
       },
       {
-        "symbolName": "video",
+        "icon": "video",
         "title": "Join or get directions",
         "detail": "Meetings with a call link show Join, and events with a place show Directions."
       }

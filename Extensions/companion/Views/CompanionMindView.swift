@@ -414,7 +414,7 @@ struct CompanionMindScreen: View {
         FlowChips(spacing: UIScale.pt(6)) {
             ForEach(Array(run.steps.enumerated()), id: \.offset) { _, step in
                 HStack(spacing: UIScale.pt(4)) {
-                    Image(systemName: step.ok ? "checkmark" : "xmark")
+                    EdithIconView(step.ok ? .check : .close)
                         .font(.system(size: UIScale.pt(8.5), weight: .bold))
                         .foregroundStyle(step.ok ? .green : .red)
                     Text(step.name.replacingOccurrences(of: "_", with: " "))
@@ -535,7 +535,7 @@ private struct MindDetailSheet: View {
                 Button {
                     close()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .font(.edithText(.title3))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -589,7 +589,7 @@ private struct MindDetailSheet: View {
                     openEpisode(ref.0)
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: "book.pages")
+                        EdithIconView(.book)
                             .font(.edithText(.caption))
                         Text(ref.1)
                             .font(.edithText(.subheadline))

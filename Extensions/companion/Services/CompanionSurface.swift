@@ -132,7 +132,7 @@ enum CompanionSurfaceProjection {
                         title: bounded($0.name, bytes: 1024),
                         detail: bounded($0.detail, bytes: 4096),
                         value: $0.ok ? "Ready" : "Needs attention",
-                        icon: $0.ok ? "checkmark.circle" : "exclamationmark.circle")
+                        icon: $0.ok ? .success : .alert)
                 }
         }
         if kinds?.contains("totals") ?? true, let status {
@@ -173,8 +173,8 @@ enum CompanionSurfaceProjection {
                         } ?? "Date unavailable",
                         value: bounded(kindTitle($0.kind), bytes: 256),
                         icon: $0.kind == "voice"
-                            ? "waveform" : $0.kind == "pdf" ? "doc.richtext" : "doc.text",
-                        actions: [.init("episode/" + $0.id, "Open in Memory", "arrow.up.right")])
+                            ? .waveform : .docText,
+                        actions: [.init("episode/" + $0.id, "Open in Memory", .arrowUpRight)])
                 }
             if !episodes.isEmpty {
                 value.message =
@@ -189,8 +189,8 @@ enum CompanionSurfaceProjection {
                 bytes: 4096)
         }
         value.actions = [
-            .init("open", "Open Memory", "arrow.up.right"),
-            .init("refresh", "Check health", "arrow.clockwise"),
+            .init("open", "Open Memory", .arrowUpRight),
+            .init("refresh", "Check health", .refresh),
         ]
         return value
     }

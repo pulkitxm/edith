@@ -623,7 +623,7 @@ struct CompanionSettingsScreen: View {
                 if !endpointDraftIsValid {
                     Label(
                         "Not a usable URL; the app keeps talking to \(endpoint)",
-                        systemImage: "exclamationmark.triangle.fill"
+                        edith: .warning
                     )
                     .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.danger)

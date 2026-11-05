@@ -40,7 +40,7 @@ struct HomeMeetingsCard: View {
                     }
                 } else if !isAuthorized {
                     PageEmptyState(
-                        symbolName: "calendar.badge.exclamationmark",
+                        icon: .calendar,
                         title: "See today's meetings here",
                         message: "Allow Edith to read your calendar. It never changes your events.",
                         primary: PageAction(
@@ -63,7 +63,7 @@ struct HomeMeetingsCard: View {
                 }
                 if store.loaded, let error = store.error {
                     HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                        Image(systemName: "exclamationmark.triangle")
+                        EdithIconView(.warning)
                             .foregroundStyle(.orange)
                             .accessibilityHidden(true)
                         Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -75,7 +75,7 @@ struct HomeMeetingsCard: View {
                 }
                 if showsActions, isAuthorized || !store.loaded {
                     Button(action: open) {
-                        Label("Open Calendar", systemImage: "arrow.right")
+                        Label("Open Calendar", edith: .arrowRight)
                             .labelStyle(CalendarTrailingIconLabelStyle())
                     }
                     .buttonStyle(.edith(.borderless))
@@ -129,7 +129,7 @@ struct HomeMeetingsCard: View {
                 Button {
                     store.perform(.join, eventID: event.id)
                 } label: {
-                    Image(systemName: "video.fill")
+                    EdithIconView(.video)
                 }
                 .buttonStyle(.edith(.iconOnly, tint: theme))
                 .help("Join meeting")

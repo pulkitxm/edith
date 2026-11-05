@@ -77,7 +77,7 @@ struct CodeStatsPage: View {
             EmptyView()
         case .firstRun:
             PageEmptyState(
-                symbolName: "arrow.triangle.2.circlepath", title: "Your first sync is running",
+                icon: .sync, title: "Your first sync is running",
                 message:
                     "Edith is copying and reading your repositories in the background. You can leave this page or close the window; your stats appear here when it finishes.",
                 footnote: "The first run is the slowest. Later refreshes only fetch new commits."
@@ -87,13 +87,13 @@ struct CodeStatsPage: View {
             CodeStatsSetupView(model: model)
         case .unavailable:
             PageEmptyState(
-                symbolName: "chart.bar.xaxis", title: "Your results could not be opened",
+                icon: .chartBar, title: "Your results could not be opened",
                 message:
                     "The sync finished, but Code Stats could not read its saved results. Try again, or refresh to rebuild them.",
-                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                primary: PageAction("Try again", icon: .refresh) {
                     Task { await model.loadReport() }
                 },
-                secondary: PageAction("Refresh from GitHub", symbolName: "icloud.and.arrow.down") {
+                secondary: PageAction("Refresh from GitHub", icon: .cloudDownload) {
                     Task { await model.start() }
                 }
             )
@@ -122,15 +122,15 @@ struct CodeStatsPage: View {
 
     private var noCommits: some View {
         PageEmptyState(
-            symbolName: "text.magnifyingglass", title: "No commits in this range",
+            icon: .search, title: "No commits in this range",
             message: model.hasActiveFilter
                 ? "Nothing matches your current filters. Clear them or pick a longer range."
                 : "No commits by you were found here. Try a longer range, or check that your name or email is listed under Settings.",
             primary: model.hasActiveFilter
-                ? PageAction("Clear filters", symbolName: "line.3.horizontal.decrease") {
+                ? PageAction("Clear filters", icon: .filter) {
                     Task { await model.updateFilter { $0 = .default } }
                 }
-                : PageAction("Show all time", symbolName: "calendar") {
+                : PageAction("Show all time", icon: .calendar) {
                     Task { await model.select(.preset(.allTime)) }
                 }
         )

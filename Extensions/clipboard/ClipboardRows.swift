@@ -63,7 +63,7 @@ struct ClipboardRows: View {
                         "Clipboard is off",
                         message:
                             "Nothing you copy is being recorded. Turn it on to keep a history and change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if let error = presentation?.error {
                 Section {
@@ -223,7 +223,7 @@ struct ClipboardRows: View {
                     Button("Allow Access", action: requestPermission)
                         .buttonStyle(.edith(.secondary))
                 } label: {
-                    Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(
+                    Text(edith: .warning).foregroundColor(
                         .orange)
                         + Text(" Accessibility is needed")
                     Text("Until you allow it, picking an item only copies it.")
@@ -348,7 +348,7 @@ private struct ClipboardRecentRow: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-            Image(systemName: ClipboardCategory(entry).symbol)
+            EdithIconView(ClipboardCategory(entry).icon)
                 .foregroundStyle(.secondary)
                 .frame(width: UIScale.pt(20))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
