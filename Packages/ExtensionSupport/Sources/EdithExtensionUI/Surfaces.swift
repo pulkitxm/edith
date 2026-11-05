@@ -43,14 +43,13 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
                         .frame(width: UIScale.pt(16), height: UIScale.pt(20))
                         .accessibilityHidden(true)
                 }
-                .padding(UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(8))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
             if configuration.isExpanded {
                 configuration.content
-                    .padding(.horizontal, UIScale.pt(8))
                     .padding(.bottom, UIScale.pt(10))
             }
         }

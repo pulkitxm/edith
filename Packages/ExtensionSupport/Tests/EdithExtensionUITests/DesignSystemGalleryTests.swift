@@ -1,3 +1,4 @@
+import EdithExtensionTestSupport
 import AppKit
 import SwiftUI
 import Testing
@@ -5,62 +6,15 @@ import Testing
 
 @MainActor
 struct DesignSystemGallery {
-    struct Variant {
-        let name: String
-        let width: Double
-        let height: Double
-        let zoom: Double
-        let scheme: ColorScheme
-    }
-
-    static let variants = [
-        Variant(name: "regular-light", width: 1100, height: 760, zoom: 1, scheme: .light),
-        Variant(name: "regular-dark", width: 1100, height: 760, zoom: 1, scheme: .dark),
-        Variant(name: "compact-light", width: 640, height: 700, zoom: 1, scheme: .light),
-        Variant(name: "compact-dark", width: 640, height: 700, zoom: 1, scheme: .dark),
-        Variant(name: "zoom-light", width: 1100, height: 760, zoom: 1.6, scheme: .light),
-    ]
-
-    static func render<V: View>(_ view: V, variant: Variant, name: String) async throws
-        -> NSHostingView<AnyView>
+    static func render<V: View>(_ view: V, variant: RenderCapture.Variant, name: String)
+        async throws -> NSView
     {
-        UIScale.apply(variant.zoom)
-        let host = NSHostingView(
-            rootView: AnyView(
-                view
-                    .environment(\.compactLayout, variant.width < UIScale.pt(720))
-                    .environment(\.colorScheme, variant.scheme)
-                    .environment(\.automaticViewActionsEnabled, false)
-                    .environment(\.loadingAnimationsEnabled, false)
-                    .environment(\.controlActiveState, .key)
-                    .transaction { $0.animation = nil }))
-        host.sizingOptions = []
-        host.frame = CGRect(x: 0, y: 0, width: variant.width, height: variant.height)
-        let window = TestWindowHost.window(contentRect: host.frame)
-        window.isReleasedWhenClosed = false
-        window.appearance = NSAppearance(named: variant.scheme == .dark ? .darkAqua : .aqua)
-        window.contentView = host
-        window.orderBack(nil)
-        try await Task.sleep(for: .milliseconds(450))
-        host.layoutSubtreeIfNeeded()
-        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: bitmap)
-        #expect(bitmap.pixelsWide >= Int(variant.width))
-        #expect(abs(host.bounds.height - variant.height) < 1, "\(name) \(variant.name)")
-        #expect(edgeColors(bitmap) <= 3, "\(name) \(variant.name) draws into the trailing edge")
-        #expect(!TestWindowHost.isExposedOnDesktop(window))
-        if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
-            let directory = URL(fileURLWithPath: capture, isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: directory, withIntermediateDirectories: true)
-            let data = try #require(bitmap.representation(using: .png, properties: [:]))
-            try data.write(
-                to: directory.appendingPathComponent("\(name)-\(variant.name).png"),
-                options: .atomic)
-        }
-        window.orderOut(nil)
-        window.close()
-        return host
+        let rendered = try await RenderCapture.render(name, variant: variant) { view }
+        #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+        #expect(
+            edgeColors(rendered.bitmap) <= 3,
+            "\(name) \(variant.name) draws into the trailing edge")
+        return rendered.host
     }
 
     static func edgeColors(_ bitmap: NSBitmapImageRep) -> Int {
@@ -148,10 +102,7 @@ struct DesignSystemGallery {
                 Button("Reconnect") {}
                 Button("Dismiss") {}
             }
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(false, minimum: 180, spacing: 12),
-                spacing: UIScale.pt(PageMetrics.cardSpacing)
-            ) {
+            PageMetricGrid {
                 PageMetric(
                     title: "Commits", value: "1,284", detail: "Across 12 repositories",
                     symbol: "arrow.triangle.branch", trend: "12%")
@@ -186,6 +137,8 @@ struct DesignSystemGallery {
                     PageChip("Chip") {}
                     PageChip("Active chip", active: true) {}
                     PageChip("Disabled chip") {}.disabled(true)
+                    PageIconChip(systemImage: "line.3.horizontal.decrease", label: "Filter") {}
+                    PageIconChip(systemImage: "star", label: "Favorite", active: true) {}
                 }
             }
             PageNotice("Usage is collected every 5 minutes while Edith is open.")
@@ -247,7 +200,7 @@ struct DesignSystemGallery {
             PageLoading(
                 state: state,
                 message: "GitHub did not respond. Check your connection and try again.",
-                layout: .analytics, retry: {}
+                layout: .analytics, showsSkeletonControls: false, retry: {}
             ) {
                 EmptyView()
             }
@@ -270,6 +223,140 @@ struct DesignSystemGallery {
             skipAll: PageAction("Skip all introductions") {}
         )
         .pageSurface()
+    }
+
+    static var metrics: some View {
+        PageScaffold(pinnedHeader: true) {
+            PageHeader("Metric tiles", divider: true)
+        } content: {
+            PageMetricGrid {
+                PageMetric(
+                    title: "Commits", value: "1,284", detail: "Across 12 repositories",
+                    symbol: "arrow.triangle.branch", tint: .blue, trend: "12%")
+                PageMetric(title: "Pull requests", value: "86", detail: "71 merged")
+                PageMetric(
+                    title: "Reviews", value: "142", symbol: "eye", trend: "4%",
+                    trendPositive: false)
+                PageMetric(
+                    title: "Active days", value: "23",
+                    detail: "A long synthetic detail that has to wrap on to a second line",
+                    symbol: "calendar")
+                PageMetric(title: "Lines changed", value: "48.2K", symbol: "plusminus")
+            }
+            PageMetricGrid {
+                ForEach(0..<4, id: \.self) { _ in PageMetricSkeleton() }
+            }
+            PageCard(title: "Contributions", note: "Fills the card") {
+                GalleryCalendar(weeks: 53)
+            }
+            PageCard(title: "Last 13 weeks", note: "Short ranges still fill the card") {
+                GalleryCalendar(weeks: 13)
+            }
+        }
+    }
+
+    struct GalleryCalendar: View {
+        let weeks: Int
+        @Environment(\.colorScheme) private var scheme
+
+        var body: some View {
+            ActivityCalendarGrid(
+                weeks: DesignSystemGallery.calendarWeeks(weeks), dark: scheme == .dark,
+                calendar: DesignSystemGallery.galleryCalendar, fillsWidth: true
+            ) { _ in EmptyView() }
+        }
+    }
+
+    static var galleryCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.firstWeekday = 2
+        return calendar
+    }
+
+    static func calendarWeeks(_ count: Int) -> [ActivityCalendarWeek] {
+        (0..<count).map { week in
+            ActivityCalendarWeek(
+                id: week, monthLabel: week % 4 == 0 ? "Sep" : "",
+                cells: (0..<7).map { day in
+                    ActivityCalendarDay(
+                        id: "\(week)-\(day)", date: Date(timeIntervalSince1970: 0),
+                        value: Double(week + day), level: (week * 3 + day * 2) % 7)
+                })
+        }
+    }
+
+    struct SettingsForm: View {
+        @State var slider = 0.4
+        @State var stepper = 2_500
+        @State var checked = true
+        @State var unchecked = false
+        @State var empty = ""
+        @State var filled = "Synthetic value"
+        @State var secret = "synthetic"
+        @State var tab = 0
+
+        var body: some View {
+            Form {
+                SettingsIssueSectionPreview()
+                Section("Rows") {
+                    SettingsRow("Launch at login", subtitle: "Start this tool with your Mac.") {
+                        Toggle("Launch at login", isOn: $checked).labelsHidden()
+                    }
+                    SettingsNoticeRow(
+                        "Engine is off", message: "Turn the extension on to change this.",
+                        symbol: "power.circle.fill")
+                    SettingsErrorRow(
+                        "Could not read the shortcut", message: "Synthetic failure.", retry: {})
+                    SettingsShortcutRow(
+                        keyPrefix: "gallery.shortcut", defaultLabel: "Option Space",
+                        purpose: "Opens the panel from anywhere.")
+                    SettingsSliderRow(
+                        "Dim amount", subtitle: "How dark other windows become.", value: $slider,
+                        in: 0...1, readout: "40%")
+                    SettingsStepperRow(
+                        "History size", subtitle: "Items kept on this Mac.", value: $stepper,
+                        in: 100...5_000, step: 100, unit: "items")
+                }
+                Section("Fields") {
+                    EdithTextField(placeholder: "Placeholder text", text: $empty)
+                    EdithTextField(placeholder: "Placeholder text", text: $filled)
+                    EdithSecureField(placeholder: "Access token", text: $empty, icon: "key")
+                    EdithSecureField(placeholder: "Access token", text: $secret, icon: "key")
+                    EdithCheckbox("Include archived repositories", isOn: $checked)
+                    EdithCheckbox("Include forks", isOn: $unchecked)
+                    PageTabPicker(
+                        "Section", selection: $tab, options: [0, 1, 2],
+                        label: { ["Overview", "History", "Settings"][$0] })
+                }
+            }
+            .settingsForm()
+        }
+    }
+
+    struct SettingsIssueSectionPreview: View {
+        var body: some View {
+            SettingsIssueSection()
+                .environment(
+                    \.settingsIssue,
+                    SettingsIssue(message: "The engine did not respond.", retry: {}))
+        }
+    }
+
+    static var fullList: some View {
+        PageWorkspace {
+            PageHeader("Packages", divider: true)
+        } content: {
+            PageSkeleton(layout: .fullList, showsControls: false)
+                .pageGutter(false)
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+        }
+    }
+
+    static var formSkeleton: some View {
+        PageSkeleton(layout: .form)
+            .padding(PageMetrics.gutter(false))
+            .pageSurface()
     }
 
     static var splitPane: some View {
@@ -314,18 +401,22 @@ struct DesignSystemGalleryTests {
             ("error", AnyView(DesignSystemGallery.loading(.error))),
             ("intro", AnyView(DesignSystemGallery.intro)),
             ("split", AnyView(DesignSystemGallery.splitPane)),
+            ("metrics", AnyView(DesignSystemGallery.metrics)),
+            ("settings", AnyView(DesignSystemGallery.SettingsForm())),
+            ("form-skeleton", AnyView(DesignSystemGallery.formSkeleton)),
+            ("full-list", AnyView(DesignSystemGallery.fullList)),
         ]
         for (name, screen) in screens {
             let variants =
                 name == "gallery"
                 ? [
-                    DesignSystemGallery.Variant(
+                    RenderCapture.Variant(
                         name: "tall-light", width: 1100, height: 1900, zoom: 1, scheme: .light),
-                    DesignSystemGallery.Variant(
+                    RenderCapture.Variant(
                         name: "tall-dark", width: 1100, height: 1900, zoom: 1, scheme: .dark),
-                    DesignSystemGallery.Variant(
+                    RenderCapture.Variant(
                         name: "tall-compact", width: 640, height: 2300, zoom: 1, scheme: .light),
-                ] : DesignSystemGallery.variants
+                ] : RenderCapture.variants
             for variant in variants {
                 _ = try await DesignSystemGallery.render(screen, variant: variant, name: name)
             }

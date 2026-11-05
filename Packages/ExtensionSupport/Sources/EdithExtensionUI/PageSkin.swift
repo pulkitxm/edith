@@ -31,7 +31,7 @@ public enum DashSkin {
     private static let accentDeepPair = (ThemeColor.color("#b3543a"), ThemeColor.color("#eea486"))
     private static let gridPair = (ThemeColor.color("#ebebef"), ThemeColor.color("#303033"))
     private static let heatSteps: [(NSColor, CGFloat)] = [
-        (.black, 0.3), (.black, 0.05), (.white, 0.2), (.white, 0.55),
+        (.white, 0.6), (.white, 0.3), (.black, 0.05), (.black, 0.3),
     ]
     private static let heatStepsDark: [(NSColor, CGFloat)] = [
         (.black, 0.45), (.black, 0.2), (.white, 0.05), (.white, 0.35),

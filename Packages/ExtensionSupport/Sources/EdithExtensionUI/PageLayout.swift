@@ -24,6 +24,16 @@ public enum PageMetrics {
     public static let filterRowSpacing = 12.0
     public static let filterLabelSpacing = 12.0
     public static let readableWidth = 980.0
+    public static let metricTitleHeight = 16.0
+    public static let metricValueHeight = 28.0
+    public static let metricValueSize = 24.0
+    public static let metricRowSpacing = 4.0
+    public static let metricMinimumWidth = 148.0
+    public static let formWidth = 704.0
+    public static let groupedFormInset = 20.0
+    public static let settingsSliderWidth = 180.0
+    public static let settingsReadoutWidth = 56.0
+    public static let settingsNumberWidth = 56.0
 
     public static var chipFont: Font { .edithText(.subheadline).weight(.medium) }
     public static var capsFont: Font { .edithText(.caption2).weight(.semibold) }
@@ -51,6 +61,14 @@ public enum PageMetrics {
                 spacing: spacing.map { CGFloat(UIScale.pt($0)) }, alignment: alignment)
         ]
     }
+
+    public static func adaptiveColumns(
+        minimum: Double, maximum: Double = .infinity, spacing: Double? = nil,
+        alignment: Alignment = .top
+    ) -> [GridItem] {
+        cardColumns(
+            false, minimum: minimum, maximum: maximum, spacing: spacing, alignment: alignment)
+    }
 }
 
 public enum PageContentWidth {
@@ -74,6 +92,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
     @State private var viewportHeight: CGFloat = 0
+    @State private var scrollingHeaderHeight: CGFloat = 0
 
     public init(
         width: PageContentWidth = .fluid, pinnedHeader: Bool = false, scrollIdentity: String = "",
@@ -90,10 +109,19 @@ public struct PageScaffold<Header: View, Content: View>: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if pinnedHeader { header() }
+            if pinnedHeader {
+                header().environment(\.pageColumnWidth, width.maximum(compact: compact))
+            }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    if !pinnedHeader { header() }
+                    if !pinnedHeader {
+                        header().environment(\.pageColumnWidth, width.maximum(compact: compact))
+                            .onGeometryChange(for: CGFloat.self) {
+                            $0.size.height
+                        } action: {
+                            scrollingHeaderHeight = $0
+                        }
+                    }
                     LazyVStack(
                         alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)
                     ) {
@@ -104,15 +132,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
                 }
                 .background { PageScrollPosition(positions: .shared, key: scrollIdentity) }
             }
-            .environment(
-                \.pageViewportHeight,
-                pinnedHeader
-                    ? max(
-                        0,
-                        viewportHeight
-                            - UIScale.pt(PageMetrics.pinnedContentTop + PageMetrics.bottom))
-                    : nil
-            )
+            .environment(\.pageViewportHeight, contentViewportHeight)
             .background {
                 GeometryReader { proxy in
                     Color.clear
@@ -126,6 +146,11 @@ public struct PageScaffold<Header: View, Content: View>: View {
             }
         }
         .pageSurface()
+    }
+
+    private var contentViewportHeight: CGFloat {
+        let top = pinnedHeader ? UIScale.pt(PageMetrics.pinnedContentTop) : scrollingHeaderHeight
+        return max(0, viewportHeight - top - UIScale.pt(PageMetrics.bottom))
     }
 }
 
@@ -220,11 +245,20 @@ private struct PageTask<ID: Equatable>: ViewModifier {
     }
 }
 
+private struct PageColumnWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
 private struct PageViewportHeightKey: EnvironmentKey {
     static let defaultValue: CGFloat? = nil
 }
 
 extension EnvironmentValues {
+    public var pageColumnWidth: CGFloat? {
+        get { self[PageColumnWidthKey.self] }
+        set { self[PageColumnWidthKey.self] = newValue }
+    }
+
     var pageViewportHeight: CGFloat? {
         get { self[PageViewportHeightKey.self] }
         set { self[PageViewportHeightKey.self] = newValue }
@@ -290,8 +324,12 @@ extension View {
     public func pageContent(_ compact: Bool, width: PageContentWidth = .fluid) -> some View {
         pageGutter(compact)
             .padding(.bottom, UIScale.pt(PageMetrics.bottom))
-            .frame(maxWidth: width.maximum(compact: compact), alignment: .topLeading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .pageColumn(width.maximum(compact: compact))
+    }
+
+    public func pageColumn(_ width: CGFloat?) -> some View {
+        frame(maxWidth: width, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 }
 
@@ -311,17 +349,19 @@ public struct PageSectionHeader<Trailing: View>: View {
 
     public var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 heading.fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: UIScale.pt(8))
+                Spacer(minLength: UIScale.pt(12))
                 trailing().fixedSize(horizontal: true, vertical: false)
             }
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 heading
-                ScrollView(.horizontal) {
-                    trailing()
+                if Trailing.self != EmptyView.self {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { trailing() }
+                    }
+                    .scrollIndicators(.automatic)
                 }
-                .scrollIndicators(.automatic)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -356,6 +396,7 @@ public struct PageSubtitle: View {
 
 public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
     @Environment(\.compactLayout) private var compact
+    @Environment(\.pageColumnWidth) private var columnWidth
     @Environment(\.colorScheme) private var scheme
 
     private let title: () -> Title
@@ -382,17 +423,21 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.headerSpacing)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                     ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                        HStack(alignment: .center, spacing: 0) {
                             heading.fixedSize(horizontal: true, vertical: false)
-                            Spacer(minLength: UIScale.pt(8))
+                            Spacer(minLength: UIScale.pt(12))
                             actions.fixedSize(horizontal: true, vertical: false)
                         }
                         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                             heading
-                            ScrollView(.horizontal) {
-                                actions
+                            if Trailing.self != EmptyView.self {
+                                ScrollView(.horizontal) {
+                                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                                        actions
+                                    }
+                                }
+                                .scrollIndicators(.never)
                             }
-                            .scrollIndicators(.never)
                         }
                     }
                     if let subtitle {
@@ -404,6 +449,7 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .pageGutter(compact)
+            .pageColumn(columnWidth)
             .padding(.top, UIScale.pt(PageMetrics.top))
             .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
             if divider { PageHeaderDivider() }
@@ -448,5 +494,28 @@ public struct PageHeaderDivider: View {
             .frame(height: 1)
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
+    }
+}
+
+extension PageHeader where Title == Text, Accessory == EmptyView {
+    public init(
+        _ title: String, subtitle: String? = nil, divider: Bool = false,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.init(
+            subtitle: subtitle, divider: divider, title: { Text(title) }, trailing: trailing,
+            accessory: { EmptyView() })
+    }
+}
+
+extension PageHeader where Accessory == EmptyView {
+    public init(
+        subtitle: String? = nil, divider: Bool = false,
+        @ViewBuilder title: @escaping () -> Title,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.init(
+            subtitle: subtitle, divider: divider, title: title, trailing: trailing,
+            accessory: { EmptyView() })
     }
 }

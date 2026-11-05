@@ -1,14 +1,14 @@
 import AppKit
 
 @MainActor
-enum TestWindowHost {
-    static let application: NSApplication = {
+public enum TestWindowHost {
+    public static let application: NSApplication = {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)
         return application
     }()
 
-    static func window(
+    public static func window(
         contentRect: NSRect,
         styleMask: NSWindow.StyleMask = [.borderless]
     ) -> OffscreenTestWindow {
@@ -21,11 +21,11 @@ enum TestWindowHost {
         return window
     }
 
-    static func isExposedOnDesktop(_ window: NSWindow) -> Bool {
+    public static func isExposedOnDesktop(_ window: NSWindow) -> Bool {
         window.isVisible && NSScreen.screens.contains { $0.frame.intersects(window.frame) }
     }
 
-    static var exposedWindows: [NSWindow] {
+    public static var exposedWindows: [NSWindow] {
         NSApp?.windows.filter(isExposedOnDesktop) ?? []
     }
 
@@ -36,10 +36,10 @@ enum TestWindowHost {
     }
 }
 
-final class OffscreenTestWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
+public final class OffscreenTestWindow: NSWindow {
+    public override var canBecomeKey: Bool { true }
 
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+    public override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         frameRect
     }
 }

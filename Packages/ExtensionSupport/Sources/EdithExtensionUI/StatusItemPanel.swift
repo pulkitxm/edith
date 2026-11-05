@@ -127,10 +127,10 @@ public struct StatusProgressRow: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title).lineLimit(1)
-                Spacer(minLength: 8)
+                Spacer(minLength: UIScale.pt(8))
                 if let resetsAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(MenuCountdown.remaining(until: resetsAt, now: context.date))
@@ -144,13 +144,13 @@ public struct StatusProgressRow: View {
                     .fixedSize()
                 }
             }
-            HStack(spacing: 10) {
+            HStack(spacing: UIScale.pt(10)) {
                 LoadingProgress(value: percent ?? 0, total: 100)
                     .accessibilityLabel(title)
                 Text(percent.map { "\(Int(max(0, min(100, $0))))%" } ?? "N/A")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
-                    .frame(width: 40, alignment: .trailing)
+                    .frame(width: UIScale.pt(40), alignment: .trailing)
                     .accessibilityLabel(
                         percent.map { "\(Int(max(0, min(100, $0)))) percent used" }
                             ?? "Usage unavailable")

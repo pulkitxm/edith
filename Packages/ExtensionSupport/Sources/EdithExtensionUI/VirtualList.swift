@@ -8,6 +8,7 @@ public struct VirtualList<Item: Identifiable & Equatable, Header: View, Row: Vie
     let rowHeight: (Item) -> CGFloat
     let header: Header
     let row: (Item) -> Row
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(
         _ items: [Item], rowHeight: @escaping (Item) -> CGFloat,
@@ -65,11 +66,13 @@ public struct VirtualList<Item: Identifiable & Equatable, Header: View, Row: Vie
 
     private func update(_ coordinator: VirtualListCoordinator<Item>, environment: EnvironmentValues)
     {
+        let schemeChanged = coordinator.environment.colorScheme != colorScheme
         coordinator.environment = environment
         coordinator.rowHeight = rowHeight
         coordinator.makeRow = { AnyView(row($0)) }
         coordinator.header = AnyView(header)
         coordinator.apply(items)
+        if schemeChanged { coordinator.refreshVisibleRows() }
     }
 }
 
@@ -127,6 +130,12 @@ public final class VirtualListCoordinator<Item: Identifiable & Equatable>: NSObj
         guard abs(height - headerHeight) > 0.5 else { return }
         headerHeight = height
         table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: 0))
+    }
+
+    func refreshVisibleRows() {
+        guard let table else { return }
+        let visible = table.rows(in: table.visibleRect)
+        for row in visible.lowerBound..<visible.upperBound { refresh(row: row) }
     }
 
     private func refresh(row: Int) {

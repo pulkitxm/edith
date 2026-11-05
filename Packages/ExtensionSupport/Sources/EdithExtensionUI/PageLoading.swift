@@ -6,13 +6,19 @@ public enum PageSkeletonLayout: CaseIterable, Sendable {
     case list
     case cards
     case editor
+    case form
+    case fullList
+
+    var rendersContentDirectly: Bool { self == .editor || self == .form }
 }
 
 public struct PageLoading<Content: View>: View {
     let state: ContentLoadingState
-    var title = "No content yet"
+    var title: String?
+    var errorTitle: String?
     var message = "There is nothing to show yet."
     var layout: PageSkeletonLayout = .list
+    var showsSkeletonControls = true
     var refreshing = false
     var activity: ContentActivity?
     var retry: (() -> Void)?
@@ -20,15 +26,18 @@ public struct PageLoading<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     public init(
-        state: ContentLoadingState, title: String = "No content yet",
+        state: ContentLoadingState, title: String? = nil, errorTitle: String? = nil,
         message: String = "There is nothing to show yet.", layout: PageSkeletonLayout = .list,
-        refreshing: Bool = false, activity: ContentActivity? = nil, retry: (() -> Void)? = nil,
+        showsSkeletonControls: Bool = true, refreshing: Bool = false,
+        activity: ContentActivity? = nil, retry: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content
     ) {
         self.state = state
         self.title = title
+        self.errorTitle = errorTitle
         self.message = message
         self.layout = layout
+        self.showsSkeletonControls = showsSkeletonControls
         self.refreshing = refreshing
         self.activity = activity
         self.retry = retry
@@ -41,12 +50,15 @@ public struct PageLoading<Content: View>: View {
             .modifier(PageLoadingFill(active: !state.presentsContent && state != .loading))
     }
 
+    var errorHeading: String { errorTitle ?? title ?? ContentStatusCopy.errorTitle }
+
     private var container: some View {
         LoadingContainer(
-            state: state, title: title, message: message, retry: retry, cancel: cancel,
+            state: state, title: title ?? "No content yet", errorTitle: errorHeading,
+            message: message, retry: retry, cancel: cancel,
             refreshing: activity == nil && refreshing, updating: activity == .updating
         ) {
-            if layout == .editor {
+            if layout.rendersContentDirectly {
                 content()
             } else {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
@@ -54,7 +66,7 @@ public struct PageLoading<Content: View>: View {
                 }
             }
         } placeholder: {
-            PageSkeleton(layout: layout)
+            PageSkeleton(layout: layout, showsControls: showsSkeletonControls)
         }
     }
 }
@@ -73,28 +85,23 @@ private struct PageLoadingFill: ViewModifier {
 
 public struct PageSkeleton: View {
     var layout: PageSkeletonLayout = .list
+    var showsControls = true
     @Environment(\.compactLayout) private var compact
+    @Environment(\.pageViewportHeight) private var viewportHeight
 
-    public init(layout: PageSkeletonLayout = .list) { self.layout = layout }
+    public init(layout: PageSkeletonLayout = .list, showsControls: Bool = true) {
+        self.layout = layout
+        self.showsControls = showsControls
+    }
 
     public var body: some View {
         SkeletonGroup {
             VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                PageSkeletonControls()
+                if showsControls, layout != .form { PageSkeletonControls() }
                 switch layout {
                 case .analytics:
-                    LazyVGrid(
-                        columns: PageMetrics.cardColumns(
-                            false, minimum: compact ? 132 : 170, spacing: 12),
-                        spacing: UIScale.pt(PageMetrics.cardSpacing)
-                    ) {
-                        ForEach(0..<4, id: \.self) { _ in
-                            PageSkeletonCard {
-                                SkeletonBlock(width: 80, height: 10)
-                                SkeletonBlock(width: 96, height: 24)
-                                SkeletonBlock(width: 120, height: 9)
-                            }
-                        }
+                    PageMetricGrid {
+                        ForEach(0..<4, id: \.self) { _ in PageMetricSkeleton() }
                     }
                     PageSkeletonCard {
                         SkeletonBlock(width: 160, height: 15)
@@ -103,6 +110,11 @@ public struct PageSkeleton: View {
                     PageSkeletonCard { PageSkeletonRows() }
                 case .list:
                     PageSkeletonCard { PageSkeletonRows() }
+                case .fullList:
+                    PageSkeletonCard { PageSkeletonRows(count: 40) }
+                        .frame(height: viewportHeight)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .clipped()
                 case .cards:
                     LazyVGrid(
                         columns: PageMetrics.cardColumns(compact, minimum: 260, spacing: 12),
@@ -122,10 +134,15 @@ public struct PageSkeleton: View {
                         SkeletonBlock(height: 280, corner: 12)
                         PageSkeletonControls()
                     }
+                case .form:
+                    ForEach([3, 2], id: \.self) { rows in
+                        PageSkeletonCard { PageSkeletonFormRows(count: rows) }
+                    }
                 }
             }
+            .frame(maxWidth: layout == .form ? PageMetrics.formWidth : nil)
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: layout == .form ? .top : .topLeading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading content")
     }
@@ -168,6 +185,25 @@ struct PageSkeletonRows: View {
                     }
                     Spacer(minLength: 0)
                     SkeletonBlock(width: 56, height: 11)
+                }
+            }
+        }
+    }
+}
+
+struct PageSkeletonFormRows: View {
+    let count: Int
+
+    var body: some View {
+        VStack(spacing: UIScale.pt(16)) {
+            ForEach(0..<count, id: \.self) { index in
+                HStack(spacing: UIScale.pt(12)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                        SkeletonBlock(width: index.isMultiple(of: 2) ? 140 : 180, height: 11)
+                        SkeletonBlock(width: index.isMultiple(of: 2) ? 240 : 200, height: 8)
+                    }
+                    Spacer(minLength: 0)
+                    SkeletonBlock(width: 44, height: 22, corner: 7)
                 }
             }
         }

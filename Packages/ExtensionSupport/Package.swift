@@ -28,6 +28,9 @@ let package = Package(
             name: "EdithExtensionDocuments", type: .static, targets: ["EdithExtensionDocuments"]),
         .library(name: "EdithExtensionFiles", type: .static, targets: ["EdithExtensionFiles"]),
         .library(name: "EdithExtensionArchive", type: .static, targets: ["EdithExtensionArchive"]),
+        .library(
+            name: "EdithExtensionTestSupport", type: .static, targets: ["EdithExtensionTestSupport"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2")
@@ -78,8 +81,13 @@ let package = Package(
             name: "EdithExtensionSupportTests",
             dependencies: ["EdithExtensionCore", "EdithExtensionSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "EdithExtensionTestSupport",
+            dependencies: ["EdithExtensionCore", "EdithExtensionUI"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "EdithExtensionUITests", dependencies: ["EdithExtensionUI"],
+            name: "EdithExtensionUITests",
+            dependencies: ["EdithExtensionCore", "EdithExtensionUI", "EdithExtensionTestSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

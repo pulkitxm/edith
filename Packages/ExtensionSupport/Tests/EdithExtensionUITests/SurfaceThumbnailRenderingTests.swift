@@ -1,3 +1,4 @@
+import EdithExtensionTestSupport
 import AppKit
 import CoreGraphics
 import EdithExtensionCore

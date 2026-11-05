@@ -78,6 +78,10 @@ public struct ContentActivityBadge: View {
     }
 }
 
+enum ContentStatusCopy {
+    static let errorTitle = "Couldn’t load content"
+}
+
 public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let state: ContentLoadingState
     public let title: String
@@ -86,6 +90,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let cancel: (() -> Void)?
     public let refreshing: Bool
     public let updating: Bool
+    private let errorTitle: String?
     @State private var dimmed = false
     private let content: () -> Content
     private let placeholder: () -> Placeholder
@@ -94,7 +99,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 
     public init(
         state: ContentLoadingState,
-        title: String = "No Content",
+        title: String? = nil,
+        errorTitle: String? = nil,
         message: String = "There is nothing to show yet.",
         retry: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil,
@@ -104,7 +110,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.state = state
-        self.title = title
+        self.title = title ?? "No Content"
+        self.errorTitle = errorTitle ?? title
         self.message = message
         self.retry = retry
         self.cancel = cancel
@@ -153,10 +160,10 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
             secondaryTitle: "Cancel", secondaryAction: cancel)
     }
 
-    private var unavailableTitle: String {
+    var unavailableTitle: String {
         switch state {
         case .offline: "You’re offline"
-        case .error: "Couldn’t load content"
+        case .error: errorTitle ?? ContentStatusCopy.errorTitle
         case .cancelled: "Loading cancelled"
         default: title
         }
@@ -175,7 +182,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 extension LoadingContainer where Placeholder == PageSkeleton {
     public init(
         state: ContentLoadingState,
-        title: String = "No Content",
+        title: String? = nil,
+        errorTitle: String? = nil,
         message: String = "There is nothing to show yet.",
         layout: PageSkeletonLayout = .list,
         retry: (() -> Void)? = nil,
@@ -185,7 +193,8 @@ extension LoadingContainer where Placeholder == PageSkeleton {
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(
-            state: state, title: title, message: message, retry: retry, cancel: cancel,
+            state: state, title: title, errorTitle: errorTitle, message: message, retry: retry,
+            cancel: cancel,
             refreshing: refreshing, updating: updating, content: content,
             placeholder: { PageSkeleton(layout: layout) })
     }
@@ -436,8 +445,7 @@ public struct SkeletonBlock: View {
     public var body: some View {
         RoundedRectangle(cornerRadius: UIScale.pt(corner))
             .fill(Color.primary.opacity(0.07))
-            .frame(maxWidth: scaledWidth)
-            .frame(height: UIScale.pt(height))
+            .frame(width: scaledWidth, height: UIScale.pt(height))
             .overlay {
                 LoadingShimmer()
                     .mask(RoundedRectangle(cornerRadius: UIScale.pt(corner)))

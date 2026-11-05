@@ -79,8 +79,16 @@ public struct PageEmptyState: View {
     private var textWidth: CGFloat { UIScale.pt(small ? 320 : 460) }
 
     public var body: some View {
+        ViewThatFits(in: .vertical) {
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView { content.frame(maxWidth: .infinity) }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var content: some View {
         let dark = scheme == .dark
-        VStack(spacing: UIScale.pt(small ? 12 : 20)) {
+        return VStack(spacing: UIScale.pt(small ? 12 : 20)) {
             PageGuideBadge(
                 symbolName: symbolName, size: small ? 40 : compactLayout ? 56 : 64, tint: tint)
             VStack(spacing: UIScale.pt(small ? 4 : 8)) {
@@ -110,8 +118,6 @@ public struct PageEmptyState: View {
             }
         }
         .padding(UIScale.pt(small ? 16 : compactLayout ? 24 : 32))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder private var actions: some View {
@@ -128,6 +134,7 @@ public struct PageEmptyState: View {
             }
         }
         .buttonStyle(.edith(role))
+        .font(.edithText(.body))
         .keyboardShortcut(role == .primary && !small ? .defaultAction : nil)
         .fixedSize()
         .accessibilityIdentifier(action.identifier ?? action.title)
@@ -217,13 +224,14 @@ public struct PageIntro: View {
     let start: PageAction
     let skip: PageAction?
     let skipAll: PageAction?
+    let embedded: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
     public init(
         symbolName: String, title: String, tagline: String, summary: String,
         steps: [PageGuideStep], examples: [String] = [], start: PageAction,
-        skip: PageAction? = nil, skipAll: PageAction? = nil
+        skip: PageAction? = nil, skipAll: PageAction? = nil, embedded: Bool = false
     ) {
         self.symbolName = symbolName
         self.title = title
@@ -234,77 +242,90 @@ public struct PageIntro: View {
         self.start = start
         self.skip = skip
         self.skipAll = skipAll
+        self.embedded = embedded
     }
 
     public var body: some View {
+        if embedded {
+            content.frame(maxWidth: .infinity, alignment: .top)
+        } else {
+            GeometryReader { proxy in
+                ScrollView {
+                    content.frame(
+                        maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                }
+            }
+        }
+    }
+
+    private var content: some View {
         let dark = scheme == .dark
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(24)) {
-                    HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                        PageGuideBadge(symbolName: symbolName, size: compact ? 52 : 64)
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            Text("Welcome to \(title)").font(.edithText(.title)).fontWeight(.bold)
-                                .accessibilityAddTraits(.isHeader)
-                            Text(tagline).font(.edithText(.title3)).foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+            HStack(alignment: .center, spacing: UIScale.pt(16)) {
+                PageGuideBadge(symbolName: symbolName, size: compact ? 52 : 64)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Welcome to \(title)").font(.edithText(.title)).fontWeight(.bold)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(tagline).font(.edithText(.title3)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text(summary).font(.edithText(.body)).foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                PageSectionHeader("How it works")
+                PageGuideSteps(
+                    steps: steps,
+                    columns: compact ? 1 : steps.count % 3 == 0 ? 3 : min(steps.count, 2))
+            }
+            if !examples.isEmpty {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    PageSectionHeader(
+                        "From the terminal or an agent",
+                        subtitle:
+                            "Every action here is also available through the ed CLI and ed mcp."
+                    )
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        ForEach(examples, id: \.self) { example in
+                            Text(example).font(.edithText(.callout, design: .monospaced))
+                                .foregroundStyle(DashSkin.ink(dark))
+                                .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    Text(summary).font(.edithText(.body)).foregroundStyle(DashSkin.inkSoft(dark))
-                        .fixedSize(horizontal: false, vertical: true)
-                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                        PageSectionHeader("How it works")
-                        PageGuideSteps(
-                            steps: steps,
-                            columns: compact ? 1 : steps.count % 3 == 0 ? 3 : min(steps.count, 2))
-                    }
-                    if !examples.isEmpty {
-                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                            PageSectionHeader(
-                                "From the terminal or an agent",
-                                subtitle:
-                                    "Every action here is also available through the ed CLI and ed mcp."
-                            )
-                            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                                ForEach(examples, id: \.self) { example in
-                                    Text(example).font(.edithText(.callout, design: .monospaced))
-                                        .foregroundStyle(DashSkin.ink(dark))
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                            .padding(UIScale.pt(12))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .edithSurface(cornerRadius: 12)
-                        }
-                    }
-                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-                        if let skipAll {
-                            Button(skipAll.title, action: skipAll.perform).buttonStyle(
-                                .edith(.borderless)
-                            )
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier(skipAll.identifier ?? "intro.skip-all")
-                        }
-                        Spacer()
-                        if let skip {
-                            Button(skip.title, action: skip.perform).buttonStyle(.edith(.secondary))
-                                .controlSize(.large)
-                                .keyboardShortcut(.cancelAction)
-                                .accessibilityIdentifier(skip.identifier ?? "intro.skip")
-                        }
-                        Button(action: start.perform) {
-                            Label(start.title, systemImage: start.symbolName ?? "arrow.right")
-                        }
-                        .buttonStyle(.edith(.primary)).controlSize(.large)
-                        .keyboardShortcut(.defaultAction)
-                        .accessibilityIdentifier(start.identifier ?? "intro.start")
-                    }
+                    .padding(UIScale.pt(12))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .edithSurface(cornerRadius: 12)
                 }
-                .padding(UIScale.pt(compact ? 24 : 32))
-                .frame(maxWidth: UIScale.pt(760), alignment: .leading)
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                if let skipAll {
+                    Button(skipAll.title, action: skipAll.perform)
+                        .buttonStyle(.edith(.borderless))
+                        .font(.edithText(.body))
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier(skipAll.identifier ?? "intro.skip-all")
+                }
+                Spacer()
+                if let skip {
+                    Button(skip.title, action: skip.perform)
+                        .buttonStyle(.edith(.secondary))
+                        .font(.edithText(.body))
+                        .controlSize(.large)
+                        .keyboardShortcut(.cancelAction)
+                        .accessibilityIdentifier(skip.identifier ?? "intro.skip")
+                }
+                Button(action: start.perform) {
+                    Label(start.title, systemImage: start.symbolName ?? "arrow.right")
+                }
+                .buttonStyle(.edith(.primary))
+                .font(.edithText(.body))
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier(start.identifier ?? "intro.start")
             }
         }
+        .padding(UIScale.pt(compact ? 24 : 32))
+        .frame(maxWidth: UIScale.pt(760), alignment: .leading)
     }
 }

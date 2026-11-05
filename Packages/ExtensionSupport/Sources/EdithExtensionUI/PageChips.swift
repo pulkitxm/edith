@@ -30,7 +30,7 @@ extension View {
     }
 
     public func pageChipChrome(active: Bool = false, tint: Color? = nil) -> some View {
-        modifier(PageChipChrome(active: active, tint: tint, pressed: false))
+        modifier(PageChipChrome(active: active, tint: tint, pressed: false, iconOnly: false))
     }
 }
 
@@ -74,6 +74,7 @@ struct PageChipChrome: ViewModifier {
     let active: Bool
     let tint: Color?
     let pressed: Bool
+    let iconOnly: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.isEnabled) private var enabled
@@ -89,8 +90,11 @@ struct PageChipChrome: ViewModifier {
         content
             .font(PageMetrics.chipFont)
             .foregroundStyle(DashSkin.ink(dark))
-            .padding(.horizontal, UIScale.pt(10))
-            .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+            .padding(.horizontal, iconOnly ? 0 : UIScale.pt(10))
+            .frame(
+                minWidth: iconOnly ? UIScale.pt(PageMetrics.chipHeight) : nil,
+                minHeight: UIScale.pt(PageMetrics.chipHeight)
+            )
             .background {
                 shape.fill(
                     active
@@ -118,21 +122,28 @@ struct PageChipChrome: ViewModifier {
 public struct PageChipStyle: ButtonStyle {
     public let active: Bool
     public let tint: Color?
+    public let iconOnly: Bool
 
-    public init(active: Bool = false, tint: Color? = nil) {
+    public init(active: Bool = false, tint: Color? = nil, iconOnly: Bool = false) {
         self.active = active
         self.tint = tint
+        self.iconOnly = iconOnly
     }
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .modifier(PageChipChrome(active: active, tint: tint, pressed: configuration.isPressed))
+            .modifier(
+                PageChipChrome(
+                    active: active, tint: tint, pressed: configuration.isPressed,
+                    iconOnly: iconOnly))
     }
 }
 
 extension ButtonStyle where Self == PageChipStyle {
-    public static func pageChip(active: Bool = false, tint: Color? = nil) -> PageChipStyle {
-        PageChipStyle(active: active, tint: tint)
+    public static func pageChip(
+        active: Bool = false, tint: Color? = nil, iconOnly: Bool = false
+    ) -> PageChipStyle {
+        PageChipStyle(active: active, tint: tint, iconOnly: iconOnly)
     }
 }
 
@@ -163,6 +174,37 @@ public struct PageChip: View {
         .buttonStyle(.pageChip(active: active, tint: tint))
         .fixedSize()
         .accessibilityLabel(title)
+    }
+}
+
+public struct PageIconChip: View {
+    let systemImage: String
+    let label: String
+    var active = false
+    var tint: Color?
+    let action: () -> Void
+
+    public init(
+        systemImage: String, label: String, active: Bool = false, tint: Color? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = systemImage
+        self.label = label
+        self.active = active
+        self.tint = tint
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(.pageChip(active: active, tint: tint, iconOnly: true))
+        .fixedSize()
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 

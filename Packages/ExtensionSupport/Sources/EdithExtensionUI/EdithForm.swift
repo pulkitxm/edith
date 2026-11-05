@@ -18,4 +18,8 @@ extension View {
     public func edithForm() -> some View {
         modifier(EdithFormStyle())
     }
+
+    public func settingsForm() -> some View {
+        edithForm().controlSize(UIScale.controlSize)
+    }
 }

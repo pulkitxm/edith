@@ -270,7 +270,7 @@ extension View {
     }
 
     public func settingsCaption() -> some View {
-        font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+        font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
     }
 
     public func card() -> some View {

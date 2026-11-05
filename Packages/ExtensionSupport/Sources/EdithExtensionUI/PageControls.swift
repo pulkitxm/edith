@@ -50,3 +50,75 @@ public struct PageColumns<Content: View>: View {
         layout { content() }
     }
 }
+
+public struct PageTabPicker<Option: Hashable>: View {
+    let title: String
+    @Binding var selection: Option
+    let options: [Option]
+    let label: (Option) -> String
+    @Environment(\.compactLayout) private var compact
+
+    public init(
+        _ title: String, selection: Binding<Option>, options: [Option],
+        label: @escaping (Option) -> String
+    ) {
+        self.title = title
+        _selection = selection
+        self.options = options
+        self.label = label
+    }
+
+    public var body: some View {
+        if compact {
+            Menu {
+                Picker(title, selection: $selection) {
+                    ForEach(options, id: \.self) { Text(label($0)).tag($0) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                HStack(spacing: UIScale.pt(6)) {
+                    Text(label(selection)).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .font(.edithText(.body))
+            }
+            .menuStyle(.button)
+            .buttonStyle(.edith(.secondary))
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(title)
+        } else {
+            EdithSegmentedPicker(title, selection: $selection, options: options, label: label)
+                .labelsHidden()
+        }
+    }
+}
+
+public struct PageTabStrip<ID: Hashable, Content: View>: View {
+    let selection: ID
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    public init(selection: ID, @ViewBuilder content: @escaping () -> Content) {
+        self.selection = selection
+        self.content = content
+    }
+
+    public var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) { content() }
+                .scrollIndicators(.automatic)
+                .task(id: selection) {
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                        proxy.scrollTo(selection, anchor: .center)
+                    }
+                }
+        }
+    }
+}
