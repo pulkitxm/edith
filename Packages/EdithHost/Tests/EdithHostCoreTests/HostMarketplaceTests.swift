@@ -292,7 +292,7 @@ import HostWorkerFixtureSupport
     }
 
     @Test func theWorkerContractIsTheOneSignedByTheCurrentTeam() {
-        #expect(HostContract.compatibility == "edith-host-10")
+        #expect(HostContract.compatibility == "edith-host-11")
     }
 
     @Test func extensionsInstalledForThePreviousContractMoveToTheCurrentOneOnLaunch() async throws {
