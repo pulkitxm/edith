@@ -28,7 +28,8 @@ struct CodeStatsHomeCard: View {
         PageCard(title: "Code Stats", note: "Last 30 days") {
             LoadingContainer(
                 state: loading.state, title: "No code stats yet",
-                message: loading.errorMessage ?? "Set up the mirror to start counting.",
+                message: loading.errorMessage
+                    ?? "Set up Code Stats to start counting your commits.",
                 retry: { retry += 1 }, refreshing: loading.isRefreshing
             ) {
                 if let summary { content(summary) }
@@ -93,7 +94,7 @@ struct CodeStatsHomeCard: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .monospacedDigit()
                         }
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                     }
                 }
             }
@@ -106,16 +107,14 @@ struct CodeStatsHomeCard: View {
 
     private func metric(_ title: String, _ value: String, change: Double? = nil) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             Text(value)
-                .font(.system(size: UIScale.pt(17), weight: .semibold))
+                .font(.edithText(.title2).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .monospacedDigit()
             if let change {
                 Text(CodeStatsNumberFormat.signedPercent(change))
-                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(change >= 0 ? DashSkin.ok : DashSkin.warn)
             }
         }

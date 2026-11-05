@@ -76,8 +76,8 @@ struct AttentionHeadline: View {
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
         LazyVGrid(
-            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
-            spacing: UIScale.pt(12)
+            columns: AttentionTileGrid.columns(compact),
+            spacing: UIScale.pt(PageMetrics.cardSpacing)
         ) {
             AttentionTile(
                 label: "Screen time",
@@ -159,7 +159,7 @@ struct AttentionDayPanel: View {
             {
                 Divider()
                 Text("Agents working")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(.secondary)
                 AttentionConcurrencyChart(
                     points: summary.agents.concurrency.filter { range.contains($0.start) },
@@ -267,7 +267,7 @@ struct AttentionCategoryMenu: View {
             }
         } label: {
             Image(systemName: "tag")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -306,20 +306,20 @@ struct AttentionTriagePanel: View {
                             AttentionEntityIcon(entity: entity, size: 26)
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(entity.name)
-                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .font(.edithText(.callout).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
                                     entity.details.first?.name
                                         ?? AttentionFormat.duration(entity.duration)
                                 )
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             Text(AttentionFormat.duration(entity.duration))
-                                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                                .font(.edithText(.subheadline).weight(.semibold))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer(minLength: UIScale.pt(6))
@@ -378,18 +378,18 @@ struct AttentionRankList: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text(row.label)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                         if let detail = row.detail {
                             Text(detail)
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                         }
                         Spacer(minLength: UIScale.pt(6))
                         Text(AttentionFormat.duration(row.value))
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .font(.edithText(.subheadline).weight(.medium))
                             .monospacedDigit()
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
@@ -472,14 +472,14 @@ struct AttentionSwitchingPanel: View {
                 AttentionEmpty(text: "No switches yet", symbol: "arrow.left.arrow.right")
             } else {
                 Text("Most common switches")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     ForEach(summary.transitions.prefix(6)) { transition in
                         HStack(spacing: UIScale.pt(6)) {
                             Text(transition.from).lineLimit(1)
                             Image(systemName: "arrow.right")
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(transition.to).lineLimit(1)
                             Spacer(minLength: UIScale.pt(6))
@@ -487,7 +487,7 @@ struct AttentionSwitchingPanel: View {
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     }
                 }
@@ -502,7 +502,7 @@ struct AttentionSwitchingPanel: View {
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.ink(dark))
             Text(label)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -521,7 +521,7 @@ struct AttentionAgentsSummaryPanel: View {
             trailing: {
                 Button("Details") { model.section = .agents }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
             }
         ) {
             if agents.isEmpty {
@@ -572,20 +572,20 @@ struct AttentionListeningPanel: View {
                                 .frame(width: UIScale.pt(20))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(item.title)
-                                    .font(.system(size: UIScale.pt(12)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
                                     [item.artist, item.service].compactMap { $0 }
                                         .joined(separator: " · ")
                                 )
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                             }
                             Spacer(minLength: UIScale.pt(6))
                             Text(AttentionFormat.duration(item.duration))
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }

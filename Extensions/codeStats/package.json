@@ -30,7 +30,7 @@
     "steps": [
       {
         "symbolName": "folder",
-        "title": "Choose a mirror folder",
+        "title": "Choose a storage folder",
         "detail": "Pick where repository copies are kept; an external drive works."
       },
       {

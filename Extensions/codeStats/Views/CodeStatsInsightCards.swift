@@ -11,13 +11,11 @@ struct CodeStatsAuditCard: View {
         PageCard(title: "What counts", note: "Counted versus excluded in this range and filter") {
             HStack(spacing: UIScale.pt(18)) {
                 tally("Counted", audit.counted, emphasis: true)
-                tally("Raw in the mirror", audit.raw, emphasis: false)
+                tally("Everything scanned", audit.raw, emphasis: false)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("BULK THRESHOLD")
-                        .font(DashSkin.mono(9))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    PageCapsLabel("Bulk threshold")
                     Text(CodeStatsNumberFormat.compact(audit.bulkThreshold) + " lines per commit")
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                 }
             }
@@ -35,14 +33,12 @@ struct CodeStatsAuditCard: View {
 
     private func tally(_ title: String, _ value: CodeStatsTally, emphasis: Bool) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             Text(CodeStatsNumberFormat.compact(value.lines) + " lines")
-                .font(.system(size: UIScale.pt(emphasis ? 18 : 14), weight: .semibold))
+                .font(.edithText(emphasis ? .title2 : .title3).weight(.semibold))
                 .foregroundStyle(emphasis ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
             Text(CodeStatsNumberFormat.grouped(value.commits) + " commits")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
         .monospacedDigit()
@@ -53,11 +49,11 @@ struct CodeStatsAuditCard: View {
             Image(systemName: entry.counted ? "checkmark.circle.fill" : "minus.circle")
                 .foregroundStyle(entry.counted ? DashSkin.ok : DashSkin.inkFaint(dark))
             Text(entry.reason.title)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.ink(dark))
             Spacer()
             Text(detail(entry))
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .monospacedDigit()
             if let toggle = toggle(for: entry.reason) {
@@ -65,7 +61,7 @@ struct CodeStatsAuditCard: View {
                     Task { await model.updateFilter(toggle) }
                 }
                 .buttonStyle(.edith(.borderless))
-                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
             }
         }
     }
@@ -107,13 +103,13 @@ struct CodeStatsLargestCommitsCard: View {
                 ForEach(commits.prefix(Self.shown), id: \.sha) { commit in
                     HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
                         Text(CodeStatsNumberFormat.compact(commit.raw))
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .frame(width: UIScale.pt(56), alignment: .trailing)
                             .monospacedDigit()
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(commit.subject)
-                                .font(.system(size: UIScale.pt(12), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(1)
                             HStack(spacing: UIScale.pt(6)) {
@@ -126,13 +122,13 @@ struct CodeStatsLargestCommitsCard: View {
                                 Text(String(commit.sha.prefix(8))).font(DashSkin.mono(10))
                                 Text(Self.detail(commit))
                             }
-                            .font(.system(size: UIScale.pt(10.5)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         Spacer()
                         ForEach(CodeStatsCommitBadge.badges(commit.flags), id: \.self) { badge in
                             Text(badge)
-                                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                .font(.edithText(.caption).weight(.semibold))
                                 .padding(.horizontal, UIScale.pt(6))
                                 .padding(.vertical, UIScale.pt(2))
                                 .background(DashSkin.paper2(dark), in: Capsule())
@@ -142,7 +138,7 @@ struct CodeStatsLargestCommitsCard: View {
                 }
                 if commits.isEmpty {
                     Text("No commits match this range and filter.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -186,19 +182,19 @@ struct CodeStatsHygieneCard: View {
             ) {
                 if !audit.suggestions.isEmpty {
                     Text("These authors look like you but are not counted yet.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     ForEach(audit.suggestions.prefix(8)) { suggestion in
                         HStack(spacing: UIScale.pt(10)) {
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(suggestion.name + " <" + suggestion.email + ">")
-                                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                                    .font(.edithText(.callout).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
                                     "\(CodeStatsNumberFormat.grouped(suggestion.commits)) commits, \(suggestion.reason.summary)"
                                 )
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             Spacer()
@@ -209,7 +205,7 @@ struct CodeStatsHygieneCard: View {
                     if model.identityPendingRecount {
                         HStack {
                             Text("Identities changed. Refresh to recount.")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer()
                             Button("Refresh now") { Task { await model.start() } }
@@ -224,7 +220,7 @@ struct CodeStatsHygieneCard: View {
                             Image(systemName: "square.on.square")
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(duplicate.repository + " repeats " + duplicate.original)
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -232,7 +228,7 @@ struct CodeStatsHygieneCard: View {
                             Text(
                                 "\(CodeStatsNumberFormat.grouped(duplicate.shared)) shared commits, \(CodeStatsNumberFormat.percent(duplicate.fraction * 100))"
                             )
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .monospacedDigit()
                         }

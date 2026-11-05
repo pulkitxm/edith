@@ -22,8 +22,8 @@ struct AttentionAgentsView: View {
                     })
             }
             LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
-                spacing: UIScale.pt(12)
+                columns: AttentionTileGrid.columns(compact, regular: 5),
+                spacing: UIScale.pt(PageMetrics.cardSpacing)
             ) {
                 AttentionTile(
                     label: "Agent work", value: AttentionFormat.duration(agents.working),
@@ -47,8 +47,7 @@ struct AttentionAgentsView: View {
                     label: "Leverage",
                     value: agents.attended > 0
                         ? String(format: "%.1f×", agents.working / agents.attended) : "n/a",
-                    detail:
-                        "agent time per minute you watched \(AttentionFormat.duration(agents.attended))",
+                    detail: "agent time per minute watched",
                     tint: violet, symbol: "arrow.up.right")
             }
             if agents.isEmpty {

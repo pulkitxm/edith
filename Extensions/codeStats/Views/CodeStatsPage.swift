@@ -21,9 +21,9 @@ struct CodeStatsPage: View {
                 if model.table != nil {
                     CodeStatsFilterBar(model: model, dark: dark)
                         .pageGutter(compact)
-                        .padding(.bottom, UIScale.pt(12))
+                        .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
                 }
-                Divider()
+                PageHeaderDivider()
             }
         } content: {
             if model.report != nil, let error = model.statusLoad.errorMessage {
@@ -97,8 +97,13 @@ struct CodeStatsPage: View {
             .frame(minHeight: UIScale.pt(240))
         case .content:
             if model.table == nil {
-                CodeStatsRangePicker(range: model.range) { range in
-                    Task { await model.select(range) }
+                WrapHStack(
+                    spacing: UIScale.pt(PageMetrics.controlSpacing),
+                    lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+                ) {
+                    CodeStatsRangeChips(range: model.range) { range in
+                        Task { await model.select(range) }
+                    }
                 }
             }
             if model.reportIsEmpty {
@@ -169,11 +174,20 @@ struct CodeStatsReportSections: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsKPIGrid(report: report, dark: dark)
-            CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+            if sharesActivityRow {
+                CodeStatsActivityRow(projection: projection, dark: dark)
+            } else {
+                CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+            }
             CodeStatsTrendCard(projection: projection, dark: dark)
             CodeStatsRepositoryCards(projection: projection, dark: dark)
             CodeStatsLanguageCards(projection: projection, dark: dark)
-            CodeStatsHabitCards(projection: projection, dark: dark)
+            CodeStatsHabitCards(
+                projection: projection, dark: dark, showsTopDays: !sharesActivityRow)
         }
+    }
+
+    private var sharesActivityRow: Bool {
+        projection.heatWeeks.count <= CodeStatsActivityRow.sharedRowWeeks
     }
 }

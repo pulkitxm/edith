@@ -307,6 +307,81 @@ struct DatabaseConnectionGalleryTests {
         }
     }
 
+    @Test func catalogStatesRenderEveryVariant() async throws {
+        let empty = DatabaseConnectionWorkspaceModel(
+            sender: DatabaseGallerySender(connections: []),
+            currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in },
+            announcement: { _ in })
+        await empty.loadConnections()
+        let populated = try await Self.populatedModel()
+        let loading = DatabaseConnectionWorkspaceModel(
+            sender: DatabaseGallerySender(connections: []),
+            currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in },
+            announcement: { _ in })
+        for variant in DatabaseRenderCapture.variants {
+            let bitmap = try await DatabaseRenderCapture.render(
+                "database-populated", variant: variant
+            ) {
+                DatabaseConnectionGallery(
+                    model: populated, createConnection: {}, openConnection: { _ in },
+                    performConnectionAction: { _, _ in })
+            }
+            #expect(DatabaseRenderCapture.distinctColors(bitmap) > 3)
+            try await DatabaseRenderCapture.render("database-first-run", variant: variant) {
+                DatabaseConnectionGallery(
+                    model: empty, createConnection: {}, openConnection: { _ in })
+            }
+            try await DatabaseRenderCapture.render("database-loading", variant: variant) {
+                DatabaseConnectionGallery(
+                    model: loading, createConnection: {}, openConnection: { _ in })
+            }
+            let focused = try #require(populated.visibleConnections.first)
+            try await DatabaseRenderCapture.render("database-focused-header", variant: variant) {
+                DatabaseFocusedConnectionHeader(
+                    connection: focused, sessionState: .disconnected, backDisabled: false,
+                    focusRequested: false, focusCompleted: {}, back: {},
+                    performConnectionAction: { _, _ in }
+                )
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
+            try await DatabaseRenderCapture.render("database-repair", variant: variant) {
+                DatabaseServiceRecoveryView(
+                    detail: "The local broker did not answer within 10 seconds.",
+                    theme: DashSkin.accent(variant.scheme == .dark),
+                    showsDetails: .constant(true), repair: {})
+            }
+        }
+    }
+
+    private static func populatedModel() async throws -> DatabaseConnectionWorkspaceModel {
+        let connections = [
+            try connection(
+                id: 1, displayName: "Primary warehouse", product: .postgresql,
+                environmentKind: .production, readOnlyPolicy: .required, isFavorite: true),
+            try connection(
+                id: 2, displayName: "Reporting cache", product: .redis,
+                environmentKind: .testing, readOnlyPolicy: .preferred, isFavorite: false),
+            try connection(
+                id: 3, displayName: "Orders replica", product: .mysql,
+                environmentKind: .staging, readOnlyPolicy: .required, isFavorite: false),
+            try connection(
+                id: 4, displayName: "Product catalogue documents", product: .mongoDB,
+                environmentKind: .development, readOnlyPolicy: .preferred, isFavorite: true),
+            try connection(
+                id: 5, displayName: "Local playground", product: .postgresql,
+                environmentKind: .development, readOnlyPolicy: .preferred, isFavorite: false),
+        ]
+        let model = DatabaseConnectionWorkspaceModel(
+            sender: DatabaseGallerySender(connections: connections),
+            currentDate: { Date(timeIntervalSince1970: 8_000) },
+            prepareConnection: { _ in },
+            announcement: { _ in })
+        await model.loadConnections()
+        return model
+    }
+
     private static func fixture() async throws -> DatabaseConnectionGalleryFixture {
         let connections = [
             try connection(

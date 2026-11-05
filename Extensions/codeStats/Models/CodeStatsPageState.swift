@@ -109,7 +109,7 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
             return nil
         case .notConfigured:
             return CodeStatsBanner(
-                id: "storage", symbol: "folder.badge.questionmark", title: "No mirror folder",
+                id: "storage", symbol: "folder.badge.questionmark", title: "No storage folder",
                 message: status.storage.summary, choosesFolder: true)
         case .volumeDisconnected(let volume):
             let since = status.state.reportedAt.map {
@@ -123,7 +123,7 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
                 choosesFolder: true)
         case .missing, .notDirectory, .notWritable:
             return CodeStatsBanner(
-                id: "storage", symbol: "folder.badge.minus", title: "Mirror folder unavailable",
+                id: "storage", symbol: "folder.badge.minus", title: "Storage folder unavailable",
                 message: status.storage.summary, choosesFolder: true, tone: .danger)
         }
     }
@@ -172,6 +172,19 @@ enum CodeStatsProgressMath {
 }
 
 extension CodeStatsStatus {
+    func runSummary(now: Date) -> String {
+        let updated =
+            state.reportedAt.map {
+                "Updated " + $0.formatted(.relative(presentation: .named, unitsStyle: .wide))
+            } ?? "Not updated yet"
+        let next =
+            isRunning
+            ? "Refreshing now"
+            : settings.schedule == .manual
+                ? "Refreshes when you ask" : "Next refresh: " + nextRunLabel(now: now)
+        return updated + ". " + next + "."
+    }
+
     func nextRunLabel(now: Date) -> String {
         if isRunning { return "Running now" }
         if settings.schedule == .manual { return "Manual" }

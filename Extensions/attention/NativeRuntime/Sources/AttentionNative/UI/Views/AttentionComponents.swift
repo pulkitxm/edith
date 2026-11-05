@@ -82,6 +82,15 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 }
 
+enum AttentionTileGrid {
+    static func columns(_ compact: Bool, regular: Int = 4) -> [GridItem] {
+        Array(
+            repeating: GridItem(
+                .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
+            count: compact ? 2 : regular)
+    }
+}
+
 struct AttentionTile: View {
     let label: String
     let value: String
@@ -147,7 +156,7 @@ struct AttentionCategoryBadge: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .font(.system(size: UIScale.pt(10), weight: .semibold))
+        .font(.edithText(.caption).weight(.semibold))
         .foregroundStyle(DashSkin.inkSoft(dark))
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(2))
@@ -203,17 +212,17 @@ struct AttentionLegendRow: View {
             RoundedRectangle(cornerRadius: 2).fill(color)
                 .frame(width: UIScale.pt(9), height: UIScale.pt(9))
             Text(label)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Spacer(minLength: UIScale.pt(6))
             if let detail {
                 Text(detail)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Text(value)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
@@ -231,7 +240,7 @@ struct AttentionEmpty: View {
                 .font(.system(size: UIScale.pt(18)))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             Text(text)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
                 .multilineTextAlignment(.center)
         }
@@ -249,7 +258,7 @@ struct AttentionStatusPill: View {
         HStack(spacing: UIScale.pt(6)) {
             Circle().fill(good ? Color.green : Color.orange)
                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-            Text("\(title): \(state)").font(.system(size: UIScale.pt(10), weight: .semibold))
+            Text("\(title): \(state)").font(.edithText(.caption).weight(.semibold))
         }
         .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(6))
         .background((good ? Color.green : Color.orange).opacity(0.1), in: Capsule())

@@ -126,7 +126,7 @@ struct CodeStatsTrendCard: View {
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(CodeStatsNumberFormat.compact(Int(number.rounded())))
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                         }
                     }
                 }
@@ -142,7 +142,7 @@ struct CodeStatsTrendCard: View {
                     ? point.date.formatted(.dateTime.month(.wide).year())
                     : "Week of " + point.date.formatted(date: .abbreviated, time: .omitted)
             )
-            .font(.system(size: UIScale.pt(11), weight: .semibold))
+            .font(.edithText(.subheadline).weight(.semibold))
             Text(CodeStatsNumberFormat.grouped(point.commits) + " commits")
             Text(CodeStatsNumberFormat.grouped(point.lines) + " lines")
             Text(
@@ -150,7 +150,7 @@ struct CodeStatsTrendCard: View {
             )
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
-        .font(.system(size: UIScale.pt(10.5)))
+        .font(.edithText(.caption))
         .monospacedDigit()
         .foregroundStyle(DashSkin.ink(dark))
         .padding(UIScale.pt(8))
@@ -224,13 +224,13 @@ struct CodeStatsRepositoryCards: View {
                         Text(
                             "\(CodeStatsNumberFormat.grouped(summary.commits)) commits, \(CodeStatsNumberFormat.compact(summary.counts.authored)) lines"
                         )
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                 }
                 .chartYAxis {
                     AxisMarks { _ in
-                        AxisValueLabel().font(.system(size: UIScale.pt(10.5)))
+                        AxisValueLabel().font(.edithText(.caption))
                     }
                 }
                 .chartXScale(domain: domain, type: logScale ? .log : .linear)
@@ -334,7 +334,7 @@ struct CodeStatsStackedCard: View {
                                     ? CodeStatsNumberFormat.percent(number * 100)
                                     : CodeStatsNumberFormat.compact(Int(number.rounded()))
                             )
-                            .font(.system(size: UIScale.pt(9)))
+                            .font(.edithText(.caption))
                         }
                     }
                 }
@@ -397,17 +397,17 @@ private struct CodeStatsRepositoryTable: View {
                         }
                     }
                 }
-                .width(min: UIScale.pt(180), ideal: UIScale.pt(280))
+                .width(min: UIScale.pt(160), ideal: UIScale.pt(280))
                 SwiftUI.TableColumn("Commits") { row in
                     Text(CodeStatsNumberFormat.grouped(row.commits)).monospacedDigit()
                 }
-                .width(UIScale.pt(85))
+                .width(UIScale.pt(72))
                 SwiftUI.TableColumn("Lines") { row in
                     Text(CodeStatsNumberFormat.compact(row.counts.authored)).monospacedDigit()
                 }
-                .width(UIScale.pt(85))
+                .width(UIScale.pt(72))
                 SwiftUI.TableColumn("Language") { row in Text(row.topLanguage ?? "-") }
-                    .width(UIScale.pt(100))
+                    .width(UIScale.pt(92))
                 SwiftUI.TableColumn("Last active") { row in Text(row.lastDay).monospacedDigit() }
                     .width(UIScale.pt(100))
             }

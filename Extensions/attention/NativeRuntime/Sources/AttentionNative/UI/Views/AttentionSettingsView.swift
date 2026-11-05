@@ -10,18 +10,22 @@ struct AttentionSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PageCard {
-                Toggle(
-                    isOn: Binding(
-                        get: { model.settings.isEnabled },
-                        set: { model.setAttentionEnabled($0) })
-                ) {
+                HStack(alignment: .center, spacing: UIScale.pt(16)) {
                     SettingsTitle(
                         "Enable Attention",
                         subtitle:
                             "Master switch for all collection. Turning it off stops application, browser, agent and music tracking without deleting history."
                     )
+                    Spacer(minLength: 0)
+                    Toggle(
+                        "Enable Attention",
+                        isOn: Binding(
+                            get: { model.settings.isEnabled },
+                            set: { model.setAttentionEnabled($0) })
+                    )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
                 }
-                .toggleStyle(.switch)
             }
 
             PageCard {
@@ -80,9 +84,9 @@ struct AttentionSettingsView: View {
                     "Categorize automatically every half hour",
                     isOn: $model.settings.jevCategorizationEnabled)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("About you").font(.system(size: UIScale.pt(11), weight: .semibold))
+                    Text("About you").font(.edithText(.subheadline).weight(.semibold))
                     TextEditor(text: $model.settings.profileNote)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .frame(minHeight: UIScale.pt(70), maxHeight: UIScale.pt(120))
                         .scrollContentBackground(.hidden)
                         .padding(6)
@@ -90,7 +94,7 @@ struct AttentionSettingsView: View {
                     Text(
                         "Jev reads this with every question, together with examples from your own rules. Say what you do and what counts as useful for you, for example: I build developer tools, so following AI news on X and watching engineering talks helps my work, but X is still personal time."
                     )
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
@@ -105,7 +109,7 @@ struct AttentionSettingsView: View {
                     Text(
                         "\(model.classifications.entities.values.filter(\.isDecisive).count) apps and sites, \(model.classifications.titles.values.filter(\.isDecisive).count) titles categorized by Jev"
                     )
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 }
             }
 
@@ -162,7 +166,7 @@ struct AttentionSettingsView: View {
                     Spacer()
                     if let date = model.cloudBackup.lastBackupAt {
                         Text("Last backup \(date.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                            .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -173,7 +177,7 @@ struct AttentionSettingsView: View {
 
             HStack {
                 Text("Changes apply to all history and to the collectors after saving.")
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 Spacer()
                 Button("Save settings") { model.saveSettings() }
                     .buttonStyle(.edith(.primary))
@@ -300,7 +304,7 @@ private struct AttentionRuleEditor: View {
                 }
                 .frame(maxWidth: UIScale.pt(360))
             }
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             Toggle("Report matches separately using this rule’s name", isOn: $rule.reportSeparately)
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 GridRow {
@@ -316,7 +320,7 @@ private struct AttentionRuleEditor: View {
                     field("Browser profiles", \.browserProfiles, "Work, Personal")
                 }
             }
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
         }
         .padding(.vertical, 4)
     }
@@ -326,7 +330,7 @@ private struct AttentionRuleEditor: View {
         _ placeholder: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+            Text(label).font(.edithText(.caption).weight(.semibold)).foregroundStyle(
                 .secondary)
             TextField(
                 placeholder,

@@ -22,9 +22,9 @@ struct DatabaseServiceProgressView: View {
         if let fraction {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                 Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                 LoadingProgress(value: fraction)
                     .accessibilityLabel(title)
@@ -61,9 +61,8 @@ struct DatabaseServiceProgressView: View {
                     .frame(maxWidth: UIScale.pt(560))
                 }
                 .pageGutter(compact)
-                .padding(.vertical, UIScale.pt(compact ? 14 : 18))
-                .background(palette.panel.opacity(0.64))
-                Divider().opacity(0.35)
+                .padding(.vertical, UIScale.pt(16))
+                PageHeaderDivider()
                 ScrollView {
                     LazyVGrid(
                         columns: [
@@ -71,11 +70,11 @@ struct DatabaseServiceProgressView: View {
                                 .adaptive(
                                     minimum: UIScale.pt(compact ? 220 : 270),
                                     maximum: UIScale.pt(360)),
-                                spacing: UIScale.pt(14),
+                                spacing: UIScale.pt(PageMetrics.cardSpacing),
                                 alignment: .top)
                         ],
                         alignment: .leading,
-                        spacing: UIScale.pt(14)
+                        spacing: UIScale.pt(PageMetrics.cardSpacing)
                     ) {
                         ForEach(0..<6, id: \.self) { index in
                             DatabaseServiceConnectionCard(
@@ -83,7 +82,7 @@ struct DatabaseServiceProgressView: View {
                         }
                     }
                     .pageGutter(compact)
-                    .padding(.vertical, UIScale.pt(compact ? 18 : 24))
+                    .padding(.vertical, UIScale.pt(PageMetrics.pinnedContentTop))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -125,7 +124,7 @@ struct DatabaseServiceRecoveryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, UIScale.pt(8))
             }
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.subheadline))
             .frame(maxWidth: UIScale.pt(420))
         }
         .frame(maxWidth: UIScale.pt(720))
@@ -146,39 +145,38 @@ private struct DatabaseServiceConnectionCard: View {
                     RoundedRectangle(cornerRadius: UIScale.pt(9))
                         .fill(theme.opacity(0.11))
                     Image(systemName: "cylinder")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .foregroundStyle(theme)
                 }
                 .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .lineLimit(2)
                     Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "ellipsis.circle")
                     .frame(width: UIScale.pt(26), height: UIScale.pt(26))
             }
-            HStack(spacing: UIScale.pt(7)) {
+            Spacer(minLength: 0)
+            HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "cylinder")
-                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                 Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
                     .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                 Text("Connected")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
             }
         }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-        .background(
-            palette.panel.opacity(0.74),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 }

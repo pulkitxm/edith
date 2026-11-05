@@ -91,7 +91,7 @@ struct AttentionBreakdownView: View {
 
     private func metric(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            Text(title).font(.edithText(.subheadline)).foregroundStyle(.secondary)
             Text(value).font(DashSkin.heading(22)).monospacedDigit()
         }
     }
@@ -107,7 +107,7 @@ struct AttentionBreakdownView: View {
                 } label: {
                     HStack(spacing: UIScale.pt(12)) {
                         Text(row.label).lineLimit(1)
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .frame(width: UIScale.pt(compact ? 140 : 230), alignment: .trailing)
                             .help(row.label)
                         GeometryReader { geometry in
@@ -123,7 +123,7 @@ struct AttentionBreakdownView: View {
                         }
                         .frame(height: UIScale.pt(16))
                         Text(AttentionFormat.duration(row.duration))
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .monospacedDigit()
                             .frame(width: UIScale.pt(80), alignment: .leading)
                     }
@@ -135,7 +135,7 @@ struct AttentionBreakdownView: View {
                     "\(row.label), \(AttentionFormat.duration(row.duration)), show details")
             }
             Text("Top \(top.count) by active time · select a bar for details")
-                .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
@@ -184,7 +184,7 @@ struct AttentionBreakdownView: View {
             Text("\(AttentionFormat.duration(row.duration)) matching time").font(
                 DashSkin.heading(23)
             ).monospacedDigit()
-            Text("FULL CATEGORY SPLIT").font(DashSkin.mono(10)).foregroundStyle(.secondary)
+            PageCapsLabel("Full category split")
             ForEach(row.categories.sorted { $0.value > $1.value }, id: \.key) { key, duration in
                 Button {
                     model.filter(category: key, navigate: false)
@@ -198,7 +198,7 @@ struct AttentionBreakdownView: View {
             }
             if row.interactions > 0 {
                 Text("\(AttentionFormat.count(row.interactions)) inputs recorded across this group")
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading)

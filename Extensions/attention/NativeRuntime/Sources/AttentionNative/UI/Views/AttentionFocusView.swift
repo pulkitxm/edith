@@ -83,17 +83,17 @@ struct AttentionFocusView: View {
                                     Text(
                                         "\(block.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) to \(AttentionFormat.time(block.end))"
                                     )
-                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .font(.edithText(.callout).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     Text(block.topNames.joined(separator: ", "))
-                                        .font(.system(size: UIScale.pt(11)))
+                                        .font(.edithText(.subheadline))
                                         .foregroundStyle(DashSkin.inkSoft(dark))
                                         .lineLimit(1)
                                 }
                                 Spacer(minLength: UIScale.pt(8))
                                 VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
                                     Text(AttentionFormat.duration(block.duration))
-                                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                                        .font(.edithText(.callout).weight(.semibold))
                                         .monospacedDigit()
                                         .foregroundStyle(DashSkin.ink(dark))
                                     Text(
@@ -101,7 +101,7 @@ struct AttentionFocusView: View {
                                             ? "uninterrupted"
                                             : "\(block.interruptions) interruptions · \(AttentionFormat.percent(block.focused, of: block.duration)) focused"
                                     )
-                                    .font(.system(size: UIScale.pt(10)))
+                                    .font(.edithText(.caption))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
                             }
@@ -124,13 +124,13 @@ struct AttentionFocusView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                     Text(session.name.isEmpty ? "Focus" : session.name)
-                                        .font(.system(size: UIScale.pt(12.5)))
+                                        .font(.edithText(.callout))
                                         .foregroundStyle(DashSkin.ink(dark))
                                     Text(
                                         session.startedAt.formatted(
                                             date: .abbreviated, time: .shortened)
                                     )
-                                    .font(.system(size: UIScale.pt(10.5)))
+                                    .font(.edithText(.caption))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
                                 Spacer()
@@ -139,7 +139,7 @@ struct AttentionFocusView: View {
                                         (session.endedAt ?? session.startedAt).timeIntervalSince(
                                             session.startedAt))
                                 )
-                                .font(.system(size: UIScale.pt(12), weight: .medium))
+                                .font(.edithText(.callout).weight(.medium))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             }

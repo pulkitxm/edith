@@ -23,12 +23,24 @@ import Testing
         #expect(model.loadingState == .content)
     }
 
+    @Test func runSummaryExplainsFreshnessAndTheNextRefresh() {
+        let now = CodeStatsPageFixture.date("2026-10-05")
+        #expect(
+            CodeStatsPageFixture.status().runSummary(now: now)
+                == "Not updated yet. Refreshes when you ask.")
+        let running = CodeStatsPageFixture.status(
+            active: CodeStatsActiveRun(trigger: .manual, startedAt: now))
+        #expect(running.runSummary(now: now) == "Not updated yet. Refreshing now.")
+        let reported = CodeStatsPageFixture.status(reportedAt: now.addingTimeInterval(-3_600))
+        #expect(reported.runSummary(now: now).hasPrefix("Updated "))
+    }
+
     @Test func startBlockerExplainsWhyTheFirstSyncCannotStart() async {
         let missingFolder = model(
             CodeStatsFakeAgent(status: CodeStatsPageFixture.status(storage: .notConfigured)))
         #expect(missingFolder.startBlocker == "Checking your setup...")
         await missingFolder.loadStatus()
-        #expect(missingFolder.startBlocker == "Choose a mirror folder first.")
+        #expect(missingFolder.startBlocker == "Choose a storage folder first.")
         let missingGit = model(
             CodeStatsFakeAgent(status: CodeStatsPageFixture.status(gitAvailable: false)))
         await missingGit.loadStatus()
@@ -121,6 +133,7 @@ import Testing
         let model = model(agent)
         await model.refresh()
         #expect(model.phase == .firstRun)
+        #expect(model.loadingState == .content)
         #expect(model.isRunning)
         #expect(
             model.progress.flatMap(CodeStatsProgressMath.repositories)

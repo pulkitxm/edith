@@ -33,15 +33,17 @@ struct DatabaseConnectionGallery: View {
         DatabaseThemePalette(dark: dark, theme: appTheme)
     }
     private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 270, maximum: 360, spacing: 14, alignment: .top)
+        PageMetrics.cardColumns(
+            compact, minimum: 270, spacing: PageMetrics.cardSpacing, alignment: .top)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             catalogHeader
-            Divider().opacity(0.35)
+            PageHeaderDivider()
             ScrollView {
                 content
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     .pageContent(compact)
             }
         }
@@ -51,39 +53,50 @@ struct DatabaseConnectionGallery: View {
         .accessibilityLabel("Saved database connections")
     }
 
+    private var showsCatalogControls: Bool {
+        if case .empty = model.listState { return false }
+        return true
+    }
+
     private var catalogHeader: some View {
-        PageHeader("Database") {
-            HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Button(action: reload) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.edith(.secondary))
-                .help("Reload saved connections")
-                .accessibilityLabel("Reload saved database connections")
-                connectionFilterMenu
-                Button(action: createConnection) {
-                    if compact {
-                        Image(systemName: "plus")
-                    } else {
-                        Label("Add connection", systemImage: "plus")
+        PageHeader(
+            "Database",
+            trailing: {
+                if showsCatalogControls {
+                    HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                        Button(action: reload) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        .help("Reload saved connections")
+                        .accessibilityLabel("Reload saved database connections")
+                        connectionFilterMenu
+                        Button(action: createConnection) {
+                            if compact {
+                                Image(systemName: "plus")
+                            } else {
+                                Label("Add connection", systemImage: "plus")
+                            }
+                        }
+                        .buttonStyle(.edith(.primary, tint: palette.accent))
+                        .accessibilityLabel("Add a database connection")
                     }
                 }
-                .buttonStyle(.edith(.primary, tint: palette.accent))
-                .accessibilityLabel("Add a database connection")
-            }
-        } accessory: {
-            EdithTextField(
-                placeholder: "Search saved connections",
-                text: $model.searchText,
-                icon: "magnifyingglass",
-                compact: true,
-                clearable: true,
-                onSubmit: reload
-            )
-            .frame(maxWidth: UIScale.pt(560))
-            .accessibilityLabel("Search saved database connections")
-        }
-        .background(palette.panel.opacity(0.64))
+            },
+            accessory: {
+                if showsCatalogControls {
+                    EdithTextField(
+                        placeholder: "Search saved connections",
+                        text: $model.searchText,
+                        icon: "magnifyingglass",
+                        compact: true,
+                        clearable: true,
+                        onSubmit: reload
+                    )
+                    .frame(maxWidth: UIScale.pt(560))
+                    .accessibilityLabel("Search saved database connections")
+                }
+            })
     }
 
     private var connectionFilterMenu: some View {
@@ -128,7 +141,8 @@ struct DatabaseConnectionGallery: View {
                     ? "line.3.horizontal.decrease.circle.fill"
                     : "line.3.horizontal.decrease.circle")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.edith(.secondary))
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Filter saved connections")
@@ -209,7 +223,10 @@ struct DatabaseConnectionGallery: View {
         SkeletonReplica("Loading saved database connections") {
             Group {
                 if connections.isEmpty {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
+                    LazyVGrid(
+                        columns: columns, alignment: .leading,
+                        spacing: UIScale.pt(PageMetrics.cardSpacing)
+                    ) {
                         ForEach(0..<6, id: \.self) { index in
                             loadingConnectionCard(index)
                         }
@@ -228,52 +245,54 @@ struct DatabaseConnectionGallery: View {
                     RoundedRectangle(cornerRadius: UIScale.pt(9))
                         .fill(palette.accent.opacity(0.11))
                     Image(systemName: "cylinder")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .foregroundStyle(palette.accent)
                 }
                 .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .lineLimit(2)
                     Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "ellipsis.circle")
                     .frame(width: UIScale.pt(26), height: UIScale.pt(26))
             }
-            HStack(spacing: UIScale.pt(7)) {
+            Spacer(minLength: 0)
+            HStack(spacing: UIScale.pt(8)) {
                 Image(systemName: "cylinder")
-                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                 Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
                     .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                 Text("Connected")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
             }
         }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-        .background(
-            palette.panel.opacity(0.74),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
+        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 
     @ViewBuilder
     private func connectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
         if connections.isEmpty {
             Text("No connection entries are available in this result.")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("No connection entries are available in this result")
         } else {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
+            LazyVGrid(
+                columns: columns, alignment: .leading,
+                spacing: UIScale.pt(PageMetrics.cardSpacing)
+            ) {
                 ForEach(connections) { connection in
                     connectionCard(connection)
                 }
@@ -297,7 +316,7 @@ struct DatabaseConnectionGallery: View {
                             RoundedRectangle(cornerRadius: UIScale.pt(9))
                                 .fill(accent.opacity(highlighted ? 0.15 : 0.11))
                             Image(systemName: connection.product.gallerySymbolName)
-                                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                                .font(.edithText(.title3).weight(.semibold))
                                 .foregroundStyle(accent)
                         }
                         .frame(width: UIScale.pt(38), height: UIScale.pt(38))
@@ -305,18 +324,18 @@ struct DatabaseConnectionGallery: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             HStack(spacing: UIScale.pt(6)) {
                                 Text(connection.name)
-                                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                                    .font(.edithText(.headline))
                                     .foregroundStyle(palette.ink)
                                     .lineLimit(2)
                                 if connection.isFavorite {
                                     Image(systemName: "star.fill")
-                                        .font(.system(size: UIScale.pt(9)))
+                                        .font(.edithText(.caption))
                                         .foregroundStyle(DashSkin.gold)
                                         .accessibilityHidden(true)
                                 }
                             }
                             Text(connectionSubtitle(connection))
-                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(palette.inkSoft)
                                 .lineLimit(1)
                         }
@@ -325,32 +344,35 @@ struct DatabaseConnectionGallery: View {
                             .frame(width: UIScale.pt(26), height: UIScale.pt(26))
                             .accessibilityHidden(true)
                     }
-                    HStack(spacing: UIScale.pt(7)) {
+                    Spacer(minLength: 0)
+                    HStack(spacing: UIScale.pt(8)) {
                         Image(systemName: namespaceSymbol(connection))
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .font(.edithText(.caption).weight(.medium))
                             .foregroundStyle(palette.inkFaint)
                             .accessibilityHidden(true)
                         Text(namespaceTitle(connection))
-                            .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                            .font(.edithText(.caption))
                             .foregroundStyle(palette.inkSoft)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                         connectionSessionSlot(session)
                     }
                 }
-                .padding(UIScale.pt(14))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-                .background {
-                    RoundedRectangle(cornerRadius: UIScale.pt(13))
-                        .fill(palette.panel.opacity(highlighted ? 0.86 : 0.74))
-                        .overlay {
-                            if highlighted {
-                                RoundedRectangle(cornerRadius: UIScale.pt(13))
-                                    .fill(accent.opacity(dark ? 0.045 : 0.035))
-                            }
-                        }
+                .padding(UIScale.pt(PageMetrics.cardPadding))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
+                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+                .overlay {
+                    if highlighted {
+                        RoundedRectangle(
+                            cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius),
+                            style: .continuous
+                        )
+                        .fill(accent.opacity(dark ? 0.045 : 0.035))
+                        .allowsHitTesting(false)
+                    }
                 }
-                .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
+                .contentShape(
+                    RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius)))
             }
             .buttonStyle(.edith(.borderless))
             .focused($focusedConnectionID, equals: connection.id)
@@ -398,23 +420,25 @@ struct DatabaseConnectionGallery: View {
     private func connectionSessionSlot(_ session: DatabaseConnectionSessionState) -> some View {
         switch session {
         case .disconnected:
-            EmptyView()
+            Text(sessionTitle(session))
+                .font(.edithText(.caption))
+                .foregroundStyle(palette.inkSoft)
         case .connecting, .disconnecting:
             SkeletonReplica(sessionTitle(session)) {
                 HStack(spacing: UIScale.pt(7)) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                     Text("Connected")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                 }
             }
         case .connected, .failed, .outcomeUnknown:
             Image(systemName: sessionSymbol(session))
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(sessionColor(session))
                 .accessibilityHidden(true)
             Text(sessionTitle(session))
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(palette.inkSoft)
         }
     }
@@ -422,7 +446,7 @@ struct DatabaseConnectionGallery: View {
     private func loadingConnectionAction(_ connection: DatabaseConnectionSummary) -> some View {
         SkeletonReplica("Updating \(connection.name)") {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .background(palette.panel.opacity(0.94), in: Circle())
                 .overlay(Circle().stroke(palette.line, lineWidth: 1))
@@ -435,7 +459,7 @@ struct DatabaseConnectionGallery: View {
             connectionActions(connection)
         } label: {
             Image(systemName: busyConnectionID == connection.id ? "ellipsis" : "ellipsis.circle")
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
                 .foregroundStyle(palette.inkSoft)
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .background(palette.panel.opacity(0.94), in: Circle())
@@ -501,10 +525,10 @@ struct DatabaseConnectionGallery: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Text(detail)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -645,7 +669,6 @@ struct DatabaseFocusedConnectionHeader: View {
         } trailing: {
             navigationRow
         }
-        .background(palette.panel.opacity(0.78))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Database workspace for \(connection.name)")
     }
@@ -665,7 +688,7 @@ struct DatabaseFocusedConnectionHeader: View {
         if busyConnectionID == connection.id {
             SkeletonReplica("Updating \(connection.name)") {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .frame(width: UIScale.pt(28), height: UIScale.pt(28))
             }
         } else {
@@ -676,7 +699,7 @@ struct DatabaseFocusedConnectionHeader: View {
     private var navigationButton: some View {
         Button(action: back) {
             Label("All connections", systemImage: "chevron.left")
-                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(backFocused ? palette.ink : palette.inkSoft)
                 .padding(.horizontal, UIScale.pt(8))
                 .frame(minHeight: UIScale.pt(28))
@@ -716,7 +739,7 @@ struct DatabaseFocusedConnectionHeader: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(8))
                     .fill(accent.opacity(0.11))
                 Image(systemName: connection.product.gallerySymbolName)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .foregroundStyle(accent)
             }
             .frame(width: UIScale.pt(34), height: UIScale.pt(34))
@@ -724,6 +747,7 @@ struct DatabaseFocusedConnectionHeader: View {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack(spacing: UIScale.pt(7)) {
                     Text(connection.name)
+                        .font(.edithText(.title2).weight(.semibold))
                         .foregroundStyle(palette.ink)
                         .lineLimit(2)
                     if connection.isFavorite {
@@ -734,7 +758,7 @@ struct DatabaseFocusedConnectionHeader: View {
                     }
                 }
                 Text(contextTitle)
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(palette.inkSoft)
                     .lineLimit(compact ? 2 : 1)
             }
@@ -783,7 +807,7 @@ struct DatabaseFocusedConnectionHeader: View {
             }
         } label: {
             Image(systemName: "ellipsis.circle")
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .foregroundStyle(palette.inkSoft)
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }
@@ -808,19 +832,19 @@ struct DatabaseFocusedConnectionHeader: View {
             SkeletonReplica(sessionTitle) {
                 HStack(spacing: UIScale.pt(6)) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                     Text("Connected")
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                 }
             }
         } else {
             HStack(spacing: UIScale.pt(6)) {
                 Image(systemName: sessionSymbol)
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(sessionColor)
                     .accessibilityHidden(true)
                 Text(sessionTitle)
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(palette.inkSoft)
             }
             .accessibilityElement(children: .combine)

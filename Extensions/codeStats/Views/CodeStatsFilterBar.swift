@@ -46,87 +46,97 @@ struct CodeStatsFilterBar: View {
         ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(10)) {
-                    rangeControls
-                    Spacer()
-                    resetButton
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    ScrollView(.horizontal) { rangeControls }
-                        .scrollIndicators(.automatic)
-                    resetButton
-                }
-            }
-            WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(6)) {
-                facetButton(.repositories, selected: model.filter.repositories.count)
-                facetButton(.owners, selected: model.filter.owners.count)
-                facetButton(.languages, selected: model.filter.languages.count)
-                Menu {
-                    ForEach(Self.flags, id: \.1) { flag in
-                        Toggle(
-                            flag.1,
-                            isOn: Binding(
-                                get: { model.filter[keyPath: flag.2] },
-                                set: { value in
-                                    Task {
-                                        await model.updateFilter { $0[keyPath: flag.2] = value }
-                                    }
-                                }))
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.filterRowSpacing)) {
+            PageFilterBar {
+                PageFilterRow("Range") {
+                    CodeStatsRangeChips(range: model.range) { range in
+                        Task { await model.select(range) }
                     }
-                } label: {
-                    Label("Counted changes", systemImage: "line.3.horizontal.decrease")
                 }
-                .menuStyle(.button)
-                .buttonStyle(.edith(.secondary))
-                ForEach(CodeStatsCategory.filterable, id: \.self) { category in
-                    let active = model.filter.categories.contains(category)
-                    Button {
-                        Task { await model.toggleCategory(category) }
-                    } label: {
-                        CodeStatsFilterChip(
-                            title: category.title, color: DashSkin.accent(dark), active: active)
+                PageFilterRow("Filter") {
+                    facetButton(.repositories, selected: model.filter.repositories.count)
+                    facetButton(.owners, selected: model.filter.owners.count)
+                    facetButton(.languages, selected: model.filter.languages.count)
+                    countedChangesMenu
+                    if model.hasActiveFilter {
+                        Button("Reset filters") { Task { await model.resetFilter() } }
+                            .buttonStyle(.edith(.borderless))
+                            .font(PageMetrics.chipFont)
+                            .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                            .fixedSize()
                     }
-                    .buttonStyle(.edith(.borderless))
-                    .accessibilityAddTraits(active ? .isSelected : [])
+                }
+                PageFilterRow("Include") {
+                    ForEach(CodeStatsCategory.filterable, id: \.self) { category in
+                        PageChip(
+                            category.title,
+                            systemImage: model.filter.categories.contains(category)
+                                ? "checkmark" : nil,
+                            active: model.filter.categories.contains(category)
+                        ) {
+                            Task { await model.toggleCategory(category) }
+                        }
+                    }
+                }
+                if hasSelection {
+                    PageFilterRow("Showing") { selectedTokens }
                 }
             }
-            let excluded = Self.flags.filter { !model.filter[keyPath: $0.2] }.map {
-                $0.1.lowercased()
-            }
-            if !excluded.isEmpty {
-                Text("Excluded from totals: " + excluded.joined(separator: ", "))
+            if !excludedFlags.isEmpty {
+                Text("Not counted in totals: " + excludedFlags.joined(separator: ", ") + ".")
                     .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            selectedTokens
         }
     }
 
-    private var rangeControls: some View {
-        CodeStatsRangePicker(range: model.range) { range in
-            Task { await model.select(range) }
+    private var excludedFlags: [String] {
+        Self.flags.filter { !model.filter[keyPath: $0.2] }.map { $0.1.lowercased() }
+    }
+
+    private var countedChangesCustomized: Bool {
+        Self.flags.contains {
+            model.filter[keyPath: $0.2] != CodeStatsFilter.default[keyPath: $0.2]
         }
     }
 
-    @ViewBuilder private var resetButton: some View {
-        if model.hasActiveFilter {
-            Button("Reset filters") { Task { await model.resetFilter() } }
-                .buttonStyle(.edith(.borderless))
+    private var hasSelection: Bool {
+        let filter = model.filter
+        return !filter.repositories.isEmpty || !filter.owners.isEmpty
+            || !filter.languages.isEmpty || !filter.excludedRepositories.isEmpty
+            || model.isCustomRange
+    }
+
+    private var countedChangesMenu: some View {
+        PageMenuChip(
+            "Counted changes", systemImage: "line.3.horizontal.decrease",
+            active: countedChangesCustomized
+        ) {
+            ForEach(Self.flags, id: \.1) { flag in
+                Toggle(
+                    flag.1,
+                    isOn: Binding(
+                        get: { model.filter[keyPath: flag.2] },
+                        set: { value in
+                            Task { await model.updateFilter { $0[keyPath: flag.2] = value } }
+                        }))
+            }
         }
+        .help("Choose which kinds of commits count toward your totals")
     }
 
     private func facetButton(_ kind: CodeStatsFacetKind, selected: Int) -> some View {
         Button {
             open = kind
         } label: {
-            CodeStatsFilterChip(
-                title: selected == 0
+            PageChipLabel(
+                selected == 0
                     ? "All " + kind.rawValue.lowercased() : "\(kind.rawValue) (\(selected))",
-                color: DashSkin.accent(dark), active: selected > 0)
+                menu: true)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip(active: selected > 0))
+        .fixedSize()
         .popover(
             isPresented: Binding(get: { open == kind }, set: { if !$0 { open = nil } }),
             arrowEdge: .bottom
@@ -137,30 +147,20 @@ struct CodeStatsFilterBar: View {
 
     @ViewBuilder private var selectedTokens: some View {
         let filter = model.filter
-        if !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
-            || !filter.excludedRepositories.isEmpty || model.isCustomRange
-        {
-            ScrollView(.horizontal, showsIndicators: true) {
-                HStack(spacing: UIScale.pt(6)) {
-                    if model.isCustomRange {
-                        token(CodeStatsRangePicker.title(model.range)) {
-                            await model.clearCustomRange()
-                        }
-                    }
-                    ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
-                        token("Excluding " + name) { await model.toggleExcludedRepository(name) }
-                    }
-                    ForEach(filter.owners.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleOwner(name) }
-                    }
-                    ForEach(filter.repositories.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleRepository(name) }
-                    }
-                    ForEach(filter.languages.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleLanguage(name) }
-                    }
-                }
-            }
+        if model.isCustomRange {
+            token(CodeStatsRangeChips.title(model.range)) { await model.clearCustomRange() }
+        }
+        ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
+            token("Excluding " + name) { await model.toggleExcludedRepository(name) }
+        }
+        ForEach(filter.owners.sorted(), id: \.self) { name in
+            token(name) { await model.toggleOwner(name) }
+        }
+        ForEach(filter.repositories.sorted(), id: \.self) { name in
+            token(name) { await model.toggleRepository(name) }
+        }
+        ForEach(filter.languages.sorted(), id: \.self) { name in
+            token(name) { await model.toggleLanguage(name) }
         }
     }
 
@@ -168,17 +168,17 @@ struct CodeStatsFilterBar: View {
         Button {
             Task { await remove() }
         } label: {
-            HStack(spacing: UIScale.pt(4)) {
-                Text(name).lineLimit(1)
-                Image(systemName: "xmark.circle.fill")
+            HStack(spacing: UIScale.pt(6)) {
+                Text(name).lineLimit(1).truncationMode(.middle)
+                Image(systemName: "xmark")
+                    .font(.system(size: UIScale.pt(8), weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
-            .font(.system(size: UIScale.pt(11), weight: .medium))
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(3))
-            .background(DashSkin.accent(dark).opacity(0.16), in: Capsule())
-            .foregroundStyle(DashSkin.ink(dark))
+            .frame(maxWidth: UIScale.pt(260))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip(active: true))
+        .fixedSize()
         .accessibilityLabel("Remove filter \(name)")
     }
 }
@@ -268,7 +268,7 @@ private struct CodeStatsFacetPicker: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .monospacedDigit()
             }
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }

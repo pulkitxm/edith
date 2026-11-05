@@ -137,8 +137,7 @@ final class CodeStatsModel {
         if !reportLoaded { return reportLoad.state }
         switch phase {
         case .loading: return reportLoad.state == .content ? .loading : reportLoad.state
-        case .firstRun: return .loading
-        case .setup, .content: return .content
+        case .setup, .firstRun, .content: return .content
         case .unavailable: return .error
         }
     }
@@ -196,7 +195,7 @@ final class CodeStatsModel {
         guard let status else { return "Checking your setup..." }
         if status.isRunning { return "A refresh is already running." }
         if !status.gitAvailable { return "Install git first: ed tools install git" }
-        if !status.storage.isReady { return "Choose a mirror folder first." }
+        if !status.storage.isReady { return "Choose a storage folder first." }
         if isStarting { return "Starting..." }
         return nil
     }

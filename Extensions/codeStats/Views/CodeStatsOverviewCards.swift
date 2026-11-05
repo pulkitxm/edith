@@ -2,25 +2,21 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-struct CodeStatsRangePicker: View {
+struct CodeStatsRangeChips: View {
     let range: CodeStatsRange
     let select: (CodeStatsRange) -> Void
 
     var body: some View {
-        EdithSegmentedPicker(
-            "Range",
-            selection: Binding(get: { range }, set: { select($0) }),
-            options: CodeStatsRange.presets, label: { Self.title($0) }
-        )
-        .labelsHidden()
-        .fixedSize()
+        ForEach(CodeStatsRange.presets, id: \.self) { preset in
+            PageChip(Self.title(preset), active: preset == range) { select(preset) }
+        }
     }
 
     static func title(_ range: CodeStatsRange) -> String {
         switch range {
         case .days(let count): "\(count) days"
         case .year: "1 year"
-        case .all: "All"
+        case .all: "All time"
         case .between(let start, let end): start + " to " + end
         }
     }
@@ -30,45 +26,90 @@ struct CodeStatsKPIGrid: View {
     let report: CodeStatsReport
     let dark: Bool
 
+    private var spacing: CGFloat { UIScale.pt(PageMetrics.cardSpacing) }
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(10)) { tiles }
+            HStack(alignment: .top, spacing: spacing) {
+                commits
+                lines
+                activeDays
+                streak
+                repositories
+            }
+            Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+                GridRow {
+                    commits.gridCellColumns(2)
+                    lines.gridCellColumns(2)
+                    activeDays.gridCellColumns(2)
+                }
+                GridRow {
+                    streak.gridCellColumns(3)
+                    repositories.gridCellColumns(3)
+                }
+            }
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: UIScale.pt(10))],
-                spacing: UIScale.pt(10)
-            ) { tiles }
+                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: spacing)],
+                spacing: spacing
+            ) {
+                commits
+                lines
+                activeDays
+                streak
+                repositories
+            }
         }
     }
 
-    @ViewBuilder private var tiles: some View {
-        let totals = report.totals
+    private var commits: some View {
         CodeStatsTile(
-            label: "Commits", value: CodeStatsNumberFormat.compact(totals.commits),
+            label: "Commits", value: CodeStatsNumberFormat.compact(report.totals.commits),
             symbol: "point.3.connected.trianglepath.dotted",
-            change: report.momentum?.commitChange, dark: dark)
+            change: report.momentum?.commitChange,
+            detail: commitsPerDay(report.totals), dark: dark)
+    }
+
+    private var lines: some View {
         CodeStatsTile(
-            label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
+            label: "Lines authored", value: CodeStatsNumberFormat.compact(report.totals.authored),
             symbol: "text.line.first.and.arrowtriangle.forward",
             change: report.momentum?.lineChange,
             detail:
-                "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
+                "+\(CodeStatsNumberFormat.grouped(report.totals.added)) / -\(CodeStatsNumberFormat.grouped(report.totals.deleted))",
             dark: dark)
+    }
+
+    private var activeDays: some View {
         CodeStatsTile(
-            label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
+            label: "Active days", value: CodeStatsNumberFormat.grouped(report.totals.activeDays),
             symbol: "calendar",
             detail:
-                "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
+                "\(CodeStatsNumberFormat.decimal(report.totals.averagePerActiveDay)) lines per active day",
             dark: dark)
-        CodeStatsTile(
-            label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
-            symbol: "flame",
-            detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days",
-            dark: dark)
-        CodeStatsTile(
-            label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
-            symbol: "shippingbox",
-            detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
     }
+
+    private var streak: some View {
+        CodeStatsTile(
+            label: "Streak",
+            value: CodeStatsNumberFormat.grouped(report.totals.currentStreak) + "d",
+            symbol: "flame",
+            detail: "Longest " + CodeStatsNumberFormat.grouped(report.totals.longestStreak)
+                + " days",
+            dark: dark)
+    }
+
+    private var repositories: some View {
+        CodeStatsTile(
+            label: "Repositories", value: CodeStatsNumberFormat.grouped(report.totals.repositories),
+            symbol: "shippingbox",
+            detail: "Net " + CodeStatsNumberFormat.grouped(report.totals.net) + " lines",
+            dark: dark)
+    }
+}
+
+private func commitsPerDay(_ totals: CodeStatsTotals) -> String {
+    let perDay = totals.activeDays > 0 ? Double(totals.commits) / Double(totals.activeDays) : 0
+    return CodeStatsNumberFormat.decimal(perDay) + " per active day"
 }
 
 struct CodeStatsTile: View {
@@ -93,13 +134,56 @@ struct CodeStatsTile: View {
 struct CodeStatsHeatmapCard: View {
     let weeks: [CodeStatsHeatWeek]
     let dark: Bool
+    @State private var width = 0.0
+    @Environment(\.compactLayout) private var compact
+
+    private var cellSize: CGFloat {
+        guard !weeks.isEmpty, width > 0 else { return 14 }
+        let fitted = (width / UIScale.current - 16) / CGFloat(weeks.count) - 3
+        return min(compact ? 20 : 28, max(14, fitted.rounded(.down)))
+    }
 
     var body: some View {
         PageCard(
-            title: "Contributions", note: "Commits per day, hover a day for details"
+            title: "Contributions", note: "Commits per day, hover a day for details", fill: true
         ) {
-            CodeStatsHeatGrid(weeks: weeks, dark: dark)
+            CodeStatsHeatGrid(weeks: weeks, dark: dark, cellSize: cellSize)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: Double.self) {
+                    $0.size.width
+                } action: {
+                    width = $0
+                }
         }
+    }
+}
+
+struct CodeStatsActivityRow: View {
+    static let sharedRowWeeks = 27
+
+    let projection: CodeStatsProjection
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                heatmap.frame(minWidth: UIScale.pt(420))
+                topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                heatmap
+                topDays
+            }
+        }
+    }
+
+    private var heatmap: some View {
+        CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+    }
+
+    private var topDays: some View {
+        CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
     }
 }
 
@@ -134,7 +218,7 @@ struct CodeStatsDayPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(cell.date?.formatted(date: .complete, time: .omitted) ?? cell.id)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
             HStack(spacing: UIScale.pt(14)) {
                 metric("Commits", CodeStatsNumberFormat.grouped(detail?.commits ?? cell.commits))
                 metric("Lines", CodeStatsNumberFormat.compact(detail?.lines ?? cell.lines))
@@ -147,7 +231,7 @@ struct CodeStatsDayPopover: View {
             }
             if (detail?.commits ?? cell.commits) == 0 {
                 Text("No commits on this day.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }
@@ -157,20 +241,16 @@ struct CodeStatsDayPopover: View {
 
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             Text(value)
-                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .monospacedDigit()
         }
     }
 
     private func section(_ title: String, _ shares: [CodeStatsDayShare]) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             ForEach(shares, id: \.name) { share in
                 HStack {
                     Text(share.name).lineLimit(1).truncationMode(.middle)
@@ -181,7 +261,7 @@ struct CodeStatsDayPopover: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .monospacedDigit()
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
             }
         }
     }

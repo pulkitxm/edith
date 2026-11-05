@@ -59,6 +59,21 @@ import Testing
         #expect(entry.inputs == "\(AttentionFormat.count(1_250)) inputs")
     }
 
+    @Test func singleBriefSwitchReadsInTheSingular() {
+        var block = Self.block(at: Date())
+        block.skipped = 1
+        let rows = AttentionPageDerived.timelineRows([
+            AttentionTimelineDay(
+                day: Calendar.current.startOfDay(for: block.start), active: 300, ribbon: [],
+                blocks: [block])
+        ])
+        guard case .block(let entry) = rows[1].kind else {
+            Issue.record("block row is missing")
+            return
+        }
+        #expect(entry.context == "after 1 brief switch")
+    }
+
     @Test func rowHeightsAreWholePointsThatFollowContentAndZoom() {
         let plain = Self.entryRow(detail: nil, context: nil)
         let detailed = Self.entryRow(detail: "Detail", context: nil)

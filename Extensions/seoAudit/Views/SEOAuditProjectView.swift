@@ -20,27 +20,23 @@ struct SEOAuditProjectView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            if model.isRunning {
-                SEOAuditProgressRail(stage: model.stage, progress: model.selectedRun?.progress ?? 0)
-                    .padding(.horizontal, PageMetrics.gutter(compact))
-                    .padding(.bottom, UIScale.pt(14))
-            }
-            Divider()
             ScrollView {
                 LazyVStack(
-                    alignment: .leading, spacing: UIScale.pt(16),
+                    alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing),
                     pinnedViews: [.sectionHeaders]
                 ) {
-                    summary
-                    commandDeck
+                    if !project.runs.isEmpty { summary }
+                    if !project.runs.isEmpty || !model.discoveredPageURLs.isEmpty {
+                        commandDeck
+                    }
                     Section {
                         pageList
                     } header: {
-                        pinnedControls
+                        if !project.runs.isEmpty { pinnedControls }
                     }
                 }
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                 .pageContent(compact)
-                .padding(.top, UIScale.pt(16))
             }
         }
         .confirmationDialog(
@@ -65,38 +61,46 @@ struct SEOAuditProjectView: View {
     }
 
     private var toolbar: some View {
-        PageSectionHeader(project.name, subtitle: project.baseURL) {
-            Button("Projects", systemImage: "chevron.left", action: model.closeProject)
-                .buttonStyle(.edith(.secondary))
-                .help(
-                    model.isRunning
-                        ? "View projects while this audit continues" : "Back to projects")
-            if model.isRunning {
-                Button("Stop", role: .destructive, action: model.cancel)
-            } else {
-                Button("New project", systemImage: "plus", action: model.leaveForNewProject)
-                    .buttonStyle(.edith(.secondary))
-            }
-            Menu {
-                Button("Delete Project", role: .destructive) { confirmsDeletion = true }
-            } label: {
-                Image(systemName: "ellipsis")
-            }
-            .menuStyle(.borderlessButton).fixedSize()
-            .accessibilityLabel("Project actions")
-            .disabled(model.isRunning)
-        }
-        .pageGutter(compact)
-        .padding(.vertical, UIScale.pt(14))
+        PageHeader(
+            project.name, subtitle: project.baseURL, divider: true,
+            trailing: {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                    Button("Projects", systemImage: "chevron.left", action: model.closeProject)
+                        .help(
+                            model.isRunning
+                                ? "View projects while this audit continues" : "Back to projects")
+                    if model.isRunning {
+                        Button("Stop", role: .destructive, action: model.cancel)
+                    } else {
+                        Button("New project", systemImage: "plus", action: model.leaveForNewProject)
+                    }
+                    Menu {
+                        Button("Delete Project", role: .destructive) { confirmsDeletion = true }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.button)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("Project actions")
+                    .disabled(model.isRunning)
+                }
+            },
+            accessory: {
+                if model.isRunning {
+                    SEOAuditProgressRail(
+                        stage: model.stage, progress: model.selectedRun?.progress ?? 0)
+                }
+            })
     }
 
     private var summary: some View {
         LazyVGrid(
-            columns: [
-                GridItem(
-                    .adaptive(minimum: UIScale.pt(compact ? 125 : 160)), spacing: UIScale.pt(10))
-            ],
-            spacing: UIScale.pt(10)
+            columns: Array(
+                repeating: GridItem(
+                    .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
+                count: compact ? 2 : 4),
+            spacing: UIScale.pt(PageMetrics.cardSpacing)
         ) {
             metric(
                 "Pages", model.selectedRun.map { String($0.pages.count) } ?? "0", "in this run",
@@ -108,7 +112,7 @@ struct SEOAuditProjectView: View {
                 "Average", model.selectedRun?.averageScore.map(String.init) ?? "-",
                 "Lighthouse score", "gauge.with.needle")
             metric(
-                "Runs", String(project.runs.count), "saved locally",
+                "Runs", String(project.runs.count), "saved on this Mac",
                 "clock.arrow.trianglehead.counterclockwise.rotate.90")
         }
     }
@@ -116,22 +120,9 @@ struct SEOAuditProjectView: View {
     private func metric(_ title: String, _ value: String, _ detail: String, _ icon: String)
         -> some View
     {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack {
-                Text(title)
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Image(systemName: icon).foregroundStyle(DashSkin.accent(dark))
-            }
-            Text(value).font(DashSkin.mono(25, weight: .semibold))
-            Text(detail).font(.system(size: UIScale.pt(10))).foregroundStyle(.tertiary)
-        }
-        .padding(UIScale.pt(14))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+        PageMetric(
+            title: title, value: value, detail: detail, symbol: icon,
+            tint: DashSkin.accent(dark))
     }
 
     private var controls: some View {
@@ -149,70 +140,62 @@ struct SEOAuditProjectView: View {
 
     private var pinnedControls: some View {
         controls
-            .padding(.vertical, UIScale.pt(9))
+            .padding(.vertical, UIScale.pt(8))
             .background(DashSkin.paper(dark))
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(DashSkin.line(dark))
-                    .frame(height: UIScale.pt(1))
+                    .frame(height: 1)
             }
             .zIndex(1)
     }
 
     private var commandDeck: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("AUDIT COMMANDS")
-                        .font(DashSkin.mono(8.5, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(DashSkin.accent(dark))
-                    Text("1. Find pages, 2. choose, 3. run the audit")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
-                }
-                Spacer()
-                if model.lighthouseResolved, !model.lighthouseAvailable {
-                    Label(
-                        "Lighthouse is not installed (optional)",
-                        systemImage: "exclamationmark.triangle.fill"
-                    )
-                    .help(
-                        "Lighthouse adds performance and accessibility scores. Install it with npm install -g lighthouse. Audits still check titles, descriptions and links without it."
-                    )
-                    .font(.system(size: UIScale.pt(10), weight: .medium))
-                    .foregroundStyle(DashSkin.warn)
-                }
-            }
+        PageCard(title: "Audit", note: "Find pages, choose which to check, then run") {
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(10)) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     discoveryCommand
                     selectionCommand
                     lighthouseCommand
                     auditCommand
                 }
-                VStack(spacing: UIScale.pt(10)) {
-                    discoveryCommand
-                    selectionCommand
-                    lighthouseCommand
-                    auditCommand
+                .fixedSize(horizontal: false, vertical: true)
+                Grid(
+                    horizontalSpacing: UIScale.pt(PageMetrics.cardSpacing),
+                    verticalSpacing: UIScale.pt(PageMetrics.cardSpacing)
+                ) {
+                    GridRow {
+                        discoveryCommand
+                        selectionCommand
+                    }
+                    GridRow {
+                        lighthouseCommand
+                        auditCommand
+                    }
                 }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if model.lighthouseResolved, !model.lighthouseAvailable {
+                Label(
+                    "Lighthouse is not installed, so scores are skipped. Audits still check titles, descriptions and links.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .help("Install it with npm install -g lighthouse.")
+                .font(.edithText(.callout))
+                .foregroundStyle(DashSkin.warn)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(UIScale.pt(14))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(14))
-                .strokeBorder(DashSkin.accent(dark).opacity(0.28), lineWidth: UIScale.pt(1)))
     }
 
     private var discoveryCommand: some View {
         commandCell(
-            icon: "point.3.connected.trianglepath.dotted", label: "DISCOVERED",
+            icon: "point.3.connected.trianglepath.dotted", label: "Found",
             value: String(model.discoveredPageURLs.count), detail: "pages found in your sitemap"
         ) {
             Button(action: model.discoverPages) {
                 Label(
-                    model.discoveredPageURLs.isEmpty ? "Discover pages" : "Discover more",
+                    model.discoveredPageURLs.isEmpty ? "Find pages" : "Find again",
                     systemImage: "arrow.clockwise")
             }
             .buttonStyle(.edith(.secondary))
@@ -225,7 +208,7 @@ struct SEOAuditProjectView: View {
 
     private var selectionCommand: some View {
         commandCell(
-            icon: "checklist", label: "SELECTED", value: String(model.selectedPageCount),
+            icon: "checklist", label: "Selected", value: String(model.selectedPageCount),
             detail: "of \(model.discoveredPageURLs.count) pages"
         ) {
             Button("Choose pages") { pageSelectionPresented = true }
@@ -239,14 +222,14 @@ struct SEOAuditProjectView: View {
 
     private var lighthouseCommand: some View {
         commandCell(
-            icon: "gauge.with.needle", label: "LIGHTHOUSE",
+            icon: "gauge.with.needle", label: "Lighthouse",
             value: model.lighthouseEnabled ? "On" : "Off",
             detail: model.lighthouseEnabled
                 ? "scores for speed, accessibility, SEO" : "titles, descriptions and links only"
         ) {
             Toggle("Include", isOn: $model.lighthouseEnabled)
                 .toggleStyle(.checkbox)
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .font(.edithText(.caption).weight(.medium))
                 .disabled(!model.lighthouseAvailable || model.isRunning)
                 .help(
                     model.lighthouseAvailable
@@ -256,18 +239,14 @@ struct SEOAuditProjectView: View {
     }
 
     private var auditCommand: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Text("RUN")
-                .font(DashSkin.mono(8, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(.tertiary)
-            Text("Audit \(model.selectedPageCount) pages")
-                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-            Text(model.lighthouseEnabled ? "Metadata + Lighthouse" : "Metadata only")
-                .font(.system(size: UIScale.pt(9.5)))
-                .foregroundStyle(.secondary)
+        commandCell(
+            icon: "play.circle", label: "Run", value: "\(model.selectedPageCount)",
+            detail: model.lighthouseEnabled
+                ? "pages, with Lighthouse scores" : "pages, metadata only",
+            highlighted: true
+        ) {
             Button(action: model.auditSelectedPages) {
-                Label("Run selected", systemImage: "play.fill")
+                Label("Run audit", systemImage: "play.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.edith(.primary))
@@ -278,47 +257,41 @@ struct SEOAuditProjectView: View {
                     : model.selectedPageCount == 0
                         ? "Find and choose at least one page first." : "Start the audit")
         }
-        .padding(UIScale.pt(12))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.accent(dark).opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func commandCell<Actions: View>(
-        icon: String, label: String, value: String, detail: String,
+        icon: String, label: String, value: String, detail: String, highlighted: Bool = false,
         @ViewBuilder actions: () -> Actions
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: icon).foregroundStyle(DashSkin.accent(dark))
-                Text(label)
-                    .font(DashSkin.mono(8, weight: .bold))
-                    .tracking(0.6)
-                    .foregroundStyle(.tertiary)
+                Image(systemName: icon)
+                    .font(.edithText(.caption))
+                    .foregroundStyle(DashSkin.accent(dark))
+                    .accessibilityHidden(true)
+                PageCapsLabel(label)
             }
-            Text(value).font(DashSkin.mono(19, weight: .semibold))
-            Text(detail).font(.system(size: UIScale.pt(9.5))).foregroundStyle(.secondary)
+            Text(value).font(.edithText(.title2).weight(.semibold)).monospacedDigit()
+            Text(detail).font(.edithText(.callout)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: UIScale.pt(8))
             actions()
         }
         .padding(UIScale.pt(12))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(
+            highlighted ? DashSkin.accent(dark).opacity(0.08) : DashSkin.paper(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius + 2)))
     }
 
     private var runPicker: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Text("RUN HISTORY")
-                .font(DashSkin.mono(8.5, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(.tertiary)
-            Button {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            PageCapsLabel("Run history")
+            runStepButton("chevron.left", label: "Older run") {
                 selectRun(at: selectedRunIndex + 1)
-            } label: {
-                Image(systemName: "chevron.left")
             }
-            .buttonStyle(.edith(.toolbar))
-            .help("Older run")
             .disabled(selectedRunIndex >= project.runs.count - 1)
-            Menu {
+            PageMenuChip(selectedRunTitle, dot: runStateColor(model.selectedRun?.state)) {
                 ForEach(Array(project.runs.enumerated()), id: \.element.id) { index, run in
                     Button {
                         model.selectRun(run.id)
@@ -330,52 +303,31 @@ struct SEOAuditProjectView: View {
                         }
                     }
                 }
-            } label: {
-                HStack(spacing: UIScale.pt(9)) {
-                    Circle().fill(runStateColor(model.selectedRun?.state))
-                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                        Text(
-                            model.selectedRun?.startedAt.formatted(
-                                .dateTime.month(.abbreviated).day().hour().minute()) ?? "No run"
-                        )
-                        .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                        Text(
-                            model.selectedRun.map {
-                                "\($0.pages.count) pages · \($0.state.rawValue)"
-                            } ?? "Choose a saved run"
-                        )
-                        .font(DashSkin.mono(8.5))
-                        .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: UIScale.pt(12))
-                    Text("\(selectedRunIndex + 1) / \(project.runs.count)")
-                        .font(DashSkin.mono(9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: UIScale.pt(8), weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, UIScale.pt(11))
-                .frame(minWidth: UIScale.pt(250), minHeight: UIScale.pt(38))
-                .background(
-                    DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            Button {
+            runStepButton("chevron.right", label: "Newer run") {
                 selectRun(at: selectedRunIndex - 1)
-            } label: {
-                Image(systemName: "chevron.right")
             }
-            .buttonStyle(.edith(.toolbar))
-            .help("Newer run")
             .disabled(selectedRunIndex <= 0)
         }
+    }
+
+    private func runStepButton(
+        _ symbol: String, label: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .frame(width: UIScale.pt(10))
+        }
+        .buttonStyle(.pageChip())
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private var selectedRunTitle: String {
+        guard let run = model.selectedRun else { return "No run" }
+        let date = run.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+        return "\(date) · \(run.pages.count) pages"
     }
 
     private var selectedRunIndex: Int {
@@ -403,22 +355,25 @@ struct SEOAuditProjectView: View {
     }
 
     private var filters: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            SearchField(placeholder: "Filter pages", text: $model.query)
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            SearchField(placeholder: "Filter pages", text: $model.query, compact: true)
                 .frame(maxWidth: .infinity)
-            Menu {
+            PageMenuChip(
+                model.severity?.rawValue.capitalized ?? "All issues",
+                systemImage: "line.3.horizontal.decrease", active: model.severity != nil
+            ) {
                 Button("All issues") { model.severity = nil }
                 Divider()
                 ForEach(SEOAuditSeverity.allCases, id: \.self) { severity in
                     Button(severity.rawValue.capitalized) { model.severity = severity }
                 }
-            } label: {
-                Label(
-                    model.severity?.rawValue.capitalized ?? "All issues",
-                    systemImage: "line.3.horizontal.decrease.circle")
             }
-            .fixedSize()
-            Menu {
+            PageMenuChip(
+                compact
+                    ? model.socialPreviewPlatform.title
+                    : "Preview: \(model.socialPreviewPlatform.title)",
+                systemImage: model.socialPreviewPlatform.icon
+            ) {
                 ForEach(SEOAuditSocialPlatform.allCases) { platform in
                     Button {
                         model.socialPreviewPlatform = platform
@@ -426,14 +381,7 @@ struct SEOAuditProjectView: View {
                         Label(platform.title, systemImage: platform.icon)
                     }
                 }
-            } label: {
-                Label(
-                    compact
-                        ? model.socialPreviewPlatform.title
-                        : "Preview: \(model.socialPreviewPlatform.title)",
-                    systemImage: model.socialPreviewPlatform.icon)
             }
-            .fixedSize()
             .help("Change every social card preview")
         }
         .frame(maxWidth: .infinity)
@@ -449,7 +397,7 @@ struct SEOAuditProjectView: View {
                     symbolName: "point.3.connected.trianglepath.dotted",
                     title: "Find the pages to audit",
                     message:
-                        "Edith reads \(project.baseURL.isEmpty ? "your site" : project.baseURL)'s sitemap to list its pages. Then you choose which ones to check. Nothing is changed on your site.",
+                        "Edith reads the sitemap of \(project.baseURL.isEmpty ? "your site" : project.baseURL) to list its pages. Then you choose which ones to check. Nothing is changed on your site.",
                     primary: PageAction(
                         "Find pages", symbolName: "magnifyingglass", identifier: "seo.discover",
                         perform: model.discoverPages)
@@ -460,13 +408,10 @@ struct SEOAuditProjectView: View {
                     symbolName: "play.circle",
                     title: "\(model.discoveredPageURLs.count) pages ready to audit",
                     message:
-                        "\(model.selectedPageCount) are selected. Run the audit to check each page's titles, descriptions, headings and share cards.",
-                    primary: PageAction(
-                        "Run audit", symbolName: "play.fill", identifier: "seo.run",
-                        perform: model.auditSelectedPages),
-                    secondary: PageAction("Choose pages") { pageSelectionPresented = true }
+                        "\(model.selectedPageCount) are selected. Run the audit above to check each page's titles, descriptions, headings and share cards.",
+                    style: .compact
                 )
-                .frame(minHeight: UIScale.pt(300))
+                .frame(minHeight: UIScale.pt(200))
             }
         } else if model.visiblePages.isEmpty, model.isRunning {
             SEOAuditPageRowsSkeleton(dark: dark, rows: pendingSkeletonRows)
@@ -539,41 +484,26 @@ private struct SEOAuditProgressRail: View {
                     SkeletonBlock(width: 12, height: 12, corner: 6)
                 }
                 .accessibilityLabel(title)
-                Text(title).font(.system(size: UIScale.pt(12), weight: .semibold))
+                Text(title).font(.edithText(.callout).weight(.semibold))
                 Text(detail)
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer(minLength: 0)
                 Text(progress, format: .percent.precision(.fractionLength(0)))
-                    .font(DashSkin.mono(11, weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
+                    .monospacedDigit()
             }
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(DashSkin.line(dark))
-                    Capsule().fill(DashSkin.accent(dark))
-                        .frame(width: max(UIScale.pt(6), geometry.size.width * progress))
-                    Circle().fill(DashSkin.paper2(dark))
-                        .overlay(
-                            Circle().strokeBorder(DashSkin.accent(dark), lineWidth: UIScale.pt(2))
-                        )
-                        .frame(width: UIScale.pt(9), height: UIScale.pt(9))
-                        .offset(x: max(0, geometry.size.width * progress - UIScale.pt(5)))
-                }
-            }
-            .frame(height: UIScale.pt(9))
+            LoadingProgress(value: progress)
+                .tint(DashSkin.accent(dark))
         }
-        .padding(UIScale.pt(12))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(11)))
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(11))
-                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
     }
 
     private var title: String {
         switch stage {
         case .idle: "Ready"
-        case .discovering: "Discovering pages"
+        case .discovering: "Finding pages"
         case .auditing: "Auditing pages"
         case .lighthouse: "Running Lighthouse"
         case .saving: "Saving run"
@@ -583,10 +513,10 @@ private struct SEOAuditProgressRail: View {
     private var detail: String {
         switch stage {
         case .idle: ""
-        case .discovering: "robots.txt → sitemap.xml"
-        case let .auditing(current, total, url): "\(current) / \(total)  \(url)"
+        case .discovering: "Reading your sitemap"
+        case let .auditing(current, total, url): "\(current) of \(total), \(url)"
         case let .lighthouse(url): url
-        case .saving: "writing local history"
+        case .saving: "Saving to this Mac"
         }
     }
 }
@@ -602,9 +532,10 @@ private struct SEOAuditPageSelectionSheet: View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(12)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Choose pages").font(DashSkin.heading(22))
+                    Text("Choose pages").font(.edithText(.title2)).fontWeight(.semibold)
                     Text("\(model.selectedPageCount) of \(model.discoveredPageURLs.count) selected")
-                        .font(DashSkin.mono(9.5))
+                        .font(.edithText(.callout))
+                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -613,10 +544,10 @@ private struct SEOAuditPageSelectionSheet: View {
                 Button("Done", action: dismiss.callAsFunction)
                     .buttonStyle(.edith(.primary))
             }
-            .padding(UIScale.pt(18))
+            .padding(UIScale.pt(16))
             Divider()
             SearchField(placeholder: "Filter discovered URLs", text: $model.pageSelectionQuery)
-                .padding(UIScale.pt(14))
+                .padding(UIScale.pt(16))
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(6)) {
                     ForEach(model.visibleDiscoveredPageURLs, id: \.self) { url in
@@ -632,7 +563,7 @@ private struct SEOAuditPageSelectionSheet: View {
                                     model.selectedPageURLs.contains(url)
                                         ? DashSkin.accent(dark) : .secondary)
                                 Text(url)
-                                    .font(DashSkin.mono(10.5))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Spacer()
@@ -647,8 +578,8 @@ private struct SEOAuditPageSelectionSheet: View {
                         .buttonStyle(.edith(.borderless))
                     }
                 }
-                .padding(.horizontal, UIScale.pt(14))
-                .padding(.bottom, UIScale.pt(14))
+                .padding(.horizontal, UIScale.pt(16))
+                .padding(.bottom, UIScale.pt(16))
             }
         }
         .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(520))

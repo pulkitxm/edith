@@ -69,8 +69,7 @@ struct DatabasePage: View {
     var body: some View {
         PageWorkspace {
             if model.readiness != .ready {
-                PageHeader("Database")
-                Divider().opacity(0.35)
+                PageHeader("Database", divider: true)
             }
         } content: {
             pageContent
@@ -267,7 +266,7 @@ struct DatabasePage: View {
                 back: leaveFocusedWorkspace,
                 busyConnectionID: connectionManagement.activeConnectionID,
                 performConnectionAction: performConnectionAction)
-            Divider().opacity(0.35)
+            PageHeaderDivider()
             workbench
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

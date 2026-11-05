@@ -21,6 +21,7 @@ struct AttentionPage: View {
 
     private var pageHeader: some View {
         PageHeader(
+            divider: true,
             title: { Text("Attention") },
             trailing: {
                 EmptyView()
@@ -30,7 +31,6 @@ struct AttentionPage: View {
                     AttentionSectionBar(model: model)
                     if model.section.usesPeriod {
                         AttentionPeriodControl(model: model)
-                        AttentionFilterBar(model: model)
                     }
                 }
             })
@@ -67,6 +67,7 @@ struct AttentionPage: View {
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
         .padding(
             .bottom, hasNotices || model.hasFilters ? UIScale.pt(PageMetrics.sectionSpacing) : 0)
     }
@@ -132,6 +133,7 @@ struct AttentionPage: View {
                         AttentionSetupView(model: model)
                     } else if model.section == .settings {
                         AttentionSettingsView(model: model)
+                            .buttonStyle(.edith(.secondary))
                     } else if model.hasFilters, !model.hasActivity, model.section != .focus {
                         AttentionNoMatchView(model: model)
                     } else {
@@ -175,112 +177,112 @@ private struct AttentionPresenterCover: View {
 }
 
 private struct AttentionPeriodControl: View {
-    let model: AttentionPageModel
+    @Bindable var model: AttentionPageModel
     @State private var customOpen = false
     @State private var customFrom = Date()
     @State private var customTo = Date()
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
+
+    private static let presets: [AttentionRangePreset] = [.today, .last7, .last30, .allTime]
 
     var body: some View {
-        let dark = scheme == .dark
-        WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(8)) {
-            ForEach(
-                compact
-                    ? [AttentionRangePreset.today, .allTime] : [.today, .last7, .last30, .allTime],
-                id: \.self
-            ) { preset in
-                chip(
-                    preset == .last7 ? "7 days" : preset == .last30 ? "30 days" : preset.title,
-                    active: preset == .allTime
-                        ? model.period.preset == .allTime : model.period == AttentionPeriod(preset),
-                    dark: dark
-                ) { model.select(preset) }
+        PageFilterBar {
+            PageFilterRow("Range") {
+                ForEach(Self.presets, id: \.self) { preset in
+                    PageChip(
+                        preset == .last7 ? "7 days" : preset == .last30 ? "30 days" : preset.title,
+                        active: preset == .allTime
+                            ? model.period.preset == .allTime
+                            : model.period == AttentionPeriod(preset)
+                    ) { model.select(preset) }
+                }
+                moreRanges
+                stepper
             }
-            Menu {
-                ForEach(Array(AttentionRangePreset.groups.enumerated()), id: \.offset) { _, group in
-                    Section {
-                        ForEach(group) { preset in
-                            Button(preset.title) { model.select(preset) }
-                        }
-                    }
+            PageFilterRow("Show") {
+                AttentionFilterMenu(model: model)
+                AttentionWindowMenu(model: model)
+                AttentionIdleMenu(model: model)
+                SearchField(
+                    placeholder: "Search names and titles", text: $model.searchText, compact: true
+                )
+                .frame(width: UIScale.pt(240))
+                if model.hasFilters {
+                    Button("Clear filters") { model.clearFilters() }
+                        .buttonStyle(.edith(.borderless))
+                        .font(PageMetrics.chipFont)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
                 }
-                Button("Custom range…") {
-                    customFrom = model.period.start
-                    customTo = model.period.lastDay
-                    customOpen = true
-                }
-            } label: {
-                Label("Range", systemImage: "calendar")
             }
-            .menuStyle(.button)
-            .buttonStyle(.edith(.secondary))
-            .fixedSize()
-            .popover(isPresented: $customOpen, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    Text("Custom range").font(.system(size: UIScale.pt(13), weight: .semibold))
-                    DatePicker(
-                        "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
-                    DatePicker(
-                        "To", selection: $customTo, in: ...Date(), displayedComponents: .date)
-                    HStack {
-                        Spacer()
-                        Button("Show") {
-                            model.selectRange(from: customFrom, to: customTo)
-                            customOpen = false
-                        }
-                        .buttonStyle(.edith(.primary))
-                    }
-                }
-                .padding(16)
-                .frame(width: UIScale.pt(280))
-            }
-            AttentionWindowMenu(model: model)
-            AttentionIdleMenu(model: model)
-            HStack(spacing: UIScale.pt(6)) {
-                Button {
-                    model.step(-1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.edith(.iconOnly))
-                .disabled(!model.canStepBackward)
-                .help("Previous period")
-                Text(model.period.title())
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .frame(minWidth: UIScale.pt(96))
-                Button {
-                    model.step(1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.edith(.iconOnly))
-                .disabled(!model.canStepForward)
-                .help("Next period")
-            }
-            .fixedSize()
         }
     }
 
-    private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Text(title)
-                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(5))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: active
-                        ? AnyShapeStyle(DashSkin.accent(dark))
-                        : AnyShapeStyle(DashSkin.paper2(dark)),
-                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
-                )
-                .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+    private var moreRanges: some View {
+        PageMenuChip("More", systemImage: "calendar") {
+            ForEach(Array(AttentionRangePreset.groups.enumerated()), id: \.offset) { _, group in
+                Section {
+                    ForEach(group) { preset in
+                        Button(preset.title) { model.select(preset) }
+                    }
+                }
+            }
+            Button("Custom range…") {
+                customFrom = model.period.start
+                customTo = model.period.lastDay
+                customOpen = true
+            }
         }
-        .buttonStyle(.edith(.borderless))
+        .popover(isPresented: $customOpen, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                Text("Custom range").font(.edithText(.headline))
+                DatePicker(
+                    "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
+                DatePicker(
+                    "To", selection: $customTo, in: ...Date(), displayedComponents: .date)
+                HStack {
+                    Spacer()
+                    Button("Show") {
+                        model.selectRange(from: customFrom, to: customTo)
+                        customOpen = false
+                    }
+                    .buttonStyle(.edith(.primary))
+                }
+            }
+            .padding(UIScale.pt(16))
+            .frame(width: UIScale.pt(280))
+        }
+    }
+
+    private var stepper: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            Button {
+                model.step(-1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .frame(width: UIScale.pt(10))
+            }
+            .buttonStyle(.pageChip())
+            .disabled(!model.canStepBackward)
+            .help("Previous period")
+            .accessibilityLabel("Previous period")
+            Text(model.period.title())
+                .font(PageMetrics.chipFont)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(minWidth: UIScale.pt(88))
+            Button {
+                model.step(1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .frame(width: UIScale.pt(10))
+            }
+            .buttonStyle(.pageChip())
+            .disabled(!model.canStepForward)
+            .help("Next period")
+            .accessibilityLabel("Next period")
+        }
         .fixedSize()
     }
 }
@@ -289,7 +291,10 @@ private struct AttentionIdleMenu: View {
     @Bindable var model: AttentionPageModel
 
     var body: some View {
-        Menu {
+        PageMenuChip(
+            model.excludeIdleTime ? "Exclude idle" : "Include idle", systemImage: "moon.zzz",
+            active: !model.excludeIdleTime
+        ) {
             Button {
                 model.excludeIdleTime = true
             } label: {
@@ -308,14 +313,7 @@ private struct AttentionIdleMenu: View {
                     Label("Include idle time", systemImage: "checkmark")
                 }
             }
-        } label: {
-            Label(
-                model.excludeIdleTime ? "Exclude idle" : "Include idle",
-                systemImage: "moon.zzz")
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(model.excludeIdleTime ? .primary : .secondary))
-        .fixedSize()
         .help("Filter screen time with or without idle and locked periods")
     }
 }
@@ -325,7 +323,9 @@ private struct AttentionWindowMenu: View {
 
     var body: some View {
         let window = model.window
-        Menu {
+        PageMenuChip(
+            window.isAll ? "All hours" : window.title, systemImage: "clock", active: !window.isAll
+        ) {
             Section("Days") {
                 ForEach(AttentionDayFilter.allCases) { filter in
                     toggle(
@@ -369,12 +369,7 @@ private struct AttentionWindowMenu: View {
             if !window.isAll {
                 Button("Reset to all days and hours") { model.setWindow(.all) }
             }
-        } label: {
-            Label(window.isAll ? "All hours" : window.title, systemImage: "clock")
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(window.isAll ? .secondary : .primary))
-        .fixedSize()
     }
 
     private func toggle(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -406,20 +401,23 @@ private struct AttentionSetupView: View {
     @Bindable var model: AttentionPageModel
     @State private var applicationTracking = true
     @State private var browserTracking = true
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                HStack(spacing: UIScale.pt(14)) {
-                    PageGuideBadge(symbolName: "hourglass", size: 56)
-                    Text("See where your attention actually goes")
-                        .font(DashSkin.heading(28))
-                }
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            VStack(spacing: UIScale.pt(16)) {
+                PageGuideBadge(symbolName: "hourglass")
+                Text("See where your attention actually goes")
+                    .font(.edithText(.title2)).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
                 Text(
                     "Attention measures how long each app and website is in front of you, so you can see where your day really goes. It runs quietly in the background and everything stays on this Mac unless you turn on iCloud backup."
                 )
-                .foregroundStyle(.secondary)
+                .font(.edithText(.body)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: UIScale.pt(520))
                 PageGuideSteps(
                     steps: [
                         PageGuideStep(
@@ -431,9 +429,10 @@ private struct AttentionSetupView: View {
                         PageGuideStep(
                             symbolName: "play.circle", title: "Begin tracking",
                             detail: "Charts appear after a few minutes of use."),
-                    ], columns: 3)
+                    ], columns: compact ? 1 : 3)
             }
-            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, UIScale.pt(12))
 
             PageCard {
                 SetupStep(
@@ -472,7 +471,7 @@ private struct AttentionSetupView: View {
                         }
                     })
                 Text(privacyDescription)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                 if model.settings.privacyLevel == .detailed {
                     Toggle(
@@ -487,18 +486,18 @@ private struct AttentionSetupView: View {
                 BrowserInstallCard(model: model, showToken: true)
             }
 
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: UIScale.pt(16)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(
                         AttentionPageModel.setupBlocker(
                             applicationTracking: applicationTracking,
                             browserTracking: browserTracking) ?? "Nothing is recorded yet"
                     )
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     Text(
                         "Tracking starts when you press Begin. You can pause or erase it any time in Settings."
                     )
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -511,8 +510,9 @@ private struct AttentionSetupView: View {
                 .controlSize(.large)
                 .disabled(!applicationTracking && !browserTracking)
             }
-            .padding(.top, 4)
+            .padding(.top, UIScale.pt(4))
         }
+        .buttonStyle(.edith(.secondary))
     }
 
     private var privacyDescription: String {
@@ -617,15 +617,16 @@ struct SetupStep: View {
     let subtitle: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Text(number)
-                .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
+                .font(.edithText(.callout).weight(.bold))
                 .frame(width: UIScale.pt(26), height: UIScale.pt(26))
                 .background(Color.themeAccent.opacity(0.14), in: Circle())
                 .foregroundStyle(Color.themeAccent)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
-                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title).font(.edithText(.headline))
+                Text(subtitle).font(.edithText(.callout)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -637,11 +638,11 @@ struct SourceLabel: View {
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(24))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: UIScale.pt(13), weight: .semibold))
-                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: UIScale.pt(8)) {
+            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(20))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title).font(.edithText(.body).weight(.semibold))
+                Text(subtitle).font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         }
     }
@@ -659,12 +660,12 @@ struct GuideRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(String(number)).font(.system(size: UIScale.pt(10), weight: .bold)).frame(
+        HStack(spacing: UIScale.pt(8)) {
+            Text(String(number)).font(.edithText(.caption).weight(.bold)).frame(
                 width: UIScale.pt(21), height: UIScale.pt(21)
             )
             .background(.secondary.opacity(0.12), in: Circle())
-            Text(text).font(.system(size: UIScale.pt(12)))
+            Text(text).font(.edithText(.callout))
             Spacer()
             trailing
         }
@@ -687,9 +688,10 @@ struct SettingsTitle: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
-            Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text(title).font(.edithText(.headline))
+            Text(subtitle).font(.edithText(.callout)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -732,7 +734,7 @@ struct BrowserInstallCard: View {
             if showToken {
                 Divider()
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Local port").font(.system(size: UIScale.pt(11), weight: .semibold))
+                    Text("Local port").font(.edithText(.subheadline).weight(.semibold))
                     Text(String(model.settings.serverPort))
                         .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .textSelection(.enabled)
@@ -748,13 +750,13 @@ struct BrowserInstallCard: View {
                     Text(
                         "Paste this token into the extension settings for every profile. Each profile gets its own label and can import its own 30-day site inventory."
                     )
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 }
             }
             Text(
                 "Version \(AttentionExtensionInstaller.version) reads the focused tab, page titles, searches, repositories, videos, playing media and typing, clicking and scrolling counts on every site. Updates install themselves when Edith ships a newer version."
             )
-            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            .font(.edithText(.subheadline)).foregroundStyle(.secondary)
         }
     }
 }

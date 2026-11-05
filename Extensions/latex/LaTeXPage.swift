@@ -48,24 +48,28 @@ struct LaTeXPage: View {
     }
 
     private var projectsPage: some View {
-        PageScaffold {
-            PageHeader("LaTeX projects") {
-                Button {
-                    beginAdding(.disk)
-                } label: {
-                    Label("Add project", systemImage: "plus")
-                }
-                .buttonStyle(.edith(.primary))
-                .disabled(model.busy || model.load.isRunning)
-                .help(
-                    model.load.isRunning
-                        ? "Wait for your projects to finish loading." : "Add a LaTeX project")
-            } accessory: {
-                Text("Write documents, see the PDF beside them. On this Mac or on GitHub.")
-                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-            }
+        PageScaffold(pinnedHeader: true) {
+            PageHeader(
+                "LaTeX projects",
+                subtitle: "Write documents and see the PDF beside them, on this Mac or on GitHub.",
+                divider: true,
+                trailing: {
+                    if !showsFirstRun {
+                        Button {
+                            beginAdding(.disk)
+                        } label: {
+                            Label("Add project", systemImage: "plus")
+                        }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.busy || model.load.isRunning)
+                        .help(
+                            model.load.isRunning
+                                ? "Wait for your projects to finish loading."
+                                : "Add a LaTeX project")
+                    }
+                })
         } content: {
-            if model.projects.isEmpty && model.load.state == .empty {
+            if showsFirstRun {
                 firstRun
             } else {
                 PageLoading(
@@ -76,8 +80,9 @@ struct LaTeXPage: View {
                     layout: .cards, retry: { model.launch { await model.start() } }
                 ) {
                     LazyVGrid(
-                        columns: PageMetrics.cardColumns(compact, minimum: 300, spacing: 16),
-                        spacing: UIScale.pt(16)
+                        columns: PageMetrics.cardColumns(
+                            compact, minimum: 300, spacing: PageMetrics.cardSpacing),
+                        spacing: UIScale.pt(PageMetrics.cardSpacing)
                     ) {
                         ForEach(model.projects) { project in projectCard(project) }
                     }
@@ -85,6 +90,8 @@ struct LaTeXPage: View {
             }
         }
     }
+
+    private var showsFirstRun: Bool { model.projects.isEmpty && model.load.state == .empty }
 
     private var firstRun: some View {
         PageEmptyState(
@@ -130,49 +137,57 @@ struct LaTeXPage: View {
                 await model.select(project.id)
             }
         } label: {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                HStack {
-                    Image(
-                        systemName: project.location == .disk
-                            ? "doc.richtext" : "arrow.triangle.branch"
-                    )
-                    .font(.system(size: UIScale.pt(24))).foregroundStyle(.tint)
-                    Spacer()
-                    Text(project.location.title).font(.edithText(.caption)).foregroundStyle(
-                        .secondary)
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                    PageGuideBadge(
+                        symbolName: project.location == .disk
+                            ? "doc.richtext" : "arrow.triangle.branch",
+                        size: 40)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(project.name).font(.edithText(.headline))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text(
+                            project.location == .disk
+                                ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
+                                : project.repository
+                        )
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Text(project.name).font(.edithText(.title3)).foregroundStyle(.primary)
                 Text(
                     project.location == .disk
-                        ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
-                        : project.repository
-                )
-                .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-                Text(
-                    project.location == .disk
-                        ? "Compile and save PDFs on this Mac"
+                        ? "Compiles and saves its PDF on this Mac."
                         : "\(project.sourcePath) · \(project.baseBranch)"
                 )
-                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
+                .font(.edithText(.callout)).foregroundStyle(.secondary).lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Divider()
                 HStack {
                     if let number = project.pullRequest {
                         Label("Pull request #\(number)", systemImage: "arrow.triangle.pull")
-                            .font(.edithText(.caption)).foregroundStyle(.green)
+                            .font(.edithText(.callout)).foregroundStyle(.green)
+                    } else {
+                        Text(project.location.title)
+                            .font(.edithText(.callout)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Label("Open editor", systemImage: "arrow.right")
-                        .font(.edithText(.subheadline)).foregroundStyle(.tint)
+                    HStack(spacing: UIScale.pt(4)) {
+                        Text("Open editor")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.edithText(.callout).weight(.medium))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark))
                 }
             }
-            .padding(UIScale.pt(20))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(190), alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(14)).fill(DashSkin.paper(scheme == .dark))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(
-                    Color.secondary.opacity(0.2)))
+            .padding(UIScale.pt(PageMetrics.cardPadding))
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+            .contentShape(
+                RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
         }
         .buttonStyle(.edith(.borderless))
         .disabled(model.busy || model.load.isRunning)
@@ -250,10 +265,10 @@ struct LaTeXPage: View {
         PageSectionHeader(
             project.name,
             subtitle: project.location == .disk
-                ? project.sourcePath
-                : "\(project.repository) · \(project.baseBranch) · \(project.sourcePath)"
+                ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
+                : "\(project.repository) · \(project.baseBranch)"
         ) {
-            HStack(spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button {
                     editing = false
                 } label: {
@@ -291,7 +306,12 @@ struct LaTeXPage: View {
                     }
                 } label: {
                     Image(systemName: "rectangle.split.2x1")
-                }.help("Editor layout").accessibilityLabel("Editor layout")
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Editor layout")
+                .accessibilityLabel("Editor layout")
                 Menu {
                     Button("Reload source") { model.launch { await model.reload() } }
                     if project.location == .disk {
@@ -305,15 +325,21 @@ struct LaTeXPage: View {
                 } label: {
                     Image(systemName: "ellipsis")
                 }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("More actions")
                 .disabled(model.dirty || model.busy || model.load.isRunning)
                 .help(
                     model.dirty
                         ? "Save or discard your edits before using these actions."
                         : "More actions")
             }
+            .buttonStyle(.edith(.secondary))
         }
         .pageGutter(compact)
-        .padding(.vertical, UIScale.pt(14))
+        .padding(.top, UIScale.pt(PageMetrics.cardSpacing))
+        .padding(.bottom, UIScale.pt(4))
         .confirmationDialog(
             "Remove \(project.name) from your library?", isPresented: $confirmingRemoval,
             titleVisibility: .visible

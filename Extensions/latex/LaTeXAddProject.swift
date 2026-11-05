@@ -27,12 +27,8 @@ struct LaTeXAddProject: View {
     }
 
     var body: some View {
-        PageScaffold(width: .readable) {
-            PageHeader(
-                "Add LaTeX project",
-                trailing: {
-                    Button("Cancel") { dismiss() }.disabled(busy)
-                })
+        PageScaffold(width: .readable, pinnedHeader: true) {
+            PageHeader("Add LaTeX project", divider: true)
         } content: {
             EdithSegmentedPicker(
                 "Storage", selection: $location, options: LaTeXLocation.allCases,
@@ -77,9 +73,19 @@ struct LaTeXAddProject: View {
             if let error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.red).textSelection(.enabled)
             }
-            HStack {
-                if busy { LoadingIndicator(); Text("Checking source…").font(.edithText(.caption)) }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                if busy {
+                    LoadingIndicator()
+                    Text("Checking source…").font(.edithText(.caption))
+                } else if let addDisabledReason {
+                    Text(addDisabledReason).font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.edith(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(busy)
                 Button("Add project") { add() }
                     .buttonStyle(.edith(.primary))
                     .disabled(!canAdd)
@@ -87,7 +93,7 @@ struct LaTeXAddProject: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .frame(width: UIScale.pt(520), height: UIScale.pt(510))
+        .frame(width: UIScale.pt(520), height: UIScale.pt(580))
         .transientPresentation(
             dismissible: !busy && name.isEmpty && sourcePath.isEmpty && repository.isEmpty)
     }

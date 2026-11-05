@@ -79,25 +79,24 @@ private struct SEOAuditProjectsView: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        PageScaffold {
-            PageHeader {
-                Text("Site Audit")
-            } accessory: {
-                HStack(spacing: UIScale.pt(14)) {
-                    Text("Check a website for SEO problems. Results stay on this Mac.")
-                        .font(.system(size: UIScale.pt(13)))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                    Button(action: model.presentNewProject) {
-                        Label("New project", systemImage: "plus")
+        PageScaffold(pinnedHeader: true) {
+            PageHeader(
+                "Site Audit",
+                subtitle: "Check a website for SEO problems. Results stay on this Mac.",
+                divider: true,
+                trailing: {
+                    if !(model.projectsLoaded && model.projects.isEmpty) {
+                        Button(action: model.presentNewProject) {
+                            Label("New project", systemImage: "plus")
+                        }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.isRunning)
+                        .help(
+                            model.isRunning
+                                ? "Wait for the running audit to finish or stop it first."
+                                : "Add a website to audit")
                     }
-                    .buttonStyle(.edith(.primary))
-                    .disabled(model.isRunning)
-                    .help(
-                        model.isRunning
-                            ? "Wait for the running audit to finish or stop it first."
-                            : "Add a website to audit")
-                }
-            }
+                })
         } content: {
             if model.projectsLoaded, let error = model.projectsLoadError {
                 PageNotice(
@@ -172,12 +171,15 @@ private struct SEOAuditProjectsView: View {
                     "Audits only read your public pages. Results are saved on this Mac and never uploaded."
             )
         } else {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 PageSectionHeader(
-                    "Projects", subtitle: "\(model.projects.count) local workspaces")
+                    "Projects",
+                    subtitle: model.projects.count == 1
+                        ? "1 website" : "\(model.projects.count) websites")
                 LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 290, spacing: 14),
-                    spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(
+                        compact, minimum: 290, spacing: PageMetrics.cardSpacing),
+                    spacing: UIScale.pt(PageMetrics.cardSpacing)
                 ) {
                     ForEach(model.projects) { project in
                         let active = model.isRunning && model.selectedProject?.id == project.id
@@ -215,22 +217,23 @@ private struct SEOAuditNewProjectSheet: View {
                     .background(DashSkin.accent(dark).opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("New audit project")
-                        .font(DashSkin.heading(23))
+                        .font(.edithText(.title2)).fontWeight(.semibold)
                     Text(
                         "Add the site once. Every audit of it is saved under this project so you can compare runs."
                     )
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 fieldLabel("Site URL")
                 EdithTextField(
                     placeholder: "localhost:3000 or example.com", text: $model.input,
                     icon: "link", clearable: true,
                     onSubmit: { Task { await model.beginNewProject() } })
-                fieldLabel("Project name")
+                fieldLabel("Project name").padding(.top, UIScale.pt(4))
                 EdithTextField(
                     placeholder: "Optional, defaults to the site address", text: $model.projectName,
                     icon: "folder")
@@ -253,7 +256,7 @@ private struct SEOAuditNewProjectSheet: View {
                 Spacer()
                 if model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Enter your site's address to continue")
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Button(action: { Task { await model.beginNewProject() } }) {
@@ -271,10 +274,7 @@ private struct SEOAuditNewProjectSheet: View {
     }
 
     private func fieldLabel(_ value: String) -> some View {
-        Text(value.uppercased())
-            .font(DashSkin.mono(8.5, weight: .bold))
-            .tracking(0.6)
-            .foregroundStyle(.tertiary)
+        PageCapsLabel(value)
     }
 
     private func capability(_ title: String, _ icon: String, _ available: Bool) -> some View {
@@ -282,7 +282,7 @@ private struct SEOAuditNewProjectSheet: View {
             Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(available ? DashSkin.ok : DashSkin.warn)
             Image(systemName: icon).foregroundStyle(.secondary)
-            Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
+            Text(title).font(.edithText(.caption).weight(.medium))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(UIScale.pt(10))
@@ -312,33 +312,38 @@ private struct SEOAuditProjectCard: View {
             Button(action: viewDetails) {
                 VStack(alignment: .leading, spacing: 0) {
                     artwork
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                        Text(project.name)
-                            .font(.system(size: UIScale.pt(15), weight: .semibold))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(project.baseURL)
-                            .font(DashSkin.mono(10.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                            Text(project.name)
+                                .font(.edithText(.headline))
+                                .foregroundStyle(DashSkin.ink(dark))
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(project.baseURL)
+                                .font(.edithText(.callout))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                         Divider()
-                        HStack(spacing: UIScale.pt(16)) {
+                        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(16)) {
                             cardMetric("Pages", displayedPageCount)
                             cardMetric("Issues", displayedIssueCount)
                             cardMetric("Score", displayedAverageScore)
                             Spacer(minLength: 0)
                             Text(project.updatedAt, format: .relative(presentation: .named))
-                                .font(.system(size: UIScale.pt(10)))
-                                .foregroundStyle(.tertiary)
+                                .font(.edithText(.caption))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(UIScale.pt(14))
+                    .padding(UIScale.pt(PageMetrics.cardPadding))
                 }
                 .background(DashSkin.paper2(dark))
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(15)))
+                .clipShape(
+                    RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(15))
+                    RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
                         .strokeBorder(
                             hovered ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
                             lineWidth: UIScale.pt(1))
@@ -354,7 +359,7 @@ private struct SEOAuditProjectCard: View {
                 projectActions
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     .background(.black.opacity(0.62), in: Circle())
@@ -412,11 +417,11 @@ private struct SEOAuditProjectCard: View {
                     .accessibilityLabel("Audit in progress")
                 }
                 Text(activityLabel)
-                    .font(DashSkin.mono(9, weight: .bold))
-                    .tracking(0.8)
+                    .font(.edithText(.caption).weight(.semibold))
                 if let activeProgress {
                     Text(activeProgress, format: .percent.precision(.fractionLength(0)))
-                        .font(DashSkin.mono(9, weight: .bold))
+                        .font(.edithText(.caption).weight(.semibold))
+                        .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.72))
                 }
             }
@@ -458,14 +463,14 @@ private struct SEOAuditProjectCard: View {
 
     private var activityLabel: String {
         guard let activeStage else {
-            return project.latestRun?.state.rawValue.uppercased() ?? "READY"
+            return project.latestRun?.state.rawValue.capitalized ?? "Not audited yet"
         }
         switch activeStage {
-        case .idle: return project.latestRun?.state.rawValue.uppercased() ?? "READY"
-        case .discovering: return "DISCOVERING"
-        case let .auditing(current, total, _): return "AUDITING \(current)/\(total)"
-        case .lighthouse: return "LIGHTHOUSE"
-        case .saving: return "SAVING RUN"
+        case .idle: return project.latestRun?.state.rawValue.capitalized ?? "Not audited yet"
+        case .discovering: return "Finding pages"
+        case let .auditing(current, total, _): return "Auditing \(current) of \(total)"
+        case .lighthouse: return "Running Lighthouse"
+        case .saving: return "Saving results"
         }
     }
 
@@ -501,8 +506,8 @@ private struct SEOAuditProjectCard: View {
 
     private func cardMetric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(value).font(DashSkin.mono(12, weight: .semibold))
-            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(.tertiary)
+            Text(value).font(.edithText(.body).weight(.semibold)).monospacedDigit()
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 }
@@ -523,9 +528,9 @@ private struct SEOAuditRenameProjectSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Rename project")
-                    .font(DashSkin.heading(22))
+                    .font(.edithText(.title2)).fontWeight(.semibold)
                 Text(project.baseURL)
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
             }
             EdithTextField(
