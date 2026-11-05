@@ -40,20 +40,20 @@ final class DownloadsSurface {
         let rows = ordered.prefix(100).map { item in
             var actions: [SurfaceAction] = []
             if item.canRetry {
-                actions.append(.init(Self.action("retry", item.id), "Retry", "arrow.clockwise"))
+                actions.append(.init(Self.action("retry", item.id), "Retry", .refresh))
             }
             if !item.isFinished {
-                actions.append(.init(Self.action("cancel", item.id), "Cancel", "xmark"))
+                actions.append(.init(Self.action("cancel", item.id), "Cancel", .close))
             }
             if case .done = item.status {
-                actions.append(.init(Self.action("reveal", item.id), "Show file", "folder"))
+                actions.append(.init(Self.action("reveal", item.id), "Show file", .folder))
             }
             return SurfaceDataRow(
                 item.id.uuidString, sourceID: (item.kind ?? .audio).rawValue,
                 title: Self.title(item),
                 detail: tile.shows("url") ? String(item.detail.prefix(256)) : "",
                 value: String(item.state.capitalized.prefix(80)),
-                icon: "arrow.down.circle",
+                icon: .arrowDown,
                 progress: Self.progress(item.status), field: "queue", actions: actions)
         }
         return SurfaceSnapshot(

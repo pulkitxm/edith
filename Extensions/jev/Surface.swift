@@ -12,7 +12,7 @@ enum JevSurface {
             rows: [
                 .init(
                     "configuration", title: "Jev", value: String(status.summary.prefix(256)),
-                    icon: "sparkle")
+                    icon: .jev)
             ], message: status.message.map { String($0.prefix(2048)) }, updatedAt: status.checkedAt)
     }
 }

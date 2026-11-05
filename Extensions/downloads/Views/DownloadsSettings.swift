@@ -85,7 +85,7 @@ struct DownloadsSettings: View {
     @ViewBuilder
     private func toolStatus(_ name: String) -> some View {
         if tools.installed.contains(name) {
-            Label("Installed", systemImage: "checkmark.circle.fill")
+            Label("Installed", edith: .success)
                 .foregroundStyle(.green)
         } else if tools.installing == name {
             SkeletonBlock(width: 64, height: 12, corner: 4)

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DatabaseSafetyCard<Content: View>: View {
     let title: String
-    let symbol: String
+    let icon: EdithIcon
     let dark: Bool
     var stroke: Color?
     @ViewBuilder let content: () -> Content
@@ -16,13 +16,13 @@ struct DatabaseSafetyCard<Content: View>: View {
 
     init(
         title: String,
-        symbol: String,
+        icon: EdithIcon,
         dark: Bool,
         stroke: Color? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
-        self.symbol = symbol
+        self.icon = icon
         self.dark = dark
         self.stroke = stroke
         self.content = content
@@ -30,7 +30,7 @@ struct DatabaseSafetyCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Label(title, systemImage: symbol)
+            Label(title, edith: icon)
                 .font(DashSkin.heading(17))
                 .foregroundStyle(palette.ink)
                 .accessibilityAddTraits(.isHeader)
@@ -70,7 +70,7 @@ struct DatabaseSafetyFactsGrid: View {
         ) {
             ForEach(facts) { fact in
                 HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                    Image(systemName: fact.symbol)
+                    EdithIconView(fact.icon)
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                         .foregroundStyle(palette.inkFaint)
                         .frame(width: UIScale.pt(16))
@@ -151,7 +151,7 @@ struct DatabaseSafetyLabeledText: View {
 
 struct DatabaseSafetyPill: View {
     let title: String
-    let symbol: String
+    let icon: EdithIcon
     let accentColor: Color
     let dark: Bool
     @Environment(\.databaseAppTheme) private var appTheme
@@ -162,7 +162,7 @@ struct DatabaseSafetyPill: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(5)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .foregroundStyle(accentColor)
                 .accessibilityHidden(true)
             Text(title)
@@ -179,7 +179,8 @@ struct DatabaseSafetyPill: View {
 
 struct DatabaseSafetyStatusLine: View {
     let text: String
-    let symbol: String
+    let icon: EdithIcon
+    var tone: EdithIconTone = .duotone
     let color: Color
     let dark: Bool
     @Environment(\.databaseAppTheme) private var appTheme
@@ -190,7 +191,7 @@ struct DatabaseSafetyStatusLine: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-            Image(systemName: symbol)
+            EdithIconView(icon, tone: tone)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(color)
                 .accessibilityHidden(true)

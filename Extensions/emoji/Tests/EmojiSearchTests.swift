@@ -116,7 +116,7 @@ private let corpus = [
 
 @Suite struct EmojiOperationResolveTests {
     private let catalog = EmojiCatalog(
-        groups: [EmojiGroup(id: "people-body", name: "People", symbolName: "hand.wave")],
+        groups: [EmojiGroup(id: "people-body", name: "People", icon: .person)],
         emoji: [
             Emoji(
                 character: "👍\u{FE0F}", name: "thumbs up", groupIndex: 0, unicodeVersion: 0.6,

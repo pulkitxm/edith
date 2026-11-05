@@ -170,12 +170,12 @@ struct DownloadSheet: View {
                     if let result = downloader.updateResult {
                         switch result {
                         case .success(let message):
-                            Label(message, systemImage: "checkmark.circle.fill")
+                            Label(message, edith: .success)
                                 .foregroundStyle(.green)
                         case .failure(let error):
                             Label(
                                 error.localizedDescription,
-                                systemImage: "exclamationmark.triangle.fill"
+                                edith: .warning
                             )
                             .foregroundStyle(.red)
                         }
@@ -186,7 +186,7 @@ struct DownloadSheet: View {
                         } label: {
                             Label(
                                 downloader.isUpdatingYTDLP ? "Updating…" : "Update tool",
-                                systemImage: "arrow.triangle.2.circlepath")
+                                edith: .sync)
                         }
                         .buttonStyle(.edith(.secondary))
                         .disabled(downloader.isRunning || downloader.isUpdatingYTDLP)
@@ -201,7 +201,7 @@ struct DownloadSheet: View {
                         Button {
                             dismiss()
                         } label: {
-                            Image(systemName: "xmark")
+                            EdithIconView(.close)
                         }
                         .buttonStyle(.edith(.iconOnly))
                         .keyboardShortcut(.cancelAction)
@@ -221,7 +221,7 @@ struct DownloadSheet: View {
     private func unavailableView(_ reason: String) -> some View {
         let missingTool = reason.contains("yt-dlp")
         return PageEmptyState(
-            symbolName: missingTool ? "arrow.down.circle" : "exclamationmark.triangle",
+            icon: missingTool ? .arrowDown : .warning,
             title: missingTool
                 ? "Set up Downloads once to get started" : "Downloads can't start yet",
             message: missingTool
@@ -230,20 +230,20 @@ struct DownloadSheet: View {
             steps: missingTool
                 ? [
                     PageGuideStep(
-                        symbolName: "wrench.and.screwdriver", title: "Install yt-dlp",
+                        icon: .wrench, title: "Install yt-dlp",
                         detail: "Open setup and press Install. It takes under a minute."),
                     PageGuideStep(
-                        symbolName: "link", title: "Paste a link",
+                        icon: .link, title: "Paste a link",
                         detail: "Copy any video or post link and paste it here."),
                     PageGuideStep(
-                        symbolName: "arrow.down.circle", title: "Download",
+                        icon: .arrowDown, title: "Download",
                         detail: "Files are saved to a folder you choose."),
                 ] : [],
             primary: PageAction(
                 missingTool ? "Set up Downloads" : "Open settings",
-                symbolName: "gearshape", identifier: "downloads.setup"
+                icon: .gear, identifier: "downloads.setup"
             ) { settingsPresented = true },
-            secondary: PageAction("Check again", symbolName: "arrow.clockwise") {
+            secondary: PageAction("Check again", icon: .refresh) {
                 downloader.checkAvailability()
             },
             footnote: "Nothing is downloaded until you paste a link and press Download."
@@ -383,7 +383,7 @@ struct DownloadSheet: View {
                 Button {
                     urlText = NSPasteboard.general.string(forType: .string) ?? urlText
                 } label: {
-                    Label("Paste", systemImage: "doc.on.clipboard")
+                    Label("Paste", edith: .clipboard)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.edithText(.callout))
@@ -420,13 +420,13 @@ struct DownloadSheet: View {
                 if parsedCount > 0 {
                     Label(
                         "\(parsedCount) link\(parsedCount == 1 ? "" : "s") ready",
-                        systemImage: "checkmark.circle.fill"
+                        edith: .success
                     )
                     .foregroundStyle(.secondary)
                 } else if !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Label(
                         "Enter a complete link that starts with http:// or https://",
-                        systemImage: "exclamationmark.circle"
+                        edith: .alert
                     )
                     .foregroundStyle(.orange)
                 } else {
@@ -476,7 +476,7 @@ struct DownloadSheet: View {
         return Button {
             downloadKindRaw = kind.rawValue
         } label: {
-            Label(kind.title, systemImage: formatSymbol(kind))
+            Label(kind.title, edith: formatIcon(kind))
                 .font(.edithText(.callout).weight(.medium))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
@@ -505,18 +505,18 @@ struct DownloadSheet: View {
         }
     }
 
-    private func formatSymbol(_ kind: DownloadKind) -> String {
+    private func formatIcon(_ kind: DownloadKind) -> EdithIcon {
         switch kind {
-        case .post: "square.stack"
-        case .images: "photo"
-        case .audio: "waveform"
-        case .video: "play.rectangle"
+        case .post: .layers
+        case .images: .photo
+        case .audio: .waveform
+        case .video: .play
         }
     }
 
     private func sizeChip(_ kind: DownloadKind) -> some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: kind == .audio ? "waveform" : "film")
+            EdithIconView(kind == .audio ? .waveform : .film)
             Text(kind.title)
             if estimating {
                 SkeletonGroup {
@@ -604,7 +604,7 @@ struct DownloadSheet: View {
             Button(action: startDownload) {
                 Label(
                     parsedCount > 1 ? "Download \(parsedCount) links" : "Download",
-                    systemImage: "arrow.down.circle"
+                    edith: .arrowDown
                 )
                 .font(.edithText(.body).weight(.medium))
                 .frame(maxWidth: compact ? .infinity : nil)
@@ -637,7 +637,7 @@ struct DownloadSheet: View {
                     }
                 } label: {
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "folder")
+                        EdithIconView(.folder)
                         Text(folder.lastPathComponent).lineLimit(1)
                         Spacer(minLength: UIScale.pt(8))
                         Text("Change…").foregroundStyle(.secondary)
@@ -677,7 +677,7 @@ struct DownloadSheet: View {
                         Text(browser.isEmpty ? "None (public media)" : browser.capitalized)
                             .lineLimit(1)
                         Spacer(minLength: UIScale.pt(8))
-                        Image(systemName: "chevron.up.chevron.down")
+                        EdithIconView(.chevronUpDown)
                             .foregroundStyle(.secondary)
                     }
                     .font(.edithText(.callout))
@@ -707,13 +707,13 @@ struct DownloadSheet: View {
 
     private static let firstUseSteps = [
         PageGuideStep(
-            symbolName: "link", title: "Paste a link",
+            icon: .link, title: "Paste a link",
             detail: "Videos, photos or posts from YouTube, Instagram, TikTok, X and more."),
         PageGuideStep(
-            symbolName: "square.stack", title: "Pick what to save",
+            icon: .layers, title: "Pick what to save",
             detail: "Everything in a post, just images, audio only, or video."),
         PageGuideStep(
-            symbolName: "arrow.down.circle", title: "Press Download",
+            icon: .arrowDown, title: "Press Download",
             detail: "Files are saved to the folder shown under Save to."),
     ]
 
@@ -754,21 +754,21 @@ struct DownloadSheet: View {
     private func statusIcon(_ status: DownloadStatus) -> some View {
         switch status {
         case .queued:
-            Image(systemName: "clock")
+            EdithIconView(.clock)
                 .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         case .resolving, .downloading:
             ProgressView().controlSize(.small)
         case .done:
-            Image(systemName: "checkmark.circle.fill")
+            EdithIconView(.success)
                 .font(.system(size: UIScale.pt(16)))
                 .foregroundStyle(.green)
         case .error:
-            Image(systemName: "exclamationmark.circle.fill")
+            EdithIconView(.alert)
                 .font(.system(size: UIScale.pt(16)))
                 .foregroundStyle(.red)
         case .interrupted:
-            Image(systemName: "pause.circle.fill")
+            EdithIconView(.pause)
                 .font(.system(size: UIScale.pt(16)))
                 .foregroundStyle(.orange)
         }
@@ -836,7 +836,7 @@ struct DownloadSheet: View {
                 Button {
                     downloader.cancel(item)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .help("Cancel this download")
                 .accessibilityLabel("Cancel download")
@@ -853,14 +853,14 @@ struct DownloadSheet: View {
                 Button {
                     downloader.openResult(item)
                 } label: {
-                    Image(systemName: "arrow.up.forward.app")
+                    EdithIconView(.external)
                 }
                 .help("Open downloaded file")
                 .accessibilityLabel("Open downloaded file")
                 Button {
                     downloader.revealResult(item)
                 } label: {
-                    Image(systemName: "folder")
+                    EdithIconView(.folder)
                 }
                 .help("Show in Finder")
                 .accessibilityLabel("Show in Finder")
@@ -876,7 +876,7 @@ struct DownloadSheet: View {
         Button {
             downloader.remove(item)
         } label: {
-            Image(systemName: "trash")
+            EdithIconView(.trash)
         }
         .help("Remove from the list. The file stays on your Mac.")
         .accessibilityLabel("Remove from list")
@@ -998,7 +998,7 @@ private struct DownloadThumb: View {
     }
 
     private var placeholder: some View {
-        Image(systemName: "play.rectangle.fill")
+        EdithIconView(.play)
             .font(.system(size: height * 0.4))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }

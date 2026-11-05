@@ -37,13 +37,13 @@ struct HingeRows: View {
                     SettingsNoticeRow(
                         "Starts when this extension is enabled",
                         message: "Your choice is saved and takes effect as soon as it runs.",
-                        symbol: "clock.fill")
+                        icon: .clock)
                 }
                 if !status.isEmpty {
                     Label {
                         Text(status).fixedSize(horizontal: false, vertical: true)
                     } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(
+                        EdithIconView(.warning).foregroundStyle(
                             .orange)
                     }
                     .font(.edithText(.subheadline))
@@ -135,9 +135,9 @@ private struct HingeIntro: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
-                    HingeFact(symbol: "eye", text: "Visual only")
-                    HingeFact(symbol: "laptopcomputer", text: "Follows the lid sensor")
-                    HingeFact(symbol: "keyboard", text: "⌃⌥H turns it on or off")
+                    HingeFact(icon: .eye, text: "Visual only")
+                    HingeFact(icon: .laptop, text: "Follows the lid sensor")
+                    HingeFact(icon: .keyboard, text: "⌃⌥H turns it on or off")
                 }
                 .padding(.top, UIScale.pt(4))
             }
@@ -153,11 +153,11 @@ private struct HingeIntro: View {
 }
 
 private struct HingeFact: View {
-    let symbol: String
+    let icon: EdithIcon
     let text: String
 
     var body: some View {
-        Label(text, systemImage: symbol)
+        Label(text, edith: icon)
             .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
             .padding(.horizontal, UIScale.pt(8))

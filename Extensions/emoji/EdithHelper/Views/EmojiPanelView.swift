@@ -6,7 +6,7 @@ import SwiftUI
 struct EmojiSection: Identifiable, Hashable {
     let id: String
     let title: String
-    let symbolName: String
+    let icon: EdithIcon
     let emoji: [Emoji]
 }
 
@@ -53,7 +53,7 @@ struct EmojiPanelView: View {
             guard !matches.isEmpty else { return [] }
             return [
                 EmojiSection(
-                    id: resultsSectionID, title: "Results", symbolName: "magnifyingglass",
+                    id: resultsSectionID, title: "Results", icon: .search,
                     emoji: matches)
             ]
         }
@@ -100,9 +100,7 @@ struct EmojiPanelView: View {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
                 .fill(Color.secondary.opacity(0.1))
             HStack(spacing: 0) {
-                Image(systemName: "magnifyingglass")
-                    .resizable()
-                    .frame(width: 11, height: 11)
+                EdithIconView(.search, size: 12)
                     .padding(.leading, 5)
                     .opacity(0.8)
                 TextField(
@@ -131,9 +129,7 @@ struct EmojiPanelView: View {
                     Button {
                         model.setQuery("")
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .resizable()
-                            .frame(width: 11, height: 11)
+                        EdithIconView(.closeFilled, size: 12)
                     }
                     .buttonStyle(.edith(.borderless))
                     .padding(.trailing, 5)
@@ -300,7 +296,7 @@ struct EmojiPanelView: View {
                 Button {
                     pendingSectionScroll = model.revealSection(section.id)
                 } label: {
-                    Image(systemName: section.symbolName)
+                    EdithIconView(section.icon)
                         .font(.system(size: 12))
                         .frame(maxWidth: .infinity)
                         .frame(height: 24)

@@ -1,7 +1,7 @@
 {
   "id": "emoji",
   "title": "Emoji Picker",
-  "symbolName": "face.smiling",
+  "icon": "emoji",
   "category": "desk",
   "background": false,
   "commands": [
@@ -30,22 +30,22 @@
     "summary": "Press the shortcut in any app to open a searchable emoji picker. Pick one and it is typed right where your cursor is. Your most used emoji appear first and you can set a default skin tone.",
     "steps": [
       {
-        "symbolName": "keyboard",
+        "icon": "keyboard",
         "title": "Press Control+Shift+E",
         "detail": "The picker opens next to your cursor, in any app."
       },
       {
-        "symbolName": "magnifyingglass",
+        "icon": "search",
         "title": "Search by name",
         "detail": "Type happy, thumbs or a shortcode to narrow down the list."
       },
       {
-        "symbolName": "return",
+        "icon": "enter",
         "title": "Press Return",
         "detail": "The emoji is typed into the app you were using."
       },
       {
-        "symbolName": "hand.raised",
+        "icon": "hand",
         "title": "Set a skin tone",
         "detail": "Choose a default tone in settings for emoji that support one."
       }

@@ -1,7 +1,7 @@
 {
   "id": "docs",
   "title": "Docs",
-  "symbolName": "book.closed",
+  "icon": "docs",
   "category": "agents",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "docs",
       "title": "Docs",
-      "symbolName": "book.closed",
+      "icon": "docs",
       "order": 7
     }
   ],
@@ -27,22 +27,22 @@
     "summary": "A searchable, offline reference for every ed command. Type a goal in plain words and Docs ranks the commands that fit. Nothing you read here changes your settings or your machine.",
     "steps": [
       {
-        "symbolName": "sparkle.magnifyingglass",
+        "icon": "search",
         "title": "Describe your goal",
         "detail": "Type something like \"free up docker space\" in the ask bar at the top, or press Command K."
       },
       {
-        "symbolName": "list.bullet.rectangle",
+        "icon": "list",
         "title": "Pick a match",
         "detail": "Use the arrow keys to move through the ranked commands and press Return to open one."
       },
       {
-        "symbolName": "book.closed",
+        "icon": "docs",
         "title": "Read the page",
         "detail": "Every page explains the command, shows examples, and links to related commands."
       },
       {
-        "symbolName": "line.3.horizontal.decrease",
+        "icon": "filter",
         "title": "Browse or filter",
         "detail": "Use the list on the left, or press Command F to filter pages by name."
       }

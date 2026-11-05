@@ -1,7 +1,7 @@
 {
   "id": "downloads",
   "title": "Downloads",
-  "symbolName": "arrow.down.circle",
+  "icon": "arrowDown",
   "category": "media",
   "background": true,
   "commands": [
@@ -13,7 +13,7 @@
     {
       "id": "downloads",
       "title": "Downloads",
-      "symbolName": "arrow.down.circle",
+      "icon": "arrowDown",
       "order": 4
     }
   ],
@@ -31,17 +31,17 @@
     "summary": "Paste a link from YouTube, Instagram, TikTok, X or Reddit and Edith saves the file for you. Downloads run in the background, so you can close the window and keep working.",
     "steps": [
       {
-        "symbolName": "link",
+        "icon": "link",
         "title": "Paste a link",
         "detail": "Add one or several links, one per line."
       },
       {
-        "symbolName": "square.stack",
+        "icon": "layers",
         "title": "Choose what to save",
         "detail": "Pick post, images, audio or video, and the folder to save into."
       },
       {
-        "symbolName": "arrow.down.circle",
+        "icon": "arrowDown",
         "title": "Press Download",
         "detail": "Watch progress in the list, then open or reveal the finished file."
       }

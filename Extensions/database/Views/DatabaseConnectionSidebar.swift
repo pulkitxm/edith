@@ -17,7 +17,7 @@ struct DatabaseConnectionSidebar: View {
             EdithTextField(
                 placeholder: "Search saved connections",
                 text: $model.searchText,
-                icon: "magnifyingglass",
+                icon: .search,
                 compact: true,
                 clearable: true,
                 onSubmit: reload
@@ -38,14 +38,14 @@ struct DatabaseConnectionSidebar: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             Button(action: createConnection) {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
             }
             .buttonStyle(.edith(.borderless))
             .help("Add a database connection")
             .accessibilityLabel("Add a database connection")
             Button(action: reload) {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
             }
             .buttonStyle(.edith(.borderless))
@@ -63,7 +63,7 @@ struct DatabaseConnectionSidebar: View {
             loadingConnectionRows(connections)
         case .empty:
             emptyState(
-                symbol: "cylinder.split.1x2",
+                icon: .database,
                 title: "No saved connections",
                 detail:
                     "Add a database connection here, test it, then save it.",
@@ -71,7 +71,7 @@ struct DatabaseConnectionSidebar: View {
                 action: createConnection)
         case .filteredEmpty(let search):
             emptyState(
-                symbol: "magnifyingglass",
+                icon: .search,
                 title: "No matching connections",
                 detail: "No saved connection matches \"\(search)\".",
                 actionTitle: "Clear search",
@@ -80,21 +80,21 @@ struct DatabaseConnectionSidebar: View {
             connectionRows(connections)
         case .partial(let connections):
             stateNotice(
-                symbol: "exclamationmark.circle.fill",
+                icon: .alert,
                 title: "Partial connection list",
                 detail: "Some saved connections could not be loaded.",
                 tint: .orange)
             connectionRows(connections)
         case .stale(let connections):
             stateNotice(
-                symbol: "clock.arrow.circlepath",
+                icon: .history,
                 title: "Stale connection list",
                 detail: "The saved connection information may be out of date.",
                 tint: .orange)
             connectionRows(connections)
         case .failed(let connections, let message):
             stateNotice(
-                symbol: "exclamationmark.triangle.fill",
+                icon: .warning,
                 title: "Connections unavailable",
                 detail: message,
                 tint: .red,
@@ -121,7 +121,7 @@ struct DatabaseConnectionSidebar: View {
 
     private func loadingConnectionRow(_ index: Int) -> some View {
         HStack(spacing: UIScale.pt(9)) {
-            Image(systemName: "cylinder")
+            EdithIconView(.database)
                 .font(.system(size: UIScale.pt(12), weight: .semibold))
                 .frame(width: UIScale.pt(16))
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -167,7 +167,7 @@ struct DatabaseConnectionSidebar: View {
             model.selectConnection(connection.id)
         } label: {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: connection.product.symbolName)
+                EdithIconView(connection.product.icon)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(selected ? theme : Color.secondary)
                     .frame(width: UIScale.pt(16))
@@ -184,7 +184,7 @@ struct DatabaseConnectionSidebar: View {
                 }
                 Spacer(minLength: 0)
                 if connection.isFavorite {
-                    Image(systemName: "star.fill")
+                    EdithIconView(.heart)
                         .font(.system(size: UIScale.pt(8.5)))
                         .foregroundStyle(theme)
                         .accessibilityHidden(true)
@@ -244,7 +244,7 @@ struct DatabaseConnectionSidebar: View {
     }
 
     private func stateNotice(
-        symbol: String,
+        icon: EdithIcon,
         title: String,
         detail: String,
         tint: Color,
@@ -252,7 +252,7 @@ struct DatabaseConnectionSidebar: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: symbol)
+                EdithIconView(icon)
                     .foregroundStyle(tint)
                     .accessibilityHidden(true)
                 Text(title)
@@ -275,15 +275,14 @@ struct DatabaseConnectionSidebar: View {
     }
 
     private func emptyState(
-        symbol: String,
+        icon: EdithIcon,
         title: String,
         detail: String,
         actionTitle: String,
         action: (() -> Void)? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(24), weight: .light))
+            PageIcon(icon: icon, size: 24)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(title)
@@ -331,13 +330,13 @@ struct DatabaseConnectionSidebar: View {
 }
 
 private extension DatabaseProduct {
-    var symbolName: String {
+    var icon: EdithIcon {
         switch family {
-        case .relational: "tablecells"
-        case .keyValue: "key.horizontal"
-        case .document: "doc.text"
-        case .search: "magnifyingglass.circle"
-        case .analytical: "chart.xyaxis.line"
+        case .relational: .table
+        case .keyValue: .key
+        case .document: .docText
+        case .search: .search
+        case .analytical: .chartLine
         }
     }
 }

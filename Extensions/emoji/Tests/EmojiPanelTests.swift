@@ -8,8 +8,8 @@ import EdithExtensionUI
 
 private let catalog = EmojiCatalog(
     groups: [
-        EmojiGroup(id: "smileys-emotion", name: "Smileys", symbolName: "face.smiling"),
-        EmojiGroup(id: "travel-places", name: "Travel", symbolName: "airplane"),
+        EmojiGroup(id: "smileys-emotion", name: "Smileys", icon: .emoji),
+        EmojiGroup(id: "travel-places", name: "Travel", icon: .airplane),
     ],
     emoji: [
         Emoji(character: "😀", name: "grinning face", groupIndex: 0, unicodeVersion: 1),
@@ -30,7 +30,7 @@ private let frequent = [
         let sections = EmojiPanelView.sections(catalog: catalog, frequent: frequent, query: "")
         #expect(sections.map(\.id) == ["frequent", "smileys-emotion", "travel-places"])
         #expect(sections[0].title == "Frequently used")
-        #expect(sections[0].symbolName == "clock")
+        #expect(sections[0].icon == .clock)
         #expect(sections[1].emoji.map(\.character) == ["😀", "😍"])
         #expect(sections[2].emoji.map(\.character) == ["🚀"])
     }
@@ -125,7 +125,7 @@ private let frequent = [
         let unusual = EmojiCatalog(
             groups: [
                 EmojiGroup(
-                    id: "group:with|separators", name: "Unusual", symbolName: "number")
+                    id: "group:with|separators", name: "Unusual", icon: .hash)
             ],
             emoji: [
                 Emoji(

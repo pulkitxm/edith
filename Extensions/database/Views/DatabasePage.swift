@@ -476,11 +476,8 @@ struct DatabasePage: View {
 
     private func mutationNotice(_ detail: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            Image(
-                systemName: workspace.hasTrackedMutation
-                    ? "clock.arrow.circlepath" : "info.circle.fill"
-            )
-            .foregroundStyle(workspace.hasTrackedMutation ? DashSkin.warn : theme)
+            EdithIconView(workspace.hasTrackedMutation ? .history : .info)
+                .foregroundStyle(workspace.hasTrackedMutation ? DashSkin.warn : theme)
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(
                     workspace.hasTrackedMutation ? "Change needs attention" : "Change status"

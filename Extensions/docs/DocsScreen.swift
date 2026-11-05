@@ -102,11 +102,11 @@ struct DocsScreen: View {
                 }
             } else if browser.loadFailed {
                 PageEmptyState(
-                    symbolName: "book.closed",
+                    icon: .docs,
                     title: "The reference could not be loaded",
                     message:
                         "Edith could not read its bundled command reference. Nothing was changed. Try again, or reinstall the Docs extension if it keeps failing.",
-                    primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Try again", icon: .refresh) {
                         Task { await browser.retryLoad() }
                     })
             } else {
@@ -180,7 +180,7 @@ struct DocsScreen: View {
                 Button {
                     navigatorPresented = true
                 } label: {
-                    Image(systemName: "sidebar.left")
+                    EdithIconView(.sidebarLeft)
                 }
                 .help("Browse the reference")
                 .accessibilityLabel("Browse reference")
@@ -199,7 +199,7 @@ struct DocsScreen: View {
             Button {
                 router?.goBack()
             } label: {
-                Image(systemName: "chevron.left")
+                EdithIconView(.chevronLeft)
             }
             .disabled(router?.canGoBack != true)
             .help("Back (\u{2318}[)")
@@ -207,7 +207,7 @@ struct DocsScreen: View {
             Button {
                 router?.goForward()
             } label: {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
             }
             .disabled(router?.canGoForward != true)
             .help("Forward (\u{2318}])")
@@ -220,7 +220,7 @@ struct DocsScreen: View {
 
     private func askField(question: Binding<String>) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "sparkle.magnifyingglass")
+            EdithIconView(.search)
                 .font(.edithText(.body).weight(.medium))
                 .foregroundStyle(DashSkin.accent(dark))
                 .accessibilityHidden(true)
@@ -316,7 +316,7 @@ private struct DocsAskResults: View {
             HStack(spacing: UIScale.pt(8)) {
                 Label(
                     answer.engine.label,
-                    systemImage: answer.engine == .jev ? "sparkles" : "text.magnifyingglass"
+                    edith: answer.engine == .jev ? .jev : .search
                 )
                 .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(
@@ -332,7 +332,7 @@ private struct DocsAskResults: View {
                 Button {
                     browser.hideResults()
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.edithText(.caption).weight(.bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -473,7 +473,7 @@ private struct DocsNavigator: View {
             browser.toggle(group.id)
         } label: {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
                     .font(.system(size: UIScale.pt(9), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -568,7 +568,7 @@ private struct DocsPageView: View {
     private var breadcrumb: some View {
         HStack(spacing: UIScale.pt(6)) {
             Text(group.map { $0.id.isEmpty ? "ed reference" : $0.title } ?? "ed reference")
-            Image(systemName: "chevron.right").font(.system(size: UIScale.pt(8), weight: .bold))
+            EdithIconView(.chevronRight).font(.system(size: UIScale.pt(8), weight: .bold))
                 .accessibilityHidden(true)
             Text(page.path)
             Spacer(minLength: 0)

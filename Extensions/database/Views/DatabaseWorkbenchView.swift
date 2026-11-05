@@ -55,7 +55,7 @@ struct DatabaseWorkbenchView: View {
                 session(connection)
             } else {
                 DatabaseWorkbenchEmptyState(
-                    symbol: "cylinder.split.1x2", title: "Choose a connection",
+                    icon: .database, title: "Choose a connection",
                     detail: "Select a connection or add one to start working with data.")
             }
         }
@@ -91,7 +91,7 @@ struct DatabaseWorkbenchView: View {
         case .failed(let message, _), .outcomeUnknown(let message, _):
             VStack(spacing: UIScale.pt(12)) {
                 DatabaseWorkbenchEmptyState(
-                    symbol: "exclamationmark.triangle", title: "Connection unavailable",
+                    icon: .warning, title: "Connection unavailable",
                     detail: message, fillsHeight: false)
                 Button("Try again") { Task { await connections.connectSelected() } }
                     .buttonStyle(.edith(.primary, tint: palette.accent))
@@ -103,8 +103,7 @@ struct DatabaseWorkbenchView: View {
 
     private func disconnected(_ connection: DatabaseConnectionSummary) -> some View {
         VStack(spacing: UIScale.pt(16)) {
-            Image(systemName: "cylinder.split.1x2")
-                .font(.system(size: UIScale.pt(40), weight: .light))
+            PageIcon(icon: .database, size: 40)
                 .foregroundStyle(palette.accent)
             Text(connection.name).font(.system(size: UIScale.pt(21), weight: .semibold))
             Text("\(connection.product.displayName) · \(connection.environmentLabel)")
@@ -179,7 +178,7 @@ struct DatabaseWorkbenchView: View {
                                 tabs.select(tab.id)
                                 explorer.select(tab.object)
                             } label: {
-                                Label(tab.object.path.last ?? "Table", systemImage: "tablecells")
+                                Label(tab.object.path.last ?? "Table", edith: .table)
                                     .font(.system(size: UIScale.pt(11), weight: .medium))
                             }
                             .buttonStyle(.edith(.borderless))
@@ -188,7 +187,7 @@ struct DatabaseWorkbenchView: View {
                                 tabs.close(tab.id)
                                 explorer.select(tabs.selected?.object)
                             } label: {
-                                Image(systemName: "xmark").font(
+                                EdithIconView(.close).font(
                                     .system(size: UIScale.pt(9), weight: .semibold))
                             }
                             .buttonStyle(.edith(.borderless))
@@ -217,7 +216,7 @@ struct DatabaseWorkbenchView: View {
             } label: {
                 Label(
                     explorer.selectedObject?.path.last ?? "Select an object",
-                    systemImage: "tablecells"
+                    edith: .table
                 )
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .lineLimit(1)
@@ -263,7 +262,7 @@ struct DatabaseWorkbenchView: View {
             Button {
                 explorer.load(connection, force: true)
             } label: {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
             }
             .buttonStyle(.edith(.borderless)).accessibilityLabel("Reload database objects")
         }
@@ -278,14 +277,14 @@ struct DatabaseWorkbenchView: View {
 }
 
 struct DatabaseWorkbenchEmptyState: View {
-    let symbol: String
+    let icon: EdithIcon
     let title: String
     let detail: String
     var fillsHeight = true
 
     var body: some View {
         VStack(spacing: UIScale.pt(11)) {
-            Image(systemName: symbol).font(.system(size: UIScale.pt(32), weight: .light))
+            PageIcon(icon: icon, size: 32)
                 .foregroundStyle(.secondary)
             Text(title).font(.system(size: UIScale.pt(17), weight: .semibold))
             Text(detail).font(.system(size: UIScale.pt(12))).foregroundStyle(.secondary)

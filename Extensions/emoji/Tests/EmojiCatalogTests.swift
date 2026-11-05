@@ -7,8 +7,8 @@ import EdithExtensionUI
 
 private let sampleCatalog = """
     {"schema":1,"source":"test","groups":[
-    {"id":"smileys-emotion","name":"Smileys","symbol":"face.smiling"},
-    {"id":"people-body","name":"People","symbol":"hand.wave"}],
+    {"id":"smileys-emotion","name":"Smileys","icon":"emoji"},
+    {"id":"people-body","name":"People","icon":"person"}],
     "emoji":[
     {"e":"😀","n":"grinning face","g":0,"v":1,"t":["happy","smile"]},
     {"e":"👍","n":"thumbs up","g":1,"v":0.6,"t":["+1","thumbsup"],
@@ -24,7 +24,7 @@ private func decodedSample() throws -> EmojiCatalog {
     @Test func decodeReadsGroupsTermsAndSkinTones() throws {
         let catalog = try decodedSample()
         #expect(catalog.groups.map(\.name) == ["Smileys", "People"])
-        #expect(catalog.groups[0].symbolName == "face.smiling")
+        #expect(catalog.groups[0].icon == .emoji)
         #expect(catalog.emoji.count == 3)
         let thumbsUp = try #require(catalog.emoji.first { $0.name == "thumbs up" })
         #expect(thumbsUp.groupIndex == 1)
@@ -75,6 +75,13 @@ private func decodedSample() throws -> EmojiCatalog {
         #expect(catalog.emoji.allSatisfy { !$0.character.isEmpty })
         for index in catalog.groups.indices {
             #expect(!catalog.emoji(inGroup: index).isEmpty)
+        }
+    }
+
+    @Test func bundledCatalogGroupsNameDrawnIcons() {
+        #expect(!EmojiCatalog.shared.groups.isEmpty)
+        for group in EmojiCatalog.shared.groups {
+            #expect(group.icon != .placeholder, "\(group.id)")
         }
     }
 

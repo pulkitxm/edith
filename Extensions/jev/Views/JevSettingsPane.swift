@@ -24,7 +24,7 @@ struct JevSettingsPane: View {
         if model.status?.hasSavedKey != true, model.status != nil {
             PageNotice(
                 "Everything in Edith already works without Jev. Add a TypeSafe API key only if you want faster, smarter decisions in the features listed below.",
-                title: "Jev is optional", symbol: "sparkles"
+                title: "Jev is optional", icon: .jev
             )
             .padding(.horizontal, -Self.formHeaderInset)
             .padding(.bottom, UIScale.pt(16))

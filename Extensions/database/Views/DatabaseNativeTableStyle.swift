@@ -12,7 +12,7 @@ enum DatabaseTableMetrics {
     static let indexFont = 10.5
     static let bodyFont = 11.0
     static let headerFont = 11.0
-    static let keySide = 11.0
+    static let keySide = 12.0
 
     static func points(_ base: Double, scale: Double) -> CGFloat {
         CGFloat(base * scale)

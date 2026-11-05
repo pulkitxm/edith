@@ -44,17 +44,17 @@ struct DatabaseServiceProgressView: View {
                                 .system(
                                     size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
                         Spacer(minLength: 0)
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        EdithIconView(.filter)
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                        Label("Add connection", systemImage: "plus")
+                        Label("Add connection", edith: .plus)
                             .frame(minHeight: UIScale.pt(28))
                     }
                     EdithTextField(
                         placeholder: "Search saved connections",
                         text: .constant(""),
-                        icon: "magnifyingglass",
+                        icon: .search,
                         compact: true,
                         clearable: true
                     )
@@ -99,12 +99,12 @@ struct DatabaseServiceRecoveryView: View {
     private var recoveryContent: some View {
         VStack(spacing: UIScale.pt(8)) {
             PageEmptyState(
-                symbolName: "wrench.and.screwdriver.fill",
+                icon: .wrench,
                 title: "Database needs a quick repair",
                 message:
                     "Edith's local database tools did not start. Repairing refreshes them and reopens your saved connections. Your connections and data are not touched.",
                 primary: PageAction(
-                    "Repair and continue", symbolName: "arrow.triangle.2.circlepath",
+                    "Repair and continue", icon: .sync,
                     identifier: "database.repair", perform: repair)
             )
             .frame(minHeight: UIScale.pt(280))

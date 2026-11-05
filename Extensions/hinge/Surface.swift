@@ -9,7 +9,7 @@ enum HingeSurface {
             actions: [
                 .init(
                     active ? "disable" : "enable", active ? "Turn off" : "Turn on",
-                    "laptopcomputer.and.arrow.down")
+                    .lidAwake)
             ], updatedAt: Date())
     }
 }

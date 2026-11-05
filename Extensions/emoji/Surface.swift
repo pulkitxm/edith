@@ -19,7 +19,7 @@ enum EmojiSurface {
     static func snapshot() -> SurfaceSnapshot {
         .init(
             providerID: "emoji",
-            actions: [.init("pick", "Choose emoji", "face.smiling")],
+            actions: [.init("pick", "Choose emoji", .emoji)],
             message: "Choose an emoji to insert into your current app.")
     }
 }

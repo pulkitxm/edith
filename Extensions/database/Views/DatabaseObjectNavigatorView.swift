@@ -44,7 +44,7 @@ struct DatabaseObjectNavigatorView: View {
                 Button {
                     explorer.load(connection, force: true)
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Reload database objects")
@@ -67,7 +67,7 @@ struct DatabaseObjectNavigatorView: View {
             loadingObjectList
         case .failed(let message) where explorer.groups.isEmpty:
             VStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "exclamationmark.triangle")
+                EdithIconView(.warning)
                     .foregroundStyle(DashSkin.warn)
                 Text(message)
                     .font(.system(size: UIScale.pt(11)))
@@ -91,7 +91,7 @@ struct DatabaseObjectNavigatorView: View {
                         if groupIndex == 0 {
                             ForEach(0..<4, id: \.self) { objectIndex in
                                 HStack(spacing: UIScale.pt(7)) {
-                                    Image(systemName: "tablecells")
+                                    EdithIconView(.table)
                                     Text(
                                         objectIndex.isMultiple(of: 2)
                                             ? "customer_records" : "reporting_summary"
@@ -106,7 +106,7 @@ struct DatabaseObjectNavigatorView: View {
                         }
                     } label: {
                         HStack(spacing: UIScale.pt(7)) {
-                            Image(systemName: "square.stack.3d.up")
+                            EdithIconView(.layers)
                             Text(groupIndex.isMultiple(of: 2) ? "public" : "analytics")
                                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                                 .lineLimit(1)
@@ -129,7 +129,7 @@ struct DatabaseObjectNavigatorView: View {
                     groupContent(group)
                 } label: {
                     HStack(spacing: UIScale.pt(7)) {
-                        Image(systemName: groupSymbol(group.identifier.kind))
+                        EdithIconView(groupIcon(group.identifier.kind))
                             .foregroundStyle(.secondary)
                         Text(group.title)
                             .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -167,7 +167,7 @@ struct DatabaseObjectNavigatorView: View {
     private func groupContent(_ group: DatabaseExplorerGroup) -> some View {
         ForEach(group.objects) { object in
             HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: objectSymbol(object.identifier.kind))
+                EdithIconView(objectIcon(object.identifier.kind))
                     .foregroundStyle(objectColor(object.identifier.kind))
                 Text(object.title)
                     .font(.system(size: UIScale.pt(11)))
@@ -186,7 +186,7 @@ struct DatabaseObjectNavigatorView: View {
             ForEach(0..<3, id: \.self) { index in
                 SkeletonReplica("Loading \(group.title) objects") {
                     HStack(spacing: UIScale.pt(7)) {
-                        Image(systemName: "tablecells")
+                        EdithIconView(.table)
                         Text(index.isMultiple(of: 2) ? "customer_records" : "reporting_summary")
                             .font(.system(size: UIScale.pt(11)))
                             .lineLimit(1)
@@ -206,7 +206,7 @@ struct DatabaseObjectNavigatorView: View {
             Button {
                 explorer.loadGroup(group.identifier, connection: connection)
             } label: {
-                Label(message, systemImage: "arrow.clockwise")
+                Label(message, edith: .refresh)
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(DashSkin.warn)
             }
@@ -271,23 +271,22 @@ struct DatabaseObjectNavigatorView: View {
         return parts.joined(separator: ", ")
     }
 
-    private func groupSymbol(_ kind: DatabaseObjectKind) -> String {
+    private func groupIcon(_ kind: DatabaseObjectKind) -> EdithIcon {
         switch kind {
-        case .schema: "square.stack.3d.up"
-        case .database, .keyspace: "cylinder"
-        default: "folder"
+        case .schema: .layers
+        case .database, .keyspace: .database
+        default: .folder
         }
     }
 
-    private func objectSymbol(_ kind: DatabaseObjectKind) -> String {
+    private func objectIcon(_ kind: DatabaseObjectKind) -> EdithIcon {
         switch kind {
-        case .table: "tablecells"
-        case .view: "rectangle.stack"
-        case .materializedView: "rectangle.stack.fill"
-        case .index: "list.bullet.rectangle"
-        case .collection: "doc.on.doc"
-        case .keyspace: "key.horizontal"
-        default: "circle.grid.2x2"
+        case .table: .table
+        case .view, .materializedView: .layers
+        case .index: .list
+        case .collection: .doc
+        case .keyspace: .key
+        default: .grid
         }
     }
 

@@ -23,7 +23,7 @@ import Testing
         #expect(snapshot.rows.map(\.id) == [fixture.projects[1].id.uuidString])
         #expect(snapshot.sources.count == 2)
         #expect(snapshot.rows[0].detail == "example/mock" && snapshot.rows[0].value == "PR #10")
-        #expect(snapshot.rows[0].icon == "doc.richtext")
+        #expect(snapshot.rows[0].icon == .docText)
         #expect(snapshot.rows[0].actions.map(\.title) == ["Open document"])
         #expect(snapshot.message == nil)
         #expect(model.selectedID == nil)

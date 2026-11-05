@@ -1,5 +1,6 @@
 import AppKit
 import DatabaseCore
+import EdithExtensionUI
 import SwiftUI
 
 struct DatabaseNativeTableView: NSViewRepresentable {
@@ -248,10 +249,13 @@ struct DatabaseNativeTableView: NSViewRepresentable {
                 cell.imageView?.image =
                     parent.records[row].identity == nil
                     ? nil
-                    : NSImage(
-                        systemSymbolName: "key.fill",
-                        accessibilityDescription: parent.rowIsEditable(row)
-                            ? "Editable row" : "Stable row key")
+                    : EdithIcon.key.nsImage(
+                        size: DatabaseTableMetrics.points(
+                            DatabaseTableMetrics.keySide, scale: parent.scale
+                        ).rounded())
+                cell.imageView?.setAccessibilityLabel(
+                    parent.records[row].identity == nil
+                        ? nil : parent.rowIsEditable(row) ? "Editable row" : "Stable row key")
                 cell.imageView?.contentTintColor =
                     tableView.selectedRow == row ? NSColor(parent.accent) : .tertiaryLabelColor
                 textField.setAccessibilityLabel("Row \(row + 1)")
@@ -588,9 +592,9 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             NSLayoutConstraint.activate([
                 imageView.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
                 imageView.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                imageView.widthAnchor.constraint(equalToConstant: 11),
-                imageView.heightAnchor.constraint(equalToConstant: 11),
-                textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 4),
+                imageView.widthAnchor.constraint(equalToConstant: DatabaseTableMetrics.keySide),
+                imageView.heightAnchor.constraint(equalToConstant: DatabaseTableMetrics.keySide),
+                textField.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 3),
                 textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
                 textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])

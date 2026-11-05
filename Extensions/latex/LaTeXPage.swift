@@ -21,8 +21,7 @@ private struct LaTeXProjectRow: View {
         Button(action: open) {
             HStack(spacing: UIScale.pt(Self.spacing)) {
                 PageGuideBadge(
-                    symbolName: project.location == .disk
-                        ? "doc.richtext" : "arrow.triangle.branch",
+                    icon: project.location == .disk ? .docText : .quinjet,
                     size: Self.icon)
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(project.name).font(.edithText(.body).weight(.semibold))
@@ -71,7 +70,7 @@ private struct LaTeXProjectRow: View {
 
     @ViewBuilder private var location: some View {
         if let number = project.pullRequest {
-            Label("Pull request #\(number)", systemImage: "arrow.triangle.pull")
+            Label("Pull request #\(number)", edith: .quinjet)
                 .font(.edithText(.caption)).foregroundStyle(.green).lineLimit(1)
         } else {
             Text(project.location.title)
@@ -82,7 +81,7 @@ private struct LaTeXProjectRow: View {
     private var openEditor: some View {
         HStack(spacing: UIScale.pt(4)) {
             Text("Open editor")
-            Image(systemName: "arrow.right")
+            EdithIconView(.arrowRight)
         }
         .font(.edithText(.callout).weight(.medium))
         .foregroundStyle(DashSkin.accent(scheme == .dark))
@@ -144,7 +143,7 @@ struct LaTeXPage: View {
                         Button {
                             beginAdding(.disk)
                         } label: {
-                            Label("Add project", systemImage: "plus")
+                            Label("Add project", edith: .plus)
                         }
                         .buttonStyle(.edith(.primary))
                         .disabled(model.busy || model.load.isRunning)
@@ -176,30 +175,30 @@ struct LaTeXPage: View {
 
     private var firstRun: some View {
         PageEmptyState(
-            symbolName: "doc.richtext",
+            icon: .docText,
             title: "Write LaTeX and see the PDF as you go",
             message:
                 "Add a .tex file and Edith opens an editor with a live PDF preview. Your files are never moved or deleted.",
             steps: [
                 PageGuideStep(
-                    symbolName: "doc.badge.plus", title: "Add a document",
+                    icon: .docAdd, title: "Add a document",
                     detail: "Pick a .tex file on this Mac, or one inside a GitHub repository."),
                 PageGuideStep(
-                    symbolName: "pencil", title: "Edit the source",
+                    icon: .edit, title: "Edit the source",
                     detail:
                         "Use the editor on the left. Find, undo and insert helpers are built in."),
                 PageGuideStep(
-                    symbolName: "doc.text.magnifyingglass", title: "Compile and preview",
+                    icon: .seoAudit, title: "Compile and preview",
                     detail:
                         "Press Save & compile (Command-S) to build the PDF and see it on the right."
                 ),
             ],
             primary: PageAction(
-                "Choose a .tex file", symbolName: "doc.badge.plus",
+                "Choose a .tex file", icon: .docAdd,
                 identifier: "latex.add-disk"
             ) { beginAdding(.disk) },
             secondary: PageAction(
-                "Use a GitHub repository", symbolName: "arrow.triangle.branch",
+                "Use a GitHub repository", icon: .quinjet,
                 identifier: "latex.add-github"
             ) { beginAdding(.github) },
             footnote: "Nothing is installed or uploaded until you add a project and compile it."
@@ -242,10 +241,10 @@ struct LaTeXPage: View {
                             ? "Saving and compiling…"
                             : model.buildingPDF ? "Building PDF on GitHub…" : "Loading source…")
                 } else if model.dirty {
-                    Label("Unsaved changes", systemImage: "circle.fill")
+                    Label("Unsaved changes", edith: .dot)
                         .foregroundStyle(.orange)
                 } else {
-                    Label("Saved", systemImage: "checkmark.circle")
+                    Label("Saved", edith: .success)
                         .foregroundStyle(.secondary)
                 }
                 if let message = model.statusMessage ?? model.load.errorMessage {
@@ -283,11 +282,11 @@ struct LaTeXPage: View {
                 PageSkeleton(layout: .editor).padding(UIScale.pt(16))
             } else {
                 PageEmptyState(
-                    symbolName: "doc.questionmark",
+                    icon: .doc,
                     title: "Could not open this source file",
                     message: model.load.errorMessage
                         ?? "The file may have moved or been renamed. Your project entry is still in the library.",
-                    primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Try again", icon: .refresh) {
                         model.launch { await model.reload() }
                     },
                     secondary: PageAction("Back to projects") { editing = false }
@@ -311,7 +310,7 @@ struct LaTeXPage: View {
                 Button {
                     editing = false
                 } label: {
-                    Label("Projects", systemImage: "chevron.left")
+                    Label("Projects", edith: .chevronLeft)
                 }.disabled(model.dirty || model.busy)
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
@@ -344,7 +343,7 @@ struct LaTeXPage: View {
                         Text("PDF only").tag("PDF")
                     }
                 } label: {
-                    Image(systemName: "rectangle.split.2x1")
+                    EdithIcon.layoutLeft.image()
                 }
                 .menuStyle(.button)
                 .menuIndicator(.hidden)
@@ -362,7 +361,7 @@ struct LaTeXPage: View {
                         confirmingRemoval = true
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    EdithIcon.more.image()
                 }
                 .menuStyle(.button)
                 .menuIndicator(.hidden)
@@ -399,7 +398,7 @@ struct LaTeXPage: View {
             WrapHStack(spacing: UIScale.pt(12)) {
                 Label(
                     model.selected.map { URL(fileURLWithPath: $0.sourcePath).lastPathComponent }
-                        ?? "Source", systemImage: "doc.text"
+                        ?? "Source", edith: .docText
                 )
                 .font(.edithText(.subheadline))
                 .lineLimit(1).truncationMode(.middle)
@@ -407,18 +406,18 @@ struct LaTeXPage: View {
                     Button {
                         editorControls.undo()
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }.help("Undo (⌘Z)").disabled(!editorControls.canUndo)
                     Button {
                         editorControls.redo()
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }.help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
                     Divider().frame(height: UIScale.pt(16))
                     Button {
                         editorControls.find()
                     } label: {
-                        Label("Find", systemImage: "magnifyingglass")
+                        Label("Find", edith: .search)
                     }.help("Find and replace (⌘F)").keyboardShortcut("f", modifiers: .command)
                     Menu {
                         Button("Bold (⌘B)") { editorControls.command("bold") }
@@ -427,7 +426,7 @@ struct LaTeXPage: View {
                         Button("Equation") { editorControls.command("equation") }
                         Button("List") { editorControls.command("list") }
                     } label: {
-                        Image(systemName: "textformat")
+                        EdithIcon.text.image()
                     }.help("Insert LaTeX").accessibilityLabel("Insert LaTeX")
                     Menu {
                         Toggle("Wrap lines", isOn: $editorControls.wrapsLines)
@@ -437,7 +436,7 @@ struct LaTeXPage: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "slider.horizontal.3")
+                        EdithIcon.adjust.image()
                     }.help("Editor options").accessibilityLabel("Editor options")
                 }.disabled(model.busy || model.load.isRunning)
             }
@@ -492,11 +491,11 @@ struct LaTeXPage: View {
                     LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
                     PageEmptyState(
-                        symbolName: "doc.richtext", title: "No PDF yet",
+                        icon: .docText, title: "No PDF yet",
                         message:
                             "Save & compile builds your document and shows the PDF here. The PDF is saved beside your .tex file.",
                         primary: PageAction(
-                            "Save & compile", symbolName: "hammer", identifier: "latex.compile"
+                            "Save & compile", icon: .hammer, identifier: "latex.compile"
                         ) { model.saveAndCompile() }
                     )
                 }
@@ -523,7 +522,7 @@ struct LaTeXPage: View {
                             PageSkeleton(layout: .editor)
                         } else {
                             PageEmptyState(
-                                symbolName: "doc.richtext",
+                                icon: .docText,
                                 title: model.hasRepositoryBuild
                                     ? "Ready to recompile" : "No PDF built yet",
                                 message: model.hasRepositoryBuild
@@ -543,13 +542,13 @@ struct LaTeXPage: View {
                             PageSectionHeader(
                                 "GitHub build",
                                 subtitle: "Source, review, and PDF builds stay on GitHub.")
-                            Label("1. Edit your source", systemImage: "pencil")
+                            Label("1. Edit your source", edith: .edit)
                             Label(
                                 "2. Create or update a pull request",
-                                systemImage: "arrow.triangle.pull")
+                                edith: .quinjet)
                             Label(
                                 "3. Review with Quinjet and squash merge",
-                                systemImage: "checkmark.circle")
+                                edith: .success)
                             Text(
                                 "The pull request adds a compiler workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
                             )
@@ -594,7 +593,7 @@ private struct LaTeXChecks: View {
             }
             ForEach(Array(review.checks.enumerated()), id: \.offset) { _, check in
                 HStack {
-                    Image(systemName: check.status == "passed" ? "checkmark.circle.fill" : "clock")
+                    EdithIconView(check.status == "passed" ? .success : .clock)
                         .foregroundStyle(check.status == "passed" ? Color.green : Color.secondary)
                     Text("\(check.workflow) · \(check.name): \(check.status)").font(
                         .edithText(.caption))
@@ -617,10 +616,10 @@ private struct LaTeXReviewWorkspace: View {
         PageWorkspace {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 PageSectionHeader("Quinjet review", subtitle: model.selected?.repository ?? "") {
-                    Button("Refresh", systemImage: "arrow.clockwise") { model.refreshReview() }
+                    Button("Refresh", edith: .refresh) { model.refreshReview() }
                         .disabled(model.busy)
                     if model.review?.pullRequest.state == "OPEN" { LaTeXMergeOptions(model: model) }
-                    Button("Back to editor", systemImage: "chevron.left", action: onClose)
+                    Button("Back to editor", edith: .chevronLeft, action: onClose)
                 }
                 if let review = model.review {
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -654,7 +653,7 @@ private struct LaTeXReviewWorkspace: View {
                                 "Diff layout", selection: $format, options: ["Unified", "Split"],
                                 label: { $0 }
                             ).frame(width: UIScale.pt(180))
-                            Button("Copy patch", systemImage: "doc.on.doc") {
+                            Button("Copy patch", edith: .copy) {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(review.diff, forType: .string)
                             }
@@ -683,11 +682,11 @@ private struct LaTeXReviewWorkspace: View {
                             }
                             ForEach(Array(review.checks.enumerated()), id: \.offset) { _, check in
                                 HStack(spacing: UIScale.pt(12)) {
-                                    Image(
-                                        systemName: check.status == "passed"
-                                            ? "checkmark.circle.fill"
+                                    EdithIconView(
+                                        check.status == "passed"
+                                            ? .success
                                             : check.status == "failed"
-                                                ? "xmark.circle.fill" : "clock"
+                                                ? .closeFilled : .clock
                                     )
                                     .foregroundStyle(
                                         check.status == "passed"

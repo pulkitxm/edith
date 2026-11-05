@@ -33,8 +33,8 @@ enum DocsSurface {
                     page.path, sourceID: page.group.isEmpty ? "overview" : page.group,
                     title: String(page.title.prefix(256)),
                     detail: String(page.abstract.prefix(256)),
-                    value: page.path == location.path ? "Reading" : "", icon: "doc.text",
-                    actions: [.init("open:" + page.path, "Read", "book")])
+                    value: page.path == location.path ? "Reading" : "", icon: .docText,
+                    actions: [.init("open:" + page.path, "Read", .book)])
             },
             sources: Array(library.groups.prefix(100)).map {
                 .init($0.id.isEmpty ? "overview" : $0.id, $0.title)

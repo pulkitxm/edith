@@ -21,7 +21,7 @@ struct EmojiSettingsRows: View {
                     SettingsNoticeRow(
                         "Emoji Picker is off",
                         message: "Turn it on to type emoji from any app and change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
