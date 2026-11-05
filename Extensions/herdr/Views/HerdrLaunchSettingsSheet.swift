@@ -15,9 +15,9 @@ struct HerdrLaunchSettingsSheet: View {
             Divider()
             ScrollView {
                 VStack(spacing: 0) {
-                    ClaudeAccountSettings(accounts: accounts).padding(UIScale.pt(18))
+                    ClaudeAccountSettings(accounts: accounts).padding(UIScale.pt(16))
                     Divider()
-                    ClaudeSharedLaunchSettings(accounts: accounts).padding(UIScale.pt(18))
+                    ClaudeSharedLaunchSettings(accounts: accounts).padding(UIScale.pt(16))
                     Divider()
                     ForEach(HerdrLaunchSettings.kinds, id: \.self) { kind in
                         HerdrLaunchKindRow(kind: kind, store: store)
@@ -33,9 +33,9 @@ struct HerdrLaunchSettingsSheet: View {
         HStack(spacing: UIScale.pt(12)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Agent Launch Settings")
-                    .font(.system(size: UIScale.pt(16), weight: .semibold))
+                    .font(.edithText(.title3)).fontWeight(.semibold)
                 Text("The command, model, effort and fast mode used when you launch each agent.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -49,7 +49,7 @@ struct HerdrLaunchSettingsSheet: View {
             .accessibilityLabel("Close")
             .keyboardShortcut(.cancelAction)
         }
-        .padding(UIScale.pt(18))
+        .padding(UIScale.pt(16))
     }
 }
 
@@ -98,7 +98,7 @@ private struct HerdrLaunchKindRow: View {
                     ForEach(catalog.explanations(for: options), id: \.self) { line in
                         Text(line)
                     }
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
                     .padding(.leading, UIScale.pt(106))
                 } else {
@@ -106,8 +106,8 @@ private struct HerdrLaunchKindRow: View {
                 }
             }
         }
-        .padding(.horizontal, UIScale.pt(18))
-        .padding(.vertical, UIScale.pt(10))
+        .padding(.horizontal, UIScale.pt(16))
+        .padding(.vertical, UIScale.pt(12))
         .onAppear(perform: reload)
         .pageTask(id: refreshes, cancel: { catalogLoad.cancel() }) { await loadCatalog() }
     }
@@ -116,7 +116,7 @@ private struct HerdrLaunchKindRow: View {
         HStack(spacing: UIScale.pt(10)) {
             HerdrKindMark(kind: kind, size: UIScale.pt(16))
             Text(kind)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.body)).fontWeight(.medium)
                 .frame(width: UIScale.pt(80), alignment: .leading)
             TextField(
                 "Command",
@@ -137,7 +137,7 @@ private struct HerdrLaunchKindRow: View {
                 }
             }
             .buttonStyle(.edith(.borderless))
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.callout))
             .disabled(
                 remote == nil
                     ? HerdrLaunchSettings.usesHerdrAgentStart(for: kind)
@@ -182,7 +182,7 @@ private struct HerdrLaunchKindRow: View {
             Spacer(minLength: 0)
             source(catalog)
         }
-        .font(.system(size: UIScale.pt(11)))
+        .font(.edithText(.callout))
         .padding(.leading, UIScale.pt(26))
     }
 
@@ -203,14 +203,14 @@ private struct HerdrLaunchKindRow: View {
             Spacer(minLength: 0)
             source(catalog)
         }
-        .font(.system(size: UIScale.pt(11)))
+        .font(.edithText(.callout))
         .padding(.leading, UIScale.pt(26))
     }
 
     private func source(_ catalog: AgentLaunchCatalog) -> some View {
         HStack(spacing: UIScale.pt(4)) {
             Text(catalog.source.label)
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 .help(catalog.kind.note ?? "Where this model list came from")
             if let tool = catalog.kind.discoveryCommand {
@@ -218,7 +218,7 @@ private struct HerdrLaunchKindRow: View {
                     refreshes += 1
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption)).fontWeight(.semibold)
                 }
                 .buttonStyle(.edith(.borderless))
                 .disabled(loading)
@@ -277,10 +277,12 @@ struct ClaudeSharedLaunchSettings: View {
             Text("Additional arguments, one per line").font(.edithText(.caption))
             ShellInputEditor(text: $arguments, label: "Shared Claude launch arguments")
                 .frame(height: UIScale.pt(48))
+                .modifier(LaunchEditorFrame())
                 .accessibilityLabel("Shared Claude launch arguments")
             Text("Environment variables, NAME=value per line").font(.edithText(.caption))
             ShellInputEditor(text: $environment, label: "Shared Claude launch environment")
                 .frame(height: UIScale.pt(48))
+                .modifier(LaunchEditorFrame())
                 .accessibilityLabel("Shared Claude launch environment")
             Text(
                 "Added to the configured command, including aliases such as cc. Put flag values on their own lines."
@@ -379,5 +381,16 @@ struct ShellInputEditor: NSViewRepresentable {
             guard let editor = notification.object as? NSTextView else { return }
             text.wrappedValue = editor.string
         }
+    }
+}
+
+private struct LaunchEditorFrame: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+        content
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(DashSkin.line(scheme == .dark)))
     }
 }

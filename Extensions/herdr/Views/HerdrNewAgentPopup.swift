@@ -49,6 +49,12 @@ struct HerdrNewAgentPopup: View {
             header
             Divider()
             field
+            Text(hint)
+                .font(.edithText(.caption))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, UIScale.pt(16))
+                .padding(.bottom, UIScale.pt(12))
             if model.selectedKind == "Claude Code" || model.space != nil {
                 ClaudeAccountLaunchPicker(
                     accounts: store.claudeAccounts,
@@ -60,14 +66,19 @@ struct HerdrNewAgentPopup: View {
                     selection: $model.selectedAccountID
                 )
                 .disabled(model.launching)
-                .padding(UIScale.pt(12))
+                .padding(.horizontal, UIScale.pt(16))
+                .padding(.bottom, UIScale.pt(12))
             }
             Divider()
             if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.red)
-                    .padding(UIScale.pt(12))
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.edithText(.callout))
+                    .foregroundStyle(DashSkin.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, UIScale.pt(16))
+                    .padding(.vertical, UIScale.pt(12))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(DashSkin.danger.opacity(0.08))
             }
             resultsList
                 .disabled(model.launching)
@@ -105,11 +116,11 @@ struct HerdrNewAgentPopup: View {
                 .accessibilityLabel("Previous step")
             }
             if let space = model.space {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("New agent in \(space.title)")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .font(.edithText(.headline))
                     Text(space.agents.first?.machineName ?? "")
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(1)
@@ -119,7 +130,7 @@ struct HerdrNewAgentPopup: View {
             Spacer()
             if model.launching {
                 Text("Launching…")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
             }
             if model.space == nil { layoutChoiceMenu }
@@ -132,29 +143,51 @@ struct HerdrNewAgentPopup: View {
             .disabled(model.launching)
             .accessibilityLabel("Close new agent")
         }
-        .padding(UIScale.pt(14))
+        .padding(.horizontal, UIScale.pt(16))
+        .padding(.vertical, UIScale.pt(12))
     }
 
     private var steps: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            ForEach(
-                [
-                    ("Kind", HerdrNewAgentPopupModel.Step.kind), ("Machine", .machine),
-                    ("Space", .space),
-                ], id: \.1
-            ) {
-                title, step in
-                Text(title)
-                    .font(
-                        .system(
-                            size: UIScale.pt(11), weight: step == model.step ? .semibold : .regular)
+        let order: [HerdrNewAgentPopupModel.Step] = [.kind, .machine, .space]
+        let current = order.firstIndex(of: model.step) ?? 0
+        return HStack(spacing: UIScale.pt(8)) {
+            ForEach(Array(order.enumerated()), id: \.offset) { index, step in
+                Text(stepTitle(step, done: index < current))
+                    .font(.edithText(.callout))
+                    .fontWeight(index == current ? .semibold : .regular)
+                    .foregroundStyle(
+                        index == current
+                            ? AnyShapeStyle(.primary)
+                            : index < current ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
                     )
-                    .foregroundStyle(step == model.step ? .primary : .secondary)
+                    .lineLimit(1)
                 if step != .space {
-                    Image(systemName: "chevron.right").font(.system(size: UIScale.pt(9)))
+                    Image(systemName: "chevron.right")
+                        .font(.edithText(.caption2)).fontWeight(.semibold)
                         .foregroundStyle(.tertiary)
                 }
             }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(current + 1) of 3")
+    }
+
+    private func stepTitle(_ step: HerdrNewAgentPopupModel.Step, done: Bool) -> String {
+        switch step {
+        case .kind: done ? model.selectedKind ?? "Agent" : "Agent"
+        case .machine: done ? model.selectedHost?.name ?? "Machine" : "Machine"
+        case .space: "Space"
+        }
+    }
+
+    private var hint: String {
+        switch model.step {
+        case .kind:
+            "Choose the coding agent to start. It opens in a terminal pane that keeps running when you leave."
+        case .machine:
+            "Choose where it runs. Machines without herdr are dimmed and cannot be picked."
+        case .space:
+            "A space groups the panes for one project. Pick one, or type a name to create it."
         }
     }
 
@@ -170,17 +203,20 @@ struct HerdrNewAgentPopup: View {
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
         }
         .menuStyle(.borderlessButton)
-        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        .fixedSize()
         .help("Choose how the new agent opens: \(model.layoutChoice.title)")
+        .accessibilityLabel("Open as \(model.layoutChoice.title)")
     }
 
     private var field: some View {
         TextField(placeholder, text: currentQueryBinding)
             .textFieldStyle(.plain)
-            .font(.system(size: UIScale.pt(14)))
+            .font(.edithText(.title3))
             .focused($fieldFocused)
             .disabled(model.launching)
-            .padding(UIScale.pt(12))
+            .padding(.horizontal, UIScale.pt(16))
+            .padding(.top, UIScale.pt(12))
+            .padding(.bottom, UIScale.pt(6))
             .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                 move(press.key == .upArrow ? -1 : 1)
                 return .handled
@@ -218,13 +254,14 @@ struct HerdrNewAgentPopup: View {
     private var resultsList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: UIScale.pt(2)) {
                     switch model.step {
                     case .kind: kindRows
                     case .machine: machineRows
                     case .space: spaceRows
                     }
                 }
+                .padding(UIScale.pt(8))
             }
             .onChange(of: selectionIndex) { _, _ in scrollToSelection(proxy) }
             .onChange(of: model.step) { _, _ in scrollToSelection(proxy) }
@@ -237,7 +274,8 @@ struct HerdrNewAgentPopup: View {
         ForEach(Array(kinds.enumerated()), id: \.element) { index, kind in
             row(index: index) {
                 HerdrKindMark(kind: kind, size: UIScale.pt(16))
-                Text(kind).font(.system(size: UIScale.pt(12)))
+                    .frame(width: UIScale.pt(16))
+                Text(kind).font(.edithText(.body))
                 Spacer()
             }
         }
@@ -253,13 +291,14 @@ struct HerdrNewAgentPopup: View {
             let available = host.reachable && host.herdrPresent
             row(index: index) {
                 Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.system(size: UIScale.pt(13)))
+                    .font(.edithText(.body))
+                    .frame(width: UIScale.pt(16))
                     .foregroundStyle(available ? .primary : .secondary)
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(host.name).font(.system(size: UIScale.pt(12)))
+                    Text(host.name).font(.edithText(.body))
                     if !available {
                         Text(unavailableReason(host))
-                            .font(.system(size: UIScale.pt(10)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -288,25 +327,26 @@ struct HerdrNewAgentPopup: View {
             ForEach(Array(matches.enumerated()), id: \.element.id) { index, space in
                 row(index: index) {
                     Image(systemName: "square.split.2x2")
-                        .font(.system(size: UIScale.pt(12)))
-                    Text(space.label).font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.body))
+                        .frame(width: UIScale.pt(16))
+                    Text(space.label).font(.edithText(.body))
                     Spacer()
                     Text("\(space.paneCount) pane\(space.paneCount == 1 ? "" : "s")")
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption)).monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
             }
             if showsCreateRow {
                 row(index: matches.count) {
                     Image(systemName: "plus.square")
-                        .font(.system(size: UIScale.pt(12)))
-                    Text("Create space “\(trimmedQuery)”").font(
-                        .system(size: UIScale.pt(12)))
+                        .font(.edithText(.body))
+                        .frame(width: UIScale.pt(16))
+                    Text("Create space “\(trimmedQuery)”").font(.edithText(.body))
                     Spacer()
                 }
             }
             if matches.isEmpty, !showsCreateRow {
-                emptyState("No spaces yet. Type a name to create one")
+                emptyState("No spaces on this machine yet. Type a name above to create one.")
             }
         }
     }
@@ -319,8 +359,8 @@ struct HerdrNewAgentPopup: View {
             activateSelection()
         } label: {
             HStack(spacing: UIScale.pt(10)) { content() }
-                .padding(.horizontal, UIScale.pt(14))
-                .padding(.vertical, UIScale.pt(8))
+                .padding(.horizontal, UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(6))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.edith(.selection, selected: index == selectionIndex))
@@ -331,23 +371,26 @@ struct HerdrNewAgentPopup: View {
         Button {
             HerdrWorkOwnership.start { await store.refresh() }
         } label: {
-            Label("Refresh machines", systemImage: "arrow.clockwise")
-                .font(.system(size: UIScale.pt(12)))
+            Label("Check machines again", systemImage: "arrow.clockwise")
+                .font(.edithText(.body))
         }
         .buttonStyle(.edith(.borderless))
-        .padding(UIScale.pt(14))
+        .padding(UIScale.pt(8))
     }
 
     private func emptyState(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .foregroundStyle(.secondary)
-            .padding(UIScale.pt(20))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .padding(UIScale.pt(24))
     }
 
     private func unavailableReason(_ host: HerdrHostSnapshot) -> String {
-        if !host.reachable { return "Unreachable" }
-        if !host.herdrPresent { return "herdr not installed" }
+        if !host.reachable { return "Cannot be reached right now" }
+        if !host.herdrPresent { return "herdr is not installed here" }
         return host.error ?? "Unavailable"
     }
 

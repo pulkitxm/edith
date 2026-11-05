@@ -32,12 +32,12 @@
       {
         "symbolName": "arrow.clockwise",
         "title": "Find your agents",
-        "detail": "Edith looks for Herdr on this Mac and your machines and lists every live session."
+        "detail": "Edith looks for the herdr command on this Mac and your SSH machines and lists every live session."
       },
       {
         "symbolName": "plus",
         "title": "Start an agent",
-        "detail": "Press New Agent, pick a folder and a coding agent, and it opens in its own pane."
+        "detail": "Press New Agent, then choose a coding agent, a machine and a space. It opens in its own pane."
       },
       {
         "symbolName": "rectangle.split.3x1",

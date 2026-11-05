@@ -33,20 +33,20 @@ struct TerminalTabsView: View {
                         symbolName: "terminal",
                         title: "No terminals open",
                         message:
-                            "Open a terminal to get a shell inside Edith. Closing a tab only ends that shell.",
+                            "A terminal gives you a real shell inside Edith, starting in your home folder. Closing a tab ends only that shell.",
                         primary: PageAction(
-                            "New terminal", symbolName: "plus", identifier: "terminal.empty.new"
+                            "New Terminal", symbolName: "plus", identifier: "terminal.empty.new"
                         ) { model.addTab() },
-                        footnote:
-                            "Shortcut: Command T opens a terminal, Command W closes the current one."
+                        footnote: "Press ⌘T to open a terminal and ⌘W to close the current one."
                     )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if model.broadcast { broadcastBar }
             if let error = model.error {
-                Text(error).font(.edithText(.caption)).foregroundStyle(DashSkin.danger).padding(
-                    UIScale.pt(8))
+                TerminalStatusBar(
+                    symbolName: "exclamationmark.triangle.fill", message: error,
+                    tint: DashSkin.danger)
             }
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
@@ -106,7 +106,8 @@ struct TerminalTabsView: View {
 
             Toggle("Broadcast", isOn: Bindable(model).broadcast)
                 .toggleStyle(.checkbox)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.callout))
+                .padding(.horizontal, UIScale.pt(4))
                 .help("Type once, send to every tab. A bar appears below to type the command.")
 
             Button {
@@ -121,7 +122,7 @@ struct TerminalTabsView: View {
             }
         }
         .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(8))
         .background(.thinMaterial)
     }
 
@@ -131,17 +132,20 @@ struct TerminalTabsView: View {
         } label: {
             HStack(spacing: UIScale.pt(6)) {
                 Image(systemName: "terminal")
-                    .font(.system(size: UIScale.pt(9.5)))
+                    .font(.edithText(.caption))
                 Text(tab.displayTitle)
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.callout)).fontWeight(.medium)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .frame(maxWidth: UIScale.pt(220))
                 if model.tabs.count > 1 {
                     Button {
                         model.closeTab(tab.id)
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: UIScale.pt(7.5), weight: .bold))
+                            .font(.edithText(.caption2)).fontWeight(.bold)
+                            .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
                     .accessibilityLabel("Close \(tab.displayTitle)")
@@ -150,11 +154,11 @@ struct TerminalTabsView: View {
             .foregroundStyle(
                 tab.id == model.selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark)
             )
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(6))
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
             .background(
                 tab.id == model.selected ? DashSkin.paper2(dark) : .clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius))
             )
             .contentShape(Rectangle())
         }
@@ -165,18 +169,22 @@ struct TerminalTabsView: View {
         HStack(spacing: UIScale.pt(8)) {
             Image(systemName: "dot.radiowaves.left.and.right")
                 .foregroundStyle(DashSkin.warn)
-            TextField("Send to every tab", text: $command)
+                .accessibilityHidden(true)
+            TextField("Type a command to run in every tab", text: $command)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(sendBroadcast)
-            Button("Send", action: sendBroadcast)
+            Button("Send to All", action: sendBroadcast)
+                .buttonStyle(.edith(.primary))
+                .disabled(command.trimmingCharacters(in: .whitespaces).isEmpty)
             if let broadcastError {
                 Text(broadcastError)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.danger)
+                    .lineLimit(2)
             }
         }
         .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(7))
+        .padding(.vertical, UIScale.pt(8))
         .background(DashSkin.warn.opacity(0.1))
     }
 

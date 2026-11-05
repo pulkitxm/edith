@@ -24,7 +24,7 @@
       {
         "symbolName": "plus",
         "title": "Add tabs",
-        "detail": "Press plus or Command T to open another shell, and Command Shift W to close one."
+        "detail": "Press plus or Command T to open another shell, and Command W to close the current one."
       },
       {
         "symbolName": "dot.radiowaves.left.and.right",
